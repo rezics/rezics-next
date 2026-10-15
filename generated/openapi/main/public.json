@@ -1,6 +1,3787 @@
 {
   "components": {
-    "schemas": {},
+    "schemas": {
+      "ActingContextPreference": {
+        "$id": "#/components/schemas/ActingContextPreference",
+        "properties": {
+          "actingSubject": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "profile": {
+            "const": "work-create-acting-context-preference-v1",
+            "type": "string"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "task": {
+            "const": "work.create",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile",
+          "task",
+          "actingSubject",
+          "revision",
+          "replayed"
+        ],
+        "type": "object"
+      },
+      "ActingContextPreferenceDenied": {
+        "$id": "#/components/schemas/ActingContextPreferenceDenied",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "acting_context_denied",
+            "type": "string"
+          },
+          "currentHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "status": {
+            "const": 403,
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": false,
+            "properties": {
+              "constraint": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "constraint"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      },
+      "ActingContextPreferenceInternal": {
+        "$id": "#/components/schemas/ActingContextPreferenceInternal",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "internal_error",
+            "type": "string"
+          },
+          "currentHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "status": {
+            "const": 500,
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": false,
+            "properties": {
+              "constraint": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "constraint"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      },
+      "ActingContextPreferenceInvalid": {
+        "$id": "#/components/schemas/ActingContextPreferenceInvalid",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "invalid_request",
+            "type": "string"
+          },
+          "currentHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "status": {
+            "const": 400,
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": false,
+            "properties": {
+              "constraint": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "constraint"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      },
+      "ActingContextPreferenceLimited": {
+        "$id": "#/components/schemas/ActingContextPreferenceLimited",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "rate_limited",
+            "type": "string"
+          },
+          "currentHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "family": {
+            "type": "string"
+          },
+          "status": {
+            "const": 429,
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": false,
+            "properties": {
+              "constraint": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "constraint"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code",
+          "family"
+        ],
+        "type": "object"
+      },
+      "ActingContextPreferenceStale": {
+        "$id": "#/components/schemas/ActingContextPreferenceStale",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "stale_context",
+            "type": "string"
+          },
+          "currentHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "status": {
+            "const": 409,
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": false,
+            "properties": {
+              "constraint": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "constraint"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      },
+      "ActingContextPreferenceUnauthorized": {
+        "$id": "#/components/schemas/ActingContextPreferenceUnauthorized",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "account_assertion_denied",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 401,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "invalid_account_assertion",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 401,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "ActingContextPreferenceUnavailable": {
+        "$id": "#/components/schemas/ActingContextPreferenceUnavailable",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "acting_context_unavailable",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 503,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "dependency_unavailable",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 503,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "rate_limit_unavailable",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 503,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "rate_limit_unclassified",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 503,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "WorkHeader": {
+        "$id": "#/components/schemas/WorkHeader",
+        "properties": {
+          "chapterCount": {
+            "~elyTyp": 7,
+            "minimum": 0,
+            "nullable": true,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "completionStatus": {
+            "~elyTyp": 7,
+            "enum": [
+              "ongoing",
+              "completed",
+              "hiatus",
+              "upcoming",
+              "cancelled",
+              null
+            ],
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "fallback",
+                    "type": "string"
+                  },
+                  "policy": {
+                    "type": "string"
+                  },
+                  "resourceType": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "policy",
+                  "key",
+                  "resourceType"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "basis": {
+                    "properties": {
+                      "context": {
+                        "type": "string"
+                      },
+                      "policy": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "policy",
+                      "context"
+                    ],
+                    "type": "object"
+                  },
+                  "coverCredit": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "holder": {
+                        "~elyTyp": 7,
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "kind": {
+                        "const": "copyright",
+                        "type": "string"
+                      },
+                      "permittedRole": {
+                        "const": "cover",
+                        "type": "string"
+                      },
+                      "source": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "href": {
+                            "format": "uri",
+                            "maxLength": 2048,
+                            "type": "string"
+                          },
+                          "name": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "href"
+                        ],
+                        "type": "object"
+                      },
+                      "text": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "text",
+                      "holder",
+                      "source",
+                      "permittedRole"
+                    ],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "crop": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "height": {
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "const": "image",
+                    "type": "string"
+                  },
+                  "mediaType": {
+                    "type": "string"
+                  },
+                  "selection": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "width": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "selection",
+                  "url",
+                  "mediaType",
+                  "width",
+                  "height",
+                  "crop",
+                  "coverCredit",
+                  "basis"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "description": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "properties": {
+              "basis": {
+                "enum": [
+                  "requested",
+                  "same-script",
+                  "other-script",
+                  "fallback"
+                ]
+              },
+              "direction": {
+                "enum": [
+                  "ltr",
+                  "rtl"
+                ],
+                "type": "string"
+              },
+              "language": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "value",
+              "language",
+              "direction",
+              "basis"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "descriptionObligations": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "status": {
+                    "const": "unassessed",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "instrument": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "obligations": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "appliesTo": {
+                          "enum": [
+                            "display",
+                            "all"
+                          ],
+                          "type": "string"
+                        },
+                        "instrument": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "enum": [
+                            "attribution",
+                            "share_alike",
+                            "notice_retention",
+                            "change_indication",
+                            "non_commercial",
+                            "no_derivatives",
+                            "other"
+                          ],
+                          "type": "string"
+                        },
+                        "notice": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "instrument",
+                        "appliesTo",
+                        "notice"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array"
+                  },
+                  "status": {
+                    "const": "assessed",
+                    "type": "string"
+                  },
+                  "use": {
+                    "const": "wiki_display",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "use",
+                  "instrument",
+                  "obligations"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "disclosure": {
+            "enum": [
+              "public",
+              "restricted"
+            ],
+            "type": "string"
+          },
+          "fieldProvenance": {
+            "properties": {
+              "admission": {
+                "type": "string"
+              },
+              "basis": {
+                "const": "creation",
+                "type": "string"
+              },
+              "candidateReceipt": {
+                "type": "string"
+              },
+              "contributor": {
+                "type": "string"
+              },
+              "fields": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "revision": {
+                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "basis",
+              "revision",
+              "contributor",
+              "admission",
+              "candidateReceipt",
+              "fields"
+            ],
+            "type": "object"
+          },
+          "id": {
+            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+            "type": "string"
+          },
+          "lastUpdatedAt": {
+            "~elyTyp": 7,
+            "format": "date-time",
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "links": {
+            "properties": {
+              "adoptions": {
+                "type": "string"
+              },
+              "classifications": {
+                "type": "string"
+              },
+              "credits": {
+                "type": "string"
+              },
+              "editions": {
+                "type": "string"
+              },
+              "history": {
+                "type": "string"
+              },
+              "metadata": {
+                "type": "string"
+              },
+              "ratings": {
+                "type": "string"
+              },
+              "versions": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "versions",
+              "classifications",
+              "adoptions",
+              "ratings",
+              "history",
+              "credits",
+              "metadata",
+              "editions"
+            ],
+            "type": "object"
+          },
+          "mainVersion": {
+            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+            "type": "string"
+          },
+          "mainVersionLabel": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "properties": {
+              "basis": {
+                "enum": [
+                  "requested",
+                  "same-script",
+                  "other-script",
+                  "fallback"
+                ]
+              },
+              "direction": {
+                "enum": [
+                  "ltr",
+                  "rtl"
+                ],
+                "type": "string"
+              },
+              "language": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "value",
+              "language",
+              "direction",
+              "basis"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "mainVersionRevision": {
+            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+            "type": "string"
+          },
+          "metadataRevision": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "originalTitle": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "properties": {
+              "direction": {
+                "enum": [
+                  "ltr",
+                  "rtl"
+                ],
+                "type": "string"
+              },
+              "language": {
+                "maxLength": 35,
+                "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                "type": "string"
+              },
+              "value": {
+                "maxLength": 500,
+                "minLength": 1,
+                "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "value",
+              "language",
+              "direction"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "profile": {
+            "const": "work-read-v1",
+            "type": "string"
+          },
+          "publicationState": {
+            "enum": [
+              "published",
+              "unpublished"
+            ],
+            "type": "string"
+          },
+          "revision": {
+            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+            "type": "string"
+          },
+          "selectedLanguage": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourcePosition": {
+            "properties": {
+              "dataEpoch": {
+                "type": "string"
+              },
+              "dependencyToken": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "sequence": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "dataEpoch",
+              "sequence"
+            ],
+            "type": "object"
+          },
+          "structurePublicationHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tagline": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "properties": {
+              "basis": {
+                "enum": [
+                  "requested",
+                  "same-script",
+                  "other-script",
+                  "fallback"
+                ]
+              },
+              "direction": {
+                "enum": [
+                  "ltr",
+                  "rtl"
+                ],
+                "type": "string"
+              },
+              "language": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "value",
+              "language",
+              "direction",
+              "basis"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "title": {
+            "properties": {
+              "basis": {
+                "enum": [
+                  "requested",
+                  "same-script",
+                  "other-script",
+                  "fallback"
+                ]
+              },
+              "direction": {
+                "enum": [
+                  "ltr",
+                  "rtl"
+                ],
+                "type": "string"
+              },
+              "language": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "value",
+              "language",
+              "direction",
+              "basis"
+            ],
+            "type": "object"
+          },
+          "types": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          "verification": {
+            "enum": [
+              "unverified",
+              "verified"
+            ],
+            "type": "string"
+          },
+          "wordCount": {
+            "~elyTyp": 7,
+            "minimum": 0,
+            "nullable": true,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "profile",
+          "id",
+          "revision",
+          "mainVersion",
+          "title",
+          "cover",
+          "types",
+          "tagline",
+          "completionStatus",
+          "chapterCount",
+          "wordCount",
+          "lastUpdatedAt",
+          "disclosure",
+          "publicationState",
+          "originalTitle",
+          "metadataRevision",
+          "description",
+          "descriptionObligations",
+          "mainVersionRevision",
+          "mainVersionLabel",
+          "selectedLanguage",
+          "sourcePosition",
+          "links"
+        ],
+        "type": "object"
+      },
+      "WorkHeaderDenied": {
+        "$id": "#/components/schemas/WorkHeaderDenied",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "authority_denied",
+            "type": "string"
+          },
+          "currentHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "status": {
+            "const": 403,
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": false,
+            "properties": {
+              "constraint": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "constraint"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      },
+      "WorkHeaderInternal": {
+        "$id": "#/components/schemas/WorkHeaderInternal",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "internal_error",
+            "type": "string"
+          },
+          "currentHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "status": {
+            "const": 500,
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": false,
+            "properties": {
+              "constraint": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "constraint"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      },
+      "WorkHeaderInvalid": {
+        "$id": "#/components/schemas/WorkHeaderInvalid",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "invalid_request",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 400,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "invalid_work_read",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 400,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "WorkHeaderLimit": {
+        "$id": "#/components/schemas/WorkHeaderLimit",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "work_read_budget_exceeded",
+            "type": "string"
+          },
+          "currentHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "status": {
+            "const": 422,
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": false,
+            "properties": {
+              "constraint": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "constraint"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      },
+      "WorkHeaderMissing": {
+        "$id": "#/components/schemas/WorkHeaderMissing",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "work_unavailable",
+            "type": "string"
+          },
+          "currentHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "status": {
+            "const": 404,
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": false,
+            "properties": {
+              "constraint": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "constraint"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      },
+      "WorkHeaderMoved": {
+        "$id": "#/components/schemas/WorkHeaderMoved",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "read_basis_changed",
+            "type": "string"
+          },
+          "currentHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "status": {
+            "const": 409,
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": false,
+            "properties": {
+              "constraint": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "constraint"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      },
+      "WorkHeaderUnauthorized": {
+        "$id": "#/components/schemas/WorkHeaderUnauthorized",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "account_assertion_denied",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 401,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "invalid_account_assertion",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 401,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "WorkHeaderUnavailable": {
+        "$id": "#/components/schemas/WorkHeaderUnavailable",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "work_read_unavailable",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 503,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "dependency_unavailable",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 503,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "reading_continuity_unsupported",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 503,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "recovery_hold",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 503,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "rate_limit_unavailable",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 503,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "rate_limit_unclassified",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 503,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "WorkScalarConflict": {
+        "$id": "#/components/schemas/WorkScalarConflict",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "stale_head",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 409,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "const": "idempotency_conflict",
+                    "type": "string"
+                  },
+                  "currentHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "detail": {
+                    "maxLength": 512,
+                    "type": "string"
+                  },
+                  "status": {
+                    "const": 409,
+                    "type": "number"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "validation": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "constraint": {
+                        "~elyTyp": 7,
+                        "maxLength": 180,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "path": {
+                        "~elyTyp": 7,
+                        "maxLength": 180,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "constraint"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "type",
+                  "title",
+                  "status",
+                  "code"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "const": "admission_busy",
+                    "type": "string"
+                  },
+                  "currentHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "detail": {
+                    "maxLength": 512,
+                    "type": "string"
+                  },
+                  "status": {
+                    "const": 409,
+                    "type": "number"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "validation": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "constraint": {
+                        "~elyTyp": 7,
+                        "maxLength": 180,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "path": {
+                        "~elyTyp": 7,
+                        "maxLength": 180,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "constraint"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "type",
+                  "title",
+                  "status",
+                  "code"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "const": "controller_continuity",
+                    "type": "string"
+                  },
+                  "currentHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "detail": {
+                    "maxLength": 512,
+                    "type": "string"
+                  },
+                  "status": {
+                    "const": 409,
+                    "type": "number"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "validation": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "constraint": {
+                        "~elyTyp": 7,
+                        "maxLength": 180,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "path": {
+                        "~elyTyp": 7,
+                        "maxLength": 180,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "constraint"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "type",
+                  "title",
+                  "status",
+                  "code"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        ]
+      },
+      "WorkScalarDenied": {
+        "$id": "#/components/schemas/WorkScalarDenied",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "authority_denied",
+            "type": "string"
+          },
+          "currentHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "status": {
+            "const": 403,
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": false,
+            "properties": {
+              "constraint": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "constraint"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      },
+      "WorkScalarInternal": {
+        "$id": "#/components/schemas/WorkScalarInternal",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "internal_error",
+            "type": "string"
+          },
+          "currentHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "status": {
+            "const": 500,
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": false,
+            "properties": {
+              "constraint": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "constraint"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      },
+      "WorkScalarInvalid": {
+        "$id": "#/components/schemas/WorkScalarInvalid",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "invalid_request",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 400,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "const": "invalid_idempotency_key",
+                    "type": "string"
+                  },
+                  "currentHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "detail": {
+                    "maxLength": 512,
+                    "type": "string"
+                  },
+                  "status": {
+                    "const": 400,
+                    "type": "number"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "validation": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "constraint": {
+                        "~elyTyp": 7,
+                        "maxLength": 180,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "path": {
+                        "~elyTyp": 7,
+                        "maxLength": 180,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "constraint"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "type",
+                  "title",
+                  "status",
+                  "code"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "const": "invalid_scalar_value",
+                    "type": "string"
+                  },
+                  "currentHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "detail": {
+                    "maxLength": 512,
+                    "type": "string"
+                  },
+                  "status": {
+                    "const": 400,
+                    "type": "number"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "validation": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "constraint": {
+                        "~elyTyp": 7,
+                        "maxLength": 180,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "path": {
+                        "~elyTyp": 7,
+                        "maxLength": 180,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "constraint"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "type",
+                  "title",
+                  "status",
+                  "code"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        ]
+      },
+      "WorkScalarLimited": {
+        "$id": "#/components/schemas/WorkScalarLimited",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "rate_limited",
+            "type": "string"
+          },
+          "currentHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "family": {
+            "type": "string"
+          },
+          "status": {
+            "const": 429,
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": false,
+            "properties": {
+              "constraint": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "constraint"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code",
+          "family"
+        ],
+        "type": "object"
+      },
+      "WorkScalarMissing": {
+        "$id": "#/components/schemas/WorkScalarMissing",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "work_unavailable",
+            "type": "string"
+          },
+          "currentHead": {
+            "~elyTyp": 7,
+            "nullable": true,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "maxLength": 512,
+            "type": "string"
+          },
+          "status": {
+            "const": 404,
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "validation": {
+            "additionalProperties": false,
+            "properties": {
+              "constraint": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "path": {
+                "~elyTyp": 7,
+                "maxLength": 180,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "constraint"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      },
+      "WorkScalarPending": {
+        "$id": "#/components/schemas/WorkScalarPending",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "result": {
+            "type": "null"
+          },
+          "retry": {
+            "properties": {
+              "afterMs": {
+                "type": "number"
+              },
+              "allowed": {
+                "const": true,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "allowed",
+              "afterMs"
+            ],
+            "type": "object"
+          },
+          "status": {
+            "const": "reconciling",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationId",
+          "status",
+          "phase",
+          "result",
+          "retry"
+        ],
+        "type": "object"
+      },
+      "WorkScalarUnauthorized": {
+        "$id": "#/components/schemas/WorkScalarUnauthorized",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "account_assertion_denied",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 401,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "invalid_account_assertion",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 401,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "WorkScalarUnavailable": {
+        "$id": "#/components/schemas/WorkScalarUnavailable",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "dependency_unavailable",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 503,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "recovery_hold",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 503,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "rate_limit_unavailable",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 503,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "const": "rate_limit_unclassified",
+                "type": "string"
+              },
+              "currentHead": {
+                "~elyTyp": 7,
+                "nullable": true,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail": {
+                "maxLength": 512,
+                "type": "string"
+              },
+              "status": {
+                "const": 503,
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "validation": {
+                "additionalProperties": false,
+                "properties": {
+                  "constraint": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "~elyTyp": 7,
+                    "maxLength": 180,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "constraint"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "type",
+              "title",
+              "status",
+              "code"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "WorkScalarWrite": {
+        "$id": "#/components/schemas/WorkScalarWrite",
+        "additionalProperties": false,
+        "properties": {
+          "predecessor": {
+            "type": "string"
+          },
+          "profile": {
+            "const": "work-scalar-state-v1",
+            "type": "string"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "scalarValue": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "integer",
+                    "type": "string"
+                  },
+                  "lexical": {
+                    "const": "0",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "lexical"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "boolean",
+                    "type": "string"
+                  },
+                  "lexical": {
+                    "const": "false",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "lexical"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "string",
+                    "type": "string"
+                  },
+                  "lexical": {
+                    "const": "",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "lexical"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "unknown",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "no-value",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "sourcePosition": {
+            "properties": {
+              "dataEpoch": {
+                "type": "string"
+              },
+              "datasetId": {
+                "const": "product",
+                "type": "string"
+              },
+              "sequence": {
+                "pattern": "^[0-9]+$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "datasetId",
+              "dataEpoch",
+              "sequence"
+            ],
+            "type": "object"
+          },
+          "work": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile",
+          "work",
+          "revision",
+          "predecessor",
+          "sourcePosition",
+          "replayed"
+        ],
+        "type": "object"
+      }
+    },
     "securitySchemes": {
       "bearerAuth": {
         "scheme": "bearer",
@@ -101981,6 +105762,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -107640,6 +111422,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -112123,6 +115906,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -113244,6 +117028,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -115495,6 +119280,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -120896,6 +124682,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -210175,6 +213962,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -239047,38 +242835,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "actingSubject": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "profile": {
-                      "const": "work-create-acting-context-preference-v1",
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "revision": {
-                      "type": "string"
-                    },
-                    "task": {
-                      "const": "work.create",
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "profile",
-                    "task",
-                    "actingSubject",
-                    "revision",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ActingContextPreference"
                 }
               }
             },
@@ -239088,69 +242845,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 400,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ActingContextPreferenceInvalid"
                 }
               }
             },
@@ -239160,69 +242855,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 401,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ActingContextPreferenceUnauthorized"
                 }
               }
             },
@@ -239232,69 +242865,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 403,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ActingContextPreferenceDenied"
                 }
               }
             },
@@ -239304,141 +242875,27 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 409,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ActingContextPreferenceStale"
                 }
               }
             },
             "description": "Response for status 409"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActingContextPreferenceLimited"
+                }
+              }
+            },
+            "description": "Response for status 429"
+          },
           "500": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 500,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ActingContextPreferenceInternal"
                 }
               }
             },
@@ -239448,69 +242905,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 503,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/ActingContextPreferenceUnavailable"
                 }
               }
             },
@@ -423397,6 +426792,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -425167,6 +428563,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -426135,6 +429532,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -427235,6 +430633,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -428770,6 +432169,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -429795,6 +433195,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -431468,6 +434869,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -432373,6 +435775,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -433335,6 +436738,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -436412,6 +439816,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -444814,6 +448219,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -447949,6 +451355,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -605908,6 +609315,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -659861,6 +663269,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -660810,6 +664219,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -756457,6 +759867,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$id": "WorkScalarPending",
                   "properties": {
                     "operationId": {
                       "type": "string"
@@ -757052,657 +760463,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "chapterCount": {
-                      "~elyTyp": 7,
-                      "minimum": 0,
-                      "nullable": true,
-                      "type": [
-                        "integer",
-                        "null"
-                      ]
-                    },
-                    "completionStatus": {
-                      "~elyTyp": 7,
-                      "enum": [
-                        "ongoing",
-                        "completed",
-                        "hiatus",
-                        "upcoming",
-                        "cancelled",
-                        null
-                      ],
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "cover": {
-                      "anyOf": [
-                        {
-                          "properties": {
-                            "key": {
-                              "type": "string"
-                            },
-                            "kind": {
-                              "const": "fallback",
-                              "type": "string"
-                            },
-                            "policy": {
-                              "type": "string"
-                            },
-                            "resourceType": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "policy",
-                            "key",
-                            "resourceType"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "properties": {
-                            "basis": {
-                              "properties": {
-                                "context": {
-                                  "type": "string"
-                                },
-                                "policy": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "policy",
-                                "context"
-                              ],
-                              "type": "object"
-                            },
-                            "coverCredit": {
-                              "additionalProperties": false,
-                              "properties": {
-                                "holder": {
-                                  "~elyTyp": 7,
-                                  "maxLength": 200,
-                                  "minLength": 1,
-                                  "nullable": true,
-                                  "type": [
-                                    "string",
-                                    "null"
-                                  ]
-                                },
-                                "kind": {
-                                  "const": "copyright",
-                                  "type": "string"
-                                },
-                                "permittedRole": {
-                                  "const": "cover",
-                                  "type": "string"
-                                },
-                                "source": {
-                                  "additionalProperties": false,
-                                  "properties": {
-                                    "href": {
-                                      "format": "uri",
-                                      "maxLength": 2048,
-                                      "type": "string"
-                                    },
-                                    "name": {
-                                      "maxLength": 200,
-                                      "minLength": 1,
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "name",
-                                    "href"
-                                  ],
-                                  "type": "object"
-                                },
-                                "text": {
-                                  "maxLength": 500,
-                                  "minLength": 1,
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "kind",
-                                "text",
-                                "holder",
-                                "source",
-                                "permittedRole"
-                              ],
-                              "type": [
-                                "object",
-                                "null"
-                              ]
-                            },
-                            "crop": {
-                              "~elyTyp": 7,
-                              "nullable": true,
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            },
-                            "height": {
-                              "type": "integer"
-                            },
-                            "kind": {
-                              "const": "image",
-                              "type": "string"
-                            },
-                            "mediaType": {
-                              "type": "string"
-                            },
-                            "selection": {
-                              "type": "string"
-                            },
-                            "url": {
-                              "type": "string"
-                            },
-                            "width": {
-                              "type": "integer"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "selection",
-                            "url",
-                            "mediaType",
-                            "width",
-                            "height",
-                            "crop",
-                            "coverCredit",
-                            "basis"
-                          ],
-                          "type": "object"
-                        }
-                      ]
-                    },
-                    "description": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "properties": {
-                        "basis": {
-                          "enum": [
-                            "requested",
-                            "same-script",
-                            "other-script",
-                            "fallback"
-                          ]
-                        },
-                        "direction": {
-                          "enum": [
-                            "ltr",
-                            "rtl"
-                          ],
-                          "type": "string"
-                        },
-                        "language": {
-                          "type": "string"
-                        },
-                        "value": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "value",
-                        "language",
-                        "direction",
-                        "basis"
-                      ],
-                      "type": [
-                        "object",
-                        "null"
-                      ]
-                    },
-                    "descriptionObligations": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "status": {
-                              "const": "unassessed",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "status"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "instrument": {
-                              "~elyTyp": 7,
-                              "nullable": true,
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            },
-                            "obligations": {
-                              "items": {
-                                "additionalProperties": false,
-                                "properties": {
-                                  "appliesTo": {
-                                    "enum": [
-                                      "display",
-                                      "all"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "instrument": {
-                                    "type": "string"
-                                  },
-                                  "kind": {
-                                    "enum": [
-                                      "attribution",
-                                      "share_alike",
-                                      "notice_retention",
-                                      "change_indication",
-                                      "non_commercial",
-                                      "no_derivatives",
-                                      "other"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "notice": {
-                                    "~elyTyp": 7,
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
-                                  }
-                                },
-                                "required": [
-                                  "kind",
-                                  "instrument",
-                                  "appliesTo",
-                                  "notice"
-                                ],
-                                "type": "object"
-                              },
-                              "maxItems": 16,
-                              "type": "array"
-                            },
-                            "status": {
-                              "const": "assessed",
-                              "type": "string"
-                            },
-                            "use": {
-                              "const": "wiki_display",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "status",
-                            "use",
-                            "instrument",
-                            "obligations"
-                          ],
-                          "type": "object"
-                        }
-                      ]
-                    },
-                    "disclosure": {
-                      "enum": [
-                        "public",
-                        "restricted"
-                      ],
-                      "type": "string"
-                    },
-                    "fieldProvenance": {
-                      "properties": {
-                        "admission": {
-                          "type": "string"
-                        },
-                        "basis": {
-                          "const": "creation",
-                          "type": "string"
-                        },
-                        "candidateReceipt": {
-                          "type": "string"
-                        },
-                        "contributor": {
-                          "type": "string"
-                        },
-                        "fields": {
-                          "items": {
-                            "type": "string"
-                          },
-                          "type": "array"
-                        },
-                        "revision": {
-                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "basis",
-                        "revision",
-                        "contributor",
-                        "admission",
-                        "candidateReceipt",
-                        "fields"
-                      ],
-                      "type": "object"
-                    },
-                    "id": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "lastUpdatedAt": {
-                      "~elyTyp": 7,
-                      "format": "date-time",
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "links": {
-                      "properties": {
-                        "adoptions": {
-                          "type": "string"
-                        },
-                        "classifications": {
-                          "type": "string"
-                        },
-                        "credits": {
-                          "type": "string"
-                        },
-                        "editions": {
-                          "type": "string"
-                        },
-                        "history": {
-                          "type": "string"
-                        },
-                        "metadata": {
-                          "type": "string"
-                        },
-                        "ratings": {
-                          "type": "string"
-                        },
-                        "versions": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "versions",
-                        "classifications",
-                        "adoptions",
-                        "ratings",
-                        "history",
-                        "credits",
-                        "metadata",
-                        "editions"
-                      ],
-                      "type": "object"
-                    },
-                    "mainVersion": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "mainVersionLabel": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "properties": {
-                        "basis": {
-                          "enum": [
-                            "requested",
-                            "same-script",
-                            "other-script",
-                            "fallback"
-                          ]
-                        },
-                        "direction": {
-                          "enum": [
-                            "ltr",
-                            "rtl"
-                          ],
-                          "type": "string"
-                        },
-                        "language": {
-                          "type": "string"
-                        },
-                        "value": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "value",
-                        "language",
-                        "direction",
-                        "basis"
-                      ],
-                      "type": [
-                        "object",
-                        "null"
-                      ]
-                    },
-                    "mainVersionRevision": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "metadataRevision": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "originalTitle": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "properties": {
-                        "direction": {
-                          "enum": [
-                            "ltr",
-                            "rtl"
-                          ],
-                          "type": "string"
-                        },
-                        "language": {
-                          "maxLength": 35,
-                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
-                          "type": "string"
-                        },
-                        "value": {
-                          "maxLength": 500,
-                          "minLength": 1,
-                          "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "value",
-                        "language",
-                        "direction"
-                      ],
-                      "type": [
-                        "object",
-                        "null"
-                      ]
-                    },
-                    "profile": {
-                      "const": "work-read-v1",
-                      "type": "string"
-                    },
-                    "publicationState": {
-                      "enum": [
-                        "published",
-                        "unpublished"
-                      ],
-                      "type": "string"
-                    },
-                    "revision": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "selectedLanguage": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "sourcePosition": {
-                      "properties": {
-                        "dataEpoch": {
-                          "type": "string"
-                        },
-                        "dependencyToken": {
-                          "pattern": "^[0-9a-f]{64}$",
-                          "type": "string"
-                        },
-                        "sequence": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "dataEpoch",
-                        "sequence"
-                      ],
-                      "type": "object"
-                    },
-                    "structurePublicationHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "tagline": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "properties": {
-                        "basis": {
-                          "enum": [
-                            "requested",
-                            "same-script",
-                            "other-script",
-                            "fallback"
-                          ]
-                        },
-                        "direction": {
-                          "enum": [
-                            "ltr",
-                            "rtl"
-                          ],
-                          "type": "string"
-                        },
-                        "language": {
-                          "type": "string"
-                        },
-                        "value": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "value",
-                        "language",
-                        "direction",
-                        "basis"
-                      ],
-                      "type": [
-                        "object",
-                        "null"
-                      ]
-                    },
-                    "title": {
-                      "properties": {
-                        "basis": {
-                          "enum": [
-                            "requested",
-                            "same-script",
-                            "other-script",
-                            "fallback"
-                          ]
-                        },
-                        "direction": {
-                          "enum": [
-                            "ltr",
-                            "rtl"
-                          ],
-                          "type": "string"
-                        },
-                        "language": {
-                          "type": "string"
-                        },
-                        "value": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "value",
-                        "language",
-                        "direction",
-                        "basis"
-                      ],
-                      "type": "object"
-                    },
-                    "types": {
-                      "items": {
-                        "type": "string"
-                      },
-                      "maxItems": 8,
-                      "type": "array"
-                    },
-                    "verification": {
-                      "enum": [
-                        "unverified",
-                        "verified"
-                      ],
-                      "type": "string"
-                    },
-                    "wordCount": {
-                      "~elyTyp": 7,
-                      "minimum": 0,
-                      "nullable": true,
-                      "type": [
-                        "integer",
-                        "null"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "profile",
-                    "id",
-                    "revision",
-                    "mainVersion",
-                    "title",
-                    "cover",
-                    "types",
-                    "tagline",
-                    "completionStatus",
-                    "chapterCount",
-                    "wordCount",
-                    "lastUpdatedAt",
-                    "disclosure",
-                    "publicationState",
-                    "originalTitle",
-                    "metadataRevision",
-                    "description",
-                    "descriptionObligations",
-                    "mainVersionRevision",
-                    "mainVersionLabel",
-                    "selectedLanguage",
-                    "sourcePosition",
-                    "links"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkHeader"
                 }
               }
             },
@@ -757712,69 +760473,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 400,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkHeaderInvalid"
                 }
               }
             },
@@ -757784,69 +760483,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 401,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkHeaderUnauthorized"
                 }
               }
             },
@@ -757856,69 +760493,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 403,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkHeaderDenied"
                 }
               }
             },
@@ -757928,69 +760503,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 404,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkHeaderMissing"
                 }
               }
             },
@@ -758000,69 +760513,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 409,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkHeaderMoved"
                 }
               }
             },
@@ -758072,69 +760523,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 422,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkHeaderLimit"
                 }
               }
             },
@@ -758144,69 +760533,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 500,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkHeaderInternal"
                 }
               }
             },
@@ -758216,69 +760543,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 503,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkHeaderUnavailable"
                 }
               }
             },
@@ -791526,139 +793791,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "predecessor": {
-                      "type": "string"
-                    },
-                    "profile": {
-                      "const": "work-scalar-state-v1",
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "revision": {
-                      "type": "string"
-                    },
-                    "scalarValue": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "kind": {
-                              "const": "integer",
-                              "type": "string"
-                            },
-                            "lexical": {
-                              "const": "0",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "lexical"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "kind": {
-                              "const": "boolean",
-                              "type": "string"
-                            },
-                            "lexical": {
-                              "const": "false",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "lexical"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "kind": {
-                              "const": "string",
-                              "type": "string"
-                            },
-                            "lexical": {
-                              "const": "",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "lexical"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "kind": {
-                              "const": "unknown",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "kind": {
-                              "const": "no-value",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "type": "object"
-                        }
-                      ]
-                    },
-                    "sourcePosition": {
-                      "properties": {
-                        "dataEpoch": {
-                          "type": "string"
-                        },
-                        "datasetId": {
-                          "const": "product",
-                          "type": "string"
-                        },
-                        "sequence": {
-                          "pattern": "^[0-9]+$",
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "datasetId",
-                        "dataEpoch",
-                        "sequence"
-                      ],
-                      "type": "object"
-                    },
-                    "work": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "profile",
-                    "work",
-                    "revision",
-                    "predecessor",
-                    "sourcePosition",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkScalarWrite"
                 }
               }
             },
@@ -791668,45 +793801,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "operationId": {
-                      "type": "string"
-                    },
-                    "phase": {
-                      "type": "string"
-                    },
-                    "result": {
-                      "type": "null"
-                    },
-                    "retry": {
-                      "properties": {
-                        "afterMs": {
-                          "type": "number"
-                        },
-                        "allowed": {
-                          "const": true,
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "allowed",
-                        "afterMs"
-                      ],
-                      "type": "object"
-                    },
-                    "status": {
-                      "const": "reconciling",
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "operationId",
-                    "status",
-                    "phase",
-                    "result",
-                    "retry"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkScalarPending"
                 }
               }
             },
@@ -791716,69 +793811,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 400,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkScalarInvalid"
                 }
               }
             },
@@ -791788,69 +793821,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 401,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkScalarUnauthorized"
                 }
               }
             },
@@ -791860,69 +793831,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 403,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkScalarDenied"
                 }
               }
             },
@@ -791932,69 +793841,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 404,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkScalarMissing"
                 }
               }
             },
@@ -792004,141 +793851,27 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 409,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkScalarConflict"
                 }
               }
             },
             "description": "Response for status 409"
           },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkScalarLimited"
+                }
+              }
+            },
+            "description": "Response for status 429"
+          },
           "500": {
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 500,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkScalarInternal"
                 }
               }
             },
@@ -792148,69 +793881,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "currentHead": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "detail": {
-                      "maxLength": 512,
-                      "type": "string"
-                    },
-                    "status": {
-                      "const": 503,
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "validation": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "constraint": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "path": {
-                          "~elyTyp": 7,
-                          "maxLength": 180,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "path",
-                        "constraint"
-                      ],
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkScalarUnavailable"
                 }
               }
             },
