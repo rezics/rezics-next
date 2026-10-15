@@ -2,6 +2,8 @@ import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { originalRecipe, type RecipeWork }
   from '../../../scripts/qa/cases/outcomes/recipes/read-a-recipe.ts';
+import { Pool } from 'pg';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { importedRightsAssessments } from '../../../services/main/src/modules/rights/import-policy.ts';
 import { personaSessions, type PersonaSessions } from '../support/personas.ts';
 
@@ -89,7 +91,16 @@ async function sourceFixture() {
       expectedHead: structure.revision, sourceObservation: source.observation, actingSubject,
     }));
     await grant('platform:resource:work.publish', `work:publish:${work.work}`);
-    await grant('platform:resource:rights.assess', 'rights:assess');
+    const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
+    const client = await accessPool.connect();
+    try {
+      await client.query('BEGIN');
+      await grantFixtureAuthority(client, { scope: 'rights:assess', requireDispatch: true,
+        representations: [{ principalId, actor: actingSubject!, action: 'rights.assess', lifetime: '8 hours' }],
+        grant: { actor: actingSubject!, action: 'rights.assess', lifetime: '8 hours' } });
+      await client.query('COMMIT');
+    } catch (error) { await client.query('ROLLBACK'); throw error; }
+    finally { client.release(); await accessPool.end(); }
     return { ...work, ...structure, revision: result.revision, observation: source.observation, record: source.record,
       otherObservation: other.observation, unknownObservation: unknown.observation };
   })();

@@ -161,7 +161,7 @@ export async function prepareLaunchBooksCorpus(input: {
 }): Promise<LaunchBooksCorpus> {
   const sources = launchBookSources().map(({ entry }) => ({ id: entry.id, sha256: entry.sha256, reuseBasis: entry.reuseBasis }));
   const compatibility = loadCompatibility(root);
-  const id = `launch-books-${createHash('sha256').update(JSON.stringify([recipe, sources, compatibility.digest, 'sourced-structure-publication-v2'])).digest('hex').slice(0, 20)}`;
+  const id = `launch-books-${createHash('sha256').update(JSON.stringify([recipe, sources, compatibility.digest, 'source-rights-v1'])).digest('hex').slice(0, 20)}`;
   const directory = resolve(input.directory);
   if (!relative(root, directory).startsWith('.temp/')) throw new Error('Launch corpus must stay in this checkout .temp');
   mkdirSync(directory, { recursive: true });
@@ -309,6 +309,9 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
 
   await authorize('work:create:root', 'work.create');
   await authorize('rights:assess', 'rights.assess');
+  await authorize(`submission:submit:${space.realm}`, 'submission.submit');
+  await authorize(`publication:adopt:${space.realm}`, 'publication.adopt');
+  await authorize(`review:decide:${space.realm}`, 'review.decide');
 
   const sources = launchRecipeSources();
   const records: LaunchRecipeRecord[] = [];
@@ -357,6 +360,18 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
         expectedPublicationHead: null, rightsBasis: 'public-domain', sourceObservation: imported.sourceObservation,
         disclosure: 'public', actingSubject: actor },
     }, signal);
+    type Submission = { submission: { id: string; state: string; revision: string } };
+    const submitted = await api.command<Submission>(`${key}:submission:${source.pinId}:${source.recipeId}`, {
+      method: 'POST', path: `/v1/realms/${short(space.realm)}/submissions`, body: {
+        kind: 'work', work: work.work, mainVersion: work.mainVersion,
+        workRevision: work.workRevision, actingSubject: actor },
+    }, signal);
+    const accepted = submitted.submission.state === 'pending' ? await api.command<Submission>(
+      `${key}:adoption:${source.pinId}:${source.recipeId}`, { method: 'POST',
+        path: `/v1/realms/${short(space.realm)}/submissions/${submitted.submission.id}/decisions`, body: {
+          actingSubject: actor, expectedRevision: submitted.submission.revision, outcome: 'accept',
+          expectedSelectionHead: null, publicReason: null, internalNote: null } }, signal) : submitted;
+    if (accepted.submission.state !== 'accepted') throw new Error('Recipe Work adoption is incomplete');
     records.push({ recipeId: source.recipeId, pinId: source.pinId, title: source.title,
       language: source.language, caseIds: source.caseIds, sourceIngredients: source.ingredients,
       sourceMethods: source.methods, work: work.work, mainVersion: work.mainVersion,
