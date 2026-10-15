@@ -1,28 +1,87 @@
 # State
 
-Checkpoint `6bf820fc-9723-4ec8-9256-f05b31f826e1` for [this Goal](GOAL.md),
-carrying forward `checkpoint:ebe9a046-77c9-42fe-bcbe-053194927d4c` and recording
+Checkpoint `0cd7b6e8-a3bc-4798-a106-fce61a810553` for [this Goal](GOAL.md),
+carrying forward `checkpoint:6bf820fc-9723-4ec8-9256-f05b31f826e1` and recording
 only these handled events:
 
-- `task:G-2248:6` (missing host `pg_config`; prerequisite repair authorized).
-- `task:G-2248:7` (sudo authentication refusal; local credential use authorized).
-- `task:G-2248:8` (unavailable package name; provider discovery authorized).
-- `task:G-2248:11` (matching host tools accepted; missing custody; bounded preparation authorized).
-- `task:G-2248:13` (publication evidence supports qualification; Program had already resumed it).
+- `task:G-2248:15` (exact-key selection refused; frozen-tree current-key preparation authorized).
+- `task:G-2248:17` (current-key publication accepted for qualification; consumers resumed on the frozen tree).
+- `mail:eb521b6c-e168-4b1b-a927-9fdfbf5a30ad` (Program takes direct steering of G-2248 and G-2205).
+- `task:G-2248:20` (completion refused a retained template collation mismatch; evidence and repair question mailed to Program).
+- `mail:96445aa6-62b5-47d6-8af1-b48bfbba30fc` (Program scopes G-2678 and owns the later qualification resume).
 
-The handled turns acknowledged these events on 2026-10-15; this checkpoint
-found no pending Operations mail. Later parallel handoffs are outside this
+The handled turns acknowledged these events on 2026-10-15 UTC; both listed
+mail messages are acknowledged and this checkpoint found no pending Operations
+mail. Later parallel handoffs and repair outcomes are outside this
 checkpoint. It updates state only and authorizes no new work or proof.
 
 | Field | State |
 | --- | --- |
 | Manager | Enrolled with the coordinator on 2026-10-13 15:34 UTC |
-| Phase | Program's 2026-10-15 18:07 UTC decision records wave/2 on main and authorizes G-2248's production/completion physical qualification. Its 18:42 UTC decision authorizes consumption of the newly published worktree-local custody; the earlier wave-build hold is superseded for those two consumers only |
+| Phase | Program directly steers G-2248 and G-2205 from 2026-10-15 19:04 UTC. Completion on verified current-key custody refused a PostgreSQL collation mismatch; Program scoped G-2678 and owns resuming completion then production after that repair lands. Operations sends findings to Program and makes no further decisions in either brief |
 | Proved on physical fixtures | D108 restore consumption qualifies in two post-fix restores; no physical erasure row or OPS10 pass is proved. These events add no proved row |
-| Fixture | Preserve small `fx-small-180553eb933a` (154.817-second build; 37.620/65.559-second post-fix restores) and superseded `fx-small-a3a906c1c1b7`. G-2248 separately published one completion-default source, 1 build / 0 reuses, with no pruning; preserve its worktree-local custody and all protected historical backups |
-| Measures | Current `task goal -- status` sample: 67/68 rows, 402 proved and 6 pending cells; Operations 50% first attempts (today 0%, 0/5), landed-task median 2, max 15 (G-2248), 110.5M input / 532k output tokens, 14 first / 12 step / 14 fix attempts, seven fixes inferred; two open tasks. The Goal summary says zero live while G-2248's task row says attempt 15 running; this sample establishes no new outcome. Tokens per proved row remain unavailable. Refusal counters are zero, but the retained host and custody refusals below remain evidence. Repeated prerequisite discovery is this event set's cause: missing executable, authentication, an unverified package name, then checkout-local custody. Provider discovery replaced the guessed package command, matching tools were verified, and preparation was separated from consumers. G-2248 remains above the three-attempt cap. These cumulative figures may include parallel activity; no weekly efficiency improvement or proved row follows from this checkpoint |
+| Fixture | Preserve small `fx-small-180553eb933a` (154.817-second build; 37.620/65.559-second post-fix restores) and superseded `fx-small-a3a906c1c1b7`. G-2248 published current-key `5a242e29…` custody on frozen `375cbb93609aac36cc19802b99971b561bde5c92`, one build / zero reuses. Preserve both worktree-local publications, graph volumes, unpublished staging and protected historical/G-2205 backups |
+| Measures | Current `task goal -- status` scope sample: 67/68 rows, 402 proved and 6 pending cells; no new row from these events. The command had not returned Operations measures when this bounded turn recorded state. Prior checkpoint's historical sample remains 50% first attempts (that day 0%, 0/5), landed-task median 2, max 15 (G-2248), 110.5M input / 532k output tokens, 14 first / 12 step / 14 fix attempts and seven inferred fixes; these are not refreshed figures. Tokens per proved row remain unavailable. G-2248 has now reached event 20, above the three-attempt cap. This event set's repeat-work causes are transitive source-key drift and producer-to-host collation incompatibility. Decisions froze the source and separated current-key preparation from consumption; Program scoped G-2678 for the collation boundary. No weekly efficiency improvement follows; prior zero refusal counters do not erase the retained prerequisite refusals |
 
 ## G-2248 qualification decisions and next action
+
+Event 15 accepted a correct compatibility refusal, not a physical outcome.
+Completion QA `20261015t184354-9332cf` requested current key `5a242e29…` while
+the protected publication was `7a2197cc…`; production did not start. Changing
+only the transitive `scripts/goal/config.ts` digest reproduced the new key, so
+the earlier descriptor-only preflight was insufficient. Decision `375cbb936`
+narrowed continuation to one existing producer invocation if matching custody
+was absent, on a clean accepted tree frozen through preparation and later
+qualification. It resumed the worker for preparation only, with consumers held
+for a separate decision. The transitive inventory finding remains listed only.
+
+Event 17 accepted current-key publication as a qualification prerequisite, not
+a consumer outcome. Job `3f771fb1-8bd3-4a3e-a2b6-11f5d9a076e1` published one
+build, zero reuses on frozen clean
+`375cbb93609aac36cc19802b99971b561bde5c92`, with the same recomputed key before
+and after publication:
+`rs-owner-erasure-source-5a242e29f0fe04127521a7a71ca209e4fd4f483b33de2877da1b510eb5fa64bd`.
+Producer work was 73.727 active seconds; physical preparation and verification
+144.982 active seconds, under separate unchanged 600-second bounds. Cleanup
+succeeded and protected custody stayed intact. Manifest structural digest:
+`bb5bc68d32b57c09ff743f03d4792f6b0d6b9264accc6be645abf48f108434f1`;
+integrity digest:
+`723566ef3186663daac9e154dcffb38f81ef526932dcad572de01d7dcc0e2199`.
+Evidence: `.temp/worktrees/g-2248/.temp/goal/current-key-custody-handoff.md`.
+Decision `d1b9e5cd9` resumed completion then production serially, once each,
+stopping at the first refusal on that same frozen tree and worktree-local root
+`.temp/worktrees/g-2248/.temp/fixture/retained-sources`. It preserved source/key
+preflight, physical custody checks, all assertions and separate unchanged clocks;
+it authorized no retry, repair or preparation.
+
+Program's 19:04 UTC mail took direct steering of G-2248 and G-2205. Operations
+must send findings to Program instead of adding decisions to either brief.
+
+Event 20's detailed handoff is `RESULT: partial`, despite the event's missing
+RESULT classification. Completion QA `20261015t190804-a24af0`, admitted job
+`7bed64f9-4f87-48db-bfde-1017e4deea53`, started restored native PostgreSQL and
+the graph, then refused `CREATE DATABASE WITH TEMPLATE` for the Relay template:
+recorded collation 2.41 versus host 2.43, SQLSTATE `XX000`. Both producer and
+native tools report PostgreSQL 18.6; the producer image uses Debian trixie.
+The authored `08007` injection was not reached, production was skipped and
+completion OPS12 had zero passes / one failure / six expect calls. The clean
+frozen source and exact key stayed stable; physical custody verification passed
+before and after disposal, and protected evidence survived. Shard elapsed was
+111.998 seconds; QA aggregate active time 165.810 seconds and admission wait
+10.162 seconds. This is a collation refusal, not budget exhaustion. No repair,
+preparation, retry, implementation landing or closure followed. Evidence:
+`.temp/worktrees/g-2248/.temp/goal/frozen-tree-qualification-handoff.md`.
+
+Operations mailed Program the brief path, evidence and repair question in
+`.temp/goal-orchestration/mail/operations-g2248-attempt20-program.md`. Program's
+19:19 UTC answer scoped G-2678: reindex and refresh collation version on the
+disposable retained PostgreSQL copy, aligning producer and consumer collation
+environments if possible. Program owns the resume after that repair lands:
+completion then production on the frozen tree. These handled events contain
+no G-2678 landing result and accept no lost-outcome, final-erasure or OPS10 proof.
+No Operations brief edit, resume, landing, dispatch or close is due here.
+
+## Prior host and publication evidence
 
 Events 6–8 offered no repository implementation or physical proof. Completion
 QA `20261015t180958-b6354d` refused missing `pg_config` before source selection;
@@ -54,18 +113,15 @@ integrity digest:
 `594392be5f888e6a3838e65fec306f113d2fb8ca2c608c39bf8938a48262c34c`.
 Evidence: `.temp/worktrees/g-2248/.temp/goal/retained-source-publication-handoff.md`.
 
-Publication supports proceeding but proves no isolated consumer restore,
-disposal immutability, `08007` response/running state, replay/release or final
-consumer erasure. Program had already committed qualification decision
+That publication proved no consumer outcome. Program had already committed qualification decision
 `8d801db67d` and resumed attempt 14; event 13 therefore made no duplicate resume,
-brief edit or landing. The next action belongs to that existing worker and its
-handoff event, retaining all fault, custody, release and final-erasure assertions,
-separate clocks and unchanged budgets. The original comment drill stays held on
+brief edit or landing. Later decisions and next action are recorded above;
+retain all fault, custody, release and final-erasure assertions, separate clocks
+and unchanged budgets. The original comment drill stays held on
 its separate prerequisites. The host installer/declaration gap is listed only:
 `docs/development/toolchain.md` omits the matching providers, and
 `scripts/dev/cli.ts` does not resolve or check `pg_config`. No repair is
-dispatched by this checkpoint, and there is no implementation to land or task to
-close from these five events.
+dispatched by this checkpoint.
 
 ## Carried wave-build decisions
 
