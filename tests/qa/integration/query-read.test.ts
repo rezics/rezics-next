@@ -161,7 +161,7 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     expect(zoneResult.result.items.map(item => item.id)).toEqual(
       (await zoneLegacy.json() as { items: Array<{ id: string }> }).items.map(item => item.id));
 
-    classification = await contextFixture(Bun.env as Record<string, string>);
+    classification = await contextFixture(Bun.env as Record<string, string>, env.objectDirectory);
     const define = async (label: string) => {
       const input = { label, actingSubject: classification!.actorA };
       const result = await createClassificationProposition(classification!.env, classification!.admission('classification:define:global',

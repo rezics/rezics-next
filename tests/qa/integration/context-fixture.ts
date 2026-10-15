@@ -32,7 +32,8 @@ export const RV = 'https://rezics.com/vocab/';
  * Real Account tokens, Access admission, Main routes and QA Jena for the Context and Statement
  * owner. The Fuseki proxy counts reads per request and can lose one command response.
  */
-export async function contextFixture(apps: Record<string, string>) {
+export async function contextFixture(apps: Record<string, string>,
+  objectDirectory = resolve('.temp', `context-${randomUUID()}`)) {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const account = await ratingAccount(apps,
     'openid context:write context:select context:read statement:write statement:decide work:create work:edit work:read classification:decide rating:configure rating:submit');
@@ -89,7 +90,7 @@ export async function contextFixture(apps: Record<string, string>) {
   } }) as FusekiClient;
   const env: WorkActivationEnvironment = createWorkActivationEnvironment({ referenceFencePool: contentPool, fuseki,
     lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
-    objectDirectory: resolve('.temp', `context-${randomUUID()}`) });
+    objectDirectory });
   const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
   access.configureBaseline(fuseki);
   const selections = new PrivateContextSelections(accessPool);
