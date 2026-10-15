@@ -1,11 +1,21 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { expect, test } from 'bun:test';
+import { afterEach, expect, test } from 'bun:test';
 import { processAlive } from '../../qa/process/identity.ts';
 import { killWorktreeProcesses } from '../goalctl.ts';
+import { processRunning } from '../../../tests/qa/support/process-liveness.ts';
+import { fixtureProcessScope } from './process-scope.ts';
 
 const fixtureDeadlineMs = 180_000;
+const cleanups: Array<() => void> = [];
+afterEach(() => {
+  const failures: unknown[] = [];
+  for (const cleanup of cleanups.splice(0)) {
+    try { cleanup(); } catch (error) { failures.push(error); }
+  }
+  if (failures.length) throw new AggregateError(failures, 'Process fixture cleanup failed');
+});
 
 async function until(check: () => boolean): Promise<void> {
   const deadline = Date.now() + fixtureDeadlineMs;
@@ -17,28 +27,20 @@ async function until(check: () => boolean): Promise<void> {
 
 async function fixture(marked: boolean) {
   const root = mkdtempSync(join(import.meta.dir, '../../../.temp/process-scope-'));
-  const children: ChildProcess[] = [];
+  const scope = fixtureProcessScope();
   const workers: { worker: number; child: number }[] = [];
-  const readyPaths: string[] = [];
   const cleanup = () => {
-    for (const path of readyPaths) {
-      if (!existsSync(path)) continue;
-      const ready = JSON.parse(readFileSync(path, 'utf8')) as { worker: number; child: number };
-      for (const pid of [ready.worker, ready.child]) {
-        try { process.kill(pid, 'SIGKILL'); } catch { /* already exited */ }
-      }
-    }
-    for (const child of children) child.kill('SIGKILL');
+    scope.cleanup();
     rmSync(root, { recursive: true, force: true });
   };
+  cleanups.push(cleanup);
   try {
     const worktrees = [join(root, 'first'), join(root, 'second')];
     for (const worktree of worktrees) {
       const ready = join(worktree, '.temp/ready');
       mkdirSync(ready, { recursive: true });
       const readyPath = join(ready, 'G-001');
-      readyPaths.push(readyPath);
-      const env: NodeJS.ProcessEnv = { ...process.env, GOAL_TASK_ID: 'G-001', GOAL_SLEEP_READY_DIR: ready };
+      const env: NodeJS.ProcessEnv = { ...process.env, ...scope.env, GOAL_TASK_ID: 'G-001', GOAL_SLEEP_READY_DIR: ready };
       delete env.GOAL_WORKER_SCRIPT;
       delete env.GOAL_WORKER_LOG;
       if (marked) env.GOAL_WORKTREE = worktree;
@@ -46,7 +48,6 @@ async function fixture(marked: boolean) {
       const child = spawn(process.execPath, [join(import.meta.dir, 'sleep-worker.ts')], {
         cwd: worktree, detached: true, stdio: 'ignore', env,
       });
-      children.push(child);
       let failure: Error | undefined;
       child.once('error', error => { failure = error; });
       await until(() => {
@@ -86,3 +87,44 @@ test('legacy task cleanup only signals matching workers still inside the request
     expect(processAlive({ pid: second!.child })).toBe(true);
   } finally { f.cleanup(); }
 }, 240_000);
+
+for (const failure of ['assertion', 'timeout'] as const) {
+  test(`fixture cleanup stops detached workers and their children after a test ${failure}`, () => {
+    const scratch = join(import.meta.dir, '../../../.temp/process-scope-tests');
+    mkdirSync(scratch, { recursive: true });
+    const directory = mkdtempSync(join(scratch, 'case-'));
+    const scope = fixtureProcessScope();
+    const ready = join(directory, 'G-001');
+    const harness = join(directory, 'cleanup.test.ts');
+    writeFileSync(harness, `import { afterEach, test } from 'bun:test';
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { fixtureProcessScope } from ${JSON.stringify(join(import.meta.dir, 'process-scope.ts'))};
+const scope = fixtureProcessScope(${JSON.stringify(scope.env.GOAL_TEST_PROCESS_SCOPE)});
+afterEach(() => scope.cleanup());
+test('failing fixture', async () => {
+  const worker = spawn(process.execPath, [${JSON.stringify(join(import.meta.dir, 'sleep-worker.ts'))}], {
+    detached: true, stdio: 'ignore', env: { ...process.env, ...scope.env,
+      GOAL_SLEEP_READY_DIR: ${JSON.stringify(directory)}, GOAL_TASK_ID: 'G-001' },
+  });
+  worker.unref();
+  while (!existsSync(${JSON.stringify(ready)})) await Bun.sleep(10);
+  ${failure === 'assertion' ? "throw new Error('fixture assertion failed before PID registration');" : 'await new Promise(() => {});'}
+}, 2000);
+`);
+    try {
+      const result = spawnSync(process.execPath, ['test', harness], {
+        encoding: 'utf8', timeout: 10_000, killSignal: 'SIGKILL', env: { ...process.env, ...scope.env },
+      });
+      expect(result.status, result.stderr).toBe(1);
+      expect(existsSync(ready), result.stderr).toBe(true);
+      const pids = JSON.parse(readFileSync(ready, 'utf8')) as { worker: number; child: number };
+      expect(processRunning(pids.worker)).toBe(false);
+      expect(processRunning(pids.child)).toBe(false);
+    } finally {
+      // A broken cleanup under test must not leak its own reproduction, even before readiness.
+      scope.cleanup();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 15_000);
+}

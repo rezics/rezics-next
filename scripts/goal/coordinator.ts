@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, statSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { processIdentity, processParent, sameProcess, type ProcessIdentity } from '../qa/process/identity.ts';
@@ -9,12 +9,35 @@ import { GoalMailStore } from './mail.ts';
 import { retryEventDatabase } from './event-store.ts';
 import { ensureTermspacesSession, termspacesSession, missingTermspacesReason, termspacesTarget, goalWindows, newGoalWindow, turnWindowName, windowTurns, windowTmux, followTurn } from './windows.ts';
 import { JobStore, jobDirectory, wakeJobs, type JobPassOptions } from './job.ts';
-import { readLedger } from './ledger.ts';
-import type { Ledger } from './types.ts';
+import { pidAlive, readLedger, withLedger } from './ledger.ts';
+import { engineOf, programOf, type Ledger } from './types.ts';
+
+/** A parked command may run for hours. Recording its caller's end must not wait for a wake or settlement. */
+export async function recordWorkerEnds(ledger: Ledger, options: JobPassOptions = {}): Promise<void> {
+  const ended = Object.values(ledger.tasks).flatMap(task => task.attempts.filter(attempt => {
+    if (attempt.endedAt) return false;
+    if (!pidAlive(attempt.pid, programOf(engineOf(attempt)))) return true;
+    if (!attempt.lastMessage || !existsSync(attempt.lastMessage)) return false;
+    const final = statSync(attempt.lastMessage);
+    return final.size > 0 && final.mtimeMs >= Date.parse(attempt.startedAt);
+  }).map(attempt => ({ id: task.id, n: attempt.n })));
+  if (!ended.length) return;
+  await (options.mutate ?? withLedger)(current => {
+    for (const { id, n } of ended) {
+      const task = current.tasks[id];
+      const attempt = task?.attempts.find(attempt => attempt.n === n);
+      if (!attempt) continue;
+      attempt.endedAt ??= new Date().toISOString();
+      if (task!.attempts.at(-1) === attempt && task!.state === 'running'
+        && !pidAlive(attempt.pid, programOf(engineOf(attempt)))) task!.state = 'exited';
+    }
+  });
+}
 
 /** A coordinator pass retries worker wakes missed by their executor; commands retain their detached
  * executor while queued or running, so taking over never restarts a command or acquires a second slot. */
 export async function coordinateWorkerJobs(ledger: Ledger = readLedger(), options: JobPassOptions = {}): Promise<void> {
+  await recordWorkerEnds(ledger, options);
   for (const cwd of new Set(Object.values(ledger.tasks).map(task => task.worktree))) {
     const directory = jobDirectory(cwd);
     if (!existsSync(join(directory, 'jobs.sqlite'))) continue;

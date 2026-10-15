@@ -2,12 +2,12 @@ import { Database } from 'bun:sqlite';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { constants } from 'node:os';
 import { checkFailureLines } from './check.ts';
 import { lastAttempt, launch, readResult, running } from './launch.ts';
 import { admitWorkers } from './tasks.ts';
-import { managerOf, readLedger, stateDir, withLedger } from './ledger.ts';
+import { git, managerOf, readLedger, stateDir, withLedger } from './ledger.ts';
 import { engineOf, type Ledger, type Task } from './types.ts';
 import { processAlive, processIdentity, type ProcessIdentity } from '../qa/process/identity.ts';
 import { gateRefusal } from './queue.ts';
@@ -31,6 +31,10 @@ export function parkedOnJob(task: Task, attempt: number, text: string): boolean 
   finally { store.close(); }
 }
 export const jobDirectory = (cwd: string): string => join(cwd, '.temp/goal/jobs');
+
+/** Coordination follows the main checkout even when a wave deliberately keeps an older application tree. */
+export const jobRuntime = (cwd: string): string => join(dirname(git(cwd,
+  ['rev-parse', '--path-format=absolute', '--git-common-dir'])), 'scripts/goal/job.ts');
 
 export interface Job {
   id: string; task: string; attempt: number; cwd: string; command: string[]; created: number;
@@ -91,7 +95,7 @@ async function jobProcess(directory: string, id: string, role: 'owner' | 'execut
     });
     log = openSync(path, 'a');
     const child = role === 'owner'
-      ? spawn(process.execPath, [import.meta.filename, '--run', directory, id], {
+      ? spawn(process.execPath, [jobRuntime(job.cwd), '--run', directory, id], {
         cwd: job.cwd, detached: true, stdio: ['ignore', log, log],
       })
       : spawn(job.command[0]!, job.command.slice(1), { cwd: job.cwd, stdio: ['ignore', log, log] });
@@ -156,7 +160,7 @@ export async function runJob(command: string[], options: {
     store.put(job);
     const log = openSync(store.log(job.id), 'a');
     try {
-      const child = spawn(process.execPath, [import.meta.filename, '--own', store.directory, job.id], {
+      const child = spawn(process.execPath, [jobRuntime(cwd), '--own', store.directory, job.id], {
         cwd, detached: true, stdio: ['ignore', log, log],
       });
       await new Promise<void>((resolveStart, reject) => {

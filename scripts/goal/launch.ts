@@ -196,6 +196,9 @@ export function launch(task: Task, effort: string, session: string, prompt: stri
   mkdirSync(runDir, { recursive: true });
   const output = join(runDir, `attempt-${n}.json`);
   const lastMessage = isCodex(engine) ? join(runDir, `attempt-${n}.last.md`) : undefined;
+  // A wave can keep old application code; its detached job controller still follows current main.
+  prompt += `\nFor recorded jobs, use \`bun ${join(root, 'scripts/goal/goalctl.ts')} job -- <command…>\``
+    + ' from this worktree, so job ownership and wake rules use main’s code.';
   const [program, args] = launchCommand({ id: task.id, effort, session, prompt, resume, engine,
     worktree: task.worktree, lastMessage });
   const child = spawn(program, args, {
