@@ -416,6 +416,23 @@ export async function ensureLocalDatasetModelGeneration(
   } finally { budget.close(); }
 }
 
+/** A running container can still be opening TDB2 after restart. Only readiness
+ * is retried: profile compatibility and model admission keep their own errors.
+ * The shared budget also bounds in-flight health requests and retry sleeps. */
+export async function waitForModelOwner(fuseki: Pick<FusekiClient, 'commandHealth'>,
+  budget: ModelWorkBudget): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await budget.run(() => fuseki.commandHealth());
+      return;
+    } catch (error) {
+      budget.remaining();
+      if (attempt === 30) throw error;
+      await budget.run(() => Bun.sleep(500));
+    }
+  }
+}
+
 async function alignLocalDatasetModelGeneration(stack: string, fixture: FixtureModelBootstrap | undefined,
   runtime: ModelBootstrapRuntime, budget: ModelWorkBudget): Promise<LocalModelBootstrapResult> {
   const docker = (args: string[], timeout = 30_000) => {
@@ -428,6 +445,7 @@ async function alignLocalDatasetModelGeneration(stack: string, fixture: FixtureM
   const container = assertLocalModelOwner(stack, env, docker, runtime.readEnv);
   checkedLocalModelEndpoint(env.FUSEKI_URL!);
   const fuseki = runtime.fuseki(env, budget.signal);
+  await waitForModelOwner(fuseki, budget);
   await budget.run(() => runtime.assertProfiles(fuseki));
   const bytes = readFileSync(modelFile),
     modelManifestSha256 = sha256(bytes);
@@ -624,15 +642,7 @@ sync`,
       // Recovery still restarts an owner if its maintenance deadline expired.
       if (stopped) runtime.docker(['start', container.Id], 30_000);
     }
-    for (let attempt = 0; ; attempt++) {
-      try {
-        await budget.run(() => fuseki.commandHealth());
-        break;
-      } catch (error) {
-        if (attempt === 30) throw error;
-        await budget.run(() => Bun.sleep(500));
-      }
-    }
+    await waitForModelOwner(fuseki, budget);
     const active = await budget.run(() => runtime.readHead(fuseki));
     if (
       active.generation !== generation ||

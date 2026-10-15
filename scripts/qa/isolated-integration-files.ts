@@ -8,6 +8,8 @@ import { integrationGateFiles } from './integration-gate-files.ts';
 // branches append entries; git's union merge driver keeps both sides (see
 // .gitattributes), so add a comment line and a path line, never reorder.
 export const isolatedIntegrationFileList = [
+  // Restarts storage owners and retains its own delivery history across process reconstruction.
+  'tests/qa/integration/restart-resilience.test.ts',
   // Closure owns its Realm and platform governance fixture for all six personas.
   'tests/qa/integration/classification-context-closure.test.ts',
   // Edit binds exact graph sequences and fresh Access authority; outbox replays from zero and changes lineage.

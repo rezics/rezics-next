@@ -4,12 +4,47 @@ import {
   modelBootstrapCandidate,
   modelBootstrapUpdate,
   type ModelBootstrapIntent,
+  waitForModelOwner,
 } from '../../../scripts/datasets/model-bootstrap.ts';
+import { ModelAlignmentTimeout, ModelWorkBudget } from '../../../scripts/fixture/model-deadline.ts';
+import type { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { sha256 } from '../../../scripts/datasets/store.ts';
 import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
 
 const target = 'a'.repeat(64),
   old = 'b'.repeat(64);
+
+test('model owner readiness retries restart failures within the shared preparation deadline', async () => {
+  let attempts = 0;
+  const owner = { commandHealth: async () => {
+    if (++attempts < 3) throw new Error('connection refused while TDB2 opens');
+    return {} as Awaited<ReturnType<FusekiClient['commandHealth']>>;
+  } };
+  const deadline = Date.now() + 3000, budget = new ModelWorkBudget(() => deadline - Date.now());
+  try {
+    await waitForModelOwner(owner, budget);
+    expect(attempts).toBe(3);
+  } finally { budget.close(); }
+});
+
+test('model owner readiness bounds a hung health request and stops on caller cancellation', async () => {
+  for (const cancel of [false, true]) {
+    const parent = new AbortController(), reason = new Error('restore cancelled');
+    const deadline = Date.now() + 20, budget = new ModelWorkBudget(() => deadline - Date.now(), parent.signal);
+    let attempts = 0;
+    const owner = { commandHealth: () => {
+      attempts++;
+      if (cancel) parent.abort(reason);
+      return new Promise<Awaited<ReturnType<FusekiClient['commandHealth']>>>(() => {});
+    } };
+    try {
+      const waiting = waitForModelOwner(owner, budget);
+      if (cancel) await expect(waiting).rejects.toBe(reason);
+      else await expect(waiting).rejects.toBeInstanceOf(ModelAlignmentTimeout);
+      expect(attempts).toBe(1);
+    } finally { budget.close(); }
+  }
+});
 function intent(): ModelBootstrapIntent {
   const generation = `urn:rezics:model-generation:${target}`;
   return {
