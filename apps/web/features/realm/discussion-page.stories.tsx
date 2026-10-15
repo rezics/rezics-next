@@ -24,6 +24,7 @@ import { RealmNotFound } from './states.tsx';
 import { RealmPageStory, realmMessagesFor } from './story-page.tsx';
 import { RealmThreadContent, ThreadSkeleton } from './thread-content.tsx';
 import { realmHref } from './route.ts';
+import { DiscussionColumns, ThreadRail } from './thread-rail.tsx';
 
 type State = 'populated' | 'empty' | 'error' | 'gone' | 'loading' | 'thread' | 'thread-empty' | 'thread-loading' | 'thread-error' | 'thread-gone' | 'siblings';
 const concept = 'https://rezics.com/id/00000001-aaaa-4000-a000-000000000001';
@@ -88,6 +89,10 @@ function DiscussionPage({ state, locale, signedIn }: { state: State; locale: UiL
       discussions: realmHref(locale, realm, 'discussions'), decisions: realmHref(locale, realm, 'decisions'),
       about: realmHref(locale, realm, 'about') } };
   return <RealmPageStory zone={zone} realmRef={realm} locale={locale}>
+    <DiscussionColumns rail={<ThreadRail name={{ value: zone.name.value, lang: zone.name.lang }}
+      description={zone.description ? { value: zone.description.value, lang: zone.description.lang } : null}
+      members={null} aboutHref={zone.links.about} rules={[]}
+      labels={{ about: feed.aboutCommunity, rules: feed.communityRules, more: feed.moreAboutCommunity }} />}>
     <FeedProvider locale={locale} messages={feed} now={THREAD_NOW} signedIn={signedIn} actingSubject={actor ?? null}
       signInHref="/auth/start" avatarQuery="" tab="all" followedRealms={null} api={memoryFeed()}>
       {isThread ? thread?.state === state ? <RealmThreadContent read={thread.read} sort="best" here={here} feed={feed}
@@ -102,6 +107,7 @@ function DiscussionPage({ state, locale, signedIn }: { state: State; locale: UiL
           <DiscussionListContent page={loaded.page} path={storyRealm.path} query={query} locale={locale} feed={feed} messages={messages} />
         </> : <DiscussionListSkeleton />}
     </FeedProvider>
+    </DiscussionColumns>
   </RealmPageStory>;
 }
 

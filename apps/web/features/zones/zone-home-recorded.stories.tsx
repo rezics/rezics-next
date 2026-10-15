@@ -106,8 +106,9 @@ const homePath = (address: ZonePresentationRead['address'], path: readonly strin
 const desktop = { locale, viewport: { value: 'desktop' } };
 const phone = { locale, viewport: { value: 'phone' } };
 
-function RecordedZoneHome({ space, selections, routePath }: {
+function RecordedZoneHome({ space, selections, routePath, locale = 'en' }: {
   space: string; selections: readonly RecordedSelection[]; routePath?: string;
+  locale?: import('../../i18n/define.ts').UiLocale;
 }) {
   return <ZoneHomeRecordedPage record={record} persona={persona} locale={locale} space={space}
     selections={selections} routePath={routePath} />;
@@ -116,6 +117,7 @@ function RecordedZoneHome({ space, selections, routePath }: {
 const meta = {
   title: 'Zones/Zone home',
   component: RecordedZoneHome,
+  render: (args, { globals }) => <RecordedZoneHome {...args} locale={globals.locale as import('../../i18n/define.ts').UiLocale} />,
   parameters: { route: { pathname: homePath(published.address) } },
   globals: { locale },
 } satisfies Meta<typeof RecordedZoneHome>;

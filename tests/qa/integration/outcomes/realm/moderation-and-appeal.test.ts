@@ -11,6 +11,7 @@ import { realmEditSite } from '../../../../../apps/web/features/manage/realm-sit
 import { readAppealReceipt } from '../../../../../apps/web/features/realm-appeal/ban-read.ts';
 import moderation from '../../../../../scripts/qa/cases/outcomes/realm/moderation-and-appeal.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordJapaneseReads } from '../../../support/recorded-locale-visit.ts';
 import { recordFrameReads } from '../../../support/frame-reads.ts';
 import { personaNames, personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
@@ -32,7 +33,7 @@ async function withinDeadline(part: string, milliseconds: number, run: () => Pro
   } finally { clearTimeout(timer); }
 }
 const fixtures = {} as Record<PersonaName, Fixture>;
-const recording = new OutcomeRecorder(moderation);
+const recording = recordJapaneseReads(new OutcomeRecorder(moderation));
 const short = (value: string) => value.slice(-36);
 const acting = (person: PersonaSession) => new URLSearchParams(person.actingSubject ? { actingSubject: person.actingSubject } : {});
 

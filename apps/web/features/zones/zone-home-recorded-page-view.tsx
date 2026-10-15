@@ -13,6 +13,7 @@ import { RealmMembership } from '../realm/membership.tsx';
 import { realmHref, siteHref } from '../realm/route.ts';
 import { realmMessagesFor } from '../realm/story-page.tsx';
 import { messages as shellMessages } from '../shell/messages.ts';
+import shellJa from '../shell/messages/ja.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
@@ -68,7 +69,7 @@ export function ZoneHomeRecordedPage({ record, persona, selections, space, local
   const [error, setError] = useState<Error | null>(null);
   useEffect(() => {
     let active = true;
-    const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
+    const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX, locale });
     const main = recordedZoneHomeClient(replay.fetcher);
     async function load() {
       const loaded = await loadZoneHomeFrame(main, space, locale, routePath);
@@ -107,6 +108,6 @@ export function ZoneHomeRecordedPage({ record, persona, selections, space, local
     return () => { active = false; replay.dispose(); };
   }, [record, persona, selections, space, locale, routePath]);
   if (error) throw error;
-  if (!shown) return <PageContainer><p role="status" aria-busy="true">{shellMessages.loading}</p></PageContainer>;
+  if (!shown) return <PageContainer><p role="status" aria-busy="true">{locale === 'ja' ? shellJa.loading : shellMessages.loading}</p></PageContainer>;
   return shown;
 }

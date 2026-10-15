@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import type { AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import books from '../../../../tests/qa/fixtures/outcomes/books/catalogue-browse-and-search-in-its-zone.json';
 import hub from '../../../../tests/qa/fixtures/outcomes/books/work-hub-and-edition-choice.json';
+import team from '../../../../tests/qa/fixtures/outcomes/realm/roles-and-team.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { recordedFetch, type RecordedSelection } from './recorded-fetch.ts';
@@ -12,6 +13,18 @@ const empty = bookRecord.personas.visitor.find(sample => sample.label === 'searc
 const problem = bookRecord.personas.visitor.find(sample => sample.label === 'unsupported-query-shape')!;
 const disposals: (() => void)[] = [];
 afterEach(() => { for (const dispose of disposals.splice(0)) dispose(); });
+
+test('Japanese replay selects the separately recorded production request without rewriting it', async () => {
+  const record = team as AnswerRecord;
+  const japanese = record.personas.owner.find(sample => sample.label === 'agent-choices@ja')!;
+  expect(japanese.path).toContain('languages=ja');
+  const replay = recordedFetch(record, 'owner', [{ label: 'agent-choices', state: 'populated' }], { locale: 'ja' });
+  disposals.push(replay.dispose);
+  const response = await replay.fetcher(new URL(japanese.path, 'https://recorded.invalid'));
+  expect(await response.json()).toEqual(japanese.answer);
+  const english = record.personas.owner.find(sample => sample.label === 'agent-choices')!;
+  await expect(replay.fetcher(new URL(english.path, 'https://recorded.invalid'))).rejects.toThrow('Unmatched recorded request');
+});
 
 test('a recorded public header with a bare question mark has the same empty query as the typed client', async () => {
   const record = hub as AnswerRecord;

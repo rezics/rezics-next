@@ -4,6 +4,7 @@ import { readAddress } from '../../../../../apps/web/features/address/client.ts'
 import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
 import { readSpacePage } from '../../../../../apps/web/features/address/space-read.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordJapaneseReads } from '../../../support/recorded-locale-visit.ts';
 import { closeRealm, closureCell } from './closure-fixture.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
@@ -15,7 +16,7 @@ import {
 } from '../../../support/personas.ts';
 
 setDefaultTimeout(180_000);
-const recording = new OutcomeRecorder(declaration);
+const recording = recordJapaneseReads(new OutcomeRecorder(declaration));
 let closed: PersonaSessions;
 let live: PersonaSessions;
 let privateRealm: PersonaSessions;

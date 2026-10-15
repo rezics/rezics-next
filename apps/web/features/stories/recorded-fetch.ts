@@ -35,13 +35,15 @@ export function recordedFetch(
   record: AnswerRecord,
   persona: AnswerPersona,
   selections: readonly RecordedSelection[],
-  { pathPrefix = '', sequence = false }: { pathPrefix?: string; sequence?: boolean } = {},
+  { pathPrefix = '', sequence = false, locale = 'en' }: { pathPrefix?: string; sequence?: boolean; locale?: string } = {},
 ): { fetcher: typeof fetch; dispose: () => void } {
   if (pathPrefix && (!pathPrefix.startsWith('/') || pathPrefix.endsWith('/'))) {
     throw new Error('Recorded fetch pathPrefix must be a path without a trailing slash');
   }
   const samples = selections.map(({ label, state }) => {
-    const found = record.personas[persona].filter(sample => sample.label === label);
+    const localizedLabel = `${label}@${locale}`;
+    const selectedLabel = record.personas[persona].some(sample => sample.label === localizedLabel) ? localizedLabel : label;
+    const found = record.personas[persona].filter(sample => sample.label === selectedLabel);
     if (found.length !== 1) throw new Error(`Expected one recorded sample: ${record.row}/${persona}/${label}`);
     const sample = found[0]!;
     // A create answers 201 and a removal 204: both are complete, unlike the 202 of a command still running.

@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { chromium } from '@playwright/test';
 import team from '../../../../../scripts/qa/cases/outcomes/realm/roles-and-team.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordJapaneseReads } from '../../../support/recorded-locale-visit.ts';
 import { expectQaPlatformAccess } from '../../../support/platform-access.ts';
 import {
   personaSessions,
@@ -27,7 +28,7 @@ async function within(part: string, milliseconds: number, run: () => Promise<voi
 }
 let dialogBundle: string;
 let sessions: PersonaSessions;
-const recording = new OutcomeRecorder(team);
+const recording = recordJapaneseReads(new OutcomeRecorder(team));
 let initialRole: string;
 const root = () => `/v1/realms/${sessions.realm.slice(-36)}`;
 const acting = (person: PersonaSession) =>

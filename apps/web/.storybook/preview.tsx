@@ -4,6 +4,7 @@ import { spyOn } from 'storybook/test';
 import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
 import { messages as shell } from '../features/shell/messages.ts';
 import shellZhHans from '../features/shell/messages/zh-Hans.ts';
+import shellJa from '../features/shell/messages/ja.ts';
 import { ShellProvider } from '../features/shell/shell-provider.tsx';
 import type { UiLocale } from '../i18n/define.ts';
 import '../app/styles.css';
@@ -32,7 +33,7 @@ const withDocument: Decorator = (Story, { globals, parameters }) => {
       <ShellProvider
         key={`${theme}-${locale}`}
         locale={locale}
-        messages={locale === 'zh-Hans' ? { ...shell, ...shellZhHans } : shell}
+        messages={locale === 'zh-Hans' ? { ...shell, ...shellZhHans } : locale === 'ja' ? { ...shell, ...shellJa } : shell}
         initialTheme={theme}
         initialCollapsed={Boolean(parameters.navCollapsed)}
       >
@@ -72,6 +73,7 @@ const preview: Preview = {
           styles: { width: '1280px', height: '860px' },
           type: 'desktop',
         },
+        desktop1440: { name: 'Desktop (1440 × 1000)', styles: { width: '1440px', height: '1000px' }, type: 'desktop' },
         foldCover: { name: 'Fold cover (412 × 960)', styles: { width: '412px', height: '960px' }, type: 'mobile' },
         tabletPortrait: { name: 'Tablet portrait (820 × 1180)', styles: { width: '820px', height: '1180px' }, type: 'tablet' },
         tabletLandscape: { name: 'Tablet landscape (1180 × 820)', styles: { width: '1180px', height: '820px' }, type: 'tablet' },

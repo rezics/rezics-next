@@ -20,6 +20,7 @@ import realmZhHant from '../realm/messages/zh-Hant.ts';
 import { siteHref } from '../realm/route.ts';
 import type { ZonePresentationRead } from '../realm/types.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
+import shellJa from '../shell/messages/ja.ts';
 import { PageContainer } from '../shell/page.tsx';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { messages as zoneMessages, type ZoneMessages } from './messages.ts';
@@ -154,7 +155,7 @@ export function ZoneSiteRecordedPage({ record, persona, selections, locale }: {
   const [load, setLoad] = useState<ZoneSiteRecordedLoad | null>(null);
   useEffect(() => {
     let mounted = true;
-    const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
+    const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX, locale });
     void readZoneSiteRecorded(replay.fetcher, record, persona, selections).then(result => {
       if (mounted) setLoad(result);
     }).catch((error: unknown) => {
@@ -166,7 +167,7 @@ export function ZoneSiteRecordedPage({ record, persona, selections, locale }: {
       });
     });
     return () => { mounted = false; replay.dispose(); };
-  }, [record, persona, selections]);
-  if (!load) return <p role="status" aria-busy="true">{shellMessages.loading}</p>;
+  }, [record, persona, selections, locale]);
+  if (!load) return <p role="status" aria-busy="true">{locale === 'ja' ? shellJa.loading : shellMessages.loading}</p>;
   return <RecordedBody load={load} locale={locale} />;
 }

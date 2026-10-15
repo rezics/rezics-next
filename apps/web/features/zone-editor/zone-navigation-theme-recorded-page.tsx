@@ -9,8 +9,9 @@ import { addressKey, spaceHref } from '../address/path.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import type { ReadFailure } from '../manage/types.ts';
-import { messages as realmMessages } from '../realm/messages.ts';
+import { realmMessagesFor } from '../realm/catalog.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
+import shellJa from '../shell/messages/ja.ts';
 import { PageContainer } from '../shell/page.tsx';
 import { recordedFetch, type RecordedSelection, type RecordedState } from '../stories/recorded-fetch.ts';
 import { defaultPresentation } from '../zones/presentation.ts';
@@ -27,6 +28,7 @@ import { zoneHomeDocument } from './home-document.tsx';
 import { messages as editorMessages } from './messages.ts';
 import { ZoneNavigationEditor } from './navigation-editor.tsx';
 import { messages as manageMessages } from '../manage/messages.ts';
+import manageJa from '../manage/messages/ja.ts';
 import { ZoneAuthoringFailure } from './states.tsx';
 import { ZoneThemeEditor } from './theme-editor.tsx';
 import type { ThemeEditorStart } from './theme.ts';
@@ -87,20 +89,21 @@ type Screen =
 export function RecordedNavigationTheme({ record, persona, locale = 'en', zoneId: publicZoneId, path = '/', presentation, presentationState = 'populated',
   route, routeState = 'empty', configuration, configurationState = 'populated', save, navigation,
   navigationState = 'populated', navigationDraft, navigationHeads, mountNames, mountWork }: RecordedNavigationThemeProps) {
+  const managementMessages = locale === 'ja' ? { ...manageMessages, ...manageJa } : manageMessages;
   const [screen, setScreen] = useState<Screen | null>(null);
   const [error, setError] = useState<Error | null>(null);
   useEffect(() => {
     let active = true;
     const selections = recordedSelections({ presentation, presentationState, route, routeState, configuration,
       configurationState, save, navigation, navigationState, navigationDraft, navigationHeads, mountNames, mountWork });
-    const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
+    const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX, locale });
     const main = browserMainApi('https://recorded.invalid', { anonymous: true, fetcher: replay.fetcher });
     const zoneMessages = zoneMessagesFor(locale);
     const actingSubject = presentation ? new URL(recordedSample(record, persona, presentation).path, 'https://recorded.invalid').searchParams.get('actingSubject') ?? undefined : undefined;
     const reads = zonePresentationReads(main, actingSubject);
     async function loadFrame(zoneId: string) {
       const read = await reads.readCompletePresentation(zoneId);
-      return read.ok ? { ok: true as const, data: publishedFrameModel(read.data, zoneId, locale, realmMessages.home, zoneMessages.moduleHeroCarousel) } : read;
+      return read.ok ? { ok: true as const, data: publishedFrameModel(read.data, zoneId, locale, realmMessagesFor(locale).home, zoneMessages.moduleHeroCarousel) } : read;
     }
     async function load(): Promise<Screen> {
       if (save) {
@@ -177,7 +180,7 @@ export function RecordedNavigationTheme({ record, persona, locale = 'en', zoneId
   }, [record, persona, locale, publicZoneId, path, presentation, presentationState, route, routeState, configuration,
     configurationState, save, navigation, navigationState, navigationDraft, navigationHeads, mountNames, mountWork]);
   if (error) throw error;
-  if (!screen) return <p role="status" aria-busy="true">{shellMessages.loading}</p>;
+  if (!screen) return <p role="status" aria-busy="true">{locale === 'ja' ? shellJa.loading : shellMessages.loading}</p>;
   if (screen.kind === 'missing') {
     const copy = zoneMessagesCatalog;
     return <ZonePageMissing title={copy.pageMissingTitle} body={copy.pageMissingBody} back={copy.pageMissingBack}
@@ -191,7 +194,7 @@ export function RecordedNavigationTheme({ record, persona, locale = 'en', zoneId
     return <ZoneEditorDraftProvider zoneId={screen.zoneId} actingSubject={screen.acting}>
       <ZoneEditorFrame name={screen.name} editorPath={zoneNavigationPath(screen.zoneId)}
         agent={{ iri: screen.acting, label: screen.acting, handle: null, kind: 'person', path: 'direct-principal' }}
-        locale={locale} manageMessages={manageMessages} sectionsLabel={copy.sectionsLabel} sectionHome={copy.sectionHome}
+        locale={locale} manageMessages={managementMessages} sectionsLabel={copy.sectionsLabel} sectionHome={copy.sectionHome}
         sectionNavigation={copy.sectionNavigation} sectionRealm={copy.sectionRealm} sectionTheme={copy.sectionTheme}>
         <ZoneNavigationEditor zoneId={screen.zoneId} zoneIri={screen.zoneIri} actingSubject={screen.acting}
           locale={locale} copy={copy} initial={edited.navigation} home={edited.home}
@@ -205,7 +208,7 @@ export function RecordedNavigationTheme({ record, persona, locale = 'en', zoneId
     return <ZoneEditorDraftProvider zoneId={screen.zoneId} actingSubject={screen.acting}>
       <ZoneEditorFrame name={screen.name} editorPath={zoneThemePath(screen.zoneId)}
         agent={{ iri: screen.acting, label: screen.acting, handle: null, kind: 'person', path: 'direct-principal' }}
-        locale={locale} manageMessages={manageMessages} sectionsLabel={copy.sectionsLabel} sectionHome={copy.sectionHome}
+        locale={locale} manageMessages={managementMessages} sectionsLabel={copy.sectionsLabel} sectionHome={copy.sectionHome}
         sectionNavigation={copy.sectionNavigation} sectionRealm={copy.sectionRealm} sectionTheme={copy.sectionTheme}>
         <ZoneThemeEditor zoneId={screen.zoneId} actingSubject={screen.acting} copy={copy} initial={screen.start}
           signInHref="/auth/start" shellPresentation={defaultPresentation(zoneMessagesFor(locale))} />
