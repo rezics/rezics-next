@@ -10,7 +10,7 @@ import type { RetainedFileIntegrity, RetainedOwnerState } from '../../../scripts
 import { copyVolume, currentEngines, freshPorts, postgresImage, removeVolumes, run, volumeExists } from '../../../scripts/fixture/stack.ts';
 import { migrateTracked } from '../../../scripts/ops/migrate.ts';
 import { runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
-import { RetainedSources, sourceFileDigests, type RetainedSourceAdapter } from '../../../scripts/qa/retained-source.ts';
+import { isRetainedSourceInput, RetainedSources, sourceFileDigests, type RetainedSourceAdapter, type SourceInputs } from '../../../scripts/qa/retained-source.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
@@ -35,13 +35,13 @@ const INPUTS = {
 };
 
 /** Explicit source closure: test assertions and Git revision are not producer inputs. */
-function producerFiles(): string[] {
+function producerFiles(root: string): string[] {
   const files = new Set<string>();
   const visit = (path: string) => {
-    // Scheduling/registration changes do not change the produced source.
-    if (path === 'scripts/qa/core.ts' || files.has(path)) return;
     const absolute = resolve(root, path);
     if (relative(root, absolute).startsWith('..')) throw new Error('producer dependency escapes checkout');
+    path = relative(root, absolute);
+    if (!isRetainedSourceInput(path) || files.has(path)) return;
     if (!statSync(absolute).isFile()) throw new Error(`producer digest input is not a file: ${path}`);
     files.add(path);
     if (!path.endsWith('.ts')) return;
@@ -176,14 +176,18 @@ export interface RetainedContentCandidate {
   poolsClosed: boolean;
 }
 
+export function retainedContentSourceSpecification(root: string, compatibility: RetainedOwnerState): SourceInputs {
+  return { producer: CONTRACT, version: '1', files: sourceFileDigests(root, producerFiles(root)),
+    inputs: INPUTS, compatibility };
+}
+
 export function retainedContentSourceAdapter(directory = retainedContentSourceDirectory()): RetainedSourceAdapter<RetainedOwnerState, RetainedContentCandidate> {
   const docker = qaStack(requireFaultTier().runId).dockerEnv;
   const engines = currentEngines(docker);
-  const specification = { producer: CONTRACT, version: '1', files: sourceFileDigests(root, producerFiles()),
-    inputs: INPUTS, compatibility: JSON.parse(JSON.stringify({ engines,
+  const specification = retainedContentSourceSpecification(root, JSON.parse(JSON.stringify({ engines,
       selectedNativeImage: pinnedImage(), modelGeneration: fixtureModel(root).generation,
       contentProjectionModel: 'https://rezics.com/definition/content-match-unit-v1',
-      postgresLayout: '18/docker', ownerSchemas: ['content', 'access', 'relay'] })) as RetainedOwnerState };
+      postgresLayout: '18/docker', ownerSchemas: ['content', 'access', 'relay'] })) as RetainedOwnerState);
   return {
     specification,
     build: async context => {
@@ -244,7 +248,9 @@ SELECT ?g ?s ?p ?o WHERE {
     ${iri(producer.content.publicationDecision)}, ${iri(producer.content.eligibilityDecision)}))
 } ORDER BY ?g ?s ?p ?o`);
           const position = await assertPublicTextReady(env.fuseki, lineage);
-          const dependencies = { environment: env, account: {}, access: new AccessAdmissionRegistry(accessPool),
+          const dependencies = { environment: env,
+            account: { verify: async () => { throw new Error('public query needs no Account assertion'); } },
+            access: new AccessAdmissionRegistry(accessPool),
             contentProjection: { content, cursor, consumer: INPUTS.contentProjectionConsumer } } as SearchRouteDependencies;
           const response = await searchRoutes(env.fuseki, dependencies).handle(new Request('http://main.local/v1/queries', {
             method: 'POST', headers: { 'content-type': 'application/json' },

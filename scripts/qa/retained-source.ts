@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 import { sha256, stable } from '../fixture/corpus.ts';
 import { FixtureWorkBudget } from '../fixture/budget.ts';
 import { createGovernanceOutputRedactor, redactCommandOutput } from '../fixture/command-output.ts';
@@ -13,6 +13,29 @@ export const SOURCE_RESTORE_MS = 600_000;
 /** Keep two complete sources per producer; remove oldest publication first (key breaks ties).
  * Only this namespace is managed: historical corpus/Content/crash backups are never pruned. */
 export const SOURCES_PER_PRODUCER = 2;
+
+/** These roots govern admission, scheduling and process custody, never source
+ * data. Prune their import branches too: harness imports reach unrelated tools
+ * and test producers that must not become inputs of the retained corpus. */
+export const RETAINED_SOURCE_EXCLUDED_ROOTS = [
+  'scripts/goal/',
+  'scripts/qa/core.ts',
+  'scripts/qa/memory-admission.ts',
+  'scripts/qa/host-admission.ts',
+  'scripts/qa/resource-classes.ts',
+  'scripts/qa/stack-startup.ts',
+  'scripts/qa/stack-pool.ts',
+  'scripts/qa/stack-ownership.ts',
+  'scripts/qa/container-reaper.ts',
+  'scripts/qa/process/',
+] as const;
+
+export function isRetainedSourceInput(path: string): boolean {
+  const normalized = posix.normalize(path);
+  return !RETAINED_SOURCE_EXCLUDED_ROOTS.some(root => root.endsWith('/')
+    ? normalized === root.slice(0, -1) || normalized.startsWith(root)
+    : normalized === root);
+}
 
 /** Physical artifact-only consumers select the matching prepared source. */
 export function independentRestorePreparationOptions(file: string): { withRecipe: boolean } | undefined {
@@ -54,7 +77,8 @@ export function sourceKey(inputs: SourceInputs): string {
 }
 
 export function sourceFileDigests(root: string, files: readonly string[]): Record<string, string> {
-  return Object.fromEntries([...new Set(files)].sort().map(path => [path, sha256(readFileSync(join(root, path)))]));
+  return Object.fromEntries([...new Set(files)].filter(isRetainedSourceInput).sort()
+    .map(path => [path, sha256(readFileSync(join(root, path)))]));
 }
 
 export interface RetainedSourceManifest<M extends RetainedJson = RetainedJson> {

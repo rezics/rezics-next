@@ -127,7 +127,7 @@ import { stable } from '../../../scripts/fixture/corpus.ts';
 import { copyVolume, currentEngines, fixtureProject, postgresImage, removeVolumes, run, volumeExists } from '../../../scripts/fixture/stack.ts';
 import { isRetainedJson, migrationInventory, type RetainedFileIntegrity, type RetainedJson, type RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
 import { fixtureModel } from '../../../scripts/fixture/model.ts';
-import { RetainedSourceRefusal, RetainedSources, SOURCE_PREPARATION_MS, sourceFileDigests, sourceKey, type RetainedSourceAdapter, type SourceContext, type RetainedSourceManifest } from '../../../scripts/qa/retained-source.ts';
+import { isRetainedSourceInput, RetainedSourceRefusal, RetainedSources, SOURCE_PREPARATION_MS, sourceFileDigests, sourceKey, type RetainedSourceAdapter, type SourceContext, type RetainedSourceManifest, type SourceInputs } from '../../../scripts/qa/retained-source.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { deliverRetainedContentEligibilityOnce } from '../../../services/main/src/modules/content-publication/eligibility-delivery.ts';
@@ -2043,9 +2043,10 @@ export function retainedVolumeInventory(volume: string, docker: NodeJS.ProcessEn
 export function producerModules(root: string, initial: readonly string[]): string[] {
   const paths = new Set<string>();
   const visit = (path: string) => {
-    if (paths.has(path)) return;
     const full = resolve(root, path);
     if (relative(root, full).startsWith('..')) throw new Error('producer input escapes checkout');
+    path = relative(root, full);
+    if (!isRetainedSourceInput(path) || paths.has(path)) return;
     paths.add(path);
     if (!path.endsWith('.ts')) return;
     for (const match of readFileSync(full, 'utf8').matchAll(/(?:from|import)\s*['"](\.[^'"]+)['"]/g)) {
@@ -2068,18 +2069,16 @@ export function producerModules(root: string, initial: readonly string[]): strin
   return [...paths].sort();
 }
 
-export function ownerErasureSourceAdapter(options: OwnerRestoreErasureFixtureOptions = {}): RetainedSourceAdapter<RetainedOwnerState, Awaited<ReturnType<typeof runOwnerRestoreErasureFixture>>> {
+export function ownerErasureSourceSpecification(root: string, options: OwnerRestoreErasureFixtureOptions,
+  compatibility: RetainedOwnerState): SourceInputs {
   if (Boolean(options.beforeCutApiSeed) !== Boolean(options.beforeCutSource))
     throw new Error('foreground seed requires explicit source identity, inputs and files');
   if (options.beforeCutSource && (!options.beforeCutSource.identity || !options.beforeCutSource.files.length))
     throw new Error('foreground seed requires an authored identity and source-affecting files');
-  const root = resolve(import.meta.dir, '../../..');
-  const docker = qaStack(requireFaultTier().runId).dockerEnv;
-  const engines = currentEngines(docker);
   const modules = producerModules(root, ['tests/qa/fault-recovery/owner-restore-erasure-fixture.ts',
     'yarn.lock', 'package.json', 'services/main/package.json', 'services/content/package.json', 'services/account/package.json',
     ...(options.beforeCutSource?.files ?? [])]);
-  const specification = {
+  return {
     producer: 'owner-erasure-source', version: '1',
     files: { ...sourceFileDigests(root, modules), ...migrationInventory(root) },
     inputs: {
@@ -2087,9 +2086,17 @@ export function ownerErasureSourceAdapter(options: OwnerRestoreErasureFixtureOpt
       quotedBody: 'authored annotation stays', language: 'en', direction: 'ltr',
       foregroundSeed: options.beforeCutSource ?? null, laterApiAdmission: options.laterApiAdmission ?? false,
     },
-    compatibility: JSON.parse(JSON.stringify({ engines, selectedNativeImage: pinnedImage(),
-      modelGeneration: fixtureModel(root).generation, postgresNative: execFileSync('pg_config', ['--version'], { encoding: 'utf8' }).trim() })) as RetainedOwnerState,
+    compatibility,
   };
+}
+
+export function ownerErasureSourceAdapter(options: OwnerRestoreErasureFixtureOptions = {}): RetainedSourceAdapter<RetainedOwnerState, Awaited<ReturnType<typeof runOwnerRestoreErasureFixture>>> {
+  const root = resolve(import.meta.dir, '../../..');
+  const docker = qaStack(requireFaultTier().runId).dockerEnv;
+  const engines = currentEngines(docker);
+  const specification = ownerErasureSourceSpecification(root, options,
+    JSON.parse(JSON.stringify({ engines, selectedNativeImage: pinnedImage(),
+      modelGeneration: fixtureModel(root).generation, postgresNative: execFileSync('pg_config', ['--version'], { encoding: 'utf8' }).trim() })) as RetainedOwnerState);
   const sourceBuild = ownerErasureSourceBuild(phase => runOwnerRestoreErasureFixture(options, undefined, phase));
   return {
     specification,

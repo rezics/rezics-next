@@ -55,7 +55,7 @@ import { readManifest } from '../../../scripts/fixture/build.ts';
 import { compatibleFixture, type FixtureRestoreEvidence } from '../../../scripts/fixture/restore.ts';
 
 import { RetainedSources, RetainedSourceRefusal, sourceKey, sourceFileDigests,
-  type RetainedSourceAdapter, type SourceContext } from '../../../scripts/qa/retained-source.ts';
+  type RetainedSourceAdapter, type SourceContext, type SourceInputs } from '../../../scripts/qa/retained-source.ts';
 import { migrationInventory, type RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
 import { sha256, stable } from '../../../scripts/fixture/corpus.ts';
 import { fixtureModel } from '../../../scripts/fixture/model.ts';
@@ -1865,13 +1865,9 @@ async function produceIndependentRestoreSource(withRecipe: boolean, context: Sou
 
 type IndependentCandidate = { directory: string; transferFile: string; transfer: IndependentRestoreTransfer };
 
-/** The producer owns cut/capture; consumers only verify custody and copy bytes. */
-export function independentRestoreSourceAdapter(withRecipe: boolean,
-  compatibility: RetainedOwnerState = JSON.parse(JSON.stringify({ engines: currentEngines(dockerEnvironment()),
-    modelGeneration: fixtureModel(repositoryRoot).generation,
-    postgresNative: execFileSync('pg_config', ['--version'], { encoding: 'utf8' }).trim() })) as RetainedOwnerState,
-): RetainedSourceAdapter<RetainedOwnerState, IndependentCandidate> {
-  const modules = producerModules(repositoryRoot, [
+export function independentRestoreSourceSpecification(root: string, withRecipe: boolean,
+  compatibility: RetainedOwnerState): SourceInputs {
+  const modules = producerModules(root, [
     'tests/qa/fault-recovery/independent-restore-support.ts',
     'tests/qa/fault-recovery/g-727-recovery-checks.ts',
     'scripts/dev/cli.ts', 'scripts/fixture/cli.ts',
@@ -1879,12 +1875,21 @@ export function independentRestoreSourceAdapter(withRecipe: boolean,
     'yarn.lock', 'package.json',
   ]);
   return {
-    specification: {
-      producer: withRecipe ? 'independent-recipe-source' : 'independent-authority-source', version: '1',
-      files: { ...sourceFileDigests(repositoryRoot, modules), ...migrationInventory(repositoryRoot) },
-      inputs: { withRecipe },
-      compatibility,
-    },
+    producer: withRecipe ? 'independent-recipe-source' : 'independent-authority-source', version: '1',
+    files: { ...sourceFileDigests(root, modules), ...migrationInventory(root) },
+    inputs: { withRecipe },
+    compatibility,
+  };
+}
+
+/** The producer owns cut/capture; consumers only verify custody and copy bytes. */
+export function independentRestoreSourceAdapter(withRecipe: boolean,
+  compatibility: RetainedOwnerState = JSON.parse(JSON.stringify({ engines: currentEngines(dockerEnvironment()),
+    modelGeneration: fixtureModel(repositoryRoot).generation,
+    postgresNative: execFileSync('pg_config', ['--version'], { encoding: 'utf8' }).trim() })) as RetainedOwnerState,
+): RetainedSourceAdapter<RetainedOwnerState, IndependentCandidate> {
+  return {
+    specification: independentRestoreSourceSpecification(repositoryRoot, withRecipe, compatibility),
     build: async context => {
       const result = await produceIndependentRestoreSource(withRecipe, context);
       return { ...result, metadata: JSON.parse(JSON.stringify(result.metadata)) as RetainedOwnerState,
