@@ -14,7 +14,9 @@ export async function serveJourneyResource(route: Route, origin: string): Promis
   // cancel healthy loopback requests; Node HTTP keeps the real response alive.
   // Documents keep browser streaming and redirects. Asset redirects stay on Node
   // HTTP too: Playwright does not route a redirected browser request again.
-  const response = await route.fetch({ maxRetries: 0 });
+  // A stale loopback keep-alive can reset before returning any HTTP response.
+  // Playwright retries only ECONNRESET here, never HTTP errors or API commands.
+  const response = await route.fetch({ maxRetries: 2 });
   try { await route.fulfill({ response, body: await response.body() }); }
   finally { await response.dispose(); }
 }

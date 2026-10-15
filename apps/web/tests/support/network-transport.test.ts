@@ -2,7 +2,38 @@ import { expect, test } from 'bun:test';
 import { chromium } from 'playwright';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createServer } from 'node:http';
 import { protectJourneyBrowser } from './network-transport.ts';
+
+test('a static GET survives a socket reset before the server sends its response', async () => {
+  let attempts = 0;
+  const server = createServer((request, response) => {
+    if (request.url === '/reset.js') {
+      if (++attempts === 1) { request.socket.destroy(); return; }
+      response.writeHead(200, { 'content-type': 'text/javascript' });
+      response.end('export const value = 42;');
+    } else {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<title>Journey transport</title>');
+    }
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing test server port');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const browser = await chromium.launch();
+  const restore = protectJourneyBrowser(browser, origin);
+  try {
+    const page = await browser.newPage();
+    await page.goto(origin);
+    expect(await page.evaluate(async () => { const path = '/reset.js'; return (await import(path)).value; })).toBe(42);
+    expect(attempts).toBe(2);
+  } finally {
+    restore();
+    await browser.close();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+}, 30_000);
 
 test('journey contexts load real resources through transport loss and preserve API and server failures', async () => {
   const requests: string[] = [];
