@@ -3,9 +3,7 @@ import { resolve } from 'node:path';
 import { applyQaSqlMigrations } from '../../../scripts/qa/bootstrap.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import type { ContentCore } from '../../../services/content/src/core.ts';
-import type { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { contentRebuildDelivery } from '../../../services/main/src/modules/content-publication/rebuild-preflight.ts';
-import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 
 const migrated = new Set<string>();
@@ -40,17 +38,4 @@ export async function deliverFixtureContentEligibility(env: WorkActivationEnviro
     }
   } finally { await pool.end(); }
   await content.sequencePending();
-}
-
-export async function settleFixtureContentProjection(env: WorkActivationEnvironment,
-  content: ContentCore, cursor: ContentProjectionCursor, consumer: string, relayUrl?: string) {
-  await deliverFixtureContentEligibility(env, content, relayUrl);
-  const cut = await content.ownerPosition();
-  await cursor.initialize(consumer);
-  for (let n = 0; (await cursor.read(consumer)).sequence !== cut.sequence; n++) {
-    if (n >= 10_000 || !await relayContentProjectionOnce(env, content, cursor, consumer)) {
-      throw new Error('Content fixture projection stopped before delivered source cut');
-    }
-  }
-  return cut;
 }
