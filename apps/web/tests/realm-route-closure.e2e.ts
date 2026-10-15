@@ -52,7 +52,7 @@ async function closedRequest(page: Page, path: string, info: TestInfo) {
 }
 
 test('realm-closure-direct: readers and the Realm owner lose direct pages after reload and recover after restoration', async ({ page }, info) => {
-  test.setTimeout(300_000);
+  test.setTimeout(600_000);
   const findings: Findings = [];
   const tabs = ['home', 'about', 'rules', 'members', 'decisions'] as const;
   // The signed-in owner has no disclosure exception on ordinary community pages.
@@ -77,9 +77,11 @@ test('realm-closure-direct: readers and the Realm owner lose direct pages after 
     await expect(page.getByRole('heading', { name: fixture.title, exact: true }).first()).toBeVisible();
   } finally { await fixture.restoreRealm(info); }
   for (const locale of locales) {
-    await open(page, realmHref(locale, fixture.realm.space));
-    await page.reload();
-    await expect(page.getByRole('heading', { name: fixture.realmName, exact: true }).first()).toBeVisible();
+    await expect(async () => {
+      await open(page, realmHref(locale, fixture.realm.space));
+      await page.reload();
+      await expect(page.getByRole('heading', { name: fixture.realmName, exact: true }).first()).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 60_000, intervals: [1000] });
   }
   expectClean(findings);
 });

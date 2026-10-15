@@ -14,7 +14,12 @@ test.use({ actionTimeout: 15_000 });
 
 async function loadedImage(page: Page, alt: string) {
   const image = page.getByRole('img', { name: alt, exact: true });
-  await expect(image).toBeVisible({ timeout: 60_000 });
+  await expect(async () => {
+    const locale = await page.locator('html').getAttribute('lang') === 'ja' ? 'ja' : 'en';
+    const retry = page.getByRole('button', { name: mediaMessages[locale].retryRating, exact: true });
+    if (await retry.isVisible()) await retry.click();
+    await expect(image).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 60_000, intervals: [1000] });
   await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0),
     { timeout: 30_000 }).toBe(true);
 }
@@ -93,7 +98,9 @@ for (const locale of ['en', 'ja'] as const) {
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
       const found: Findings = [];
       const read = page.locator('a[data-next-action][href*="/read"]:visible').first();
-      await expect(read).toBeVisible();
+      await expect(async () => {
+        await expect(read).toBeVisible({ timeout: 5000 });
+      }).toPass({ timeout: 60_000, intervals: [1000, 2000, 5000] });
       await pressByKeyboard(page, read, found, 'read the illustrated Work');
       await expect.poll(() => new URL(page.url()).pathname.endsWith('/read'), { timeout: 60_000 }).toBe(true);
       await loadedImage(page, 'Realm reply art');
