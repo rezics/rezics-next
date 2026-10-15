@@ -1,5 +1,6 @@
 import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
@@ -56,6 +57,7 @@ test('OPS09: a cold public Content body read and exact RDF/Lucene rebuild stay w
     const cursor = new ContentProjectionCursor(contentPool);
     const consumer = apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
     const corpus = await seedRecoveryContent(env, contentPool, accessPool);
+    await deliverFixtureContentEligibility(env, content, apps.MAIN_RELAY_DATABASE_URL);
     const cut = await content.ownerPosition();
     await cursor.initialize(consumer);
     for (let i = 0; i < 10 && (await cursor.read(consumer)).sequence !== cut.sequence; i++) {

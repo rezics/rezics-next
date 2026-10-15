@@ -10,6 +10,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
 import { Pool } from 'pg';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { createAccountApp } from '../../../services/account/src/app.ts';
@@ -20,6 +21,8 @@ import { ContentProjectionCursor } from '../../../services/content/src/projectio
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { governanceServices } from '../../../services/main/src/modules/governance/composition.ts';
+import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 import { FusekiClient, FusekiReadBudgetExceeded, fusekiReadBudget }
   from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
@@ -162,6 +165,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
         introspectUrl: `${base}/api/auth/oauth2/introspect`,
         clientId: mainClient.client_id, clientSecret: mainClient.client_secret! }),
       access, judgments: new AccessJudgments(accessPool), platformAccess: new AccessExposure(accessPool),
+      governance: governanceServices(accessPool, contentPool, content, new SourceIntakeStore(contentPool), access, environment),
       content, contentAuthoring: content, comments,
       contentProjection: { content, cursor, consumer } });
     const send = (path: string, body: object, protectedCommand = true,
@@ -201,7 +205,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
         'content-type': 'application/json', 'idempotency-key': `unavailable-${randomUUID()}` },
       body: JSON.stringify(unavailableIntent),
     });
-    const accountUnavailable = createMainApp(fuseki, { environment,
+    const accountUnavailable = createMainApp(fuseki, { environment: { ...environment },
       account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
         audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: 'http://127.0.0.1:1/jwks',
         introspectUrl: 'http://127.0.0.1:1/introspect',
@@ -215,7 +219,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     const deadAccessPool = new Pool({ connectionString: deadAccessUrl.toString(),
       connectionTimeoutMillis: 500 });
     try {
-      const accessUnavailable = createMainApp(fuseki, { environment,
+      const accessUnavailable = createMainApp(fuseki, { environment: { ...environment },
         account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
           audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: `${base}/api/auth/jwks`,
           introspectUrl: `${base}/api/auth/oauth2/introspect`,
@@ -544,6 +548,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
       publicationDecision: publication.decision, expectedEligibilityHead: null,
       actingSubject: actor, rightsBasis: 'original-contribution', disclosure: 'public' });
     expect(eligibility.decision).toBeTruthy();
+    await deliverFixtureContentEligibility(environment, content);
     while (BigInt((await cursor.read(consumer)).sequence)
       < BigInt((await content.ownerPosition()).sequence)) {
       const event = await relayContentProjectionOnce(environment, content, cursor, consumer);
@@ -662,6 +667,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     expect(await (await readRelease()).json()).toMatchObject({ release: release.release,
       body: originalBody, selectedDraft: draft.draftRevision });
     const restartedMain = createMainApp(fuseki, { environment,
+      governance: governanceServices(accessPool, contentPool, content, new SourceIntakeStore(contentPool), access, environment),
       account: new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
         audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: `${base}/api/auth/jwks`,
         introspectUrl: `${base}/api/auth/oauth2/introspect`,
@@ -705,9 +711,8 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     expect((await readContent(missing)).status).toBe(404);
     expect((await readWork(`https://rezics.com/id/${missing}`)).status).toBe(404);
     expect((await readMain(`https://rezics.com/id/${missing}`)).status).toBe(404);
-    // IAM21: a reader granted after these revisions were written reads them under
-    // its current grant. Revoking that one grant, with the scope still open, ends
-    // every historical read; re-saving the old body cannot revive the grant.
+    // IAM21: private history requires the current grant. The exact published
+    // Content pin remains public; restoring a draft cannot revive private access.
     const reader = `https://rezics.com/id/${randomUUID()}`;
     const readerGrant = randomUUID();
     await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [reader]);
@@ -734,7 +739,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
       body: { body: originalContent } });
     await accessPool.query(`UPDATE access.permission_grant SET active = false,
       generation = generation + 1 WHERE id = $1`, [readerGrant]);
-    expect(await readerReads()).toEqual([404, 404, 404, 404, 404, 404, 404]);
+    expect(await readerReads()).toEqual([200, 404, 404, 404, 404, 404, 404]);
     expect((await readContent(first.revisionId)).status).toBe(200);
     expect((await readWork(work.workRevision)).status).toBe(200);
     // The owner restores the old body as a new revision; it carries no grant.
@@ -744,7 +749,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     expect(restoredRead.status).toBe(200);
     expect(await restoredRead.json()).toMatchObject({ body: { body: originalContent } });
     expect((await readContent(restoredSnapshot.revisionId, reader)).status).toBe(404);
-    expect(await readerReads()).toEqual([404, 404, 404, 404, 404, 404, 404]);
+    expect(await readerReads()).toEqual([200, 404, 404, 404, 404, 404, 404]);
     expect((await accessPool.query<{ active: boolean; generation: string }>(
       'SELECT active, generation FROM access.permission_grant WHERE id = $1', [readerGrant])).rows[0])
       .toEqual({ active: false, generation: '1' });
