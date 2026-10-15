@@ -296,12 +296,26 @@ async function readInstructions(name: PersonaName) {
   }
   const privateContentPath = `/v1/content-revisions/${slice.privateContentRevision}${query(person)}`;
   const privateStructurePath = `/v1/compositions/${short(recipe.structure)}/revisions/${short(slice.draftRevision)}${query(person)}`;
+  const privatePagePath = pagePath(person, slice.draftRevision);
   if (name === 'owner') {
     expect(JSON.stringify(await answer(person.main('GET', privateContentPath)))).toContain(privateText);
     expect(await answer(person.main('GET', privateStructurePath))).toMatchObject({ revision: slice.draftRevision });
+    const preview = await answer<InstructionPage>(person.main('GET', privatePagePath));
+    expect(preview.revision).toBe(slice.draftRevision);
+    expect(JSON.stringify(preview)).toContain(privateText);
+    expect(preview.instructions.map(item => item.status)).toEqual(final.references.map(() => 'available'));
+    expect(preview.instructions[1]).toMatchObject({ occurrence: recorded.occurrence,
+      reference: recorded.reference, status: 'available' });
+    // A private preview does not create a publication Use. The represented
+    // owner retrieves the exact retained recording through native Media access.
+    const previewBytes = await person.main('GET', `/v1/media/assets/${recorded.reference.target.slice('urn:rezics:media:asset:'.length)}/bytes${
+      query(person, { target: recipe.work })}`);
+    expect(previewBytes.status).toBe(200);
+    expect(new Uint8Array(await previewBytes.arrayBuffer())).toEqual(new Uint8Array(originalBytes));
   } else {
     for (const [hidden, absent] of [[privateContentPath, `/v1/content-revisions/${randomUUID()}${query(person)}`],
-      [privateStructurePath, `/v1/compositions/${short(recipe.structure)}/revisions/${randomUUID()}${query(person)}`]]) {
+      [privateStructurePath, `/v1/compositions/${short(recipe.structure)}/revisions/${randomUUID()}${query(person)}`],
+      [privatePagePath, pagePath(person, `https://rezics.com/id/${randomUUID()}`)]]) {
       const refused = await person.main('GET', hidden!), missing = await person.main('GET', absent!);
       expect(refused.status).toBe(404);
       expect([refused.status, await refused.text()]).toEqual([missing.status, await missing.text()]);

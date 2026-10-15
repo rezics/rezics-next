@@ -6,7 +6,7 @@ import { WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkRea
   from '../work/read-session.ts';
 import { CompositionUnavailable, compositionForMainVersion, orderTreeKey, readCompositionHeader }
   from '../structure/graph.ts';
-import { readCompositionPage, readStructureMeasures } from '../structure/read.ts';
+import { readCompositionPage, readStructureMeasures, selectWorkCompositionRevision } from '../structure/read.ts';
 import { STRUCTURE_LIMITS, type OccurrenceRecord, type RecipeMeasure } from '../structure/format.ts';
 import { scaleIngredients } from './operations.ts';
 import { exactRational, type ExactRational } from './quantity.ts';
@@ -329,6 +329,15 @@ export async function readRecipeWorkPage(session: WorkReadSession, work: string,
     throw new WorkReadUnavailable('Recipe Structure differs from selected Work');
   }
   const revision = requestedRevision ?? (hasPrivatePreview ? header.head : selected!.structureRevision);
+  if (requestedRevision) {
+    // Explicit pins need the same live preview/publication authority as every
+    // other Structure read before adopted dependencies can be hydrated.
+    try { await selectWorkCompositionRevision(session, header, requestedRevision); }
+    catch (error) {
+      if (error instanceof CompositionUnavailable) throw new WorkReadMissing('Recipe is unavailable');
+      throw error;
+    }
+  }
   if (!await structureRevisionDisclosureVisible(session, { work, workRevision: basis.card.revision,
     structure, revision })) {
     if (!hasPrivatePreview) {

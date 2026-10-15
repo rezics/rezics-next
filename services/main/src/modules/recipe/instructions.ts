@@ -4,6 +4,7 @@ import type { ExactInstructionSelector } from '../structure/selection.ts';
 import type { WorkReadSession } from '../work/read-session.ts';
 import { WorkReadLimit } from '../work/read-session.ts';
 import { readPublicInstructionAdoptions } from '../work/instruction-adoption.ts';
+import { resolveContentReference } from '../content-publication/reference.ts';
 
 export interface InstructionReference { target: string; selector: ExactInstructionSelector }
 export interface RecipeInstruction {
@@ -69,6 +70,12 @@ export async function readRecipeInstructions(session: WorkReadSession, records: 
           instruction.status = 'available';
           instruction.mediaUse = use;
         }
+      } else {
+        // A readable private Structure has no publication Use. Resolve its
+        // exact selection through Media's existing owner/disclosure authority;
+        // previewing it must not manufacture a public attachment.
+        const resolved = await resolveContentReference(session, reference);
+        instruction.status = resolved.status;
       }
     }
     instructions.push(instruction);
