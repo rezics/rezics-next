@@ -67,9 +67,9 @@ test('row IDs include the capability slug and hard case and are unique in the sc
   ).rejects.toThrow('Duplicate scope row ID');
   const progress = await scopeProgress({ root: data.directory, registry: launchCoverage });
   expect(progress).toEqual({
-    rowsInScope: 68,
+    rowsInScope: 67,
     rowsProved: 0,
-    cells: { proved: 0, pending: 0, notApplicable: 0, missing: 408 },
+    cells: { proved: 0, pending: 0, notApplicable: 0, missing: 402 },
   });
 });
 
