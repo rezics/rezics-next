@@ -11,7 +11,7 @@ import type { OccurrenceRecord } from '../structure/format.ts';
 import { readCompositionHeader } from '../structure/graph.ts';
 import type { WorkStructurePublicationInput } from './structured-publication.ts';
 import { GRAPHS, iri, type WorkActivationEnvironment } from './activate.ts';
-import { WorkReadUnavailable, type WorkReadSession } from './read-session.ts';
+import { WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from './read-session.ts';
 
 export interface PublicationAttribution {
   record: string; observation: string; provider: string; externalId: string; url: string;
@@ -130,7 +130,7 @@ export async function selectedPublicationAttribution(session: WorkReadSession,
   if (!store) throw new WorkReadUnavailable('Publication rights are unavailable');
   const read = () => store.structuredPublicationRights(source.work, attribution.record);
   const rights = await read();
-  if (!rights.allowed) throw new WorkReadUnavailable('Publication rights are unavailable');
+  if (!rights.allowed) throw new WorkReadMissing('Publication rights do not permit delivery');
   session.observeDependency(`structured-publication-rights:${source.source}`, rights, read);
   return attribution;
 }

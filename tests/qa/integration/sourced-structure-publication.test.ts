@@ -152,8 +152,8 @@ test('public-domain publication binds replay, rejects stale heads, and withdraws
   const denied = await assess('not_supported', null);
   for (const persona of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
     const person = sessions[persona], query = person.actingSubject ? `?actingSubject=${encodeURIComponent(person.actingSubject)}` : '';
-    await json(person.main('GET', `/v1/works/${source.work.slice(-36)}${query}`), 503);
-    await json(person.main('GET', `/v1/recipes/works/${source.work.slice(-36)}${query}`), 503);
+    await json(person.main('GET', `/v1/works/${source.work.slice(-36)}${query}`), 404);
+    await json(person.main('GET', `/v1/recipes/works/${source.work.slice(-36)}${query}`), 404);
   }
   await assess('supported', denied.assessmentId);
   await json(sessions.visitor.main('GET', `/v1/recipes/works/${source.work.slice(-36)}`));
