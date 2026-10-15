@@ -1,10 +1,21 @@
 import { expect, test } from 'bun:test';
-import { exclusivePreparationWallMs, preparationTestFiles, smallRecoveryFixtureConsumers, WORK_PROFILE_SEED_BUILD_FILE, WORK_PROFILE_SEED_BUILD_WALL_MS } from '../../../scripts/qa/preparation-selection.ts';
+import { exclusivePreparationWallMs, preparationTestFiles, smallRecoveryFixtureConsumers, WORK_PROFILE_SEED_BUILD_FILE, WORK_PROFILE_SEED_BUILD_WALL_MS,
+  OWNER_ERASURE_SOURCE_BUILD_FILE, OWNER_ERASURE_SOURCE_BUILD_WALL_MS } from '../../../scripts/qa/preparation-selection.ts';
 
 const restore = 'tests/qa/integration/work-profile-seed-checkpoints.test.ts';
 const ordinary = 'tests/qa/fault-recovery/access-restore.test.ts';
 const launch = 'tests/qa/fault-recovery/g-727-launch-drill.test.ts';
 const campaign = 'tests/qa/fault-recovery/erasure-campaign-qualification.test.ts';
+
+test('owner source builds are explicit, exclusive and retain both 600-second stages', () => {
+  const build = OWNER_ERASURE_SOURCE_BUILD_FILE;
+  expect(preparationTestFiles([ordinary, build])).toEqual([ordinary]);
+  expect(preparationTestFiles([build], ['tests/qa/fault-recovery'])).toEqual([]);
+  expect(preparationTestFiles([build], [build])).toEqual([build]);
+  expect(() => preparationTestFiles([build, ordinary], [build, ordinary])).toThrow('alone');
+  expect(exclusivePreparationWallMs([build])).toBe(OWNER_ERASURE_SOURCE_BUILD_WALL_MS);
+  expect(OWNER_ERASURE_SOURCE_BUILD_WALL_MS).toBe(1_320_000);
+});
 
 test('retained fixture selection is independent for each consumer and never replaces supplied custody', () => {
   expect(smallRecoveryFixtureConsumers([launch, campaign], {})).toEqual({ launch: true, erasure: true });

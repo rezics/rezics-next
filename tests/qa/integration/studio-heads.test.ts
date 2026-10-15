@@ -424,7 +424,7 @@ test('Studio chapters and variant pages ignore other Work writes but reject chan
       const before = await content.ownerPosition();
       const input = { revisionId: otherDraft.revisionId!, resourceId: otherWork, author: f.actor,
         exact: 'Concurrent manuscript', body: 'Comment on another Work' };
-      await progress.write({ principal: { issuer: 'https://studio-fence.test', subject: randomUUID() },
+      await progress.write({ principal: { issuer: 'https://studio-fence.test', subject: randomUUID() }, agent: f.actor,
         structure: `https://rezics.com/id/${randomUUID()}`, occurrence: `https://rezics.com/id/${randomUUID()}`,
         completed: true, position: 'p1', expectedVersion: 0, idempotencyKey: randomUUID(),
         library: { agent: f.actor, work: otherWork } });
@@ -501,8 +501,9 @@ test('G1049 disclosure batches plan a singleton recovery fence without per-read 
         expect(nodes(plan.Plan).find(node => node['CTE Name'] === 'fence')?.['Plan Rows']).toBe(1);
       }
     }
-    await expect(reader.read(Array.from({ length: DISCLOSURE_COST.submissionLimit + 1 },
-      (_, index) => targets[index % targets.length]!), ANONYMOUS_VIEWER, 'summary'))
+    expect(await reader.read([...targets, targets[0]!], ANONYMOUS_VIEWER, 'summary'))
+      .toEqual([...targets, targets[0]!].map(target => target.work === works.at(-1) ? 'tombstone' : 'visible'));
+    await expect(reader.read([{ ...targets[0]!, ancestry: undefined }], ANONYMOUS_VIEWER, 'summary'))
       .rejects.toBeInstanceOf(DisclosureUnavailable);
   } finally {
     await pool.query('DELETE FROM access.scope_gate WHERE id = $1', [`work:read:${works.at(-1)}`]);

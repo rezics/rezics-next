@@ -514,7 +514,7 @@ test('G931-M2: wiki candidate matching cannot identify a later alias at the read
     );
     const progress = new StructureProgressStore(wiki.f.contentPool);
     const write = (chapter: number, completed: boolean, expectedVersion: number) => progress.write({
-      principal: verified, structure: wiki.composition.structure,
+      principal: verified, agent: person.agent, structure: wiki.composition.structure,
       occurrence: wiki.chapters.occurrences[chapter]!, completed, expectedVersion,
       position: null, idempotencyKey: randomUUID(),
     });

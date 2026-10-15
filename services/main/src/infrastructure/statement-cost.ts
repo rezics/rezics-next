@@ -15,10 +15,14 @@ export function observeStatementClient(client: Pick<PoolClient, 'query'>): void 
   if (observedClients.has(client) || client.query !== client.query) return;
   observedClients.add(client);
   const query = client.query;
+  const inherited = !Object.hasOwn(client, 'query');
   client.query = function (this: Pick<PoolClient, 'query'>, ...args: unknown[]) {
     if (!forwardingQuery) for (const counter of measurements.getStore() ?? []) counter.statements++;
     forwardingQuery++;
-    try { return Reflect.apply(query, this, args); }
+    // A driver hook may decorate the prototype after a pool client was first
+    // observed. Preserve normal prototype dispatch instead of pinning the old
+    // method and silently bypassing later telemetry or diagnostic observers.
+    try { return Reflect.apply(inherited ? Object.getPrototypeOf(this).query : query, this, args); }
     finally { forwardingQuery--; }
   } as PoolClient['query'];
 }
