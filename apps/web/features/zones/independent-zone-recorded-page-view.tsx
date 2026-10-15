@@ -71,7 +71,7 @@ export function independentZoneHomeBody({ mapped, presentation, zone, zoneId, re
     <ZoneHomeContent page={mapped.page} presentation={presentation.presentation}
       moduleData={presentation.moduleData} slideMedia={presentation.slideMedia} zone={zone} pkg={null}
       messages={messages} context={context} />
-    {mapped.credit ? <ZoneSiteRecordedCredit credit={mapped.credit} /> : null}
+    {mapped.credit ? <ZoneSiteRecordedCredit credit={mapped.credit} locale={locale} /> : null}
   </>;
   return <ZoneHomeContent page={null} presentation={presentation.presentation}
     moduleData={presentation.moduleData} slideMedia={presentation.slideMedia} zone={zone} pkg={null}

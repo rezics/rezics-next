@@ -99,7 +99,7 @@ export function ZoneHomeRecordedPage({ record, persona, selections, space, local
       if (!active) return;
       setShown(<HomeFrame model={model} locale={locale} messages={messages} realmMessages={realmMessages}>
         {content}
-        {model.credit ? <ZoneSiteRecordedCredit credit={model.credit} /> : null}
+        {model.credit ? <ZoneSiteRecordedCredit credit={model.credit} locale={locale} /> : null}
       </HomeFrame>);
     }
     void load().catch((reason: unknown) => {

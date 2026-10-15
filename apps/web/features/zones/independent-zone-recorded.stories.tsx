@@ -1,3 +1,5 @@
+import { creditText } from './credit-messages.ts';
+import { profileHref } from '../profile/route.ts';
 import { documentText, type DocumentSnapshot } from '@rezics/document';
 import type { CanonicalAddress } from '@rezics/model/address';
 import type { Meta, StoryObj } from '@storybook/react-vite';
@@ -90,8 +92,8 @@ function populatedPlay(persona: AnswerPersona) {
     const editor = record.personas[persona].find(item => item.label === 'page-editor-link');
     await expect(canvas.findByRole('heading', { level: 1, name: presentation(persona).name })).resolves.toBeVisible();
     await expect(canvas.getByText(homeText(persona))).toBeVisible();
-    await expect(canvas.getByText(shown.rightsBasis)).toBeVisible();
-    await expect(canvas.getByText(shown.author)).toBeVisible();
+    await expect(canvas.getByText(creditText.en.original)).toBeVisible();
+    await expect(canvas.getByRole('link', { name: creditText.en.contributor })).toHaveAttribute('href', localizedPath(profileHref({ handle: null, id: shown.author }), 'en'));
     await expect(canvas.getByRole('link', { name: realmMessages.home })).toBeVisible();
     const edit = canvas.queryByRole('link', { name: manageMessages.editSite });
     if (editor?.status === 200) {

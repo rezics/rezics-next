@@ -17,6 +17,7 @@ import homeMeta, * as homeStories from '../zones/zone-home-recorded.stories.tsx'
 import siteMeta, * as siteStories from '../zones/zone-site-recorded.stories.tsx';
 import zoneEditorMeta, * as zoneEditorStories from '../zone-editor/zone-navigation-theme-recorded.stories.tsx';
 import attachedMeta, * as attachedStories from '../zones/zone-discussion-recorded.stories.tsx';
+import zonePageMeta, * as zonePageStories from '../zones/zone-page.stories.tsx';
 import { reviewText } from '../realm-appeal/review-messages.ts';
 
 const meta = { title: 'Review/Realm and Zone pages', parameters: { layout: 'fullscreen' } } satisfies Meta;
@@ -189,3 +190,8 @@ export const AttachedDiscussionEnglishPhone = review(attachedMeta, attachedStori
 export const AttachedDiscussionEnglishDesktop = review(attachedMeta, attachedStories.PopulatedStrangerDesktop, 'en', 'desktop1440');
 export const AttachedDiscussionJapanesePhone = review(attachedMeta, attachedStories.PopulatedStrangerDesktop, 'ja', 'phone');
 export const AttachedDiscussionJapaneseDesktop = review(attachedMeta, attachedStories.PopulatedStrangerDesktop, 'ja', 'desktop1440');
+
+export const PopulatedRealmHomeEnglishPhone = review(zonePageMeta, zonePageStories.CommunityRealm, 'en', 'phone');
+export const PopulatedRealmHomeEnglishDesktop = review(zonePageMeta, zonePageStories.CommunityRealm, 'en', 'desktop1440');
+export const PopulatedRealmHomeJapanesePhone = review(zonePageMeta, zonePageStories.CommunityRealm, 'ja', 'phone');
+export const PopulatedRealmHomeJapaneseDesktop = review(zonePageMeta, zonePageStories.CommunityRealm, 'ja', 'desktop1440');
