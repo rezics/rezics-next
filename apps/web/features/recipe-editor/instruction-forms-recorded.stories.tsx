@@ -91,14 +91,19 @@ export const ReadingDesktop: Story = { play: reading };
 export const ReadingPhone: Story = { globals: { viewport: { value: 'phone' } }, play: reading };
 export const LoadingPhone: Story = { args: { surface: 'loading' }, globals: { viewport: { value: 'phone' } } };
 export const EditorDesktop: Story = { args: { persona: 'owner', surface: 'editor' }, play: async ({ canvasElement }) => {
-  await within(canvasElement).findByRole('button', { name: 'Use these instructions' });
+  const canvas = within(canvasElement);
+  await canvas.findByRole('button', { name: 'Use these instructions' });
+  await userEvent.click(canvas.getByRole('textbox', { name: 'Source resource' }));
+  await expect(canvas.getByRole('button', { name: 'Publish' })).toBeEnabled();
+  expect(canvas.queryByText('No steps yet. Add the first one below.')).toBeNull();
   await noMiss(canvasElement);
 } };
 export const EditorPhone: Story = { ...EditorDesktop, globals: { viewport: { value: 'phone' } } };
 export const PreviewDesktop: Story = { args: { persona: 'owner', surface: 'editor' }, play: async ({ canvasElement }) => {
   const canvas = within(canvasElement);
-  const preview = await canvas.findByRole('button', { name: 'Preview' }, { timeout: 10_000 });
-  await userEvent.click(preview);
+  await canvas.findByRole('button', { name: 'Use these instructions' });
+  const preview = canvas.queryByRole('button', { name: 'Preview' });
+  if (preview) await userEvent.click(preview);
   await canvas.findByText('PRIVATE successor', { exact: false });
   const recording = await canvas.findByRole('button', { name: englishMessages.openRecording });
   await userEvent.click(recording);

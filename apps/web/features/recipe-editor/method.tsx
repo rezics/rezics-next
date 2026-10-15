@@ -141,7 +141,7 @@ export function MethodSection(common: Common) {
     <InstructionEditor {...common} />
     {list.length ? <ol className="grid gap-3">{list.map((node, index) =>
       <StepRow key={node.occurrence} node={node} index={index} count={list.length} {...common} />)}</ol>
-      : <p className="text-muted-foreground text-sm">{t.emptySteps}</p>}
-    <AddStep {...common} />
+      : !common.state.instructions?.length ? <p className="text-muted-foreground text-sm">{t.emptySteps}</p> : null}
+    {!common.state.instructions?.length ? <AddStep {...common} /> : null}
   </section>;
 }
