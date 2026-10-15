@@ -62,6 +62,11 @@ const eligibilityFields = {
 };
 
 export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
+  async function canReadCommentSource(principal: Parameters<typeof work.access.canReadWork>[0],
+    actingSubject: string, resourceId: string, revisionId: string): Promise<boolean> {
+    return await isPublicContentRevision(work.environment, resourceId, revisionId)
+      || await work.access.canPreviewWork?.(principal, actingSubject, resourceId) === true;
+  }
   async function revisionDeliverable(revisionId: string): Promise<boolean> {
     await work.access.assertRecoveryOpen();
     const erased = await graphErasedContentRevisions(fuseki, [revisionId]);
@@ -159,6 +164,10 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           ASK { GRAPH <urn:rezics:graph:current> {
             ${iri(comment.resourceId)} a ?kind . VALUES ?kind { schema:CreativeWork rv:Post } } }`);
         if (current.boolean !== true) return problem(404, 'comment_unavailable', 'Comment is unavailable');
+        if (commentTargetHasSource(comment.target)
+          && !await canReadCommentSource(principal, query.actingSubject, comment.resourceId, comment.revisionId)) {
+          return problem(404, 'comment_unavailable', 'Comment is unavailable');
+        }
         const exact = (await work.content.readExactBatch([comment.revisionId],
           async ids => new Set(ids)))[0];
         if (exact?.status === 'denied') {
@@ -196,7 +205,8 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           if (!(error instanceof ContentCommentInvalid)) throw error;
           return problem(503, 'revision_unavailable', 'Comment selector no longer resolves');
         }
-        if (!await revisionDeliverable(comment.revisionId)) {
+        if (!await revisionDeliverable(comment.revisionId)
+          || !await canReadCommentSource(principal, query.actingSubject, comment.resourceId, comment.revisionId)) {
           return problem(404, 'comment_unavailable', 'Comment is unavailable');
         }
         return Response.json({ ...comment, resolvedText: selector.exact },
@@ -260,6 +270,11 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           }
           return problem(404, 'comment_unavailable', 'Comments are unavailable');
         }
+        // Counts, continuation tokens and quoted selectors share the exact
+        // source audience, even when the parent resource is public.
+        if (!await canReadCommentSource(principal, query.actingSubject, resourceId, params.revision)) {
+          return problem(404, 'comment_unavailable', 'Comments are unavailable');
+        }
         if (exact?.status !== 'available' || exact.reference.resourceId !== resourceId) {
           return problem(503, 'revision_unavailable', 'Comment source bytes are unavailable');
         }
@@ -297,7 +312,8 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           return problem(422, 'comment_page_budget_exceeded',
             'Comment page is too large; request fewer comments');
         }
-        if (!await revisionDeliverable(params.revision)) {
+        if (!await revisionDeliverable(params.revision)
+          || !await canReadCommentSource(principal, query.actingSubject, resourceId, params.revision)) {
           return problem(404, 'comment_unavailable', 'Comments are unavailable');
         }
         return Response.json(payload, { headers: { 'cache-control': 'no-store' } });
@@ -446,16 +462,14 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           && exact.reference.resourceId === resourceId
           && await publicDomainRevisionCurrent(exact.reference, work.rights?.store)
           && await revisionDeliverable(params.revision)) {
-          // Rights and delivery checks can await while the bundle or editor's
-          // owner proof moves. Recheck the same Zone path immediately before bytes leave.
-          if (target.zone || published) {
-            const readable = published
-              ? target.zone ? await isZonePublishedPageRevision(work.environment, target.zone, resourceId, params.revision)
-                : await isPublicContentRevision(work.environment, resourceId, params.revision)
-              : principal && query.actingSubject && await canReadContentTarget(work.environment,
-                work.access, principal, query.actingSubject, resourceId, target);
-            if (!readable) return problem(404, 'revision_unavailable', 'Revision is unavailable');
-          }
+          // Rights and delivery checks can await while publication or private
+          // preview authority moves. Recheck the same path before bytes leave.
+          const readable = published
+            ? target.zone ? await isZonePublishedPageRevision(work.environment, target.zone, resourceId, params.revision)
+              : await isPublicContentRevision(work.environment, resourceId, params.revision)
+            : principal && query.actingSubject && await canReadContentTarget(work.environment,
+              work.access, principal, query.actingSubject, resourceId, target);
+          if (!readable) return problem(404, 'revision_unavailable', 'Revision is unavailable');
           return Response.json({ reference: exact.reference, serializedJson: exact.serializedJson,
             body: exact.body }, { headers: { 'cache-control': 'no-store' } });
         }

@@ -48,8 +48,7 @@ import { canonicalAddress } from '../modules/address/schema.ts';
 import { pageDiscovery } from '../modules/realm-reads/read-contract.ts';
 import { resourceListing } from '../modules/realm-admin/contract.ts';
 import { pageDiscoveryHeaders } from '../modules/space/visibility.ts';
-import { AdmissionDenied } from '../modules/access/admission.ts';
-import { AccountAssertionInsufficientScope } from '../modules/account/verify-assertion.ts';
+import { requireZoneEditor } from '../modules/zone/editor.ts';
 import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { ZONE_CAMPAIGN_ART_COST } from '../modules/zone/campaign-art.ts';
 import { EmptyContentPublicationBody } from '../modules/content-publication/publish.ts';
@@ -272,32 +271,12 @@ async function navigation(fuseki: FusekiClient, zone: string): Promise<string | 
 }
 
 /** Raw configuration includes unreleased slides and unreadable Work references. */
-async function requireZoneEditor(work: MainWorkDependencies, request: Request, zone: string, actingSubject: string) {
-  try {
-    const principal = await work.account.verify(request, ['zone:edit']);
-    if (!work.access.assertAuthority) throw new AdmissionDenied('Zone edit authority is unavailable');
-    await work.access.assertAuthority({ principal, actingSubject, scope: `zone:edit:${zone}`, action: 'zone.edit' });
-    return principal;
-  } catch (error) {
-    // Editor reads must not distinguish hidden configuration from a missing Zone.
-    if (error instanceof AdmissionDenied || error instanceof AccountAssertionInsufficientScope) {
-      throw new ZoneUnavailable('Zone is unavailable');
-    }
-    throw error;
-  }
-}
-
 async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, request: Request,
   zone: string, input: { actingSubject: string; revision?: string; after?: string; limit?: number }) {
   await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
   const { principal, workPrincipal } = await zoneRouteViewer(work, request, input.actingSubject);
   if (!principal) throw new CompositionUnavailable('Zone is unavailable');
-  const editorRead = !await work.access.canReadSemanticResource?.(principal, input.actingSubject, zone);
-  if (editorRead) {
-    // Saved navigation is part of the editor's own Zone. An exact edit mandate
-    // supplies this read without granting semantic access to its mount targets.
-    await requireZoneEditor(work, request, zone, input.actingSubject);
-  }
+  await requireZoneEditor(work, request, zone, input.actingSubject);
   const state = await readZoneConfiguration(work.environment, zone);
   const structure = await navigation(fuseki, zone);
   if (!structure) throw new CompositionUnavailable('Zone is unavailable');
@@ -318,7 +297,7 @@ async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, reques
           canReadSemanticResource: (semanticPrincipal, actor, resource) =>
             work.access.canReadSemanticResource?.(semanticPrincipal, actor, resource) ?? Promise.resolve(false),
         }, principal, actingSubject: input.actingSubject }, targets) });
-  if (editorRead) await requireZoneEditor(work, request, zone, input.actingSubject);
+  await requireZoneEditor(work, request, zone, input.actingSubject);
   // The optional revision selects navigation history; metadata names the current owner head.
   return { zone, navigation: structure, revision: result.revision,
     ownerRevision: state.revision, name: state.name, language: state.language, direction: state.direction,

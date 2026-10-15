@@ -161,7 +161,7 @@ export async function resolveContentTarget(env: WorkActivationEnvironment,
 }
 
 export type ContentReadAuthority = Pick<AccessAdmissionRegistry, 'canReadWork'>
-  & Partial<Pick<AccessAdmissionRegistry, 'activePrincipalId' | 'withOwnerAuthority'>>;
+  & Partial<Pick<AccessAdmissionRegistry, 'canPreviewWork' | 'activePrincipalId' | 'withOwnerAuthority'>>;
 
 type ZoneContentAuthority = Partial<Pick<AccessAdmissionRegistry, 'activePrincipalId' | 'withOwnerAuthority'>>;
 
@@ -183,12 +183,13 @@ export async function withZoneContentAuthority<T>(env: WorkActivationEnvironment
   });
 }
 
-/** Private Zone bytes use the same live zone.edit bridge as dispatch. */
+/** Public resource admission never selects private Content. Work drafts need
+ * preview authority; Zone drafts use the same live zone.edit bridge as dispatch. */
 export async function canReadContentTarget(env: WorkActivationEnvironment,
   access: ContentReadAuthority, principal: VerifiedPrincipal, actingSubject: string,
   resourceId: string, target: ContentTarget): Promise<boolean> {
   if (workContentTypes().includes(target.type)) {
-    return access.canReadWork(principal, actingSubject, resourceId);
+    return access.canPreviewWork?.(principal, actingSubject, resourceId) ?? false;
   }
   if (!access.withOwnerAuthority) {
     throw new ContentDraftUnavailable('Content owner authority is unavailable');

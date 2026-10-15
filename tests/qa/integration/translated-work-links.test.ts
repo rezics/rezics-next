@@ -62,8 +62,11 @@ function translationFixture(label: string) {
     await accessPool.query('INSERT INTO access.authority_subject (id, kind) VALUES ($1, $2)',
       [actor, 'agent']);
   };
-  const createWork = async (title: string) => activateMetadataWork(env, { title,
-    admission: admission('work:create:root', 'work.create', metadataWorkRequestDigest(title)) });
+  const createWork = async (title: string) => {
+    const catalogue = { grain: 'new-creative-scope' as const, candidateReceipt: randomUUID() };
+    return activateMetadataWork(env, { title, catalogue,
+      admission: admission('work:create:root', 'work.create', metadataWorkRequestDigest(title, [], 'und', { catalogue })) });
+  };
   const publish = async (work: string, body: string, language = 'zh') => {
     const draftInput = { work, language, body, actingSubject: actor };
     const draft = await activateTextContribution(env, admission(`contribution:create:${work}`,

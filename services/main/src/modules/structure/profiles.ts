@@ -19,7 +19,7 @@ export interface StructureTargetAuthority {
   /** Owner policies can distinguish the target's current structural type. */
   environment?: WorkActivationEnvironment;
   access: Pick<AccessAdmissionRegistry, 'canReadWork'>
-    & Partial<Pick<AccessAdmissionRegistry, 'canReadWorks' | 'canReadSemanticResource' | 'withOwnerAuthority' | 'canManageMedia'>>;
+    & Partial<Pick<AccessAdmissionRegistry, 'canPreviewWork' | 'canReadWorks' | 'canReadSemanticResource' | 'withOwnerAuthority' | 'canManageMedia'>>;
   principal: VerifiedPrincipal;
   actingSubject: string;
   target: string;

@@ -17,7 +17,7 @@ export async function publishAdmittedContent(
   env: WorkActivationEnvironment, content: ContentCore,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork'>
-    & Partial<Pick<AccessAdmissionRegistry, 'activePrincipalId' | 'withOwnerAuthority'>>,
+    & Partial<Pick<AccessAdmissionRegistry, 'canPreviewWork' | 'activePrincipalId' | 'withOwnerAuthority'>>,
   request: Request,
   input: PublishPinnedContentInput & { actingSubject: string; idempotencyKey: string },
 ): Promise<ContentPublicationResult> {

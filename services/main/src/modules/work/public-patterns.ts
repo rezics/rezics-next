@@ -2,6 +2,21 @@ import { GRAPHS, iri, type WorkActivationEnvironment } from './activate.ts';
 import { DISCLOSURE_COST, discloseInventory, type DisclosureChannel } from '../disclosure/read.ts';
 import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
 
+/** Public provenance endpoints have no acting identity. An exact Main Version
+ * selector must resolve through a currently disclosed Work before its inventory
+ * (including an empty inventory) can reveal that the revision exists. */
+export async function publicMainRevisionVisible(environment: WorkActivationEnvironment,
+  mainVersion: string, revision: string): Promise<boolean> {
+  const rows = (await environment.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+    PREFIX schema: <https://schema.org/> SELECT DISTINCT ?work WHERE {
+      ${publicWork('?work', iri(mainVersion))}
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(mainVersion)} .
+        FILTER NOT EXISTS { ${iri(revision)} a rv:ErasedRevision } }
+    } LIMIT 2`, 4096)).results?.bindings ?? [];
+  const work = rows[0]?.work?.value;
+  return rows.length === 1 && !!work && (await admittedPublicWorks(environment, [work])).has(work);
+}
+
 /** Graph publication is a candidate predicate, not audience admission. Owners
  * returning identities/counts without summaries disclose both the Work name
  * and its selected Structure revision before pagination or aggregation. */

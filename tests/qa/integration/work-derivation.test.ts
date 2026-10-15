@@ -27,9 +27,10 @@ function qaEnvironment(label: string): { env: WorkActivationEnvironment; actor: 
 }
 
 async function work(env: WorkActivationEnvironment, actor: string, title: string): Promise<WorkActivationReceipt> {
-  return activateMetadataWork(env, { title, admission: { id: randomUUID(), actingSubject: actor,
+  const catalogue = { grain: 'new-creative-scope' as const, candidateReceipt: randomUUID() };
+  return activateMetadataWork(env, { title, catalogue, admission: { id: randomUUID(), actingSubject: actor,
     scope: 'work:create:root', action: 'work.create', idempotencyKey: randomUUID(),
-    requestDigest: metadataWorkRequestDigest(title), authorityEpoch: '0',
+    requestDigest: metadataWorkRequestDigest(title, [], 'und', { catalogue }), authorityEpoch: '0',
     expiresAt: new Date(Date.now() + 60_000).toISOString() } });
 }
 

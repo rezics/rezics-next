@@ -33,6 +33,8 @@ import { WorkReadMoved } from '../modules/work/read-session.ts';
 import { structureRevisionDisclosureVisible } from '../modules/work/read-header.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import { groupUuid } from './shared.ts';
+import { requireZoneEditor } from '../modules/zone/editor.ts';
+import { ZoneUnavailable } from '../modules/zone/configuration.ts';
 
 import { ingredientLine, recipeStep } from './recipe-qualifiers.ts';
 import { ExactInstructionSelector } from '../modules/structure/selection.ts';
@@ -170,6 +172,16 @@ async function disclosedComposition<T>(work: MainWorkDependencies, request: Requ
       throw new CompositionUnavailable('Composition is unavailable');
     }
     const profile = structureProfileFor(header.profile);
+    if (header.profile === 'zone-navigation') {
+      const read = async () => {
+        if (!session.principal || !actingSubject) return false;
+        try { await requireZoneEditor(work, request, header.owner, actingSubject); return true; }
+        catch (error) { if (error instanceof ZoneUnavailable) return false; throw error; }
+      };
+      const allowed = await read();
+      session.observeDependency(`zone-navigation-preview:${header.owner}`, allowed, read);
+      if (!allowed) throw new CompositionUnavailable('Composition is unavailable');
+    }
     const requestedRevision = options.revision;
     let revision = requestedRevision ?? header.head;
     if (options.selectedRoot !== false && profile.workPublication === true) {

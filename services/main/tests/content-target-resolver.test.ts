@@ -89,11 +89,12 @@ test('runtime Work metadata selects custody and refreshes head and ambiguity gua
   const target = await resolveContentTarget(environment([type]).env, id);
   const calls: string[] = [];
   const access: ContentReadAuthority = {
-    canReadWork: async () => { calls.push('work'); return false; },
+    canReadWork: async () => { throw new Error('public Work admission is not preview authority'); },
+    canPreviewWork: async () => { calls.push('preview'); return false; },
     withOwnerAuthority: async (_authority, operation) => { calls.push('ordinary'); return operation({} as never); },
   };
   expect(await canReadContentTarget(environment([type]).env, access, principal, resource(), id, target)).toBe(false);
-  expect(calls).toEqual(['work']);
+  expect(calls).toEqual(['preview']);
   expect(contentTargetGuard(id, { type: zoneType, zone: id })).toContain(`<${type}>`);
   expect(contentTargetGuard(id, target)).toContain(`<${type}>`);
   await expect(resolveContentTarget(environment([zoneType, type]).env, id))
@@ -122,14 +123,15 @@ test('dispatch guards retain heads, active complete Zones and resolved owner ide
   expect(() => contentTargetGuard(id, { type: zoneType, zone: resource() })).toThrow(ContentDraftUnavailable);
 });
 
-test('private native Post reads preserve canReadWork denial without ordinary policy fallback', async () => {
+test('private native Post reads require preview authority without public or ordinary policy fallback', async () => {
   const h = environment([nativePostType]);
   const id = resource(), actor = resource();
   const target = await resolveContentTarget(h.env, id);
   for (const allowed of [false, true]) {
     let ordinary = 0;
     const access: ContentReadAuthority = {
-      canReadWork: async (actualPrincipal, actualActor, actualId) => {
+      canReadWork: async () => true,
+      canPreviewWork: async (actualPrincipal, actualActor, actualId) => {
         expect([actualPrincipal, actualActor, actualId]).toEqual([principal, actor, id]);
         return allowed;
       },
@@ -137,6 +139,14 @@ test('private native Post reads preserve canReadWork denial without ordinary pol
     };
     expect(await canReadContentTarget(h.env, access, principal, actor, id, target)).toBe(allowed);
     expect(ordinary).toBe(0);
+  }
+});
+
+test('missing preview capability fails closed for private Work and Post Content', async () => {
+  for (const type of [workType, bookType, nativePostType]) {
+    const h = environment([type]), id = resource();
+    expect(await canReadContentTarget(h.env, { canReadWork: async () => true },
+      principal, resource(), id, await resolveContentTarget(h.env, id))).toBe(false);
   }
 });
 

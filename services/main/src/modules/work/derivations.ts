@@ -8,6 +8,7 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, IdempotencyConflict,
   type WorkActivationEnvironment } from './activate.ts';
 import { PendingAdmittedWork } from './create-admitted.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
+import { admittedPublicWorks, publicMainRevisionVisible, publicWork } from './public-patterns.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const evidenceUrl = /^https:\/\/[^\s<>"{}|\\^`]{1,2040}$/;
@@ -509,9 +510,12 @@ export async function createAdmittedWorkDerivation(env: WorkActivationEnvironmen
  * unresolved; earlier corrected or resolved ones remain readable as superseded.
  */
 export async function readWorkDerivations(env: WorkActivationEnvironment,
-  mainVersion: string, mainRevision: string, includeLexicon = false): Promise<WorkDerivation[]> {
+  mainVersion: string, mainRevision: string, includeLexicon = false, publicOnly = false): Promise<WorkDerivation[]> {
   if (!nativeId.test(mainVersion) || !nativeId.test(mainRevision)) {
     throw new InvalidWorkDerivation('invalid Main Version revision');
+  }
+  if (publicOnly && !await publicMainRevisionVisible(env, mainVersion, mainRevision)) {
+    throw new WorkDerivationUnavailable('target revision unavailable');
   }
   const available = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
     GRAPH ${iri(GRAPHS.current)} { ${iri(mainVersion)} a rv:MainVersion ; rv:work ?work . }
@@ -520,7 +524,7 @@ export async function readWorkDerivations(env: WorkActivationEnvironment,
     }
   }`);
   if (available.boolean !== true) throw new WorkDerivationUnavailable('target revision unavailable');
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> SELECT
     ?derivation ?targetWork ?sourceWork ?sourceMain ?sourceRevision ?kind ?evidence ?linkedBy
     ?sequence ?corrects ?supersededBy ?class ?sourceStatus WHERE {
     GRAPH ${iri(GRAPHS.revisions)} {
@@ -538,6 +542,7 @@ export async function readWorkDerivations(env: WorkActivationEnvironment,
       OPTIONAL { ?derivation rv:corrects ?corrects }
       OPTIONAL { ?supersededBy rv:corrects ?derivation }
     }
+    ${publicOnly ? publicWork('?sourceWork', '?disclosedSourceMain') : ''}
   } ORDER BY ?sequence LIMIT ${MAX_REVISION_DERIVATIONS + 1}`);
   const rows = result.results?.bindings ?? [];
   if (rows.length > MAX_REVISION_DERIVATIONS) {
@@ -579,5 +584,10 @@ export async function readWorkDerivations(env: WorkActivationEnvironment,
           || prior.sourceMainVersion === item.sourceMainVersion))))) {
     throw new WorkDerivationConflict('ambiguous target derivations');
   }
-  return relations;
+  if (!publicOnly) return relations;
+  const visible = await admittedPublicWorks(env, relations.map(item => item.sourceWork));
+  if (!await publicMainRevisionVisible(env, mainVersion, mainRevision)) {
+    throw new WorkDerivationUnavailable('target revision unavailable');
+  }
+  return relations.filter(item => visible.has(item.sourceWork));
 }

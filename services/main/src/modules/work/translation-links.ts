@@ -2,6 +2,7 @@ import { postBookPlacement } from '../post/patterns.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from './activate.ts';
 import type { RightsStore } from '../rights/store.ts';
+import { admittedPublicWorks, publicMainRevisionVisible, publicWork } from './public-patterns.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 // Translation links currently use the installed native-text tag syntax;
@@ -266,9 +267,12 @@ export async function sealTranslationLinkAdmission(env: WorkActivationEnvironmen
 
 /** Exact revision query: a newer target head never inherits this provenance. */
 export async function readTranslationLinks(env: WorkActivationEnvironment,
-  mainVersion: string, mainRevision: string): Promise<TranslationLink[]> {
+  mainVersion: string, mainRevision: string, publicOnly = false): Promise<TranslationLink[]> {
   if (!nativeId.test(mainVersion) || !nativeId.test(mainRevision)) {
     throw new InvalidTranslationLink('invalid Main Version revision');
+  }
+  if (publicOnly && !await publicMainRevisionVisible(env, mainVersion, mainRevision)) {
+    throw new TranslationTargetUnavailable('Main Version revision is unavailable');
   }
   const available = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
     GRAPH ${iri(GRAPHS.current)} { ${iri(mainVersion)} a rv:MainVersion ; rv:work ?work . }
@@ -279,7 +283,7 @@ export async function readTranslationLinks(env: WorkActivationEnvironment,
   if (available.boolean !== true) {
     throw new TranslationTargetUnavailable('Main Version revision is unavailable');
   }
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> SELECT
     ?link ?targetWork ?sourceWork ?sourceMain ?sourceRevision ?sourceStatus ?status
     ?language ?translator ?publisher ?evidence ?linkedBy ?authorizer ?scope ?epoch WHERE {
     GRAPH ${iri(GRAPHS.revisions)} {
@@ -295,10 +299,11 @@ export async function readTranslationLinks(env: WorkActivationEnvironment,
       OPTIONAL { ?link rv:authorizingParty ?authorizer ; rv:authorizationScope ?scope ;
         rv:authorizationEpoch ?epoch }
     }
+    ${publicOnly ? publicWork('?sourceWork', '?disclosedSourceMain') : ''}
   } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (rows.length > 1) throw new TranslationLinkConflict('target revision has ambiguous translation links');
-  return rows.map(row => {
+  const links = rows.map<TranslationLink>(row => {
     if (!row.link || !row.targetWork || !row.sourceWork || !row.sourceMain
       || !row.sourceStatus || !row.status || !row.language || !row.translator
       || !row.publisher || !row.evidence || !row.linkedBy) {
@@ -323,4 +328,10 @@ export async function readTranslationLinks(env: WorkActivationEnvironment,
       authorizationScope: row.scope?.value ?? null,
       authorizationEpoch: row.epoch?.value ?? null };
   });
+  if (!publicOnly) return links;
+  const visible = await admittedPublicWorks(env, links.map(item => item.sourceWork));
+  if (!await publicMainRevisionVisible(env, mainVersion, mainRevision)) {
+    throw new TranslationTargetUnavailable('Main Version revision is unavailable');
+  }
+  return links.filter(item => visible.has(item.sourceWork));
 }

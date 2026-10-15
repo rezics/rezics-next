@@ -157,7 +157,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       try {
         const mainVersion = `https://rezics.com/id/${params.mainVersion}`;
         const revision = `https://rezics.com/id/${params.revision}`;
-        const links = await readTranslationLinks(work.environment, mainVersion, revision);
+        const links = await readTranslationLinks(work.environment, mainVersion, revision, true);
         return Response.json({ profile: 'translation-links-v1', mainVersion, revision,
           complete: true, links }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
@@ -174,7 +174,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       try {
         const mainVersion = `https://rezics.com/id/${params.mainVersion}`;
         const revision = `https://rezics.com/id/${params.revision}`;
-        const derivations = await readWorkDerivations(work.environment, mainVersion, revision);
+        const derivations = await readWorkDerivations(work.environment, mainVersion, revision, false, true);
         return Response.json({ profile: 'work-derivations-v1', mainVersion, revision,
           complete: true, derivations }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
