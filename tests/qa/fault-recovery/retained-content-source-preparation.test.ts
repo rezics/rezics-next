@@ -16,8 +16,12 @@ test('D016STOP01: an expired PostgreSQL stop refuses before copy with its contro
     const startup = await runQaStartupChildAsync(root, ['stack:up', ...stack.args], 180_000);
     if (!startup.ok) throw new Error(`stop regression startup failed: ${startup.output.slice(-2000)}`);
     // A real frozen postmaster cannot finish shutdown before Compose's grace expires.
-    const freeze = stack.compose(['exec', '-T', 'postgres', 'sh', '-ec', 'kill -STOP 1']);
-    if (freeze.status !== 0) throw new Error(`postmaster pause failed: ${freeze.output}`);
+    // A namespace's init ignores SIGSTOP from its own namespace. Docker sends
+    // it from the host; retain the actual stopped state before testing shutdown.
+    run('docker', ['kill', '--signal', 'STOP', `${stack.project}-postgres-1`], stack.dockerEnv);
+    const freeze = stack.compose(['exec', '-T', 'postgres', 'sh', '-ec', 'grep "^State:" /proc/1/status']);
+    if (freeze.status !== 0 || !/State:\s+T\b/.test(freeze.output))
+      throw new Error(`postmaster did not stop: ${freeze.output}`);
     let failure: unknown;
     try {
       await retainStoppedContentWriters(stack, async () => {
@@ -28,7 +32,7 @@ test('D016STOP01: an expired PostgreSQL stop refuses before copy with its contro
     const control = readRetainedPostgresControl(`${stack.project}_postgres_data`, stack.dockerEnv);
     const state = JSON.parse(run('docker', ['inspect', `${stack.project}-postgres-1`, '--format', '{{json .State}}'], stack.dockerEnv));
     writeFileSync(join(artifacts, 'retained-content-source-stop-regression.json'), JSON.stringify({
-      forcedPostmasterPause: true, startupAdmissionWaitMs: startup.admissionWaitMs,
+      forcedPostmasterPause: true, frozenState: freeze.output, startupAdmissionWaitMs: startup.admissionWaitMs,
       state, control, copyStarted, failure: failure instanceof Error ? failure.message : null,
     }, null, 2) + '\n', { mode: 0o600 });
     expect(state.ExitCode).toBe(137);
