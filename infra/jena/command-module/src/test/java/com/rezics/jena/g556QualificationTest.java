@@ -159,6 +159,7 @@ public class g556QualificationTest {
             var removed = new org.apache.jena.query.text.Entity("urn:rezics:match:g556:0",
                 CommandPolicy.PUBLIC_SEARCH, "en", null);
             removed.put("body", "common catalogue phrase 0");
+            var expectedContinuation = ranked.ranked(BODY, "common catalogue phrase", 20, after);
             fixture.index.deleteEntity(removed);
             fixture.index.commit();
             // Ranked continuations retain their committed reader through writes
@@ -167,7 +168,7 @@ public class g556QualificationTest {
             var retained = ranked.ranked(BODY, "common catalogue phrase", 20, after);
             assertEquals(after.commit(), retained.commit());
             assertEquals(20, retained.hits().size());
-            assertEquals(retained.hits(), ranked.ranked(BODY, "common catalogue phrase", 20, after).hits());
+            assertEquals(expectedContinuation.hits(), retained.hits());
             assertEquals(false, SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("available"));
             assertFalse(SearchDeltaJournal.qualify(fixture.data));
         }

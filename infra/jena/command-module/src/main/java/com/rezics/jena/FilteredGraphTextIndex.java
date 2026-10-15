@@ -648,6 +648,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                     .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), CommandPolicy.PUBLIC_SEARCH)),
                         BooleanClause.Occur.FILTER).build();
                 var resolved = searcher.search(identity, 2);
+                if (searcher.timedOut()) throw new TextIndexException("ranked query deadline exceeded");
                 if (resolved.scoreDocs.length != 1) throw new RankRestart();
                 cursor = new ScoreDoc(resolved.scoreDocs[0].doc, after.score());
                 }

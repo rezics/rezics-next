@@ -1140,7 +1140,9 @@ public class SearchDeltaJournalTest {
                         : field.equals("occurrenceLabel") ? CommandPolicy.CURRENT : CommandPolicy.PUBLIC_SEARCH, "en", null);
                     // Preserve unrelated documents with the current title-tier
                     // metadata; only the selected Content body is legacy here.
-                    entity.put(field, "preserved legacy literal"); f.filtered.addEntity(entity);
+                    entity.put(field, "preserved legacy literal");
+                    if (field.equals("publicTitle")) f.filtered.addEntity(entity);
+                    else f.index.addEntity(entity);
                 }
                 f.data.commit();
             } finally { f.data.end(); }
