@@ -218,6 +218,8 @@ async function createReplyReportFixture(
       graphQueries.push(raw);
       if (graph.authorityDown) throw new Error('Reply reporting graph authority is unavailable');
       const query = raw.replace(/\s+/g, ' ').trim();
+      if (query.includes('SELECT DISTINCT ?zone ?head ?typed ?space ?author ?realm'))
+        return bindings([]);
       if (/ASK \{ GRAPH <urn:rezics:graph:control>/.test(query) && query.includes('rv:restoreHold'))
         return { boolean: query.includes(epoch) };
       if (query.includes('ASK { GRAPH <urn:rezics:graph:current>')

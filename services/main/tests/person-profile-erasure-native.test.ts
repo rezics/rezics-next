@@ -659,12 +659,10 @@ public class AgentProfileErasureCallerContractTest {
   }
 }, nativeTimeout + 60_000);
 
-// fails until a later native image accepts the profile editor's operation id form
-test.failing('erase a Person after a profile edit with a SHA-256 operation id', () => {
+test('erase a Person after a profile edit with a SHA-256 operation id', () => {
   expect(nativeGapResults.get('profile-editor-erasure')).toBe('');
 });
 
-// fails until a later native image purges author-prefix entries from surviving Works
-test.failing('offline Person purge removes surviving Work author prefixes and indexed name copies', () => {
+test('offline Person purge removes surviving Work author prefixes and indexed name copies', () => {
   expect(nativeGapResults.get('surviving-work-prefix-purge')).toBe('');
 });
