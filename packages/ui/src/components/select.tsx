@@ -5,6 +5,7 @@ import { ark } from '@ark-ui/react/factory';
 import { Select as ArkSelect, createListCollection, useSelectContext } from '@ark-ui/react/select';
 import { CheckIcon, ChevronDownIcon, XIcon } from 'lucide-react';
 import type React from 'react';
+import { useEffect, useState } from 'react';
 import type { VariantProps } from 'tailwind-variants';
 import { useUiCopy } from '../i18n/copy.ts';
 import { cn } from '../utils.ts';
@@ -17,6 +18,8 @@ export const SelectContext = ArkSelect.Context;
 
 export const Select: ArkSelect.RootComponent = (props) => {
   const { lazyMount = true, unmountOnExit = true, children, ...rest } = props;
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
 
   return (
     <ArkSelect.Root
@@ -24,6 +27,7 @@ export const Select: ArkSelect.RootComponent = (props) => {
       lazyMount={lazyMount}
       unmountOnExit={unmountOnExit}
       {...rest}
+      disabled={!hydrated || rest.disabled}
     >
       {children}
 

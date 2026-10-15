@@ -69,13 +69,13 @@ function ShelfNav({ state, overview, locale, messages, loansCurrent = false }: {
     <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] lg:grid lg:gap-6 lg:overflow-visible">
       <ul className="flex gap-2 lg:grid lg:gap-0.5">
         {entries.map(entry => <li key={entry.key}>
-          <Link href={href(entry.shelf)} aria-current={current === entry.key ? 'page' : undefined} className={navItem}>
+          <Link documentNavigation href={href(entry.shelf)} aria-current={current === entry.key ? 'page' : undefined} className={navItem}>
             <span className="lg:flex-1">{entry.label}</span>
             <span className="tabular-nums opacity-70">{count(entry.count, locale)}</span>
           </Link>
         </li>)}
         <BringIntoRow active={current === 'loans'}>
-          <Link href="/library/loans" aria-current={current === 'loans' ? 'page' : undefined} className={navItem}>
+          <Link documentNavigation href="/library/loans" aria-current={current === 'loans' ? 'page' : undefined} className={navItem}>
             <span className="lg:flex-1">{t.loans}</span>
           </Link>
         </BringIntoRow>
@@ -87,7 +87,7 @@ function ShelfNav({ state, overview, locale, messages, loansCurrent = false }: {
           {overview.customShelves.map(shelf => {
             const id = shelf.id.slice(-36);
             return <li key={shelf.id}>
-              <Link href={href({ kind: 'custom', id })} aria-current={current === id ? 'page' : undefined}
+              <Link documentNavigation href={href({ kind: 'custom', id })} aria-current={current === id ? 'page' : undefined}
                 className={navItem}>
                 <span className="max-w-48 truncate lg:flex-1">{shelf.name}</span>
                 {shelf.disclosure === 'private' ? <LockIcon role="img" aria-label={t.privateShelf}
