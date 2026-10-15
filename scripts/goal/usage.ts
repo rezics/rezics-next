@@ -1,4 +1,4 @@
-import { type UsageSample, type UsageSnapshot, type UsageReport, type AccountUsage, type CodexResetStatus, type CodexResetLoad, modelOf } from './types.ts';
+import { type UsageSample, type UsageSnapshot, type UsageReport, type AccountUsage, type CodexResetStatus, type CodexResetLoad } from './types.ts';
 import { configuredAccounts } from './config.ts';
 import { readFileSync, mkdirSync, writeFileSync, readdirSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import { usagePath, usageHistoryPath, stateDir, codexResetCachePath, CODEX_RESET_CACHE_MS, CODEX_RESET_URL } from './ledger.ts';
@@ -196,12 +196,6 @@ export function codexAccounts(): AccountUsage[] {
     }
     return account;
   });
-}
-
-/** The ordered fallback list belongs to the account, for workers, managers and reviewers alike. */
-export function codexModel(engine: string): string {
-  const account = codexAccounts().find(account => account.engines.includes(engine));
-  return account?.reached && account.pastAllowance?.length ? account.pastAllowance[0]! : modelOf(engine);
 }
 
 function resetStatusFrom(value: unknown): CodexResetStatus | undefined {

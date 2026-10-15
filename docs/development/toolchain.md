@@ -35,7 +35,7 @@ overrides built-in defaults, and ignored `settings.user.json` overrides shared
 values for this computer and operator. Each layer declares `"version": 1` and
 is validated on load. `task goal -- config` shows effective values and their
 sources. Codex account names, launchers or homes, dispatch weights and ordered
-`pastAllowance` model lists belong only in the user layer. Service tier, review
+`pastAllowance` resource lists belong only in the user layer. Service tier, review
 engine, confirmation interval, QA and gate counts, unit gate scope and shards,
 and Telegram recipient are settings fields too. See
 [Resources](../goals/manager.md#resources) for their names and semantics.

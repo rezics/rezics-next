@@ -8,7 +8,7 @@ import { launchCommand } from './launch.ts';
 import { parseCodexUsage } from './usage.ts';
 import type { AccountUsage, Ledger, Task } from './types.ts';
 import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
-import { withTestAccounts } from './fixtures/accounts.ts';
+import type { CodexAccount } from './config.ts';
 
 const spawnSync = fixtureSpawns(60_000);
 const cli = join(import.meta.dir, 'goalctl.ts');
@@ -43,6 +43,7 @@ const args = process.argv.slice(2);
 const refs = Object.fromEntries((existsSync('.temp/ref') ? readdirSync('.temp/ref') : [])
   .map(name => [name, readFileSync(join('.temp/ref', name), 'utf8')]));
 const record = { args, refs, prompt: args.at(-1), account: process.env.CODEX_HOME, settings: process.env.GOAL_SETTINGS_DIRECTORY,
+  pastAllowance: JSON.parse(process.env.GOAL_CODEX_PAST_ALLOWANCE ?? '[]'),
   head: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() };
 const last = args[args.indexOf('-o') + 1];
 writeFileSync(last, 'RESULT: partial\\nNEXT: fixture step\\n');
@@ -62,7 +63,7 @@ writeFileSync('.temp/record.json', JSON.stringify(record));
     { engine: 'codex', home: join(local, 'codex'), weight: 1 },
     { engine: 'sample-b', home: join(local, 'sample-b'), weight: 1 },
   ];
-  const configure = (configured = accounts) => writeFileSync(join(settingsDirectory, 'settings.user.json'), JSON.stringify({ version: 1, accounts: configured }));
+  const configure = (configured: CodexAccount[] = accounts) => writeFileSync(join(settingsDirectory, 'settings.user.json'), JSON.stringify({ version: 1, accounts: configured }));
   configure();
   const env = {
     PATH: `${bin}:${process.env.PATH}`, GOAL_MAX_WORKERS: '25', GOAL_MEMORY_FLOOR_GIB: '0',
@@ -91,7 +92,7 @@ writeFileSync('.temp/record.json', JSON.stringify(record));
       if (Date.now() > deadline) throw new Error(`Recording launcher did not start: ${readFileSync(task.attempts.at(-1)!.output.replace('.json', '.err'), 'utf8')}`);
       await Bun.sleep(10);
     }
-    return JSON.parse(readFileSync(file, 'utf8')) as { args: string[]; refs: Record<string, string>; prompt: string; account: string; head: string; settings: string };
+    return JSON.parse(readFileSync(file, 'utf8')) as { args: string[]; refs: Record<string, string>; prompt: string; account: string; head: string; settings: string; pastAllowance: string[] };
   };
   return { dir, local, run, git, ledger, save, brief, reference, record, configure,
     dispose: () => rmSync(dir, { recursive: true, force: true }) };
@@ -107,15 +108,17 @@ function weeklyUsage(home: string, week: number, fiveHour = 5): void {
 }
 
 describe('worker handover', () => {
-  test('an exhausted account uses the first model permitted past its allowance', () => {
+  test('an exhausted account passes its ordered continuation resources to its launcher', async () => {
     const repo = repository();
     try {
       const home = join(repo.local, 'sample-c');
       weeklyUsage(home, 100);
-      withTestAccounts(() => {
-        const [, args] = launchCommand({ id: 'worker', engine: 'sample-c', effort: 'high', session: '', prompt: 'p', resume: false });
-        expect(args[args.indexOf('-m') + 1]).toBe('sample-fallback-model');
-      }, [{ engine: 'sample-c', home, weight: 1, pastAllowance: ['sample-fallback-model', 'other-fallback-model'] }]);
+      const pastAllowance = ['sample-resource-a', 'sample-resource-b'];
+      repo.configure([{ engine: 'sample-c', home, weight: 1, pastAllowance }]);
+      const result = repo.run('dispatch', repo.brief(), '--engine', 'sample-c');
+      expect(result.status, result.stderr).toBe(0);
+      const record = await repo.record(repo.ledger().tasks['G-001']!);
+      expect(record.pastAllowance).toEqual(pastAllowance);
     } finally { repo.dispose(); }
   });
 

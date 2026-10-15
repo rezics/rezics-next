@@ -4,9 +4,8 @@ import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, rea
 import { dirname, join, relative, resolve } from 'node:path';
 import { processAlive, processIdentity } from '../qa/process/identity.ts';
 import { configuredAccounts, loadSettings } from './config.ts';
-import { engineEnv, launcherOf } from './types.ts';
+import { engineEnv, launcherOf, modelOf } from './types.ts';
 import { solAccount } from './handover.ts';
-import { codexModel } from './usage.ts';
 
 interface LandingState {
   accepted?: { head: string; brief: string; directory: string };
@@ -354,7 +353,7 @@ async function reviewPass(request: LandReview, engine: ReviewEngine, prompt: str
     const accounts: ReviewEngine[] = [engine, engine, ...configuredAccounts().filter(account => account.engine !== engine).map(account => account.engine)];
     for (const [attempt, account] of accounts.entries()) {
       try {
-        await runReviewer(launcherOf(account), ['exec', '-m', codexModel(account), '-c', 'model_reasoning_effort=high',
+        await runReviewer(launcherOf(account), ['exec', '-m', modelOf(account), '-c', 'model_reasoning_effort=high',
           '-s', 'read-only', '-c', 'mcp_servers={}', '--output-schema', schema, '--output-last-message', output, '-'], request, prompt, attempt > 0, engineEnv(account));
         break;
       } catch (error) {

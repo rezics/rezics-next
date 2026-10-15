@@ -168,8 +168,9 @@ launched workers and coordinator turns inherit the originating settings director
 `accounts` is a user-layer array. Each entry has a unique `engine` name,
 `launcher` (an executable name or path) or `home` (a Codex home), numeric
 `weight` greater than or equal to zero, and optional `pastAllowance`, an ordered
-array of model IDs permitted after the allowance is exhausted. Its default is
-empty; when exhausted, the first permitted model is used. A home without a
+array of resources permitted after the allowance is exhausted. Its default is
+empty. `GOAL_CODEX_PAST_ALLOWANCE` passes that array as JSON to the launcher,
+which implements resource-specific continuation in the configured order. A home without a
 launcher uses `codex`. Supply a home for native session and usage readouts;
 launcher-only accounts still appear with unavailable usage. Relative paths
 resolve from `.goalctl/`; `~/` resolves from the user's home. Names cannot

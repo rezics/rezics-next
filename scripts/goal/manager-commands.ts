@@ -2,7 +2,6 @@ import { resolve, join } from 'node:path';
 import { stateDir, activeGoals, root, managerOf } from './ledger.ts';
 import { type Ledger, effortsOf, modelOf, engineEnv, isCodex, launcherOf } from './types.ts';
 import { configuredAccounts, settingsDirectory } from './config.ts';
-import { codexModel } from './usage.ts';
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { GoalMailStore } from './mail.ts';
@@ -126,7 +125,7 @@ export function coordinatorStartOptions(args: string[]): {
   }
   const effort = flags['--effort'] ?? '';
   if (!effortsOf(engine).includes(effort)) throw new Error(`${engine} effort must be one of ${effortsOf(engine).join(', ')}`);
-  return {goal,engine,effort,model:flags['--model'] ?? (isCodex(engine) ? codexModel(engine) : modelOf(engine))};
+  return {goal,engine,effort,model:flags['--model'] ?? modelOf(engine)};
 }
 export function coordinatorStartDescriptor(options: ReturnType<typeof coordinatorStartOptions>, cwd: string, socket: string): LaunchDescriptor {
   const {goal,engine,effort,model} = options;
@@ -144,7 +143,7 @@ export function coordinatorStartDescriptor(options: ReturnType<typeof coordinato
   return {goal,generation:randomUUID(),session,engine,effort,cwd,home,
     program:Bun.which(program) ?? program,args,startArgs:command(false)[1],socket,server:tmuxServer(socket),
     env:{PATH:process.env.PATH ?? '',HOME:homedir(),GOAL_ID:goal,GOAL_MANAGER:`goal-${goal}`,GOAL_SETTINGS_DIRECTORY:settingsDirectory(),
-      ...(engine === 'claude' ? (process.env.CLAUDE_CONFIG_DIR ? {CLAUDE_CONFIG_DIR:home} : {}) : home ? {CODEX_HOME:home} : {}),
+      ...(engine === 'claude' ? (process.env.CLAUDE_CONFIG_DIR ? {CLAUDE_CONFIG_DIR:home} : {}) : engineEnv(engine)),
       ...Object.fromEntries(['GOAL_MAX_WORKERS','GOAL_MEMORY_FLOOR_GIB','STORYBOOK_MAX_WORKERS','GOAL_CODEX_HOME',
         'GOAL_CODEX_SERVICE_TIER'].filter(key=>process.env[key] !== undefined).map(key=>[key,process.env[key]!]))}};
 }
@@ -244,7 +243,7 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
         prompt:WAKE_PROMPT,lastMessage:WAKE_LAST_MESSAGE});
       const descriptor: LaunchDescriptor = {goal,generation:randomUUID(),session,engine,effort,cwd,home,previousOwner,
         program:Bun.which(program) ?? program,args:launchArgs,socket,server:tmuxServer(socket),
-        env:{PATH:process.env.PATH ?? '',HOME:homedir(),CODEX_HOME:home,GOAL_ID:goal,GOAL_SETTINGS_DIRECTORY:settingsDirectory(),
+        env:{PATH:process.env.PATH ?? '',HOME:homedir(),...engineEnv(engine),CODEX_HOME:home,GOAL_ID:goal,GOAL_SETTINGS_DIRECTORY:settingsDirectory(),
           GOAL_MANAGER:managerOf(eventLedger(directory),goal),
           ...(process.env.GOAL_MAIL_STATE_DIR ? {GOAL_MAIL_STATE_DIR:directory} : {}),
           ...Object.fromEntries(['GOAL_MAX_WORKERS','GOAL_MEMORY_FLOOR_GIB','STORYBOOK_MAX_WORKERS','GOAL_CODEX_HOME',

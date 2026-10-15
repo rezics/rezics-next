@@ -3,7 +3,7 @@ import { loadSettings, settingsDirectory } from './config.ts';
 import { join, resolve } from 'node:path';
 import { stateDir, root, pidAlive, readLedger, git, regenerationOnlyFiles } from './ledger.ts';
 import { existsSync, readFileSync, mkdirSync, openSync } from 'node:fs';
-import { currentUsage, codexAccounts, codexModel, describeAccount } from './usage.ts';
+import { currentUsage, codexAccounts, describeAccount } from './usage.ts';
 import { spawn } from 'node:child_process';
 import { type ChangedFile, isGeneratedOutput, outOfScope } from './briefs.ts';
 import { handoverPrompt, prepareHandover, type WorkerHandover } from './handover.ts';
@@ -31,7 +31,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
   if (isCodex(engine)) {
     // Maintainer, 2026-10-03: Codex workers run on the fast service tier unless GOAL_CODEX_SERVICE_TIER says otherwise.
     const tier = process.env.GOAL_CODEX_SERVICE_TIER ?? codexServiceTier();
-    const common = ['-m', codexModel(engine), '-c', `model_reasoning_effort=${effort}`,
+    const common = ['-m', modelOf(engine), '-c', `model_reasoning_effort=${effort}`,
       '-c', 'features.multi_agent=false', '-c', 'features.multi_agent_v2=false',
       ...codexMcpOverrides(engine),
       ...(engine === 'luna' ? [] : ['-c', `model_context_window=${SOL_CONTEXT_WINDOW}`]),

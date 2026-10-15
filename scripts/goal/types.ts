@@ -155,8 +155,11 @@ export const isClaudeCode = (engine: Engine): boolean => engine === 'claude' || 
 export const programOf = (engine: Engine): string =>
   isCodex(engine) ? 'codex' : engine === 'cursor' ? 'cursor-agent' : isClaudeCode(engine) ? 'claude' : engine;
 export const launcherOf = (engine: Engine): string => codexAccount(engine)?.launcher ?? programOf(engine);
-export const engineEnv = (engine: Engine): Record<string, string> =>
-  codexAccount(engine)?.home ? { CODEX_HOME: codexAccount(engine)!.home! } : {};
+export const engineEnv = (engine: Engine): Record<string, string> => {
+  const account = codexAccount(engine);
+  return account ? { ...(account.home ? { CODEX_HOME: account.home } : {}),
+    GOAL_CODEX_PAST_ALLOWANCE: JSON.stringify(account.pastAllowance ?? []) } : {};
+};
 export const HOLDING: State[] = ['starting', 'running', 'exited', 'conflict', 'merged', 'stopped'];
 // Preparations have no commits yet. Landed (`merged`) and closed tasks no longer
 // have to land; the remaining holders do, including their out-of-claim commits.
