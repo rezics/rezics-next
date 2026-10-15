@@ -240,7 +240,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   };
   const app = new Elysia({ introspect: true })
     .use(httpTelemetry())
-    .request(({ request, server }) => {
+    .onRequest(({ request, server }) => {
       const peer = server?.requestIP(request)?.address;
       if (new URL(request.url).pathname.startsWith('/api/auth/')) {
         const forwarded = request.headers.get('x-forwarded-for')?.trim();
@@ -258,7 +258,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
         request.headers.set('x-rezics-request-country', country);
       }
     })
-    .error(({ error }) => {
+    .onError(({ error }) => {
       if (error instanceof ValidationError || error instanceof ParseError) return Response.json({ error: 'invalid_request' }, { status: 400 });
       if (error instanceof NotFound) return Response.json({ error: 'not_found' }, { status: 404 });
       return accountFailure(error);
@@ -495,7 +495,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       { headers: { 'cache-control': 'no-store' } }); }
       catch (error) { return recoveryError(error); }
     })
-    .cleanup(async () => { await guardPool?.end(); })
+    .onStop(async () => { await guardPool?.end(); })
     .mount(async (request: Request) => {
       try {
         const prepared = await prepareAuthentication(auth, request);

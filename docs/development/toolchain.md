@@ -99,6 +99,19 @@ only the required package to `dependenciesMeta.<name>.built`; Yarn's global
 parser for dependency-cruiser through `.yarnrc.yml`; product typechecks use the
 TypeScript version in their manifests.
 
+The October 2026 dependency refresh follows each existing release channel:
+stable dependencies follow `latest`, while Elysia and Storybook retain their
+beta and alpha lines. The maintainer authorized current releases, including
+ones younger than Yarn's one-day quarantine; the refresh used the command-local
+`YARN_NPM_MINIMAL_AGE_GATE=0` override without changing the install policy.
+
+Elysia beta.32 uses `onRequest`, `onStart`, `onStop`, `onBeforeHandle`,
+`onAfterResponse` and `onError`. Global admission refusals use typed `status`
+wrappers so Eden does not infer them as successful responses. The beta.2
+OpenTelemetry package still needs our socket/status patch. Generation after
+this group produced an identical Main OpenAPI contract, and the Eden consumer,
+OpenAPI, telemetry socket and private-delivery lifecycle checks passed.
+
 `task dev` starts the shared local stack through Aspire in the main checkout.
 In a worktree it starts the Accounts app, web app and Storybook on allocated
 ports against the shared backend; `task dev -- --backend` creates an isolated
@@ -350,9 +363,9 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @better-auth/utils | 0.4.2 | services/account |
 | @better-fetch/fetch | 1.3.2 | services/account |
 | @cloudflare/vite-plugin | 1.58.0 | apps/accounts, apps/web |
-| @elysia/eden | 2.0.0-beta.5 | apps/web, services/account, services/main |
-| @elysia/openapi | 2.0.0-beta.4 | services/account, services/main |
-| @elysia/opentelemetry | 2.0.0-beta.1 | packages/observability |
+| @elysia/eden | 2.0.0-beta.6 | apps/web, services/account, services/main |
+| @elysia/openapi | 2.0.0-beta.6 | services/account, services/main |
+| @elysia/opentelemetry | 2.0.0-beta.2 | packages/observability |
 | @emnapi/runtime | 1.11.3 | apps/about |
 | @fontsource-variable/geist-mono | 5.3.0 | apps/about, apps/web |
 | @fontsource-variable/manrope | 5.3.0 | apps/about, apps/accounts, apps/web |
@@ -426,7 +439,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | buffer | 6.0.3 | apps/web, services/main |
 | dependency-cruiser | 18.4.0 | . |
 | drizzle-orm | 0.45.3 | services/content |
-| elysia | 2.0.0-beta.16 | apps/web, packages/observability, services/account, services/main |
+| elysia | 2.0.0-beta.32 | apps/web, packages/observability, services/account, services/main |
 | envalid | 8.2.0 | apps/accounts, apps/web, packages/observability, services/account, services/main |
 | exact-mirror | 1.2.6 | packages/observability, services/account, services/main |
 | fast-check | 4.10.2 | packages/model |

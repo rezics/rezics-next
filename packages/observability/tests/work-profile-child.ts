@@ -51,7 +51,7 @@ const pool = real
 let phase = 'startup';
 const app = new Elysia()
   .use(httpTelemetry())
-  .error(({ error }) =>
+  .onError(({ error }) =>
     Response.json(
       {
         phase,

@@ -89,7 +89,7 @@ export function realmDirectoryLifecycle(deps: MainWorkDependencies) {
   }
   const shared = worker;
   index.setRefreshNudge(() => shared.nudge());
-  return lifecycle.setup(() => shared.start())
-    .request(() => { shared.start(); })
-    .cleanup(() => shared.stop());
+  return lifecycle.onStart(() => shared.start())
+    .onRequest(() => { shared.start(); })
+    .onStop(() => shared.stop());
 }

@@ -126,7 +126,7 @@ test('server-selected query templates and edit commands cannot be opened by a bo
   };
   let effects = 0;
   const app = new Elysia()
-    .error(({ error }) =>
+    .onError(({ error }) =>
       error instanceof PlatformClosed
         ? Response.json({ code: error.code }, { status: 403 })
         : undefined,

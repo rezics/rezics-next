@@ -64,7 +64,7 @@ export function mcpRoutes(work: Pick<MainWorkDependencies, 'account' | 'mcp' | '
   return new Elysia({ name: 'main-mcp' })
     // Transport messages have no domain rate family. Early interception leaves
     // the one in-process operation subject to the installed G-543 hook exactly once.
-    .request(async function handleMcp({ request }) {
+    .onRequest(async function handleMcp({ request }) {
       const path = new URL(request.url).pathname;
       if (path === '/.well-known/oauth-protected-resource/mcp'
         || path === '/.well-known/oauth-protected-resource') return metadata();
@@ -85,7 +85,7 @@ export function mcpRoutes(work: Pick<MainWorkDependencies, 'account' | 'mcp' | '
       if (body instanceof Response) return body;
       return handler.fetch(new Request(request, { ...(body ? { body: new Uint8Array(body) } : {}) }));
     })
-    .cleanup(() => handler.close())
+    .onStop(() => handler.close())
     .all('/mcp', { parse: 'none', detail: { hide: true } }, () => new Response(null, { status: 405 }))
     .get('/.well-known/oauth-protected-resource/mcp', { detail: { hide: true } }, metadata)
     .get('/.well-known/oauth-protected-resource', { detail: { hide: true } }, metadata);

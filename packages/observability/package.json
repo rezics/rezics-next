@@ -9,7 +9,7 @@
     "./log": "./src/log.ts"
   },
   "dependencies": {
-    "@elysia/opentelemetry": "2.0.0-beta.1",
+    "@elysia/opentelemetry": "2.0.0-beta.2",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/api-logs": "0.222.0",
     "@opentelemetry/core": "2.11.0",
@@ -22,7 +22,7 @@
     "@opentelemetry/sdk-metrics": "2.11.0",
     "@opentelemetry/sdk-node": "0.222.0",
     "@opentelemetry/sdk-trace-base": "2.11.0",
-    "elysia": "2.0.0-beta.16",
+    "elysia": "2.0.0-beta.32",
     "envalid": "8.2.0",
     "exact-mirror": "1.2.6",
     "openapi-types": "12.1.3",

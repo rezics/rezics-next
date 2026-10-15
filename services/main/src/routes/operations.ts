@@ -1,4 +1,4 @@
-import { Elysia, t } from 'elysia';
+import { Elysia, t, status } from 'elysia';
 import { BackpressureSaturated, BackpressureUnavailable,
   type AdmissionLease, type LeaseOutcome } from '../operations/admission-budget.ts';
 import { contentProjectionPositions, OperationsBackpressure,
@@ -80,7 +80,7 @@ export function operationsRoutes(work: MainWorkDependencies,
   }, work.backpressureProfile)) {
   const leases = new WeakMap<Request, AdmissionLease>();
   return new Elysia({ name: 'operations-backpressure' })
-    .beforeHandle('global', async ({ request }) => {
+    .onBeforeHandle('global', async ({ request }) => {
       if (request.method !== 'POST') return;
       const path = new URL(request.url).pathname;
       try {
@@ -91,11 +91,11 @@ export function operationsRoutes(work: MainWorkDependencies,
         }
       } catch (error) {
         const response = refusal(error);
-        if (response) return response;
+        if (response) return status(503, response);
         throw error;
       }
     })
-    .afterResponse('global', (context) => {
+    .onAfterResponse('global', (context) => {
       const lease = leases.get(context.request);
       if (!lease) return;
       leases.delete(context.request);

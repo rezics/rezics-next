@@ -976,59 +976,59 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@elysia/eden@npm:2.0.0-beta.5":
-  version: 2.0.0-beta.5
-  resolution: "@elysia/eden@npm:2.0.0-beta.5"
+"@elysia/eden@npm:2.0.0-beta.6":
+  version: 2.0.0-beta.6
+  resolution: "@elysia/eden@npm:2.0.0-beta.6"
   peerDependencies:
     elysia: ">= 2.0.0-beta.2"
-  checksum: 10c0/a5e15c22dfc45cf310690333eaaf3d836ec425046c8fce6066b6a26b23bb6c8ede04a8302032b07e688adc81ddc2232f0302a823e53f3d4f4c1dac044fa2dc18
+  checksum: 10c0/a6a61b9f610a75b0745349a08b22789921c667074d5b5e6b4bd31f371044cc4b9c2ee2fdf584a7722ee209efdd95297b6f2646069ecbce82671fdf0de13769b1
   languageName: node
   linkType: hard
 
-"@elysia/openapi@npm:2.0.0-beta.4":
-  version: 2.0.0-beta.4
-  resolution: "@elysia/openapi@npm:2.0.0-beta.4"
+"@elysia/openapi@npm:2.0.0-beta.6":
+  version: 2.0.0-beta.6
+  resolution: "@elysia/openapi@npm:2.0.0-beta.6"
   peerDependencies:
     "@scalar/types": ">= 0.18.0"
     elysia: ">= 2.0.0-beta.11"
     typebox: ">= 1.3.0"
-  checksum: 10c0/1fd373369efb1123914e998206551220640486ff145b76ee00522a39892e9872524f8e7702b66f00ffbe09a974e96270eb1613b03f0a3d6eb00951e75b95a973
+  checksum: 10c0/8de8f0111f9cf9c15fc28535a049791a22b09b1370a25cca4cfe8ce590d2448362242020a7d8f305de825e2776644bd6064ca092f23c2dbcb346a08519cec557
   languageName: node
   linkType: hard
 
-"@elysia/opentelemetry@npm:2.0.0-beta.1":
-  version: 2.0.0-beta.1
-  resolution: "@elysia/opentelemetry@npm:2.0.0-beta.1"
+"@elysia/opentelemetry@npm:2.0.0-beta.2":
+  version: 2.0.0-beta.2
+  resolution: "@elysia/opentelemetry@npm:2.0.0-beta.2"
   dependencies:
     "@opentelemetry/api": "npm:^1.9.0"
     "@opentelemetry/instrumentation": "npm:^0.200.0"
     "@opentelemetry/sdk-node": "npm:^0.200.0"
   peerDependencies:
-    elysia: ">= 2.0.0-beta.1"
+    elysia: ">= 2.0.0-beta.30"
   peerDependenciesMeta:
     graphql:
       optional: true
     graphql-yoga:
       optional: true
-  checksum: 10c0/17b1d6139fdd8239d1c87ed6b7f393248206d177a997327001edc8cc50820565a2a32cc191ae64932a9210f31e25594fddbe677d99204be8b499c85be180df1c
+  checksum: 10c0/468f9718d5b8464a7da9d0a2a8f287ffa7b35bec0460a989f6a45f0b2172daa7b2748d293c2f950e8bc1b4f6ca70dd9938c9216fb753feb89f2d086391fbdc58
   languageName: node
   linkType: hard
 
-"@elysia/opentelemetry@patch:@elysia/opentelemetry@npm%3A2.0.0-beta.1#./.yarn/patches/elysia-opentelemetry-status.patch::locator=rezics%40workspace%3A.":
-  version: 2.0.0-beta.1
-  resolution: "@elysia/opentelemetry@patch:@elysia/opentelemetry@npm%3A2.0.0-beta.1#./.yarn/patches/elysia-opentelemetry-status.patch::version=2.0.0-beta.1&hash=7c131c&locator=rezics%40workspace%3A."
+"@elysia/opentelemetry@patch:@elysia/opentelemetry@npm%3A2.0.0-beta.2#./.yarn/patches/elysia-opentelemetry-status.patch::locator=rezics%40workspace%3A.":
+  version: 2.0.0-beta.2
+  resolution: "@elysia/opentelemetry@patch:@elysia/opentelemetry@npm%3A2.0.0-beta.2#./.yarn/patches/elysia-opentelemetry-status.patch::version=2.0.0-beta.2&hash=7c131c&locator=rezics%40workspace%3A."
   dependencies:
     "@opentelemetry/api": "npm:^1.9.0"
     "@opentelemetry/instrumentation": "npm:^0.200.0"
     "@opentelemetry/sdk-node": "npm:^0.200.0"
   peerDependencies:
-    elysia: ">= 2.0.0-beta.1"
+    elysia: ">= 2.0.0-beta.30"
   peerDependenciesMeta:
     graphql:
       optional: true
     graphql-yoga:
       optional: true
-  checksum: 10c0/c75886f267b4587a9ada2e5cb5d725c9a901d84ca00b28ab84d5dc792115623eb842ba6392501cf5a17e3a7650c9bf4672960989a507547a65de440ad478cba9
+  checksum: 10c0/cd21cc9ddce113ba93c878c87ab2334718f71c9e00c54dd60a5414949a589534de0ed9ea1116ada262100bfee28d877f01104cebf6abc8780188d1671a43f30f
   languageName: node
   linkType: hard
 
@@ -4314,8 +4314,8 @@ __metadata:
     "@better-auth/passkey": "npm:1.7.5"
     "@better-auth/utils": "npm:0.4.2"
     "@better-fetch/fetch": "npm:1.3.2"
-    "@elysia/eden": "npm:2.0.0-beta.5"
-    "@elysia/openapi": "npm:2.0.0-beta.4"
+    "@elysia/eden": "npm:2.0.0-beta.6"
+    "@elysia/openapi": "npm:2.0.0-beta.6"
     "@rezics/observability": "workspace:*"
     "@scalar/types": "npm:0.18.3"
     "@types/bun": "npm:1.4.2"
@@ -4323,7 +4323,7 @@ __metadata:
     "@types/pg": "npm:8.23.1"
     better-auth: "npm:1.7.5"
     better-call: "npm:1.4.0"
-    elysia: "npm:2.0.0-beta.16"
+    elysia: "npm:2.0.0-beta.32"
     envalid: "npm:8.2.0"
     exact-mirror: "npm:1.2.6"
     jose: "npm:6.2.12"
@@ -4421,8 +4421,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@rezics/main@workspace:services/main"
   dependencies:
-    "@elysia/eden": "npm:2.0.0-beta.5"
-    "@elysia/openapi": "npm:2.0.0-beta.4"
+    "@elysia/eden": "npm:2.0.0-beta.6"
+    "@elysia/openapi": "npm:2.0.0-beta.6"
     "@js-temporal/polyfill": "npm:0.5.1"
     "@modelcontextprotocol/client": "npm:2.0.0"
     "@modelcontextprotocol/server": "npm:2.0.0"
@@ -4437,7 +4437,7 @@ __metadata:
     aws4fetch: "npm:1.0.20"
     better-auth: "npm:1.7.5"
     buffer: "npm:6.0.3"
-    elysia: "npm:2.0.0-beta.16"
+    elysia: "npm:2.0.0-beta.32"
     envalid: "npm:8.2.0"
     exact-mirror: "npm:1.2.6"
     jose: "npm:6.2.12"
@@ -4466,7 +4466,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@rezics/observability@workspace:packages/observability"
   dependencies:
-    "@elysia/opentelemetry": "npm:2.0.0-beta.1"
+    "@elysia/opentelemetry": "npm:2.0.0-beta.2"
     "@opentelemetry/api": "npm:1.9.1"
     "@opentelemetry/api-logs": "npm:0.222.0"
     "@opentelemetry/core": "npm:2.11.0"
@@ -4481,7 +4481,7 @@ __metadata:
     "@opentelemetry/sdk-trace-base": "npm:2.11.0"
     "@types/bun": "npm:1.4.2"
     "@types/pg": "npm:8.23.1"
-    elysia: "npm:2.0.0-beta.16"
+    elysia: "npm:2.0.0-beta.32"
     envalid: "npm:8.2.0"
     exact-mirror: "npm:1.2.6"
     openapi-types: "npm:12.1.3"
@@ -4533,7 +4533,7 @@ __metadata:
   resolution: "@rezics/web@workspace:apps/web"
   dependencies:
     "@cloudflare/vite-plugin": "npm:1.58.0"
-    "@elysia/eden": "npm:2.0.0-beta.5"
+    "@elysia/eden": "npm:2.0.0-beta.6"
     "@fontsource-variable/geist-mono": "npm:5.3.0"
     "@fontsource-variable/manrope": "npm:5.3.0"
     "@fontsource-variable/source-serif-4": "npm:5.3.0"
@@ -4557,7 +4557,7 @@ __metadata:
     "@vitest/browser-playwright": "npm:5.0.2"
     axe-core: "npm:4.13.0"
     buffer: "npm:6.0.3"
-    elysia: "npm:2.0.0-beta.16"
+    elysia: "npm:2.0.0-beta.32"
     envalid: "npm:8.2.0"
     lucide-react: "npm:1.47.0"
     native-i18n: "npm:0.2.0"
@@ -9311,12 +9311,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"elysia@npm:2.0.0-beta.16":
-  version: 2.0.0-beta.16
-  resolution: "elysia@npm:2.0.0-beta.16"
+"elysia@npm:2.0.0-beta.32":
+  version: 2.0.0-beta.32
+  resolution: "elysia@npm:2.0.0-beta.32"
   dependencies:
     deuri: "npm:^3.0.0"
-    memoirist: "npm:1.2.2"
+    memoirist: "npm:1.2.3"
   peerDependencies:
     "@types/bun": ">= 1.3.0"
     exact-mirror: ">= 1.2.6"
@@ -9328,7 +9328,7 @@ __metadata:
       optional: true
     typescript:
       optional: true
-  checksum: 10c0/ae78226bac02921a9be4dce3bcd4d8198e3282071f05e686df809d2e02d45416ee87ea0ce6fdf484f34349b0204e4afac63d0687cf2ab81b7b603761a23ceabc
+  checksum: 10c0/08625234edbfe2726c945022c53402670bcdd4d4ff95a1d4a60244b8068bf73469f8f741d2387a94197365179084d48b0ad0790877aa94a298ed3410dede4d48
   languageName: node
   linkType: hard
 
@@ -11024,10 +11024,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"memoirist@npm:1.2.2":
-  version: 1.2.2
-  resolution: "memoirist@npm:1.2.2"
-  checksum: 10c0/240599c462e4a6a75ad72ab98b39cbb3009f2303a49062c86ebfd6f396810e383b310f55fcde80cc6f37d22122a015cce0574c0b539bf9689ba195c72829140b
+"memoirist@npm:1.2.3":
+  version: 1.2.3
+  resolution: "memoirist@npm:1.2.3"
+  checksum: 10c0/e12d61fcb5eeb7a0e140a3f1de69570fa73e0424485a836995d9a1f5952ca9552fc6c92e1a91a4c261e865ca28adcc5506a46c6c6aa58f34927fb50cd1b1b46c
   languageName: node
   linkType: hard
 

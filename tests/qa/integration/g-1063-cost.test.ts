@@ -93,7 +93,7 @@ test('G1063: 100/1k/10k projections use constant irrelevant/local work with 0/10
     let profileKey = discoveryScopeKey(rated);
     probe = new Elysia()
       .use(httpTelemetry())
-      .error(({ error }) => new Response(String(error), { status: 500 }))
+      .onError(({ error }) => new Response(String(error), { status: 500 }))
       .get('/g-1063/refresh', {}, async () => {
         await force(profileKey);
         const result = await new DiscoveryRefreshWorker(deps, store, projection).tick();

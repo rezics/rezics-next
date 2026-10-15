@@ -128,7 +128,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     return { principal, ...visible };
   };
   return new Elysia()
-    .setup(() => { configureProgressProjections(work); })
+    .onStart(() => { configureProgressProjections(work); })
     .get('/v1/compositions/:id/progress', {
       params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref, cursor: t.Optional(t.String({ maxLength: 2048,

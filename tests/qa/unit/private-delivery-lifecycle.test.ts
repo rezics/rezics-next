@@ -44,7 +44,7 @@ test('SEARCH12: Elysia afterResponse runs before a slow client receives a gated 
   const afterResponse = deferred<void>();
   const sent = { value: false };
   const app = new Elysia()
-    .afterResponse(() => { afterResponse.resolve(); })
+    .onAfterResponse(() => { afterResponse.resolve(); })
     .get('/probe', () => gatedResponse(gate.promise, sent));
   app.listen({ hostname: '127.0.0.1', port: 0 });
   const socket = await connect(app.server!.port!);
@@ -76,7 +76,7 @@ test('SEARCH12: Elysia afterResponse also precedes a disconnected client', async
   const afterResponse = deferred<void>();
   const sent = { value: false };
   const app = new Elysia()
-    .afterResponse(() => { afterResponse.resolve(); })
+    .onAfterResponse(() => { afterResponse.resolve(); })
     .get('/probe', () => gatedResponse(gate.promise, sent));
   app.listen({ hostname: '127.0.0.1', port: 0 });
   const socket = await connect(app.server!.port!);

@@ -1,4 +1,4 @@
-import { Elysia, ParseError, ValidationError } from 'elysia';
+import { Elysia, ParseError, ValidationError, status } from 'elysia';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AccountAssertionDenied, verifyRequestAccount } from '../account/verify-assertion.ts';
 import {
@@ -94,20 +94,20 @@ export function rateLimitHook(
     }
   };
   return new Elysia({ name: 'main-rate-limit-v1' })
-    .setup(() => {
+    .onStart(() => {
       limit?.store.startExpirySweep?.();
     })
-    .cleanup(async () => {
+    .onStop(async () => {
       await limit?.store.stopExpirySweep?.();
     })
-    .beforeHandle('global', async function enforceRateLimit({ request, server }) {
+    .onBeforeHandle('global', async function enforceRateLimit({ request, server }) {
       // Embedded route fixtures may omit deployment dependencies. The HTTP
       // composition root always supplies the store; no runtime fail-open switch.
       if (!limit) return;
       const family = rateLimitFamily(request.method, new URL(request.url).pathname);
       if (family === null) return;
       if (family === undefined)
-        return Response.json(
+        return status(503, Response.json(
           {
             type: 'about:blank',
             status: 503,
@@ -122,11 +122,13 @@ export function rateLimitHook(
               'retry-after': '5',
             },
           },
-        );
+        ));
       // Page navigation must first establish a miss. Batch enumeration,
       // availability and revision inventory retain their pre-read budgets.
       if (pageResolution(request)) return;
-      return consume(request, server?.requestIP(request)?.address, family);
+      const response = await consume(request, server?.requestIP(request)?.address, family);
+      // Global hook refusals must carry their status into Eden's route union.
+      if (response) return status(response.status === 401 ? 401 : response.status === 429 ? 429 : 503, response);
     })
     .mapResponse('global', async ({ request, server, responseValue, set }) => {
       if (!pageResolution(request)) return;
@@ -134,7 +136,7 @@ export function rateLimitHook(
       if (status !== 400 && status !== 404 && status !== 422) return;
       return consume(request, server?.requestIP(request)?.address, 'address');
     })
-    .error('global', async ({ request, server, error }) => {
+    .onError('global', async ({ request, server, error }) => {
       // Validation precedes beforeHandle. Cover standalone route plugins too;
       // the composition root's own 400 is charged by mapResponse above.
       if (

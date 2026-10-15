@@ -145,14 +145,14 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
     return { key, principal };
   }
   return new Elysia()
-    .cleanup(async () => { await worker?.stop(); })
+    .onStop(async () => { await worker?.stop(); })
     // Preserve the authored request schema while supplying its body only after
     // bounded intake. Global upload-budget admission then precedes the
     // handler's actor check and every format adapter (including CSV preview).
     // Size, transfer and Account refusals are thrown so the app error hook's
     // shared table is what the client sees. Other intake failures stay
     // responses from this hook.
-    .request(async ({ request }) => {
+    .onRequest(async ({ request }) => {
       if (request.method !== 'POST' || new URL(request.url).pathname !== base) return;
       try {
         checkImportLength(request);

@@ -335,7 +335,7 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
   // Registered first so it also handles every plugin route mounted below.
   const app = new Elysia()
     .use(httpTelemetry())
-    .request(({ request }) => {
+    .onRequest(({ request }) => {
       if (new URL(request.url).pathname.startsWith('/health/')) return;
       const types = work?.types;
       if (!types) return;
@@ -350,11 +350,11 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
           return problem(503, 'types_unavailable', 'Type registry is unavailable');
       });
     })
-    .afterResponse(({ request }) => {
+    .onAfterResponse(({ request }) => {
       if (new URL(request.url).pathname.startsWith('/health/')) return;
       work?.types?.endRequest?.();
     })
-    .error(({ error, request, route, params }) => {
+    .onError(({ error, request, route, params }) => {
       const profileProblem = realmProfileSchemaError(error, request, route, params);
       if (profileProblem) return profileProblem;
       const wikiProblem = wikiSchemaError(error, request);
