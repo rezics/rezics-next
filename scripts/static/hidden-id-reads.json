@@ -3506,6 +3506,14 @@
     "status": "unregistered"
   },
   {
+    "operation": "POST /v1/recipes/file-imports",
+    "ids": [
+      "query:actingSubject"
+    ],
+    "status": "exempt",
+    "reason": "The only id is the caller's own acting subject."
+  },
+  {
     "operation": "POST /v1/resources/{resource}/derivations",
     "ids": [
       "path:resource"

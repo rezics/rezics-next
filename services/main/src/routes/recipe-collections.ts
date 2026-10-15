@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { createHash } from 'node:crypto';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem, commandError } from './problems.ts';
 import { problemResult } from '../api-contract.ts';
@@ -7,7 +8,7 @@ import { cancelRecipeFileBody, readRecipeFileBytes, RecipeFileInvalid, RecipeFil
 import { readRecipeCollection, normalizeCollectionRecipe, RECIPE_COLLECTION_LIMITS,
   type RecipeCollectionFormat } from '../modules/recipe/collection-file.ts';
 import { importCollectionRecipe, collectionRecipeConflict } from '../modules/recipe/collection-import.ts';
-import { ReaderImportUnavailable } from '../modules/library-import/reader-import.ts';
+import { ReaderImportConflict, ReaderImportUnavailable } from '../modules/library-import/reader-import.ts';
 import { RecipeNotImportable } from '../modules/recipe/importer.ts';
 import { PendingActivation } from '../modules/work/activate.ts';
 
@@ -49,7 +50,8 @@ export function recipeCollectionRoutes(deps: MainWorkDependencies) {
   }, async ({ request, query }: { request: Request; query: { actingSubject: string; format: RecipeCollectionFormat;
     after?: number; limit?: number } }) => {
     try {
-      if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(request.headers.get('idempotency-key') ?? '')) {
+      const requestKey = request.headers.get('idempotency-key') ?? '';
+      if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(requestKey)) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       }
       const principal = await deps.account.verify(request, ['work:read', 'work:create', 'work:edit', 'library:write']);
@@ -65,6 +67,10 @@ export function recipeCollectionRoutes(deps: MainWorkDependencies) {
       const entries = readRecipeCollection(bytes, query.format);
       const after = query.after ?? 0, limit = query.limit ?? RECIPE_COLLECTION_LIMITS.page;
       if (after > entries.length) return problem(400, 'invalid_recipe_cursor', 'Recipe offset is outside this collection');
+      const intent = createHash('sha256').update(JSON.stringify([query.format, after, limit]))
+        .update(bytes).digest('hex');
+      await deps.libraryImport.beginBatch(query.actingSubject,
+        `recipe-upload:${createHash('sha256').update(requestKey).digest('hex')}`, intent, 1);
       const items: unknown[] = [];
       for (let index = after; index < Math.min(entries.length, after + limit); index++) {
         const entry = entries[index]!;
@@ -92,6 +98,7 @@ export function recipeCollectionRoutes(deps: MainWorkDependencies) {
       if (error instanceof RecipeFileTooLarge) return problem(413, 'recipe_not_importable', error.message);
       if (error instanceof RecipeFileInvalid) return problem(422, 'invalid_recipe_file', error.message);
       if (error instanceof ReaderImportUnavailable) return problem(503, 'recipe_import_unavailable', error.message);
+      if (error instanceof ReaderImportConflict) return problem(409, 'recipe_import_conflict', 'Recipe upload key changed intent');
       if (error instanceof PendingActivation) return problem(503, 'recipe_import_pending', error.message);
       return commandError(error);
     } finally { cancelRecipeFileBody(request); }

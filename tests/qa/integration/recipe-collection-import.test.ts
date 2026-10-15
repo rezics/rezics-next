@@ -128,4 +128,13 @@ test('a collection reports malformed recipes and continues to later entries', as
   const rest = await json<ImportedPage>(upload(sessions.owner, bytes, 'melarecipes', `&after=${first.next}&limit=1`));
   expect(rest.items[0]).toMatchObject({ status: 'imported', identity: original.id });
   expect(rest.next).toBeNull();
+  const key = randomUUID(), path = `/v1/recipes/file-imports?${query(sessions.owner)}&format=melarecipes&after=1&limit=1`;
+  const retry = () => sessions.owner.main('POST', path, undefined, key,
+    { bytes, headers: { 'content-type': 'application/octet-stream' } });
+  expect((await json<ImportedPage>(retry())).items[0]!.replayed).toBe(true);
+  expect((await json<ImportedPage>(retry())).items[0]!.replayed).toBe(true);
+  const changed = zipSync({ 'a-broken.melarecipe': Buffer.from('{'),
+    'b-valid.melarecipe': Buffer.from(JSON.stringify({ ...original, notes: 'Changed intent' })) });
+  expect((await sessions.owner.main('POST', path, undefined, key,
+    { bytes: changed, headers: { 'content-type': 'application/octet-stream' } })).status).toBe(409);
 });
