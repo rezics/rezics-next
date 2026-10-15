@@ -105,6 +105,10 @@ for (const locale of ['en', 'ja'] as const) {
       await expect(page.getByText(t.backupContains)).toBeVisible();
       await pressByKeyboard(page, page.getByRole('button', { name: t.backupStart, exact: true }), found, t.backupStart);
       const save = page.getByRole('button', { name: t.backupSave, exact: true });
+      const resume = page.getByRole('button', { name: t.backupResume, exact: true });
+      await expect(save.or(resume)).toBeVisible({ timeout: 120_000 });
+      // A failed page read preserves the export checkpoint and offers recovery.
+      if (await resume.isVisible()) await pressByKeyboard(page, resume, found, t.backupResume);
       await expect(save).toBeVisible({ timeout: 120_000 });
       const downloading = page.waitForEvent('download');
       await pressByKeyboard(page, save, found, t.backupSave);
