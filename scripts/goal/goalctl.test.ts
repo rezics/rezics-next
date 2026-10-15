@@ -130,6 +130,9 @@ Body.
 function writeFixtureOutcomeOwner(root: string): void {
   const file = join(root, 'scripts/qa/cases/outcomes.ts');
   mkdirSync(dirname(file), { recursive: true });
+  mkdirSync(join(root, 'scripts/lib'), { recursive: true });
+  writeFileSync(join(root, 'scripts/lib/repository-files.ts'),
+    readFileSync(join(import.meta.dir, '../lib/repository-files.ts'), 'utf8'));
   // Load the real owner at the fixture's root, where its relative helper paths belong.
   const source = readFileSync(join(import.meta.dir, '../qa/cases/outcomes.ts'), 'utf8')
     .replace("from 'typescript-6'", `from ${JSON.stringify(Bun.resolveSync('typescript-6', import.meta.dir))}`)

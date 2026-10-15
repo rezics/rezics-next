@@ -29,6 +29,7 @@ function fixture() {
     return run.stdout.trim();
   };
   const row = 'books/catalogue';
+  write('scripts/lib/repository-files.ts', readFileSync(join(import.meta.dir, '../lib/repository-files.ts'), 'utf8'));
   for (const file of ['outcomes.ts', 'outcome-cells.ts']) {
     write(`scripts/qa/cases/${file}`, readFileSync(join(import.meta.dir, '../qa/cases', file), 'utf8'));
   }
