@@ -11,7 +11,7 @@ import { qaStackEnvironment } from '../qa/stack-environment.ts';
 import { runQaStartupChildAsync } from '../qa/stack-startup.ts';
 import { dockerEnvironment, stream } from '../fixture/stack.ts';
 import { grantFixtureAuthority } from '../../services/main/src/modules/access/fixture-authority.ts';
-import { initializeRelayCheckpoint } from '../../services/main/src/modules/outbox/relay.ts';
+import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../services/main/src/modules/outbox/relay.ts';
 import { seedCatalogueProfileWorks } from './catalogue-work.ts';
 import { compatibleLoadStorage, loadCompatibility, type LoadCompatibility } from './compatibility.ts';
 import { createCorpusBackupDriver, type CorpusRestoreSmokeInput } from './corpus-backup-driver.ts';
@@ -501,6 +501,27 @@ export async function restoreLaunchRecipesCorpus(corpus: LaunchRecipesCorpus, ta
   return restoreMs;
 }
 
+/** A restored graph cut includes the cutover's Main events. Deliver their
+ * retained envelopes before proving browse coverage; a graph scan cannot
+ * acknowledge the relay owner's stream on its behalf. */
+export async function prepareRestoredRecipeBrowse(stack: MediaStack, signal: AbortSignal): Promise<void> {
+  const { relayPool, relayConsumer, zoneBrowse } = stack.composition;
+  if (!relayPool || !relayConsumer || !zoneBrowse)
+    throw new Error('Restored recipes have no Main relay or Zone browse projection');
+  await initializeRelayCheckpoint(relayPool, relayConsumer, stack.env.lineage.dataEpoch);
+  for (let batch = 0; batch < 1024; batch++) {
+    signal.throwIfAborted();
+    const delivered = await relayMainOutboxOnce(stack.fuseki, relayPool, relayConsumer,
+      { ownerOutbox: stack.env.receiptCustody });
+    if (!delivered) {
+      await zoneBrowse.backfill();
+      signal.throwIfAborted();
+      return;
+    }
+  }
+  throw new Error('Restored recipes Main relay exceeded its preparation budget');
+}
+
 async function buildRecipesApiBackup() {
   const directory = join(root, '.temp/launch-corpus/recipes/manifests');
   const sources = launchRecipeSourcesManifest();
@@ -576,10 +597,8 @@ async function buildRecipesApiBackup() {
           relay: input.apps.ACCOUNT_RELAY_DATABASE_URL!,
         } });
         stack = opened;
-        const projection = opened.composition.zoneBrowse;
-        if (!projection) throw new Error('Restored recipes copy has no Zone browse projection');
         const readinessStarted = performance.now();
-        await projection.backfill();
+        await prepareRestoredRecipeBrowse(opened, input.signal);
         input.signal.throwIfAborted();
         console.log(JSON.stringify({ launchCorpus: corpus!.id, stage: 'restored-zone-browse-readiness',
           readinessMs: Math.round(performance.now() - readinessStarted) }));
@@ -784,9 +803,7 @@ export async function restoreBrowserRecipes(input: { runId: string; webOrigin: s
           access: restored.apps.ACCESS_DATABASE_URL!, content: restored.apps.CONTENT_DATABASE_URL!,
           relay: restored.apps.ACCOUNT_RELAY_DATABASE_URL!,
         } });
-        const projection = stack.composition.zoneBrowse;
-        if (!projection) throw new Error('Restored browser recipes have no Zone browse projection');
-        await projection.backfill();
+        await prepareRestoredRecipeBrowse(stack, restored.signal);
         restored.signal.throwIfAborted();
         const importer = await stack.member('launch-recipes-importer', { stable: true, verified: true });
         const api = workProfileCorpusApi('http://main.local', importer.token, {

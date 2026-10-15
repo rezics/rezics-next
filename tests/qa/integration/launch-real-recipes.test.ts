@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { root } from '../../../scripts/fixture/stack.ts';
 import { createCorpusBackupDriver, type CorpusRestoreSmokeInput } from '../../../scripts/load/corpus-backup-driver.ts';
-import { launchRecipeSources, loadLaunchRecipesCorpus,
+import { launchRecipeSources, loadLaunchRecipesCorpus, prepareRestoredRecipeBrowse,
   restoreLaunchRecipesCorpus, type LaunchRecipesCorpus }
   from '../../../scripts/load/launch-corpus.ts';
 import { workProfileCorpusApi, type CorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
@@ -38,11 +38,9 @@ async function openCopy(input: CorpusRestoreSmokeInput) {
       relay: input.apps.ACCOUNT_RELAY_DATABASE_URL!,
     } });
     input.signal.throwIfAborted();
-    const projection = stack.composition.zoneBrowse;
-    if (!projection) throw new Error('Restored recipes copy has no Zone browse projection');
     const readinessStarted = performance.now();
     try {
-      await projection.backfill();
+      await prepareRestoredRecipeBrowse(stack, input.signal);
       input.signal.throwIfAborted();
       console.log(JSON.stringify({ stage: 'restored-zone-browse-readiness',
         readinessMs: Math.round(performance.now() - readinessStarted) }));
@@ -143,7 +141,9 @@ beforeAll(async () => {
           cursor = page.nextCursor ?? undefined;
         } while (cursor);
         const ids = pages.flatMap(page => page.items.map(item => item.id));
-        expect(pages.at(-1)?.window.complete).toBe(true);
+        expect(pages.at(-1)?.window.complete, JSON.stringify({ pages: pages.map(page => ({
+          items: page.items.length, matches: page.matches, window: page.window,
+          continuation: Boolean(page.nextCursor) })), recovery: stack.composition.zoneBrowse?.recoveryStatus() })).toBe(true);
         expect(pages.at(-1)?.matches).toEqual({ value: corpus.records.length, kind: 'exact' });
         expect(new Set(ids)).toEqual(new Set(corpus.records.map(item => item.work)));
         copies.set(input.target, stack);
