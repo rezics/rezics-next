@@ -14,6 +14,23 @@ import { PendingActivation } from '../modules/work/activate.ts';
 export const openApiOperations = {
   '/v1/recipes/file-imports': { post: { exposure: 'public', rateLimitFamily: 'upload', bearer: true, idempotencyKey: true } },
 } as const;
+const importedItem = t.Object({ index: t.Integer(), name: t.String(), identity: t.String(),
+  status: t.Literal('imported'), work: t.String(), structure: t.String(), revision: t.String(),
+  content: t.Object({ post: t.String(), variantId: t.String(), revisionId: t.String() }, { additionalProperties: false }),
+  sourceObservation: t.String(), kept: t.Array(t.String()), retainedOnly: t.Array(t.String()),
+  sourceOmittedFields: t.Array(t.String()),
+  losses: t.Array(t.Object({ field: t.String(), reason: t.String() }, { additionalProperties: false })),
+  photos: t.Array(t.Object({ asset: t.String(), representation: t.Nullable(t.String()), clearance: t.String(),
+    use: t.Optional(t.String()) }, { additionalProperties: false })), replayed: t.Boolean(),
+}, { additionalProperties: false });
+const failedItem = t.Object({ index: t.Integer(), name: t.String(), status: t.Literal('failed'),
+  reason: t.Union([t.Literal('source-changed'), t.Literal('invalid-or-unsupported-recipe')]),
+  detail: t.String({ maxLength: 512 }), importability: t.Optional(t.Object({ status: t.Literal('not-importable'),
+    code: t.Literal('recipe_not_importable'), limit: t.Union(['occurrences', 'bytes', 'depth', 'section-depth'].map(value => t.Literal(value))),
+    measured: t.Integer(), allowed: t.Integer() }, { additionalProperties: false })),
+}, { additionalProperties: false });
+const importPage = t.Object({ items: t.Array(t.Union([importedItem, failedItem]), { maxItems: RECIPE_COLLECTION_LIMITS.page }),
+  total: t.Integer(), next: t.Nullable(t.Integer()), pending: t.Boolean() }, { additionalProperties: false });
 
 export function recipeCollectionRoutes(deps: MainWorkDependencies) {
   return new Elysia().post('/v1/recipes/file-imports', {
@@ -26,7 +43,9 @@ export function recipeCollectionRoutes(deps: MainWorkDependencies) {
       requestBody: { required: true, content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } },
         'application/zip': { schema: { type: 'string', format: 'binary' } },
         'application/json': { schema: { type: 'object' } } } } },
-    response: { 200: t.Any(), ...Object.fromEntries([400,401,403,409,413,422,429,500,503].map(status => [status, problemResult(status)])) },
+    response: { 200: importPage, 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
+      409: problemResult(409), 413: problemResult(413), 422: problemResult(422), 429: problemResult(429),
+      500: problemResult(500), 503: problemResult(503) },
   }, async ({ request, query }: { request: Request; query: { actingSubject: string; format: RecipeCollectionFormat;
     after?: number; limit?: number } }) => {
     try {
@@ -61,7 +80,7 @@ export function recipeCollectionRoutes(deps: MainWorkDependencies) {
           if (error instanceof RecipeFileInvalid || error instanceof RecipeNotImportable || collectionRecipeConflict(error)) {
             items.push({ index, name: entry.name, status: 'failed',
               reason: collectionRecipeConflict(error) ? 'source-changed' : 'invalid-or-unsupported-recipe',
-              detail: error instanceof Error ? error.message : 'Recipe was refused',
+              detail: (error instanceof Error ? error.message : 'Recipe was refused').slice(0, 512),
               ...(error instanceof RecipeNotImportable ? { importability: error.importability } : {}) });
           } else throw error;
         }

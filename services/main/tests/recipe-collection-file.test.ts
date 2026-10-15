@@ -41,6 +41,7 @@ for (const [format, bytes] of exports) test(`${format} preserves exact facts, mu
   expect(first.rating).toBe(format === 'paprikarecipes' ? 4 : 4.5);
   expect(first.retainedOnly).toContain('future_field');
   expect(first.photos).toHaveLength(1);
+  expect(first.sourceOmittedFields).toEqual([]);
   expect(parseDocument(first.document)).toEqual(first.document);
   const body = authoredDocumentBody({ document: first.document });
   expect(body.body).toContain('炖煮至软。');
@@ -49,6 +50,17 @@ for (const [format, bytes] of exports) test(`${format} preserves exact facts, mu
     definition: 'https://rezics.com/definition/procedure-v1', payload: { items: [
       { type: 'HowToStep', id: 'step-0' }, { type: 'HowToStep', id: 'step-1' }, { type: 'HowToStep', id: 'step-2' },
     ] } } });
+});
+
+test('full-size photo exports keep text within Source custody and hand exact images to Media', () => {
+  const value = JSON.parse(mela.toString());
+  const photo = Buffer.alloc(300_000, 42).toString('base64');
+  value.images = [photo];
+  const normalized = normalizeCollectionRecipe({ name: 'photo.melarecipe', value }, 'melarecipe');
+  expect(normalized.photos).toEqual([photo]);
+  expect(normalized.sourceOmittedFields).toEqual(['images']);
+  expect(normalized.retainedSource).toEqual(Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'images')));
+  expect(normalized.source.images).toEqual([photo]);
 });
 
 test('an invalid member is an explicit per-file refusal beside a valid recipe', () => {

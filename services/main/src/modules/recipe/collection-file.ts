@@ -5,12 +5,13 @@ import { authoredDocumentBody } from '../../../../content/src/document-body.ts';
 import { RecipeNotImportable } from './importer.ts';
 import type { DocumentNode, DocumentSnapshot, JsonValue } from '@rezics/document';
 import { canonicalLanguage } from '../display-language/tag.ts';
+import { MAX_RETAINED_SOURCE_BYTES } from '../source/intake.ts';
 import { importRecipe, measureRecipeJSON, type RecipeImport } from './importer.ts';
 import { RecipeFileInvalid } from './file-intake.ts';
 
 export type RecipeCollectionFormat = 'paprikarecipes' | 'melarecipes' | 'melarecipe';
 export const RECIPE_COLLECTION_LIMITS = { bytes: 16 * 1024 * 1024, expandedBytes: 32 * 1024 * 1024,
-  recipes: 5_000, recipeBytes: 256 * 1024, page: 8 } as const;
+  recipes: 5_000, recipeBytes: 16 * 1024 * 1024, page: 8 } as const;
 export const recipeCollectionDigest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const decoder = new TextDecoder('utf-8', { fatal: true });
 function invalid(message: string): never { throw new RecipeFileInvalid(message); }
@@ -18,6 +19,7 @@ export interface CollectionFileEntry { name: string; bytes?: Uint8Array; value?:
 export interface CollectionRecipe {
   provider: 'paprika' | 'mela'; identity: string; title: string; language: string;
   source: Record<string, unknown>; parsed: RecipeImport; document: DocumentSnapshot;
+  retainedSource: Record<string, unknown>; sourceOmittedFields: string[];
   categories: string[]; rating?: unknown; photos: string[]; retainedOnly: string[];
 }
 
@@ -159,10 +161,21 @@ function normalize(entry: CollectionFileEntry, format: RecipeCollectionFormat): 
     source.images.forEach(addPhoto);
   }
   if (photos.length > 16) invalid('Too many recipe photos');
+  // Full-size exports exceed Source's text-custody bound. Media retains those
+  // exact images; a partial Source snapshot keeps every other original field.
+  const retainedSource = { ...source }, sourceOmittedFields: string[] = [];
+  if (Buffer.byteLength(JSON.stringify(source)) > MAX_RETAINED_SOURCE_BYTES) {
+    for (const key of paprika ? ['photo_data', 'photos'] : ['images']) {
+      if (Object.hasOwn(retainedSource, key)) { delete retainedSource[key]; sourceOmittedFields.push(key); }
+    }
+    if (Buffer.byteLength(JSON.stringify(retainedSource)) > MAX_RETAINED_SOURCE_BYTES) {
+      invalid('Recipe source text exceeds its retained byte budget');
+    }
+  }
   const mapped = new Set([paprika ? 'name' : 'title', paprika ? 'uid' : 'id', 'inLanguage', 'ingredients',
     paprika ? 'directions' : 'instructions', paprika ? 'description' : 'text', 'notes', 'categories',
     'rating', 'photo_data', 'photos', 'images']);
-  return { provider: paprika ? 'paprika' : 'mela', identity, title, language, source, parsed,
+  return { provider: paprika ? 'paprika' : 'mela', identity, title, language, source, retainedSource, sourceOmittedFields, parsed,
     document: document(blocks), categories: [...new Set(categories as string[])],
     ...(source.rating !== undefined ? { rating: source.rating } : {}), photos,
     retainedOnly: Object.keys(source).filter(key => !mapped.has(key)) };

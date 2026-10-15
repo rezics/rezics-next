@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { zipSync } from 'fflate';
 import sharp from 'sharp';
@@ -16,8 +16,8 @@ let image: string;
 beforeAll(async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through isolated integration QA');
   sessions = await personaSessions('public');
-  image = (await sharp({ create: { width: 320, height: 180, channels: 3,
-    background: { r: 80, g: 140, b: 60 } } }).png().toBuffer()).toString('base64');
+  image = (await sharp(randomBytes(640 * 480 * 3), { raw: { width: 640, height: 480, channels: 3 } })
+    .png().toBuffer()).toString('base64');
 }, 240_000);
 afterAll(async () => { await sessions?.close(); });
 
@@ -81,15 +81,31 @@ for (const format of ['paprikarecipes', 'melarecipes', 'melarecipe'] as const) {
     expect(JSON.stringify(page.instructions[0]!.document)).toContain('https://rezics.com/definition/procedure-v1');
     expect(JSON.stringify(page.instructions[0]!.document)).toContain(original.notes);
     expect(page.instructions[0]!.document.doc.content?.some(node => node.type === 'image')).toBe(true);
-    const retained = await json<{ rawBytesBase64: string; rightsEvidence: { basis: string } }>(owner.main('GET',
+    const retained = await json<{ rawBytesBase64: string; rightsEvidence: { basis: string };
+      coverage: { complete: boolean; omittedFields: string[] } }>(owner.main('GET',
       `/v1/sources/observations/${short(imported.sourceObservation)}`));
-    expect(JSON.parse(Buffer.from(retained.rawBytesBase64, 'base64').toString())).toEqual(original);
+    expect(retained.coverage).toMatchObject({ complete: false, omittedFields: [format === 'paprikarecipes' ? 'photo_data' : 'images'] });
+    expect(JSON.parse(Buffer.from(retained.rawBytesBase64, 'base64').toString())).toEqual(
+      Object.fromEntries(Object.entries(original).filter(([key]) => !retained.coverage.omittedFields.includes(key))));
+    expect(imported.sourceOmittedFields).toEqual(retained.coverage.omittedFields);
     expect(retained.rightsEvidence.basis).toBe('unknown');
     const content = await json<{ reference: { provenance: Record<string, unknown> } }>(owner.main('GET',
       `/v1/content-revisions/${imported.content.revisionId}?${query(owner)}`));
     expect(content.reference.provenance).toMatchObject({ kind: 'admitted-private-import-v1',
       transcriber: owner.actingSubject, rightsBasis: 'unknown', sourceObservation: imported.sourceObservation });
     expect(content.reference.provenance.author).toBeUndefined();
+    const photo = imported.photos[0]!;
+    const photoPath = `/v1/media/representations/${photo.representation}/bytes?use=${photo.use}`;
+    const delivered = await owner.main('GET', `${photoPath}&${query(owner)}`);
+    expect(delivered.status).toBe(200);
+    expect(Buffer.from(await delivered.arrayBuffer()).toString('base64')).toBe(image);
+    expect((await stranger.main('GET', `${photoPath}&${query(stranger)}`)).status).toBe(404);
+    const library = await json<{ customShelves: Array<{ id: string; name: string }> }>(owner.main('GET',
+      `/v1/works/${short(imported.work)}/reader-state?${query(owner)}`));
+    expect(library.customShelves.map(shelf => shelf.name).sort()).toEqual(['Family', '汤']);
+    for (const shelf of library.customShelves) {
+      expect((await stranger.main('GET', `/v1/collections/${short(shelf.id)}?${query(stranger)}`)).status).toBe(404);
+    }
     expect((await stranger.main('GET', `/v1/compositions/${short(imported.structure)}?${query(stranger)}`)).status).toBe(404);
     expect((await stranger.main('GET', `/v1/content-revisions/${imported.content.revisionId}?${query(stranger)}`)).status).toBe(404);
     expect((await stranger.main('GET', `/v1/sources/observations/${short(imported.sourceObservation)}`)).status).toBe(404);

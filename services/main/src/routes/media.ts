@@ -417,6 +417,28 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         )).has(basis.metadata.use))) return unavailable();
         if (basis.disclosure==='public') return deliver(request,work.media,{objectNamespace:basis.objectNamespace,
           sha256:basis.metadata.sha256,mediaType:basis.metadata.mediaType},basis.publicTarget);
+        if (query.actingSubject && basis.owner === query.actingSubject) {
+          // An uploader's exact private representation uses the same Asset
+          // authority as original bytes, including after attaching it to a Post.
+          const principal = await work.account.verify(request, ['work:read']);
+          const viewer = disclosureViewer(principal, query.actingSubject);
+          bindNativeAssetAudience(viewer, basis.metadata.asset);
+          const result = await readClosedRealmMediaSelection(work.environment, async () => {
+            const current = (await metadataFor(request, [{ representation: params.representation,
+              ...(query.use ? { use: query.use } : {}) }], query.actingSubject))[0];
+            return current?.owner === query.actingSubject ? current : null;
+          }, selected => ({ asset: selected.metadata.asset }), async selected => {
+            const bytes = await work.media!.objects(selected.objectNamespace).get(selected.metadata.sha256);
+            if (bytes.byteLength !== selected.byteLength) throw new ObjectIntegrityError('media byte length differs');
+            return { bytes, selected };
+          }, viewer);
+          if (!result) return unavailable();
+          return new Response(result.bytes.slice(), { headers: {
+            'content-type': result.selected.metadata.mediaType,
+            'content-length': String(result.selected.byteLength),
+            'x-content-type-options': 'nosniff', 'cache-control': 'private, no-store',
+          } });
+        }
         // The shared metadata gate has established the uploader's own private
         // audience even before this image is attached to a Work.
         if (!basis.target) return deliver(request,work.media,{objectNamespace:basis.objectNamespace,
