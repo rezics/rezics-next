@@ -929,7 +929,8 @@ export async function createRetainedErasureRestoreScenario() {
         async (client, generation) => {
           if (!interrupted) {
             interrupted = true;
-            throw new Error('transient interruption before native restore release');
+            throw Object.assign(new Error('transient interruption before native restore release'),
+              { code: 'ECONNRESET' });
           }
           return lock(client, generation);
         });
