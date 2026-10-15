@@ -2185,16 +2185,16 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', '/r/last.md', '-C', '/w']));
     expect(launchCommand({ id: 'G-081', effort: 'high', session: 't', prompt: 'p', resume: true, engine: 'codex' })[1]
       .slice(0, 3)).toEqual(['exec', 'resume', 't']);
-    // Sol states its real window and compacts at 80% of it; the account's own config declares more than the model takes.
+    // Sol states its real window and uses the project compaction limit.
     expect(args).toContain('model_context_window=500000');
-    expect(args).toContain('model_auto_compact_token_limit=400000');
+    expect(args).toContain('model_auto_compact_token_limit=160000');
     expect(args).toContain('tool_output_token_limit=4000');
     // Luna keeps its own limit and no window override, fresh or resumed.
     const resumed = launchCommand({ id: 'G-081', effort: 'high', session: 't', prompt: 'p', resume: true, engine: 'luna' })[1];
     expect(resumed).toContain('model_auto_compact_token_limit=200000');
     expect(resumed.some(arg => arg.startsWith('model_context_window='))).toBe(false);
     expect(launchCommand({ id: 'G-081', effort: 'high', session: 't', prompt: 'p', resume: true, engine: 'codex' })[1])
-      .toContain('model_auto_compact_token_limit=400000');
+      .toContain('model_auto_compact_token_limit=160000');
     const previous = process.env.GOAL_CODEX_COMPACT_TOKENS;
     try {
       process.env.GOAL_CODEX_COMPACT_TOKENS = '120000';
@@ -2529,8 +2529,10 @@ describe('goalctl reclaim', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
-  test('dispatch and reclaim refuse a file an exited task committed outside its claim until that task is verified', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'goalctl-unlanded-'));
+  test('owner, dispatch and reclaim allow branch overlaps and refuse only live path claims', () => {
+    const scratch = join(process.cwd(), '.temp');
+    mkdirSync(scratch, { recursive: true });
+    const dir = mkdtempSync(join(scratch, 'goalctl-overlap-'));
     const env = cliEnvironment(dir);
     const git = (...args: string[]) => {
       const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8', env });
@@ -2570,7 +2572,8 @@ describe('goalctl reclaim', () => {
       const held = (id: string, paths: string[], branch: string, tree: string) => ({
         id, title: id, effort: 'high', engine: 'grok', cases: [], paths, migrations: [], shared: [],
         depends: [], brief: join(dir, `${id}.md`), worktree: tree, branch, base: '0', state: 'exited' as string,
-        attempts: [], goal: 'alpha',
+        attempts: [{ n: 1, effort: 'high', engine: 'grok', pid: process.pid, session: 'fixture',
+          output: join(dir, 'worker.json'), startedAt: '2026-10-09T00:00:00.000Z' }], goal: 'alpha',
       });
       const ledger = {
         goals: { alpha: { manager: 'alpha-manager', startedAt: '2026-10-09T00:00:00.000Z' } },
@@ -2584,67 +2587,48 @@ describe('goalctl reclaim', () => {
       const save = () => writeFileSync(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`);
       save();
       const caller = writeBrief('G-003', ['caller.ts']);
-      const refused = run(['dispatch', caller, '--dry-run']);
-      expect(refused.status).toBe(1);
-      expect(refused.stderr).toContain('Claim conflict for G-003:\n  path caller.ts changed by G-001 (unlanded)');
-      expect(refused.stderr).not.toContain('overlaps');
-      expect(JSON.parse(readFileSync(ledgerPath, 'utf8')).tasks['G-003']).toBeUndefined();
-      const glob = run(['dispatch', writeBrief('G-004', ['caller.*']), '--dry-run']);
-      expect(glob.status).toBe(1);
-      expect(glob.stderr).toContain('path caller.* changed by G-001 (unlanded)');
-      const reclaim = run(['reclaim', 'G-002', writeBrief('G-002', ['caller.ts'])]);
-      expect(reclaim.status).toBe(1);
-      expect(reclaim.stderr).toContain('path caller.ts changed by G-001 (unlanded)');
-      expect(JSON.parse(readFileSync(ledgerPath, 'utf8')).tasks['G-002'].paths).toEqual(['other.ts']);
-      const owner = run(['owner', 'caller.ts']);
-      expect(owner.status).toBe(1);
-      expect(owner.stdout).toContain('caller.ts: changed by G-001 (unlanded)');
-      expect(run(['owner', 'claimed.ts']).stdout).toContain('claimed.ts: claimed by G-001 (exited)');
-      for (const path of ['generated/note.json', 'union-file.ts', 'dirty.ts', 'fresh.ts']) {
-        const result = run(['dispatch', writeBrief('G-005', [path]), '--dry-run']);
-        expect(result.stderr).toBe('');
-        expect(result.status).toBe(0);
-        expect(result.stdout).toContain('G-005: claims ok');
-        expect(run(['owner', path]).stdout).toContain(`${path}: unclaimed`);
-      }
-      const adopted = run(['reclaim', 'G-001', writeBrief('G-001', ['claimed.ts', 'caller.ts'])]);
-      expect(adopted.stderr).toBe('');
-      expect(adopted.status).toBe(0);
-      expect(run(['owner', 'caller.ts']).stdout).toContain('caller.ts: claimed by G-001 (exited)');
-      const reverted = run(['reclaim', 'G-001', writeBrief('G-001', ['claimed.ts'])]);
-      expect(reverted.status).toBe(0);
-      expect(run(['owner', 'caller.ts']).stdout).toContain('caller.ts: changed by G-001 (unlanded)');
-      ledger.tasks['G-002'].paths = ['other.ts', 'caller.ts'];
-      save();
-      const kept = run(['reclaim', 'G-002', writeBrief('G-002', ['other.ts', 'caller.ts', 'extra.ts'])]);
-      expect(kept.stderr).toBe('');
-      expect(kept.status).toBe(0);
-      expect(JSON.parse(readFileSync(ledgerPath, 'utf8')).tasks['G-002'].paths).toEqual(['other.ts', 'caller.ts', 'extra.ts']);
-      ledger.tasks['G-002'].paths = ['other.ts'];
-      save();
-      for (const state of ['running', 'conflict', 'stopped']) {
+      for (const state of ['running', 'exited', 'conflict', 'stopped']) {
         ledger.tasks['G-001'].state = state;
         save();
-        expect(run(['dispatch', caller, '--dry-run']).stderr).toContain('changed by G-001 (unlanded)');
+        for (const paths of [['caller.ts'], ['caller.*']]) {
+          const allowed = run(['dispatch', writeBrief('G-003', paths), '--dry-run']);
+          expect(allowed.status, allowed.stderr).toBe(0);
+          expect(allowed.stdout).toContain('G-003: claims ok');
+        }
+        const reclaimed = run(['reclaim', 'G-002', writeBrief('G-002', ['caller.ts'])]);
+        expect(reclaimed.status, reclaimed.stderr).toBe(0);
+        const owner = run(['owner', 'caller.ts']);
+        expect(owner.status).toBe(0);
+        expect(owner.stdout).toContain('caller.ts: overlap with G-001 (unlanded; resolve at merge; proceed)');
       }
-      ledger.tasks['G-001'].state = 'merged';
+      for (const state of ['starting', 'running']) {
+        writeBrief('G-003', ['caller.ts']);
+        ledger.tasks['G-001'].state = state;
+        ledger.tasks['G-001'].paths = ['caller.ts'];
+        save();
+        const owner = run(['owner', 'caller.ts']);
+        expect(owner.status).toBe(1);
+        expect(owner.stdout).toContain(`caller.ts: claimed by G-001 (${state})`);
+        const refused = run(['dispatch', caller, '--dry-run']);
+        expect(refused.status).toBe(1);
+        expect(refused.stderr).toContain('path caller.ts overlaps G-001 caller.ts');
+        const reclaim = run(['reclaim', 'G-002', writeBrief('G-002', ['caller.ts'])]);
+        expect(reclaim.status).toBe(1);
+        expect(reclaim.stderr).toContain('path caller.ts overlaps G-001 caller.ts');
+      }
+      for (const state of ['exited', 'stopped', 'conflict', 'merged', 'verified', 'cancelled']) {
+        ledger.tasks['G-001'].state = state;
+        save();
+        expect(run(['owner', 'caller.ts']).status).toBe(0);
+        expect(run(['dispatch', caller, '--dry-run']).status).toBe(0);
+      }
+      ledger.tasks['G-001'].state = 'running';
       save();
-      expect(run(['dispatch', caller, '--dry-run']).status).toBe(0);
-      expect(run(['owner', 'caller.ts']).stdout).toContain('caller.ts: unclaimed');
-      expect(run(['owner', 'claimed.ts']).stdout).toContain('claimed.ts: claimed by G-001 (merged)');
-      ledger.tasks['G-001'].state = 'exited';
-      save();
-      expect(run(['dispatch', caller, '--dry-run']).stderr).toContain('changed by G-001 (unlanded)');
-      ledger.tasks['G-001'].state = 'verified';
-      save();
-      const allowed = run(['dispatch', caller, '--dry-run']);
-      expect(allowed.stderr).toBe('');
-      expect(allowed.status).toBe(0);
-      expect(allowed.stdout).toContain('G-003: claims ok');
-      expect(run(['owner', 'caller.ts']).stdout).toContain('caller.ts: unclaimed');
-      const released = run(['reclaim', 'G-002', writeBrief('G-002', ['caller.ts'])]);
-      expect(released.status).toBe(0);
-      expect(JSON.parse(readFileSync(ledgerPath, 'utf8')).tasks['G-002'].paths).toEqual(['caller.ts']);
+      for (const path of ['generated/note.json', 'union-file.ts', 'dirty.ts', 'fresh.ts']) {
+        const result = run(['dispatch', writeBrief('G-005', [path]), '--dry-run']);
+        expect(result.status, result.stderr).toBe(0);
+        expect(run(['owner', path]).stdout).toContain(`${path}: unclaimed`);
+      }
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 

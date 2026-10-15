@@ -1,9 +1,9 @@
 import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, type Ledger, isClaudeCode, isCodex, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
-import { root, withLedger, briefGoal, unlandedChangeConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, preserveTaskOutputs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH, REGENERATION_COMMIT_SUBJECT } from './ledger.ts';
+import { root, withLedger, briefGoal, briefClaimConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, preserveTaskOutputs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH, REGENERATION_COMMIT_SUBJECT } from './ledger.ts';
 import { pathToFileURL } from 'node:url';
 import { join, resolve, basename, relative, dirname, posix } from 'node:path';
 import { readFileSync, existsSync, mkdirSync, writeFileSync, readdirSync, readlinkSync, renameSync } from 'node:fs';
-import { parseBrief, validateBrief, mechanismSectionErrors, claimConflicts, areaConflicts, validGoalSlug, goalFile, GOALS_DIR, HISTORY_EXEMPT, nextTaskId, goalBriefFile } from './briefs.ts';
+import { parseBrief, validateBrief, mechanismSectionErrors, areaConflicts, validGoalSlug, goalFile, GOALS_DIR, HISTORY_EXEMPT, nextTaskId, goalBriefFile } from './briefs.ts';
 import { launchGates, briefFile, launch, workerPrompt, lastAttempt, taskOf, readResult, capacityRefusal, transportDrop, transportContinuations, transportContinuationPrompt, handoffContinuations, hasHandoff, cleanSessionEnd, changedFiles, elapsed, describe, running } from './launch.ts';
 import { postgresSocketRefusal, physicalPath } from './postgres-socket.ts';
 import { describeAccount } from './usage.ts';
@@ -90,8 +90,7 @@ export async function dispatch(briefPath: string, flags: Set<string>, overrideEn
     const reservedBy = ledger.reserved?.[brief.id];
     if (reservedBy && reservedBy !== goal) throw new Error(`${brief.id} is reserved for Goal ${reservedBy}; take an ID with \`new\``);
     const tasks = Object.values(ledger.tasks);
-    // Commits outside the claim are held until that task lands or closes, or land would refuse it.
-    const conflicts = [...claimConflicts(brief, tasks), ...unlandedChangeConflicts(brief, tasks)];
+    const conflicts = briefClaimConflicts(brief, tasks, goal);
     if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(brief.paths, goal, areasOf(activeGoals(ledger))));
     if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
     for (const id of brief.depends) {
@@ -664,11 +663,8 @@ function replacementClaims(task: Task, ledger: Ledger, source: ReturnType<typeof
   const changed = Object.entries(claims).filter(([key, value]) => !isDeepStrictEqual(task[key as keyof Task], value))
     .map(([key]) => key);
   if (onlyChanged && !changed.length) return { claims, changed };
-  // A path this task already holds was claimed before any later change to it, so only added paths can
-  // collide with another task's unlanded change.
   const added = { ...brief, paths: brief.paths.filter(path => !task.paths.includes(path)) };
-  const conflicts = [...claimConflicts(brief, Object.values(ledger.tasks)),
-    ...unlandedChangeConflicts(added, Object.values(ledger.tasks))];
+  const conflicts = briefClaimConflicts(brief, Object.values(ledger.tasks), task.goal);
   // Another Goal's area is likewise checked for added paths only: a held path was admitted, with `--allow-area`
   // where it needed it, and a resume that changes anything else in the brief must not refuse it again.
   if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(added.paths, task.goal, areasOf(activeGoals(ledger))));

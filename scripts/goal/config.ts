@@ -10,10 +10,12 @@ export interface CodexAccount {
 }
 export interface Settings {
   version: 1; accounts: CodexAccount[]; codexServiceTier: string; reviewEngine: string;
+  codexCompactTokens: { sol: number; luna: number };
   confirmIntervalMinutes: number; gateLanes: number; qaSlots: number; regressLaneCount: number;
   unitGateScope: 'affected' | 'changed'; unitGateShards: number; telegramChat: string;
 }
 const defaults: Settings = { version: 1, accounts: [], codexServiceTier: 'fast', reviewEngine: 'sol',
+  codexCompactTokens: { sol: 160_000, luna: 200_000 },
   confirmIntervalMinutes: 90, gateLanes: 2, qaSlots: 3, regressLaneCount: 2,
   unitGateScope: 'affected', unitGateShards: 4, telegramChat: '' };
 type Schema = { type?: string; const?: unknown; enum?: unknown[]; minimum?: number; minLength?: number;

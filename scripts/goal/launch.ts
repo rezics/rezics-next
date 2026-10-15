@@ -62,19 +62,15 @@ function codexMcpOverrides(engine: Engine): string[] {
 /** Sol's context window in Codex since 2026-10-12 (it was 272,000). The account's own config still declares
  * 1,000,000 with compaction at 900,000, which is more than the model takes, so a worker states the real one. */
 export const SOL_CONTEXT_WINDOW = 500_000;
-/** Where a worker compacts its context. Every model call resends the whole context, so a larger limit
- * costs tokens and time on each step of a long session; a smaller one compacts sooner, and a compaction
- * loses detail the worker then reads again or gets wrong. Measured to 2026-10-12, counting each resumed
- * session by its growth and not by its running total: a step carries 44,000 tokens on average (Sol
- * 57,000), so the limit binds only on long sessions. Sol compacts at 80% of its window; Luna's window is
- * not published the same way and stays at 200,000. `GOAL_CODEX_COMPACT_TOKENS` overrides both.
- * (An earlier note here said resumed sessions averaged 780,000 tokens a call: that counted a resumed
- * session's cumulative total once per attempt. Their real average before any limit was 118,000.) */
-export const CODEX_COMPACT_TOKENS = { sol: 400_000, luna: 200_000 } as const;
+/** Each launch reads the layered per-family compaction limits; the project uses Sol 160,000 and Luna
+ * 200,000. GOAL_CODEX_COMPACT_TOKENS overrides either family. Measure fresh and resumed sessions by
+ * per-attempt token deltas, tracking re-sent context, wake prompt sizes, and rereads or mistakes after
+ * compaction to balance context cost against lost detail. */
 function codexCompactTokens(engine: Engine): number {
   const override = Number(process.env.GOAL_CODEX_COMPACT_TOKENS);
   if (Number.isSafeInteger(override) && override > 0) return override;
-  return engine === 'luna' ? CODEX_COMPACT_TOKENS.luna : CODEX_COMPACT_TOKENS.sol;
+  const limits = loadSettings({ stateDirectory: stateDir }).settings.codexCompactTokens;
+  return engine === 'luna' ? limits.luna : limits.sol;
 }
 
 /** What one command's output may add to a worker's context. Sol's own default is 10,000 tokens; a token

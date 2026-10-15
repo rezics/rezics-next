@@ -24,6 +24,15 @@
       }
     },
     "codexServiceTier": { "type": "string", "enum": ["fast", "default", "flex"] },
+    "codexCompactTokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sol", "luna"],
+      "properties": {
+        "sol": { "type": "integer", "minimum": 1 },
+        "luna": { "type": "integer", "minimum": 1 }
+      }
+    },
     "reviewEngine": { "type": "string", "minLength": 1 },
     "confirmIntervalMinutes": { "type": "number", "minimum": 0 },
     "gateLanes": { "type": "integer", "minimum": 1 },

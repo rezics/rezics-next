@@ -194,16 +194,17 @@ export function isGeneratedOutput(path: string): boolean {
   return path === 'generated' || path.startsWith('generated/');
 }
 
-export function claimConflicts(brief: Brief, tasks: Task[]): string[] {
+export function claimConflicts(brief: Brief, tasks: Task[], sameBase: (task: Task) => boolean = () => true): string[] {
   const conflicts: string[] = [];
   for (const task of tasks) {
     if (task.id === brief.id || !HOLDING.includes(task.state)) continue;
     for (const id of brief.cases) if (task.cases.includes(id)) conflicts.push(`case ${id} is held by ${task.id}`);
     for (const path of brief.paths) {
+      if (!['starting', 'running'].includes(task.state)) continue;
       if (isGeneratedOutput(path)) continue;
       for (const held of task.paths) {
         if (isGeneratedOutput(held)) continue;
-        if (pathsOverlap(path, held)) conflicts.push(`path ${path} overlaps ${task.id} ${held}`);
+        if (pathsOverlap(path, held) && sameBase(task)) conflicts.push(`path ${path} overlaps ${task.id} ${held}`);
       }
     }
     for (const range of brief.migrations) {

@@ -3,10 +3,10 @@
 import { typecheckWorkspaces, TYPECHECK_WORKSPACES } from '../qa/affected.ts';
 import { startGoal, closeGoal, newBrief, tidy, dispatch, waitFor, resumeTask, stopTask, landTask, setAutoLand, lendFiles, closeTasks, reclaimTask } from './tasks.ts';
 import { describe, taskOf } from './launch.ts';
-import { readLedger, areasOf, activeGoals, unlandedChangers, stateDir, withLedger, root } from './ledger.ts';
+import { readLedger, areasOf, activeGoals, unlandedChangers, sameClaimBase, stateDir, withLedger, root } from './ledger.ts';
 import { mergeTask } from './merge.ts';
 import { pathsOverlap, isGeneratedOutput, validGoalSlug, isHeavyTest } from './briefs.ts';
-import { HOLDING, engineNames } from './types.ts';
+import { engineNames } from './types.ts';
 import { loadSettings } from './config.ts';
 import { status } from './status.ts';
 import { eventStateDirectory, mailCommand, eventLedger, coordinatorCommand } from './manager-commands.ts';
@@ -27,7 +27,7 @@ import { landsOutsideTurn, startLandingOutsideTurn, reportLanding } from './land
 export { type State, type Engine, BRIEF_KINDS, type BriefKind, type Brief, type Attempt, type Task, type GoalRecord, type Ledger, type UsageWindow, type UsageSnapshot, type UsageSample, type UsageLevel, type UsageReport, type AccountUsage, type CodexResetStatus, type CodexResetLoad, MODEL, FABLE_MODEL, SONNET_MODEL, HAIKU_MODEL, CODEX_MODEL, LUNA_MODEL, GROK_MODEL, DEFAULT_ENGINE } from './types.ts';
 export { parseFrontmatter, parseBrief, validateBrief, mechanismSectionErrors, rangesOverlap, pathsOverlap, isGeneratedOutput, claimConflicts, outOfScope, GOALS_DIR, validGoalSlug, goalFile, goalBriefFile, goalOfBriefPath, goalAreas, areaConflicts, nextTaskId, HISTORY_EXEMPT, type ChangedFile, historyIntroductions, ownerRefusal, isHeavyTest } from './briefs.ts';
 export { PROJECTED_LIMIT, CRITICAL_USED, WEEK_CAP, WEEK_TARGET, WEEK_PROJECTED_LIMIT, WEEK_CRITICAL_USED, burnRate, weekBurnRate, usageLevel, parseCodexUsage, loadCodexResetStatus, codexHoursUntil100, type GoalUsageReport, usageReport } from './usage.ts';
-export { launchCommand, SOL_CONTEXT_WINDOW, CODEX_COMPACT_TOKENS, CODEX_TOOL_OUTPUT_TOKENS, briefFile, memoryFloorRefusal, managerWakeGates, workerSessionEnvironment, capacityRefusal } from './launch.ts';
+export { launchCommand, SOL_CONTEXT_WINDOW, CODEX_TOOL_OUTPUT_TOKENS, briefFile, memoryFloorRefusal, managerWakeGates, workerSessionEnvironment, capacityRefusal } from './launch.ts';
 export { retryGitIndexLock, ARCHIVE_BRANCH, archiveFiles, removeFromTree, treeMentions, landClaimScope, REGENERATION_COMMIT_SUBJECT, regenerationOnlyFiles } from './ledger.ts';
 export { dispatchMethodErrors, waitFor, resumeDecisionError, killWorktreeProcesses, removeWorktreeStack, preserveWorktreeArtifacts, COMPOSITION_ROOTS } from './tasks.ts';
 export { normalizeUseChains, compositionSyntaxFailure, type CompositionMerge, prepareCompositionMerge, migrationsBelowMain, landedBoundary } from './merge-normalise.ts';
@@ -120,7 +120,7 @@ async function main(argv: string[]): Promise<number> {
     case 'close': await closeTasks(positional.slice(0, -1), positional.at(-1) ?? ''); return 0;
     case 'reclaim': await reclaimTask(positional[0] ?? '', positional[1] ?? '', flags); return 0;
     case 'owner': {
-      // Read-only: which open task claims a path, or committed it outside its claim and has not landed.
+      // Only a live claim on this base blocks; unlanded edits are overlaps for the merge.
       const path = positional[0] ?? '';
       const ledger = readLedger();
       const areas = Object.entries(areasOf(activeGoals(ledger)))
@@ -131,16 +131,18 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       }
       const tasks = Object.values(ledger.tasks);
-      const holders = tasks.filter(task => HOLDING.includes(task.state)
+      const holders = tasks.filter(task => task.id !== process.env.GOAL_TASK_ID
+        && ['starting', 'running'].includes(task.state) && sameClaimBase(task, process.cwd())
         && task.paths.some(pattern => !isGeneratedOutput(pattern)
           && (new Bun.Glob(pattern).match(path) || pathsOverlap(pattern, path))));
-      const changed = unlandedChangers(tasks, path);
+      const changed = unlandedChangers(tasks, path).filter(task => task.id !== process.env.GOAL_TASK_ID
+        && !holders.some(holder => holder.id === task.id));
       const claimText = holders.length
         ? `claimed by ${holders.map(task => `${task.id} (${task.state})`).join(', ')}` : '';
-      const changeText = changed.length ? `changed by ${changed.map(task => task.id).join(', ')} (unlanded)` : '';
+      const changeText = changed.length ? `overlap with ${changed.map(task => task.id).join(', ')} (unlanded; resolve at merge; proceed)` : '';
       const body = [claimText, changeText].filter(Boolean).join('; ') || 'unclaimed';
       console.log(`${path}: ${body}${areaNote}`);
-      return claimText || changeText ? 1 : 0;
+      return claimText ? 1 : 0;
     }
     case 'status': await status(); return 0;
     case 'mail': {

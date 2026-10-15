@@ -63,36 +63,82 @@ function repository(wave: boolean) {
       changes: { worktree: string; branch: string; files: string[] }[]; inherited: string[]; own: string[];
     };
   };
-  return { directory, worktree, branch, changes, run };
+  return { directory, worktree, branch, changes, run, git, commit, task, state };
 }
 
 afterEach(() => {
   for (const directory of fixtures.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
-test('a wave task holds only its own out-of-claim commits', () => {
+test('a synthetic wave reports only the worker edits as nonblocking overlaps', () => {
   const r = repository(true);
-  expect(r.changes()).toEqual({ changes: [{ worktree: r.worktree, branch: r.branch, files: ['own.ts'] }],
+  expect(r.changes()).toEqual({ changes: [{ worktree: r.worktree, branch: r.branch, files: ['claimed.ts', 'own.ts'] }],
     inherited: [], own: ['G-001'] });
+  const overlap = r.run('owner', 'own.ts');
+  expect(overlap.status).toBe(0);
+  expect(overlap.stdout).toContain('overlap with G-001 (unlanded; resolve at merge; proceed)');
+  expect(r.run('owner', 'inherited.ts').stdout).toContain('inherited.ts: unclaimed');
+});
+
+test('an unlanded wave branch itself reports overlaps against main', () => {
+  const r = repository(true);
+  r.task.branch = 'wave/1';
+  r.task.worktree = join(r.directory, '.temp/wave');
+  r.git(r.directory, 'worktree', 'add', '-q', r.task.worktree, r.task.branch);
+  writeFileSync(join(r.state, 'ledger.json'), JSON.stringify({ tasks: { [r.task.id]: r.task } }));
+  const owner = r.run('owner', 'inherited.ts');
+  expect(owner.status).toBe(0);
+  expect(owner.stdout).toContain('inherited.ts: overlap with G-001');
 });
 
 test.each([false, true])('a non-wave task keeps its held files (missing worktree=%s)', missing => {
   const r = repository(false);
   if (missing) rmSync(r.worktree, { recursive: true, force: true });
-  expect(r.changes()).toEqual({ changes: [{ worktree: r.worktree, branch: r.branch, files: ['own.ts'] }],
+  expect(r.changes()).toEqual({ changes: [{ worktree: r.worktree, branch: r.branch, files: ['claimed.ts', 'own.ts'] }],
     inherited: [], own: ['G-001'] });
 });
 
-test('dispatch admits a wave-changed path no wave task touched while refusing the task own change', () => {
+test('dispatch admits both inherited wave paths and another branch own edits', () => {
   const r = repository(true);
   const brief = join(r.directory, '.temp/claim.md');
-  for (const [path, status] of [['inherited.ts', 0], ['own.ts', 1]] as const) {
+  for (const path of ['inherited.ts', 'own.ts']) {
     writeFileSync(brief, ['---', 'id: G-002', 'title: Claim a path', 'kind: tooling', 'engine: sol',
       'effort: medium', `paths: [${path}]`, '---', '', '## Outcome', '', 'Claim the path.', '',
       '## Mechanisms', '', 'none', ''].join('\n'));
     const result = r.run('dispatch', brief, '--dry-run');
-    expect(result.status, result.stderr).toBe(status);
-    if (status === 0) expect(result.stdout).toContain('G-002: claims ok');
-    else expect(result.stderr).toContain('path own.ts changed by G-001 (unlanded)');
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('G-002: claims ok');
   }
+});
+
+test.each([false, true])('a merge candidate that merged main reports only its branch edits (wave=%s)', wave => {
+  const r = repository(wave);
+  r.commit(r.directory, 'main-only.ts');
+  r.git(r.worktree, 'merge', '--no-ff', '-qm', 'Merge main into candidate', 'main');
+  // Main moves again after the merge; ownership still starts at the latest shared main ancestor.
+  r.commit(r.directory, 'later-main.ts');
+  expect(r.run('owner', 'main-only.ts').stdout).toContain('main-only.ts: unclaimed');
+  expect(r.run('owner', 'later-main.ts').stdout).toContain('later-main.ts: unclaimed');
+  const overlap = r.run('owner', 'own.ts');
+  expect(overlap.status).toBe(0);
+  expect(overlap.stdout).toContain('overlap with G-001');
+  expect(r.changes().changes[0]!.files).toEqual(['claimed.ts', 'own.ts']);
+});
+
+test('a live claim blocks only workers on the same integration base', () => {
+  const r = repository(true);
+  r.task.state = 'running';
+  writeFileSync(join(r.state, 'ledger.json'), JSON.stringify({ tasks: { [r.task.id]: r.task } }));
+  const owner = (cwd: string, self = false) => spawnSync(process.execPath,
+    [join(import.meta.dir, 'goalctl.ts'), 'owner', 'claimed.ts'],
+    { cwd, encoding: 'utf8', env: { ...process.env, GOAL_TASK_ID: self ? r.task.id : '' } });
+  const main = owner(r.directory);
+  expect(main.status).toBe(0);
+  expect(main.stdout).toContain('overlap with G-001');
+  const sibling = join(r.directory, '.temp/sibling');
+  r.git(r.directory, 'worktree', 'add', '-qb', 'goal/sibling', sibling, 'wave/1');
+  const sameBase = owner(sibling);
+  expect(sameBase.status).toBe(1);
+  expect(sameBase.stdout).toContain('claimed by G-001 (running)');
+  expect(owner(r.worktree, true).status).toBe(0);
 });
