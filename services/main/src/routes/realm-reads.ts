@@ -16,7 +16,6 @@ import { RealmProfileUnavailable } from '../modules/realm-profile/schema.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem, typedRefusal } from './problems.ts';
 import { workReadProblems } from './work-reads.ts';
-import { SearchIndexUnavailable } from '../modules/work/search-readiness.ts';
 
 const params = t.Object({ realm: readUuid });
 const headers = { 'cache-control': 'no-store' };
@@ -32,14 +31,8 @@ function realmReadError(error: unknown): Response {
     return problem(503, 'realm_read_unavailable', error instanceof RealmProfileUnavailable
       ? 'Realm public profile is unavailable' : 'Realm read is unavailable');
   }
-  const refusal = typedRefusal(error);
-  if (refusal) {
-    // SearchIndexUnavailable already emits its fault in the shared translator.
-    if (refusal.status >= 500 && !(error instanceof SearchIndexUnavailable)) {
-      logWorkerFault('main.route.realm_read_unavailable', realmFaultCause(error));
-    }
-    return refusal;
-  }
+  const refusal = typedRefusal(error, realmFaultCause(error));
+  if (refusal) return refusal;
   return commandError(error);
 }
 

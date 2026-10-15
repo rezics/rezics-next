@@ -183,9 +183,9 @@ export function commandError(error: unknown): Response {
 /** Server refusals emit one bounded fault before a caller returns the response.
  * Status and problem for a typed refusal. Unrecognized errors return undefined;
  * callers choose the fallback (route handlers use 503, the app hook uses 500). */
-export function typedRefusal(error: unknown): Response | undefined {
+export function typedRefusal(error: unknown, fault: unknown = error): Response | undefined {
   const refusal = mapTypedRefusal(error);
-  if (refusal && refusal.status >= 500) logWorkerFault('main.route.typed_refusal', error);
+  if (refusal && refusal.status >= 500) logWorkerFault('main.route.typed_refusal', fault);
   return refusal;
 }
 
