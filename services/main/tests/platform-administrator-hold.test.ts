@@ -267,12 +267,13 @@ for (const hold of holds) {
 
 for (const field of ['labels', 'conceal'] as const) {
   for (const sealed of [true, false]) {
-    test(`a committed ${field} protection result replays during a platform hold with Access ${sealed ? 'sealed' : 'awaiting reconciliation'}`, () => isolated(async f => {
+    test(`a platform hold withholds a committed ${field} receipt with Access ${sealed ? 'sealed' : 'awaiting reconciliation'}`, () => isolated(async f => {
       if (!sealed) f.beforeSeal(async () => { throw new Error('lost acknowledgement after owner commit'); });
       const key = randomUUID();
       const first = await f.call(field, key);
       expect(first.status).toBe(sealed ? 201 : 503);
       const firstBody = await first.json();
+      if (sealed) expect(firstBody).toMatchObject({ admission: f.registered().id, replayed: false });
       const outcome = await f.store.readOutcome(`media-field:${f.registered().id}`);
       expect(outcome?.outcome).toBe('succeeded');
       const revisions = await f.revisions();
@@ -280,10 +281,10 @@ for (const field of ['labels', 'conceal'] as const) {
       await f.gate(false, false);
       f.beforeSeal(async () => undefined);
       const replay = await f.call(field, key);
-      expect(replay.status).toBe(200);
-      const result = await replay.json();
-      expect(result).toMatchObject({ admission: f.registered().id, revision: assetIri(revisions[0]!.id), replayed: true });
-      if (sealed) expect(result).toEqual({ ...firstBody, replayed: true });
+      // Receipt delivery requires today's authority even when its effect is
+      // durable. Closing the platform must not disclose retained owner state.
+      expect(replay.status).toBe(403);
+      expect(await replay.json()).toMatchObject({ code: 'authority_denied' });
       expect(await f.revisions()).toEqual(revisions);
       expect(await f.store.readOutcome(`media-field:${f.registered().id}`)).toEqual(outcome);
     }), 60_000);
