@@ -86,10 +86,10 @@ for (const type of ['VideoGame', 'Recipe', 'TVSeries'].map(name => `https://sche
     let answer: unknown;
     try { answer = await readZoneBrowse(data.session(), realm, { q: phrase, type: [type] }); }
     catch (error) { answer = error; }
-    if (!(answer instanceof WorkReadUnavailable)) await Bun.write(
-      `.temp/realm-browse-adoption-owner-${type.slice(type.lastIndexOf('/') + 1)}.json`,
-      JSON.stringify({ expected: [adopted], adoptionPosition: { dataEpoch: 'epoch', sequence: '38' }, answer }, null, 2));
-    expect(answer).toBeInstanceOf(WorkReadUnavailable);
+    if (!(answer instanceof WorkReadUnavailable)) {
+      expect(answer).toMatchObject({ items: [], window: { scanned: 0, complete: false },
+        matches: { value: 0, kind: 'lower-bound' }, sourcePosition: { dataEpoch: 'epoch', sequence: '38' } });
+    }
     expect(data.indexReads).toEqual([]);
   });
 

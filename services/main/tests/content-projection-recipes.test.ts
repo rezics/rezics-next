@@ -118,7 +118,9 @@ test('G-087: media-set publication is proven and acknowledged without text proje
   expect(acknowledgements).toBe(2);
 
   reference.model = 'unknown-model-v1';
-  expect((await relayContentProjectionOnce(env, content, cursor, 'public-search'))?.disposition).toBe('deferred');
+  expect(() => projectionRecipeFor(reference.model)).toThrow('No projection recipe');
+  // Closed search eligibility is terminal before model-specific text extraction.
+  expect((await relayContentProjectionOnce(env, content, cursor, 'public-search'))?.disposition).toBe('ignored');
   expect(acknowledgements).toBe(3);
 });
 

@@ -40,9 +40,12 @@ test('G323 first-page retries share budgets, recheck authority, and do not repla
   access: { assertRecoveryOpen: async () => undefined,
     activePrincipalId: async () => active ? 'principal' : null } } as unknown as MainWorkDependencies;
   const request = new Request('http://main.local/v1/agents/test');
+  const selected = async (session: Parameters<Parameters<typeof workRead>[3]>[0]) =>
+    session.dependency('selected-owner', async () => sequence);
   try {
     let attempts = 0;
     const result = await workRead(deps, request, {}, async session => {
+      await selected(session);
       if (++attempts < WORK_READ_COST.attempts) sequence++;
       return session.position;
     });
@@ -66,12 +69,13 @@ test('G323 first-page retries share budgets, recheck authority, and do not repla
     expect(attempts).toBe(1);
 
     attempts = 0;
-    await expect(workRead(deps, request, {}, async () => { attempts++; sequence++; }))
+    await expect(workRead(deps, request, {}, async session => { await selected(session); attempts++; sequence++; }))
       .rejects.toBeInstanceOf(WorkReadUnavailable);
     expect(attempts).toBe(WORK_READ_COST.attempts);
 
     calls = 0;
     await expect(workRead(deps, request, {}, async session => {
+      await selected(session);
       for (let n = 0; n < 60; n++) await session.query('SELECT ?x WHERE {}', 1);
       sequence++;
     })).rejects.toBeInstanceOf(WorkReadLimit);
@@ -81,14 +85,14 @@ test('G323 first-page retries share budgets, recheck authority, and do not repla
       [new Request('http://main.internal/discovery-refresh'), {}], [request, { cursor: 'continuation' }],
       [new Request(`${request.url}?cursor=owner-decoded`), {}]] as const) {
       attempts = 0;
-      await expect(workRead(deps, read, options, async () => { attempts++; sequence++; }))
+      await expect(workRead(deps, read, options, async session => { await selected(session); attempts++; sequence++; }))
         .rejects.toBeInstanceOf(WorkReadMoved);
       expect(attempts).toBe(1);
     }
     const authenticated = new Request(request.url, { headers: { authorization: 'Bearer test' } });
     attempts = 0;
-    await expect(workRead(deps, authenticated, { actingSubject: 'agent' }, async () => {
-      attempts++; sequence++; active = false;
+    await expect(workRead(deps, authenticated, { actingSubject: 'agent' }, async session => {
+      await selected(session); attempts++; sequence++; active = false;
     })).rejects.toBeInstanceOf(AccountAssertionDenied);
     expect(attempts).toBe(1);
   } finally { await server.stop(true); }

@@ -221,6 +221,7 @@ test('semantic readability does not restore a private name', async () => {
     : query.includes('SELECT ?epoch ?sequence WHERE')
       ? { results: { bindings: [control] } }
       : { results: { bindings: [] } };
+  configureFixtureDisclosureAncestry(open, () => undefined);
   const canRead = async () => true;
   await expect(referenceDisclosure(open, { principal: stranger, actingSubject: id(9), access: {} }, canRead)(
     [privateAgent, concept])).rejects.toThrow('Disclosure cut reader is unavailable');
@@ -334,6 +335,7 @@ test('an authorized private-name summary is restricted, and an anonymous one sta
   const bare = { fuseki: new FusekiClient('http://graph.invalid'), objectDirectory: directory,
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as WorkActivationEnvironment;
   bare.fuseki.query = async () => ({ results: { bindings: [publicRow()] } });
+  configureFixtureDisclosureAncestry(bare, () => undefined);
   await expect(readResourceSummaries(bare, undefined, {}, {
     resources: [publicAgent], context: DEFAULT_MEDIA_CONTEXT, language: 'en' }))
     .rejects.toThrow('Disclosure cut reader is unavailable');

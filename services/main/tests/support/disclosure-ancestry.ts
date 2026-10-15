@@ -62,6 +62,7 @@ export function withFixtureRealmDisclosure<T extends import('../../src/modules/w
     fuseki: {}, lineage: { dataEpoch: session.position.dataEpoch, routingEpoch: 'fixture' },
     objectDirectory: '.temp/realm-module-fixture',
   } as WorkActivationEnvironment;
+  environment.lineage ??= { dataEpoch: session.position.dataEpoch, routingEpoch: 'fixture' };
   Object.assign(session.deps, { environment });
   configureFixtureDisclosureAncestry(environment, () => undefined);
   configureDisclosure(environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));

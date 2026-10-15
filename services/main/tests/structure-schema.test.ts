@@ -627,7 +627,7 @@ test('COMP01/WIKI01/RECIPE01 owner schema: graph profiles publish shapes and foc
   const expected: Record<string, string[]> = {
     'structure-composition-v1': ['structure', 'generation', 'segment', 'item-list', 'occurrence', 'placement',
       'removed-placement', 'revision', 'seal'],
-    'zone-capability-v1': ['navigation-link', 'zone', 'mount', 'revision'],
+    'zone-capability-v1': ['navigation-link', 'zone', 'home-document', 'home-revision', 'mount', 'revision'],
     'collection-curation-v1': ['structure-link', 'collection', 'revision', 'definition',
       'definition-revision'],
     'recipe-structure-v1': ['ingredient-line', 'step', 'measure'],

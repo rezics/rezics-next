@@ -35,11 +35,12 @@ function runtimeImports(file: string): string[] {
 test('the Main release image copies every transitive runtime import of its server', () => {
   const dockerfile = readFileSync(resolve(root, 'infra/release/Dockerfile'), 'utf8')
     .split(/FROM .* AS runtime\s*\n/)[1]!;
-  const copies = [...dockerfile.matchAll(/^COPY\s+(?:--\S+\s+)*\/app\/(\S+)\s+\.\/(\S+)\s*$/gm)]
+  const copies = [...dockerfile.matchAll(/^COPY\s+(?:--\S+\s+)*\/app\/(\S*)\s+\.\/(\S*)\s*$/gm)]
     .map(([, source, destination]) => ({ source: source!, destination: destination! }));
   expect(copies.length).toBeGreaterThan(0);
   // External package implementations reside in the production dependency tree.
-  expect(copies).toContainEqual({ source: 'node_modules', destination: 'node_modules' });
+  expect(copies.some(copy => ['', 'node_modules'].includes(copy.source)
+    && copy.source === copy.destination)).toBe(true);
   const options: ts.CompilerOptions = { moduleResolution: ts.ModuleResolutionKind.Bundler,
     allowImportingTsExtensions: true, resolveJsonModule: true };
   const queue = ['services/main/src/index.ts', 'services/main/src/telemetry.ts', 'infra/release/entrypoint.ts']
@@ -51,7 +52,7 @@ test('the Main release image copies every transitive runtime import of its serve
     if (visited.has(file)) continue;
     visited.add(file);
     const path = relative(root, file);
-    if (!copies.some(copy => (path === copy.source || path.startsWith(`${copy.source}/`))
+    if (!copies.some(copy => (!copy.source || path === copy.source || path.startsWith(`${copy.source}/`))
       && resolve(root, copy.destination, relative(resolve(root, copy.source), file)) === file)) {
       missing.push(path);
     }
