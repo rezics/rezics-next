@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { independentRestorePreparationOptions, ownerErasurePreparationOptions } from './retained-source.ts';
-import { realmSourceBuildDeadlineMs } from '../../tests/qa/support/realm-discussion-source.ts';
+import { realmSourceBuildDeadlineMs } from '../../tests/qa/support/realm-discussion-budget.ts';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { redactCommandOutput } from '../fixture/command-output.ts';

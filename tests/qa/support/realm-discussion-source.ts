@@ -6,10 +6,11 @@ import type { RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
 import { RetainedSources, type RetainedSourceAdapter, type SourceContext, type SourceInputs } from '../../../scripts/qa/retained-source.ts';
 import type { PersonaName, PersonaSession, PersonaSessions, RetainedPersonaRealm } from './personas.ts';
 import { prepareRealmRankingStates } from './realm-ranking-fixture.ts';
+import { realmSourceBuildDeadlineMs } from './realm-discussion-budget.ts';
+export { realmSourceBuildDeadlineMs } from './realm-discussion-budget.ts';
 
 export const realmSourcePopulation = Object.freeze({ publicRanking: 261, retainedPrivate: 21,
   currentPrivate: 21, roots: 21, siblings: 193, nested: 34, privateRoots: 1 });
-export const realmSourceBuildDeadlineMs = 1_800_000;
 /** Bound fixture authority independently of active operation clocks. A retained
  * grant must survive producer work and the host's admission queue unchanged. */
 export const realmSourceAuthorityLifetimeMs = 86_400_000;
