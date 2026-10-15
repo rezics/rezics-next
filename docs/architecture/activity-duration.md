@@ -207,3 +207,9 @@ named in the response (adjacent bucket bounds within a ratio of 1.25), next to
 the exact mean and the counts. The histogram is part of the first
 implementation, and the outcome test asserts a cohort where one outlier moves
 the mean but not the median interval.
+
+Deferred past the first launch on 2026-10-16: the launch scope is the rows the
+first public release needs, and B03 is a new capability. The pending
+`games/play-duration-estimates` row and its outcome test were removed from the
+launch registry; they remain in commit `9764891737` and return with the
+implementation brief.

@@ -38,6 +38,10 @@ reconciliation. See [Main Version](../contracts/main-version.md),
 [authorization bridge](../implementation/authorization-bridge.md) and
 [recovery](../operations/recovery.md).
 
+The [bounded community automation proposal](community-automation.md) considers
+event-triggered owner commands using the durable-job machinery shared with
+Scheduled; activation, narrow grants and guarded reversal await program review.
+
 The initial path uses one effective graph writer and one assessed principal
 host. Redis, a broker, replicas and an external search cluster are later choices
 when measured work warrants them; another host alone does not add database

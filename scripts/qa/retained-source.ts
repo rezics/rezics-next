@@ -80,6 +80,7 @@ export interface RetainedSourceManifest<M extends RetainedJson = RetainedJson> {
 
 export interface SourceContext {
   key: string;
+  /** Producer callbacks receive a pending path; only the lifecycle publishes it. */
   directory: string;
   backup: string;
   budget: FixtureWorkBudget;
@@ -239,6 +240,12 @@ class ProducerBuildBudget extends FixtureWorkBudget {
 const digestManifest = (manifest: Omit<RetainedSourceManifest, 'digest'>) => sha256(stable(manifest));
 const sourceRoot = () => fixtureDirectory('retained-sources');
 
+function reportRecovery(key: string, reason: 'unpublished-staging' | 'unreadable-manifest' | 'verification-refused'): void {
+  // Custody locks, not a PID file, establish that no producer can still own this work.
+  try { console.info(`RETAINED_SOURCE_RECOVERY ${JSON.stringify({ key, reason })}`); }
+  catch { /* Diagnostics must not interrupt recovery. */ }
+}
+
 /** Kernel custody prevents two builders across QA processes. Closing the owning
  * process's pipe releases custody even after a crash; no stale PID unlink race.
  * Lock files retain their inode, since unlinking an in-use lock splits custody. */
@@ -283,6 +290,10 @@ export class RetainedSources {
 
   private context(key: string, budget: FixtureWorkBudget, directory = join(this.directory, key)): SourceContext {
     return { key, directory, backup: join(directory, 'backup'), budget };
+  }
+
+  private pending(key: string): string {
+    return join(this.directory, `.${key}.pending-${randomUUID()}`);
   }
 
   private async verified<M extends RetainedJson, C>(adapter: RetainedSourceAdapter<M, C>, context: SourceContext): Promise<RetainedSourceManifest<M>> {
@@ -406,8 +417,14 @@ export class RetainedSources {
           catch (error) {
             if (!(error instanceof RetainedSourceRefusal)) throw error;
             try {
+              // Quarantine before asynchronous external cleanup: a second interruption
+              // must not strand an unmanifested directory in the published namespace.
+              const quarantine = this.pending(key);
+              renameSync(context.directory, quarantine);
+              reportRecovery(key, error.evidence.includes('complete manifest is missing or unreadable')
+                ? 'unreadable-manifest' : 'verification-refused');
               await adapter.remove(key);
-              rmSync(context.directory, { recursive: true, force: true });
+              rmSync(quarantine, { recursive: true, force: true });
             } catch (cleanupError) {
               await lifecycle.cleanup(lifecycle.failure(error), 'remove', () => { throw cleanupError; });
               throw error;
@@ -419,13 +436,18 @@ export class RetainedSources {
         for (const name of readdirSync(this.directory).filter(name => name.startsWith(pendingPrefix) && name.includes('.pending-'))) {
           const orphanKey = name.slice(1, name.indexOf('.pending-'));
           if (!/^[a-f0-9]{64}$/.test(orphanKey.slice(`rs-${adapter.specification.producer}-`.length))) continue;
-          await lifecycle.step('remove-orphan', async () => {
+          const remove = () => lifecycle.step('remove-orphan', async () => {
+            // A live producer may have published while we waited for its key.
+            if (!existsSync(join(this.directory, name))) return;
+            reportRecovery(orphanKey, 'unpublished-staging');
             await adapter.remove(orphanKey);
             rmSync(join(this.directory, name), { recursive: true, force: true });
           });
+          if (orphanKey === key) await remove(); // Already exclusively held.
+          else await locked(join(this.directory, `${orphanKey}.lock`), lifecycle, remove);
         }
         await lifecycle.step('remove', () => adapter.remove(key));
-        const staging = join(this.directory, `.${key}.pending-${randomUUID()}`);
+        const staging = this.pending(key);
         const candidate = this.context(key, budget, staging);
         mkdirSync(candidate.backup, { recursive: true, mode: 0o700 });
         const startedAt = new Date(this.now()).toISOString();
