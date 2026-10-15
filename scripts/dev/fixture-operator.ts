@@ -1,6 +1,8 @@
 import type { Pool } from 'pg';
 import { symmetricDecrypt } from 'better-auth/crypto';
 import { createOTP } from '@better-auth/utils/otp';
+import { requireSecondFactor } from '../../services/account/src/methods.ts';
+import { AccountProblem } from '../../services/account/src/http.ts';
 
 /** Local fixture preparation owns these disposable credentials and database.
  * It exercises Account's factor policy; production users supply their own OTP. */
@@ -20,6 +22,16 @@ operator: { id: string; email: string; password: string; cookie?: string }): Pro
     takeCookies(response);
     await response.body?.cancel();
   };
+  if (cookie) {
+    const response = await input.handle(new Request(`${input.origin}/api/auth/get-session`, { headers: { cookie } }));
+    if (!response.ok) throw new Error(`Fixture operator session: HTTP ${response.status}`);
+    const current = await response.json() as { user: { id: string }; session: { id: string } } | null;
+    if (current) {
+      if (current.user.id !== operator.id) throw new Error('Fixture operator identity changed');
+      try { await requireSecondFactor(input.pool, current.session.id); return cookie; }
+      catch (error) { if (!(error instanceof AccountProblem)) throw error; }
+    }
+  }
   if (!cookie) await post('/api/auth/sign-in/email', { email: operator.email, password: operator.password });
   let factor = (await input.pool.query<{ secret: string }>('SELECT secret FROM "twoFactor" WHERE "userId" = $1', [operator.id])).rows[0];
   if (!factor) {
