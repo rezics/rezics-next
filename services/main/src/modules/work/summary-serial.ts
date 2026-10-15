@@ -1,7 +1,7 @@
 import { GRAPHS, iri } from './activate.ts';
 import type { SerialStatus } from './metadata-schema.ts';
 import { readMetadataHeader, selectedMetadata } from './metadata-read.ts';
-import { WorkReadUnavailable, readDependencyToken, type WorkReadSession } from './read-session.ts';
+import { WorkReadUnavailable, readDependencyToken, type ReadRow, type WorkReadSession } from './read-session.ts';
 import { SearchSnapshotMoved } from './search-readiness.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
 import { readFactObligations } from '../rights/read-imported.ts';
@@ -22,8 +22,11 @@ export async function readSerialStatistics(session: WorkReadSession, works: read
   return stats;
 }
 
-/** Metadata is editor-owned; numeric facts are from the durable relay projection. */
-export async function readSerialSummaries(session: WorkReadSession, works: readonly string[], preview = false) {
+/** Metadata is editor-owned; numeric facts are from the durable relay projection.
+ * A caller supplying heads owns their closing dependency (for example, the
+ * Realm's selected page includes its exact metadata heads). */
+export async function readSerialSummaries(session: WorkReadSession, works: readonly string[], preview = false,
+  selectedHeads?: readonly ReadRow[]) {
   const result = new Map<string, { tagline: ReturnType<typeof selectedMetadata>['tagline'];
     factObligations?: WikiDisplayObligations;
     completionStatus: SerialStatus | null;
@@ -33,7 +36,7 @@ export async function readSerialSummaries(session: WorkReadSession, works: reado
   if (works.length > 20 || new Set(works).size !== works.length) {
     throw new WorkReadUnavailable('Serial summary batch is out of bounds');
   }
-  const rows = await session.query(`SELECT ?work ?head WHERE {
+  const rows = selectedHeads ?? await session.query(`SELECT ?work ?head WHERE {
     VALUES ?work { ${works.map(iri).join(' ')} }
     OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work rv:descriptiveMetadataHead ?head } }
   } LIMIT ${works.length + 1}`, works.length + 1);

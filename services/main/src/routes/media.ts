@@ -27,7 +27,7 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
-import { disclose, discloseInventory, discloseInventoryWithAnonymousNames, type DisclosureTarget } from '../modules/disclosure/read.ts';
+import { discloseInventory, discloseInventoryWithAnonymousNames, type DisclosureTarget } from '../modules/disclosure/read.ts';
 import { bindZoneCampaignReader, currentZoneCampaignUses } from '../modules/zone/showcase-disclosure.ts';
 import { bindNativeAssetAudience, mediaVisibility } from '../modules/media/visibility.ts';
 import { readClosedRealmMediaSelection } from '../modules/media/closed-realm-media.ts';
@@ -327,9 +327,14 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       } else facts.push({...asset,work:basis.target});
       return own;
     });
-    const decisions=await discloseInventory(work.environment,facts,reader.viewer??ANONYMOUS_VIEWER,'media');
-    const assetDecisions=await disclose(work.environment,assetFences,reader.viewer??ANONYMOUS_VIEWER,'media');
-    const publicMedia=await mediaVisibility(work.environment,facts,ANONYMOUS_VIEWER);
+    // Exact Uses and their Asset restrictions share one owner batch. Repeating
+    // the inventory separately would hydrate the same attachment audience twice.
+    const viewer = reader.viewer ?? ANONYMOUS_VIEWER;
+    const combined = await discloseInventory(work.environment,[...facts,...assetFences],viewer,'media');
+    const decisions = combined.slice(0, facts.length), assetDecisions = combined.slice(facts.length);
+    const publicMedia = viewer.signedIn
+      ? await mediaVisibility(work.environment,facts,ANONYMOUS_VIEWER)
+      : decisions.map(decision => decision === 'visible');
     const results = await Promise.all(bases.map(async (basis,index)=>{
       const assetDecision=assetDecisions[indexes[index]![0]!];
       if (!basis || assetDecision!=='visible' || basis.target && !available.has(`${basis.context}\0${basis.target}`)

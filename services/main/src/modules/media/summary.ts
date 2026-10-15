@@ -253,6 +253,7 @@ function avatar(type: ResourceType, reference: string, row: AvatarRow | undefine
     mediaType: row.mediaType!, width: row.width!, height: row.height!, crop: row.crop,
     basis: { policy: AVATAR_POLICY, context: row.context! } };
 }
+export { avatar as resourceAvatar };
 
 /** The batch is repeated inside independent OPTIONAL inputs: an outer VALUES
  * does not constrain an optimized UNION's right-hand scan. */

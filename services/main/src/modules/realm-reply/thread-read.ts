@@ -11,7 +11,7 @@ import { replySlotIri } from './graph.ts';
 import { REALM_ABOUT_THREAD_COST, REALM_THREAD_COST, type realmAboutThread, type realmThread, type realmThreadContinuation, type realmThreadReply, type realmThreadSummary,
   type threadSort, type threadWindow } from './thread-contract.ts';
 import type { PlacedHead, RealmReplyThreadStore, ThreadSiblingKey, ThreadVote } from './thread-store.ts';
-import { resolveTargets, resolveVisibleTargets, targetSummaries, TARGET_RESOLVE_COST } from '../target/resolve.ts';
+import { resolveVisibleTargets, resolveSummarizedTargets, targetSummaries, TARGET_RESOLVE_COST } from '../target/resolve.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import { hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
@@ -241,6 +241,7 @@ async function bodies(session: WorkReadSession, heads: readonly Head[], realm: s
  * roots on the page. Hidden roots cannot suppress otherwise readable threads. */
 async function works(session: WorkReadSession, heads: readonly Head[]) {
   const unique = [...new Set(heads.map((head) => head.work))];
+  const read = async () => {
   const titles = new Map<string, { id: string; title: Static<typeof import('../work/read-contract.ts').readName>;
     cover: Static<typeof import('../work/read-contract.ts').readAvatar>;
     }>();
@@ -255,13 +256,15 @@ async function works(session: WorkReadSession, heads: readonly Head[]) {
     const available = result.summaries.filter(
       (summary) => summary.status === 'available' && summary.base !== null);
     if (!available.length) continue;
-    await resolveTargets(session, available.map((summary) => summary.reference), 'discussion');
+    await resolveSummarizedTargets(session, { ...result, summaries: available }, 'discussion', false);
     for (const summary of available) {
       if (summary.status === 'available') titles.set(summary.reference,
         { id: summary.reference, title: summary.name, cover: summary.avatar });
     }
   }
   return titles;
+  };
+  return session.retained ? session.retained(`thread-roots:${JSON.stringify(unique)}`, read) : read();
 }
 
 async function authors(session: WorkReadSession, ids: readonly string[]) {

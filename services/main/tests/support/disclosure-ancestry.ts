@@ -67,5 +67,6 @@ export function withFixtureRealmDisclosure<T extends import('../../src/modules/w
   configureFixtureDisclosureAncestry(environment, () => undefined);
   configureDisclosure(environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   if (!session.observeDependency) Object.assign(session, { observeDependency: () => '' });
+  if (!session.disclosure) Object.assign(session, { disclosure: async (targets: readonly unknown[]) => targets.map(() => 'visible') });
   return session;
 }

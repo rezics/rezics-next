@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { withTelemetrySpan } from '@rezics/observability/runtime';
+import { GraphReadFence, graphReadVersion } from '../../infrastructure/graph-read-fence.ts';
 import { fusekiReadBudget, FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge,
   type SparqlResult } from '../../infrastructure/fuseki.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
@@ -97,15 +98,17 @@ function summaryReader(work: MainWorkDependencies, viewer: ZoneRouteViewer): Sum
   };
 }
 
-async function position(work: MainWorkDependencies): Promise<ReadPosition> {
-  const rows = (await work.environment.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+async function position(work: MainWorkDependencies): Promise<ReadPosition & { graphVersion?: string }> {
+  const result = await work.environment.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(work.environment.lineage.dataEpoch)} ;
       rv:routingEpoch ${lit(work.environment.lineage.routingEpoch)} ; rv:sequence ?sequence .
-      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } } } LIMIT 2`, 4096)).results?.bindings ?? [];
+      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } } } LIMIT 2`, 4096);
+  const rows = result.results?.bindings ?? [];
   if (rows.length !== 1 || !/^\d+$/.test(rows[0]?.sequence?.value ?? '')) {
     throw new WorkReadUnavailable('Zone graph position is unavailable');
   }
-  return { dataEpoch: work.environment.lineage.dataEpoch, sequence: rows[0]!.sequence!.value };
+  return { dataEpoch: work.environment.lineage.dataEpoch, sequence: rows[0]!.sequence!.value,
+    graphVersion: graphReadVersion(result) };
 }
 
 class RouteRead {
@@ -287,8 +290,10 @@ async function boundedRead<T>(work: MainWorkDependencies, request: Request, acti
         const viewer = await zoneRouteViewer(work, request, actingSubject);
         const read = new RouteRead(work, request, viewer, before, attempt + 1);
         let result: T;
+        const graphFence = new GraphReadFence(work.environment.fuseki);
         try {
-          try { result = await operation(read); }
+          try { result = before.graphVersion
+            ? await graphFence.capture(() => operation(read)) : await operation(read); }
           catch (error) {
             // Distinguish a removed selected mount/head from a stable 404 using
             // those exact dependencies, including when another Work was edited.
@@ -305,12 +310,24 @@ async function boundedRead<T>(work: MainWorkDependencies, request: Request, acti
           if (graphBasis === 'presentation-cut' && before.sequence !== after.sequence) {
             throw new WorkReadMoved('Zone presentation changed during the read');
           }
-          await read.fenceDependencies();
+          if (before.graphVersion && before.graphVersion === after.graphVersion) {
+            await graphFence.verify(() => read.fenceDependencies());
+          } else await read.fenceDependencies();
         } finally {
           try { await read.fenceAuthority(); }
           catch (error) {
             if (error instanceof WorkReadMissing) throw new ZoneRouteMissing('Zone route is unavailable');
             throw error;
+          }
+        }
+        if (graphFence.reused) {
+          const closed = await position(work);
+          if (graphBasis === 'presentation-cut' && closed.sequence !== before.sequence) {
+            throw new WorkReadMoved('Zone presentation changed during the closing owner checks');
+          }
+          if (closed.dataEpoch !== before.dataEpoch || closed.graphVersion !== before.graphVersion) {
+            try { await read.fenceDependencies(); }
+            finally { await read.fenceAuthority(); }
           }
         }
         signal.throwIfAborted();

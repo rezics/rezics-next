@@ -19,8 +19,8 @@ import { realmHistoryOriginFilter } from '../realm-admin/history.ts';
 type RealmWork = Static<typeof realmWork>;
 
 /** Select the public Realm population before the bounded summary/type hydration.
- * Two basis probes, at most 64 identity/admission batches, one type batch,
- * two summary batches and graph-position fences give O(P) hydration for P ≤ 20. Jena can still scan/sort
+ * One retained Realm basis, at most 64 identity/admission batches carrying
+ * types and metadata heads, summary hydration and exact fences give O(P) hydration for P ≤ 20. Jena can still scan/sort
  * all D adopted Works: O(D log D) is the conservative discovery bound. */
 export async function readRealmWorks(session: WorkReadSession, realm: string) {
   await readRealmBasis(session, realm);
@@ -34,12 +34,17 @@ export async function readRealmWorks(session: WorkReadSession, realm: string) {
     key: (row) => row.work!.value,
     fetch: async (after, size) => {
       const rows = await probe.query(
-        `SELECT DISTINCT ?work ?head ?main ?selection ?contribution ?language WHERE {
+        `SELECT DISTINCT ?work ?head ?main ?selection ?contribution ?language ?metadataHead
+          (GROUP_CONCAT(DISTINCT STR(?workType); separator="|") AS ?types) WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:work ?work ;
         rv:mainVersion ?main ; rv:selectionHead ?selection .
       ?work rv:head ?head .
       ?contribution rv:publicationHead ?decision . }
+    OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work rv:descriptiveMetadataHead ?metadataHead } }
+    OPTIONAL { VALUES ?workType { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?work a ?workType } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work a rv:Agent } }
     GRAPH ${iri(GRAPHS.revisions)} { ?selection a rv:PublicationSelection ;
       rv:component ?slot ; rv:context ${iri(realm)} ; rv:work ?work ;
       rv:mainVersion ?main ; rv:contribution ?contribution ;
@@ -51,7 +56,8 @@ export async function readRealmWorks(session: WorkReadSession, realm: string) {
 
 
     ${after ? `FILTER(STR(?work) > ${lit(after.work!.value)})` : ''}
-  } ORDER BY STR(?work) LIMIT ${size}`,
+  } GROUP BY ?work ?head ?main ?selection ?contribution ?language ?metadataHead
+    ORDER BY STR(?work) LIMIT ${size}`,
         size,
       );
       if (
@@ -68,6 +74,9 @@ export async function readRealmWorks(session: WorkReadSession, realm: string) {
       ) {
         throw new WorkReadUnavailable('Realm Work relation is ambiguous');
       }
+      for (const row of rows) if (row.types) {
+        row.types.value = row.types.value.split('|').filter(Boolean).sort().join('|');
+      }
       return rows;
     },
     admit: async (rows) => {
@@ -79,6 +88,7 @@ export async function readRealmWorks(session: WorkReadSession, realm: string) {
           revision: row.head!.value,
           work: row.work!.value,
           workRevision: row.head!.value,
+          nameOwnerResolved: true,
         })),
         'read',
       );
@@ -88,34 +98,22 @@ export async function readRealmWorks(session: WorkReadSession, realm: string) {
   const page = selected.page;
   const ids = page.map((row) => row.work!.value);
   const summaries = await session.summaries(ids);
+  const serialIds = ids.filter(
+    (id, index) => summaries[index]?.status === 'available' && summaries[index]?.disclosure === 'public'
+      && summaries[index]?.type === 'work');
   const serial = await readSerialSummaries(
     session,
-    ids.filter(
-      (id, index) =>
-        summaries[index]?.status === 'available' &&
-        summaries[index]?.disclosure === 'public' &&
-        summaries[index]?.type === 'work',
-    ),
+    serialIds, false, page.filter(row => serialIds.includes(row.work!.value))
+      .map(row => ({ work: row.work!, ...(row.metadataHead ? { head: row.metadataHead } : {}) })),
   );
-  const typeRows = ids.length
-    ? await session.query(
-        `SELECT ?work ?type WHERE {
-    VALUES ?work { ${ids.map(iri).join(' ')} }
-    VALUES ?type { ${WORK_SEMANTIC_TYPES.map((type) => `<${type}>`).join(' ')} }
-    GRAPH ${iri(GRAPHS.current)} { ?work a ?type }
-  } LIMIT 161`,
-        160,
-      )
-    : [];
   const fenced = await session.summaries(ids);
   const types = new Map<string, string[]>();
-  for (const row of typeRows) {
-    if (!row.work || !row.type || !ids.includes(row.work.value)) {
+  for (const row of page) {
+    const selected = row.types?.value.split('|').filter(Boolean) ?? [];
+    if (selected.some(type => !WORK_SEMANTIC_TYPES.includes(type))) {
       throw new WorkReadUnavailable('Realm Work type relation is incomplete');
     }
-    const list = types.get(row.work.value) ?? [];
-    list.push(row.type.value);
-    types.set(row.work.value, list);
+    types.set(row.work!.value, selected);
   }
   const items: RealmWork[] = page.flatMap((row, index) => {
     const summary = summaries[index];

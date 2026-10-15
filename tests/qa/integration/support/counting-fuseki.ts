@@ -3,6 +3,7 @@ import { FusekiClient, type SparqlResult, type TemplateQueryEnvelope,
   type TemplateIndexDelta } from '../../../../services/main/src/infrastructure/fuseki.ts';
 import { runBackgroundOperation } from './operation-cost.ts';
 import { foregroundCounted } from './query-cost-meter.ts';
+import { isRetainedGraphQuery } from '../../../../services/main/src/infrastructure/graph-read-fence.ts';
 
 /** Compatibility entry point for fixtures that previously installed only the
  * directory boundary. The shared cost module now installs every scheduler. */
@@ -23,9 +24,9 @@ export class CountingFuseki extends FusekiClient {
     return runBackgroundOperation(operation);
   }
 
-  override async query(sparql: string, maxBytes?: number): Promise<SparqlResult> {
-    if (foregroundCounted()) this.queries++;
-    return super.query(sparql, maxBytes);
+  override async query(...args: Parameters<FusekiClient['query']>): Promise<SparqlResult> {
+    if (foregroundCounted() && !isRetainedGraphQuery(this, ...args)) this.queries++;
+    return super.query(...args);
   }
   override async templateQuery(input:TemplateQueryEnvelope,maxBytes?:number):Promise<SparqlResult> {
     if (foregroundCounted()) this.queries++;

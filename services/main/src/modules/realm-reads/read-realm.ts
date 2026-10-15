@@ -2,8 +2,8 @@ import type { RealmVisibility, RealmReviewMode, RealmHistory } from '../space/po
 import { WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { AdmissionUnavailable } from '../access/admission.ts';
 import { chosenModerators, readCurrentProfile } from '../realm-profile/commands.ts';
-import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
-import { fallbackAvatar } from '../media/summary.ts';
+import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT, type AvatarRow } from '../media/store.ts';
+import { fallbackAvatar, resourceAvatar } from '../media/summary.ts';
 import { legacyLocalizedText, selectDisplayName } from '../display-language/select.ts';
 import { pageDiscoveryPolicy } from '../space/visibility.ts';
 import { readRealmPolicy } from '../space/policy.ts';
@@ -27,41 +27,81 @@ async function readRealmDisclosure(session: WorkReadSession, realm: string) {
 
 /** A private Realm and an absent Realm have the same public answer. */
 export async function readRealmBasis(session: WorkReadSession, realm: string): Promise<RealmBasis> {
+  const read = async () => {
   const policy = await session.realm(realm);
   if (!policy.realmRevision) throw new WorkReadUnavailable('Realm basis is incomplete');
   await readRealmDisclosure(session, realm);
   return { id: realm, space: policy.space, revision: policy.realmRevision,
     visibility: policy.visibility, reviewMode: policy.reviewMode, policyRevision: policy.revision,
     history: policy.history };
+  };
+  return session.retained ? session.retained(`realm-basis:${realm}`, read) : read();
 }
 
 export async function readRealmHeader(session: WorkReadSession, realm: string) {
-  const basis = await readRealmBasis(session, realm);
-  const summary = (await session.summaries([realm]))[0];
-  if (summary?.status !== 'available' || summary.type !== 'realm') {
-    throw new WorkReadMissing('Realm is unavailable');
-  }
-  const path = `/v1/realms/${realm.slice(-36)}`;
+  const policy = await session.realm(realm);
+  if (!policy.realmRevision) throw new WorkReadUnavailable('Realm basis is incomplete');
+  if (!hasDisclosure(session.deps.environment)) throw new WorkReadUnavailable('Realm disclosure is unavailable');
+  const decisions = await session.disclosure([
+    { owner: 'graph', resource: realm, component: 'record' },
+    { owner: 'graph', resource: realm, component: 'name', nameOwnerResolved: true },
+  ]);
+  if (decisions.some(decision => decision !== 'visible')) throw new WorkReadMissing('Realm is unavailable');
+  const basis: RealmBasis = { id: realm, space: policy.space, revision: policy.realmRevision,
+    visibility: policy.visibility, reviewMode: policy.reviewMode, policyRevision: policy.revision,
+    history: policy.history };
   const published = await readCurrentProfile(session.deps.environment, realm);
+  session.observeDependency(`realm-profile:${realm}`, published,
+    () => readCurrentProfile(session.deps.environment, realm));
+  const profile = published?.profile;
+  // The header already owns Realm admission. Read only the legacy label and
+  // image it needs, rather than resolving the Realm as another summary twice.
+  const names = !profile ? await session.query(`SELECT ?name WHERE { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(policy.space)} a rv:Space ; rv:realmCapability ${iri(realm)} ; rdfs:label ?name .
+  } } LIMIT 2`, 1) : [];
+  if (!profile && (names.length !== 1 || !names[0]?.name)) throw new WorkReadMissing('Realm is unavailable');
+  const legacyName = names[0]?.name ? selectDisplayName({ original: names[0].name['xml:lang'] ?? 'und',
+    labels: { [names[0].name['xml:lang'] ?? 'und']: names[0].name.value } }, session.displayLanguages) : null;
+  const readImage = async (context: string) => {
+    if (!session.deps.media) return undefined;
+    const read = () => session.deps.media!.store.avatarRows([realm], context);
+    const media = await read();
+    session.observeDependency(`realm-image:${realm}:${context}`,
+      [media.generation.dataEpoch, media.rows.get(realm) ?? null], async () => {
+        const current = await read();
+        return [current.generation.dataEpoch, current.rows.get(realm) ?? null];
+      });
+    return media.rows.get(realm);
+  };
+  const image = !profile || profile.iconSelection ? await readImage(DEFAULT_MEDIA_CONTEXT) : undefined;
+  let icon = resourceAvatar('realm', realm, image);
+  if (profile && (icon.kind !== 'image' || icon.selection !== profile.iconSelection)) icon = fallbackAvatar('realm', realm);
+  const path = `/v1/realms/${realm.slice(-36)}`;
   const selected = (value: { original: string; labels: Record<string, string> }
     | { en: string; 'zh-CN': string }) =>
     selectDisplayName('labels' in value ? value : legacyLocalizedText(value), session.displayLanguages)!;
-  const profile = published?.profile;
   let banner = null;
+  let bannerImage: AvatarRow | undefined;
   if (profile?.bannerSelection && session.deps.media?.store) {
-    const row = await session.deps.media.store.avatarDelivery(profile.bannerSelection);
-    if (row?.target === realm && row.context === realm && avatarImageEligible(row)) {
+    const row = await readImage(realm);
+    if (row?.target === realm && row.context === realm && row.selection === profile.bannerSelection && avatarImageEligible(row)) {
+      bannerImage = row;
       banner = { kind: 'image' as const, selection: row.selection!,
         url: `/v1/media/avatars/${row.selection}`, mediaType: row.mediaType!,
         width: row.width!, height: row.height!, crop: row.crop,
         basis: { policy: AVATAR_POLICY, context: realm } };
     }
   }
-  const icon = profile?.iconSelection
-    ? summary.avatar.kind === 'image' && summary.avatar.selection === profile.iconSelection
-      && summary.avatar.basis.context === DEFAULT_MEDIA_CONTEXT
-      ? summary.avatar : fallbackAvatar('realm', realm)
-    : profile ? fallbackAvatar('realm', realm) : summary.avatar;
+  const images = [icon.kind === 'image' ? image : undefined, bannerImage];
+  const selectedImages = images.filter((row): row is AvatarRow => !!row?.asset);
+  const imageDecisions = selectedImages.length ? await session.disclosure(selectedImages.map(row => ({
+    owner: 'media' as const, resource: `https://rezics.com/id/${row.asset}`, component: 'cover' as const,
+    context: row.context ?? undefined, ...(row.use ? { occurrence: { owner: 'media' as const,
+      kind: 'media-use' as const, resource: `https://rezics.com/id/${row.use}`,
+      revision: `https://rezics.com/id/${row.use}` } } : {}),
+  })), 'summary') : [];
+  if (image && icon.kind === 'image' && imageDecisions[selectedImages.indexOf(image)] !== 'visible') icon = fallbackAvatar('realm', realm);
+  if (bannerImage && imageDecisions[selectedImages.indexOf(bannerImage)] !== 'visible') banner = null;
   const moderators = profile ? [...await chosenModerators(session.deps.environment,
     realm, profile.moderators)] : [];
   const governance = session.deps.governance?.rules;
@@ -95,13 +135,11 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
       ? { kind: 'exact' as const, value: counted!, revision: snapshot.memberRevision ?? '0' }
       : await session.deps.access.publicRealmCount!(realm)
     : profile?.count ?? { kind: 'unknown' as const, value: null };
-  // Recheck live disclosure after all profile, media and governance hydration.
-  // The enclosing read also fences the graph position and private membership.
-  const policy = await session.realm(realm);
-  await readRealmDisclosure(session, realm);
+  // The session closes the exact profile, icon, policy and paired disclosure
+  // dependencies after governance hydration, including private membership.
   return { profile: 'realm-read-v1' as const, ...basis,
-    name: profile ? selected(profile.name) : summary.name, icon,
-    originalName: profile ? selectDisplayName(profile.name, []) : summary.name,
+    name: profile ? selected(profile.name) : legacyName!, icon,
+    originalName: profile ? selectDisplayName(profile.name, []) : legacyName!,
     profileRevision: published?.revision ?? null,
     profileContract: published?.contract ?? null,
     listing: policy.listing, history: policy.history, admission: policy.admission,

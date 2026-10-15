@@ -1,4 +1,5 @@
 import type { FusekiClient } from '../../../../services/main/src/infrastructure/fuseki.ts';
+import { isRetainedGraphQuery } from '../../../../services/main/src/infrastructure/graph-read-fence.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Pool, type PoolClient } from 'pg';
 import type { WorkProfile } from '../../support/work-profile.ts';
@@ -78,7 +79,8 @@ export function meterFuseki<T extends FusekiClient>(client: T): T & QueryMeter {
       if (property === 'queries') return state.queries;
       if (property === 'bytes') return state.bytes;
       if (property === 'reset') return state.reset.bind(state);
-      if (property === 'query') return countedQuery(state, query) as T['query'];
+      if (property === 'query') return ((...args: Parameters<FusekiClient['query']>) =>
+        isRetainedGraphQuery(client, ...args) ? query(...args) : countedQuery(state, query)(...args)) as T['query'];
       const value = Reflect.get(target, property, target);
       return typeof value === 'function' ? value.bind(target) : value;
     },

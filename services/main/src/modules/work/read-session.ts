@@ -116,6 +116,17 @@ export function decodeReadCursor(token: string | undefined, binding: unknown, po
 }
 
 export class WorkReadSession {
+  private readonly retainedReads = new Map<string, Promise<unknown>>();
+  /** Share hydration within this attempt; the registered dependency still reads
+   * its owner afresh at completion. Never share this cache across requests. */
+  async retained<T>(key: string, read: () => Promise<T>): Promise<T> {
+    let value = this.retainedReads.get(key);
+    if (!value) {
+      value = read();
+      this.retainedReads.set(key, value);
+    }
+    return structuredClone(await value) as T;
+  }
   private readonly children = new Set<WorkReadSession>();
   private captureDependencies = true;
   /** Moving inventories own their live-row fences; every other read captures selected inputs. */
@@ -245,6 +256,10 @@ export class WorkReadSession {
   restorePriors: ReadonlyMap<string, string> | null = null;
 
   async realm(realm: string) {
+    return this.retained(`realm:${realm}`, () => this.readRealm(realm));
+  }
+
+  private async readRealm(realm: string) {
     const policy = await readRealmPolicy(this.deps.environment, realm);
     if (!policy) throw new WorkReadMissing('Realm is unavailable');
     this.observeDependency(`realm-policy:${realm}`, policy, () => readRealmPolicy(this.deps.environment, realm));
@@ -291,6 +306,11 @@ export class WorkReadSession {
   }
 
   async summaries(resources: string[], optionalMedia = false): Promise<ResourceSummary[]> {
+    return this.retained(`summaries:${JSON.stringify([resources, optionalMedia])}`,
+      () => this.readSummaries(resources, optionalMedia));
+  }
+
+  private async readSummaries(resources: string[], optionalMedia: boolean): Promise<ResourceSummary[]> {
     this.checkDeadline();
     if (!resources.length) return [];
     const reader = { viewer: this.viewer, realmReadProof: this.principal && this.options.actingSubject ? (realm: string) =>
@@ -517,10 +537,11 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
             } else if (options.actingSubject) throw new AccountAssertionDenied('Authentication is required');
             return activeReadSession.run(session, () => withDisclosureViewer(session.viewer, async () => {
               let result: T;
+              const graphFence = new GraphReadFence(deps.environment.fuseki);
+              let closingVersion: string | undefined;
               // Every completed attempt closes its authority check, including a
               // failed consistency fence; retries cannot defer revocation.
               try {
-                const graphFence = new GraphReadFence(deps.environment.fuseki);
                 result = located.graphVersion && !options.movingGraph
                   ? await graphFence.capture(() => operation(session)) : await operation(session);
                 const after = await position(deps, true);
@@ -533,22 +554,21 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
                   }
                 }
                 if (located.graphVersion && after.graphVersion === located.graphVersion && !options.movingGraph) {
-                  // The version proves every captured graph input at once.
-                  // Owner callbacks still run: Access/Content can move without
-                  // a graph commit. Never reuse their authority decisions.
+                  // Graph inputs can be retained; every SQL owner check stays live.
                   await graphFence.verify(() => session.fenceDependencies());
-                  if (graphFence.reused) {
-                    const closed = await position(deps, true);
-                    if (closed.dataEpoch !== after.dataEpoch || closed.graphVersion !== after.graphVersion) {
-                      // A global version is sufficient, never necessary. If an
-                      // unrelated writer moved it, retain the selected-input
-                      // fallback rather than demanding a quiet dataset.
-                      await session.fenceDependencies();
-                    }
-                  }
+                  closingVersion = after.graphVersion;
                 } else await session.fenceDependencies();
               } finally {
                 await session.fenceAuthority();
+              }
+              if (graphFence.reused) {
+                // Close after authority too: an owner callback may commit graph inputs.
+                const closed = await position(deps, true);
+                if (closed.dataEpoch !== session.position.dataEpoch || closed.graphVersion !== closingVersion) {
+                  // Unrelated writes need no quiet dataset: replay only selected inputs.
+                  try { await session.fenceDependencies(); }
+                  finally { await session.fenceAuthority(); }
+                }
               }
               signal.throwIfAborted();
               return complete ? complete(result, session) : result;

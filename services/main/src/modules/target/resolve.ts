@@ -403,7 +403,7 @@ export async function resolveVisibleTargetSources(session: TargetReadSession, re
   return resolveTargetChains(session, resources, capability, true);
 }
 
-async function resolveSummarizedTargets(session: TargetReadSession, summaries: SummaryBatch,
+export async function resolveSummarizedTargets(session: TargetReadSession, summaries: SummaryBatch,
   capability: Capability, inventory: boolean, redirects?: Map<string, string>): Promise<Map<string, ResolvedTarget>> {
   if ((session.fencesSelectedUnits ?? session.options.localBasis)
     ? !summaries.generation.graph.startsWith(`${session.position.dataEpoch}:`)

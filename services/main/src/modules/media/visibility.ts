@@ -2,6 +2,7 @@ import { measureStatements } from '../../infrastructure/statement-cost.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { DisclosureTarget } from '../disclosure/read.ts';
+import { discloseInventory } from '../disclosure/read.ts';
 import type { Viewer } from '../suitability/policy.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readResourceSummaries, type SummaryReader } from './summary.ts';
@@ -158,7 +159,7 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
     for (let offset = 0; offset < realms.length; offset += 64) {
       const result = await readResourceSummaries(deps.environment, undefined, reader, {
         resources: realms.slice(offset, offset + 64), context: DEFAULT_MEDIA_CONTEXT,
-        language: null, channel: 'media',
+        language: null, channel: 'media', settleNonAgentNameOwners: 'includingAbsent',
       });
       for (const summary of result.summaries)
         if (summary.status === 'available' && summary.type === 'realm') readableRealms.add(summary.reference);
@@ -166,13 +167,20 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
     const readable = new Set<string>();
     for (const [context, resources] of byContext) {
       if (realmContexts.has(context) && !readableRealms.has(context)) continue;
-      const references = [...resources];
+      // A Realm used as its own banner target was already hydrated above.
+      // Only its contextual name policy remains; reload no names or media.
+      const ownRealm = readableRealms.has(context) && resources.has(context);
+      if (ownRealm && (await discloseInventory(deps.environment,
+        [{ owner: 'graph', resource: context, component: 'name', context, nameOwnerResolved: true }],
+        viewer, 'media'))[0] === 'visible') readable.add(`${context}\0${context}`);
+      const references = [...resources].filter(reference => !ownRealm || reference !== context);
       for (let offset = 0; offset < references.length; offset += 64) {
         const result = await readResourceSummaries(deps.environment, undefined, reader, {
           resources: references.slice(offset, offset + 64),
           context,
           language: null,
           channel: 'media',
+          settleNonAgentNameOwners: 'includingAbsent',
         });
         for (const summary of result.summaries)
           if (summary.status === 'available') readable.add(`${context}\0${summary.reference}`);
