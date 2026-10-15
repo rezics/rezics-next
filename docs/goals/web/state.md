@@ -1,5 +1,39 @@
 # State
 
+Checkpoint bb27caf8-1d34-45db-82aa-75a980ce8cb8 consolidates handled events
+task:G-2462:10, mail:be780089-5c29-4f28-b8bf-f94028b4cef8,
+mail:4bd60a72-b6b2-4da5-ae56-1d1a5a55a47e and
+mail:66583548-964b-4f91-8811-f87f8ae094ce. These dispositions supersede
+the affected holds below; later events retain their own decisions.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2462 | Task:G-2462:10 leaves `527b24f390` unaccepted: six-persona production replay, 19 mapping tests, answer-record guard, 18 inspected stories and integration run `20261015t183902-8aa9e9` passed, but complete gate `run-LckSXp` failed. Decision `43cecc5ea3` removes the integration test only from the surface selector; its separate proof remains required. Mail:be780089 assigns shared gate recovery to G-2676 and inventory repair to web. Mail:66583548 reports G-2676's measured unit shards and isolation of deliberately failed child reports, with 45 tests passing in QA `20261015t190720-ad9548`; this is infrastructure proof, not a roster verdict. Program's later brief decision `d6fb35a086` records the fix on main and authorizes rebase and the complete gate rerun. Attempt 11 was already started; its result is a separate event. Preserve all six cells and applicable capture/inspection evidence; accept only after the complete canonical gate, including affected consumers, guards and stories. No waiver or landing accepted. |
+| G-2675 | Task:G-2462:10 created and dispatched the bounded inventory repair at `ce5c5f56f2`. Mail:4bd60a72 and decision `b247337343` additionally authorize the five missing-module citations in `scripts/qa/cases/launch-coverage.ts` to name their existing direct registered tests under OWNER CHANGES. The path was reclaimed and the worker resumed. Preserve proof evidence, scope, real gaps and strict registration checks; no proof promotion or harness work. The ledger now shows verified and the brief archived; that later disposition is not a new acceptance or closure by this checkpoint. |
+
+G-2234's shared-path hold and G-2585's Program-owned retained-corpus hold
+remain as recorded below. No API row or persona cell is promoted here.
+The method's measures, current status and latest efficiency report were read.
+Scope remains 67/68 API rows and 402 proved/6 pending persona cells. Web's
+first-attempt share is 26% overall and 7% today (5 of 73); attempts per landed
+task have median 2.5 and maximum 25 (G-2237). Recorded input/output tokens
+are 2046.2M/13M, with two sessions unavailable and tokens per proved row
+unavailable. Attempt counts are 71 first, 49 step, 206 fix and 3 capacity;
+11 fixes are inferred from unavailable handoffs. Retained refusals count
+0 outcome, 11 gate, 0 failing-test findings and 18 other. These are aggregate
+readings, not costs attributed to these four events. The latest efficiency
+report remains dated 2026-10-13 21:49 UTC. These events
+identify gate budgeting, child-report contamination and stale inventory
+expectations as shared causes; the recorded repairs preserve the acceptance
+bar. No efficiency improvement is inferred before a comparable measurement.
+
+All three supplied mails were acknowledged in their deciding turns; their
+acknowledgements were confirmed here. This checkpoint supplies no new mail
+to acknowledge. It changes only this file and starts no worker, landing,
+closure, retry or watcher.
+
+## Retained checkpoint a93e497a
+
 Checkpoint a93e497a-d9eb-4254-b6a8-29e44fc89eeb consolidates handled events
 task:G-2234:5 and task:G-2585:7. These dispositions supersede the affected
 holds below; other tasks and later events retain their own decisions.
