@@ -197,14 +197,15 @@ test('Gutenberg recipes publish as copied public-domain text with source and aut
   for (const record of corpus.records) {
     const header = await recipeApi.read<{ rights: { basis: string; source: {
       provider: string; externalId: string; url: string; license: string; author: string;
-      observation: string; transcriber: string } } }>(`/v1/works/${short(record.work)}`);
+      observation: string; transcriber: string } } }>(
+      `/v1/works/${short(record.work)}?actingSubject=${encodeURIComponent(recipeActor)}`);
     expect(header.rights.basis).toBe('public-domain');
     expect(header.rights.source).toMatchObject({ provider: 'gutenberg',
       license: 'https://www.gutenberg.org/policy/license.html',
       author: record.pinId === 'artusi' ? 'Pellegrino Artusi' : 'Fannie Merritt Farmer' });
     expect(header.rights.source.externalId).toEndWith(`/${record.recipeId}`);
     const credits = await recipeApi.read<{ items: Array<{ role: string; agent: string | null; displayName: string }> }>(
-      `/v1/works/${short(record.work)}/credits`);
+      `/v1/works/${short(record.work)}/credits?actingSubject=${encodeURIComponent(recipeActor)}`);
     expect(credits.items).toContainEqual(expect.objectContaining({ role: 'author', agent: null,
       displayName: header.rights.source.author }));
     expect(credits.items).toContainEqual(expect.objectContaining({ role: 'transcriber', agent: header.rights.source.transcriber }));
@@ -224,10 +225,10 @@ test('recipes / Pinned Schema.org imports retain ordered content, quantities and
     const ingredients = pages.flatMap(item => item.ingredients);
     const occurrences = pages.flatMap(item => item.occurrences);
     if (pages.some(item => item.revision !== record.revision)) failures.push(`${record.title}: read revision differs from import`);
-    const expectedIngredients = sourceRecipe.ingredients.map(line => line.trim());
+    const expectedIngredients = sourceRecipe.ingredients;
     if (JSON.stringify(ingredients.map(item => item.originalText)) !== JSON.stringify(expectedIngredients))
       failures.push(`${record.title}: ingredient order or duplicate occurrences differ`);
-    const expectedMethods = sourceRecipe.methods.map(line => line.trim());
+    const expectedMethods = sourceRecipe.methods;
     const actualMethods = occurrences.filter(item => item.role === 'step')
       .map(item => item.qualifier?.instructionText?.value ?? '');
     if (JSON.stringify(actualMethods) !== JSON.stringify(expectedMethods)) failures.push(`${record.title}: method lines differ`);
@@ -244,16 +245,16 @@ test('recipes / Pinned Schema.org imports retain ordered content, quantities and
   const quantities = corpus.records.flatMap(record => {
     const sourceRecipe = sourceByKey.get(`${record.pinId}/${record.recipeId}`)!;
     const ingredients = (recipePages.get(record.work) ?? []).flatMap(item => item.ingredients);
-    return sourceRecipe.ingredients.map((line, index) => ({ record, line: line.trim(), index, ingredients }));
+    return sourceRecipe.ingredients.map((line, index) => ({ record, line, index, ingredients }));
   });
   const fractionRows = quantities.filter(row => /[½¼¾⅓⅔⅛⅜⅝⅞]/u.test(row.line));
   const rangeRows = quantities.filter(row => /\b\d+\s+(?:to|or)\s+\d+\b/iu.test(row.line));
   // A suffix amount is kept as text.
   const suffixFraction = fractionRows.find(row => row.record.recipeId === 'lemon-pie-iv'
-    && row.line === 'Grated rind ½ lemon');
+    && row.line.trim() === 'Grated rind ½ lemon');
   expect(suffixFraction).toBeDefined();
   const suffixIngredient = suffixFraction!.ingredients[suffixFraction!.index];
-  expect(suffixIngredient?.originalText).toBe('Grated rind ½ lemon');
+  expect(suffixIngredient?.originalText).toBe(suffixFraction!.line);
   expect(suffixIngredient?.amount).toBeUndefined();
   expect(suffixIngredient?.amountUpper).toBeUndefined();
   for (const row of quantities) {
@@ -273,7 +274,7 @@ test('recipes / Pinned Schema.org imports retain ordered content, quantities and
   const puffPages = recipePages.get(puff.work)!;
   const puffIngredients = puffPages.flatMap(item => item.ingredients);
   const puffOccurrences = puffPages.flatMap(item => item.occurrences);
-  const flour = puffIngredients.find(item => item.originalText === '1 pound pastry flour');
+  const flour = puffIngredients.find(item => item.originalText.trim() === '1 pound pastry flour');
   if (!flour)
     failures.push('Puff paste: ingredient flour line is missing');
   const puffSteps = puffOccurrences.filter(item => item.role === 'step');
