@@ -12,7 +12,7 @@ import {
   motionRunning,
   pressByKeyboard,
 } from './g-743-matrix.ts';
-import { uuid, visitor, wikiRecords, type WikiRecords } from './g-743-stack.ts';
+import { main, uuid, visitor, wikiRecords, type WikiRecords } from './g-743-stack.ts';
 
 // Launch journey `franchise-wiki`: the franchise wiki Zone for Pride and Prejudice, read inside the spoiler position
 // (G-849's records and steps, `g-849-wiki.e2e.ts`). A visitor with no account starts at chapter 1: a later
@@ -121,9 +121,15 @@ test('franchise-wiki: the spoiler position is set by keyboard alone under reduce
   await page.goto(site(locales.latin, `/characters/${uuid(seed.entities.elizabeth)}?position=all`));
   await expect(page.getByRole('heading', { level: 1, name: 'Elizabeth Bennet' })).toBeVisible();
   await checkScreen(page, 'wiki-character', found, info);
+  const relationsPath = `/v1/resources/${uuid(seed.entities.elizabeth)}/relations?position=all&limit=20`;
+  const relations = await fetch(main(relationsPath));
+  await info.attach('character-relations-response', { contentType: 'application/json',
+    body: JSON.stringify({ path: relationsPath, status: relations.status, body: await relations.text() }) });
+  const relationship = page.locator('[data-wiki-relationships]').getByRole('link', { name: 'Fitzwilliam Darcy' });
+  await expect(relationship).toBeVisible({ timeout: 30_000 });
   await keyboardReach(
     page,
-    page.locator('[data-wiki-relationships]').getByRole('link', { name: 'Fitzwilliam Darcy' }),
+    relationship,
     found,
     'relationship link',
   );

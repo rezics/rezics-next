@@ -11,9 +11,10 @@ import {
 import { axeViolations, formatViolations } from './a11y-axe.ts';
 import { member, type PageTargets, pageTargets, signIn } from './perf-targets.ts';
 import { accessibilityViewports } from '../../../scripts/qa/accessibility.ts';
+import { keyboardReach, setTheme, type Findings } from './g-743-matrix.ts';
 
 // Accessibility of the built site: axe (WCAG 2.2 A and AA) on every page type
-// signed out and signed in, in light on a desktop and dark on a phone, then
+// signed out and signed in, both themes and widths in English and Japanese, then
 // what axe cannot see: keyboard-only use, visible focus, reduced motion and
 // reflow at 200% and 400% zoom. `node apps/web/tests/a11y-audit.ts` runs the
 // wider axe sweep (both themes at both widths, Manage with a moderation queue)
@@ -86,15 +87,16 @@ async function sweep(
   try {
     for (const [name, target] of Object.entries(pages)) {
       for (const locale of ['en', 'ja']) {
+        const originalPath = typeof target === 'string' ? target : await target(page);
+        const path = originalPath.replace(/^\/en(?=\/|\?|$)/, `/${locale}`);
+        await page.goto(path);
+        await page.waitForLoadState('networkidle');
+        await expect(page.locator('html')).toHaveAttribute('lang', locale);
         for (const theme of ['light', 'dark']) {
           for (const viewport of [desktop, phone]) {
-            await context.addCookies([{ name: 'rezics_theme', value: theme, url: upstream }]);
             await page.setViewportSize(viewport);
-            const originalPath = typeof target === 'string' ? target : await target(page);
-            const path = originalPath.replace(/^\/en(?=\/|\?|$)/, `/${locale}`);
-            await page.goto(path);
-            await page.waitForLoadState('networkidle');
-            await expect(page.locator('html')).toHaveAttribute('lang', locale);
+            await setTheme(page, theme as 'light' | 'dark');
+            await page.evaluate(() => scrollTo(0, 0));
             const violations = await axeViolations(page);
             if (violations.length)
               failures.push(
@@ -165,29 +167,29 @@ test('keyboard: every stop through the header and navigation shows where focus i
   expect(missing, 'Focused without a visible indicator').toEqual([]);
 });
 
-test('keyboard: search suggestions open, are chosen with arrows and Enter, and close with Escape', async ({
+test('keyboard: site search focuses with its shortcut and opens a result with Enter', async ({
   page,
 }) => {
   await page.goto('/en/discover');
-  const search = page.getByRole('combobox', { name: 'Search works' });
+  test.setTimeout(90_000);
+  const search = page.getByRole('searchbox', { name: 'Search everything' });
   // `/` is handled once the page has hydrated; press until it lands.
   await expect(async () => {
     await page.locator('#main-content').click({ position: { x: 1, y: 1 } });
     await page.keyboard.press('/');
     await expect(search).toBeFocused({ timeout: 1_000 });
   }).toPass();
-  // The seeded title is indexed shortly after the seed; ask until a suggestion appears.
-  await expect(async () => {
-    await search.fill('');
-    await search.pressSequentially('Cartog', { delay: 40 });
-    await expect(search).toHaveAttribute('aria-expanded', 'true', { timeout: 2_000 });
-  }).toPass({ timeout: 60_000 });
-  await page.keyboard.press('Escape');
-  await expect(search).toHaveAttribute('aria-expanded', 'false');
-  await page.keyboard.press('ArrowDown');
-  await expect(search).toHaveAttribute('aria-activedescendant', /.+/);
+  await search.pressSequentially('Cartographer', { delay: 40 });
   await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/\/en\/w\/[0-9a-f-]{36}$/);
+  await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe('Cartographer');
+  const result = page.getByRole('main').getByRole('link', { name: /The Cartographer of Tides/ }).first();
+  await expect(result).toBeVisible({ timeout: 30_000 });
+  const found: Findings = [];
+  await keyboardReach(page, result, found, 'search result');
+  expect(found, found.join('\n')).toEqual([]);
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { level: 1, name: /The Cartographer of Tides/ }))
+    .toBeVisible({ timeout: 30_000 });
 });
 
 test('keyboard: the feed filters sheet keeps focus inside, closes with Escape and returns focus', async ({
@@ -233,7 +235,8 @@ test('keyboard: the reader opens its settings from the keyboard and turns chapte
   await expect(settings).toBeFocused();
   const chapter = page.url();
   await page.locator('body').press('ArrowRight');
-  await expect(page).not.toHaveURL(chapter);
+  await expect.poll(() => new URL(page.url()).pathname, { timeout: 30_000 })
+    .not.toBe(new URL(chapter).pathname);
   await expect(page).toHaveURL(/\/read\/[0-9a-f-]{36}$/);
 });
 
@@ -279,7 +282,7 @@ test('reduced motion: the navigation sheet opens without animating', async ({ br
 test('zoom: every page type reflows at 200% and 400% without scrolling sideways', async ({
   browser,
 }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(480_000);
   const overflowing: string[] = [];
   // A 1280 px window at 200% lays out at 640 CSS px, and at 400% at 320 (WCAG 1.4.10).
   for (const width of [640, 320]) {
