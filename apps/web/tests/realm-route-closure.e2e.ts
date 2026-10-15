@@ -88,9 +88,17 @@ test('realm-closure-threads: a reader cannot reopen an opening or nested reply u
   test.setTimeout(240_000);
   const findings: Findings = [];
   const thread = (locale: UiLocale, reply: string) => localizedPath(threadHref(spaceHref(fixture.realm.space, 'community'), reply), locale);
+  const liveThread = async (locale: UiLocale, item: typeof fixture.opening, bodies = [item.body]) => {
+    // A read that loses its consistency cut offers reload. Recover through
+    // that same public page; closure checks below still require immediate absence.
+    await expect(async () => {
+      await open(page, thread(locale, item.reply));
+      await page.reload();
+      for (const body of bodies) await expect(page.getByText(body, { exact: true }).first()).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 60_000, intervals: [1000] });
+  };
   for (const locale of locales) for (const item of [fixture.opening, fixture.reply]) {
-    await open(page, thread(locale, item.reply));
-    await expect(page.getByText(item.body, { exact: true }).first()).toBeVisible();
+    await liveThread(locale, item);
   }
   await fixture.closeRealm(info);
   try {
@@ -106,14 +114,16 @@ test('realm-closure-threads: a reader cannot reopen an opening or nested reply u
     await pressByKeyboard(page, page.getByRole('link', { name: japanese.browse, exact: true }), findings, 'Leave the closed reply (ja)');
     await expect(page).toHaveURL(url => url.pathname === localizedPath('/discover', 'ja'));
   } finally { await fixture.restoreRealm(info); }
+  for (const item of [fixture.opening, fixture.reply]) {
+    const path = `/api/main/v1/realms/${short(fixture.realm.realm)}/threads/${short(item.reply)}`;
+    const response = await page.request.get(path, { timeout: 60_000 });
+    const body = await response.text();
+    await closureRequestEvidence(info, 'restored-thread-read', { method: 'GET', path, status: response.status(), response: body });
+    expect(response.status(), `GET ${path}: ${body}`).toBe(200);
+  }
   for (const locale of locales) {
-    await open(page, thread(locale, fixture.opening.reply));
-    await page.reload();
-    await expect(page.getByText(fixture.opening.body, { exact: true }).first()).toBeVisible();
-    await expect(page.getByText(fixture.reply.body, { exact: true }).first()).toBeVisible();
-    await open(page, thread(locale, fixture.reply.reply));
-    await page.reload();
-    await expect(page.getByText(fixture.reply.body, { exact: true }).first()).toBeVisible();
+    await liveThread(locale, fixture.opening, [fixture.opening.body, fixture.reply.body]);
+    await liveThread(locale, fixture.reply);
   }
   await shot(page, info, 'restored-thread-ja');
   expectClean(findings);

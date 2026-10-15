@@ -102,9 +102,9 @@ for (const locale of ['en', 'ja'] as const) {
       await fixture.restrict();
       await page.reload();
       await expect(page.getByRole('heading', { level: 1, name: target.title, exact: true })).toBeVisible();
+      await loadedImage(page, 'Independent original art');
       await expect(page.getByRole('img', { name: 'Realm reply art', exact: true })).toHaveCount(0);
       await expect(page.locator('[data-slot="media-image-placeholder"]')).toHaveText(mediaMessages[locale].unavailable);
-      await loadedImage(page, 'Independent original art');
       // The browser's real byte request also refuses a retained URL, rather than relying on a UI mask.
       const bytes = await page.request.get(`/api/main/v1/media/uses/${closedImage.use}`);
       expect(bytes.status(), await bytes.text()).toBe(404);

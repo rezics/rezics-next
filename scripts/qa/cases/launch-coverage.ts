@@ -24,7 +24,6 @@ const api = (file: string, test: string, evidence?: string): ApiProof => ({ file
 const browser = api;
 const journeyBrowser = (file: string, journey: string, test: string, evidence?: string): JourneyProof => ({ file, journey, test, evidence });
 const missing = (item: string, reason?: string): MissingProof => ({ missing: item, reason });
-const realmClosureBrowserGap = 'apps/web/tests/realm-route-closure.e2e.ts defines the direct-route, thread/reply, directory and Zone journeys. Their closure prerequisite POST /v1/moderation/decisions targets graph Realm record, scopeKind=component, revision=null, effect=disclosure and returns 403 governance_denied: "decision target is outside the reported evidence". POST /v1/reports cannot capture Realm record evidence through governance/evidence.ts, so closure and restoration cannot be proved; the journey retains the exact request/response as realm-restrict-request.json.';
 
 export const launchCoverage: readonly LaunchCoverage[] = [
   {
@@ -364,7 +363,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-direct-routes.test.ts',
       'realm/closure-direct-routes / visitor: conceals closed home, teaser, adoptions, decisions and Zone entry while live controls remain readable',
       'Closes a populated Realm through platform governance and compares its home, teaser, adoptions, decisions and Zone entry with absent routes while live controls remain readable.'),
-    browser: missing('gap', realmClosureBrowserGap),
+    browser: browser('apps/web/tests/realm-route-closure.e2e.ts',
+      'realm-closure-direct: readers and the Realm owner lose direct pages after reload and recover after restoration',
+      'Public report intake supplies the exact evidence for platform closure. Readers and the owner reload concealed community tabs, retain an independent Work, and recover the community after reversal in English and Japanese.'),
   },
   {
     kind: 'realm',
@@ -372,7 +373,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-threads-and-replies.test.ts',
       'realm/closure-threads-and-replies / member: conceals closed placed threads, descendants, canonical lookup, placement and counts',
       'After Realm closure, checks placed threads, descendants, canonical lookup, placement and counts through ordinary member APIs without inheriting a membership bypass.'),
-    browser: missing('gap', realmClosureBrowserGap),
+    browser: browser('apps/web/tests/realm-route-closure.e2e.ts',
+      'realm-closure-threads: a reader cannot reopen an opening or nested reply until the Realm is restored',
+      'Opens a real discussion and nested reply, reloads both as missing after closure, then reverses the decision and recovers both through the API and browser in English and Japanese.'),
   },
   {
     kind: 'realm',
@@ -380,7 +383,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('services/main/tests/realm-platform-closure-reads.test.ts',
       'closed-directory-before-drain: hidden indexed rows are omitted and live rows remain traversable',
       'Filters closed indexed Realms before directory delivery, traverses every remaining live row and keeps continuation identifiers opaque.'),
-    browser: missing('gap', realmClosureBrowserGap),
+    browser: browser('apps/web/tests/realm-route-closure.e2e.ts',
+      'realm-closure-directory: a newcomer sees only live communities after reload and follows one by keyboard',
+      'Reloads the directory after closure, sees only the live community, follows it by keyboard and recovers the closed card after reversal in English and Japanese.'),
   },
   {
     kind: 'realm',
@@ -388,7 +393,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-zone-discussion-entry-and-modules.test.ts',
       'realm/closure-zone-discussion-entry-and-modules / visitor: loses the closed Realm entry and module sources while independent Zone pages and credited originals survive',
       'Reads published Zone entry and module sources after attached Realm closure, omitting closed Realm occurrences while preserving independent pages, original Works and author credits.'),
-    browser: missing('gap', realmClosureBrowserGap),
+    browser: browser('apps/web/tests/realm-route-closure.e2e.ts',
+      'realm-closure-zone: a visitor keeps the independent Zone while its Realm discussion and shelf disappear after reload',
+      'Reloads independent Zone pages after closure, sees their Realm discussion and adoption shelf concealed, then recovers both after reversal in English and Japanese.'),
   },
   {
     kind: 'realm',
@@ -440,7 +447,10 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-media.test.ts',
       'realm/closure-media / visitor: hides closed media metadata, exact and bare bytes and validators while independent public uses remain available',
       'Checks closed Realm media metadata, exact and bare representation bytes and conditional validators are unavailable, while independent public Uses of the shared representation remain readable.'),
-    browser: missing('gap', 'realm-closure.e2e.ts (journeys/realm-closure.ts): before closure, POST /v1/media/metadata for a cleared public reply-backed representation and Use returns HTTP 200 with items[0].status unavailable, preventing the real reader from rendering it. Exact request and answer: QA 20261014t200800-9bf7b2 logs/e2e-playwright.log.'),
+    browser: journeyBrowser('apps/web/tests/realm-closure.e2e.ts',
+      'apps/web/tests/journeys/realm-closure.ts',
+      'realm-closure-media: a reader reloads reply-backed art as unavailable while independent art survives, then sees restoration (en)',
+      'Reads cleared public reply art, reloads it as unavailable after closure while independent art survives, checks retained bytes return 404 and recovers both images after reversal; runs in English and Japanese.'),
   },
   {
     kind: 'realm',
@@ -448,7 +458,10 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-roster.test.ts',
       'realm/closure-roster / member: conceals closed roster, featured members and retained pagination like a real absent Realm',
       'Compares the closed roster, featured members and retained pagination with an absent Realm through an ordinary member session.'),
-    browser: missing('gap', 'realm-closure.e2e.ts (journeys/realm-closure.ts): the public roster conceals after completed platform closure, but GET /v1/realms/{closedRealm}/members?actingSubject={founder} still returns HTTP 200 with joined member identities, so Manage continues rendering them after reload. Exact request and answer: QA 20261014t194648-5672da logs/e2e-playwright.log.'),
+    browser: journeyBrowser('apps/web/tests/realm-closure.e2e.ts',
+      'apps/web/tests/journeys/realm-closure.ts',
+      'realm-closure-roster: a founder and listed member reload concealed public and management rosters, then recover unchanged membership (en)',
+      'Reloads public and management rosters after closure, checks the founder’s management API returns 404, retains a live community and recovers unchanged membership after reversal; runs in English and Japanese.'),
   },
   {
     kind: 'realm',

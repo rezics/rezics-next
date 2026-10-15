@@ -36,7 +36,7 @@ export async function command<T>(page: Page, method: string, path: string, data?
     ? data.idempotencyKey : randomUUID();
   for (let attempt = 0; attempt < 60; attempt++) {
     const response = await page.request.fetch(`/api/main/v1${path}`, {
-      method, data, headers: method === 'GET' ? {} : { 'idempotency-key': key },
+      method, data, timeout: 60_000, headers: method === 'GET' ? {} : { 'idempotency-key': key },
     });
     const raw = await response.text();
     if ([200, 201].includes(response.status())) return JSON.parse(raw) as T;
