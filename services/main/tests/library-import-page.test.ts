@@ -50,7 +50,7 @@ test('a review page matches as one bounded batch and rechecks write authority fo
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ nextCursor: 7,
     rows: Array.from({ length: 8 }, (_, index) => ({ index, match: { kind: 'matched' } })) });
-  expect(h.counts()).toEqual({ reads: 2, writes: 8, matching: 8, peak: 8, pages: 2, active: 0 });
+  expect(h.counts()).toEqual({ reads: 2, writes: 8, matching: 8, peak: FILE_IMPORT_COST.matchConcurrency, pages: 2, active: 0 });
   expect(h.saved.size).toBe(8);
 });
 
@@ -62,7 +62,8 @@ test('read-only review never retains matches, revoked write consent never saves,
   const revoked = fixture({ revokedWrite: true });
   expect((await revoked.read()).status).toBe(401);
   expect(revoked.saved.size).toBe(0);
-  expect(revoked.counts()).toMatchObject({ writes: 8, matching: 8, active: 0 });
+  expect(revoked.counts()).toMatchObject({ writes: FILE_IMPORT_COST.matchConcurrency,
+    matching: FILE_IMPORT_COST.matchConcurrency, active: 0 });
   const denied = fixture({ denied: true });
   expect((await denied.read()).status).toBe(403);
   expect(denied.counts()).toMatchObject({ matching: 0, pages: 0 });
