@@ -177,10 +177,9 @@ export class RealmReplyContentStore {
       id: string; variant_id: string; revision_id: string; author: string;
       root_target: string; root_revision: string; origin_realm: string | null;
       parent_reply: string | null; parent_revision: string | null; context_revision: string | null;
-    }>(`SELECT p.id, p.variant_id, r.revision_id::text, p.author,
-      p.root_target, p.root_revision, p.origin_realm, p.parent_reply, p.parent_revision::text,
-      p.context_revision FROM content.reply p
-      JOIN content.receipt r ON r.operation_id = p.operation_id WHERE p.id = $1`, [reply]);
+    }>(`SELECT p.id,p.variant_id,r.revision_id::text,p.author,p.root_target,p.root_revision,
+      p.origin_realm,p.parent_reply,p.parent_revision::text,p.context_revision
+      FROM content.discovery_reply($1) p CROSS JOIN LATERAL content.discovery_receipt(p.operation_id) r`, [reply]);
     const row = result.rows[0];
     if (!row) return null;
     return { reply: row.id, variantId: row.variant_id, revisionId: row.revision_id,
@@ -378,29 +377,7 @@ export class RealmReplyContentStore {
 
   async currentReview(realm: string, reply: string, revisionId: string,
     reviewDecisionId?: string, preparationId?: string): Promise<boolean> {
-    const result = await this.pool.query(`SELECT 1 FROM content.reply p
-      JOIN content.variant v ON v.id = p.variant_id
-      JOIN content.revision head ON head.id = v.draft_head AND head.availability = 'available'
-        AND head.body->>'deleted' = 'false'
-      JOIN content.realm_review_decision d ON d.variant_id = p.variant_id
-      JOIN content.revision r ON r.variant_id = d.variant_id AND r.id = d.revision_id
-      WHERE p.id = $1 AND d.realm = $2 AND d.revision_id = $3 AND d.outcome = 'approved'
-        -- Origin and exact review share one current owner read. A Realm-local
-        -- reply can never be disclosed through another Realm's placement.
-        AND NOT EXISTS (SELECT 1 FROM content.reply_author origin
-          WHERE origin.reply = p.id AND origin.origin_realm IS NOT NULL AND origin.origin_realm <> $2)
-        AND r.availability = 'available' AND ($4::uuid IS NULL OR d.id = $4)
-        AND ($5::text IS NULL OR EXISTS (
-          SELECT 1 FROM content.realm_placement_preparation placement
-          JOIN content.publication_preparation publication ON publication.operation_id = placement.operation_id
-          WHERE placement.operation_id = $5 AND placement.realm = d.realm
-            AND placement.variant_id = p.variant_id AND placement.revision_id = d.revision_id
-            AND placement.review_decision_id = d.id
-            AND publication.status = 'active' AND publication.pin_active))
-        AND NOT EXISTS (SELECT 1 FROM content.realm_review_decision later
-          WHERE later.supersedes = d.id) LIMIT 1`, [reply, realm, revisionId, reviewDecisionId ?? null,
-      preparationId ?? null]);
-    return result.rowCount === 1;
+    return (await this.currentReviewRows([{ realm, reply, revisionId, reviewDecisionId, preparationId }])).length > 0;
   }
 
   /** Feed batches retain each root's 64-reference probe; no per-reply owner call. */
@@ -443,41 +420,10 @@ export class RealmReplyContentStore {
   }
 
   private async currentReviewRows(heads: readonly CurrentReviewHead[], evidence = false): Promise<CurrentReviewRow[]> {
-    const rows = await this.pool.query<CurrentReviewRow>(`WITH requested AS (
-      SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(ordinal int, reply text, realm text,
-        revision text, review text, preparation text))
-SELECT x.ordinal${evidence ? `, p.id AS reply, d.realm, d.revision_id::text AS revision,
-        d.id::text AS review, prepared.operation_id AS preparation, p.origin_realm AS origin,
-        p.author, p.root_target AS root, p.root_revision, p.variant_id AS variant, r.byte_digest AS revision_digest,
-        receipt.data_epoch::text, receipt.sequence::text` : ''}
-      FROM requested x JOIN content.reply p ON p.id = x.reply
-      JOIN content.variant v ON v.id = p.variant_id
-      JOIN content.revision head ON head.id = v.draft_head AND head.availability = 'available'
-        AND head.body->>'deleted' = 'false'
-      JOIN content.realm_review_decision d ON d.variant_id = p.variant_id
-      JOIN content.revision r ON r.variant_id = d.variant_id AND r.id = d.revision_id
-      ${evidence ? `JOIN content.realm_placement_preparation prepared ON prepared.operation_id = x.preparation
-        JOIN content.receipt receipt ON receipt.operation_id = prepared.operation_id
-          AND receipt.action = 'publication.prepare' AND receipt.outcome = 'succeeded'
-          AND receipt.variant_id = prepared.variant_id AND receipt.revision_id = prepared.revision_id` : ''}
-      WHERE p.id = x.reply AND d.realm = x.realm AND d.revision_id = x.revision::uuid AND d.outcome = 'approved'
-        -- Origin and exact review share one current owner read. A Realm-local
-        -- reply can never be disclosed through another Realm's placement.
-        AND NOT EXISTS (SELECT 1 FROM content.reply_author origin
-          WHERE origin.reply = p.id AND origin.origin_realm IS NOT NULL AND origin.origin_realm <> x.realm)
-        AND r.availability = 'available' AND (x.review::uuid::uuid IS NULL OR d.id = x.review::uuid)
-        AND (x.preparation::text IS NULL OR EXISTS (
-          SELECT 1 FROM content.realm_placement_preparation placement
-          JOIN content.publication_preparation publication ON publication.operation_id = placement.operation_id
-          WHERE placement.operation_id = x.preparation AND placement.realm = d.realm
-            AND placement.variant_id = p.variant_id AND placement.revision_id = d.revision_id
-            AND placement.review_decision_id = d.id
-            AND publication.status = 'active' AND publication.pin_active))
-        AND NOT EXISTS (SELECT 1 FROM content.realm_review_decision later
-          WHERE later.supersedes = d.id)
-      ${evidence ? `ORDER BY x.ordinal LIMIT ${heads.length + 1}` : ''}
-      `, [JSON.stringify(heads.map((h, ordinal) => ({ ordinal, reply: h.reply, realm: h.realm,
-        revision: h.revisionId, review: h.reviewDecisionId ?? null, preparation: h.preparationId ?? null })))]);
+    const rows = await this.pool.query<CurrentReviewRow>(`SELECT * FROM content.discovery_current_reviews($1::jsonb,$2)
+      ${evidence ? `LIMIT ${heads.length + 1}` : ''}`,
+    [JSON.stringify(heads.map((h, ordinal) => ({ ordinal, reply: h.reply, realm: h.realm,
+      revision: h.revisionId, review: h.reviewDecisionId ?? null, preparation: h.preparationId ?? null }))), evidence]);
     return rows.rows;
   }
 
@@ -516,12 +462,12 @@ SELECT x.ordinal${evidence ? `, p.id AS reply, d.realm, d.revision_id::text AS r
     const row = (await this.pool.query<{ reply: string; author: string; rootTarget: string;
       rootRevision: string; variantId: string; revisionId: string; body: string; document: DocumentSnapshot | null; spoiler: unknown;
       revisionDigest: string; originRealm: string | null }>(`
-      SELECT p.id AS reply, p.author, p.origin_realm AS "originRealm", p.root_target AS "rootTarget", p.root_revision AS "rootRevision",
-        p.variant_id AS "variantId", r.id AS "revisionId", r.body->>'body' AS body,
-        r.body->'document' AS document, r.body->'spoiler' AS spoiler, r.byte_digest AS "revisionDigest"
-      FROM content.reply p JOIN content.variant v ON v.id = p.variant_id
-      JOIN content.revision r ON r.id = v.draft_head
-      WHERE p.id = $1 AND r.availability = 'available' AND r.body->>'deleted' = 'false'`, [reply])).rows[0];
+      SELECT p.id AS reply,p.author,p.origin_realm AS "originRealm",p.root_target AS "rootTarget",p.root_revision AS "rootRevision",
+        p.variant_id AS "variantId",r.id AS "revisionId",r.body->>'body' AS body,
+        r.body->'document' AS document,r.body->'spoiler' AS spoiler,r.byte_digest AS "revisionDigest"
+      FROM content.discovery_reply($1) p CROSS JOIN LATERAL content.discovery_variant(p.variant_id) v
+      CROSS JOIN LATERAL content.discovery_revision(v.draft_head) r
+      WHERE r.availability='available' AND r.body->>'deleted'='false'`, [reply])).rows[0];
     if (!row) return null;
     const { document, spoiler, ...result } = row;
     try {

@@ -1053,6 +1053,14 @@ export const ACCESS_RECOVERY_CLASSIFICATION: Readonly<Record<string, AccessRecov
     reset: 'DELETE FROM access.realm_directory',
     rebuild: 'RealmDirectoryIndex.refresh (services/main/src/modules/realm-directory/index.ts)',
   },
+  'access.realm_directory_growth': {
+    class: 'derived-projection',
+    writer: 'services/main/src/modules/realm-directory/index.ts; services/main/migrations/access/2600_realm_directory_growth_seek.sql',
+    writerKind: 'directory worker and per-Realm growth trigger',
+    reason: 'Rolling ranks are rebuilt from retained daily growth by the directory worker.',
+    reset: 'DELETE FROM access.realm_directory_growth',
+    rebuild: 'RealmDirectoryIndex.refresh (services/main/src/modules/realm-directory/index.ts)',
+  },
   'access.realm_directory_position': {
     class: 'derived-projection',
     writer: 'services/main/src/modules/realm-directory/index.ts', writerKind: 'projection worker',
@@ -1060,7 +1068,8 @@ export const ACCESS_RECOVERY_CLASSIFICATION: Readonly<Record<string, AccessRecov
     reset: `UPDATE access.realm_directory_position SET data_epoch = NULL, sequence = 0,
       target_sequence = NULL, refresh_after = '', rebuilding = true, generation = 0,
       revision = revision + 1, build_data_epoch = NULL, build_base_sequence = 0,
-      phase = 'idle', spare_sequence = NULL WHERE singleton`,
+      phase = 'idle', spare_sequence = NULL, growth_day = NULL, growth_target_day = NULL,
+      growth_after_generation = 0, growth_after_realm = '' WHERE singleton`,
     rebuild: 'RealmDirectoryIndex.refresh (services/main/src/modules/realm-directory/index.ts)',
   },
   'access.rate_limit_v1': {

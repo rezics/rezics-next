@@ -40,7 +40,7 @@ export interface ZoneBrowseRecoveryStatus {
 }
 export interface BrowseEntryReader {
   current(position: ReadPosition): boolean | Promise<boolean>;
-  batch(realm: string, sort: 'newest' | 'updated', after: BrowseAfter | null, position?: ReadPosition): Promise<BrowseEntry[]>;
+  batch(realm: string, sort: 'newest' | 'updated', after: BrowseAfter | null, position?: ReadPosition, batchSize?: number): Promise<BrowseEntry[]>;
 }
 
 /** One index seek per batch, O(log N + 64), O(64) memory. RDF remains the
@@ -603,7 +603,10 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     } catch { return false; }
   }
 
-  async batch(realm: string, sort: 'newest' | 'updated', after: BrowseAfter | null, position?: ReadPosition): Promise<BrowseEntry[]> {
+  async batch(realm: string, sort: 'newest' | 'updated', after: BrowseAfter | null, position?: ReadPosition, batchSize: number = ZONE_BROWSE_PROJECTION_COST.batch): Promise<BrowseEntry[]> {
+    if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > ZONE_BROWSE_PROJECTION_COST.batch) {
+      throw new RangeError('Invalid Zone browse batch size');
+    }
     if (!this.usableCut && this.handoffDeferred) return [];
     if (!this.usableCut) throw new WorkReadUnavailable(this.recoveryStatus().state === 'waiting-for-cut'
       ? 'Zone browse recovery waiting for a stable cut' : 'Zone browse backfill is not ready');
@@ -620,17 +623,17 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     let rows: Row[];
     if (sort === 'newest') {
       rows = await read(after ? 'AND (adopted_order, work) < ($2::numeric, $3::text)' : '',
-        after ? [realm, after.key, after.work] : [realm], ZONE_BROWSE_PROJECTION_COST.batch);
+        after ? [realm, after.key, after.work] : [realm], batchSize);
     } else {
       // SQL row comparison with null is unknown; seek each index partition
       // separately, avoiding both a lost null tail and a growing OR scan.
       // https://www.postgresql.org/docs/current/functions-comparisons.html
       rows = after?.key === null ? [] : await read('AND updated_at IS NOT NULL'
         + (after ? ' AND (updated_at, work) < ($2::timestamptz, $3::text)' : ''),
-      after ? [realm, after.key, after.work] : [realm], ZONE_BROWSE_PROJECTION_COST.batch);
-      if (rows.length < ZONE_BROWSE_PROJECTION_COST.batch) {
+      after ? [realm, after.key, after.work] : [realm], batchSize);
+      if (rows.length < batchSize) {
         rows.push(...await read('AND updated_at IS NULL' + (after?.key === null ? ' AND work < $2::text' : ''),
-          after?.key === null ? [realm, after.work] : [realm], ZONE_BROWSE_PROJECTION_COST.batch - rows.length));
+          after?.key === null ? [realm, after.work] : [realm], batchSize - rows.length));
       }
     }
     return rows.map(row => ({ work: row.work, adoptedOrder: row.adopted_order,

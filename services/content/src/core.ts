@@ -1013,7 +1013,8 @@ export class ContentCore {
     const result = await (client ?? contentConnection(this.pool)).query(`WITH picked AS (
       SELECT r.*, v.language_kind, v.language_tag, v.original_language_tag, v.direction, v.resource_id,
         sum(CASE WHEN r.availability = 'available' THEN r.byte_length ELSE 0 END) OVER () AS total_bytes
-      FROM content.revision r JOIN content.variant v ON v.id = r.variant_id WHERE r.id = ANY($1::uuid[])
+      FROM content.discovery_exact_revisions($1::uuid[]) r
+      CROSS JOIN LATERAL content.discovery_variant(r.variant_id) v
     ) SELECT id, variant_id, model, byte_digest, byte_length, availability,
       language_kind, language_tag, original_language_tag, direction, resource_id,
       source_revision, predecessor, provenance, total_bytes,

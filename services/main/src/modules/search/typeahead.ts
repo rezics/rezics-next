@@ -204,18 +204,18 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
       const response = validatePrefixWalkResponse(native, walkRequest);
       walks.push({ request: walkRequest, response });
       generation = response.generation;
-      entries.push(...response.entries);
+      const batchEntries = response.entries;
+      entries.push(...batchEntries);
       cursor = response.cursor; more = response.more;
-    } while (more && entries.length < cap);
     // Candidate identities, their matched fields, facets and all cards share
     // one selected dependency set, including across native walk batches.
-    const previouslyDelivered = new Set(deliveredMainVersions);
-    const visible = await session.selection(`typeahead-presentation:${JSON.stringify(entries)}`, async probe => {
-      const candidates = await queryTypeaheadCandidates(env, input.prefix, entries, work.sourceAuthorNames, probe);
+    const previouslyDelivered = new Set([...accepted.values()].map(item => item.mainVersion));
+    const visible = await session.selection(`typeahead-presentation:${JSON.stringify(batchEntries)}`, async probe => {
+      const candidates = await queryTypeaheadCandidates(env, input.prefix, batchEntries, work.sourceAuthorNames, probe);
       const relation = await present({ context: 'main-version-default' as const, sourcePosition: position,
         total: candidates.length, results: candidates });
       const seen = new Set(previouslyDelivered);
-      return { ...relation, results: entries.flatMap(entry => {
+      return { ...relation, results: batchEntries.flatMap(entry => {
         if (seen.has(entry.mainVersion)) return [];
         const row = relation.results.find(match => match.mainVersion === entry.mainVersion
           && match.matchUnit === entry.matchUnit && match.matchedField === entry.matchedField);
@@ -236,7 +236,7 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
         !== JSON.stringify({ ...after[i], avatar: undefined }))) {
         throw new SearchSnapshotMoved('Typeahead disclosure changed during hydration');
       }
-      accepted = new Map<string, TypeaheadItem>(visible.results.flatMap((row, i) => {
+      accepted = new Map<string, TypeaheadItem>([...accepted, ...visible.results.flatMap((row, i) => {
         const summary = summaries[i], final = after[i];
         return summary?.status === 'available' && summary.type === 'work' && summary.disclosure === 'public'
           ? [[`${row.mainVersion}\n${row.matchUnit}\n${row.matchedField}`, {
@@ -245,8 +245,9 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
             types: types.get(row.work) ?? [], authors: authors?.get(row.work) ?? [],
             matchedField: row.matchedField as 'title' | 'credit', matchedText: row.matchedText,
             matchedLanguage: row.matchedLanguage }]] : [];
-      }));
+      })]);
     }
+    } while (more && entries.length < cap && accepted.size < initial.pageSize);
     const items: TypeaheadItem[] = [];
     let examined = 0;
     for (const entry of entries) {

@@ -85,9 +85,9 @@ export class SerialStatisticsProjection {
   private async mainStreamCoverage(): Promise<RelayHandoffPosition> {
     const row = (
       await this.relay.query<{ stream_scope: string; data_epoch: string; sequence: string }>(
-        `SELECT stream_scope, data_epoch, coalesce(max(sequence),0)::text AS sequence
-        FROM relay.delivered_batch WHERE stream_scope = $1 AND data_epoch = $2
-        GROUP BY stream_scope, data_epoch`,
+        `SELECT $1::text AS stream_scope,$2::text AS data_epoch,
+          coalesce((SELECT max(sequence) FROM relay.delivered_batch
+            WHERE stream_scope=$1 AND data_epoch=$2),0)::text AS sequence`,
         [MAIN_RELAY_STREAM_SCOPE, this.env.lineage.dataEpoch],
       )
     ).rows[0];

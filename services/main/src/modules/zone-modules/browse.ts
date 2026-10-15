@@ -315,7 +315,10 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   // position; a continuation must restart rather than skip that missing prefix.
   if (!current && cursor) throw new WorkReadExpired('Zone browse inventory changed; restart from a current projection');
   for (let batchIndex = 0; current && batchIndex < ZONE_BROWSE_COST.batches; batchIndex++) {
-    const entries = await projection.batch(realm, appliedSort, after, session.position);
+    // Hydrate only the remaining page and one continuation witness. The
+    // inventory batch is a ceiling, not a minimum amount of request work.
+    const batchSize = Math.min(ZONE_BROWSE_COST.batchRows, limit - page.length + 1);
+    const entries = await projection.batch(realm, appliedSort, after, session.position, batchSize);
     if (!entries.length) { more = false; break; }
     const batch = await evaluate(entries.map(item => item.work), new Map(entries.map(item => [item.work, item])));
     const candidates = new Map(batch.candidates.map(item => [item.work, item]));
@@ -325,7 +328,7 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
       if (candidate) examined.push(candidate);
       if (candidate && batch.found.has(entry.work)) page.push(candidate);
       after = { work: entry.work, key: appliedSort === 'newest' ? entry.adoptedOrder : entry.updatedAt };
-      more = index + 1 < entries.length || entries.length === ZONE_BROWSE_COST.batchRows;
+      more = index + 1 < entries.length || entries.length === batchSize;
     }
     if (!more || page.length === limit) break;
   }

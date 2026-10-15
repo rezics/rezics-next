@@ -246,9 +246,9 @@ export async function startMediaStack(label: string, options: { contentProjectio
     dispatchEligible: true, replayed: false,
   });
   /** Catalogue metadata carries no invented native authorship or publication. */
-  const catalogueWork = async (actor: string, title: string) => {
-    const created = await activateMetadataWork(env, { title, language: 'en',
-      admission: admission(actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, undefined, 'en')) });
+  const catalogueWork = async (actor: string, title: string, semanticTypes?: readonly string[]) => {
+    const created = await activateMetadataWork(env, { title, language: 'en', semanticTypes,
+      admission: admission(actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, semanticTypes, 'en', {}, true)) });
     return { work: created.work, mainVersion: created.mainVersion, title };
   };
   /** A native author draft stays private until its Main selection is public. */
@@ -280,8 +280,9 @@ export async function startMediaStack(label: string, options: { contentProjectio
     return { contribution: draft.contribution, decision: publication.publicationDecision, language };
   };
   /** A Work whose Main Version selects a public native contribution; further languages stay eligible variants. */
-  const publicWork = async (actor: string, languages: string[] = ['en'], title = `${label} public ${randomUUID()}`) => {
-    const created = await catalogueWork(actor, title);
+  const publicWork = async (actor: string, languages: string[] = ['en'], title = `${label} public ${randomUUID()}`,
+    semanticTypes?: readonly string[]) => {
+    const created = await catalogueWork(actor, title, semanticTypes);
     const variants = [];
     for (const language of languages) {
       variants.push(await contribution(created.work, actor, language, `${label} ${language} ${randomUUID()}`));

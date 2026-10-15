@@ -139,7 +139,7 @@ export function realmConceptRankCut(sort: 'new' | 'best' | 'top', after: boolean
       LEFT JOIN access.realm_thread_state s ON s.data_epoch=$1 AND s.realm=$2),
     readiness AS (SELECT ready AND NOT EXISTS(SELECT 1 FROM access.realm_thread_reference
         WHERE data_epoch=$1 AND realm=$2 AND concepts IS NULL LIMIT 1)
-      AND NOT EXISTS(SELECT 1 FROM page WHERE expires_at<=clock_timestamp()) AS complete
+      AND NOT EXISTS(SELECT 1 FROM page WHERE expires_at<=statement_timestamp()) AS complete
       FROM access.read_realm_thread_scope_cut($1,$2,
         (SELECT COALESCE(array_agg(reply),'{}') FROM page),$8::uuid,$9::bigint,$10::numeric,$11::text))
     SELECT fence.open,readiness.complete,state.revision,

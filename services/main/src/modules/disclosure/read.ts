@@ -484,8 +484,7 @@ export class DisclosureStore implements DisclosureReader {
                 SELECT wanted.resource WHERE wanted."resourceKind" = 'work'
                 UNION SELECT wanted.work WHERE wanted.legacy AND wanted.work IS NOT NULL
                 UNION SELECT resource FROM parent_edges WHERE ordinal = wanted.ordinal AND kind = 'work'
-                ) work_ref CROSS JOIN LATERAL (SELECT 1 FROM access.scope_gate gate
-                  WHERE gate.id = 'work:read:' || work_ref.resource AND NOT gate.open LIMIT 1) matched) AS restricted,
+                ) work_ref WHERE access.discovery_work_read_closed(work_ref.resource)) AS restricted,
             ${suitabilityDefault ? `COALESCE((SELECT jsonb_agg(head.labels) FROM
               (SELECT wanted.resource AS ref UNION SELECT wanted.work WHERE wanted.legacy AND wanted.work IS NOT NULL
                 UNION SELECT resource FROM parent_edges

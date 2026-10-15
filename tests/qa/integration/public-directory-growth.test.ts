@@ -4,14 +4,15 @@ import { join } from 'node:path';
 import { startMediaStack } from './media-support.ts';
 import { waitForRealmDirectory } from './support/realm-directory.ts';
 import { measureGraphResponses } from './support/graph-responses.ts';
-import { meterSqlReadWork, type SqlReadWork } from './support/sql-read-work.ts';
+import { meterSqlReadWork, prepareSqlReadWork, type SqlReadWork } from './support/sql-read-work.ts';
 
 interface Page { items: { id: string }[]; nextCursor: string | null }
 interface Reading { read: string; size: number; page: number; graphCalls: number; graphRows: number;
   servedMs: number; sql: SqlReadWork }
 
 test('public directory first and next pages visit a fixed neighbourhood as Realms grow', async () => {
-  const sql = meterSqlReadWork(text => /FROM access\.realm_directory d\b/.test(text));
+  await prepareSqlReadWork();
+  const sql = meterSqlReadWork(() => true, text => /FROM access\.realm_directory(?:_growth)? [dg]\b/.test(text));
   const stack = await startMediaStack('public-directory-growth');
   const evidence: Reading[] = [];
   const failures: string[] = [];
@@ -54,7 +55,7 @@ test('public directory first and next pages visit a fixed neighbourhood as Realm
             }
             expect(result.nextCursor).toBeString();
             cursor = result.nextCursor;
-            expect(measured.value.work.plans).toHaveLength(1);
+            expect(measured.value.work.plans.some(plan => /FROM access\.realm_directory(?:_growth)? [dg]\b/.test(plan.sql))).toBe(true);
             evidence.push({ read, size, page, ...measured.cost, servedMs, sql: measured.value.work });
           }
         }
@@ -74,6 +75,7 @@ test('public directory first and next pages visit a fixed neighbourhood as Realm
     const directory = process.env.REZICS_QA_ARTIFACT_DIR ?? '.temp/public-discovery-growth';
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, 'directory-growth.json'), JSON.stringify({ evidence, failures }, null, 2));
+    writeFileSync(join(directory, `directory-growth-${process.env.REZICS_QA_RUN_ID}.json`), JSON.stringify({ evidence, failures }, null, 2));
     console.log('directory growth', JSON.stringify(evidence.map(({ sql: work, ...row }) => ({ ...row,
       sqlStatements: work.statements, sqlRowsTouched: work.rowsTouched }))));
     sql.restore();

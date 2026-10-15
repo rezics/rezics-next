@@ -259,7 +259,7 @@ export class RealmReplyThreadStore {
           FROM content.reply WHERE id = $1
         UNION ALL
         SELECT c.id, c.parent_reply, c.author, c.origin_realm, c.root_target, c.root_revision, c.created_at, t.depth + 1
-          FROM tree t JOIN content.reply c ON c.parent_reply = t.id WHERE t.depth < $2
+          FROM tree t CROSS JOIN LATERAL content.discovery_children(t.id,$4) c WHERE t.depth < $2
       ) SELECT id AS reply, parent_reply AS parent, author, origin_realm AS origin, root_target, root_revision,
         created_at, depth = $2 AND EXISTS(SELECT 1 FROM content.reply child
           WHERE child.parent_reply = tree.id) AS truncated
@@ -293,13 +293,12 @@ export class RealmReplyThreadStore {
     if (!heads.length) return new Map();
     const rows = await this.content.query<{ reply: string; parent: string | null; author: string;
       origin: string | null; root_target: string; root_revision: string; created_at: Date }>(`
-      SELECT c.id AS reply, c.parent_reply AS parent, c.author, c.origin_realm AS origin, c.root_target,
-        c.root_revision, c.created_at
-      FROM unnest($2::text[], $3::uuid[], $4::uuid[], $5::text[]) AS x(reply, revision_id, review_id, preparation_id)
-      JOIN content.reply c ON c.id = x.reply
-      WHERE ${approved('$1', 'x.reply', 'x.revision_id', 'x.review_id', 'x.preparation_id')}`,
-    [realm, heads.map(head => head.reply), heads.map(head => head.revisionId),
-      heads.map(head => head.reviewDecisionId), heads.map(head => head.preparationId)]);
+      SELECT review.reply,identity.parent_reply AS parent,review.author,review.origin,
+        review.root AS root_target,review.root_revision,review.created_at
+      FROM content.discovery_current_reviews($1::jsonb,true) review
+      CROSS JOIN LATERAL content.discovery_reply(review.reply) identity`,
+    [JSON.stringify(heads.map((head, ordinal) => ({ ordinal, realm, reply: head.reply,
+      revision: head.revisionId, review: head.reviewDecisionId, preparation: head.preparationId })))]);
     return new Map(rows.rows.map(row => [row.reply, node(row)]));
   }
 
@@ -317,16 +316,15 @@ export class RealmReplyThreadStore {
     const limit = threads.length * REALM_THREAD_COST.countPerThread;
     const rows = await this.content.query<{ thread: string; id: string; parent_reply: string; root_target: string; visible: boolean; truncated: boolean }>(`WITH RECURSIVE tree AS (
         SELECT r.id AS thread, c.id, 1 AS depth FROM unnest($2::text[]) AS r(id)
-          JOIN content.reply c ON c.parent_reply = r.id
+          CROSS JOIN LATERAL content.discovery_children(r.id,$4) c
         UNION ALL
-        SELECT t.thread, c.id, t.depth + 1 FROM tree t JOIN content.reply c ON c.parent_reply = t.id
+        SELECT t.thread, c.id, t.depth + 1 FROM tree t CROSS JOIN LATERAL content.discovery_children(t.id,$4) c
           WHERE t.depth < $3
       ), walked AS MATERIALIZED (SELECT thread, id, depth FROM tree LIMIT $4)
       SELECT thread, walked.id, reply.parent_reply, reply.root_target,
-        walked.depth = $3 AND EXISTS(SELECT 1 FROM content.reply child
-          WHERE child.parent_reply = walked.id) AS truncated,
+        walked.depth = $3 AND EXISTS(SELECT 1 FROM content.discovery_children(walked.id,1) child) AS truncated,
         ${approved('$1', 'walked.id', 'any', null, null)} AS visible FROM walked
-        JOIN content.reply reply ON reply.id = walked.id`,
+        CROSS JOIN LATERAL content.discovery_reply(walked.id) reply`,
     [realm, [...threads], REALM_THREAD_COST.depth, limit + 1]);
     const reader = disclosurePoolReader(this.access);
     const candidates = rows.rows.filter(row => row.visible);

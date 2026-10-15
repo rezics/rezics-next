@@ -17,6 +17,7 @@ interface DirectoryPosition {
   build_data_epoch: string | null; build_base_sequence: string; target_sequence: string | null;
   spare_sequence: string | null; refresh_after: string; rebuilding: boolean;
   phase: 'idle' | 'clean' | 'copy' | 'graph' | 'sync-clean' | 'sync-copy';
+  growth_day: string | null;
 }
 
 /** Derived, rebuildable projection. Source updates and deletions commit with
@@ -24,9 +25,7 @@ interface DirectoryPosition {
  * streams bounded source batches, then synchronizes the spare generation.
  * Ordinary updates copy and hydrate only affected Realms.
  * Activity, member and newest pages seek an ordered B-tree: O(log R + P).
- * Growing reads at most seven daily aggregate rows per Realm and sorts in SQL;
- * substring search can scan the matching order O(R). No path materializes the
- * whole directory in JS. */
+ * Growing seeks maintained seven-day ranks in the same way. */
 export class RealmDirectoryIndex {
   constructor(private readonly pool: Pool) {}
   private refreshNudge: (() => void) | undefined;
@@ -38,19 +37,48 @@ export class RealmDirectoryIndex {
       build_data_epoch = NULL, revision = revision + 1 WHERE singleton`);
   }
 
-  private async upsert(client: PoolClient, candidate: Candidate, generation: number): Promise<void> {
+  private async upsert(client: PoolClient, candidate: Candidate, generation: number, epoch: string): Promise<void> {
     const count = candidate.profile?.count;
     await client.query(`INSERT INTO access.realm_directory
-      (realm, space, profile, created, activity, search_text, count_kind, count_value, topics, generation)
+      (realm, space, profile, created, activity, search_text, count_kind, count_value, topics, generation, growth_epoch)
       VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7 = 'exact' THEN
-        COALESCE((SELECT value FROM access.realm_member_count WHERE realm = $1),0) ELSE $8 END,$9,$10)
+        COALESCE((SELECT value FROM access.realm_member_count WHERE realm = $1),0) ELSE $8 END,$9,$10,$11)
       ON CONFLICT (generation,realm) DO UPDATE SET space = EXCLUDED.space, profile = EXCLUDED.profile,
         created = EXCLUDED.created, activity = EXCLUDED.activity, search_text = EXCLUDED.search_text,
         count_kind = EXCLUDED.count_kind, count_value = EXCLUDED.count_value,
-        topics = EXCLUDED.topics`,
+        topics = EXCLUDED.topics, growth_epoch = EXCLUDED.growth_epoch`,
     [candidate.id, candidate.space, candidate.profile, candidate.created.toString(),
       candidate.activity.toString(), candidate.search, count?.kind ?? 'unknown', count?.value ?? -1,
-      candidate.topics, generation]);
+      candidate.topics, generation, epoch]);
+  }
+
+  /** Prepare at most one source batch of rolling ranks per tick. A midnight
+   * rollover never sorts or rebuilds the directory on a public request. */
+  private async prepareGrowth(): Promise<boolean> {
+    return withAccessClient(this.pool, async client => {
+      try {
+        await client.query('BEGIN');
+        const state = (await client.query<{ ready: boolean; generation: number; realm: string }>(`UPDATE access.realm_directory_position
+          SET growth_after_generation=CASE WHEN growth_target_day=(now() AT TIME ZONE 'UTC')::date THEN growth_after_generation ELSE 0 END,
+            growth_after_realm=CASE WHEN growth_target_day=(now() AT TIME ZONE 'UTC')::date THEN growth_after_realm ELSE '' END,
+            growth_target_day=(now() AT TIME ZONE 'UTC')::date
+          WHERE singleton RETURNING growth_day=growth_target_day AS ready,
+            growth_after_generation AS generation,growth_after_realm AS realm`)).rows[0]!;
+        if (state.ready) { await client.query('COMMIT'); return true; }
+        const rows = (await client.query<{ generation: number; realm: string; growth_epoch: string }>(`SELECT generation,realm,growth_epoch
+          FROM access.realm_directory WHERE (generation,realm)>($1::smallint,$2::text)
+          ORDER BY generation,realm LIMIT $3`, [state.generation,state.realm,REALM_DIRECTORY_COST.sourceBatch])).rows;
+        await this.lockCounts(client, [...new Set(rows.map(row => row.realm))].sort());
+        for (const row of rows) await client.query('SELECT access.prepare_realm_directory_growth_row($1::smallint,$2,$3)',
+          [row.generation,row.realm,row.growth_epoch]);
+        const last = rows.at(-1);
+        await client.query(`UPDATE access.realm_directory_position SET growth_after_generation=$1,growth_after_realm=$2,
+          growth_day=CASE WHEN $3 THEN growth_target_day ELSE growth_day END WHERE singleton`,
+        [last?.generation ?? state.generation,last?.realm ?? state.realm,rows.length < REALM_DIRECTORY_COST.sourceBatch]);
+        await client.query('COMMIT');
+        return rows.length < REALM_DIRECTORY_COST.sourceBatch;
+      } catch (error) { await client.query('ROLLBACK'); throw error; }
+    });
   }
 
   /** Background-only. All HTTP reads precede the short local transaction.
@@ -60,10 +88,11 @@ export class RealmDirectoryIndex {
     const recovery = (await this.pool.query<{ generation: string }>(
       'SELECT generation::text FROM access.recovery_fence WHERE id AND open')).rows[0];
     if (!recovery) throw new WorkReadUnavailable('Realm directory recovery is held');
+    const growthReady = await this.prepareGrowth();
     const prior = (await this.pool.query<DirectoryPosition>(
       'SELECT * FROM access.realm_directory_position WHERE singleton')).rows[0]!;
     if (prior.data_epoch === session.position.dataEpoch && prior.sequence === session.position.sequence
-      && prior.build_data_epoch === session.position.dataEpoch && prior.phase === 'idle') return true;
+      && prior.build_data_epoch === session.position.dataEpoch && prior.phase === 'idle') return growthReady;
     let phase = prior.phase;
     let rebuilding = prior.rebuilding;
     let base = prior.build_base_sequence;
@@ -149,10 +178,10 @@ export class RealmDirectoryIndex {
           FROM (SELECT realm FROM access.realm_directory WHERE generation = $1 AND realm > $2
             ORDER BY realm LIMIT $3) batch`, [prior.generation, after, batchSize]);
         const copied = await client.query<{ realm: string }>(`INSERT INTO access.realm_directory
-          (generation,realm,space,profile,created,activity,search_text,count_kind,count_value,topics)
+          (generation,realm,space,profile,created,activity,search_text,count_kind,count_value,topics,growth_epoch)
           SELECT $1,realm,space,profile,created,activity,search_text,count_kind,
             CASE WHEN count_kind = 'exact' THEN COALESCE((SELECT value FROM access.realm_member_count c
-              WHERE c.realm = access.realm_directory.realm),0) ELSE count_value END,topics
+              WHERE c.realm = access.realm_directory.realm),0) ELSE count_value END,topics,growth_epoch
           FROM access.realm_directory WHERE generation = $2 AND realm > $3 ORDER BY realm LIMIT $4 RETURNING realm`,
         [generation, prior.generation, after, batchSize]);
         after = copied.rows.at(-1)?.realm ?? after;
@@ -166,10 +195,10 @@ export class RealmDirectoryIndex {
           await client.query('DELETE FROM access.realm_directory WHERE generation = $1 AND realm = ANY($2::text[])',
             [generation, changed]);
           await client.query(`INSERT INTO access.realm_directory
-            (generation,realm,space,profile,created,activity,search_text,count_kind,count_value,topics)
+            (generation,realm,space,profile,created,activity,search_text,count_kind,count_value,topics,growth_epoch)
             SELECT $1,realm,space,profile,created,activity,search_text,count_kind,
               CASE WHEN count_kind = 'exact' THEN COALESCE((SELECT value FROM access.realm_member_count c
-                WHERE c.realm = access.realm_directory.realm),0) ELSE count_value END,topics
+                WHERE c.realm = access.realm_directory.realm),0) ELSE count_value END,topics,growth_epoch
             FROM access.realm_directory WHERE generation = $2 AND realm = ANY($3::text[]) ORDER BY realm`,
           [generation, prior.generation, changed]);
         }
@@ -180,7 +209,7 @@ export class RealmDirectoryIndex {
         await this.lockCounts(client, [...new Set([...changed, ...candidates.map(candidate => candidate.id)])]);
         if (changed.length) await client.query(`DELETE FROM access.realm_directory
           WHERE generation = $1 AND realm = ANY($2::text[])`, [generation, changed]);
-        for (const candidate of candidates) await this.upsert(client, candidate, generation);
+        for (const candidate of candidates) await this.upsert(client, candidate, generation, session.position.dataEpoch);
       }
       // A finished target is the position this pass read. Publishing only when
       // that target still equals the pin would skip the commit whenever the
@@ -204,7 +233,7 @@ export class RealmDirectoryIndex {
         publish || phase === 'idle' || phase === 'sync-clean' || phase === 'sync-copy' ? null : target,
         publish ? '' : after, !publish && rebuilding, phase, spareSequence]);
       await client.query('COMMIT');
-      return phase === 'idle' && (publish || prior.sequence === session.position.sequence);
+      return growthReady && phase === 'idle' && (publish || prior.sequence === session.position.sequence);
     } catch (error) {
       await client.query('ROLLBACK');
       if (error instanceof WorkReadUnavailable || error instanceof WorkReadMoved) throw error;
@@ -250,11 +279,11 @@ export class RealmDirectoryIndex {
       session.options.language ?? null];
     const column = input.sort === 'members' ? 'count_value' : input.sort === 'newest' ? 'created' : 'activity';
     const growing = input.sort === 'growing';
-    const rankColumn = growing ? '-COALESCE(g.growth,0)' : `-d.${column}`;
+    const rankColumn = growing ? '-g.growth' : `-d.${column}`;
     return withAccessClient(this.pool, async client => {
       try {
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        await client.query("SET LOCAL statement_timeout = '5s'");
+        await client.query("SET LOCAL statement_timeout = '5s'; SET LOCAL enable_seqscan=off; SET LOCAL enable_bitmapscan=off; SET LOCAL enable_hashjoin=off; SET LOCAL enable_mergejoin=off");
         if (!(await client.query('SELECT 1 FROM access.recovery_fence WHERE id AND open')).rowCount) {
           throw new WorkReadUnavailable('Realm directory recovery is held');
         }
@@ -265,6 +294,11 @@ export class RealmDirectoryIndex {
           throw new WorkReadUnavailable('Realm directory is not built', {
             cause: new RealmDirectoryWarming('Realm directory is warming up'),
           });
+        }
+        if (growing && !(await client.query(`SELECT 1 FROM access.realm_directory_position
+          WHERE singleton AND growth_day=(now() AT TIME ZONE 'UTC')::date`)).rowCount) {
+          this.refreshNudge?.();
+          throw new WorkReadUnavailable('Realm growth ranks are warming up', { cause: new RealmDirectoryWarming() });
         }
         const sourcePosition: ReadPosition = { dataEpoch: source.data_epoch, sequence: source.sequence };
         const cursor = input.seek ? { after: input.seek.id, order: input.seek.key }
@@ -285,20 +319,20 @@ export class RealmDirectoryIndex {
           if (!order || !/^-?\d+$/.test(order)) throw new WorkReadMoved('Realm directory cursor is unavailable');
           rank = order;
         }
-        const rows = (await client.query<DirectoryRow>(`${growing ? `WITH growth AS (
-          SELECT realm, SUM(members + posts) AS growth FROM access.realm_growth_day
-          WHERE day BETWEEN $6::date - 6 AND $6::date
-            AND (data_epoch = '' OR data_epoch = $7::text)
-          GROUP BY realm)` : ''}
+        const rows = (await client.query<DirectoryRow>(`
           SELECT d.realm, d.space, d.profile,
           (${rankColumn})::text AS rank, d.count_value::text, COALESCE(c.revision,0)::text AS count_revision
-          FROM access.realm_directory d LEFT JOIN access.realm_member_count c ON c.realm = d.realm
-          ${growing ? 'LEFT JOIN growth g ON g.realm = d.realm' : ''}
-          WHERE ${cursor ? `(${rankColumn}, d.realm) > ($1::numeric, $2::text)` : "$1::numeric IS NULL AND $2::text = ''"}
+          ${growing ? `FROM access.realm_directory_growth g
+            CROSS JOIN LATERAL (SELECT * FROM access.realm_directory candidate
+              WHERE candidate.generation=g.generation AND candidate.realm=g.realm LIMIT 1) d`
+            : 'FROM access.realm_directory d'}
+          LEFT JOIN access.realm_member_count c ON c.realm = d.realm
+          WHERE ${cursor ? `(${rankColumn}, ${growing ? 'g' : 'd'}.realm) > ($1::${growing ? 'bigint' : 'numeric'}, $2::text)` : "$1::numeric IS NULL AND $2::text = ''"}
             AND ($3::text = '' OR strpos(d.search_text, $3) > 0)
             AND ($5::text IS NULL OR d.topics @> ARRAY[$5::text])
-            AND d.generation = ${growing ? '$8' : '$6'}::smallint
-          ORDER BY ${rankColumn}, d.realm LIMIT $4`,
+            AND ${growing ? 'g' : 'd'}.generation = ${growing ? '$8' : '$6'}::smallint
+            ${growing ? 'AND g.day=$6::date AND g.data_epoch=$7::text' : ''}
+          ORDER BY ${rankColumn}, ${growing ? 'g' : 'd'}.realm LIMIT $4`,
         growing ? [rank, cursor?.after ?? '', input.q, limit + 1, input.topic ?? null,
           positionRow.day, sourcePosition.dataEpoch, source.generation]
           : [rank, cursor?.after ?? '', input.q, limit + 1, input.topic ?? null, source.generation])).rows;
