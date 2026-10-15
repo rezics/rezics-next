@@ -28,13 +28,9 @@ export class AccessRealmRoster {
       const policy = await readRealmPolicy(this.env,realm);
       if (policy?.visibility !== 'public' || (await client.query(`SELECT 1 FROM access.realm_admin_settings
         WHERE realm = $1 AND visibility <> 'public' UNION ALL SELECT 1 FROM access.realm_policy_delivery
-        WHERE realm = $1 AND NOT delivered LIMIT 1`,[realm])).rowCount) throw new RealmAdminDenied('Public roster is unavailable');
-      // Bound candidates before eligibility joins. A page may contain fewer
-      // visible members; its cursor advances over every examined candidate.
-      const candidates = (await client.query<{ member: string; membership_id: string }>(`SELECT member,membership_id
-        FROM access.realm_roster_listing WHERE realm = $1 AND listed ${options.featured ? 'AND featured' : ''}
-          AND ($2::text IS NULL OR member > $2) ORDER BY member LIMIT $3 FOR SHARE`,
-      [realm,options.after ?? null,limit + 1])).rows;
+        WHERE realm = $1 AND NOT delivered LIMIT 1`,[realm])).rowCount) throw new RealmAdminDenied('Realm is unavailable');
+      // Eligibility precedes the page bound: the seek key is public response
+      // data, so even an empty page must never carry a restricted member's ID.
       const rows = (await client.query<{ member: string; featured: boolean; display_name: string | null }>(`
         SELECT l.member,l.featured,p.display_name FROM access.realm_roster_listing l
         JOIN access.membership m ON m.id = l.membership_id AND m.generation = l.membership_generation
@@ -42,11 +38,11 @@ export class AccessRealmRoster {
         JOIN access.authority_subject s ON s.id = l.member AND s.active
         LEFT JOIN access.agent_provision p ON p.agent_id = l.member AND p.state = 'active'
         WHERE l.realm = $1 AND l.listed ${options.featured ? 'AND l.featured' : ''}
-          AND l.membership_id = ANY($2::uuid[])
+          AND ($2::text IS NULL OR l.member > $2)
           AND NOT EXISTS (SELECT 1 FROM access.membership_ban b WHERE b.kind = 'realm'
             AND b.owner_subject = l.realm AND b.member_subject = l.member AND b.active
             AND (b.expires_at IS NULL OR b.expires_at > clock_timestamp()))
-        ORDER BY l.member LIMIT $3 FOR SHARE OF l,m,s`,[realm,candidates.slice(0,limit).map(row => row.membership_id),limit])).rows;
+        ORDER BY l.member LIMIT $3 FOR SHARE OF l,m,s`,[realm,options.after ?? null,limit + 1])).rows;
       const end = await readRealmPolicy(this.env,realm);
       if (end?.visibility !== 'public' || end.revision !== policy.revision) throw new RealmAdminStale('Realm visibility changed');
       const page = rows.slice(0,limit);
@@ -62,7 +58,7 @@ export class AccessRealmRoster {
       if (decisions[0] !== 'visible') throw new RealmAdminDenied('Realm is unavailable');
       return { items: page.map(row => ({ agent: row.member,
         displayName: visible.has(row.member) ? row.display_name : null, featured: row.featured })),
-        nextCursor: candidates.length > limit ? candidates[limit - 1]!.member : null };
+        nextCursor: rows.length > limit ? rows[limit - 1]!.member : null };
     });
   }
 

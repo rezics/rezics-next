@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { originalRecipe, short, type RecipeWork } from '../../../scripts/qa/cases/outcomes/recipes/read-a-recipe.ts';
-import { personaSessions, type PersonaSessions } from '../support/personas.ts';
+import { personaNames, personaSessions, type PersonaSessions } from '../support/personas.ts';
 import { comparableBody } from '../support/hidden-id-equality.ts';
 
 setDefaultTimeout(180_000);
@@ -12,6 +12,33 @@ beforeAll(async () => {
   published = await originalRecipe(sessions.owner, 'Published exact export', { laterDraft: true });
 }, 240_000);
 afterAll(async () => { await sessions?.close(); });
+
+for (const name of personaNames) test(`${name}: private recipe exports and exact drafts cannot be cache-validated outside their audience`, async () => {
+  const person = sessions[name];
+  const actor = person.actingSubject ?? sessions.stranger.actingSubject!;
+  for (const format of ['native', 'schema-org']) {
+    for (const selected of [
+      { structure: short(privateRecipe.structure) },
+      { structure: short(published.structure), revision: published.draftRevision! },
+    ]) {
+      const query = new URLSearchParams({ actingSubject: actor, format,
+        ...(selected.revision ? { revision: selected.revision } : {}) });
+      const path = `/v1/recipes/${selected.structure}/export?${query}`;
+      const response = await person.main('GET', path, undefined, undefined, { headers: { 'if-none-match': '*' } });
+      const bytes = await response.text();
+      expect(response.status, `${path}: ${bytes}`).toBe(name === 'visitor' ? 401 : name === 'owner' ? 200 : 404);
+      if (name !== 'owner') {
+        const absentQuery = new URLSearchParams(query);
+        if (selected.revision) absentQuery.set('revision', `https://rezics.com/id/${randomUUID()}`);
+        const missing = await person.main('GET', `/v1/recipes/${selected.revision ? selected.structure : randomUUID()}/export?${absentQuery}`,
+          undefined, undefined, { headers: { 'if-none-match': '*' } });
+        expect(response.status).toBe(missing.status);
+        expect(comparableBody(bytes)).toBe(comparableBody(await missing.text()));
+        expect(response.headers.get('etag')).toBeNull();
+      }
+    }
+  }
+});
 
 test('native and Schema.org exports conceal hidden Structures and draft revisions exactly like missing ones', async () => {
   if (!published.draftRevision) throw new Error('fixture requires a private successor');

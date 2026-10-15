@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
-import type { VerifiedPrincipal } from './admission.ts';
+import { AdmissionDenied, type VerifiedPrincipal } from './admission.ts';
+import { withRealmPermit } from './realm-management-policy.ts';
 import { REALM_ADMIN_COST, REALM_ROLE_CAP, REALM_ROLE_HOLDER_PREVIEW, REALM_ROLE_HOLDER_PROBE,
   REALM_ROLE_READ_LIMIT, RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid,
   RealmAdminLimit, RealmAdminStale, RealmAdminUnavailable, escalationCommand, roleCommand,
@@ -197,11 +198,19 @@ export class AccessRealmManagement {
     return this.transaction(realm, run, false, false);
   }
 
-  private async readDisclosedRoster<T>(realm: string, principal: VerifiedPrincipal,
+  private async readDisclosedRoster<T>(realm: string, principal: VerifiedPrincipal, actor: string,
     env: WorkActivationEnvironment | undefined, run: (client: PoolClient, generation: string) => Promise<T>) {
     const fence = async () => {
       if (!env) return;
-      if (!await readRealmPolicy(env, realm)) throw new WorkReadMissing('Realm is unavailable');
+      const policy = await readRealmPolicy(env, realm);
+      if (!policy) throw new WorkReadMissing('Realm is unavailable');
+      if (policy.visibility === 'private') {
+        try { await withRealmPermit(this.pool, principal, actor, realm, 'read', async () => {}); }
+        catch (error) {
+          if (error instanceof AdmissionDenied) throw new WorkReadMissing('Realm is unavailable');
+          throw error;
+        }
+      }
       const decisions = await discloseInventory(env, [{ owner: 'graph', resource: realm,
         component: 'record' }], disclosureViewer(principal), 'read');
       if (decisions[0] !== 'visible') throw new WorkReadMissing('Realm is unavailable');
@@ -519,7 +528,7 @@ export class AccessRealmManagement {
   }
 
   roles(principal: VerifiedPrincipal, realm: string, actor: string, env?: WorkActivationEnvironment) {
-    return this.readDisclosedRoster(realm, principal, env, async (client, generation) => {
+    return this.readDisclosedRoster(realm, principal, actor, env, async (client, generation) => {
       await this.authorize(client, principal, realm, actor, 'realm.roles.manage');
       // Holder names are member identities. Only someone who can already read
       // members may see them. Null, not [], so a roles-only manager is not told
@@ -551,7 +560,7 @@ export class AccessRealmManagement {
       || options.role !== undefined && !roleUuid.test(options.role)) {
       throw new RealmAdminInvalid('Invalid member page');
     }
-    return this.readDisclosedRoster(realm, principal, env, async (client, generation) => {
+    return this.readDisclosedRoster(realm, principal, options.actingSubject, env, async (client, generation) => {
       await this.authorize(client, principal, realm, options.actingSubject, 'realm.members.manage');
       // A role search seeks holders, then this page projects them. A realm-wide
       // name page would drop holders who sort after it.
