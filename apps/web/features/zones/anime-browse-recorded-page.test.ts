@@ -41,7 +41,8 @@ async function visit(persona: AnswerPersona, label: string, locale: UiLocale = '
   })));
   const requests: { path: string; authorization: string | null }[] = [], gaps: string[] = [];
   const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = new Request(input, init), url = new URL(request.url);
+    const request = new Request(input instanceof Request ? input : new URL(String(input), 'https://recorded.invalid'), init);
+    const url = new URL(request.url);
     requests.push({ path: url.pathname + url.search, authorization: request.headers.get('authorization') });
     try { return await replay.fetcher(input, init); }
     catch (error) { gaps.push(String(error)); throw error; }
