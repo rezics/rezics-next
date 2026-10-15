@@ -71,7 +71,8 @@ export function registerGamesJourneys() {
       const speculativeWorks: string[] = [];
       page.on('request', request => {
         const headers = request.headers();
-        if (headers['next-router-prefetch'] || headers.purpose === 'prefetch') speculativeWorks.push(request.url());
+        if ((headers['next-router-prefetch'] || headers.purpose === 'prefetch')
+          && new URL(request.url()).pathname.split('/').includes('w')) speculativeWorks.push(request.url());
       });
       await signInAtAccounts(page, '/en', credentials().member);
       await visitJourney(page, localizedPath(realmWorkHref(games.handle, work.work), locale));
