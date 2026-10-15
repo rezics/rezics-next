@@ -22,8 +22,8 @@ export function ReadingStats({ stats, locale, messages }: { stats: Loaded<Readin
     <div className="grid gap-1">
       <h2 id="library-reading-stats" className="font-semibold text-xl">{title}</h2>
       <p className="flex flex-wrap gap-x-4 text-muted-foreground text-sm tabular-nums">
-        <span>{t.booksFinished({ count: data.books })}</span>
-        <span>{t.chaptersFinished({ count: data.chapters })}</span></p>
+        <span>{t.booksFinished(data.books)}</span>
+        <span>{t.chaptersFinished(data.chapters)}</span></p>
     </div>
     <div className="grid gap-3 text-sm sm:grid-cols-2">
       {data.averageRating !== null && data.ratedBooks !== null && <p>{t.averageRating({ rating: number(data.averageRating),
@@ -45,7 +45,7 @@ export function ReadingStats({ stats, locale, messages }: { stats: Loaded<Readin
           const name = new Intl.DateTimeFormat(locale, { month: 'short', timeZone: 'UTC' })
             .format(new Date(Date.UTC(data.year, month.month - 1, 1)));
           return <li key={month.month} aria-label={t.monthStats({ month: name,
-            books: t.booksFinished({ count: month.books }), chapters: t.chaptersFinished({ count: month.chapters }) })}
+            books: t.booksFinished(month.books), chapters: t.chaptersFinished(month.chapters) })}
             className="grid justify-items-center gap-1 text-xs tabular-nums">
             <span className="font-medium">{number(month.books)}</span>
             <span aria-hidden="true" className="flex h-20 w-full items-end rounded-sm bg-background/70">

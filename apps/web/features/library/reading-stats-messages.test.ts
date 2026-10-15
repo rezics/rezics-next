@@ -21,16 +21,16 @@ test.each([
 ] as const)('%s reading totals use the locale’s singular and plural forms',
   (locale, copy, oneBook, twoBooks, oneChapter, twoChapters) => {
     const t = materializeData({ ...messages, ...copy }, { locale });
-    expect(t.booksFinished({ count: 1 })).toBe(oneBook);
-    expect(t.booksFinished({ count: 2 })).toBe(twoBooks);
-    expect(t.chaptersFinished({ count: 1 })).toBe(oneChapter);
-    expect(t.chaptersFinished({ count: 2 })).toBe(twoChapters);
+    expect(t.booksFinished(1)).toBe(oneBook);
+    expect(t.booksFinished(2)).toBe(twoBooks);
+    expect(t.chaptersFinished(1)).toBe(oneChapter);
+    expect(t.chaptersFinished(2)).toBe(twoChapters);
   });
 
 test('zero and large totals retain locale plural selection and number formatting', () => {
   const en = materializeData(messages, { locale: 'en' });
   const french = materializeData({ ...messages, ...fr }, { locale: 'fr' });
-  expect(en.chaptersFinished({ count: 0 })).toBe('0 chapters completed');
-  expect(french.chaptersFinished({ count: 0 })).toBe('Chapitre terminé : 0');
-  expect(en.booksFinished({ count: 1000 })).toBe('1,000 books finished');
+  expect(en.chaptersFinished(0)).toBe('0 chapters completed');
+  expect(french.chaptersFinished(0)).toBe('Chapitre terminé : 0');
+  expect(en.booksFinished(1000)).toBe('1,000 books finished');
 });
