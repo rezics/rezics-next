@@ -55,13 +55,9 @@ export async function seedRealmRanking(sessions: PersonaSessions, size: number, 
       reviewDecisionId: null, expectedHead: null, actingSubject: author }), 201);
     return reply;
   };
-  for (let start = 0; start < size; start += 8) {
-    const results = await Promise.allSettled(Array.from({ length: Math.min(8, size - start) }, (_, offset) => create(start + offset)));
-    for (const result of results) {
-      if (result.status === 'rejected') throw result.reason;
-      replies.push(result.value);
-    }
-  }
+  // Identity root reads and placement commands share the native graph writer.
+  // These small cursor inventories must not queue concurrent graph commands.
+  for (let index = 0; index < size; index++) replies.push(await create(index));
   return replies;
 }
 
