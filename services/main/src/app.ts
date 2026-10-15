@@ -330,7 +330,7 @@ function extraRoutes8(fuseki: FusekiClient, work: SearchRouteDependencies) {
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
 export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependencies) {
-  if (work?.environment && work.access.admittedActingSubject) {
+  if (work?.environment && work.access?.admittedActingSubject) {
     work.environment.accessAdmission = { admittedActingSubject: work.access.admittedActingSubject.bind(work.access) };
   }
   work?.memberships?.configureFollowGraph?.(fuseki);
