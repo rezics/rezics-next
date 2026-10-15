@@ -117,9 +117,10 @@ status, media type and retry headers through that path. The address-miss
 response mapper serializes the same refusal at the final mapping boundary.
 
 The inference baseline was recorded again with three fresh samples after the
-compiler environment changed. Relative to the previous baseline, Main, web and
-Eden instantiations rose by 10.1%, 8.5% and 21.9%; rendered route types shrank
-by 15.0%. Median checks were 15.347 s, 31.286 s and 11.122 s on the shared host.
+compiler environment changed and wave/2 merged. Relative to main’s previous
+baseline, Main, web and Eden instantiations rose by 8.2%, 9.1% and 6.2%; rendered
+route types shrank by 14.2%. Median checks were 20.588 s, 33.873 s and 13.175 s
+on the shared host. The recorded source revision includes the merged wave/2 tree.
 The baseline retains the existing 5% graph/display margin, timing margin and
 independent 30-second Eden wall limit. This records the cost of the new
 dependency cohort so future application changes are measured against it.
@@ -127,9 +128,11 @@ dependency cohort so future application changes are measured against it.
 Storybook 11 alpha.6 and Vitest 5.0.4 use the matching Playwright 1.64.1
 Chromium revision. Web story tests now use reduced motion, as Accounts already
 does, so automatic accessibility checks observe settled controls rather than
-an enabling opacity transition. Asset forwarding retries only connection resets
-on idempotent asset GETs; HTTP errors, application API calls and stories are not
-retried. A real TCP-reset test covers that boundary.
+an enabling opacity transition. Storybook asset forwarding retries only connection
+resets on idempotent asset GETs; HTTP errors, application API calls and stories
+are not retried. A real TCP-reset test covers that boundary. Browser journeys
+retain main’s loopback Chromium interface-change protection, route disposables
+and callback draining instead of intercepting assets; API commands are never replayed.
 The session lifecycle and bilingual Work-creation journeys allow 90 seconds
 for their multiple hydrated navigations; their existing assertions remain.
 
