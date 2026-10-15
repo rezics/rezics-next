@@ -1,6 +1,6 @@
 # Private anchored journals and return state
 
-Status: proposal for program review, 2026-10-16. This note proposes ownership
+Status: decided by program on 2026-10-16 (see Program review). This note proposes ownership
 and semantics for competitor-coverage finding B06. It adds no contracts, scope
 rows, operations, schemas or implementation. Program reviews the proposal before
 the contract step.
@@ -242,3 +242,11 @@ The later UI must make privacy, exact/unresolved targets, conflicts and leaving
 understandable while preserving richer saved state. This static review and
 documentation check establish neither API behavior, human usability nor
 competitor replacement parity.
+
+## Program review
+
+Accepted on 2026-10-16 as proposed: private custody in Content, no sharing in
+the first cut, exact anchors with explicit reanchoring only, the ordered-marker
+meaning and the admission budgets. The contract and pending-row step follows on
+the same pattern as the other decided capabilities, after the wave merges that
+change Content's owners.
