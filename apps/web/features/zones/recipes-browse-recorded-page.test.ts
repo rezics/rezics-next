@@ -566,7 +566,7 @@ test('both Recipe records keep the header follow-state refresh for a null level'
       expect(state.body).toBeUndefined();
       expect(url.pathname).toBe('/v1/me/follow-state');
       expect([...url.searchParams.keys()]).toEqual(['actingSubject', 'target']);
-      expect(url.searchParams.get('actingSubject')).toBe(actingSubject(record));
+      expect(url.searchParams.get('actingSubject') ?? null).toBe(actingSubject(record) ?? null);
       expect(url.searchParams.get('target')).toBe((sampleOf(record, who, 'frame-realm-header').answer as { id: string }).id);
     }
   }
