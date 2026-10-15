@@ -76,6 +76,33 @@ function ready(identity: RecipeIdentity): asserts identity is Extract<RecipeIden
   if (identity.kind !== 'ready') throw new Error(`Recipe identity was ${identity.kind} (${identity.failure})`);
 }
 
+test('a transient unavailable Recipe read is recovered with the identical actor and selection', async () => {
+  const requests: string[] = [];
+  const start = sample('owner', 'recipe-start');
+  const main = mainApiWithToken(undefined, { fetcher: (async input => {
+    requests.push(String(input));
+    return requests.length === 1
+      ? Response.json({ code: 'work_read_unavailable' }, { status: 503 }) : Response.json(start.answer);
+  }) as typeof fetch });
+  const answer = await recipePageReader({ main, actingSubject: actingSubjectOf(start.path) }, start.path)({ cursor: 'exact-cursor' });
+  expect(answer.error).toBeNull();
+  expect(answer.data).toEqual(start.answer);
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toBe(requests[0]);
+  expect(new URL(requests[0]!).searchParams.get('cursor')).toBe('exact-cursor');
+});
+
+test.each([401, 403, 404, 409, 503])('a definitive Recipe refusal stays visible without retry (%s)', async status => {
+  let calls = 0;
+  const main = mainApiWithToken(undefined, { fetcher: (async () => {
+    calls++;
+    return Response.json({ code: 'specific_refusal' }, { status });
+  }) as typeof fetch });
+  const answer = await recipePageReader({ main }, '/v1/recipes/works/00000000-0000-4000-8000-000000000001')({});
+  expect(answer.error?.status).toBe(status);
+  expect(calls).toBe(1);
+});
+
 test('each persona reads the published recipe, its next page and a scaled page', async () => {
   const draft = sample('owner', 'private-draft-preview');
   expect(draft.method).toBe('GET');

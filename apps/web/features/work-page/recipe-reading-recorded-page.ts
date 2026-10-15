@@ -60,7 +60,14 @@ async function settleCall<T>(call: () => Promise<CallResult<T>>): Promise<BooksR
  */
 export function recipePageReader(host: RecipeReadingHost, href: string) {
   return async (query: { cursor?: string; servings?: number }) => {
-    const answer = await followHref<RecipeWorkPage | null>(host.main, href, recipePageQuery(host.actingSubject, query))();
+    const read = followHref<RecipeWorkPage | null>(host.main, href, recipePageQuery(host.actingSubject, query));
+    let answer = await read();
+    const problem = answer.error?.value;
+    // A cancelled owner read established no page. One fresh read retains the exact selection and caller deadline.
+    if (answer.error?.status === 503 && (problem instanceof Error
+      || typeof problem === 'object' && problem !== null && 'code' in problem && problem.code === 'work_read_unavailable')) {
+      answer = await read();
+    }
     if (answer.data?.instructions?.length) return { ...answer, data: { ...answer.data,
       instructions: await readInstructionDetails(host.main as MainClient, answer.data.instructions, host.actingSubject) } };
     return answer;
