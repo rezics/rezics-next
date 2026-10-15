@@ -243,8 +243,9 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       }
       return [item];
     });
-    const last=page.at(-1) ?? examined.at(-1);
-    const hasMore=selected.length>limit || physicalMore && examined.length>0;
+    const window=yearScope?examined:candidates;
+    const last=page.at(-1) ?? window.at(-1);
+    const hasMore=selected.length>limit || physicalMore && window.length>0;
     const nextCursor=hasMore && last ? encodeReadCursor(normalized,position,last.id,last.key,
       cursor?.expiresAt ?? Date.now()+READ_BASIS_RETENTION_MS):null;
     if(!yearPage) await admit(session,template.root,roots);

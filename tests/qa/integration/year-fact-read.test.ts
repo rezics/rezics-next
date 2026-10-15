@@ -145,6 +145,17 @@ test('First-publication years: newest page, incremental posting, and a seek that
       expect(seen).toEqual([published.work, older.work]);
       expect(new Set(seen).size).toBe(seen.length);
     }
+    // A fully filtered window still carries the seek to a later match.
+    for (const persona of [member, stranger]) {
+      const sparse = { realm, filter: { all: [{ facet: 'publicationYear', range: { min: '1999', max: '1999' } }] } };
+      const empty = await read(sparse, 1, undefined, persona.token);
+      expect(empty.items).toEqual([]);
+      expect(empty.complete).toBe(false);
+      expect(empty.nextCursor).not.toBeNull();
+      const tail = await read(sparse, 1, empty.nextCursor!, persona.token);
+      expect(tail.items.map(item => item.id)).toEqual([older.work]);
+      expect(tail.nextCursor).toBeNull();
+    }
     const scopedFirst = await read(scoped, 1);
     expect((await stack.main.handle(new Request('http://main.local/v1/query', { method: 'POST',
       headers: { 'content-type': 'application/json' }, body: JSON.stringify({ profile: 'template-query-v1',
