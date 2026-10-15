@@ -143,7 +143,8 @@ test('campaign rendition queue failures replay the retained Use and logo metadat
   const uses = (await f.contentPool.query('SELECT id,role,logo_anchor FROM media.use WHERE asset_id=$1', [asset.asset])).rows;
   expect(uses).toHaveLength(1);
   expect(uses[0]).toMatchObject({ role: 'campaign-logo:zh-Hant:light', logo_anchor: 'center-top' });
-  expect(await json(await f.create({ ...body, language: 'zh-Hant' }, key))).toMatchObject({ id: uses[0].id, replayed: true });
+  const replayed = await json<{ id: string }>(await f.create({ ...body, language: 'zh-Hant' }, key));
+  expect(replayed).toMatchObject({ id: uses[0].id, replayed: true });
   expect((await f.contentPool.query('SELECT id FROM media.use WHERE asset_id=$1', [asset.asset])).rows).toHaveLength(1);
   const cutout = await json<{ id: string }>(await f.create({ asset: asset.asset, role: 'cutout' }), 201);
   const portraitSource = await f.moderator.upload(await image(960, 1280));
@@ -151,7 +152,7 @@ test('campaign rendition queue failures replay the retained Use and logo metadat
   await json(await f.moderator.send('PUT', `${f.path}/configuration`, {
     expectedHead: (await readZoneConfiguration(f.env, f.zone)).revision, defaultRealm: f.realm,
     presentation: { ...DEFAULT_ZONE_PRESENTATION, slides: [{ id: 'logo', href: '/launch', art: {
-      logos: [{ use: `https://rezics.com/id/${uses[0].id}`, language: 'zh-Hant', tone: 'light', anchor: 'center-top' }],
+      logos: [{ use: `https://rezics.com/id/${replayed.id}`, language: 'zh-Hant', tone: 'light', anchor: 'center-top' }],
       cutout: { use: `https://rezics.com/id/${cutout.id}` }, portrait: { use: `https://rezics.com/id/${portrait.id}` },
     } }] }, actingSubject: f.moderator.actor,
   }));

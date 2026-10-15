@@ -344,10 +344,12 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
         [taskKey,owner,item])).rows).toHaveLength(1);
       await edit(); changedOwners.push(owner);
     });
-    const libraryVersion = (await f.pool.query<{ version: string }>('SELECT version::text FROM reader.library_status WHERE agent=$1 AND work=$2',[actorA,survivor.work])).rows[0]!.version;
-    afterCapture('library',actorA,async () => { await status(survivor.work,actorA,'reading',f.account.tokenA,Number(libraryVersion)); });
-    const followRevision = (await f.accessPool.query<{ revision: string }>('SELECT revision::text FROM access.follow WHERE principal_id=$1 AND target=$2',[f.principalId,survivor.work])).rows[0]!.revision;
-    afterCapture('follows',f.principalId,async () => { await follow(survivor.work,actorA,true,f.account.tokenA,followRevision); });
+    const libraryState = await json<{ status: { version: number } }>(await call('GET',
+      `/v1/works/${shortId(survivor.work)}/reader-state?actingSubject=${encodeURIComponent(actorA)}`,undefined,f.account.tokenA));
+    afterCapture('library',actorA,async () => { await status(survivor.work,actorA,'reading',f.account.tokenA,libraryState.status.version); });
+    const followState = await json<{ revision: string }>(await call('GET',
+      `/v1/follows/${shortId(survivor.work)}?actingSubject=${encodeURIComponent(actorA)}&kind=work`,undefined,f.account.tokenA));
+    afterCapture('follows',f.principalId,async () => { await follow(survivor.work,actorA,true,f.account.tokenA,followState.revision); });
     // The write compares the graph observation head, which is the value a client
     // retries with. The aggregate table is only that head's private witness.
     const ratingSlot = standingRatingSlotIri(f.principalId, context, survivor.mainVersion);

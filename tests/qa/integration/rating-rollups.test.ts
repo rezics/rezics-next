@@ -32,8 +32,12 @@ async function raters(prefix: string, count: number) {
   return made;
 }
 /** `ratings` raters give `target` the values in `values` in turn, so its mean is known exactly. */
+const ratingHeads = new Map<string, string>();
 const fill = (context: string, target: string, people: readonly Person[], ratings: number, values: readonly number[]) =>
-  inBatches(people.slice(0, ratings), 10, (rater, index) => r.rate(rater, context, target, values[index % values.length]!));
+  inBatches(people.slice(0, ratings), 10, async (rater, index) => {
+    const receipt = await r.rate(rater, context, target, values[index % values.length]!);
+    ratingHeads.set(`${rater.principalId}:${context}:${target}`, receipt.observationRevision);
+  });
 const sequence = async () => (await r.stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE { GRAPH ${iri(GRAPHS.control)} {
   ${iri(DATASET)} rv:sequence ?sequence } }`)).results!.bindings[0]!.sequence!.value;
 
@@ -221,9 +225,7 @@ test('the prior uses only readable requested members, and unrelated writes leave
     reason: 'unavailable',
   });
   await r.rate(people[0]!, context, hidden, 10,
-    (
-      await r.stack.accessPool.query('SELECT revision FROM access.target_rating_head WHERE context = $1 AND target = $2 AND principal_id = $3',
-        [context, hidden, people[0]!.principalId], )).rows[0] .revision,
+    ratingHeads.get(`${people[0]!.principalId}:${context}:${hidden}`)!,
   ); await r.resource('unrelated-sequence'); expect(await rollup(input, 200, outsider)).toEqual(before);
   // Removing the unused totals is forward-only; the migration left target components intact.
   expect(

@@ -599,7 +599,7 @@ async function qualifyAuthenticatedSourceSteps(continuation: boolean): Promise<v
         state: 'recorded', attachment: saved.attachment, currentHead: humanRevision,
         verifiedRevisionIsHead: true, withdrawal: null } });
       const exactPath = `${path}/${saved.attachment.binding.split('/').at(-1)}`;
-      await assertSourceSupportWithdrawal({ call, pool: contentPool, fuseki, adoption,
+      const legacyWithdrawal = await assertSourceSupportWithdrawal({ call, pool: contentPool, fuseki, adoption,
         application: applied.application, humanRevision, sourceAdoptToken, readToken, fullToken,
         otherToken, otherWork, actor, titlePath, titleBody,
         failNextAcquisition: () => { failNextSourceFetch = true; },
@@ -639,8 +639,7 @@ async function qualifyAuthenticatedSourceSteps(continuation: boolean): Promise<v
       const replayA = await call('POST', `${path}/${adoption.binding.split('/').at(-1)}/withdrawal`,
         sourceAdoptToken, { profile: 'native-work-source-support-withdrawal-v2',
           expectedSupport: legacy.support.supportIdentity, reason: legacy.support.withdrawal.reason },
-        (await contentPool.query('SELECT idempotency_key FROM source.native_work_support_withdrawal WHERE binding_id = $1',
-          [adoption.binding.split('/').at(-1)])).rows[0].idempotency_key);
+        legacyWithdrawal.key);
       expect(replayA.status).toBe(200);
       expect(await replayA.json()).toEqual({ kind: 'adoption', withdrawal: legacy.support.withdrawal, replayed: true });
       evidence.record('continuation-completed', { path });

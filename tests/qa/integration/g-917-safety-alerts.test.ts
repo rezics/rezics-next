@@ -162,12 +162,7 @@ test('SAFETY03/SAFETY08: G917 restart replays partial intake once and recovery h
     await f.stack.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id');
     await expect(f.safetyAlerts.runOnce()).rejects.toThrow('recovery');
     await f.stack.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id');
-    const step = (
-      await f.stack.accessPool.query(
-        'SELECT id FROM access.governance_process_step WHERE case_id = $1 AND step = $2',
-        [receipt.caseId, 'removal_deadline'],
-      )
-    ).rows[0];
+    const step = await f.removalStep(receipt);
     await f.complete(await f.input(receipt, image, 'dismiss', null, step.id));
     const old = (await alerts(f))[0]!;
     expect(
@@ -195,12 +190,7 @@ test('SAFETY03/SAFETY08: G917 open-case scan excludes closed and answered histor
     const deadline = deadlineFor(receipt.receivedAt);
     const answeredImage = await f.author.upload(png(76, 76));
     const answered = await f.report(answeredImage, 'ncii', nciiDeclaration);
-    const answeredStep = (
-      await f.stack.accessPool.query(
-        `SELECT id FROM access.governance_process_step WHERE case_id = $1 AND step = 'removal_deadline'`,
-        [answered.caseId],
-      )
-    ).rows[0].id;
+    const answeredStep = (await f.removalStep(answered)).id;
     await f.complete(await f.input(answered, answeredImage, 'restrict', null, answeredStep));
     // Keep this answered case in the active set to exercise the answer anti-join.
     await f.stack.accessPool.query(

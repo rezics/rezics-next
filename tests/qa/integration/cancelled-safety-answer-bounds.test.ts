@@ -224,12 +224,7 @@ test('admission, due queue and alert checks seek one answer across thousands of 
     await migrate(f.stack.accessPool);
     const image = await f.author.upload(png(151, 151));
     const receipt = await f.report(image, 'ncii', nciiDeclaration);
-    const step = (
-      await f.stack.accessPool.query<{ id: string; due_at: Date }>(
-        "SELECT id,due_at FROM access.governance_process_step WHERE case_id = $1 AND step = 'removal_deadline'",
-        [receipt.caseId],
-      )
-    ).rows[0]!;
+    const step = await f.removalStep(receipt);
     const initial = await f.input(receipt, image, 'restrict', null, step.id);
     const admission = await capture(() => f.decide(initial));
     const accepted = await json<DecisionResult>(admission.result, 202);

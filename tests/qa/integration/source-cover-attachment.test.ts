@@ -222,8 +222,13 @@ test('COVER-ROLE confines an imported cover to its Work avatar and keeps other i
   expect((await f.contentPool.query(`SELECT u.target,u.role,u.asset_revision_id FROM media.use u
     JOIN media.selection_revision r ON r.use_id=u.id WHERE r.id=$1`, [selection.selection])).rows[0])
     .toMatchObject({ target: work.work, role: 'avatar', asset_revision_id: admitted.revision });
-  const coverUse = (await f.contentPool.query<{ id: string }>(`SELECT use_id AS id FROM media.selection_revision
-    WHERE id=$1`, [selection.selection])).rows[0]!.id;
+  const summaryResponse = await owner.send('POST', '/v1/resources/summaries', {
+    profile: 'resource-summary-batch-v1', resources: [work.work], actingSubject: owner.actor,
+  });
+  expect(summaryResponse.status).toBe(200);
+  const summaries = await summaryResponse.json() as { summaries: { avatar: { kind: string; use?: string } }[] };
+  const coverUse = summaries.summaries[0]!.avatar.use;
+  if (!coverUse) throw new Error('Selected avatar has no delivered Use');
   const movedEvidence = await coverEvidence(f, owner.principalId, otherWork.work, bytes);
   await json(await owner.send('POST', '/v1/media/uploads', { profile: 'media-image-upload-v1',
     asset: admitted.asset, mediaType: 'image/png', byteLength: bytes.length, sha256: sha(bytes),

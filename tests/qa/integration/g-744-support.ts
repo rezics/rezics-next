@@ -239,6 +239,14 @@ export async function safetyFixture(label: string, autoClearUploads = true,
         idempotencyKey: randomUUID(),
       };
     };
+    const removalStep = async (receipt: Receipt) => {
+      await claim(receipt);
+      const view = await json<{ steps: { id: string; kind: string; dueAt: string | null }[] }>(
+        await read(`/v1/safety-cases/${receipt.caseId}`));
+      const step = view.steps.find(item => item.kind === 'removal_deadline');
+      if (!step?.dueAt) throw new Error('Case has no removal deadline');
+      return { id: step.id, due_at: new Date(step.dueAt) };
+    };
     const decide = (body: DecisionInput) =>
       call(
         'POST',
@@ -282,6 +290,8 @@ export async function safetyFixture(label: string, autoClearUploads = true,
       claim,
       target,
       input,
+      removalStep,
+      rule,
       decide,
       complete,
       produce,

@@ -61,26 +61,11 @@ test('report enforcement reaches two authors and three private reporters across 
       );
     expect(new Set(reporters.map((r) => r.caseId)).size).toBe(1);
     await f.claim(reporters[0]!);
-    const retained = (
-      await f.stack.accessPool.query<{ evidence_digest: string; revision: string }>(
-        `SELECT r.evidence_digest,e.revision
-      FROM access.governance_report r JOIN access.governance_evidence e ON e.report_id = r.id
-      WHERE r.id = $1`,
-        [reporters[0]!.reportId],
-      )
-    ).rows[0]!;
-    const generation = (
-      await f.stack.accessPool.query<{ generation: string }>(
-        'SELECT generation::text FROM access.governance_case WHERE id = $1',
-        [reporters[0]!.caseId],
-      )
-    ).rows[0]!.generation;
-    const rule = (
-      await f.stack.accessPool.query<{ ref: string; revision: string; digest: string }>(
-        'SELECT ref,revision::text,digest FROM access.governance_rule_head WHERE scope_id = $1',
-        ['governance:platform'],
-      )
-    ).rows[0]!;
+    const retained = await json<{ evidenceDigest: string; evidence: { revision: string }[] }>(
+      await f.read(`/v1/reports/${reporters[0]!.reportId}`));
+    const view = await json<{ generation: string }>(await f.read(`/v1/safety-cases/${reporters[0]!.caseId}`));
+    const generation = view.generation;
+    const rule = f.rule;
     const input: DecisionInput = {
       caseId: reporters[0]!.caseId,
       expectedGeneration: generation,
@@ -93,13 +78,13 @@ test('report enforcement reaches two authors and three private reporters across 
           component: 'title',
           locator: null,
           scopeKind: 'exact_revision',
-          revision: retained.revision,
-          expectedHead: retained.revision,
+          revision: retained.evidence[0]!.revision,
+          expectedHead: retained.evidence[0]!.revision,
           effect: 'disclosure',
         },
       ],
       rule,
-      evidenceDigest: retained.evidence_digest,
+      evidenceDigest: retained.evidenceDigest,
       reversesDecisionId: null,
       answersStepId: null,
       rationale: 'Reviewed the reported title.',
@@ -250,7 +235,7 @@ test('report enforcement reaches two authors and three private reporters across 
     const plan = await pool.query(
       `EXPLAIN (FORMAT JSON) SELECT 1 FROM access.governance_case_evidence
       WHERE case_id = $1 AND target_key = access.governance_target_key($2,$3,$4,$5,$6) AND available LIMIT 1`,
-      [input.caseId, 'graph', work.work, 'title', null, retained.revision],
+      [input.caseId, 'graph', work.work, 'title', null, retained.evidence[0]!.revision],
     );
     expect(JSON.stringify(plan.rows)).toContain('governance_case_evidence_pkey');
   } finally {

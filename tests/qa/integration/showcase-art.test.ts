@@ -504,7 +504,7 @@ test('a lost rendition request or Access reconciliation replays the committed sh
   } finally {
     store.renditions.queue = queue;
   }
-  const committed = (
+  const committedInOwner = (
     await contentPool.query(
       `SELECT head FROM media.selection_slot WHERE target=$1 AND role='showcase-cutout'`,
       [work.work],
@@ -518,9 +518,9 @@ test('a lost rendition request or Access reconciliation replays the committed sh
       )
     ).rows[0].n,
   ).toBe(0);
-  expect(
-    await (await status(await owner.send('PUT', artPath(work.work), body, key), 200)).json(),
-  ).toMatchObject({ selection: committed, replayed: true });
+  const replay = await (await status(await owner.send('PUT', artPath(work.work), body, key), 200)).json() as { selection: string };
+  expect(replay).toMatchObject({ selection: committedInOwner, replayed: true });
+  const committed = replay.selection;
   expect(
     (
       await contentPool.query(

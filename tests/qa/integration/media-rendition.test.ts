@@ -60,12 +60,13 @@ async function selectedImage(label: string, width = 80, height = 80, crop: strin
   );
   expect(selected.status).toBe(201);
   const selection = ((await selected.json()) as { selection: string }).selection;
-  const use = (
-    await fixture.contentPool.query<{ use_id: string }>(
-      'SELECT use_id FROM media.selection_revision WHERE id = $1',
-      [selection],
-    )
-  ).rows[0].use_id;
+  const summaryResponse = await owner.send('POST', '/v1/resources/summaries', {
+    profile: 'resource-summary-batch-v1', resources: [work.work], actingSubject: owner.actor,
+  });
+  expect(summaryResponse.status).toBe(200);
+  const summaries = await summaryResponse.json() as { summaries: { avatar: { kind: string; use?: string } }[] };
+  const use = summaries.summaries[0]!.avatar.use;
+  if (!use) throw new Error('Selected avatar has no delivered Use');
   const renditions = fixture.store.renditions;
   const worker = new MediaRenditionWorker(renditions, transformer, fixture.objects);
   return { ...fixture, owner, work, bytes, image, use, selection, renditions, worker };
