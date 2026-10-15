@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sha256, stable } from './corpus.ts';
-import type { RegistryBinding, RegistryCondition } from '../../model/compiler/registry.ts';
+import { selectCommandProfile, type RegistryBinding, type RegistryCondition } from '../../model/compiler/registry.ts';
 
 export interface FixtureModelManifest {
   profiles: { id: string; sha256: string; file: string; binding?: RegistryBinding }[];
@@ -48,7 +48,14 @@ export function fixtureModelInputs(root: string, use: FixtureModelUse): Record<s
     const bindingDemands = manifest.bindingDemands.filter(demand => demand.type === type && !ids.has(demand.profile));
     const dependencies = [...new Set([...routes.map(route => route.profile), ...bindingDemands.map(demand => demand.profile)])]
       .sort().map(declaration);
-    inputs[`validation:${type}`] = sha256(stable({ routes, bindingDemands, dependencies }));
+    // Native selection uses the first canonical type present on the whole record.
+    // Per-type route hashes alone miss a precedence change between two used types.
+    const selections = records.map(record => {
+      const selected = selectCommandProfile(manifest, record.types, path => record.values[path] ?? []);
+      return selected ? { kind: selected.kind, profile: selected.profile,
+        shape: selected.shape, when: selected.when } : null;
+    });
+    inputs[`validation:${type}`] = sha256(stable({ routes, bindingDemands, dependencies, selections }));
   }
   return inputs;
 }

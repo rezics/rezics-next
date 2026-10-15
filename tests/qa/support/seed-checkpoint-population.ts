@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import type { CorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
+import { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.ts';
 
 export interface SeedCheckpointPopulationTargets {
   recipeOccurrences: number;
@@ -16,6 +17,7 @@ export interface SeedCheckpointPopulation {
   zone: { id: string; navigation: string; revision: string; mounts: Array<{ occurrence: string; segment: string; target: string }> };
   home: { page: string; variantId: string; revisionId: string; byteDigest: string; contentEpoch: string };
   shelfWorks: string[];
+  works: SeedCheckpointPublicWork[];
 }
 type Grant = (scope: string, action: string) => Promise<unknown>;
 const short = (id: string) => id.slice(-36);
@@ -74,16 +76,25 @@ export async function initializeSeedCheckpointPopulation(
     collection: { id: collection, ...curated, members: [] },
     zone: { id: site.zone, navigation: site.navigation, revision: site.navigationRevision, mounts: [] },
     home: { page: homeDocument, variantId, revisionId: home.revisionId, byteDigest: home.byteDigest, contentEpoch: home.sourcePosition.dataEpoch },
-    shelfWorks: [] };
+    shelfWorks: [], works: [] };
 }
 
-/** Reuse the corpus's public Works for shelf and mounted membership populations. */
+/** Related Works are distinct from the unrelated catalogue population. */
 export async function growSeedCheckpointPopulation(
   api: CorpusApi,
   handles: SeedCheckpointPopulation,
-  works: readonly SeedCheckpointPublicWork[],
   targets: SeedCheckpointPopulationTargets,
 ): Promise<void> {
+  if (Object.values(targets).some(value => !Number.isSafeInteger(value) || value < 0))
+    throw new Error('Checkpoint population targets are invalid');
+  const works = handles.works;
+  while (works.length < Math.max(targets.readerShelfEntries, targets.mountedCollectionResources)) {
+    const index = works.length;
+    works.push(await seedPublicProfileWork(api, `checkpoint:population-work:${index}`, {
+      actingSubject: handles.actor, title: `Checkpoint population Work ${index}`,
+      body: `Checkpoint population text ${index}`,
+    }));
+  }
   const { actor, recipe, collection, zone } = handles;
   const previousMembers = collection.members.length, previousMounts = zone.mounts.length;
   if (Object.values(targets).some(value => !Number.isSafeInteger(value) || value < 0)

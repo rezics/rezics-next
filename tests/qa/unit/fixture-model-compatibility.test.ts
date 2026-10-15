@@ -124,6 +124,28 @@ test('round 2 finding 2: route matching uses literal lexical forms from emitted 
   });
 });
 
+test('fixture compatibility records canonical type precedence for multi-typed stored records', async () => {
+  await modelRoot((directory, model) => {
+    const use = { profiles: ['work-metadata-v1'], records: [{
+      types: ['https://schema.org/CreativeWork', 'https://rezics.com/vocab/MainVersion'],
+      values: { 'https://rezics.com/vocab/hostingPolicy': ['https://rezics.com/vocab/MetadataOnly'] },
+    }] };
+    const before = fixtureModelInputs(directory, use);
+    model.canonical.reverse();
+    saveModel(directory, model);
+    const after = fixtureModelInputs(directory, use);
+    expect(after['validation:https://schema.org/CreativeWork'])
+      .not.toBe(before['validation:https://schema.org/CreativeWork']);
+    // Single-typed records still resolve through the same native route.
+    const single = { ...use, records: [{ ...use.records[0]!, types: ['https://schema.org/CreativeWork'] }] };
+    const reversed = fixtureModelInputs(directory, single);
+    model.canonical.reverse();
+    saveModel(directory, model);
+    expect(fixtureModelInputs(directory, single)['validation:https://schema.org/CreativeWork'])
+      .toBe(reversed['validation:https://schema.org/CreativeWork']);
+  });
+});
+
 test('fixture: real manifests before an additive definition restore, with newer migrations alone or together', async () => {
   await modelRoot((directory, model) => {
     const backup = core();
@@ -167,8 +189,9 @@ test('finding 2: a changed used canonical route, binding or binding demand is st
       const now = current(backup);
       now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory, fixtureCorpus('small', undefined, 6));
       now.modelGeneration = fixtureModel(directory).generation;
-      expect(restoreCompatibility(backup, now)).toMatchObject({ compatible: false,
-        reasons: [`owner graph model input changed: profile:${id}`] });
+      const compatibility = restoreCompatibility(backup, now);
+      expect(compatibility.compatible).toBe(false);
+      expect(compatibility.reasons).toContain(`owner graph model input changed: profile:${id}`);
     }
   });
 });

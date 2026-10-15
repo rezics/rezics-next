@@ -8,6 +8,7 @@ import { workProfileCorpusApi, type CorpusApi, type WorkProfileCorpusManifest }
   from '../../../scripts/load/work-profile-corpus.ts';
 import type { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.ts';
 import { verifySeedCheckpointPopulation, type SeedCheckpointPopulation } from './seed-checkpoint-population.ts';
+import { SEED_AXES, SEED_RECIPE, type SeedAxis } from './seed-checkpoint-plan.ts';
 import type { MediaStack } from '../integration/media-support.ts';
 import type { WorkProfile } from './work-profile.ts';
 
@@ -22,15 +23,18 @@ export type SeedWork = Awaited<ReturnType<typeof seedPublicProfileWork>>;
 export interface RetainedSeedCut {
   manifest: WorkProfileCorpusManifest;
   works: SeedWork[];
+  posts: SeedPost[];
   population: SeedCheckpointPopulation;
   timing: { startupMs: number; buildMs: number; backupMs: number; totalMs: number };
 }
 export interface RetainedSeed {
-  format: 'seed-checkpoints-v2';
+  format: 'seed-checkpoints-v3';
   sourceRunId: string;
   actor: string;
   cuts: RetainedSeedCut[];
+  axes: Record<SeedAxis, RetainedSeedCut[]>;
 }
+export interface SeedPost { post: string; variantId: string; revisionId: string; byteDigest: string }
 export function seedVerificationCuts(seed: Pick<RetainedSeed, 'cuts'>, selection = 'all'): RetainedSeedCut[] {
   return seedVerificationPlan(selection).scales.map(scale => {
     const cut = seed.cuts.find(cut => cut.manifest.scale === scale);
@@ -171,10 +175,18 @@ export function readRetainedSeed(path = retainedSeedPath): RetainedSeed {
   let seed: RetainedSeed;
   try { seed = JSON.parse(readFileSync(path, 'utf8')) as RetainedSeed; }
   catch { throw new Error(`Retained seed checkpoints are invalid. Build them explicitly: ${SEED_BUILD_COMMAND}`); }
-  if (seed.format !== 'seed-checkpoints-v2' || !Array.isArray(seed.cuts) || seed.cuts.length !== 3
+  if (seed.format !== 'seed-checkpoints-v3' || !Array.isArray(seed.cuts) || seed.cuts.length !== 3
     || seed.cuts.some((cut, index) => cut.manifest.scale !== ['small', 'medium', 'large'][index]
       || !existsSync(cut.manifest.backup)))
     throw new Error(`Retained seed checkpoints are incomplete. Build them explicitly: ${SEED_BUILD_COMMAND}`);
+  for (const axis of SEED_AXES) {
+    const cuts = seed.axes?.[axis];
+    if (!Array.isArray(cuts) || cuts.length !== 3 || cuts.some((cut, index) =>
+      cut.manifest.recipe !== SEED_RECIPE || cut.manifest.dimension !== axis
+      || cut.manifest.scale !== ['small', 'medium', 'large'][index]
+      || !existsSync(cut.manifest.backup) || !Array.isArray(cut.posts) || !Array.isArray(cut.population?.works)))
+      throw new Error(`Retained seed axis ${axis} is incomplete. Build them explicitly: ${SEED_BUILD_COMMAND}`);
+  }
   return seed;
 }
 export function seedApi(stack: MediaStack, token: string): CorpusApi {
@@ -183,7 +195,7 @@ export function seedApi(stack: MediaStack, token: string): CorpusApi {
   });
 }
 export const seedSelection = (id: string): `/v1/${string}` => `/v1/main-versions/${id.slice(-36)}/selection?language=en`;
-export async function seedCensus(api: CorpusApi, cut: Pick<RetainedSeedCut, 'works' | 'population'>) {
+export async function seedCensus(api: CorpusApi, cut: Pick<RetainedSeedCut, 'works' | 'posts' | 'population'>) {
   const ids = new Set<string>();
   for (const [index, created] of cut.works.entries()) {
     const selected = await api.read(seedSelection(created.mainVersion));
@@ -193,7 +205,16 @@ export async function seedCensus(api: CorpusApi, cut: Pick<RetainedSeedCut, 'wor
     ids.add(created.work);
   }
   expect(ids.size).toBe(cut.works.length);
-  return { unrelatedWorks: ids.size, unrelatedPosts: 0, follows: 0, memberships: 0,
+  const related = new Set(cut.population.works.map(work => work.work));
+  expect(cut.works.every(work => !related.has(work.work))).toBe(true);
+  const posts = new Set<string>();
+  for (const post of cut.posts) {
+    const selected = await api.read(`/v1/posts/${post.post.slice(-36)}`);
+    expect(selected).toMatchObject({ id: post.post });
+    posts.add(post.post);
+  }
+  expect(posts.size).toBe(cut.posts.length);
+  return { unrelatedWorks: ids.size, unrelatedPosts: posts.size, follows: 0, memberships: 0,
     historyDepth: 0, realmSize: 0, conceptVocabulary: 0,
     ...await verifySeedCheckpointPopulation(api, cut.population) };
 }

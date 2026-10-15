@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { loadavg } from 'node:os';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { SEED_AXES, SEED_RECIPE, seedCheckpointPlan } from '../support/seed-checkpoint-plan.ts';
+import { WORK_PROFILE_SEED_BUILD_WALL_MS } from '../../../scripts/qa/preparation-selection.ts';
 import { profileRequest, startWorkProfileSink } from '../support/work-profile.ts';
 import { startTelemetry, flushTelemetryTraces, shutdownTelemetry }
   from '../../../packages/observability/src/runtime.ts';
@@ -26,10 +28,12 @@ test('explicit preparation retains one API-built store at three population cuts'
     buildSeedCommandCostReport, buildSeedCommandCostComparison, saveRetainedSeed, readRetainedSeed } = await import('../support/seed-checkpoints.ts');
   const { initializeSeedCheckpointPopulation, growSeedCheckpointPopulation }
     = await import('../support/seed-checkpoint-population.ts');
+  const { seedCheckpointPost } = await import('../support/seed-checkpoint-post.ts');
   type CorpusApi = import('../../../scripts/load/work-profile-corpus.ts').CorpusApi;
   type CorpusCommand = import('../../../scripts/load/work-profile-corpus.ts').CorpusCommand;
   type Recipe = import('../../../scripts/load/work-profile-corpus.ts').WorkProfileCorpusRecipe;
   type SeedWork = import('../support/seed-checkpoints.ts').SeedWork;
+  type SeedPost = import('../support/seed-checkpoints.ts').SeedPost;
   type RetainedSeed = import('../support/seed-checkpoints.ts').RetainedSeed;
   type SeedCommandMeasurement = import('../support/seed-checkpoints.ts').SeedCommandMeasurement;
   type SeedCommandCostStage = import('../support/seed-checkpoints.ts').SeedCommandCostStage;
@@ -54,7 +58,7 @@ test('explicit preparation retains one API-built store at three population cuts'
           .every(name => existsSync(join(seedDirectory, name)))
           && costMarkdownFiles.every(name => readFileSync(join(seedDirectory, name), 'utf8')
             .includes(`Build run ID: ${saved.sourceRunId}`));
-        if (saved.cuts.every(cut => compatibleLoadStorage(cut.manifest.compatibility, loadCompatibility(root)))
+        if (Object.values(saved.axes).flat().every(cut => compatibleLoadStorage(cut.manifest.compatibility, loadCompatibility(root)))
           && costEvidenceComplete) {
           console.log('Reusing completed retained seed checkpoints', retainedSeedPath);
           console.log('seed command-cost report paths', JSON.stringify(commandCostReportPaths));
@@ -78,6 +82,7 @@ test('explicit preparation retains one API-built store at three population cuts'
     let currentApi = seedApi(source, member.token);
     let actor = '', population: Population | undefined;
     const works: SeedWork[] = [];
+    const posts: SeedPost[] = [];
     let measured: SeedCommandMeasurement[] = [];
     let scale: (typeof WORK_PROFILE_SCALES)[number] = 'small';
     const api: CorpusApi = {
@@ -91,13 +96,11 @@ test('explicit preparation retains one API-built store at three population cuts'
       },
       read: (path, signal) => currentApi.read(path, signal),
     };
-    const fixed = { unrelatedWorks: 0, unrelatedPosts: 0, follows: 0, memberships: 0,
-      historyDepth: 0, realmSize: 0, conceptVocabulary: 0 };
-    const populations = ['recipeOccurrences', 'readerShelfEntries', 'mountedCollectionResources', 'zoneNavigationEntries'] as const;
     const stageCostRows: Record<SeedCommandCostStage, SeedCommandCostRow[]> = { '4': [], '16': [], '64': [] };
     let stageBuildMs = 0;
+    let stage = seedCheckpointPlan()[0]!;
     const recipe: Recipe = {
-      version: 'public-population-checkpoints-v2', fixed, populations,
+      version: SEED_RECIPE, fixed: stage.fixed,
       async initialize(client, key) {
         if (actor) return;
         actor = (await client.command<{ agent: string }>(`${key}:author`, { method: 'POST',
@@ -106,31 +109,42 @@ test('explicit preparation retains one API-built store at three population cuts'
           grant: (scope, action) => grantFixtureAuthority(source!.accessPool, { scope, requireDispatch: true,
             representations: [{ principalId: member.principalId, actor, action, lifetime: '7 days' }],
             grant: { actor, action, lifetime: '7 days' } }) });
+        for (let index = 0; index < 4; index++) posts.push(await seedCheckpointPost(client, actor, index));
+        await growSeedCheckpointPopulation(client, population, { recipeOccurrences: 100,
+          readerShelfEntries: 4, mountedCollectionResources: 4, zoneNavigationEntries: 4 });
       },
       async grow(client, dimension, index, key) {
         if (dimension === 'unrelatedWorks') {
           if (!works[index]) works[index] = await seedPublicProfileWork(client, key, { actingSubject: actor,
             title: `Checkpoint public Work ${index}`, body: `Checkpoint selected text ${index}` });
+        } else if (dimension === 'unrelatedPosts') {
+          if (!posts[index]) posts[index] = await seedCheckpointPost(client, actor, index);
         } else if (index === 0) {
           const targets: Targets = { recipeOccurrences: population!.recipe.occurrences.length,
             readerShelfEntries: population!.shelfWorks.length, mountedCollectionResources: population!.collection.members.length,
             zoneNavigationEntries: population!.zone.mounts.length };
-          targets[dimension as keyof Targets] = workProfileDimensions(dimension, scale, fixed)[dimension]!;
-          await growSeedCheckpointPopulation(client, population!, works, targets);
+          targets[dimension as keyof Targets] = workProfileDimensions(dimension, scale, stage.fixed)[dimension]!;
+          await growSeedCheckpointPopulation(client, population!, targets);
         }
       },
       async verify(client) {
-        const counts = await seedCensus(client, { works, population: population! });
+        const counts = await seedCensus(client, { works, posts, population: population! });
         stageBuildMs = performance.now() - stageStartedAt - stageStartupMs;
         return counts;
       },
     };
-    const retained: RetainedSeed = { format: 'seed-checkpoints-v2', sourceRunId, actor, cuts: [] };
-    for (scale of WORK_PROFILE_SCALES) {
+    const retained: RetainedSeed = { format: 'seed-checkpoints-v3', sourceRunId, actor, cuts: [],
+      axes: { unrelatedWorks: [], unrelatedPosts: [], zoneNavigationEntries: [],
+        mountedCollectionResources: [], readerShelfEntries: [], recipeOccurrences: [] } };
+    const plan = seedCheckpointPlan();
+    for (const [ordinal, planned] of plan.entries()) {
+      stage = planned;
+      scale = stage.scale;
+      recipe.fixed = stage.fixed;
       measured = [];
-      if (scale !== 'small') { stageStartedAt = performance.now(); stageStartupMs = 0; }
+      if (ordinal > 0) { stageStartedAt = performance.now(); stageStartupMs = 0; }
       const driver = createCorpusBackupDriver({ sourceRunId, directory: join(seedDirectory, sourceRunId, 'backups'),
-        resumeSource: scale !== 'large', onSourceStartup: ms => { stageStartupMs += ms; },
+        resumeSource: ordinal !== plan.length - 1, onSourceStartup: ms => { stageStartupMs += ms; },
         async quiesce(signal) {
           signal.throwIfAborted();
           await source!.stop(); sourceStopped = true;
@@ -153,32 +167,42 @@ test('explicit preparation retains one API-built store at three population cuts'
         },
         smokeRead: async () => { throw new Error('BUILD never restores'); },
       });
-      const manifest = await prepareWorkProfileCorpus({ recipe, api, backups: driver, dimension: 'unrelatedWorks',
+      // The small cut of each next series is the previous stopped large cut.
+      // Reuse its immutable backup instead of stopping/copying identical owners.
+      const previous = ordinal > 0 && scale === 'small'
+        ? retained.axes[plan[ordinal - 1]!.axis].at(-1) : undefined;
+      const backups = previous ? { ...driver, backup: async () => previous.manifest.backup } : driver;
+      const manifest = await prepareWorkProfileCorpus({ recipe, api, backups, dimension: stage.axis,
         scale, directory: join(seedDirectory, sourceRunId, 'manifests'), startedAt: stageStartedAt });
       const totalMs = performance.now() - stageStartedAt;
       expect(totalMs).toBeLessThan(600_000);
       const timing = { startupMs: stageStartupMs, buildMs: stageBuildMs,
         backupMs: totalMs - stageStartupMs - stageBuildMs, totalMs };
       retained.actor = actor;
-      retained.cuts.push({ manifest, works: structuredClone(works), population: structuredClone(population!), timing });
-      console.log('retained seed stage seconds', scale, JSON.stringify(Object.fromEntries(
+      retained.axes[stage.axis].push({ manifest, works: structuredClone(works), posts: structuredClone(posts),
+        population: structuredClone(population!), timing });
+      console.log('retained seed stage seconds', stage.axis, scale, JSON.stringify(Object.fromEntries(
         Object.entries(timing).map(([key, value]) => [key.replace(/Ms$/, 'Seconds'), value / 1000]))));
       const stageKey = ({ small: '4', medium: '16', large: '64' } as const)[scale];
-      const jsonPath = join(seedDirectory, `command-cost-${stageKey}.json`);
-      const markdownPath = join(seedDirectory, `command-cost-${stageKey}.md`);
+      const reportKey = stage.axis === 'unrelatedWorks' ? stageKey : `${stage.axis}-${stageKey}`;
+      const jsonPath = join(seedDirectory, `command-cost-${reportKey}.json`);
+      const markdownPath = join(seedDirectory, `command-cost-${reportKey}.md`);
       writeFileSync(jsonPath, JSON.stringify(measured, null, 2) + '\n');
       const report = buildSeedCommandCostReport(measured);
-      stageCostRows[stageKey] = report.rows;
+      if (stage.axis === 'unrelatedWorks') stageCostRows[stageKey] = report.rows;
       const interval = scale === 'small' ? 'Commands issued for the initial 4-Work cut, including scenario setup.'
         : `Commands issued while growing from the ${scale === 'medium' ? '4' : '16'}-Work cut to the ${stageKey}-Work cut.`;
       writeFileSync(markdownPath, `# ${stageKey}-Work cut command costs\n\n${report.markdown}\n${interval}\nBuild run ID: ${sourceRunId}\n`);
-      if (scale === 'large') {
+      if (scale === 'large' && stage.axis === 'unrelatedWorks') {
         const comparison = buildSeedCommandCostComparison(stageCostRows);
         const comparisonPath = join(seedDirectory, 'command-cost-compare.md');
         writeFileSync(comparisonPath, `# Retained Work-profile command cost comparison\n\n${comparison.markdown}\nBuild run ID: ${sourceRunId}\n`);
       }
     }
+    retained.cuts = retained.axes.unrelatedWorks;
     expect(works).toHaveLength(64);
+    expect(posts).toHaveLength(64);
+    expect(SEED_AXES.every(axis => retained.axes[axis].length === WORK_PROFILE_SCALES.length)).toBe(true);
     saveRetainedSeed(retained);
     console.log('largest retained seed build seconds', retained.cuts[2]!.timing.totalMs / 1000,
       'total build workflow seconds', (performance.now() - startedAt) / 1000);
@@ -193,4 +217,4 @@ test('explicit preparation retains one API-built store at three population cuts'
       console.log('seed BUILD host load end', loadavg());
     }
   }
-}, 1_920_000);
+}, WORK_PROFILE_SEED_BUILD_WALL_MS);

@@ -1,8 +1,9 @@
 /** Preparing retained data is an explicit command; ordinary QA only restores it. */
 export const WORK_PROFILE_SEED_BUILD_FILE = 'tests/qa/fault-recovery/work-profile-seed-build.test.ts';
 
-/** Three independently bounded 600-second stages plus harness and cleanup. */
-export const WORK_PROFILE_SEED_BUILD_WALL_MS = 1_920_000;
+/** Six independent axes, each with three bounded 600-second stages, plus cleanup.
+ * Every individual preparation and routine restore retains the same ceiling. */
+export const WORK_PROFILE_SEED_BUILD_WALL_MS = 10_920_000;
 
 /** Select consumers independently; a supplied (even invalid) source never falls back. */
 export function smallRecoveryFixtureConsumers(files: readonly string[], environment: NodeJS.ProcessEnv) {

@@ -78,7 +78,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
       writeFileSync(evidencePath, JSON.stringify(evidence, null, 2) + '\n');
       console.log('recipe-page-growth-evidence', evidencePath);
     } });
-    const cuts = retained.cuts.map(cut => {
+    const cuts = retained.axes.recipeOccurrences.map(cut => {
       // The restore owner requires a local .temp path. Copy only the retained
       // descriptor/object bundle; its stopped Docker volumes remain the source.
       const local = join(directory, 'backups', cut.manifest.id);
@@ -359,7 +359,7 @@ if (Bun.env.REZICS_RECIPE_GROWTH_CHILD === '1') {
           const budgeted = budgetedRead(measured.profile, fetches, cut.manifest.scale, read, reader, treeCensus);
           pageRow.objectReadBudget = budgeted.budget;
           series[reader][pageIndex === 0 ? 'firstPages' : 'continuations'].push(
-            recipeCostSample(budgeted.profile, cut.manifest.dimensions.unrelatedWorks));
+            recipeCostSample(budgeted.profile, cut.manifest.dimensions.recipeOccurrences!));
           expect(measured.profile.request.route).toBe('/v1/recipes/works/:id');
           assertRecipePageComplete(measured.result, treeCensus, pageIndex * recipePageSize, recipePageSize);
           expect(measured.result.cost.pages).toBeLessThanOrEqual(RECIPE_WORK_PAGE_READ_BOUND);

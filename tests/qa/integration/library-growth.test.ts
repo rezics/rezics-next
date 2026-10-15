@@ -256,8 +256,9 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
 
   const retained = readRetainedSeed();
   expect(retained.cuts.map((cut) => cut.manifest.dimensions[workAxis])).toEqual(scales);
-  expect(retained.cuts.map((cut) => cut.manifest.dimensions[shelfAxis])).toEqual(scales);
-  for (const cut of retained.cuts) {
+  expect(retained.axes[shelfAxis].map((cut) => cut.manifest.dimensions[shelfAxis])).toEqual(scales);
+  const cuts = [...retained.axes[workAxis], ...retained.axes[shelfAxis]];
+  for (const cut of cuts) {
     expect(cut.population.shelfWorks).toHaveLength(cut.manifest.dimensions[shelfAxis]!);
     expect(new Set(cut.population.shelfWorks).size).toBe(cut.population.shelfWorks.length);
   }
@@ -327,7 +328,7 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
       const stack = await openRestoredStack(input, startMediaStack);
       try {
         if (!activeCut) throw new Error('No active retained Work-profile checkpoint');
-        const target = activeCut.works[0]!;
+        const target = activeCut.population.works[0]!;
         expect(activeCut.population.shelfWorks).toContain(target.work);
         const author = await stack.member(seedAuthorName, { stable: true, verified: true });
         const authorApi = seedApi(stack, author.token);
@@ -335,7 +336,7 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
         expect(selected).toMatchObject({
           work: target.work,
           mainVersion: target.mainVersion,
-          body: 'Checkpoint selected text 0',
+          body: 'Checkpoint population text 0',
         });
 
         const reader = await stack.member(`library-growth-${input.target}`, {
@@ -387,10 +388,10 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
       dockerEnvironment(),
     );
 
-    for (const cut of retained.cuts) {
+    for (const cut of cuts) {
       activeCut = cut;
       const scale = cut.manifest.dimensions[workAxis];
-      const target = `lib-growth-${cut.manifest.scale}-${runId}`;
+      const target = `lib-growth-${cut.manifest.dimension}-${cut.manifest.scale}-${runId}`;
       targets.push(target);
       const restoreStarted = performance.now();
       const elapsedMs = await restoreWorkProfileCorpus(cut.manifest, target, driver, restoreStarted);
@@ -422,7 +423,7 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
       expect(calibration.result).toMatchObject({ profile: 'work-read-v1', id: context.targetWork });
       sink.clear();
 
-      for (const axis of [workAxis, shelfAxis]) {
+      for (const axis of [cut.manifest.dimension as typeof workAxis | typeof shelfAxis]) {
         const ownShelf = axis === shelfAxis;
         const size = cut.manifest.dimensions[axis]!;
         const actingSubject = encodeURIComponent(ownShelf ? context.seededReaderAgent : context.readerAgent);

@@ -35,8 +35,8 @@ test('retained seed preparation stays out of routine, directory and diagnostic s
 test('only the exact explicitly selected build file receives its exclusive wall', () => {
   const files = preparationTestFiles([WORK_PROFILE_SEED_BUILD_FILE], [WORK_PROFILE_SEED_BUILD_FILE]);
   expect(files).toEqual([WORK_PROFILE_SEED_BUILD_FILE]);
-  expect(exclusivePreparationWallMs(files)).toBe(3 * 600_000 + 120_000);
-  expect(WORK_PROFILE_SEED_BUILD_WALL_MS).toBe(1_920_000);
+  expect(exclusivePreparationWallMs(files)).toBe(6 * 3 * 600_000 + 120_000);
+  expect(WORK_PROFILE_SEED_BUILD_WALL_MS).toBe(10_920_000);
   expect(exclusivePreparationWallMs([restore])).toBeUndefined();
   expect(exclusivePreparationWallMs([ordinary])).toBeUndefined();
   expect(exclusivePreparationWallMs(['tests/qa/fault-recovery/g-727-launch-drill.test.ts'])).toBe(1_320_000);

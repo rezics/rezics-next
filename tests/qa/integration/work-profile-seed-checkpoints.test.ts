@@ -75,7 +75,7 @@ test('retained checkpoints restore exact populations and identities into isolate
         expect(actual).toEqual(verifying.manifest.dimensions);
         const { profile } = await profileRequest(sink, async headers => {
           headers.set('authorization', `Bearer ${token}`);
-          const response = await stack.main.handle(new Request(`http://main.local/v1/works/${verifying.works[0]!.work.slice(-36)}/reader-state?actingSubject=${encodeURIComponent(retained.actor)}`, { headers }));
+          const response = await stack.main.handle(new Request(`http://main.local/v1/works/${verifying.population.shelfWorks[0]!.slice(-36)}/reader-state?actingSubject=${encodeURIComponent(retained.actor)}`, { headers }));
           expect(response.status).toBe(200);
           expect(await response.json()).toMatchObject({ status: { status: 'reading', version: 1 } });
         }, { service: 'main', flush: flushTelemetryTraces });
@@ -89,7 +89,7 @@ test('retained checkpoints restore exact populations and identities into isolate
         for (const created of retained.cuts[2]!.works.slice(verifying.works.length))
           await expect(client.read(seedSelection(created.mainVersion))).rejects.toThrow('HTTP 404');
         if (isolatedWrite)
-          expect(await client.read(`/v1/works/${verifying.works[0]!.work.slice(-36)}/reader-state?actingSubject=${encodeURIComponent(retained.actor)}`))
+          expect(await client.read(`/v1/works/${verifying.population.shelfWorks[0]!.slice(-36)}/reader-state?actingSubject=${encodeURIComponent(retained.actor)}`))
             .toMatchObject({ status: { status: 'reading', version: 1 } });
         copy = { stack, api: client, input };
         stores.push(input);
@@ -118,10 +118,10 @@ test('retained checkpoints restore exact populations and identities into isolate
         readinessMs: timing.readinessMs, totalMs: timing.totalMs });
       if (index === 0) {
         const state = await copy!.api.command(`checkpoint-isolated-${qaRunId}`, {
-          method: 'PUT', path: `/v1/works/${cut.works[0]!.work.slice(-36)}/reader-status`,
+          method: 'PUT', path: `/v1/works/${cut.population.shelfWorks[0]!.slice(-36)}/reader-status`,
           body: { actingSubject: retained.actor, expectedVersion: 1, status: 'want-to-read', startedOn: null, finishedOn: null } });
         expect(state).toMatchObject({ status: 'want-to-read', version: 2 });
-        expect(await copy!.api.read(`/v1/works/${cut.works[0]!.work.slice(-36)}/reader-state?actingSubject=${encodeURIComponent(retained.actor)}`))
+        expect(await copy!.api.read(`/v1/works/${cut.population.shelfWorks[0]!.slice(-36)}/reader-state?actingSubject=${encodeURIComponent(retained.actor)}`))
           .toMatchObject({ status: { status: 'want-to-read', version: 2 } });
         isolatedWrite = true;
       }
