@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { localizedPath } from '../../i18n/locale.ts';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { useEffect, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import EditLayout from '../../app/[locale]/w/[ref]/edit/layout.tsx';
