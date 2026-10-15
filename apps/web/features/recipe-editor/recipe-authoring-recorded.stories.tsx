@@ -69,6 +69,7 @@ const signedInFrame = [
 ] as const satisfies readonly RecordedSelection[];
 
 const exchangeReads = [
+  { label: 'editor-composition-head', state: 'populated' },
   ...signedInFrame,
   { label: 'editor-authority', state: 'populated' },
   { label: 'editor-work-header', state: 'populated' },

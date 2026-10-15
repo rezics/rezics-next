@@ -33,6 +33,20 @@ test('binary replay reads the source fixture and rejects a changed or absent sou
     } else await expect(response).rejects.toThrow(selected.binary!.source === recordingSource ? 'integrity mismatch' : 'ENOENT');
   }
 });
+test('binary replay refuses repository escapes before opening a source', async () => {
+  for (const source of ['../outside.wav', '/tmp/outside.wav', 'file:///outside.wav', 'tests/../../outside.wav']) {
+    let opened = false;
+    const sample: AnswerSample = { label: 'escaped', operationId: 'recording-bytes', method: 'GET',
+      path: '/v1/media/recording/bytes', status: 200, answer: null, headers: { 'content-type': 'audio/wav' },
+      binary: { source, byteLength: 0, sha256: '0'.repeat(64) } };
+    const playback = recordedFetch(recordWith(sample), 'visitor', [{ label: sample.label, state: 'populated' }], {
+      readBinary: async () => { opened = true; return new Uint8Array(); },
+    });
+    disposals.push(playback.dispose);
+    await expect(playback.fetcher(`https://recorded.invalid${sample.path}`)).rejects.toThrow('inside the repository');
+    expect(opened).toBe(false);
+  }
+});
 afterEach(() => { for (const dispose of disposals.splice(0)) dispose(); });
 
 test('a recorded public header with a bare question mark has the same empty query as the typed client', async () => {

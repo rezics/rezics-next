@@ -199,6 +199,7 @@ async function exchangeReads(name: PersonaName, recipe: Recipe, prefix: string, 
     read(sample(`${prefix}-recipe`, 'GET', `/v1/recipes/works/${id}${query(person)}`)),
     read(sample(`${prefix}-notes-empty`, 'GET', `/v1/me/contributions${query(person)}&limit=20`)),
   ]);
+  if (prefix === 'editor') await read(sample('editor-composition-head', 'GET', `/v1/compositions/${short(recipe.structure)}${query(person)}`));
 }
 
 // RootLayout and LocaleLayout share these reads for an English visit by Work UUID.

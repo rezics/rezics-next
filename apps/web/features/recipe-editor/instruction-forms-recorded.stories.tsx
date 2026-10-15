@@ -74,7 +74,7 @@ async function noMiss(canvasElement: HTMLElement) {
 }
 async function reading({ canvasElement }: { canvasElement: HTMLElement }) {
   const canvas = within(canvasElement);
-  await canvas.findByText('Stir', { exact: false });
+  await canvas.findAllByText('Stir', { exact: false });
   expect(canvas.queryByText('PRIVATE successor', { exact: false })).toBeNull();
   await userEvent.click(await canvas.findByRole('button', { name: englishMessages.openRecording }));
   await waitFor(() => expect(canvasElement.querySelector('audio[src^="blob:"]')).not.toBeNull());
@@ -84,7 +84,7 @@ export const ReadingDesktop: Story = { play: reading };
 export const ReadingPhone: Story = { globals: { viewport: { value: 'phone' } }, play: reading };
 export const LoadingPhone: Story = { args: { surface: 'loading' }, globals: { viewport: { value: 'phone' } } };
 export const EditorDesktop: Story = { args: { persona: 'owner', surface: 'editor' }, play: async ({ canvasElement }) => {
-  await within(canvasElement).findByText('Adopt instructions');
+  await within(canvasElement).findByRole('button', { name: 'Use these instructions' });
   await noMiss(canvasElement);
 } };
 export const EditorPhone: Story = { ...EditorDesktop, globals: { viewport: { value: 'phone' } } };
@@ -97,19 +97,23 @@ export const PreviewDesktop: Story = { args: { persona: 'owner', surface: 'edito
 export const PreviewPhone: Story = { ...PreviewDesktop, globals: { viewport: { value: 'phone' } } };
 export const PeerEditingRefused: Story = { args: { persona: 'member', surface: 'editor' }, play: async ({ canvasElement }) => {
   await waitFor(() => expect(canvasElement.textContent).toContain('edit'));
-  expect(within(canvasElement).queryByText('Adopt instructions')).toBeNull();
+  expect(within(canvasElement).queryByRole('button', { name: 'Use these instructions' })).toBeNull();
   await noMiss(canvasElement);
 } };
 export const ExchangeDesktop: Story = { args: { persona: 'member', surface: 'exchange' }, play: async ({ canvasElement }) => {
   const canvas = within(canvasElement);
-  await userEvent.click(await canvas.findByRole('button', { name: 'Download Schema.org JSON' }));
+  const download = await canvas.findByRole('button', { name: 'Download Schema.org JSON' });
+  await waitFor(() => expect(download).toBeEnabled());
+  await userEvent.click(download);
   await canvas.findByText('Information this format cannot preserve');
   await noMiss(canvasElement);
 } };
 export const ExchangePhone: Story = { ...ExchangeDesktop, globals: { viewport: { value: 'phone' } } };
 export const VisitorExportRefused: Story = { args: { surface: 'exchange' }, play: async ({ canvasElement }) => {
   const canvas = within(canvasElement);
-  await userEvent.click(await canvas.findByRole('button', { name: 'Download Schema.org JSON' }));
+  const download = await canvas.findByRole('button', { name: 'Download Schema.org JSON' });
+  await waitFor(() => expect(download).toBeEnabled());
+  await userEvent.click(download);
   await canvas.findByRole('alert');
   await noMiss(canvasElement);
 } };

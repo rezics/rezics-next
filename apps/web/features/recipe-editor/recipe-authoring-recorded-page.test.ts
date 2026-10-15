@@ -78,6 +78,7 @@ const authorReads = [
 ] as const satisfies readonly RecordedSelection[];
 
 const exchangeReads = [
+  { label: 'editor-composition-head', state: 'populated' },
   { label: 'editor-authority', state: 'populated' },
   { label: 'editor-work-header', state: 'populated' },
   { label: 'editor-resource-summary', state: 'populated' },

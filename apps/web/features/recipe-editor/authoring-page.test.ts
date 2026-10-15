@@ -40,7 +40,7 @@ for (const record of [authoringJson, exchangeJson] as AnswerRecord[]) {
         expect(view.initial.recipe).toEqual(stateOf(page.answer as Parameters<typeof stateOf>[0]));
         expect(view.initial.recipe.nodes.filter(node => node.role === 'ingredient')).toHaveLength(2);
         expect(view.initial.notes).toEqual(noNotes);
-        expect(requests).toHaveLength(record.row === 'recipes/author-a-recipe' ? 8 : 6);
+        expect(requests).toHaveLength(record.row === 'recipes/author-a-recipe' ? 8 : 7);
       } else {
         expect(view).toEqual({ kind: 'no-authority', signedIn: persona !== 'visitor' });
         expect(requests).toHaveLength(persona === 'visitor' ? 1 : 2);
