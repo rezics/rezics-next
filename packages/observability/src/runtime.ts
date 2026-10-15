@@ -50,6 +50,7 @@ const spanAttributes = new Set([
   'db.system.name',
   'db.namespace',
   'db.operation.name',
+  'rezics.postgres.rows',
   'error.type',
   'rezics.worker.name',
   'rezics.worker.outcome',
@@ -526,6 +527,10 @@ export function startTelemetry(
     instrumentations: [
       new PgInstrumentation({
         enhancedDatabaseReporting: false,
+        responseHook: (span, { data }) => {
+          const rows = data.rowCount ?? 0;
+          if (Number.isSafeInteger(rows) && rows >= 0) span.setAttribute('rezics.postgres.rows', rows);
+        },
         requireParentSpan: true,
         ignoreConnectSpans: true,
         addSqlCommenterCommentToQueries: false,

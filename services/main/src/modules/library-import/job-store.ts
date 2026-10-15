@@ -1,3 +1,4 @@
+import { indexedRead } from '../../infrastructure/indexed-read.ts';
 import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
@@ -30,15 +31,17 @@ export class LibraryImportJobStore {
       lease_token=NULL,lease_expires_at=NULL FROM outcomes o WHERE j.agent=o.agent AND j.file_id=o.file_id AND j.state='pending' AND ${deadlines}`);
   }
   async status(agent: string,id: string) {
-    await contentConnection(this.pool).query(`UPDATE reader.library_import_job j SET state='completed',reason=NULL,
-      lease_token=NULL,lease_expires_at=NULL WHERE agent=$1 AND file_id=$2 AND state='pending'
-      AND NOT EXISTS (SELECT 1 FROM reader.library_import_source_row r
-        WHERE r.agent=j.agent AND r.file_id=j.file_id AND r.outcome IS NULL)`,[agent,id]);
-    await contentConnection(this.pool).query(`UPDATE reader.library_import_job SET state='stalled',
-      reason=CASE WHEN lease_expires_at<=clock_timestamp() THEN 'lease-expired' ELSE 'no-progress' END,
-      lease_token=NULL,lease_expires_at=NULL WHERE agent=$1 AND file_id=$2 AND state='pending' AND ${deadlines}`,[agent,id]);
-    return (await contentConnection(this.pool).query<ImportJob>(`SELECT state,reason,lease_token FROM reader.library_import_job
-      WHERE agent=$1 AND file_id=$2`,[agent,id])).rows[0] ?? null;
+    return indexedRead(contentConnection(this.pool), async client => {
+      await client.query(`UPDATE reader.library_import_job j SET state='completed',reason=NULL,
+        lease_token=NULL,lease_expires_at=NULL WHERE agent=$1 AND file_id=$2 AND state='pending'
+        AND NOT EXISTS (SELECT 1 FROM reader.library_import_source_row r
+          WHERE r.agent=j.agent AND r.file_id=j.file_id AND r.outcome IS NULL)`,[agent,id]);
+      await client.query(`UPDATE reader.library_import_job SET state='stalled',
+        reason=CASE WHEN lease_expires_at<=clock_timestamp() THEN 'lease-expired' ELSE 'no-progress' END,
+        lease_token=NULL,lease_expires_at=NULL WHERE agent=$1 AND file_id=$2 AND state='pending' AND ${deadlines}`,[agent,id]);
+      return (await client.query<ImportJob>(`SELECT state,reason,lease_token FROM reader.library_import_job
+        WHERE agent=$1 AND file_id=$2`,[agent,id])).rows[0] ?? null;
+    }, 'write');
   }
   /** `seal` runs in the receipt's transaction: a refused command seals nothing. */
   async accept(agent: string,id: string,key: string,intent: ApplyIntent,resume: boolean,

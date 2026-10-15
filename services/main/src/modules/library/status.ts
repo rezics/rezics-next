@@ -361,7 +361,7 @@ export class ReaderLibraryStatusStore {
       || after && (!ID.test(after.work) || after.value !== null && typeof after.value !== 'string')) {
       throw new InvalidLibraryStatus('invalid status shelf page');
     }
-    const [key, type] = keys[sort], direction = order === 'asc' ? 'ASC' : 'DESC';
+    const [key, type] = keys[sort], column = key.replace(' COLLATE "C"', ''), direction = order === 'asc' ? 'ASC' : 'DESC';
     const compare = order === 'asc' ? '>' : '<';
     // Restrict the first scan to nonnull values so either index direction can
     // serve LIMIT without a sort over the whole shelf. Then enter the null tail.
@@ -372,7 +372,7 @@ export class ReaderLibraryStatusStore {
         const boundary = after ? `AND (${key},work) ${compare} ($4::${type},$5::text)` : '';
         const rows = await client.query<Row & { sort_value: string | null }>(`
           SELECT ${columns}, (${key})::text AS sort_value FROM reader.library_status AS shelf
-          WHERE agent = $1 AND status = $2 AND ${key} IS NOT NULL ${boundary}
+          WHERE agent = $1 AND status = $2 AND ${column} IS NOT NULL ${boundary}
           ORDER BY ${key} ${direction}, work ${direction} LIMIT $3`,
         [agent, status, limit, ...(after ? [after.value, after.work] : [])]);
         found.push(...rows.rows);
@@ -381,7 +381,7 @@ export class ReaderLibraryStatusStore {
         const nullBoundary = after?.value === null ? `AND work ${compare} $4::text` : '';
         const rows = await client.query<Row & { sort_value: string | null }>(`
           SELECT ${columns}, NULL::text AS sort_value FROM reader.library_status AS shelf
-          WHERE agent = $1 AND status = $2 AND ${key} IS NULL ${nullBoundary}
+          WHERE agent = $1 AND status = $2 AND ${column} IS NULL ${nullBoundary}
           ORDER BY work ${direction} LIMIT $3`,
         [agent, status, limit - found.length, ...(after?.value === null ? [after.work] : [])]);
         found.push(...rows.rows);

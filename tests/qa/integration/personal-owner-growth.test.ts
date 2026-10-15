@@ -19,7 +19,7 @@ interface Plan {
   'Rows Removed by Index Recheck'?: number;
   Plans?: Plan[];
 }
-type Sample = { operation: string; size: number; statements: number; returned: number; examined: number; ms: number };
+type Sample = { operation: string; size: number; statements: number; returned: number; examined: number; ms: number; queueItems?: number };
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 
 // Count the leaves that touched owner tables, including rows discarded below
@@ -209,14 +209,17 @@ test('notification intake enqueues one bounded audience batch as followers grow'
       await stack.accessPool.query(`INSERT INTO access.follow(principal_id,target,kind,acting_subject,following,revision,level)
         SELECT id,$2,'work',$3,true,gen_random_uuid(),'all' FROM unnest($1::uuid[]) id`, [principals, work, author]);
       await stack.accessPool.query('ANALYZE access.follow');
-      samples.push(await measured.measure('notification-batch', size, async () => {
+      let queueItems = 0;
+      const sample = await measured.measure('notification-batch', size, async () => {
         const batch = await notifications.enqueue({ sourceOwner: 'access', sourceEvent: `growth:${work}:${size}`,
           purpose: 'subscription', topic: 'followed-chapter', subject: { owner: 'graph', ref: work, revision: null },
           disclosureBasis: 'followed-chapter-v1', recipients: [], relationshipPlan: { targets: [work], highlights: false } });
+        queueItems = batch.length;
         expect(batch).toHaveLength(RELATIONSHIP_RECIPIENT_COST.examinedPerBatch);
         expect(batch.complete).toBe(false);
         expect(batch.length).toBeLessThanOrEqual(NOTIFICATION_LIMITS.recipientsPerEvent);
-      }));
+      });
+      samples.push({ ...sample, queueItems });
       previous = size;
     }
     console.table(samples);

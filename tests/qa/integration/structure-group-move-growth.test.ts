@@ -10,6 +10,7 @@ import { assertWorkCostAtScales, profileRequest, startWorkProfileSink,
 
 interface Reading {
   descendants: number;
+  sqlRows: number;
   profile: WorkProfile;
   nativeAdds: number;
   validationFocuses: number;
@@ -90,7 +91,13 @@ if (process.env.REZICS_GROUP_MOVE_PROFILE_CHILD === '1') {
         expect(Number.isFinite(work[field]), field).toBe(true);
         return sum + work[field]!;
       }, 0);
-      readings.push({ descendants, profile, nativeAdds: counter('current_adds') + counter('revisions_adds') + counter('other_adds'),
+      const sqlRows = profile.postgres.reduce((sum, statement) => {
+        const span = profile.spans.find(span => span.spanId === statement.spanId)!;
+        const rows = span.attributes['rezics.postgres.rows'];
+        expect(typeof rows === 'number' && Number.isSafeInteger(rows) && rows >= 0).toBe(true);
+        return sum + Number(rows);
+      }, 0);
+      readings.push({ descendants, sqlRows, profile, nativeAdds: counter('current_adds') + counter('revisions_adds') + counter('other_adds'),
         validationFocuses: counter('validation_focuses'), pagesRead: result.cost.pagesRead });
       sink.clear();
       const afterMove = await retained();
@@ -157,13 +164,13 @@ if (process.env.REZICS_GROUP_MOVE_PROFILE_CHILD === '1') {
     ({ readings } = JSON.parse(readFileSync(resultPath, 'utf8')) as { readings: Reading[] });
     expect(readings.map(reading => reading.descendants)).toEqual([16, 64, 256]);
     const counts = readings.map(reading => ({ descendants: reading.descendants,
-      sql: reading.profile.postgresStatements, fuseki: reading.profile.fusekiRequests,
+      sql: reading.profile.postgresStatements, sqlRows: reading.sqlRows, fuseki: reading.profile.fusekiRequests,
       adds: reading.nativeAdds, focuses: reading.validationFocuses, pages: reading.pagesRead }));
     console.log('Group move growth', JSON.stringify(counts), resultPath);
   }, 600_000);
   test('cross-parent group move work is constant at 16/64/256 descendants', () => {
     const counts = readings.map(reading => ({ descendants: reading.descendants,
-      sql: reading.profile.postgresStatements, fuseki: reading.profile.fusekiRequests,
+      sql: reading.profile.postgresStatements, sqlRows: reading.sqlRows, fuseki: reading.profile.fusekiRequests,
       adds: reading.nativeAdds, focuses: reading.validationFocuses, pages: reading.pagesRead }));
     const message = `Cross-parent group move work at 16/64/256: ${JSON.stringify(counts)}`;
     try {
@@ -171,7 +178,7 @@ if (process.env.REZICS_GROUP_MOVE_PROFILE_CHILD === '1') {
         postgresStatements: readings[0]!.profile.postgresStatements! * 1.2,
         fusekiRequests: readings[0]!.profile.fusekiRequests! * 1.2,
       }, 'structure-group-move-growth');
-      for (const field of ['nativeAdds', 'validationFocuses'] as const) {
+      for (const field of ['nativeAdds', 'validationFocuses', 'sqlRows'] as const) {
         expect(Math.max(...readings.map(reading => reading[field])), message)
           .toBeLessThanOrEqual(readings[0]![field] * 1.2);
       }

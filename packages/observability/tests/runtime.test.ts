@@ -135,7 +135,8 @@ test('Bun exports correct HTTP spans, cumulative histograms and correlated logs,
       ).toBe(true);
     }
     expect(
-      spans.some((s) => attributes(s.attributes ?? [])['db.system.name'] === 'postgresql'),
+      spans.some((s) => attributes(s.attributes ?? [])['db.system.name'] === 'postgresql'
+        && attributes(s.attributes ?? [])['rezics.postgres.rows'] === 1),
     ).toBe(true);
     const expected: Record<string, number> = {
       'GET /ok/:id': 200,

@@ -1,3 +1,4 @@
+import { indexedRead } from '../../infrastructure/indexed-read.ts';
 import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { Value } from 'typebox/value';
 import { createHash } from 'node:crypto';
@@ -91,18 +92,20 @@ export class LibraryFileStore {
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { if (!borrowed) client.release(); }
   }
   async file(agent: string, id: string) {
-    const result = await contentConnection(this.pool).query<{ import_key: string; format: LibraryFileFormat; apply_intent: ApplyIntent | null }>(`
-      SELECT import_key,format,apply_intent FROM reader.library_import_file WHERE agent=$1 AND id=$2 AND expires_at>clock_timestamp()`, [agent,id]);
+    const result = await indexedRead(contentConnection(this.pool), client => client.query<{ import_key: string; format: LibraryFileFormat;
+      apply_intent: ApplyIntent | null; total: number; completed: number; issues: number }>(`
+      SELECT import_key,format,apply_intent,total_count AS total,completed_count AS completed,issue_count AS issues
+      FROM reader.library_import_file WHERE agent=$1 AND id=$2 AND expires_at>clock_timestamp()`, [agent,id]), true);
     if (!result.rows[0]) throw new LibraryFileMissing('Import file was deleted, expired or is unavailable');
     return result.rows[0];
   }
   async page(agent: string, id: string, after: number, limit = FILE_IMPORT_COST.page as number) {
     await this.file(agent,id);
-    const result = await contentConnection(this.pool).query<SourceRecord>(`WITH candidates AS MATERIALIZED (
+    const result = await indexedRead(contentConnection(this.pool), client => client.query<SourceRecord>(`WITH candidates AS MATERIALIZED (
       SELECT * FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2 AND row_number>$3 ORDER BY row_number LIMIT $4)
       SELECT r.row_number,${sourceView},r.match,r.resolution,r.outcome,r.version::text
       FROM candidates r CROSS JOIN LATERAL (SELECT source FROM reader.library_import_source
-        WHERE agent=r.agent AND digest=r.source_digest OFFSET 0) s ORDER BY r.row_number`, [agent,id,after,limit+1]);
+        WHERE agent=r.agent AND digest=r.source_digest OFFSET 0) s ORDER BY r.row_number`, [agent,id,after,limit+1]), true);
     return { rows: result.rows.slice(0,limit).map(unpack), more: result.rows.length>limit };
   }
   async saveMatch(agent: string, id: string, index: number, match: RowMatch) {
@@ -166,12 +169,12 @@ export class LibraryFileStore {
     await client.query(`UPDATE reader.library_import_file SET apply_intent=$3 WHERE agent=$1 AND id=$2`, [agent,id,JSON.stringify(intent)]);
   }
   async pending(agent: string, id: string) {
-    const rows = await contentConnection(this.pool).query<SourceRecord>(`WITH candidates AS MATERIALIZED (
+    const rows = await indexedRead(contentConnection(this.pool), client => client.query<SourceRecord>(`WITH candidates AS MATERIALIZED (
       SELECT * FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2 AND outcome IS NULL
         ORDER BY row_number LIMIT ${FILE_IMPORT_COST.page})
       SELECT r.row_number,${sourceView},r.match,r.resolution,r.outcome,r.version::text
       FROM candidates r CROSS JOIN LATERAL (SELECT source FROM reader.library_import_source
-        WHERE agent=r.agent AND digest=r.source_digest OFFSET 0) s ORDER BY r.row_number`, [agent,id]);
+        WHERE agent=r.agent AND digest=r.source_digest OFFSET 0) s ORDER BY r.row_number`, [agent,id]), true);
     return rows.rows.map(unpack);
   }
   async complete(agent: string, id: string, index: number, outcome: NonNullable<StoredSourceRow['outcome']>,token?: string) {
@@ -191,11 +194,9 @@ export class LibraryFileStore {
     } catch (error) { await client.query('ROLLBACK');throw error; } finally { if (!borrowed) client.release(); }
   }
   async progress(agent: string, id: string) {
-    await this.file(agent,id);
     const job=await this.jobs.status(agent,id);
-    const result = await contentConnection(this.pool).query<{ total: number; completed: number; issues: number }>(`SELECT total_count AS total,
-      completed_count AS completed,issue_count AS issues FROM reader.library_import_file WHERE agent=$1 AND id=$2`, [agent,id]);
-    const counts=result.rows[0]!;
+    const { total,completed,issues } = await this.file(agent,id);
+    const counts = { total,completed,issues };
     const state=job?.state ?? (counts.completed===counts.total ? 'completed' as const : 'review' as const);
     return { ...counts,state,reason: job?.reason ?? null,pending: state==='pending' };
   }

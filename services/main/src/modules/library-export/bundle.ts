@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { indexedRead } from '../../infrastructure/indexed-read.ts';
 import { emptyRow, FILE_IMPORT_COST, type CanonicalRow } from '../library-import/formats/contract.ts';
 import { importDigest, type RowMatch } from '../library-import/file-store.ts';
@@ -48,7 +48,7 @@ function ratingAfter(after: string): [string, string] {
  * owner fence and reader collection/rating heads detect changes before and after every page.
  * The retained cursor lasts 30 minutes and tolerates unrelated graph writes. */
 export class LibraryBundleExporter {
-  constructor(private readonly content: Pool, private readonly access: Pool) {}
+  constructor(private readonly content: Pool | PoolClient, private readonly access: Pool | PoolClient) {}
   async fence(session: WorkReadSession, agent: string) {
     const result = await this.content.query<{ data_epoch: string; version: string; expires_at: Date | null }>(`SELECT c.data_epoch,
       coalesce(f.version,0)::text AS version,
@@ -68,6 +68,12 @@ export class LibraryBundleExporter {
       ratings.rows[0]!.version,collections[0]?.position?.value ?? null]),expiresAt: position.expires_at?.getTime() };
   }
   async page(session: WorkReadSession, agent: string, options: ExportOptions) {
+    // One index scope per database covers every phase, including sparse ones.
+    // Reopening a scope per phase would spend the SQL budget on planner setup.
+    return indexedRead(this.content, content => indexedRead(this.access, access =>
+      new LibraryBundleExporter(content, access).readPage(session, agent, options)));
+  }
+  private async readPage(session: WorkReadSession, agent: string, options: ExportOptions) {
     if (!session.principal) throw new WorkReadInvalid('Authentication is required');
     const limit = options.limit ?? LIBRARY_EXPORT_COST.page;
     const owner = await this.fence(session,agent), fence = owner.value, binding = ['rezics-library-export-v1',session.principal.issuer,session.principal.subject,agent];
@@ -200,7 +206,7 @@ export class LibraryBundleExporter {
     const principalId = await session.deps.access.activePrincipalId(principal);
     if (!principalId) throw new WorkReadUnavailable('Library export principal is unavailable');
     if (phase === 7) {
-      const result = await indexedRead(this.access, client => client.query<{
+      const result = await this.access.query<{
         target: string;
         context: string;
         observation: string;
@@ -212,7 +218,7 @@ export class LibraryBundleExporter {
         WHERE principal_id=$1 AND (context COLLATE "C",target COLLATE "C")>($2,$3)
         ORDER BY context COLLATE "C",target COLLATE "C" LIMIT $4`,
         [principalId, ...ratingAfter(after), limit],
-      ));
+      );
       if (result.rows.length) {
         const reader = await session.deps.account.verify(session.request, ['rating:read']);
         if (reader.issuer !== principal.issuer || reader.subject !== principal.subject)
@@ -297,10 +303,10 @@ export class LibraryBundleExporter {
       const keys = new Map(result.rows.map(head => [head.key, JSON.stringify([head.context, head.target])]));
       return exported.map(item => ({ ...item, key: keys.get(item.key)! }));
     }
-    const result = await indexedRead(this.access, client => client.query<{ work: string; context: string; observation: string; revision: string; key: string }>(`
+    const result = await this.access.query<{ work: string; context: string; observation: string; revision: string; key: string }>(`
       SELECT work,context,observation,revision,context||':'||work AS key FROM access.rating_aggregate_head
       WHERE principal_id=$1 AND target_release IS NULL AND (context COLLATE "C",work COLLATE "C")>($2,$3)
-      ORDER BY context COLLATE "C",work COLLATE "C" LIMIT $4`,[principalId,...ratingAfter(after),limit]));
+      ORDER BY context COLLATE "C",work COLLATE "C" LIMIT $4`,[principalId,...ratingAfter(after),limit]);
     if (result.rows.length) {
       const reader = await session.deps.account.verify(session.request,['rating:read']);
       if (reader.issuer !== principal.issuer || reader.subject !== principal.subject) throw new WorkReadUnavailable('Rating export principal changed');
