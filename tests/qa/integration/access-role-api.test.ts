@@ -1,3 +1,4 @@
+import { enrollOperatorAt } from '../../../services/account/tests/factor-fixture.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -63,6 +64,7 @@ test('IAM05/IAM30/IAM33: pinned role revision grants one saved work.create path'
     }
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await enrollOperatorAt(accountPool, Bun.env.ACCOUNT_SECRET!, base, operator);
     const headers = new Headers({ cookie: operator.cookie, origin: base });
     const verifierClient = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Role verifier', scope: 'access:role',

@@ -1,3 +1,4 @@
+import { enrollSecondFactor } from './factor-fixture.ts';
 import { expect, spyOn, test } from 'bun:test';
 import { Client } from 'pg';
 import { randomUUID } from 'node:crypto';
@@ -33,6 +34,7 @@ for (const first of ['verification', 'operator-note'] as const) {
     try {
       const operator = await f.signup('note-operator@example.test');
       f.operators.add(operator.id);
+      await enrollSecondFactor(f, operator);
       await bootstrapOperators(f.pool, f.operators);
       const email = 'note-verification@example.test';
       expect((await f.request('/api/auth/sign-up/email', { email, name: 'Member',
@@ -310,6 +312,7 @@ for (const issuer of ['signup', 'resend', 'operator', 'bulk'] as const) {
     try {
       const operator = await f.signup('operator@example.test');
       f.operators.add(operator.id);
+      await enrollSecondFactor(f, operator);
       await bootstrapOperators(f.pool, f.operators);
       const original = { email: 'reused@example.test', name: 'Original', password: 'original sufficiently long password' };
       expect((await f.request('/api/auth/sign-up/email', original)).status).toBe(200);
@@ -399,6 +402,7 @@ test(`${issuer} verification uses the current recovery generation and rejects it
     const guardian = await f.signup('guardian@example.test');
     const operator = await f.signup('operator@example.test');
     f.operators.add(operator.id);
+    await enrollSecondFactor(f, operator);
     await bootstrapOperators(f.pool, f.operators);
     const recovery = await recoveryProof(f, member, guardian);
     await f.pool.query('UPDATE "user" SET "emailVerified" = false WHERE id = $1', [member.id]);

@@ -1,3 +1,4 @@
+import { enrollOperatorAt } from '../../../services/account/tests/factor-fixture.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { readTitleControl } from '../../../services/main/src/modules/work/title-control.ts';
@@ -91,6 +92,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
     };
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await enrollOperatorAt(accountPool, Bun.env.ACCOUNT_SECRET!, base, operator);
     const headers = new Headers({ cookie: operator.cookie, origin: base });
     const verifierClient = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Source Main verifier', scope: 'source:intake',

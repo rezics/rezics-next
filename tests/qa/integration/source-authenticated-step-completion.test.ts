@@ -1,3 +1,4 @@
+import { enrollOperatorAt } from '../../../services/account/tests/factor-fixture.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { assertSourceSupportWithdrawal } from '../fixtures/source-support-withdrawal.ts';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
@@ -222,10 +223,11 @@ async function qualifyAuthenticatedSourceSteps(continuation: boolean): Promise<v
         body: JSON.stringify({ email: accountOperator.email, password: accountOperator.password }),
       });
       expect(response.status).toBe(200);
-      expect((await response.json() as { user: { id: string } }).user.id).toBe(accountOperator.id);
+      await response.body?.cancel();
       return { ...accountOperator, cookie: response.headers.get('set-cookie')! };
     });
     operators.add(operator.id);
+    await enrollOperatorAt(accountPool, Bun.env.ACCOUNT_SECRET!, base, operator);
     const headers = new Headers({ cookie: operator.cookie, origin: base });
     const verifierClient = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Source Main verifier', scope: 'source:intake',

@@ -1,3 +1,4 @@
+import { enrollOperatorAt } from '../../../services/account/tests/factor-fixture.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -86,6 +87,7 @@ async function withOwners(label: string, work: (owners: Owners) => Promise<void>
     };
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await enrollOperatorAt(accountPool, Bun.env.ACCOUNT_SECRET!, base, operator);
     const headers = new Headers({ cookie: operator.cookie, origin: base });
     const mainClient = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: `${label} verifier`, scope: 'work:create access:manage',

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { writeAudit } from './operators.ts';
+import { checkActor } from './admin-actions.ts';
 
 export const INSTALLATION_CLAIM = 'rezics_installation_id';
 
@@ -62,20 +63,23 @@ export async function readInstallation(pool: Pool, clientId: string): Promise<In
  * share-lock the installation: those commit first or fail after it. An exact
  * retry returns the revoked installation. */
 export async function revokeInstallation(pool: Pool, input: {
-  installationId: string; operatorUserId: string;
+  installationId: string; actor: { userId: string; sessionId: string };
 }): Promise<InstallationView> {
   const db = await pool.connect();
   try {
     await db.query('BEGIN');
+    await db.query("SET LOCAL lock_timeout = '2s'");
+    await db.query("SET LOCAL statement_timeout = '5s'");
     const before = await db.query<InstallationRow>('SELECT * FROM rezics_oauth_installation WHERE id = $1 FOR UPDATE', [input.installationId]);
     if (!before.rows[0]) throw new InstallationNotFound('installation not found');
+    await checkActor(db, input.actor, 'clients:manage');
     const revoked = await db.query<InstallationRow>(`UPDATE public.rezics_oauth_installation
     SET state = 'revoked', revoked_by = $2, revoked_at = now()
     WHERE id = $1 AND state = 'active'
     RETURNING id, client_id, state, scopes, installed_at, revoked_at`,
-  [input.installationId, input.operatorUserId]);
+  [input.installationId, input.actor.userId]);
     const after = view(revoked.rows[0] ?? before.rows[0]);
-    await writeAudit(db, { actorId: input.operatorUserId, action: 'installation_revoked', targetId: input.installationId,
+    await writeAudit(db, { actorId: input.actor.userId, action: 'installation_revoked', targetId: input.installationId,
       reason: 'Operator revoked App installation', before: view(before.rows[0]), after, requestId: randomUUID() });
     await db.query('COMMIT');
     return after;
@@ -88,7 +92,7 @@ export async function revokeInstallation(pool: Pool, input: {
  * ceiling is revoke then install, so every token family re-authorizes. The
  * operator's change key makes an exact retry return the original result. */
 export async function installClient(pool: Pool, input: {
-  clientId: string; scopes: readonly string[]; changeKey: string; operatorUserId: string;
+  clientId: string; scopes: readonly string[]; changeKey: string; actor: { userId: string; sessionId: string };
 }): Promise<InstallationView> {
   const scopes = [...new Set(input.scopes)].sort();
   if (!scopes.length || scopes.length !== input.scopes.length
@@ -99,10 +103,13 @@ export async function installClient(pool: Pool, input: {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout = '2s'");
+    await client.query("SET LOCAL statement_timeout = '5s'");
     const registration = await client.query<{ declared: string[] }>(`SELECT
         public.rezics_declared_scopes(scopes, "clientCredentialsScopes") AS declared
       FROM public."oauthClient" WHERE "clientId" = $1 FOR UPDATE`, [input.clientId]);
     if (!registration.rows[0]) throw new InstallationNotFound('client not found');
+    await checkActor(client, input.actor, 'clients:manage');
     const replay = await client.query<InstallationRow & { change_digest: string }>(`SELECT id,
         client_id, state, scopes, installed_at, revoked_at, change_digest
       FROM public.rezics_oauth_installation WHERE client_id = $1 AND change_key = $2`,
@@ -125,9 +132,9 @@ export async function installClient(pool: Pool, input: {
         (id, client_id, state, scopes, installed_by, change_key, change_digest)
       VALUES ($1, $2, 'active', to_jsonb($3::text[]), $4, $5, $6)
       RETURNING id, client_id, state, scopes, installed_at, revoked_at`,
-    [randomUUID(), input.clientId, scopes, input.operatorUserId, input.changeKey, digest]);
+    [randomUUID(), input.clientId, scopes, input.actor.userId, input.changeKey, digest]);
     const after = view(inserted.rows[0]!);
-    await writeAudit(client, { actorId: input.operatorUserId, action: 'installation_created', targetId: input.clientId,
+    await writeAudit(client, { actorId: input.actor.userId, action: 'installation_created', targetId: input.clientId,
       reason: 'Operator installed App scopes', before: null, after, requestId: randomUUID() });
     await client.query('COMMIT');
     return after;

@@ -1,3 +1,4 @@
+import { enrollOperatorAt } from '../../../services/account/tests/factor-fixture.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { authorize, postToken } from '../../../scripts/lib/oauth-client.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -104,6 +105,7 @@ export async function startAgentControlHarness(label: string) {
   };
   const operator = await signUp('operator');
   operators.add(operator.id);
+    await enrollOperatorAt(accountPool, Bun.env.ACCOUNT_SECRET!, base, operator);
   const headers = new Headers({ cookie: operator.cookie, origin: base });
   const verifierClient = await auth.api.adminCreateOAuthClient({
     headers,

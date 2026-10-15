@@ -1,3 +1,4 @@
+import { enrollOperatorAt } from '../../../services/account/tests/factor-fixture.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -56,6 +57,7 @@ test('PKG20: real Account scopes and Access admission fence Go source runs', asy
     };
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await enrollOperatorAt(accountPool, Bun.env.ACCOUNT_SECRET!, base, operator);
     await accountPool.query("INSERT INTO rezics_account_operator (user_id, role) VALUES ($1, 'owner') ON CONFLICT DO NOTHING", [operator.id]);
     const adminHeaders = new Headers({ cookie: operator.cookie, origin: base });
     const verifier = await auth.api.adminCreateOAuthClient({ headers: adminHeaders, body: {

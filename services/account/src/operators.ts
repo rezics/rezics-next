@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { accountSession, AccountProblem, type AccountAuth } from './http.ts';
-import { requireStepUp } from './methods.ts';
+import { requireSecondFactor, requireStepUp } from './methods.ts';
 
 export type OperatorRole = 'owner' | 'admin' | 'support';
 export const operatorPermissions = {
@@ -54,6 +54,7 @@ export async function requireOperator(auth: AccountAuth, pool: Pool, request: Re
       before: null, after: null, requestId: randomUUID(), outcome: 'failed' });
     throw new AccountProblem('forbidden', 403);
   }
+  await requireSecondFactor(pool, session.session.id);
   if (write) await requireStepUp(pool, session);
   return { userId: session.user.id, sessionId: session.session.id, role };
 }

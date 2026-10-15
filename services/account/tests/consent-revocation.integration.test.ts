@@ -1,3 +1,4 @@
+import { enrollSecondFactor } from './factor-fixture.ts';
 import { test, expect } from 'bun:test';
 import { signupPolicyFixture } from './account-fixture.ts';
 import { postToken, prepareAuthorization, signIn } from '../../../scripts/lib/oauth-client.ts';
@@ -53,11 +54,14 @@ test('IAM09: withdrawn consent fences old refresh and Main access across clients
         body: JSON.stringify({ ...signupPolicyFixture, name, email, password }),
       });
       expect(response.status).toBe(200);
-      return { id: (await response.json() as { user: { id: string } }).user.id,
+      return { password, id: (await response.json() as { user: { id: string } }).user.id,
         cookie: response.headers.get('set-cookie')! };
     };
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await enrollSecondFactor({ pool, secret: config.secret, request: (path, body, cookie) =>
+      fetch(`${baseURL}${path}`, { method: 'POST', headers: { 'content-type': 'application/json',
+        origin: baseURL, cookie }, body: JSON.stringify(body) }) }, operator);
     const adminHeaders = new Headers({ cookie: operator.cookie, origin: baseURL });
     const verifierClient = await auth.api.adminCreateOAuthClient({ headers: adminHeaders,
       body: { client_name: 'Main verifier', scope: 'work:create',

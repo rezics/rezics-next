@@ -1,3 +1,4 @@
+import { enrollSecondFactor } from './factor-fixture.ts';
 import { expect, test } from 'bun:test';
 import { signupPolicyFixture } from './account-fixture.ts';
 import { postToken, prepareAuthorization } from '../../../scripts/lib/oauth-client.ts';
@@ -46,17 +47,21 @@ test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pendin
     const auth = createAccountAuth(config);
     account = createAccountApp(auth, pool).listen({ hostname: '127.0.0.1', port: accountPort });
     const signUp = async (name: string) => {
+      const password = randomBytes(24).toString('base64url');
       const response = await fetch(`${base}/api/auth/sign-up/email`, {
         method: 'POST', headers: { 'content-type': 'application/json', origin: base },
         body: JSON.stringify({ ...signupPolicyFixture, name, email: `${name}-${randomUUID()}@example.test`,
-          password: randomBytes(24).toString('base64url') }),
+          password }),
       });
       expect(response.status).toBe(200);
-      return { id: (await response.json() as { user: { id: string } }).user.id,
+      return { password, id: (await response.json() as { user: { id: string } }).user.id,
         cookie: response.headers.get('set-cookie')! };
     };
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await enrollSecondFactor({ pool, secret: config.secret, request: (path, body, cookie) =>
+      fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json',
+        origin: base, cookie }, body: JSON.stringify(body) }) }, operator);
     const headers = new Headers({ cookie: operator.cookie, origin: base });
     const introspector = await auth.api.adminCreateOAuthClient({ headers,
       body: { client_name: 'IAM02 introspection', scope: 'work:create',

@@ -1,3 +1,4 @@
+import { enrollOperatorAt } from '../../../services/account/tests/factor-fixture.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -60,6 +61,7 @@ test('IAM23/IAM24/IAM06: independent Org/Realm participation requires two exact 
     }
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await enrollOperatorAt(accountPool, Bun.env.ACCOUNT_SECRET!, base, operator);
     const headers = new Headers({ cookie: operator.cookie, origin: base });
     const verifierClient = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Org Realm verifier', scope: 'access:manage work:create',

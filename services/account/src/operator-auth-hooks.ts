@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import type { Pool } from 'pg';
 import { bootstrapOperators, operatorRole, rolePermits, writeAudit } from './operators.ts';
-import { requireStepUp } from './methods.ts';
+import { requireSecondFactor, requireStepUp } from './methods.ts';
 import { decodeJwt } from 'jose';
 
 const mutationPaths = new Set(['/oauth2/create-client', '/admin/oauth2/create-client',
@@ -46,14 +46,16 @@ export function operatorAuthHooks(pool: Pool, bootstrapIds: ReadonlySet<string>)
           throw new APIError('BAD_REQUEST', { code: 'INVALID_TOKEN', message: 'Invalid token' });
         }
       }
-      if (!mutationPaths.has(ctx.path) && !(ctx.path.startsWith('/admin/oauth2/resources') && ctx.method !== 'GET')) return;
+      const mutation = mutationPaths.has(ctx.path) || (ctx.path.startsWith('/admin/oauth2/resources') && ctx.method !== 'GET');
+      if (!mutation && !ctx.path.startsWith('/admin/oauth2/')) return;
       await bootstrapOperators(pool, bootstrapIds);
       const session = await getSessionFromCtx(ctx);
       if (!session) throw new APIError('UNAUTHORIZED', { code: 'UNAUTHENTICATED', message: 'Sign in to continue' });
       const role = await operatorRole(pool, session.user.id);
       if (!role || !rolePermits(role, 'clients:manage')) throw new APIError('FORBIDDEN', { code: 'FORBIDDEN', message: 'Operator permission required' });
-      try { await requireStepUp(pool, session); }
+      try { await requireSecondFactor(pool, session.session.id); await requireStepUp(pool, session); }
       catch { throw new APIError('FORBIDDEN', { code: 'STEP_UP_REQUIRED', message: 'Sign in again to continue' }); }
+      if (!mutation) return;
       const reason = ctx.headers?.get('x-account-reason')?.trim() ?? (ctx.request ? '' : 'Server-side OAuth client administration');
       if (reason.length < 3 || reason.length > 1000) throw new APIError('BAD_REQUEST', { code: 'REASON_REQUIRED', message: 'Provide x-account-reason' });
       const body = ctx.body as { client_id?: unknown; client_name?: unknown } | undefined;

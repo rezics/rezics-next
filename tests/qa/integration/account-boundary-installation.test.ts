@@ -206,10 +206,11 @@ test('IAM09: installation checks stay constant-cost as revoked installation hist
       cycleCosts.push(counter.counts.calls);
     } finally { counter.restore(); }
   }
-  // e6b199f4 added durable bootstrap/role checks, step-up and transactional audits.
-  // Measured endpoint costs are 14 for revoke + 16 for install, independent of history.
+  // Current MFA, transaction-local role/session checks and bounded lock timeouts
+  // add fourteen indexed statements to the former 30-statement cycle.
+  // The ceiling includes both endpoint admission and the fenced transactions.
   expect(new Set(cycleCosts).size).toBe(1);
-  expect(cycleCosts[0]).toBeLessThanOrEqual(30);
+  expect(cycleCosts[0]).toBeLessThanOrEqual(44);
   expect((await account.pool.query('SELECT 1 FROM rezics_oauth_installation WHERE client_id = $1',
     [churned.client_id])).rowCount).toBe(17);
   const afterHistory = await measure((await account.issue(churned.client_id, member, scope, false)).access_token);

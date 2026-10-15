@@ -1,3 +1,4 @@
+import { enrollOperatorAt } from '../../../services/account/tests/factor-fixture.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -61,6 +62,7 @@ export async function agentProvisionHarness(scopes: readonly string[] = ['agent:
   }
   const operator = await signUp('operator');
   operators.add(operator.id);
+    await enrollOperatorAt(accountPool, Bun.env.ACCOUNT_SECRET!, base, operator);
   // This QA database outlives each harness; one-time Account bootstrap cannot
   // promote the next test's operator. Seed its durable fixture role explicitly.
   await accountPool.query(`INSERT INTO rezics_account_operator (user_id, role)

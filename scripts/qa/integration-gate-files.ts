@@ -60,6 +60,7 @@ export const integrationGateFiles = [
   'services/account/tests/guardian-consent.integration.test.ts',
   'services/account/tests/guardian-cost.integration.test.ts',
   'services/account/tests/methods.integration.test.ts',
+  'services/account/tests/privileged-policy.integration.test.ts',
   'services/account/tests/recovery-claim.integration.test.ts',
   'services/account/tests/recovery-coverage.integration.test.ts',
   'services/account/tests/recovery-factors.integration.test.ts',

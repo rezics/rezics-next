@@ -2,7 +2,7 @@ import { contentConnection } from '../../../../content/src/connection.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { representedGrantProof } from '../access/composition.ts';
+import { representedGrantProof, dispatchRepresentedGrant } from '../access/composition.ts';
 import type { ExportBasis, LicenseScopeHook, VerifiedExportMember } from '../export/planner.ts';
 import type { DeliveryCutSnapshot } from './delivery-cut.ts';
 import { assessmentFamilies, assessmentOutcomes, expressionKinds, materialScopes, obligationKinds, rightsBases,
@@ -190,7 +190,7 @@ function supportedPublicDomainHead(row: { assessment_head: string; basis: string
  * Content-database rights basis owner. Assessments are immutable per exact
  * material, family, use and use scope; a changed use is a different key and
  * never inherits an earlier conclusion. Authority comes from an Access grant
- * checked before the Content transaction.
+ * selected before the Content transaction and fenced through its commit.
  */
 export class RightsStore {
   constructor(private readonly content: Pool, private readonly access: Pool) {}
@@ -305,14 +305,17 @@ export class RightsStore {
     return row.principalId;
   }
 
-  private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+  private async transaction<T>(work: (client: PoolClient) => Promise<T>,
+    commit?: (effect: () => Promise<void>) => Promise<void>): Promise<T> {
     const client = await this.content.connect().catch(() => { throw new RightsUnavailable('rights owner is unavailable'); });
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       const result = await work(client);
-      await client.query('COMMIT');
+      const effect = async () => { await client.query('COMMIT'); };
+      if (commit) await commit(effect);
+      else await effect();
       return result;
     } catch (error) {
       await rollback(client);
@@ -347,7 +350,10 @@ export class RightsStore {
       || (input.expectedAssessment !== null && !/^[0-9a-f-]{36}$/.test(input.expectedAssessment))) {
       throw new RightsInvalid('rights assessment does not match its profile');
     }
-    const principalId = await this.assessor(principal, input.actingSubject);
+    const authority = await representedGrantProof(this.access, principal, input.actingSubject, ASSESS_SCOPE, ASSESS_ACTION)
+      .catch(() => { throw new RightsUnavailable('Access is unavailable'); });
+    if (!authority) throw new RightsDenied('rights assessment authority is missing');
+    const principalId = authority.principalId;
     const request = sha256(JSON.stringify({ ...input, idempotencyKey: undefined }));
     return this.transaction(async client => {
       const prior = (await client.query<{ id: string; request_digest: string }>(`SELECT id, request_digest
@@ -395,7 +401,8 @@ export class RightsStore {
         [material.id, input.family, input.useKind, input.useScope, id]);
       }
       return { ...await this.read(client, id), replayed: false };
-    });
+    }, effect => dispatchRepresentedGrant(this.access, principal, input.actingSubject, ASSESS_SCOPE,
+      ASSESS_ACTION, authority, () => new RightsDenied('rights assessment authority ended'), effect));
   }
 
   private async read(client: PoolClient, assessmentId: string): Promise<Assessment> {

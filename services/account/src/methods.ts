@@ -22,6 +22,19 @@ export async function requireStepUp(pool: Pool | PoolClient, session: { session:
   if (!current.rowCount) throw new AccountProblem('step_up_required', 403);
 }
 
+/** Privileged use and replacement prove the currently enrolled authenticator,
+ * even on a newly created or remembered-device session. */
+export async function requireSecondFactor(pool: Pool | PoolClient, sessionId: string) {
+  const current = await pool.query(`SELECT 1 FROM "session" s
+    JOIN "user" u ON u.id = s."userId" AND u."twoFactorEnabled"
+    JOIN "twoFactor" f ON f."userId" = u.id AND f.verified
+    JOIN rezics_account_step_up p ON p.session_id = s.id AND p.totp_factor_id = f.id
+    WHERE s.id = $1 AND s."expiresAt" > clock_timestamp()
+      AND s.rezics_generation = (SELECT session_generation FROM rezics_account_security WHERE user_id = u.id)
+      AND p.verified_at > clock_timestamp() - interval '5 minutes'`, [sessionId]);
+  if (!current.rowCount) throw new AccountProblem('step_up_required', 403);
+}
+
 /** Raw signed-in TOTP and reauthentication prove the same factor, so they
  * spend one atomic user budget even across sessions and ignored body fields. */
 export { consumeStepUpAttempt } from './rate-limit.ts';
@@ -79,8 +92,11 @@ export async function reauthenticate(guardPool: Pool, session: { session: { id: 
     if (authenticationSubjectChanged(authentication.subject, exchange)) return { changed: exchange };
     if (exchange.kind === 'threw') throw exchange.error;
     const accepted = exchange.result;
-    if (accepted) await db.query(`INSERT INTO rezics_account_step_up (session_id) VALUES ($1)
-      ON CONFLICT (session_id) DO UPDATE SET verified_at = now()`, [session.session.id]);
+    if (accepted) await db.query(`INSERT INTO rezics_account_step_up (session_id, totp_factor_id)
+      VALUES ($1, (SELECT id FROM "twoFactor" WHERE "userId" = $2 AND verified AND $3))
+      ON CONFLICT (session_id) DO UPDATE SET verified_at = clock_timestamp(),
+        totp_factor_id = EXCLUDED.totp_factor_id`,
+    [session.session.id, session.user.id, path === '/api/account/reauthenticate']);
     return { accepted };
   }, { ...(path === '/api/account/reauthenticate' ? { totpVerification: true as const } : {}),
     afterCommit: async (result, db) => {

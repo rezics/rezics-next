@@ -1,3 +1,4 @@
+import { enrollSecondFactor } from './factor-fixture.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { accountFixture } from './account-fixture.ts';
@@ -38,6 +39,7 @@ test('G262 admin panel: directory operators, exact jump, work queues and per-ope
   try {
     const { owner } = await oauthFixture(f);
     const support = await f.signup('support@example.test');
+    await enrollSecondFactor(f, support);
     const li = await f.signup('li.ming@example.test');
     const wang = await f.signup('wang@example.test');
     const pending = await f.signup('pending@example.test');
@@ -115,11 +117,12 @@ test('G262 admin panel: sanctions need a reason code, message the user, and read
   try {
     const { owner } = await oauthFixture(f);
     const support = await f.signup('support@example.test');
+    await enrollSecondFactor(f, support);
     const member = await f.signup('member@example.test');
     await json(f.request(`/api/account/admin/operators/${support.id}`, { role: 'support', reason: 'Support rotation' }, owner.cookie));
     const me = await json<{ reasonCodes: Record<string, string[]>; stepUpUntil: string | null; secondFactor: boolean; bulkLimit: number }>(
       f.request('/api/account/admin/me', undefined, owner.cookie));
-    expect(me).toMatchObject({ secondFactor: false, bulkLimit: 100 });
+    expect(me).toMatchObject({ secondFactor: true, bulkLimit: 100 });
     expect(me.reasonCodes.suspend).toContain('spam');
     expect(me.stepUpUntil).toBeTruthy();
 
@@ -178,7 +181,9 @@ test('G262 admin panel: bulk actions run as jobs with per-user results, replay a
   try {
     const { owner } = await oauthFixture(f);
     const admin = await f.signup('admin@example.test');
+    await enrollSecondFactor(f, admin);
     const support = await f.signup('support@example.test');
+    await enrollSecondFactor(f, support);
     const [first, second, third] = [await f.signup('one@example.test'), await f.signup('two@example.test'), await f.signup('three@example.test')];
     await json(f.request(`/api/account/admin/operators/${admin.id}`, { role: 'admin', reason: 'Moderation team' }, owner.cookie));
     await json(f.request(`/api/account/admin/operators/${support.id}`, { role: 'support', reason: 'Support rotation' }, owner.cookie));
@@ -235,6 +240,7 @@ test('G262 admin panel: disabling an App refuses its authorizations and tokens u
     const oauth = await oauthFixture(f);
     const member = await f.signup('member@example.test');
     const support = await f.signup('support@example.test');
+    await enrollSecondFactor(f, support);
     await json(f.request(`/api/account/admin/operators/${support.id}`, { role: 'support', reason: 'Support rotation' }, oauth.owner.cookie));
     const client = await oauth.createClient();
     const tokens = await oauth.issue(client.client_id, member.cookie);

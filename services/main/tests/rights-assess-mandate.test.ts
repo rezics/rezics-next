@@ -6,7 +6,8 @@ import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
-import { fixtureAuthorityScenario } from '../src/modules/access/fixture-authority-scenario.ts';
+import { advanceFixtureAuthorityGeneration, fixtureAuthorityScenario, setFixtureGrantDeadline,
+  setFixtureMandateState, setFixtureMembershipState } from '../src/modules/access/fixture-authority-scenario.ts';
 import { ASSESS_ACTION, ASSESS_SCOPE, PUBLIC_DOMAIN_TEXT_USE, publicDomainWorkMaterial,
   RightsDenied, RightsStore, type AssessmentInput } from '../src/modules/rights/store.ts';
 
@@ -66,4 +67,53 @@ for (const mandate of [ASSESS_ACTION, 'agent.control']) {
         replayed: true });
     });
   }
+}
+
+for (const ended of ['grant', 'expiry', 'mandate', 'membership', 'principal', 'representation',
+  'authority_subject', 'permission_grant', 'scope_gate', 'recovery_fence'] as const) {
+  test(`assessment rolls back its prepared Content effect when ${ended} ends at the head wait`, async () => {
+    const authority = await fixtureAuthorityScenario(pool, { scope: ASSESS_SCOPE, action: ASSESS_ACTION,
+      mandate: ASSESS_ACTION, membership: 'joined' });
+    const input = assessment(authority.actor);
+    const previous = await store.assess(authority.principal, input);
+    const next = { ...input, expectedAssessment: previous.assessmentId, idempotencyKey: randomUUID(),
+      obligations: [{ kind: 'attribution' as const, instrument: 'https://example.test/credit', appliesTo: 'display' as const, notice: 'Credit' }] };
+    const blocker = await pool.connect();
+    let pending: Promise<unknown> | undefined;
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query('SELECT 1 FROM rights.use_assessment_head WHERE assessment_id = $1 FOR UPDATE', [previous.assessmentId]);
+      if (ended === 'expiry') await setFixtureGrantDeadline(pool, authority.grantId, 250);
+      pending = store.assess(authority.principal, next).catch(error => error);
+      let waiting = false;
+      for (let attempt = 0; attempt < 150; attempt++) {
+        waiting = (await pool.query(`SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock'
+          AND query LIKE 'SELECT assessment_id,%'`)).rowCount! > 0;
+        if (waiting) break;
+        await Bun.sleep(5);
+      }
+      expect(waiting).toBe(true);
+      if (ended === 'expiry') await Bun.sleep(275);
+      else if (ended === 'grant') await setFixtureGrantDeadline(pool, authority.grantId, -1000);
+      else if (ended === 'mandate') await setFixtureMandateState(pool, authority.representationId, 'revoked');
+      else if (ended === 'membership') await setFixtureMembershipState(pool, authority.membershipId!, 'left');
+      else await advanceFixtureAuthorityGeneration(pool, ended, ended === 'principal' ? authority.principalId
+        : ended === 'representation' ? authority.representationId : ended === 'authority_subject' ? authority.actor
+        : ended === 'permission_grant' ? authority.grantId : ended === 'scope_gate' ? ASSESS_SCOPE : 'true');
+      await blocker.query('COMMIT');
+      expect(await pending).toBeInstanceOf(RightsDenied);
+      expect((await pool.query('SELECT id FROM rights.use_assessment WHERE idempotency_key = $1', [next.idempotencyKey])).rowCount).toBe(0);
+      expect((await pool.query('SELECT assessment_id FROM rights.use_assessment_head WHERE material_id = $1', [previous.materialId])).rows)
+        .toEqual([{ assessment_id: previous.assessmentId }]);
+      expect((await pool.query(`SELECT 1 FROM rights.obligation o JOIN rights.use_assessment a ON a.id = o.assessment_id
+        WHERE a.material_id = $1`, [previous.materialId])).rowCount).toBe(0);
+      if (['grant', 'expiry', 'mandate', 'membership'].includes(ended)) {
+        await expect(store.assess(authority.principal, input)).rejects.toBeInstanceOf(RightsDenied);
+      }
+    } finally {
+      await blocker.query('ROLLBACK');
+      blocker.release();
+      await pending;
+    }
+  });
 }

@@ -70,6 +70,30 @@ user's consent does not revoke the installation. See
 [consent admission](../../services/account/src/consent-fence.ts) and the
 [connected-app decision](../contracts/connected-apps.md).
 
+Installation changes retain the operator's user and session identity. After
+locking the target, the transaction rechecks and locks current role, security,
+session and second-factor authority before either writing or returning a retry.
+A demotion or session retirement committed while the target was busy refuses
+the change, without an installation effect or successful audit entry.
+
+## Operator and authenticator policy
+
+Operator reads and changes, including provider client/resource administration,
+require a verified TOTP authenticator and explicit password plus current-TOTP
+reauthentication within five minutes. A recent sign-in, remembered device,
+password-only proof or passkey-only proof does not supply this operator proof.
+The proof is session-bound and identifies the current factor. Bootstrap assigns
+responsibility but grants no exception: the first owner enrolls an authenticator
+through ordinary Account settings, then reauthenticates before administration.
+Local development preparation enrolls and proves its disposable operator fixture.
+
+Replacing or disabling a verified TOTP requires that same fresh proof of the
+authenticator being replaced. The existing independent Account recovery path
+handles a lost authenticator; recovery does not preserve its trust. Every factor
+secret replacement or deletion retires all of the user's remembered-device
+records and step-up proofs, including devices absent from the request. Renaming
+the factor and consuming a backup code preserve the factor's identity and trust.
+
 ## Signing-key operations
 
 Use the Account runtime environment for

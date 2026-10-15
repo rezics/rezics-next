@@ -5,7 +5,7 @@ import { accountFailure, accountJson, AccountProblem, accountSession, literalUni
 import { decodeCursor, encodeCursor, pageQuery } from './pagination.ts';
 import { operatorPermissions, operatorRole, requireOperator, rolePermits, writeAudit,
   type OperatorRole } from './operators.ts';
-import { readMethods } from './methods.ts';
+import { readMethods, requireSecondFactor } from './methods.ts';
 import { readSecurityActivity, readSessions } from './security-activity.ts';
 import { readConnectedApps } from './connected-apps.ts';
 import { accountResponses, activityView, commandView, connectedAppView,
@@ -186,6 +186,7 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
   const preferenceActor = async (request: Request) => {
     const session = await accountSession(auth, request);
     if (!await operatorRole(pool, session.user.id)) throw new AccountProblem('forbidden', 403);
+    await requireSecondFactor(pool, session.session.id);
     return session.user.id;
   };
   const readPreferences = async (userId: string) => {

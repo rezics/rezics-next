@@ -25,7 +25,7 @@ reuse. Service terms and data rights remain separate families.
 
 | Operation | Bound |
 | --- | --- |
-| `assess` | One Access grant lookup, one indexed material lookup, one head lock and at most 16 obligation inserts. |
+| `assess` | One Access preflight and one locked dispatch proof (plus one selected membership lock when applicable), one indexed material lookup, one head lock and at most 16 obligation inserts. |
 | `evaluate` | One Access grant lookup, one indexed material/head lookup and at most 16 obligation rows. |
 | `exportScope` | One Content query over at most 256 exact material/head keys and their at most 16 obligations each, plus one Access query over at most 256 exact export targets. |
 | `currentWikiDisplayObligations` | One Content query over at most 32 exact material keys and their display obligations, then one Access query for disclosure fences on keys that have a current `wiki_display` head. No graph call. The result is part of the Work header or statement page and uses that response's cache headers. |
@@ -43,6 +43,16 @@ the target and instrument hash; offering state and platform recognition retain
 separate immutable revision chains. Copy `offering.ts`, `receipt-family.ts`,
 `outbox-event.ts` and the route declarations together for another admitted
 graph command family.
+
+Assessment admission keeps the exact Access principal, mandate, Agent, grant,
+membership episode, scope and recovery generations selected at preflight.
+After Content prepares its changes and finishes waiting on the head, Access
+revalidates that same basis with shared locks held through Content commit.
+Dispatch checks wall-clock expiry after lock waits; an ended basis rolls back
+the material, assessment, obligations and head together. A replacement grant
+does not rescue the admitted request. Retries also require current authority
+through dispatch before returning a stored result. This uses the existing
+represented-grant owner rather than duplicating authority policy in Rights.
 
 Main installs the provider-term retention gate on retained source intake and
 source acquisition runs. The gate checks the current

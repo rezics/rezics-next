@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { proveFixtureOperator } from './fixture-operator.ts';
 import { createAccountAuth } from '../../services/account/src/auth.ts';
 import { createAccountApp } from '../../services/account/src/app.ts';
 import { installClient, revokeInstallation } from '../../services/account/src/installations.ts';
@@ -140,14 +141,15 @@ export async function retiredOperator<T>(stackDir: string,
 }
 
 async function signInOperator(app: ReturnType<typeof createAccountApp>, base: string,
-  operator: OperatorCredentials): Promise<(OperatorCredentials & { cookie: string }) | undefined> {
+  operator: OperatorCredentials, pool: Pool, secret: string): Promise<(OperatorCredentials & { cookie: string }) | undefined> {
   const response = await app.handle(new Request(`${base}/api/auth/sign-in/email`, {
     method: 'POST', headers: { 'content-type': 'application/json', origin: base },
     body: JSON.stringify({ email: operator.email, password: operator.password }),
   }));
-  const cookie = response.headers.get('set-cookie');
+  let cookie = response.headers.get('set-cookie');
   await response.body?.cancel();
   if (response.status !== 200 || !cookie) return undefined;
+  cookie = await proveFixtureOperator({ pool, secret, origin: base, handle: request => app.handle(request) }, { ...operator, cookie });
   const accepted = await app.handle(new Request(`${base}/api/account/policies/acceptance`, {
     method: 'POST', headers: { 'content-type': 'application/json', origin: base, cookie },
     body: JSON.stringify({ acceptedPolicies: signupPolicyFixture.acceptedPolicies }),
@@ -289,12 +291,12 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
     const app = createAccountApp(auth, accountPool);
     const bootstrapped = await accountPool.query('SELECT 1 FROM rezics_account_operator_bootstrap');
     const operator = options.fixture
-      ? await signInOperator(app, apps.ACCOUNT_BASE_URL!, options.fixture.operator)
+      ? await signInOperator(app, apps.ACCOUNT_BASE_URL!, options.fixture.operator, accountPool, apps.ACCOUNT_SECRET!)
       : bootstrapped.rowCount
       ? await retiredOperator(stackDir, async credentials => {
         const role = await operatorRole(accountPool, credentials.id);
         return role && rolePermits(role, 'clients:manage')
-          ? signInOperator(app, apps.ACCOUNT_BASE_URL!, credentials) : undefined;
+          ? signInOperator(app, apps.ACCOUNT_BASE_URL!, credentials, accountPool, apps.ACCOUNT_SECRET!) : undefined;
       })
       : await signUp(app, apps.ACCOUNT_BASE_URL!, 'operator');
     if (!operator) throw new Error('No retired local operator can register the web client; restore its private credentials or use the Account operator API');
@@ -303,6 +305,8 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
         email: operator.email, password: operator.password } }), { mode: 0o600 });
     }
     operatorIds.add(operator.id);
+    operator.cookie = await proveFixtureOperator({ pool: accountPool, secret: apps.ACCOUNT_SECRET!,
+      origin: apps.ACCOUNT_BASE_URL!, handle: request => app.handle(request) }, operator);
     const headers = new Headers({ cookie: operator.cookie, origin: apps.ACCOUNT_BASE_URL! });
     const mainClient = await auth.api.adminCreateOAuthClient({ headers,
       body: { client_name: 'Local Main introspection', scope: 'work:create',
@@ -510,14 +514,14 @@ async function declaredWebClientScopes(pool: Pool, clientId: string): Promise<st
   return declared;
 }
 
-function webClientInstallationChanges(pool: Pool, operatorUserId: string): WebClientInstallationChanges {
+function webClientInstallationChanges(pool: Pool, actor: { userId: string; sessionId: string }): WebClientInstallationChanges {
   return {
     declaredScopes: clientId => declaredWebClientScopes(pool, clientId),
     async revoke(installationId) {
-      await revokeInstallation(pool, { installationId, operatorUserId });
+      await revokeInstallation(pool, { installationId, actor });
     },
     async install(clientId, scopes, changeKey) {
-      await installClient(pool, { clientId, scopes, changeKey, operatorUserId });
+      await installClient(pool, { clientId, scopes, changeKey, actor });
     },
   };
 }
@@ -611,14 +615,12 @@ async function openWebClientAccount(pool: Pool, apps: Record<string, string>,
   const auth = createAccountAuth({ baseURL: apps.ACCOUNT_BASE_URL!, secret: apps.ACCOUNT_SECRET!,
     resource: apps.ACCOUNT_MAIN_RESOURCE!, pool, operatorUserIds: operatorIds });
   const app = createAccountApp(auth, pool, { operatorUserIds: operatorIds });
-  const signIn = await app.handle(new Request(`${apps.ACCOUNT_BASE_URL}/api/auth/sign-in/email`, {
-    method: 'POST', headers: { 'content-type': 'application/json', origin: apps.ACCOUNT_BASE_URL! },
-    body: JSON.stringify({ email: operator.email, password: operator.password }) }));
-  const cookie = signIn.headers.get('set-cookie');
-  await signIn.body?.cancel();
-  if (signIn.status !== 200 || !cookie) throw new Error(`Local operator sign-in failed with HTTP ${signIn.status}`);
+  const cookie = await proveFixtureOperator({ pool, secret: apps.ACCOUNT_SECRET!,
+    origin: apps.ACCOUNT_BASE_URL!, handle: request => app.handle(request) }, operator);
   const headers = new Headers({ cookie, origin: apps.ACCOUNT_BASE_URL! });
-  const installation = webClientInstallationChanges(pool, operator.id);
+  const session = await auth.api.getSession({ headers });
+  if (!session) throw new Error('Local operator session is unavailable');
+  const installation = webClientInstallationChanges(pool, { userId: operator.id, sessionId: session.session.id });
   return {
     async updateClient(clientId, update) {
       let updated: { client_id?: string };

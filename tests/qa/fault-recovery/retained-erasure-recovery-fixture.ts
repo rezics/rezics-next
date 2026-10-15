@@ -1,3 +1,4 @@
+import { enrollOperatorAt } from '../../../services/account/tests/factor-fixture.ts';
 import { expect, spyOn } from 'bun:test';
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -682,6 +683,7 @@ export async function createRetainedErasureRestoreScenario() {
     const erased = await signUp('erased');
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await enrollOperatorAt(account, config.secret, baseURL, operator);
     const adminHeaders = new Headers({ cookie: operator.cookie, origin: baseURL });
     const verifierClient = await auth.api.adminCreateOAuthClient({ headers: adminHeaders,
       body: { client_name: 'Erasure restore verifier', scope: 'access:manage',

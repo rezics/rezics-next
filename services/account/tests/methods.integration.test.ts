@@ -61,6 +61,7 @@ test('G205 methods: recovery fences credential writes already waiting on the old
       VALUES ($1, 'Existing authenticator', 'test-fixture', $2, $3, 0, 'singleDevice', false, now())`, [randomUUID(), member.id, randomUUID()]);
     blocker = await f.pool.connect();
     await blocker.query('BEGIN');
+    const blockerPid = (await blocker.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
     await blocker.query('UPDATE rezics_account_recovery_policy SET recovered_at = clock_timestamp() WHERE id = $1', [member.id]);
     const removals = Promise.all([
       f.request('/api/account/methods/password/remove', {}, member.cookie),
@@ -70,7 +71,8 @@ test('G205 methods: recovery fences credential writes already waiting on the old
     const deadline = Date.now() + 1500;
     do {
       waiting = (await f.pool.query(`SELECT count(*)::integer AS n FROM pg_stat_activity
-        WHERE wait_event_type = 'Lock' AND query LIKE 'SELECT recovered_at%'`)).rows[0].n;
+        WHERE wait_event_type = 'Lock' AND query LIKE '%rezics_account_recovery_policy%'
+          AND $1 = ANY(pg_blocking_pids(pid))`, [blockerPid])).rows[0].n;
       if (waiting < 2) await Bun.sleep(10);
     } while (waiting < 2 && Date.now() < deadline);
     await blocker.query('DELETE FROM "session" WHERE "userId" = $1', [member.id]);

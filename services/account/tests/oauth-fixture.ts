@@ -1,9 +1,11 @@
 import { authorize, postToken } from '../../../scripts/lib/oauth-client.ts';
 import type { accountFixture } from './account-fixture.ts';
+import { enrollSecondFactor } from './factor-fixture.ts';
 
 export async function oauthFixture(f: Awaited<ReturnType<typeof accountFixture>>) {
   const owner = await f.signup('oauth-owner@example.test');
   f.operators.add(owner.id);
+  await enrollSecondFactor(f, owner);
   const headers = new Headers({ origin: f.baseURL, cookie: owner.cookie });
   const verifier = await f.auth.api.adminCreateOAuthClient({ headers,
     body: { client_name: 'Resource verifier', token_endpoint_auth_method: 'client_secret_post',

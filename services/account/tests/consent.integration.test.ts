@@ -1,3 +1,4 @@
+import { enrollSecondFactor } from './factor-fixture.ts';
 import { expect, test } from 'bun:test';
 import { prepareAuthorization } from '../../../scripts/lib/oauth-client.ts';
 import { accountFixture } from './account-fixture.ts';
@@ -10,6 +11,7 @@ test('G205 consent: authenticated signed preview, localization, denial, tamperin
     const owner = await f.signup('owner@example.test');
     const peer = await f.signup('peer@example.test');
     f.operators.add(owner.id);
+    await enrollSecondFactor(f, owner);
     const client = await f.auth.api.adminCreateOAuthClient({ headers: new Headers({ origin: f.baseURL, cookie: owner.cookie }),
       body: { client_name: 'Notes', redirect_uris: ['https://notes.example.test/callback'],
         token_endpoint_auth_method: 'none', grant_types: ['authorization_code'],

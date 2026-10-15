@@ -1,3 +1,4 @@
+import { enrollOperatorAt } from '../../../services/account/tests/factor-fixture.ts';
 import { discloseClassificationConcept, recordClassifiedStatement, shareClassificationContext,
   statementDecisionBody, type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
@@ -79,6 +80,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     };
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await enrollOperatorAt(accountPool, Bun.env.ACCOUNT_SECRET!, base, operator);
     await accountPool.query(`INSERT INTO rezics_account_operator (user_id, role)
       VALUES ($1, 'owner') ON CONFLICT DO NOTHING`, [operator.id]);
     const adminHeaders = new Headers({ cookie: operator.cookie, origin: base });

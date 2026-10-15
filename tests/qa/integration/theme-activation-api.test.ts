@@ -1,3 +1,4 @@
+import { enrollOperatorAt } from '../../../services/account/tests/factor-fixture.ts';
 import { foregroundCounted } from './support/query-cost-meter.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
@@ -92,6 +93,7 @@ test('VIEW09: changed dependencies and expired approval require a new exact them
     }
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await enrollOperatorAt(accountPool, Bun.env.ACCOUNT_SECRET!, base, operator);
     const adminHeaders = new Headers({ cookie: operator.cookie, origin: base });
     const verifierClient = await auth.api.adminCreateOAuthClient({ headers: adminHeaders, body: {
       client_name: 'Theme verifier', scope: 'theme:approve theme:read',

@@ -95,6 +95,35 @@ export async function representedGrantProof(client: Pick<Pool | PoolClient, 'que
   return row ?? null;
 }
 
+/** Dispatch a prepared owner transaction against its exact preflight basis.
+ * Locks survive the owner's commit; a new grant cannot replace a lost witness.
+ * Membership is a separate row because the grant's EXISTS does not lock it. */
+export async function dispatchRepresentedGrant<T>(pool: Pool, principal: VerifiedPrincipal,
+  actor: string, scope: string, action: string, expected: RepresentedGrantProof,
+  denied: () => Error, effect: () => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout = '2s'");
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    const current = await representedGrantProof(client, principal, actor, scope, action, { lock: true });
+    if (!current || (Object.keys(expected) as (keyof RepresentedGrantProof)[])
+      .some(key => key !== 'validUntil' && expected[key] !== current[key])) throw denied();
+    if (current.membershipId && !(await client.query(`SELECT 1 FROM access.membership
+      WHERE id = $1 AND state = 'joined' AND generation = $2 FOR SHARE`,
+    [current.membershipId, current.membershipGeneration])).rowCount) throw denied();
+    // Wall time, after every possible lock wait, rather than BEGIN's timestamp.
+    if (!(await client.query('SELECT 1 WHERE clock_timestamp() < $1::timestamptz',
+      [current.validUntil])).rowCount) throw denied();
+    const result = await effect();
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally { client.release(); }
+}
+
 /** Select one indexed mandate and the lowest-id live direct grant. That is
  * the first grant a decision records. A live controller is sufficient
  * representation of its Agent, but grants no Work

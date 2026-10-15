@@ -1,3 +1,4 @@
+import { enrollSecondFactor } from './factor-fixture.ts';
 import { expect, test } from 'bun:test';
 import { accountFixture } from './account-fixture.ts';
 import { oauthFixture } from './oauth-fixture.ts';
@@ -8,6 +9,7 @@ test('G411 admin download users: the filtered directory as safe CSV across pages
     const { owner } = await oauthFixture(f);
     const member = await f.signup('member@example.test');
     const support = await f.signup('support@example.test');
+    await enrollSecondFactor(f, support);
     const outsider = await f.signup('outsider@example.test');
     const promote = await f.request(`/api/account/admin/operators/${support.id}`, { role: 'support', reason: 'Support rotation' },
       owner.cookie);

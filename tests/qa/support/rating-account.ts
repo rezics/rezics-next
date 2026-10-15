@@ -1,3 +1,4 @@
+import { enrollOperatorAt } from '../../../services/account/tests/factor-fixture.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { registerTelemetryPeers } from '@rezics/observability/runtime';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
@@ -91,6 +92,7 @@ export async function ratingAccount(apps: Record<string, string>,
     }
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await enrollOperatorAt(pool, apps.ACCOUNT_SECRET!, base, operator);
     // A QA project can create several fixtures against one Account database.
     // The deployment bootstrap runs once, so each fixture grants its own operator.
     await pool.query("INSERT INTO rezics_account_operator (user_id, role) VALUES ($1, 'owner') ON CONFLICT DO NOTHING",

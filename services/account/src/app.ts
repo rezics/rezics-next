@@ -13,7 +13,7 @@ import { guardedRefreshTokenExchange } from './refresh-token-guard.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
 import { consentApi } from './consent.ts';
 import { consumeStepUpAttempt, lockTotpFactor, methodsApi, requireStepUp, sensitiveAuthPaths } from './methods.ts';
-import { accountFailure, accountSession } from './http.ts';
+import { accountFailure, accountSession, AccountProblem } from './http.ts';
 import { observeAuthentication, securityActivityApi } from './security-activity.ts';
 import { recordSessionClient } from './sessions.ts';
 import { connectedAppsApi } from './connected-apps.ts';
@@ -100,16 +100,17 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     ...('password' in pool.options ? { password: pool.options.password } : {}),
     max: options.codeGuardConnections ?? 4, connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 1_000, allowExitOnIdle: true }));
-  const operator = async (request: Request, write: boolean): Promise<string | Response> => {
+  const operator = async (request: Request, write: boolean) => {
     try {
       await bootstrapOperators(pool, options.operatorUserIds ?? new Set());
-      return (await requireOperator(auth, pool, request, 'clients:manage', write)).userId;
+      return await requireOperator(auth, pool, request, 'clients:manage', write);
     } catch (error) { return accountFailure(error); }
   };
   const installationError = (error: unknown) => {
     if (error instanceof InstallationNotFound) return Response.json({ error: 'not_found' }, { status: 404 });
     if (error instanceof InstallationConflict) return Response.json({ error: 'conflict' }, { status: 409 });
     if (error instanceof InstallationInvalid) return Response.json({ error: 'invalid_scope' }, { status: 400 });
+    if (error instanceof AccountProblem) return accountFailure(error);
     return Response.json({ error: 'temporarily_unavailable' }, { status: 503 });
   };
   const accountActor = async (request: Request): Promise<{
@@ -375,9 +376,9 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       if (actor instanceof Response) return actor;
       try {
         const result = body.change === 'revoke'
-          ? await revokeInstallation(pool, { installationId: body.installationId, operatorUserId: actor })
+          ? await revokeInstallation(pool, { installationId: body.installationId, actor })
           : await installClient(pool, { clientId: body.clientId, scopes: body.scopes,
-            changeKey: body.changeKey, operatorUserId: actor });
+            changeKey: body.changeKey, actor });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return installationError(error); }
     })

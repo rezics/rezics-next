@@ -53,8 +53,9 @@ export async function fixtureAuthorityScenario(pool: Pool, input: {
     grant: { actor, action: input.membership ? 'fixture.membership.setup' : input.action, lifetime: '8 hours' },
   });
   if (input.mandateState) await setFixtureMandateState(pool, authority.representationIds[0]!, input.mandateState);
+  let membershipId: string | null = null;
   if (input.membership) {
-    const membershipId = randomUUID();
+    membershipId = randomUUID();
     await pool.query(`INSERT INTO access.membership_policy (kind, owner_subject, revision, terms_revision)
       VALUES ('org',$1,1,'terms:1')`, [actor]);
     await pool.query(`INSERT INTO access.membership (id,kind,owner_subject,member_subject,state,
@@ -74,5 +75,5 @@ export async function fixtureAuthorityScenario(pool: Pool, input: {
       }
     }
   }
-  return { principal, actor, ...authority };
+  return { principal, principalId, actor, membershipId, representationId: authority.representationIds[0]!, ...authority };
 }

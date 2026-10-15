@@ -1,3 +1,4 @@
+import { enrollSecondFactor } from './factor-fixture.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { Pool } from 'pg';
@@ -107,6 +108,7 @@ test('P22: operator audit keeps the provider-context actor and returned client i
     const operator = await f.signup('provider-operator@example.test');
     const peer = await f.signup('forged-operator@example.test');
     f.operators.add(operator.id);
+    await enrollSecondFactor(f, operator);
     const headers = new Headers({ cookie: operator.cookie, origin: f.baseURL });
     headers.append('x-account-reason', 'First reason');
     headers.append('x-account-reason', 'Second reason');

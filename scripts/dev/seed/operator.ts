@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
+import { createAccountApp } from '../../../services/account/src/app.ts';
+import { proveFixtureOperator } from '../fixture-operator.ts';
 import { setClientDisabled } from '../../../services/account/src/admin-actions.ts';
 import { ensureFixtureScopeGate, grantFixtureAuthority,
   type FixtureRepresentation } from '../../../services/main/src/modules/access/fixture-authority.ts';
@@ -13,6 +15,17 @@ export { proveOperatorAuthority };
 export interface LocalOperatorInput { endpoints: SeedEndpoints; credentials: Credentials;
   accountDatabaseUrl: string; accountSecret: string; accessDatabaseUrl: string;
   accountSubject: string; ownerAccountSubject: string; actingSubject: string }
+
+/** The retained local operator fixture has an enrolled second factor. */
+export async function localOperatorSession(input: LocalOperatorInput, pool: Pool) {
+  loopback(input.accountDatabaseUrl);
+  const auth = createAccountAuth({ baseURL: input.endpoints.account, secret: input.accountSecret,
+    resource: input.endpoints.resource, pool, operatorUserIds: new Set([input.accountSubject]) });
+  const app = createAccountApp(auth, pool);
+  const cookie = await proveFixtureOperator({ pool, secret: input.accountSecret, origin: input.endpoints.account,
+    handle: request => app.handle(request) }, { id: input.accountSubject, ...input.credentials });
+  return { id: input.accountSubject, cookie };
+}
 
 function loopback(value: string) {
   const url = new URL(value);
@@ -47,11 +60,10 @@ export async function disableSupersededSeedClients(pool: Pool, ownerId: string, 
 /** Reuse the fixture operator's installed seed client across repeated seed runs. */
 export async function operatorSeedSession(input: LocalOperatorInput) {
   for (const value of [input.accountDatabaseUrl, input.accessDatabaseUrl]) loopback(value);
-  const signed = await new SeedApi(input.endpoints).signInOrUp(input.credentials);
-  if (signed.id !== input.accountSubject) throw new Error('Seed fixture operator identity changed');
   const pool = new Pool({ connectionString: input.accountDatabaseUrl });
   const lock = await pool.connect();
   try {
+    const signed = await localOperatorSession(input, pool);
     // Serialize selection, creation and retirement across repeated seed processes.
     await lock.query("SET lock_timeout = '5s'");
     await lock.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [`zone-seed:${signed.id}`]);

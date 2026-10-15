@@ -5,6 +5,7 @@ import { AccountProblem, accountSession, type AccountAuth } from './http.ts';
 import { operatorRole, requireOperator, rolePermits, writeAudit, type OperatorPermission, type OperatorRole } from './operators.ts';
 import { accountLocale, enqueueAccountEmail, type AccountLocale } from './email.ts';
 import { createAccountVerificationToken } from './recovery-claim.ts';
+import { requireSecondFactor } from './methods.ts';
 
 export const adminActions = ['suspend', 'unsuspend', 'revoke-sessions', 'require-password-reset',
   'resend-verification', 'add-note'] as const;
@@ -74,11 +75,17 @@ export function validateAction(body: ActionInput) {
 }
 
 export async function checkActor(db: PoolClient, actor: Actor, permission: OperatorPermission) {
+  const security = await db.query(`SELECT 1 FROM rezics_account_security WHERE user_id = $1
+    AND deletion_started_at IS NULL AND NOT password_reset_required
+    AND (suspended_at IS NULL OR suspended_until <= clock_timestamp()) FOR SHARE`, [actor.userId]);
+  if (!security.rowCount) throw new AccountProblem('forbidden', 403);
+  await db.query('SELECT id FROM "twoFactor" WHERE "userId" = $1 FOR SHARE', [actor.userId]);
   const current = await db.query<{ role: OperatorRole }>(`SELECT o.role FROM rezics_account_operator o
     JOIN "session" s ON s."userId" = o.user_id AND s.id = $2 AND s."expiresAt" > now()
       AND s.rezics_generation = (SELECT session_generation FROM rezics_account_security WHERE user_id = o.user_id)
     WHERE o.user_id = $1 FOR SHARE OF o, s`, [actor.userId, actor.sessionId]);
   if (!current.rows[0] || !rolePermits(current.rows[0].role, permission)) throw new AccountProblem('forbidden', 403);
+  await requireSecondFactor(db, actor.sessionId);
   return current.rows[0].role;
 }
 
@@ -272,6 +279,7 @@ export async function cancelBulkJob(auth: AccountAuth, pool: Pool, request: Requ
   const session = await accountSession(auth, request, true);
   const role = await operatorRole(pool, session.user.id);
   if (!role) throw new AccountProblem('forbidden', 403);
+  await requireSecondFactor(pool, session.session.id);
   const db = await pool.connect();
   try {
     await db.query('BEGIN');

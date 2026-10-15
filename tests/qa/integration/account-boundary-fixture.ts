@@ -1,3 +1,4 @@
+import { enrollSecondFactor } from '../../../services/account/tests/factor-fixture.ts';
 import { foregroundCounted } from './support/query-cost-meter.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { authorize as oauthAuthorize, postToken } from '../../../scripts/lib/oauth-client.ts';
@@ -83,6 +84,7 @@ export async function startAccount(input: { pool: PoolConfig; secret: string; re
   };
   const operator = await signUp('operator');
   operators.add(operator.id);
+  await enrollSecondFactor({ pool, secret: input.secret, request: post }, operator);
   const adminHeaders = new Headers({ cookie: operator.cookie, origin: base });
   const registerClient = (body: NonNullable<Parameters<typeof auth.api.adminCreateOAuthClient>[0]>['body']) =>
     auth.api.adminCreateOAuthClient({ headers: adminHeaders, body });

@@ -1,3 +1,4 @@
+import { enrollSecondFactor } from './factor-fixture.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { accountFixture } from './account-fixture.ts';
@@ -11,6 +12,7 @@ test('G205 admin: stored roles, directory filters/cursors, notes, audit and deni
     const oauth = await oauthFixture(f);
     const owner = oauth.owner;
     const support = await f.signup('support@example.test');
+    await enrollSecondFactor(f, support);
     const member = await f.signup('member@example.test');
     const grant = await f.request(`/api/account/admin/operators/${support.id}`, { role: 'support', reason: 'Support rotation' }, owner.cookie);
     expect(grant.status).toBe(200);
@@ -106,6 +108,7 @@ test('G205 admin: audit failure rolls back, concurrent owner suspension preserve
     const { owner } = await oauthFixture(f);
     const member = await f.signup('partial@example.test');
     const second = await f.signup('second-owner@example.test');
+    await enrollSecondFactor(f, second);
     expect((await f.request(`/api/account/admin/operators/${second.id}`, { role: 'owner', reason: 'Ownership continuity' }, owner.cookie)).status).toBe(200);
     await f.pool.query(`CREATE FUNCTION reject_probe_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
       IF NEW.reason = 'Audit failure probe' THEN RAISE EXCEPTION 'probe failure'; END IF;

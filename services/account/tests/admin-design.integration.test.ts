@@ -1,3 +1,4 @@
+import { enrollSecondFactor } from './factor-fixture.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { accountFixture } from './account-fixture.ts';
@@ -61,6 +62,7 @@ test('G356 admin signals: failure bursts, email after a password change, new pas
     const oauth = await oauthFixture(f);
     const { owner } = oauth;
     const support = await f.signup('support@example.test');
+    await enrollSecondFactor(f, support);
     const stuffed = await f.signup('stuffed@example.test');
     const changed = await f.signup('changed@example.test');
     const veteran = await f.signup('veteran@example.test');
@@ -156,6 +158,7 @@ test('G356 admin timeline: an account’s security log, staff actions and notes 
   try {
     const { owner } = await oauthFixture(f);
     const support = await f.signup('support@example.test');
+    await enrollSecondFactor(f, support);
     const member = await f.signup('member@example.test');
     await json(f.request(`/api/account/admin/operators/${support.id}`, { role: 'support', reason: 'Support rotation' }, owner.cookie));
     await f.pool.query('UPDATE "user" SET "emailVerified" = false WHERE id = $1', [member.id]);
@@ -269,6 +272,7 @@ test('G356 admin bulk: an undo window before the first item, and stopping what i
   try {
     const { owner } = await oauthFixture(f);
     const admin = await f.signup('admin@example.test');
+    await enrollSecondFactor(f, admin);
     const [first, second] = [await f.signup('one@example.test'), await f.signup('two@example.test')];
     await json(f.request(`/api/account/admin/operators/${admin.id}`, { role: 'admin', reason: 'Moderation team' }, owner.cookie));
     const bulk = (extra: Record<string, unknown>, cookie = admin.cookie) => f.request('/api/account/admin/bulk-actions', { action: 'suspend',

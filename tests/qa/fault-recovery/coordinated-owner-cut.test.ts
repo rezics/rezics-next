@@ -1,3 +1,4 @@
+import { enrollOperatorAt } from '../../../services/account/tests/factor-fixture.ts';
 import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
@@ -151,6 +152,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     };
     const operator = await signUp('operator');
     operators.add(operator.id);
+    await enrollOperatorAt(accountPool, apps.ACCOUNT_SECRET!, base, operator);
     const adminHeaders = new Headers({ cookie: operator.cookie, origin: base });
     const verifierClient = await auth.api.adminCreateOAuthClient({ headers: adminHeaders,
       body: { client_name: 'Recovery verifier', scope: 'work:create owner:operate',

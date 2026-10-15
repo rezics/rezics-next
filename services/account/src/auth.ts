@@ -25,6 +25,7 @@ import { deviceLabel } from './security-activity.ts';
 import { ACCOUNT_GENERATION_CLAIM, GRANT_GENERATION_CLAIM, currentAccountGenerations } from './account-fence.ts';
 import { bootstrapOperators, operatorRole, rolePermits } from './operators.ts';
 import { operatorAuthHooks } from './operator-auth-hooks.ts';
+import { requireSecondFactor } from './methods.ts';
 import { beforeSessionDelete, revokeSessionSelection } from './first-party-session.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
 import { signupPolicyInput, policyAcceptanceRequired } from './policy-acceptance.ts';
@@ -368,6 +369,17 @@ export function accountAuthOptions(config: AccountConfig) {
         if (token) await internal.deleteSession(token);
       }
       await operatorHooks.before(ctx);
+      if (ctx.path === '/two-factor/enable' || ctx.path === '/two-factor/disable') {
+        const session = await getSessionFromCtx(ctx);
+        if (session && (await config.pool.query('SELECT 1 FROM "twoFactor" WHERE "userId" = $1 AND verified',
+          [session.user.id])).rowCount) {
+          try { await requireSecondFactor(config.pool, session.session.id); }
+          catch (error) {
+            if (!(error instanceof AccountProblem)) throw error;
+            throw new APIError('FORBIDDEN', { code: 'STEP_UP_REQUIRED', message: 'Verify the current authenticator before replacing it' });
+          }
+        }
+      }
       if (ctx.path === '/sign-up/email') {
         try { signupPolicyInput(ctx.body as Record<string, unknown>,
           ctx.headers?.get('x-rezics-request-country'), config.policyVersions); }

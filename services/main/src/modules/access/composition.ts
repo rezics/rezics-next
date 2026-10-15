@@ -6,7 +6,7 @@ import { AccessManagedOrganizations } from './managed-organizations.ts';
 import { AccessPrivateRecipients } from './private-recipients.ts';
 import { AccessRoles } from './roles.ts';
 
-export { representedGrantProof } from './represented-work-proof.ts';
+export { representedGrantProof, dispatchRepresentedGrant, type RepresentedGrantProof } from './represented-work-proof.ts';
 
 export {
   AccessActingContexts, ActingContextDenied, ActingContextInvalid, ActingContextStale,

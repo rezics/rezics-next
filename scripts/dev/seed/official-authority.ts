@@ -3,7 +3,7 @@ import { Pool } from 'pg';
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { SeedApi } from './api.ts';
-import type { LocalOperatorInput } from './operator.ts';
+import { localOperatorSession, type LocalOperatorInput } from './operator.ts';
 
 // Fixture-only authority for the official Realms' public profiles. Main has no
 // site UI or grant API for `realm.profile.publish` and `realm.moderator.choose`
@@ -29,10 +29,9 @@ function loopback(value: string) {
  */
 export async function realmProfileClient(input: LocalOperatorInput): Promise<SeedApi> {
   loopback(input.accountDatabaseUrl);
-  const signed = await new SeedApi(input.endpoints).signInOrUp(input.credentials);
-  if (signed.id !== input.accountSubject) throw new Error('Seed fixture operator identity changed');
   const pool = new Pool({ connectionString: input.accountDatabaseUrl });
   try {
+    const signed = await localOperatorSession(input, pool);
     const scopes = JSON.stringify(PROFILE_SCOPE.split(' '));
     const reused = await pool.query<{ clientId: string }>(`SELECT c."clientId" FROM "oauthClient" c
       JOIN rezics_oauth_installation i ON i.client_id = c."clientId" AND i.state = 'active'
@@ -58,10 +57,9 @@ export async function realmProfileClient(input: LocalOperatorInput): Promise<See
 /** The web client does not request package:resolve; demo mod authors use a scoped native client. */
 export async function officialModClient(input: LocalOperatorInput): Promise<SeedApi> {
   loopback(input.accountDatabaseUrl);
-  const signed = await new SeedApi(input.endpoints).signInOrUp(input.credentials);
-  if (signed.id !== input.accountSubject) throw new Error('Seed fixture operator identity changed');
   const pool = new Pool({ connectionString: input.accountDatabaseUrl });
   try {
+    const signed = await localOperatorSession(input, pool);
     const scopes = JSON.stringify(MOD_SCOPE.split(' '));
     const reused = await pool.query<{ clientId: string }>(`SELECT c."clientId" FROM "oauthClient" c
       JOIN rezics_oauth_installation i ON i.client_id = c."clientId" AND i.state = 'active'

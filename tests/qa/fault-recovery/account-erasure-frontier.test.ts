@@ -1,3 +1,4 @@
+import { enrollOperatorAt } from '../../../services/account/tests/factor-fixture.ts';
 import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
@@ -143,6 +144,7 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     const deleted = await signUp('deleted');
     const unaffected = await signUp('unaffected');
     operators.add(unaffected.id);
+    await enrollOperatorAt(account, config.secret, baseURL, unaffected);
     const principalId = randomUUID();
     await access.query(
       'INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
