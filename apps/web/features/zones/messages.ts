@@ -56,7 +56,6 @@ export const messages = {
   tagsUnavailable: 'Tags can’t be used as filters right now.',
   catalogueIncomplete: 'More matches may follow. This count is a minimum.',
   browseIncompleteTitle: 'No matches on this page',
-  catalogueFreshness: insert('Catalogue as of change {{sequence}}', { sequence: String }),
   browseEmptyTitle: 'Nothing matches these filters',
   browseEmptyBody: 'Remove a filter, or search for something else.',
   facetStatus: 'Status', facetLength: 'Length', facetConcept: 'Tags', facetType: 'Type',

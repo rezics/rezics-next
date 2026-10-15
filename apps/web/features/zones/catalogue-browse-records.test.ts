@@ -51,7 +51,7 @@ for (const slug of ['books', 'visual-novels', 'manga'] as const) {
           tags: answer.tags, window: answer.window, matches: answer.matches });
         if (answer.nextCursor) expect(new URL(page.data.next!, 'https://story.invalid').searchParams.get('cursor')).toBe(answer.nextCursor);
         else expect(page.data.next).toBeNull();
-        expect(page.data.notes).toContain(`Catalogue as of change ${answer.sourcePosition.sequence}`);
+        expect(page.data.notes).not.toContain(`Catalogue as of change ${answer.sourcePosition.sequence}`);
         expect(JSON.stringify(record)).toBe(before);
       } finally { replay.dispose(); }
     });
@@ -97,11 +97,10 @@ test('missing contract states declare exact requests; lag stays lower-bound and 
   }
 });
 
-test('freshness and minimum-count copy exists in all eight interface locales', () => {
+test('minimum-count copy exists in all eight interface locales', () => {
   for (const locale of uiLocales) {
     const messages = zoneMessagesFor(locale);
     expect(messages.catalogueIncomplete.length).toBeGreaterThan(0);
-    expect(messages.catalogueFreshness).toBeDefined();
     if (locale !== 'en') expect(messages.catalogueIncomplete).not.toBe(zoneMessagesFor('en').catalogueIncomplete);
   }
 });
