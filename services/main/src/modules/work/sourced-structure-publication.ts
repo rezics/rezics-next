@@ -3,7 +3,7 @@ import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
-import { PublicationUnavailable } from '../contribution/publish.ts';
+import { PublicationUnavailable, StalePublicationHead } from '../contribution/publish.ts';
 import { importRecipe } from '../recipe/importer.ts';
 import { GUTENBERG_LICENSE } from '../rights/import-policy.ts';
 import { readCompositionPage, readCompositionSnapshot } from '../structure/read.ts';
@@ -22,10 +22,8 @@ export interface PublicationAttribution {
 export async function prepareSourcedStructurePublication(deps: MainWorkDependencies,
   input: Extract<WorkStructurePublicationInput, { operation: 'publish' }>, principal: VerifiedPrincipal)
   : Promise<PublicationAttribution> {
-  const refuse = (reason = 'source-incomplete') => {
-    console.info('structured_publication_source_refused', { reason });
-    return new PublicationUnavailable('The exact public-domain Recipe source is unavailable');
-  };
+  const refuse = (reason = 'source-incomplete') =>
+    new PublicationUnavailable(`The exact public-domain Recipe source is unavailable: ${reason}`);
   const principalId = await deps.access.activePrincipalId?.(principal);
   if (input.rightsBasis !== 'public-domain' || !principalId || !deps.sourceIntake) throw refuse('source-owner');
   const observation = await deps.sourceIntake.read(principalId, input.sourceObservation.slice(-36));
@@ -52,8 +50,9 @@ export async function prepareSourcedStructurePublication(deps: MainWorkDependenc
   ]);
   const header = await readCompositionHeader(deps.environment, input.structure);
   if (!header || header.profile !== 'recipe-composition' || header.owner !== input.work
-    || header.component !== input.expectedMainVersion || header.head !== input.expectedStructureHead
+    || header.component !== input.expectedMainVersion
     || header.placementCount !== expected.size || !expected.size) throw refuse('structure-owner');
+  if (header.head !== input.expectedStructureHead) throw new StalePublicationHead('Recipe Structure head changed');
   const records: OccurrenceRecord[] = [];
   const snapshot = await readCompositionSnapshot(deps.environment, { structure: input.structure, header,
     revision: input.expectedStructureHead });
@@ -90,15 +89,11 @@ export async function prepareSourcedStructurePublication(deps: MainWorkDependenc
         || qualifier.media.length > 0 || qualifier.usesIngredient.length > 0
         || !isDeepStrictEqual(qualifier.instructionText, wanted.text))
       || wanted.role === 'group' && !isDeepStrictEqual(record.labels, wanted.labels)) {
-      console.info('structured_publication_source_binding', { role: record.role,
-        keys: Object.keys(qualifier ?? {}).sort(), expectedKeys: Object.keys(wanted?.text ?? {}).sort(),
-        parent: (record.parent === input.structure ? null : keys.get(record.parent)) === wanted?.parent,
-        sameText: isDeepStrictEqual(qualifier, wanted?.text) });
       throw refuse('source-text');
     }
   }
   if ((await discloseInventory(deps.environment, [{ owner: 'source', resource: observation.record,
-    component: 'record', revision: observation.observation }], ANONYMOUS_VIEWER))[0] !== 'visible') throw refuse('source-disclosure');
+    component: 'record', revision: observation.observation }], ANONYMOUS_VIEWER, 'read'))[0] !== 'visible') throw refuse('source-disclosure');
   if (!deps.rights || !(await deps.rights.store.structuredPublicationRights(input.work, observation.record)).allowed)
     throw refuse();
   return { record: observation.record, observation: observation.observation, provider: observation.provider,

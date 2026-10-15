@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { originalRecipe, type RecipeWork }
   from '../../../scripts/qa/cases/outcomes/recipes/read-a-recipe.ts';
+import { importedRightsAssessments } from '../../../services/main/src/modules/rights/import-policy.ts';
 import { personaSessions, type PersonaSessions } from '../support/personas.ts';
 
 setDefaultTimeout(60_000);
@@ -88,6 +89,7 @@ async function sourceFixture() {
       expectedHead: structure.revision, sourceObservation: source.observation, actingSubject,
     }));
     await grant('platform:resource:work.publish', `work:publish:${work.work}`);
+    await grant('platform:resource:rights.assess', 'rights:assess');
     return { ...work, ...structure, revision: result.revision, observation: source.observation, record: source.record,
       otherObservation: other.observation, unknownObservation: unknown.observation };
   })();
@@ -105,6 +107,9 @@ test('public-domain publication refuses a missing source, unassessed evidence an
   await json(sessions.operator.main('POST', '/v1/work-publications', missing), 400);
   for (const sourceObservation of [source.otherObservation, source.unknownObservation])
     await json(sessions.operator.main('POST', '/v1/work-publications', { ...input, sourceObservation }), 404);
+  await json(sessions.operator.main('POST', '/v1/work-publications', { ...input, expectedStructureHead: recipe.revision }), 409);
+  await json(sessions.operator.main('POST', '/v1/work-publications', { ...input, expectedWorkHead: recipe.workRevision }), 409);
+  await json(sessions.operator.main('POST', '/v1/work-publications', { ...input, expectedMainVersion: recipe.mainVersion }), 404);
   const { sourceObservation: _copied, ...original } = input;
   const falseOriginal = await sessions.operator.main('POST', '/v1/work-publications', { ...original, rightsBasis: 'original-contribution' });
   expect([403, 404]).toContain(falseOriginal.status);
@@ -124,6 +129,23 @@ test('public-domain publication binds replay, rejects stale heads, and withdraws
       observation: source.observation, provider: 'gutenberg', license: 'https://www.gutenberg.org/policy/license.html' } });
     await json(person.main('GET', `/v1/recipes/works/${source.work.slice(-36)}${query}`));
   }
+  const assessment = importedRightsAssessments({ provider: 'project-gutenberg',
+    url: 'https://www.gutenberg.org/ebooks/65061', credit: 'Fannie Merritt Farmer' }, source.work)[0]!;
+  const assess = (outcome: 'supported' | 'not_supported', expectedAssessment: string | null) => {
+    const idempotencyKey = `source-rights:${randomUUID()}`;
+    return json<{ assessmentId: string }>(sessions.operator.main('POST', '/v1/rights/use-assessments', {
+      profile: 'rights-use-assessment-v1', actingSubject: sessions.operator.actingSubject,
+      ...assessment, outcome, expectedAssessment, idempotencyKey,
+    }, idempotencyKey), 201);
+  };
+  const denied = await assess('not_supported', null);
+  for (const persona of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
+    const person = sessions[persona], query = person.actingSubject ? `?actingSubject=${encodeURIComponent(person.actingSubject)}` : '';
+    await json(person.main('GET', `/v1/works/${source.work.slice(-36)}${query}`), 503);
+    await json(person.main('GET', `/v1/recipes/works/${source.work.slice(-36)}${query}`), 503);
+  }
+  await assess('supported', denied.assessmentId);
+  await json(sessions.visitor.main('GET', `/v1/recipes/works/${source.work.slice(-36)}`));
   const withdrawal = { profile: 'work-structure-publication-v1', operation: 'withdraw', work: source.work,
     actingSubject: sessions.operator.actingSubject, expectedPublicationHead: write.publicationDecision };
   const withdrawalKey = `source-withdrawal:${randomUUID()}`;

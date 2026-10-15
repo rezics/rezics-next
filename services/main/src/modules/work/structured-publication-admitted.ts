@@ -49,8 +49,15 @@ export async function changeAdmittedWorkStructurePublication(
         terminal = await sealWorkStructurePublicationAdmission(env, admission);
       } else {
         terminal = await publicationFence(async allowed => {
-          const dependencies = allowed && input.operation === 'publish'
-            ? await prepareDependencies?.(admission.id, principal) : undefined;
+          let dependencies: Awaited<ReturnType<NonNullable<typeof prepareDependencies>>> | undefined;
+          if (allowed && input.operation === 'publish') {
+            try { dependencies = await prepareDependencies?.(admission.id, principal); }
+            catch (error) {
+              if (error instanceof PublicationUnavailable || error instanceof AdmissionDenied
+                || error instanceof StalePublicationHead || error instanceof InvalidPublicationInput) throw error;
+              throw new AdmissionUnavailable('Work publication dependencies are unavailable', { cause: error });
+            }
+          }
           return !allowed
             ? denyWorkStructurePublicationAdmission(env, admission, input)
             : changeStructuredWorkPublication(env, admission, input,
