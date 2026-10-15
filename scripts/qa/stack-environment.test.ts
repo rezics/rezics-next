@@ -11,6 +11,16 @@ import { rawSparqlIntegrationFiles } from './isolated-integration-files.ts';
 const discoveryReplay = 'tests/qa/integration/discovery-read-isolation.test.ts';
 const commandOnly = 'tests/qa/integration/profile-corpus-restore.test.ts';
 
+test('standalone ranking can retain its source on persistent volumes within the existing allocation', () => {
+  const name = integrationResourceClass(['tests/qa/integration/outcomes/realm/ranking.test.ts']);
+  const allocation = qaResourceClasses[name];
+  const environment = qaStackEnvironment({}, allocation.storage, name);
+  expect(environment.REZICS_QA_STACK_MODE).toBe('scale');
+  expect(environment.REZICS_FUSEKI_MEMORY_LIMIT).toBe(qaResourceClasses.ordinary.memory);
+  expect(environment.REZICS_FUSEKI_JVM_ARGS).toBe(qaResourceClasses.ordinary.jvmArgs);
+  expect(allocation.budgetMs).toBe(6 * 120_000);
+});
+
 test('model custody maintenance uses persistent harness owners within its existing test budget', () => {
   const name = integrationResourceClass(['tests/qa/integration/model-custody-backfill.test.ts']);
   expect(qaResourceClasses[name].storage).toBe('scale');

@@ -13,8 +13,10 @@ export const qaResourceClasses = {
   // private admission histories, chart continuations and cursor refusals. The
   // measured visitor/stranger/member cases took 55/70/88s; bound each at 120s.
   // Restore keeps its independent 600s active-work bound and the ordinary heap.
+  // A standalone consumer may also prepare custody; the physical cut copies
+  // persistent volumes and cannot retain tmpfs stores.
   'realm-ranking': {
-    storage: 'test',
+    storage: 'scale',
     memory: '2g',
     jvmArgs: '-Xms64m -Xmx512m -XX:MaxDirectMemorySize=128m',
     budgetMs: 6 * 120_000,
