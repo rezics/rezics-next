@@ -110915,7 +110915,7 @@
                       "type": "object"
                     },
                     "items": {
-                      "description": "This principal's completed states whose occurrence and selected revision remain readable. Readable tombstones are included; any completed selection marks its occurrence complete.",
+                      "description": "This Person's completed states whose occurrence and selected revision remain readable. Readable tombstones are included; any completed selection marks its occurrence complete.",
                       "items": {
                         "properties": {
                           "completed": {
