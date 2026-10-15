@@ -356,7 +356,7 @@ async function productionVisits(name: PersonaName) {
   let phase = 'frame', index = 0;
   const cache = new Map<string, Promise<Response>>();
   const fetcher = (async (input, init) => {
-    const request = new Request(input, init);
+    const request = new Request(typeof input === 'string' ? new URL(input, origin) : input, init);
     const url = new URL(request.url);
     const path = url.pathname.slice(BFF_PREFIX.length) + url.search;
     const raw = await request.text();

@@ -167,6 +167,8 @@ async function editorReads(name: PersonaName, work: string) {
     answer(sample('editor-recipe-draft', 'GET', `/v1/recipes/works/${id}${query(person)}`)),
     answer(sample('editor-notes-empty', 'GET', `/v1/me/contributions${query(person)}&limit=20`)),
   ]);
+  const current = await answer<{ revision: string }>(sample('editor-composition-head', 'GET', `/v1/compositions/${short(recipe.structure)}${query(person)}`));
+  await answer(sample('editor-private-recipe', 'GET', `/v1/recipes/works/${id}${query(person)}&revision=${encodeURIComponent(current.revision)}`));
 }
 
 async function within<T>(milliseconds: number, phase: string, run: () => Promise<T>): Promise<T> {

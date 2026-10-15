@@ -104,6 +104,8 @@ export function recordedFetch(
     const { status, headers, answer } = match.sample;
     if (match.sample.binary) {
       const { source, byteLength, sha256 } = match.sample.binary;
+      if (source.startsWith('/') || source.split(/[\\/]/).includes('..') || /^[a-z][a-z\d+.-]*:/i.test(source))
+        throw new Error(`Recorded binary source must stay inside the repository: ${source}`);
       if (!readBinary) throw new Error(`Recorded binary source loader is absent: ${source}`);
       const bytes = await readBinary(source);
       const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(bytes)))].map(value => value.toString(16).padStart(2, '0')).join('');

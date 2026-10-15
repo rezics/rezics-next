@@ -32,7 +32,7 @@ function ResourceVisit({ persona, state }: { persona: AnswerPersona; state: 'pop
     let mounted = true;
     const replay = recordedFetch(record, persona, [
       { label: 'editor-work-header', state: 'populated' }, { label: 'public-recipe', state },
-      ...(actingSubject ? [{ label: 'editor-authority', state: 'populated' as const }, { label: 'schema-org-export', state: 'populated' as const }] : []),
+      ...(actingSubject ? [{ label: 'editor-authority', state: 'populated' as const }, { label: 'selected-schema-org-export', state: 'populated' as const }] : []),
     ], { pathPrefix: BFF_PREFIX });
     const header = record.personas[persona].find(item => item.label === 'editor-work-header')!.answer as { mainVersion: string };
     const selection = `${BFF_PREFIX}/v1/main-versions/${header.mainVersion.slice(-36)}/selection`;
@@ -105,7 +105,7 @@ const readable: Story['play'] = async ({ canvasElement, args }) => {
     const download = canvas.getByRole('button', { name: t.exportAction });
     await waitFor(() => expect(download).toHaveAttribute('data-hydrated', 'true'));
     await userEvent.click(download);
-    const exported = record.personas[args.persona].find(item => item.label === 'schema-org-export')!.answer as { revision: string };
+    const exported = record.personas[args.persona].find(item => item.label === 'selected-schema-org-export')!.answer as { revision: string };
     await expect(await canvas.findByText(t.exportedRevision({ revision: exported.revision.slice(-36) }))).toBeVisible();
   } else await expect(canvas.queryByRole('button', { name: t.exportAction })).toBeNull();
 };

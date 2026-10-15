@@ -202,7 +202,8 @@ export class AnswerRecordValidator {
       'Response has no declared schema for this media type')];
     if (sample.binary) {
       const binarySchema = this.resolved<XSchema>(schema);
-      if (typeof binarySchema !== 'object' || binarySchema.type !== 'string' || binarySchema.format !== 'binary')
+      if (typeof binarySchema !== 'object' || !binarySchema || !('type' in binarySchema) || binarySchema.type !== 'string'
+        || !('format' in binarySchema) || binarySchema.format !== 'binary')
         return [violation('/binary', 'declared binary response', sample.binary, 'Binary metadata cannot replace a JSON answer')];
       return sample.answer === null ? [] : [violation('/answer', 'null', sample.answer, 'Binary bytes belong to the source asset, never record JSON')];
     }

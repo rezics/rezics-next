@@ -34,12 +34,13 @@ for (const record of [authoringJson, exchangeJson] as AnswerRecord[]) {
       if (persona === 'owner') {
         expect(view.kind).toBe('editor');
         if (view.kind !== 'editor') throw new Error('Author did not reach the editor');
-        const page = samples.find(sample => sample.label === 'editor-recipe-draft' || sample.label === 'editor-recipe')!;
+        const page = samples.find(sample => sample.label === 'editor-private-recipe')
+          ?? samples.find(sample => sample.label === 'editor-recipe-draft' || sample.label === 'editor-recipe')!;
         expect(view.actingSubject).toBe(actingSubject!);
         expect(view.initial.recipe).toEqual(stateOf(page.answer as Parameters<typeof stateOf>[0]));
         expect(view.initial.recipe.nodes.filter(node => node.role === 'ingredient')).toHaveLength(2);
         expect(view.initial.notes).toEqual(noNotes);
-        expect(requests).toHaveLength(6);
+        expect(requests).toHaveLength(record.row === 'recipes/author-a-recipe' ? 8 : 6);
       } else {
         expect(view).toEqual({ kind: 'no-authority', signedIn: persona !== 'visitor' });
         expect(requests).toHaveLength(persona === 'visitor' ? 1 : 2);

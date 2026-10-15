@@ -41,13 +41,13 @@ type Header = { id: string; title: { value: string } };
 
 const authorTitle = (recorded(authoring, 'owner', 'editor-resource-summary').answer as Named).name
   .value;
-const authorRecipe = recorded(authoring, 'owner', 'editor-recipe-draft').answer as RecipeAnswer;
+const authorRecipe = recorded(authoring, 'owner', 'editor-private-recipe').answer as RecipeAnswer;
 const authorHeader = recorded(authoring, 'owner', 'editor-work-header').answer as Header;
 const exchangeRecipe = recorded(exchange, 'owner', 'editor-recipe').answer as RecipeAnswer;
 const exchangeTitle = (recorded(exchange, 'owner', 'editor-resource-summary').answer as Named).name
   .value;
 const exchangeHeader = recorded(exchange, 'owner', 'editor-work-header').answer as Header;
-const exported = recorded(exchange, 'owner', 'schema-org-export');
+const exported = recorded(exchange, 'owner', 'selected-schema-org-export');
 
 const visitFrame = [
   { label: 'frame-platform-access', state: 'populated' },
@@ -76,7 +76,7 @@ const exchangeReads = [
   { label: 'editor-metadata-empty', state: 'populated' },
   { label: 'editor-recipe', state: 'populated' },
   { label: 'editor-notes-empty', state: 'populated' },
-  { label: 'schema-org-export', state: 'populated' },
+  { label: 'selected-schema-org-export', state: 'populated' },
 ] as const satisfies readonly RecordedSelection[];
 
 function linesOf(answer: RecipeAnswer): string[] {

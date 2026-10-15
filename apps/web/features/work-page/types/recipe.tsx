@@ -190,9 +190,10 @@ function Steps({ page, units, messages: t, recordingFetch }: {
 }
 
 /** A focused recipe task keeps the display awake while its steps are open. */
-function CookMode({ page, messages: t, units, onClose }: {
+function CookMode({ page, messages: t, units, onClose, recordingFetch }: {
   page: ReadableRecipe; messages: WorkPageMessages; units: Units;
   onClose: () => void;
+  recordingFetch?: typeof fetch;
 }) {
   const close = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -245,7 +246,7 @@ function CookMode({ page, messages: t, units, onClose }: {
         <section className="grid content-start gap-3"><h3 className="font-semibold text-xl">{t.ingredients}</h3>
           <IngredientList page={page} units={units} messages={t} /></section>
         <section className="grid content-start gap-3"><h3 className="font-semibold text-xl">{t.method}</h3>
-          <Steps page={page} units={units} messages={t} /></section>
+          <Steps page={page} units={units} messages={t} recordingFetch={recordingFetch} /></section>
       </div>
     </div>
   </div>;
@@ -437,7 +438,7 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
             {continuing ? t.loadingMoreRecipe : t.showMoreRecipe}</Button> : null}
         </div> : null}
       </div>
-      {cooking ? <CookMode page={page} messages={t} units={units}
+      {cooking ? <CookMode page={page} messages={t} units={units} recordingFetch={recordingFetch}
         onClose={() => setCooking(false)} /> : null}
     </> : <>
       {editorLink}

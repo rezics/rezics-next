@@ -18,7 +18,7 @@ import { recipeProveStates } from './prove-states.ts';
 import { recipeEditHref } from './route.ts';
 
 const exchange = exchangeJson as AnswerRecord;
-const exportSample = exchange.personas.owner.find(item => item.label === 'schema-org-export')!;
+const exportSample = exchange.personas.owner.find(item => item.label === 'selected-schema-org-export')!;
 const recipeFile = () => new File([JSON.stringify((exportSample.answer as { recipe: unknown }).recipe)], 'recipe.json', { type: 'application/ld+json' });
 const importedSample = exchange.personas.owner.find(item => item.label === 'imported-recipe')!;
 const retainedImport = stateOf(importedSample.answer as Parameters<typeof stateOf>[0]);

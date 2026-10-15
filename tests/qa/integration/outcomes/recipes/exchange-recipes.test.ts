@@ -96,6 +96,7 @@ async function exchangeRecipe(name: PersonaName) {
     return;
   }
   const exported = await answer<Export>(sample('schema-org-export', 'GET', exportPath(source, person)));
+  await answer(sample('selected-schema-org-export', 'GET', `/v1/recipes/${short(source.structure)}/export${query(person)}&revision=${encodeURIComponent(source.revision)}&format=schema-org`));
   expect(exported.revision).toBe(source.revision);
   expect(exported.recipe).toEqual(sourceExport.recipe);
   expect(exported.recipe.recipeIngredient.map(item => item.value)).toEqual(['3/2', '1/4']);

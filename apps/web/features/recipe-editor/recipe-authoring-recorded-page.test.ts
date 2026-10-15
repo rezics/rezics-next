@@ -9,7 +9,7 @@ import exchangeFixture from '../../../../tests/qa/fixtures/outcomes/recipes/exch
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { clearTypes } from '../catalogue/types.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
-import { readRecipe, writePlan } from './api.ts';
+import { readRecipe, readRecipeDraft, writePlan } from './api.ts';
 import type { Operation } from './intents.ts';
 import { mainRecipeExportApi } from './export-api.ts';
 import { readingLine } from './ingredient-line.ts';
@@ -72,6 +72,8 @@ const authorReads = [
   { label: 'editor-resource-summary', state: 'populated' },
   { label: 'editor-metadata-empty', state: 'populated' },
   { label: 'editor-recipe-draft', state: 'populated' },
+  { label: 'editor-composition-head', state: 'populated' },
+  { label: 'editor-private-recipe', state: 'populated' },
   { label: 'editor-notes-empty', state: 'populated' },
 ] as const satisfies readonly RecordedSelection[];
 
@@ -115,7 +117,7 @@ test('an owner opens the recorded draft at its head', async () => {
   const { main, fetcher } = replay(authoring, 'owner', [...signedInFrame, ...authorReads]);
   const actor = actingSubject(authoring, 'owner', 'editor-work-header');
   const id = workId(authoring, 'owner');
-  const draft = sample(authoring, 'owner', 'editor-recipe-draft');
+  const draft = sample(authoring, 'owner', 'editor-private-recipe');
   const summary = sample(authoring, 'owner', 'editor-resource-summary');
   const answer = draft.answer as {
     structure: string;
@@ -144,7 +146,7 @@ test('an owner opens the recorded draft at its head', async () => {
   expect(view.initial.recipe.head).toBe(answer.revision);
   expect(view.initial.next).toBe(answer.next ?? null);
   expect(view.initial.notes).toEqual({ text: null, head: null, body: '', publicationHead: null });
-  const loaded = await readRecipe(main, id, actor);
+  const loaded = await readRecipeDraft(main, id, actor);
   expect(loaded.ok).toBe(true);
   if (!loaded.ok) return;
   const title = (summary.answer as { name: { value: string } }).name.value;
@@ -161,7 +163,7 @@ test('an owner opens the recorded draft at its head', async () => {
   expect(steps(loaded.data).map((node) => node.qualifier.instructionText.value)).toEqual(
     stepValues,
   );
-  expect(stepValues).toHaveLength(2);
+  expect(stepValues).toHaveLength(3);
   expect(steps(view.initial.recipe).map(node => node.qualifier.instructionText.value)).toEqual(stepValues);
   const amounts = answer.occurrences
     .filter((item) => item.role === 'ingredient' && item.state === 'active')
@@ -322,10 +324,10 @@ test('the recorded draft and the empty imported composition are read as themselv
 });
 
 test('the owner exports the recorded revision and the work keeps its author credit', async () => {
-  const exported = sample(exchange, 'owner', 'schema-org-export');
+  const exported = sample(exchange, 'owner', 'selected-schema-org-export');
   const credits = sample(exchange, 'owner', 'public-credits');
   const { main } = replay(exchange, 'owner', [
-    { label: 'schema-org-export', state: 'populated' },
+    { label: 'selected-schema-org-export', state: 'populated' },
     { label: 'public-credits', state: 'populated' },
   ]);
   const url = new URL(exported.path, origin);

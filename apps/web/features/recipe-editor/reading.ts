@@ -23,10 +23,6 @@ export function readingOf(state: RecipeState): ReadableRecipe {
       line: readingLine(node.qualifier),
       language: node.qualifier.originalText.language,
     }] : []),
-    measures: state.measures.map(measure => ({
-      kind: measure.kind,
-      value: measure.value,
-      ...(measure.unitText ? { unitText: measure.unitText } : {}),
-    })),
+    measures: state.measures.map(measure => ({ ...measure })),
   };
 }

@@ -24,6 +24,13 @@ export function InstructionRecording({ instruction, messages: t, fetcher = fetch
     | { kind: 'failed'; status?: number; problem?: unknown }>({ kind: 'idle' });
   const live = useRef(true);
   const objectUrl = useRef<string | null>(null);
+  const generation = useRef(0);
+  useEffect(() => {
+    generation.current += 1;
+    if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
+    objectUrl.current = null;
+    setState({ kind: 'idle' });
+  }, [policy.presentation]);
   useEffect(() => {
     live.current = true;
     return () => { live.current = false; if (objectUrl.current) URL.revokeObjectURL(objectUrl.current); };
@@ -31,24 +38,26 @@ export function InstructionRecording({ instruction, messages: t, fetcher = fetch
   const open = async () => {
     if (!recording || !href || state.kind === 'loading') return;
     setState({ kind: 'loading' });
+    const openedGeneration = generation.current;
+    const current = () => live.current && openedGeneration === generation.current;
     try {
       const response = await fetcher(new URL(href, window.location.origin), {
         credentials: instruction.details?.actingSubject ? 'same-origin' : 'omit', cache: 'no-store',
       });
       if (!response.ok) {
         const problem: unknown = await response.json().catch(() => null);
-        if (live.current) setState({ kind: 'failed', status: response.status, problem });
+        if (current()) setState({ kind: 'failed', status: response.status, problem });
         return;
       }
       const bytes = await response.arrayBuffer();
       const sha256 = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(value => value.toString(16).padStart(2, '0')).join('');
       if (sha256 !== recording.sha256) throw new Error('Recording byte integrity mismatch');
-      if (!live.current) return;
+      if (!current()) return;
       const src = URL.createObjectURL(new Blob([bytes], { type: recording.mediaType }));
       objectUrl.current = src;
       setState({ kind: 'ready', src: `${src}${selector.grain === 'representation' && selector.fragment ? `#${selector.fragment}` : ''}` });
     } catch {
-      if (live.current) setState({ kind: 'failed' });
+      if (current()) setState({ kind: 'failed' });
     }
   };
   if (!recording || policy.presentation === 'unavailable' || policy.presentation === 'rating-hidden')

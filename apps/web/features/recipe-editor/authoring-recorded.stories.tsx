@@ -28,7 +28,8 @@ const phone = { globals: { viewport: { value: 'phone' as const }, locale: 'en' }
 const owner: Story['play'] = async ({ canvasElement, args }) => {
   const canvas = within(canvasElement), t = copyOf(args.locale);
   const record = args.record as AnswerRecord;
-  const recipe = record.personas.owner.find(item => item.label === 'editor-recipe-draft' || item.label === 'editor-recipe')!;
+  const recipe = record.personas.owner.find(item => item.label === 'editor-private-recipe')
+    ?? record.personas.owner.find(item => item.label === 'editor-recipe-draft' || item.label === 'editor-recipe')!;
   const state = stateOf(recipe.answer as Parameters<typeof stateOf>[0]);
   const title = record.personas.owner.find(item => item.label === 'editor-resource-summary')!.answer as { name: { value: string } };
   await expect(await canvas.findByRole('textbox', { name: t.title })).toHaveValue(title.name.value);
