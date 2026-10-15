@@ -1,19 +1,95 @@
 # State
 
-Checkpoint 936af965-5ee4-4a97-85e9-e4d4960d2cb7 consolidates handled events
-task:G-2333:9, mail:53423171-f4ea-474e-909b-8bbf51f977ae and
-mail:21365ae4-f86b-414c-985a-fa1e4b63f759.
+Checkpoint 6ca2314e-45fa-491e-b0c5-74dea042fbdd consolidates handled events
+mail:d32cd50f-3ca9-4a2b-a9cb-4186047bfc10 and task:G-2586:22.
+This disposition supersedes G-2586's preview-proof remainder below; other
+tasks and later events retain their own decisions.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2586 | Mail:d32cd50f reports G-2588's owner-preview correction on wave/2 at `4839f1ece`, with private revisions returning 404 to peers. Brief decision `f65c08318` resumed attempt 16 to rebase and re-record only the owner editor preview visit, preserving unaffected proof. Task:G-2586:22 accepts the completed handoff at `abec6c1154`, verified on wave/2 with the API and Storybook fixes included. Six-persona instruction capture `20261015t022436-4612e5` includes the retained private recording; six production replays have zero missing requests. Final 11 instruction stories and phone/desktop inspection passed in `20261015t023708-75e9fd`; affected consumers, binary validation, answer-records, types/lint/AST/guards, web types and localization passed across the recorded final checks. Authorized recorder/replay, authored-response generator and six-MIME media declaration corrections are included. Leave exited for Program to close after the wave merges; no individual landing, restart or main row promotion. |
+
+G-2584's accepted wave handoff and G-2585's G-2587 hold remain unchanged.
+The supplied mail was acknowledged in its deciding turn and its acknowledgement
+was confirmed here. This checkpoint changes only this file and starts no work.
+
+The method's measures, status and latest efficiency report were read. Concurrent
+scope remains 64/67 API rows and 384 proved/18 pending persona cells; both Codex
+accounts read 74% of their weekly windows. The latest efficiency report remains
+2026-10-13 21:49 UTC, with no current tokens-per-proved-row reading. Earlier
+attempt measures retain their checkpoint attribution; no efficiency gain is
+inferred. The API preview correction was Program-owned; the accepted continuation
+reused unaffected proof and resolved its recorded story/capture gaps without
+weakening assertions or cells. No further correction or dispatch is decided.
+
+## Retained checkpoint 8af73fc5
+
+Checkpoint 8af73fc5-464c-4f77-b355-f440fdd25428 consolidates handled events
+mail:506310d8-d383-457e-a8e8-219cd2ae38be,
+mail:fc667953-9454-4e55-bd02-0f644baf8bb3 and task:G-2584:11.
+These dispositions supersede the affected task readings below; later events
+retain their own decisions.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2584 | Task:G-2584:11 accepts the completed surface handoff for wave/2 integration. Commit `00ef145503` was verified as an ancestor of wave/2. Six personas, 171 unchanged captured answers, 65 public Works and zero-miss production replay; capture `20261015t013431-a41174` at `1f11fd499e`. Final gate at `00ef145503` passed types/lint/guards, 299 units, answer-records, 92 stories and localization; phone/desktop inspected in `20261015t015629-2bf308`. Program received acceptance and the exact wave-gate file list in mail:0343c1ca. Leave exited for Program to close after the wave merges; no individual landing, restart or main row promotion. This supersedes the earlier capture-recovery hold. |
+| G-2586 | Mail:506310d8 classifies the ignored `.temp/` fixture-root failure as G-2570's regression, fixed on wave/2 at `15d2e21be` with 12/12 outcome-test support tests passing. Rebase onto wave/2 and continue; the deciding turn found it running and started no duplicate worker. Mail:fc667953 and brief decision `4deb9431bf` require an owner's private-revision preview to show the attached recording under the publication's rights, erasure and disclosure rules. G-2588 owns the API correction and owner outcome case. Finish against the current recorded answer, then, once G-2588 pushes, rebase and re-record that one owner visit through production. Preserve consistent identities, existing assertions/cells and applicable unaffected captures; retain binary fixture/hash replay. Acceptance needs the corrected visit, zero-miss replay, final phone/desktop preview inspection and complete affected gate. The deciding turn issued resume; no new continuation follows from this checkpoint. |
+
+G-2585's existing G-2587 hold and Program-owned resume remain unchanged.
+Wave tasks stay on wave/2 and reach main with the wave; accepting G-2584's
+handoff does not close it or promote a main API row. Concurrent status remains
+64/67 API rows, 384 proved/18 pending persona cells; both Codex accounts read
+74% of their weekly windows. The method's status and latest efficiency report
+were read: the latter remains dated 2026-10-13 21:49 UTC and supplies no current
+tokens-per-proved-row reading. Tool-attempt figures below retain their earlier
+checkpoint attribution; no efficiency gain is inferred from this handoff.
+The fixture-listing regression is a shared-tool cause, not a surface fix round;
+the preview answer is Program-owned API work. This checkpoint starts no worker,
+landing, closure, retry or watcher and changes only this file.
+
+## Retained wave/2 decisions
+
+Checkpoint d6994109-2a21-4bf9-9b38-9850a36e7303 consolidates handled events
+mail:f43329f1, mail:9f250c88, mail:7b3abd26, mail:8aa98c11,
+mail:3240321f, task:G-2585:4 and mail:91aa32a1. No surface row, landing
+or closure is accepted by these events. Later results retain their own events.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2584 | Anime catalogue surface committed at `725a5b2814` and dispatched under mail:f43329f1. Decision `d456e2395f` applies Program's API promotion at wave/2 `88b05ef2e`: rebase, verify ancestry and record normally without changing declarations. The deciding turn resumed it. Mail:7b3abd26 then found capture job `c79ee3e3` reported replaced-attempt ownership while capture processes remained alive with no result; Program received the recovery question with the brief path. Preserve the existing capture for reconciliation; no duplicate retry was started or authorized. Finish whole production visits, replay, phone/desktop and complete gate after recovery. |
+| G-2585 | Realm Best/Top ranking surface committed at `3e9503d2b1` and dispatched. Decision `de8d5aabf1` applies the same wave/2 promotion and recording rule; it was already running, so no duplicate resume started. Mail:3240321f classifies capture timeout as the API projection fault `EventSourceUnavailable`, assigned to G-2587. Hold exited until G-2587 pushes to wave/2; Program owns the resume. Task:G-2585:4 confirms that disposition without new proof, retry or brief edit. Then rebase and finish six-persona capture, replay, tests, phone/desktop and full gate. |
+| G-2586 | Recipe instruction-form surface committed at `0db7780aa7` and dispatched. Decision `6e92396a52` implements mail:8aa98c11's binary-record ruling: status, content-type, length, sha256 and repository fixture path, never bytes in JSON; replay reads the fixture and verifies its hash. Test valid binary, mismatched hash and absent source; JSON behavior and assertions stay intact. Resume was refused because the worker was running. Decision `2264ce0cc8` authorizes the narrow media bytes 200 declaration correction, retained formats including audio/wav, unchanged behavior/operation, regenerated contract and strict media-type checks. Running-task reclaim/resume initially refused and claim settlement went to Program. Mail:91aa32a1 settles it: added claims are registered while running; `eda7906be3` records permission to edit unclaimed shared media.ts alongside G-2577, preserving both through wave rebase. No restart followed. Finish binary recording and the unchanged complete surface gate before wave handoff. |
+
+All three are wave/2 build tasks explicitly authorized to record their own
+production requests on a wave/2 stack now. Recording, zero-miss replay,
+phone/desktop inspection and complete checks precede handoff; they land with
+the wave, without individual landing or a deferred second proof pass.
+Program's API promotions are wave-local: Anime/ranking at `88b05ef2e`,
+Recipe instruction forms at `b10513e88`; the concurrent main scope reading
+below remains 64/67 and is not changed by this checkpoint.
+
+The settled claim procedure is to reclaim added claims directly on a running
+surface; do not wait for its exit or mail Program for that routine addition.
+The shared media.ts exception above is specific to the wave's overlapping
+work. Preserve assertions, persona cells, whole-record identities and exact
+production requests. Unaffected prior decisions remain below; this checkpoint
+starts no worker, retry or landing and changes only this file.
+
+## Retained checkpoint decisions
+
+Checkpoint 0e8878ac-c589-41ea-8840-41fd8e825ae6 consolidates handled events
+task:G-2233:9, task:G-2237:19 and task:G-2237:23.
 No complete surface row, new landing or closure is accepted. These current
 dispositions supersede the affected historical holds below:
 
 | Task | Current decision and next action |
 | --- | --- |
-| G-2233 | Decision `b54789f83` admits four production settings paths for the smallest replay-client seam, preserving production access and browser defaults. Keep integration capture QA `20261014t230349-8f769a`, source `d790bb9f766bf3c813a0f5d39d30012887fd5f74`, passed in 55.9 seconds; promote it and use its settings authority samples without recapturing for a RESULT. Reclaim/resume found an existing worker, and task:G-2233:6 found attempt 7 already run. Mail:87b91f97 reports another setup import failure before tests; Program received recovery question mail:d166f7c1. Task:G-2233:7 then confirms Program's committed `2a05e0ac7` decision and already-resumed attempt 8: rebase onto the Storybook harness fix and rerun. This supersedes the startup hold for that continuation, without accepting the diagnostic fourteen-story pass as the full gate. Finish unchanged mapping/consumer checks, answer-records and final phone/desktop proof. |
+| G-2233 | Task:G-2233:9 decisions `8ffcca31ed`/`85369b01ce` classify landing gate `run-Zx1umY`: contract and types passed, then lint refused two unawaited assertions in the Storybook `waitFor` callback. Attempt 10 resumed to make the callback async and await both assertions, preserving retry and failure propagation, then finish the complete affected gate including mapping/consumer checks, guards and recorded stories. Rebase onto main and verify harness-fix ancestry before Storybook. Retain the admitted settings seam and applicable capture QA `20261014t230349-8f769a`, source `d790bb9f766bf3c813a0f5d39d30012887fd5f74`, plus valid phone/desktop evidence; refresh only for a relevant change or named gap. No merge or completed row was accepted in this event; later landing and closure results remain outside this checkpoint. |
 | G-2333 | Task:G-2333:9 decision `c83adb32c` retains `e31456b5b`, `de14bdd60` and `1f319edd4` unaccepted on the branch: 74 passing stories and phone/desktop evidence use a shell still duplicated by production, and job `f442c75e` skipped the surface contract under an obsolete Wave section. Remove that section and wire the production layout to `zoneManagementShell` under the narrow G-2332 loan, preserving its reads, identity, lifecycle and provider behavior; do not edit its read.ts or authoring-reads.ts. Home/preview routes were reclaimed and attempt 10 resumed. Exercise the actual production layout in the boundary test, preserve six-persona capture `20261014t220002-43e889`, operator Zone/editor 200 answers, saving-Agent provenance and the headers loan. Finish affected final phone/desktop inspection and the complete surface gate. No integration or landing accepted. |
 | G-2224 | Mail:53423171 commits the harness recovery in `793e2b2db`/`e1a118639`; the corrected dated decision resumed attempt 10 with rebase and ancestry verification. Finish the existing zero-miss production replay, phone/desktop and complete affected gate, including Books consumers, preserving applicable captures. Mail:21365ae4 reports the replaced job `e1fbc98d`; its passed contract/type/lint/AST checks are incomplete gate evidence. Attempt 10 had already stopped that stale gate, rebased, verified the harness fix and started a replacement gate. No duplicate resume, new brief decision or acceptance follows. |
 | G-2239 | Task:G-2239:6 remains unaccepted pending the complete gate. Attempt 7 and Program's Cargo recovery were already underway. Mail:53423171 decision `ff85e42be` records the rebase/ancestry rule; the worker was running and already included the harness fix, so no duplicate continuation started. Retain the passed guard/stories and existing production-client, original-timeout, phone/desktop and complete-gate requirements. |
 | G-2334 | Decisions `54a64c277`/`51529c160` incorporate Program's loan of realm-page.tsx from G-2462, settling the shared-access hold. Record and replay the real follow-state refresh for every reached persona, including null-level follows, through the production client; preserve the holder's changes and make the false relationship-load error disappear. Finish the nullable assertion-typing correction without weakening assertions. Attempt 10 resumed; task:G-2334:9 confirms it was running and the handoff remains partial. Acceptance still needs the three production GETs, faithful phone/desktop inspection and complete affected gate. |
-| G-2237 | Task:G-2237:10 decision `ec611872d` rejects the green gate at `ae346afc8` and screenshots using recordedFollowRefresh: a prior membership answer cannot stand in for the missing production refresh. Attempt 11 resumed for independent work; Program received the shared-file question in mail:998c2ce1. Mail:b47963e3 decisions `e607741bc`/`24e95901f` settle access with narrow injection loans in realm/read.ts, realm-page.tsx and zones/site-route.tsx. Preserve every holder's changes; later landings rebase onto earlier ones. Remove the fallback, record exact reached follow-state reads and confirm the conditional graph for all six personas. The requested resume found an already-running worker. Both rows remain open for answer-records, faithful final phone/desktop inspection and the complete gate. |
+| G-2237 | Task:G-2237:19 decisions `a1e37bec68`/`d01f69aed6` resolve the loaned Realm-page rebase by retaining main's `replayFetch`, `origin: ''`, supplied session and ban inputs, plus the optional read-client fetch and site-route client argument; do not restore `recordedFollowRefresh` or `relationshipApi`. The manager rebased, reclaimed both browse outcome test/record paths and resumed attempt 20. Answer-records at `bb2d587a91` (QA `20261015t000511-dd9da2`) and 74 stories (QA `20261014t235556-efd781`) remain source-specific evidence: the changed follow-state path required new phone/desktop frames and zero-miss production-route stories. Stranger, owner and operator reach `GET /v1/me/follow-state`; visitor, member and moderator do not. Task:G-2237:23 decision `82630574a8` then rejects landing gate `run-QPbx3Z`, which passed contract/types but failed lint on an unawaited relationship-notice assertion. Attempt 24 resumed to await or return that assertion's promise and fix equivalent callbacks without weakening checks, then rerun affected stories and the complete surface gate including consumers and answer-records. Preserve valid captures and inspected frames at their tested source; repeat inspection only for a relevant rendered-source change or named gap. Both rows remain open. No merge or closure accepted; do not restart the failed landing or land installed step `0c490b122` again. |
 
 Preserve applicable passed artifacts and repeat evidence only for relevant
 changes or a named gap. Assertions, persona cells and whole-record identities
@@ -25,6 +101,11 @@ G-2334's production refresh and nullable assertion correction, and G-2237's
 shared-file loans and exact follow-state recording. Mail:53423171 decision
 `293554461` makes G-2233's rebase/ancestry check explicit without a duplicate
 resume. Later handoffs and landing results remain outside this checkpoint.
+Carry forward checkpoint 936af965's G-2333 production-layout continuation,
+G-2224 replacement gate and harness recovery, G-2239 harness ancestry rule,
+and the unchanged G-2334 proof remainder. The three events above supersede
+G-2233's earlier startup disposition and G-2237's earlier integration hold;
+they do not accept later results or authorize duplicate continuations.
 Carry forward unaffected decisions from checkpoint 595008e1, including
 G-2235's already-running Program continuation and G-2237's preserved 74-story
 and owner evidence; no additional disposition of their later results is made.
@@ -89,11 +170,10 @@ The method's measures, `task goal -- status` and
 `task goal -- efficiency --last --json` were read at this checkpoint.
 Scope and accounts are concurrent snapshots, not acceptance of later events.
 Status still reports 64/67 API rows and 384 proved/18 pending persona cells;
-accounts read codex 72% and codex-1 72% of their weekly windows. Other tool
-classifications and token totals below are retained from checkpoint 5b17f324,
-not newly measured totals for this event set.
-Raw attempts below are retained from checkpoint 844479ae. Classified-tool,
-token measures are retained readings; these
+accounts read codex 73% and codex-1 73% of their weekly windows. Historical
+classifications below remain attributed to their earlier checkpoints.
+Raw attempts below are retained from checkpoint 844479ae. Tool and token
+measures were refreshed from `goalctl status` for this checkpoint; concurrent
 measurements accept no later handoff or task disposition.
 The latest efficiency report
 is still 2026-10-13 21:49 UTC: 324.6M input tokens, 97% worker input,
@@ -106,12 +186,12 @@ It supplies no current tokens-per-proved-row reading.
 | Web surfaces | Complete surface-row total unavailable; G-2240's landed step and G-2332's accepted management evidence are not whole-row proof; G-2234/G-2237 are bounded steps; G-2333/G-2235 remain unaccepted; G-2381 is a mechanism with no rows |
 | Raw web attempts | Retained ledger: 124 across 65 attempted tasks, 65 first and 59 subsequent; queued work excluded; raw first share 52% |
 | Attempts per landed web task | Retained raw ledger sample: median 2, maximum 6 across 35 merged or verified web tasks; bounded steps are included; ledger state does not accept a later landing mail |
-| Web tool measures | 44% first share, daily 26% (27 of 105); 66 first, 45 step, 85 fix, 3 capacity; 11 fixes inferred from unavailable handoffs; landed-task median 1, maximum 14 (G-2236) |
-| Web tokens | 1844.4M input, 12M output, 2 unavailable sessions; tokens per proved row unavailable |
-| Web recorded refusals | 0 outcome, 9 gate, 0 failing-test finding, 17 other in retained reports; Program owns the classified tool/main/host faults below |
-| Program measures | 41% first attempts, today 24% (111 of 454); landed-task median 1, maximum 15 (G-2576); 2015.9M input, 8.1M output, 80 unavailable sessions; tokens per proved row unavailable |
+| Web tool measures | 31% first share, daily 14% (3 of 22); 69 first, 49 step, 157 fix, 3 capacity; 11 fixes inferred from unavailable handoffs; landed-task median 2, maximum 25 (G-2237) |
+| Web tokens | 2010.7M input, 12.9M output, 2 unavailable sessions; tokens per proved row unavailable |
+| Web recorded refusals | 0 outcome, 11 gate, 0 failing-test finding, 18 other in retained reports; Program owns the classified tool/main/host faults below |
+| Program measures | 38% first attempts, today 7% (3 of 41); landed-task median 1, maximum 17 (G-2576); 2121.3M input, 8.4M output, 80 unavailable sessions; tokens per proved row unavailable |
 | Program refusals | 0 outcome, 12 gate, 0 failing-test finding, 10 other in retained reports |
-| Accounts | Concurrent status: codex 72%, codex-1 72% of weekly windows |
+| Accounts | Concurrent status: codex 73%, codex-1 73% of weekly windows |
 | Audit 5 web interval | 21:50–00:48 UTC: 22 starts for 7 landings (3.14 per landing); 13 of 16 ended handoffs not done, 12 without handoff text; exit-to-command median 56 minutes, maximum over 155, first mention after 3 minutes |
 
 The concurrent API reading is 64 of 67; this checkpoint closes no task
@@ -121,7 +201,7 @@ it does not measure tokens per proved row. Its deciding turn accounted for prior
 commands and found all eight queued surfaces missing prerequisites on main.
 The retained raw first share is 52%; the earlier tool daily share
 was below half at 38%, prompting the classifications below. The current tool
-daily share is 26%; Program's daily share is 24%, both below half. Program
+daily share is 14%; Program's daily share is 7%, both below half. Program
 owns the shared tooling causes classified below; this notice adds no fix
 round or missing-input restart. Tokens per proved row remain unavailable. Repeated work
 comes from incomplete production-path records, omitted layout decisions,
@@ -259,8 +339,30 @@ job is lifecycle progress, not a new surface defect or completed gate. The
 already-running replacement needs no duplicate start. Scope remains 64/67 API
 rows and 384 proved/18 pending cells; retained daily first shares remain web
 26% and Program 24%, with no current tokens-per-proved-row evidence of gain.
+Checkpoint 0e8878ac identifies the same assertion-synchronization cause in
+G-2233 and G-2237: asynchronous Storybook assertions were not awaited by
+their retry callbacks, and the landing gates correctly refused lint after
+contract/types passed. The committed corrections preserve assertions and
+require complete gates; G-2237 also checks equivalent callbacks. Its separate
+integration cause was a stale loaned Realm-page hunk: keeping main's transport
+and requiring fresh rendered-source proof resolves that conflict without
+substituted refresh answers or repeated valid captures. Attempts 10, 20 and
+24 were already resumed in the deciding turns; this checkpoint starts none.
+The refreshed daily shares are web 14% and Program 7%, with no new row proof
+or measured efficiency gain from these events. Later status dispositions do
+not accept their landing-result events here.
 Unavailable tokens per proved row establish no efficiency improvement. Program's measures cover other Goals as well; concurrent status
 and ledger measurements do not decide later handoffs or landing results.
+
+Checkpoint d6994109 classifies its repeated work as capture-job ownership
+(G-2584), an API projection fault (G-2585), and binary recording/declaration
+plus running-claim tooling limits (G-2586). No frequency ranking among these
+causes is established by the seven events. Program owns capture reconciliation
+and G-2587's repair; the binary fixture rule and direct running-task reclaim
+settle the other reported blockers. Three ready briefs were dispatched rather
+than held for the low first-attempt share. No unchanged capture retry or
+duplicate worker followed; these procedural decisions prove no efficiency
+gain while tokens per proved row remain unavailable.
 
 ## Work and next actions
 
@@ -561,12 +663,15 @@ G-2267; keep the owner's correct record unchanged.
 
 ## Acknowledgements
 
-The supplied mails were already acknowledged on 2026-10-14 UTC:
-mail:53423171-f4ea-474e-909b-8bbf51f977ae at 23:26:39 and
-mail:21365ae4-f86b-414c-985a-fa1e4b63f759 at 23:30:24;
-both acknowledgements were confirmed at this checkpoint. Task:G-2333:9
-confirmed the related job mail:ee3d0805's acknowledgement at 23:07:01.
-Earlier acknowledgements remain in durable mail history. This checkpoint
-confirms acknowledgements and consolidates decisions only: no brief edit,
+Mails 506310d8-d383-457e-a8e8-219cd2ae38be and
+fc667953-9454-4e55-bd02-0f644baf8bb3 were acknowledged by their deciding
+turns; task:G-2584:11 is handled in coordinator history. Checkpoint 8af73fc5
+acknowledges their consolidation and supplies no new mail to acknowledge.
+
+The six supplied mails are already acknowledged in durable mail history by
+their deciding turns; task:G-2585:4 is handled in coordinator history.
+This checkpoint supplies no new mail to acknowledge and leaves later inbox
+deliveries to their own events. Earlier acknowledgements remain in durable mail
+history. This checkpoint acknowledges the requested consolidation only: no brief edit,
 worker start, landing, closure, watcher or wait. Later mail and task results
 retain their own events.

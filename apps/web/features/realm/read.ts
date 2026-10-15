@@ -53,6 +53,8 @@ export interface RealmReadClient {
   personal?: MainClient;
   actingSubject?: string;
   signedIn: boolean;
+  /** Replaying fetch for a story. Production omits it and the header uses the browser session. */
+  fetch?: typeof fetch;
 }
 
 // Published modules use the public viewer. Member-readable Realm and Zone

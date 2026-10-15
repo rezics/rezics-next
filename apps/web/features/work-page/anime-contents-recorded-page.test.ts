@@ -335,3 +335,125 @@ test('owner work header title is the recorded work title on the inventory page',
   expect(view.nextHref).toContain((inventory.answer as PageAnswer).nextCursor);
   expect(typeof query.actingSubject).toBe('string');
 });
+
+function numbered(label: string, prefix: string): number {
+  return Number(label.slice(prefix.length));
+}
+
+/** Successful limit=100 inventory windows, in the order the page followed. */
+function inventoryWindows(persona: AnswerPersona) {
+  return record.personas[persona]
+    .filter(item => /^inventory-read-\d+$/.test(item.label) && item.status === 200)
+    .sort((left, right) => numbered(left.label, 'inventory-read-') - numbered(right.label, 'inventory-read-'));
+}
+
+function searchWindows(persona: AnswerPersona) {
+  return record.personas[persona]
+    .filter(item => item.status === 200 && (item.label === 'distant-episode-search' || /^distant-episode-window-\d+$/.test(item.label)))
+    .sort((left, right) => (left.label === 'distant-episode-search' ? 1 : numbered(left.label, 'distant-episode-window-'))
+      - (right.label === 'distant-episode-search' ? 1 : numbered(right.label, 'distant-episode-window-')));
+}
+
+function contentsLabelForInventory(path: string, label: string): string {
+  return new URL(path, 'https://recorded.invalid').searchParams.has('cursor')
+    ? `inventory-contents-${numbered(label, 'inventory-read-')}` : 'selected-language-contents';
+}
+
+function contentsLabelForSearch(label: string): string {
+  return label === 'distant-episode-search'
+    ? 'selected-language-contents' : `distant-episode-contents-${numbered(label, 'distant-episode-window-')}`;
+}
+
+test('each persona follows the recorded inventory and the search cursor to the distant episode', async () => {
+  for (const persona of answerPersonas) {
+    const windows = inventoryWindows(persona);
+    expect(windows.length).toBeGreaterThan(1);
+    let previous: string | null = null;
+    let seen = 0;
+    for (const [index, item] of windows.entries()) {
+      const answer = item.answer as PageAnswer;
+      const url = new URL(item.path, 'https://recorded.invalid');
+      expect(url.searchParams.get('limit')).toBe('100');
+      expect(url.searchParams.get('q')).toBeNull();
+      expect(url.searchParams.get('cursor')).toBe(previous);
+      expect(answer.count).toEqual({ value: answer.items.length, kind: 'exact-page', total: null });
+      expect(answer.complete).toBe(answer.nextCursor === null);
+      if (index === 0) expect(chapterLabel(answer.items[0])).toBe('Episode 1');
+      seen += answer.items.length;
+      previous = answer.nextCursor;
+      const contents = sample(persona, contentsLabelForInventory(item.path, item.label));
+      const replay = recordedFetch(record, persona, [
+        { label: contents.label, state: contents.status === 200 ? 'populated' : 'error' },
+        { label: item.label, state: 'populated' },
+      ], { pathPrefix: BFF_PREFIX });
+      disposals.push(replay.dispose);
+      const seenRequests: string[] = [];
+      const actingSubject = url.searchParams.get('actingSubject') ?? undefined;
+      const main = browserMainApi('https://recorded.invalid', {
+        anonymous: !actingSubject, fetcher: watchedFetch(replay, seenRequests),
+      });
+      const host = { main, ...(actingSubject ? { actingSubject } : {}) };
+      const cursor = url.searchParams.get('cursor') ?? undefined;
+      await main.v1.works({ id: url.pathname.split('/').at(-1)! }).contents.get({
+        query: { actingSubject, language: 'en', ...(cursor ? { cursor } : {}) },
+      });
+      const view = await readContentsInventory(host, {
+        workId: url.pathname.split('/').at(-1)!, workRef: url.pathname.split('/').at(-1)!,
+        workIri: iriOf(url.pathname.split('/').at(-1)!), locale: 'en', language: 'en', cursor,
+      });
+      const requested = seenRequests.map(requestedPath);
+      expect(requested).toHaveLength(2);
+      sameQuery(requested[1]!, item.path);
+      expect(view.kind).toBe('page');
+    }
+    expect(previous).toBeNull();
+    expect(seen).toBe(1000);
+    expect(chapterLabel((windows.at(-1)!.answer as PageAnswer).items.at(-1))).toBe(distantLabel);
+
+    const search = searchWindows(persona);
+    expect(search.length).toBeGreaterThan(1);
+    let searchCursor: string | null = null;
+    for (const item of search) {
+      const url = new URL(item.path, 'https://recorded.invalid');
+      expect(url.searchParams.get('q')).toBe(distantLabel);
+      expect(url.searchParams.get('limit')).toBe('100');
+      expect(url.searchParams.get('cursor')).toBe(searchCursor);
+      searchCursor = (item.answer as PageAnswer).nextCursor;
+    }
+    const visible = search.find(item => (item.answer as PageAnswer).items.length > 0);
+    if (!visible) throw new Error(`${persona} search never reached ${distantLabel}`);
+    expect(chapterLabel((visible.answer as PageAnswer).items.find(item => chapterLabel(item) === distantLabel))).toBe(distantLabel);
+    const visibleUrl = new URL(visible.path, 'https://recorded.invalid');
+    const contents = sample(persona, contentsLabelForSearch(visible.label));
+    const actingSubject = visibleUrl.searchParams.get('actingSubject') ?? undefined;
+    const replay = recordedFetch(record, persona, [
+      { label: contents.label, state: contents.status === 200 ? 'populated' : 'error' },
+      { label: visible.label, state: 'populated' },
+    ], { pathPrefix: BFF_PREFIX });
+    disposals.push(replay.dispose);
+    const seenRequests: string[] = [];
+    const main = browserMainApi('https://recorded.invalid', {
+      anonymous: !actingSubject, fetcher: watchedFetch(replay, seenRequests),
+    });
+    const cursor = visibleUrl.searchParams.get('cursor') ?? undefined;
+    const host = { main, ...(actingSubject ? { actingSubject } : {}) };
+    await main.v1.works({ id: visibleUrl.pathname.split('/').at(-1)! }).contents.get({
+      query: { actingSubject, language: 'en', ...(cursor ? { cursor } : {}) },
+    });
+    const view = await readContentsInventory(host, {
+      workId: visibleUrl.pathname.split('/').at(-1)!, workRef: visibleUrl.pathname.split('/').at(-1)!,
+      workIri: iriOf(visibleUrl.pathname.split('/').at(-1)!), locale: 'en', language: 'en',
+      q: distantLabel, cursor,
+    });
+    const requested = seenRequests.map(requestedPath);
+    expect(requested).toHaveLength(2);
+    sameQuery(requested[0]!, contents.path);
+    sameQuery(requested[1]!, visible.path);
+    expect(view.kind).toBe('page');
+    if (view.kind !== 'page') return;
+    expect(view.chapters.some(chapter => chapter.label === distantLabel)).toBe(true);
+    expect(view.q).toBe(distantLabel);
+    if (cursor) expect(view.firstHref).toContain('q=');
+    expect(view.firstHref).not.toContain('cursor=');
+  }
+});

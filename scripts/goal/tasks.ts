@@ -685,9 +685,17 @@ export async function reclaimTask(id: string, briefPath: string, flags: Set<stri
     assertOwner(task);
     assertPrepared(task);
     assertClaimIdentity(task, source);
-    if (running(task)) throw new Error(`${task.id} is still running`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
-    Object.assign(task, replacementClaims(task, ledger, source, flags).claims);
+    const { claims } = replacementClaims(task, ledger, source, flags);
+    if (running(task)) {
+      // A running worker may need more files (a surface recording its own requests); it never loses one mid-attempt.
+      const dropped = (['paths', 'tests', 'migrations', 'shared', 'operations', 'refs'] as const)
+        .flatMap(key => ((task[key] ?? []) as string[]).filter(item => !((claims[key] ?? []) as string[]).includes(item)));
+      if (dropped.length) {
+        throw new Error(`${task.id} is still running; a running task can only add claims (${dropped.join(', ')} would be dropped)`);
+      }
+    }
+    Object.assign(task, claims);
     if (existsSync(task.worktree)) writeFileSync(join(task.worktree, briefFile({ ...task, shared: !!task.worktreeName })), source.text);
     console.log(`${task.id} claims replaced from ${briefPath}`);
   });

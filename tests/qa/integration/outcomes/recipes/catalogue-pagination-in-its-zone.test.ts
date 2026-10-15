@@ -1,10 +1,14 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
+import { BFF_PREFIX } from '../../../../../apps/web/features/api/browser.ts';
+import { mainApiWithToken } from '../../../../../apps/web/features/api/main.ts';
+import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
+import { mainRelationships, RelationshipError } from '../../../../../apps/web/features/relationships/api.ts';
 import pagination from '../../../../../scripts/qa/cases/outcomes/recipes/catalogue-pagination-in-its-zone.ts';
 import { recipeCatalogue, short } from '../../../../../scripts/qa/cases/outcomes/recipes/read-a-recipe.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
-import { personaSessions, type PersonaName, type PersonaSessions } from '../../../support/personas.ts';
+import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 import { recordFrameReads } from '../../../support/frame-reads.ts';
 
 setDefaultTimeout(120_000);
@@ -107,6 +111,7 @@ async function pageReads(name: PersonaName) {
   const person = sessions[name];
   await recordFrameReads(recording, name, person, sessions.visitor, sessions.realm, sessions.zone,
     'space', short(sessions.space), 'browse');
+  await recordFollowStateRefresh(name);
   if (name !== 'visitor') {
     const personal = recording.session(name, person);
     await (await personal('frame-personal-realm-header', 'GET', `/v1/realms/${short(sessions.realm)}`)).body?.cancel();
@@ -126,17 +131,119 @@ async function pageReads(name: PersonaName) {
     ['page-search-no-match', { q: `${phrase}Missing` }],
     ['page-search-no-match-relevance', { q: `${phrase}Missing`, sort: 'relevance' }],
   ];
+  let searchNewestCursor: string | null = null;
   for (const [label, shape] of shapes) {
     const query = new URLSearchParams(shape);
     for (let page = 0; page < 5; page++) {
       const suffix = query.size ? `?${query}` : '';
       const result = await answer<Page>(publicRead(page ? `${label}-continuation-${page}` : label,
         'GET', `${path}${suffix}`));
+      if (label === 'page-search-newest' && page === 0) searchNewestCursor = result.nextCursor;
       if (!result.nextCursor) break;
       query.set('cursor', result.nextCursor);
     }
   }
+  if (!searchNewestCursor) throw new Error('Recipe search has no next page for the site route to follow');
+  await recordProductionSiteContinuation(name, searchNewestCursor);
 }
+
+/** The site page resolves the published `/z/` key anonymously, then reads that zone's browse route for the cursor its own search returned. */
+async function recordProductionSiteContinuation(name: PersonaName, cursor: string) {
+  const person = sessions[name];
+  const published = await answer<{ address?: { prefix?: string; key?: string } }>(
+    sessions.visitor.main('GET', `/v1/zones/${short(sessions.zone)}/presentation`));
+  const siteKey = published.address?.prefix === '/z/' ? published.address.key : undefined;
+  if (!siteKey) throw new Error('Published Recipe zone has no site address');
+  const counts = new Map<string, number>();
+  const clientFor = (caller: PersonaSession) => {
+    const sample = recording.session(name, caller);
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const headers = new Headers(init?.headers);
+      for (const forbidden of ['authorization', 'cookie', 'x-session-key']) headers.delete(forbidden);
+      if (url.pathname.endsWith('/addresses/resolve')) {
+        headers.set('accept-language', 'en');
+        headers.set('x-rezics-display-languages', 'en');
+      }
+      const method = init?.method ?? 'GET';
+      const path = `${url.pathname}${url.search}`;
+      const base = url.pathname.endsWith('/addresses/resolve') ? 'site-address'
+        : url.pathname.endsWith('/routes') ? 'site-search-newest-route'
+        : url.pathname.endsWith('/presentation') ? 'site-presentation'
+        : `site-${url.pathname.split('/').filter(Boolean).at(-1) ?? 'read'}`;
+      const seen = counts.get(base) ?? 0;
+      counts.set(base, seen + 1);
+      const text = typeof init?.body === 'string' ? init.body : undefined;
+      return sample(seen === 0 ? base : `${base}-${seen + 1}`, method, path,
+        text ? JSON.parse(text) as unknown : undefined, undefined, { headers: Object.fromEntries(headers) });
+    }) as typeof fetch;
+    return mainApiWithToken(caller.actingSubject ? 'recorded-session' : undefined, { fetcher });
+  };
+  const frames = realmFrameReads({
+    main: clientFor(sessions.visitor),
+    personal: clientFor(person),
+    actingSubject: person.actingSubject ?? undefined,
+  });
+  const resolved = await frames.resolveSite(siteKey, 'en');
+  if (resolved.kind !== 'site' || !resolved.realm)
+    throw new Error(`Recipe site ${siteKey} resolved as ${resolved.kind}`);
+  const routed = await frames.readZoneRoute(resolved.zone, 'browse', cursor);
+  if (routed.ok) throw new Error('Recipe browse continuation route answered ok');
+  if (routed.failure !== 'missing' || routed.status !== 404)
+    throw new Error(`Recipe browse continuation route answered ${routed.status ?? 'no-status'} ${routed.failure}`);
+}
+/**
+ * The header calls `state(realm)` when the follow it already read has no following or no level.
+ * A visitor has no acting person. A joined follow with a level does not refresh.
+ * The request carries the frame's acting person and the realm header's id, and no kind or body.
+ */
+async function recordFollowStateRefresh(name: PersonaName) {
+  const person = sessions[name];
+  const subject = person.actingSubject;
+  if (!subject) {
+    if (name !== 'visitor') throw new Error(`${name} has no acting person for the follow refresh`);
+    return;
+  }
+  const header = await answer<{ id: string }>(sessions.visitor.main('GET', `/v1/realms/${short(sessions.realm)}`));
+  expect(header.id).toBe(sessions.realm);
+  const follow = await answer<{ following: boolean | null; level: string | null }>(person.main('GET',
+    `/v1/follows/${short(sessions.realm)}?kind=realm&actingSubject=${encodeURIComponent(subject)}`));
+  if (follow.following !== null && follow.level !== null) return;
+  const sample = recording.session(name, person);
+  let recordedPath = '';
+  let failure: unknown;
+  const send = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input), 'http://record.invalid');
+    const path = url.pathname.startsWith(BFF_PREFIX) ? url.pathname.slice(BFF_PREFIX.length) + url.search : url.pathname + url.search;
+    recordedPath = path;
+    if ((init?.method ?? 'GET') !== 'GET' || init?.body != null) throw new Error('Follow-state refresh is a GET with no body');
+    try {
+      return await sample('frame-follow-state', 'GET', path, undefined, undefined, {
+        headers: Object.fromEntries(new Headers(init?.headers)),
+      });
+    } catch (error) {
+      failure = error;
+      throw error;
+    }
+  };
+  const api = mainRelationships(subject, {
+    origin: 'http://record.invalid',
+    fetch: Object.assign(send, { preconnect: globalThis.fetch.preconnect }),
+  });
+  try {
+    await api.state(header.id);
+  } catch (error) {
+    if (failure) throw failure;
+    if (!(error instanceof RelationshipError)) throw error;
+  }
+  const params = new URLSearchParams(recordedPath.slice(recordedPath.indexOf('?') + 1));
+  expect(recordedPath.startsWith('/v1/me/follow-state?')).toBe(true);
+  expect(params.get('actingSubject')).toBe(subject);
+  expect(params.get('target')).toBe(header.id);
+  expect(params.has('kind')).toBe(false);
+  expect([...params.keys()]).toEqual(['actingSubject', 'target']);
+}
+
 // The browse route reads its frame, facet labels and the state of its cards separately.
 async function supportingReads(sample: ReturnType<typeof recording.session>) {
   const acting = `actingSubject=${encodeURIComponent(sessions.owner.actingSubject!)}`;

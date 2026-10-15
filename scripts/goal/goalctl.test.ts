@@ -4736,6 +4736,26 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
+  test('a running task takes added claims by reclaim but cannot drop one', async () => {
+    const r = repo();
+    try {
+      const task = await r.start('G-001');
+      const briefOf = (paths: string) => {
+        const path = join(r.dir, '.temp', 'G-001-reclaim.md');
+        writeFileSync(path, readFileSync(r.brief('G-001'), 'utf8').replace(/^paths: .*$/m, `paths: [${paths}]`));
+        return path;
+      };
+      const added = r.run(['reclaim', task.id, briefOf('worker-001.ts, extra-001.ts')]);
+      expect(added.stderr).toBe('');
+      expect(added.status).toBe(0);
+      expect(r.ledger().tasks[task.id]!.paths).toEqual(['worker-001.ts', 'extra-001.ts']);
+      const dropped = r.run(['reclaim', task.id, briefOf('extra-001.ts')]);
+      expect(dropped.status).toBe(1);
+      expect(dropped.stderr).toContain('is still running; a running task can only add claims (worker-001.ts would be dropped)');
+      expect(r.ledger().tasks[task.id]!.paths).toEqual(['worker-001.ts', 'extra-001.ts']);
+    } finally { r.cleanup(); }
+  });
+
   test('a branch that resolved main by merging lands by merge, not by replaying its commits', async () => {
     const r = repo();
     try {
