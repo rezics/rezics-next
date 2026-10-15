@@ -21,10 +21,11 @@ public class RealmSearchSeekTest {
     record Owner(Node work,Node main,Node unit,Node selection,Node contribution,Node decision,Node draft,Node slot){}
     static final class Fixture implements AutoCloseable {
         final FilteredGraphTextIndex index; final DatasetGraphText data;
-        Fixture(){
+        Fixture(){this(System::currentTimeMillis);}
+        Fixture(java.util.function.LongSupplier rankClock){
             var definition=new EntityDefinition("uri","label","graph");definition.set("body",p("searchBody"));definition.set("publicTitle",p("publicTitle"));definition.set("label",label());definition.setLangField("lang");definition.setUidField("uid");
             var config=new TextIndexConfig(definition);config.setValueStored(true);
-            index=new FilteredGraphTextIndex(new TextIndexLucene(new ByteBuffersDirectory(),config));
+            index=new FilteredGraphTextIndex(new TextIndexLucene(new ByteBuffersDirectory(),config),rankClock);
             data=new DatasetGraphText(org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(),index,new TextDocProducerTriples(index));index.bindRankData(data);
             data.begin(ReadWrite.WRITE);
             data.add(CURRENT,SPACE,RDF.type.asNode(),p("Space"));data.add(CURRENT,SPACE,p("disclosure"),p("Public"));

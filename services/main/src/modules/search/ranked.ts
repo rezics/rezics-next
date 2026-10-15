@@ -19,13 +19,13 @@ export const RANKED_CATALOGUE_COST = { pageSize: 64, candidates: MAX_PHRASE_CAND
   rankReads: 8, responseBytes: MAX_SEARCH_RESPONSE_BYTES } as const;
 export interface RankedCatalogueRequest { phrase: string; language: string | null;
   author?: string; realm?: string; pageSize: number; continuation?: string }
-interface RankAfter { id: string; score: string; commit: string; document?: number }
+interface RankAfter { id: string | null; score: string; commit: string; document?: number }
 interface RankHit { id: string; key: string | null; score: string; document?: number; unit?: string }
-interface RankEnvelope { hits: RankHit[]; commit: string; more: boolean; restart?: boolean }
+interface RankEnvelope { hits: RankHit[]; commit: string; more: boolean; restart?: boolean; expiresAt?: number }
 export interface RankedCatalogueMatch { matchUnit: string; work: string; mainVersion: string;
   contribution: string; revision: string; selection: string; language: string; score: number; reason?: string }
 interface Cursor { after: RankAfter | null; visible: number; generation: string; instance: string;
-  writeEpoch: string; presentation: string | null }
+  presentation: string | null }
 export interface RankedCataloguePage {
   profile: 'public-catalogue-ranked-v1'; resultGrain: 'mainVersion'; retrieval: 'ranked';
   context: 'main-version-default' | { kind: 'realm-local'; id: string };
@@ -72,17 +72,18 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
     input.realm ?? null, input.pageSize];
   let prior: Cursor | undefined, expiresAt = Date.now() + SEARCH_PAGE_TTL_MS;
   try {
-    const decoded = decodeReadCursor(input.continuation, binding, position);
+    const decoded = decodeReadCursor(input.continuation, binding, position, true);
     if (decoded) {
       prior = JSON.parse(decoded.after) as Cursor;
-      expiresAt = decoded.expiresAt ?? expiresAt;
-      if (prior.after !== null && (!prior.after || !unitId(prior.after.id)
+      if (decoded.expiresAt === undefined) throw new WorkReadExpired('rank basis has no lifetime');
+      expiresAt = decoded.expiresAt;
+      if (prior.after !== null && (!prior.after || prior.after.id !== null && !unitId(prior.after.id)
+        || prior.after.id === null && (prior.after.score !== '0' || prior.after.document !== undefined)
         || typeof prior.after.score !== 'string' || !Number.isFinite(Number(prior.after.score))
         || typeof prior.after.commit !== 'string' || !decimal.test(prior.after.commit)
         || prior.after.document !== undefined && (!Number.isSafeInteger(prior.after.document) || prior.after.document < 0))
         || !Number.isSafeInteger(prior.visible) || prior.visible < 0) throw new WorkReadInvalid('rank cursor');
-      if (prior.generation !== position.generation || prior.instance !== position.serverInstanceId
-        || prior.writeEpoch !== position.publicSearchWriteEpoch
+      if (prior.instance !== position.serverInstanceId
         || prior.presentation !== (presentationGeneration ?? null)) throw new WorkReadExpired('rank basis changed');
     }
   } catch (error) {
@@ -92,13 +93,19 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
   const scope = JSON.stringify({ catalogue: true, ...input.realm ? { realm: input.realm } : {},
     ...input.language ? { language: input.language } : {}, ...input.author ? { author: input.author } : {} });
   const results: RankedCatalogueMatch[] = [];
+  const generation = prior?.generation ?? position.generation;
+  let beginning = prior?.after ?? undefined;
   let after = prior?.after ?? undefined, scanned = 0, more = false;
-  for (let read = 0; read < RANKED_CATALOGUE_COST.rankReads && results.length < input.pageSize; read++) {
+  for (let read = 0; read < RANKED_CATALOGUE_COST.rankReads; read++) {
     // Audience and field disclosure run before pagination. Starting every
     // request at 64 made a one-item page assess the whole matching fixture.
     // Match the first index batch to its page; rejected candidates retain the
     // existing larger refill, cursor, call and candidate budgets.
-    const size = Math.min(read === 0 ? input.pageSize : RANKED_CATALOGUE_COST.pageSize,
+    // One visible lookahead proves whether a filled page has a successor.
+    // Drain rejected/grouped tail rows within the same existing refill budget
+    // so an exhausted language duplicate does not manufacture a next page.
+    const size = Math.min(read === 0 ? input.pageSize + 1 : RANKED_CATALOGUE_COST.pageSize,
+      RANKED_CATALOGUE_COST.pageSize,
       RANKED_CATALOGUE_COST.candidates - scanned);
     if (size < 1) break;
     const rows = (await rankQuery(env, `PREFIX rv: <${RV}>
@@ -119,6 +126,7 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
     if (!page || typeof page !== 'object') throw new PublicQueryUnavailable('native rank envelope is invalid');
     if (page.restart === true) throw new SearchContinuationRestart('ranked index changed; restart at page one');
     if (!Array.isArray(page.hits) || page.hits.length > size || typeof page.more !== 'boolean'
+      || page.expiresAt !== undefined && (!Number.isSafeInteger(page.expiresAt) || page.expiresAt <= 0)
       || page.more && !page.hits.length
       || typeof page.commit !== 'string' || !decimal.test(page.commit)
       || page.hits.some(hit => !hit || !unitId(hit.id)
@@ -131,6 +139,8 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
         !== page.hits.filter(hit => hit.key !== null).length) {
       throw new PublicQueryUnavailable('native rank envelope is invalid');
     }
+    if (page.expiresAt !== undefined) expiresAt = Math.min(expiresAt, page.expiresAt);
+    beginning ??= { id: null, score: '0', commit: page.commit };
     if (!page.hits.length) { more = false; break; }
     const candidates = page.hits.filter(hit => hit.key !== null);
     const matched = candidates.length ? (await observeSearchPhase('catalogue-candidate-identity-read',
@@ -171,13 +181,14 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
     if (visible.some(row => ![...byUnit.values()].some(candidate => candidate.matchUnit === row.matchUnit)) || allowed.size !== visible.length) {
       throw new PublicQueryUnavailable('ranked result filter changed identity');
     }
+    let unconsumedVisible = false;
     for (const [offset, hit] of page.hits.entries()) {
       const row = hit.key !== null ? byUnit.get(hit.id) : undefined;
       if (row && allowed.has(row.matchUnit)) {
         // Preserve the first visible probe. Trailing rejected candidates can
         // still be consumed after filling the page, avoiding an empty terminal
         // page merely because a second language loses its group witness.
-        if (results.length === input.pageSize) { more = true; break; }
+        if (results.length === input.pageSize) { more = true; unconsumedVisible = true; break; }
         results.push(row);
       }
       scanned++;
@@ -185,25 +196,25 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
         ...hit.document !== undefined ? { document: hit.document } : {} };
       more = offset + 1 < page.hits.length || page.more;
     }
-    if (!more) break;
+    if (!more || unconsumedVisible) break;
   }
   const visibleCount = (prior?.visible ?? 0) + results.length;
   const continuation = more && after ? encodeReadCursor(binding, position, JSON.stringify({ after,
-    visible: visibleCount, generation: position.generation, instance: position.serverInstanceId,
-    writeEpoch: position.publicSearchWriteEpoch, presentation: presentationGeneration ?? null } satisfies Cursor), '', expiresAt) : null;
+    visible: visibleCount, generation, instance: position.serverInstanceId,
+    presentation: presentationGeneration ?? null } satisfies Cursor), '', expiresAt) : null;
   const page: RankedCataloguePage = { profile: 'public-catalogue-ranked-v1' as const, resultGrain: 'mainVersion' as const,
     context: input.realm ? { kind: 'realm-local' as const, id: input.realm } : 'main-version-default' as const,
     retrieval: 'ranked' as const, count: { value: visibleCount, precision: more ? 'lower-bound' as const : 'exact' as const },
     population: position.population, results, next: continuation,
     sourcePosition: { datasetId: 'product' as const, dataEpoch: position.dataEpoch, sequence: position.sequence },
-    indexGeneration: position.generation };
+    indexGeneration: generation };
   if (!hydrate || !results.length) return page;
   const hydrated = await hydrate(page);
   if (hydrated) return hydrated;
   // None of this page was delivered. Keep the preceding native anchor and
   // visible count, including a resumable first page and a deferred last page.
   return { ...page, results: [], count: { value: prior?.visible ?? 0, precision: 'lower-bound' },
-    next: encodeReadCursor(binding, position, JSON.stringify({ after: prior?.after ?? null,
-      visible: prior?.visible ?? 0, generation: position.generation, instance: position.serverInstanceId,
-      writeEpoch: position.publicSearchWriteEpoch, presentation: presentationGeneration ?? null } satisfies Cursor), '', expiresAt) };
+    next: encodeReadCursor(binding, position, JSON.stringify({ after: beginning ?? null,
+      visible: prior?.visible ?? 0, generation, instance: position.serverInstanceId,
+      presentation: presentationGeneration ?? null } satisfies Cursor), '', expiresAt) };
 }

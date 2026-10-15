@@ -41,6 +41,20 @@ public final class FilteredGraphTextIndex implements TextIndex {
         new java.util.concurrent.atomic.AtomicReference<>(new java.lang.ref.WeakReference<>(null));
     private final TextIndexLucene lucene;
     private final org.apache.lucene.store.Directory directory;
+    static final long RANK_BASIS_TTL_MS = 5 * 60_000;
+    static final int MAX_RANK_BASES = 64;
+    private static final java.util.concurrent.atomic.AtomicLong rankBasisIds = new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.ScheduledExecutorService rankExpiryExecutor =
+        java.util.concurrent.Executors.newSingleThreadScheduledExecutor(task -> {
+            var thread = new Thread(task, "ranked-reader-expiry"); thread.setDaemon(true); return thread;
+        });
+    private final java.util.concurrent.ScheduledFuture<?> rankExpiryTask;
+    private final java.util.function.LongSupplier rankClock;
+    private final Map<Long, RankedBasis> rankBases = new java.util.LinkedHashMap<>();
+    private record RankedBasis(DirectoryReader reader, long expiresAt) {}
+    private record RankedReader(DirectoryReader reader, long token, long expiresAt) implements AutoCloseable {
+        @Override public void close() throws IOException { reader.decRef(); }
+    }
     static final String RANK_CONTEXT = "rankContext", RANK_GROUP = "rankGroup", RANK_SCHEMA = "rankMetadataVersion";
     static final String TITLE_KIND = "rankTitleKind";
     private java.lang.ref.WeakReference<org.apache.jena.sparql.core.DatasetGraph> rankData = new java.lang.ref.WeakReference<>(null);
@@ -316,12 +330,66 @@ public final class FilteredGraphTextIndex implements TextIndex {
     }
 
     public FilteredGraphTextIndex(TextIndexLucene lucene) {
+        this(lucene, System::currentTimeMillis);
+    }
+    FilteredGraphTextIndex(TextIndexLucene lucene, java.util.function.LongSupplier rankClock) {
         this.lucene = lucene;
+        this.rankClock = rankClock;
         // The index's location survives transient reader failures and writer rollback/reopen.
         this.directory = lucene.getIndexWriter().getDirectory();
+        rankExpiryTask = rankExpiryExecutor.scheduleWithFixedDelay(() -> {
+            try { expireRankBases(); }
+            catch (IOException error) { org.slf4j.LoggerFactory.getLogger(FilteredGraphTextIndex.class)
+                .error("Retained ranked reader expiry failed", error); }
+        }, 30, 30, java.util.concurrent.TimeUnit.SECONDS);
         mergeIndex.set(new java.lang.ref.WeakReference<>(this));
     }
     org.apache.lucene.store.Directory physicalDirectory() { return directory; }
+
+    /** A retained reader pins BM25 statistics, document IDs and live-doc bits.
+     * Active requests borrow an independent reference; expiry releases only
+     * the registry's reference. New admission never evicts a live traversal. */
+    private synchronized void expireRankBases() throws IOException {
+        long now = rankClock.getAsLong();
+        var expired = rankBases.entrySet().iterator();
+        while (expired.hasNext()) {
+            var entry = expired.next();
+            if (entry.getValue().expiresAt() <= now) {
+                expired.remove(); entry.getValue().reader().decRef();
+            }
+        }
+    }
+    private synchronized RankedReader openRankReader(RankAfter after) throws IOException {
+        expireRankBases();
+        long now = rankClock.getAsLong();
+        long token;
+        RankedBasis basis;
+        if (after != null) {
+            token = after.commit(); basis = rankBases.get(token);
+            if (basis == null) throw new RankRestart();
+        } else {
+            // The request's capture owns the current RDF/text cut. Retain
+            // that exact reader, never a writer/NRT view ahead of the graph.
+            try (var current = openReader()) {
+                var reader = current.reader();
+                var existing = rankBases.entrySet().stream()
+                    .filter(entry -> entry.getValue().reader().getVersion() == reader.getVersion()).findFirst();
+                if (existing.isPresent()) { token = existing.get().getKey(); basis = existing.get().getValue(); }
+                else {
+                    if (rankBases.size() == MAX_RANK_BASES)
+                        throw new TextIndexException("retained ranked basis admission is full");
+                    reader.incRef(); token = rankBasisIds.incrementAndGet();
+                    basis = new RankedBasis(reader, now + RANK_BASIS_TTL_MS); rankBases.put(token, basis);
+                }
+            }
+        }
+        basis.reader().incRef();
+        return new RankedReader(basis.reader(), token, basis.expiresAt());
+    }
+    private synchronized void closeRankBases() throws IOException {
+        try { for (var basis : rankBases.values()) basis.reader().decRef(); }
+        finally { rankBases.clear(); }
+    }
 
     /** A maintenance sampler reads the current writer; deadline evidence only
      * reads that sampler's published observation. Rollback can replace it. */
@@ -450,7 +518,11 @@ public final class FilteredGraphTextIndex implements TextIndex {
     public record RankAfter(String id, float score, long commit, Integer document) {
         public RankAfter(String id, float score, long commit) { this(id, score, commit, null); }
     }
-    public record RankPage(List<RankHit> hits, long count, String precision, long commit, boolean more) {}
+    public record RankPage(List<RankHit> hits, long count, String precision, long commit, boolean more, long expiresAt) {
+        public RankPage(List<RankHit> hits, long count, String precision, long commit, boolean more) {
+            this(hits, count, precision, commit, more, 0);
+        }
+    }
     public record RankScope(String realm, String language, String author, boolean catalogue, String names, List<String> resources) {
         public RankScope(String realm, String language, String author, boolean catalogue) { this(realm, language, author, catalogue, null, null); }
         public RankScope(String realm, String language, String author) { this(realm, language, author, false, null, null); }
@@ -461,7 +533,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
 
     /** Lucene top-k/searchAfter scores only: no stored fields or RDF in the
      * collector. The stable unit ID resolves the cursor's doc in its pinned
-     * commit; ties follow Lucene doc order until that commit changes. Admission
+     * retained basis; ties follow its immutable Lucene doc order. Admission
      * and canonical grouping examine only the returned page. A rejected hit
      * retains its cursor identity with a null key, so bounded refills advance
      * even through an entirely filtered page. Counts here are raw documents;
@@ -478,11 +550,12 @@ public final class FilteredGraphTextIndex implements TextIndex {
         if (!"body".equals(field) && !"publicTitle".equals(field))
             throw new TextIndexException("ranked field is not public");
         try (var rankPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.RANK);
-             var lease = openReader()) {
+             var lease = openRankReader(after)) {
             DirectoryReader reader = lease.reader();
-            long commit = reader.getIndexCommit().getGeneration();
-            if (after != null && (after.commit() != commit || !Float.isFinite(after.score())
-                || after.id() == null || after.id().length() > 2048))
+            long commit = lease.token();
+            if (after != null && (!Float.isFinite(after.score())
+                || after.id() != null && after.id().length() > 2048
+                || after.id() == null && (after.score() != 0 || after.document() != null)))
                 throw new RankRestart();
             QueryParser parser = new QueryParser(field, lucene.getQueryAnalyzer());
             // The API supplies a literal phrase, never Lucene operators.
@@ -556,7 +629,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                     .add(new org.apache.lucene.search.TermInSetQuery(entityField, units), BooleanClause.Occur.FILTER).build();
             }
             ScoreDoc cursor = null;
-            if (after != null) {
+            if (after != null && after.id() != null) {
                 if (catalogue || names) {
                     // One unit can have a body and many name documents. Its
                     // URI alone cannot identify a searchAfter position.
@@ -610,7 +683,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
             }
             if (searcher.timedOut()) throw new TextIndexException("ranked query deadline exceeded");
             return new RankPage(List.copyOf(ordered), top.totalHits.value(),
-                top.totalHits.relation() == TotalHits.Relation.EQUAL_TO ? "exact" : "lower-bound", commit, more);
+                top.totalHits.relation() == TotalHits.Relation.EQUAL_TO ? "exact" : "lower-bound", commit, more, lease.expiresAt());
         } catch (IOException | ParseException ex) { throw new TextIndexException("ranked query failed", ex); }
     }
 
@@ -1327,8 +1400,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
         throw new org.apache.jena.sparql.expr.ExprEvalException("ranked text index is unavailable");
     }
 
-    /** ARQ exposes one bounded JSON envelope, followed by the owner's RDF join
-     * over those IDs. A changed Lucene commit is a restart, never an empty page. */
+    /** ARQ exposes one bounded JSON envelope, followed by the owner's live RDF
+     * join. Later commits cannot move a retained rank; expiry is a restart. */
     public static final class RankedFunction extends org.apache.jena.sparql.function.FunctionBase {
         @Override public void checkBuild(String uri, org.apache.jena.sparql.expr.ExprList args) {
             if (args.size() != 5) throw new org.apache.jena.sparql.expr.ExprEvalException("ranked text needs five arguments");
@@ -1351,7 +1424,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
             RankAfter after = null;
             if (!continuation.isEmpty()) {
                 JsonObject value = org.apache.jena.atlas.json.JSON.parse(continuation);
-                after = new RankAfter(value.get("id").getAsString().value(),
+                after = new RankAfter(value.get("id").isNull() ? null : value.get("id").getAsString().value(),
                     Float.parseFloat(value.get("score").getAsString().value()),
                     Long.parseLong(value.get("commit").getAsString().value()),
                     value.hasKey("document") ? value.get("document").getAsNumber().value().intValue() : null);
@@ -1385,6 +1458,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 }
                 response.put("hits", hits); response.put("commit", Long.toString(page.commit()));
                 response.put("more", page.more());
+                if (page.expiresAt() != 0) response.put("expiresAt", page.expiresAt());
             } catch (RankRestart ex) {
                 response.put("restart", true);
             }
@@ -1400,7 +1474,12 @@ public final class FilteredGraphTextIndex implements TextIndex {
     @Override public void commit() { CommandWork.timed("text_commit", lucene::commit); }
     @Override public void rollback() { lucene.rollback(); }
     @Override public void close() {
-        try { lucene.close(); }
+        try {
+            rankExpiryTask.cancel(false);
+            try { closeRankBases(); }
+            catch (IOException error) { throw new TextIndexException("ranked reader release failed", error); }
+            finally { lucene.close(); }
+        }
         finally {
             var observed = mergeIndex.get();
             if (observed.get() == this) mergeIndex.compareAndSet(observed, new java.lang.ref.WeakReference<>(null));

@@ -21,7 +21,7 @@ test('native Realm seeks retain exact visit counters through query HTTP headers'
   mkdirSync(join(build, 'src/test/java/com/rezics/jena'), { recursive: true });
   cpSync(join(root, 'infra/jena/command-module/src/test/java/com/rezics/jena/RealmSearchSeekTest.java'),
     join(build, 'src/test/java/com/rezics/jena/RealmSearchSeekTest.java'));
-  for (const file of ['CatalogueRankIteratorWorkTest.java', 'CachedTitleRankTest.java'])
+  for (const file of ['CatalogueRankIteratorWorkTest.java', 'CachedTitleRankTest.java', 'RankedSnapshotTest.java'])
     cpSync(join(root, 'infra/jena/command-module/src/test/java/com/rezics/jena', file),
       join(build, 'src/test/java/com/rezics/jena', file));
   mkdirSync(join(build, 'tmp'));
@@ -35,7 +35,7 @@ test('native Realm seeks retain exact visit counters through query HTTP headers'
       'mvn', '-B', '-ntp', '-DexcludedGroups=com.rezics.jena.ExternalFixture',
       '-DargLine=-Xmx384m', '-DforkCount=1', '-DreuseForks=false',
       '-Dmaven.repo.local=/maven-cache', '-Djava.io.tmpdir=/build/tmp',
-      '-Dtest=RealmSearchSeekTest,CatalogueRankIteratorWorkTest,CachedTitleRankTest', 'package',
+      '-Dtest=RealmSearchSeekTest,CatalogueRankIteratorWorkTest,CachedTitleRankTest,RankedSnapshotTest', 'package',
     ], { cwd: root, encoding: 'utf8', timeout: 300_000 });
     if (result.status !== 0)
       throw new Error(`native visit tests failed (${result.status}):\n${result.stdout}\n${result.stderr}`);

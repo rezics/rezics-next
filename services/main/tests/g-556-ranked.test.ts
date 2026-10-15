@@ -26,7 +26,8 @@ function fixture(count = 2005) {
         const after = cursor ? JSON.parse(cursor) as { id: string } : null;
         const offset = after ? hits.findIndex(hit => hit.id === after.id) + 1 : 0;
         const selected = hits.slice(offset, offset + size);
-        return { results: { bindings: [{ epoch: b('epoch'), sequence: b('9'), generation: b(position.generation),
+        const current = searchGraphSnapshot.getStore()!.position;
+        return { results: { bindings: [{ epoch: b(current.dataEpoch), sequence: b(current.sequence), generation: b(current.generation),
           page: b(JSON.stringify({ hits: selected, count: Math.min(count, 1000),
             precision: count > 1000 ? 'lower-bound' : 'exact', commit: '7', more: offset + size < count })) }] } };
       }
@@ -100,12 +101,17 @@ test('G-556: Realm rank reads restrict the native scope and page join to actual 
   expect(calls[2]).toContain(`rv:realm <${realm}>`);
 });
 
-test('G-556: changed graph, generation and viewer selection require restart; changed query is invalid', async () => {
+test('G-556: retained ranks survive writes; epoch, instance and viewer changes restart; a changed query is invalid', async () => {
   const { env, read } = fixture();
   const page = await read(() => readRankedCatalogue(env, request, undefined, 'mutes-1'));
   for (const changed of [{ ...position, sequence: '10' }, { ...position,
     generation: 'urn:rezics:text-index-generation:22222222-2222-4222-8222-222222222222' },
     { ...position, publicSearchWriteEpoch: '2' }]) {
+    const continued = await read(() => readRankedCatalogue(env, { ...request, continuation: page.next! }, undefined, 'mutes-1'), changed);
+    expect(continued.results.map(row => row.work)).toEqual(Array.from({ length: 20 }, (_, n) => id(n + 20)));
+    expect(continued.indexGeneration).toBe(page.indexGeneration);
+  }
+  for (const changed of [{ ...position, dataEpoch: 'restored-epoch' }, { ...position, serverInstanceId: 'new-process' }]) {
     await expect(read(() => readRankedCatalogue(env, { ...request, continuation: page.next! }, undefined, 'mutes-1'), changed))
       .rejects.toBeInstanceOf(SearchContinuationRestart);
   }

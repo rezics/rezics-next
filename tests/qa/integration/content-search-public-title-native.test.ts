@@ -71,7 +71,7 @@ async function rank(phrase: string, scope: object, after = '') {
   return { page: JSON.parse(result.results.bindings[0]!.page.value) as Page, counters };
 }
 
-test('ranked continuations never apply an old score and document position to a changed index', async () => {
+test('ranked continuations keep the original scores and candidates through writes between every page', async () => {
   if (!Bun.env.FUSEKI_URL) throw new Error('Run through isolated integration QA');
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
   const phrase = `continuation${randomUUID().replaceAll('-', '')}`;
@@ -83,20 +83,26 @@ test('ranked continuations never apply an old score and document position to a c
   const first = (await rank(phrase, {})).page;
   expect(first.hits).toHaveLength(1);
   expect(first.more).toBe(true);
-  const cursor = JSON.stringify({ ...first.hits[0]!, commit: first.commit });
-  const before = (await rank(phrase, {}, cursor)).page;
-  expect(before.hits).toHaveLength(1);
-  expect(before.hits[0]!.id).not.toBe(first.hits[0]!.id);
-  // Replace the leading document and add a differently sized matching body.
-  // BM25 statistics and Lucene's tie positions both change across this write.
-  await fuseki.update(`DELETE WHERE { GRAPH <urn:rezics:search:public> {
-    ${iri(first.hits[0]!.id)} <${RV}searchBody> ?body
-  } }`);
-  await add(10, `${phrase} ${phrase} fresh`);
-  const continued = (await rank(phrase, {}, cursor)).page;
-  // The existing native owner explicitly expires a changed committed basis.
-  // It must never return a plausible but skipped/repeated next page.
-  expect(continued).toEqual({ restart: true });
+  const original = [...first.hits];
+  let page = first;
+  while (page.more) {
+    page = (await rank(phrase, {}, JSON.stringify({ ...page.hits[0]!, commit: page.commit }))).page;
+    original.push(...page.hits);
+  }
+  expect(original).toHaveLength(4);
+  const traversed = [...first.hits];
+  page = first;
+  for (let index = 0; page.more; index++) {
+    expect(index).toBeLessThan(4);
+    // New matching documents alter scores and rank in the latest index, but
+    // cannot enter this traversal or move an existing hit behind its cursor.
+    await add(10 + index, `${phrase} ${phrase} fresh ${'words '.repeat(index)}`);
+    page = (await rank(phrase, {}, JSON.stringify({ ...page.hits[0]!, commit: page.commit }))).page;
+    expect(page.restart).toBeUndefined();
+    traversed.push(...page.hits);
+  }
+  expect(traversed).toEqual(original);
+  expect(new Set(traversed.map(hit => hit.id)).size).toBe(4);
 });
 
 test('cached-title ranking reads a page-sized neighbourhood at 10, 100 and 1000 matches', async () => {

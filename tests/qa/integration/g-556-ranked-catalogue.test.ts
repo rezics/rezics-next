@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -13,6 +13,7 @@ import { activateMetadataWork, createWorkActivationEnvironment, ID, metadataWork
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { selectMainDefault, mainSelectionDigest } from '../../../services/main/src/modules/work/select-main.ts';
 import { capabilities } from '../../../services/main/src/routes/search.ts';
+import { SEARCH_PAGE_TTL_MS } from '../../../services/main/src/modules/work/search-continuation.ts';
 import { MAX_SEARCH_FUSEKI_BYTES, MAX_SEARCH_FUSEKI_CALLS, MAX_SEARCH_REQUEST_MS,
   MAX_SEARCH_RESPONSE_BYTES } from '../../../services/main/src/modules/work/search-readiness.ts';
 
@@ -28,7 +29,7 @@ interface Page { profile: string; retrieval: string; population: number;
   count: { value: number; precision: string }; next: string | null;
   results: Array<{ work: string; mainVersion: string; title: { value: string }; score: number }> }
 
-test('G-556: ranked catalogue HTTP pages keep identity, hydrate cards and restart after a native selection write', async () => {
+test('G-556: ranked catalogue pages retain their basis through writes, finish exactly and restart after expiry', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.CONTENT_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
@@ -107,6 +108,7 @@ test('G-556: ranked catalogue HTTP pages keep identity, hydrate cards and restar
       count: { value: 2, precision: 'lower-bound' } });
     expect(first.population).toBeGreaterThanOrEqual(4);
     expect(first.next).toBeString();
+    await addWork(4);
     const second = await readPage(first.next!);
     expect(second.count).toEqual({ value: 4, precision: 'exact' });
     expect(second.next).toBeNull();
@@ -117,12 +119,28 @@ test('G-556: ranked catalogue HTTP pages keep identity, hydrate cards and restar
       expect(row.title.value).toBe(works.find(work => work.work === row.work)!.title);
       expect(Number.isFinite(row.score)).toBe(true);
     }
+    await addWork(5);
     expect((await readPage(first.next!)).results).toEqual(second.results);
     expect((await read(first.next!, `${phrase} changed`)).status).toBe(422);
-    await addWork(4);
-    const stale = await read(first.next!);
-    expect(stale.status).toBe(409);
-    expect(await stale.json()).toMatchObject({ code: 'search_restart_required' });
+    // The public token has a fixed lifetime; replay never extends it. Move
+    // only the application clock so this remains a real stack proof without
+    // keeping a QA slot idle for five minutes.
+    const clock = spyOn(Date, 'now').mockReturnValue(Date.now() + SEARCH_PAGE_TTL_MS + 1);
+    try {
+      const expired = await read(first.next!);
+      expect(expired.status).toBe(409);
+      expect(await expired.json()).toMatchObject({ code: 'search_restart_required' });
+    } finally { clock.mockRestore(); }
+    const restarted: string[] = [];
+    let next: string | undefined;
+    do {
+      const page = await readPage(next);
+      restarted.push(...page.results.map(row => row.work));
+      next = page.next ?? undefined;
+      expect(restarted.length).toBeLessThanOrEqual(6);
+      if (!next) expect(page.count).toEqual({ value: 6, precision: 'exact' });
+    } while (next);
+    expect(new Set(restarted).size).toBe(6);
   } finally {
     await pool.end();
     await contentPool.end();

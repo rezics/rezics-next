@@ -37,17 +37,34 @@ The authored limits and readiness proof live in
 The Work and Content continuation types bind complete relations and owner/index
 positions in [Work paging](../../services/main/src/modules/work/search-continuation.ts)
 and [Content paging](../../services/main/src/modules/content-publication/search-continuation.ts).
-Every page re-evaluates its bounded relation; HTTP requests do not share a TDB2
-reader. [SEARCH01–20 declarations](../../scripts/qa/cases/search.ts) retain the
+Each page checks current graph selection and disclosure; HTTP requests do not
+share a TDB2 reader. [SEARCH01–20 declarations](../../scripts/qa/cases/search.ts) retain the
 required outcomes and pending extensions, while
 [coverage declarations](../../scripts/qa/coverage/search.ts) identify asserted tests.
 
-Ranked catalogue pages report a lower-bound count while more candidates remain,
-and their continuation is valid only within one Lucene commit: score ties follow
-document order inside that commit, so any later commit requires a restart rather
-than a page that may skip or repeat hits. The native writer fences every
-text-wrapper commit, including private and metadata writes, because Lucene may
-publish a merge on those commits.
+Ranked catalogue continuations pin the committed Lucene reader that supplied
+their first page, including its candidates, scores and document tie order.
+Later writes and merges do not expire that basis or add new matches to its
+pages. The basis lasts up to five minutes from its original admission; replay
+does not extend it. A deferred first page retains the same basis and starts
+before its first candidate. A fresh search sees the latest committed index.
+
+Every page still checks current publication, Realm adoption, disclosure and
+presentation policy. A retained posting grants no access: an entry that loses
+eligibility is omitted. Counts are lower bounds while a further deliverable
+result may remain, and become exact when the bounded lookahead proves the
+traversal exhausted. The count describes delivered results from that basis;
+`sourcePosition` describes the current page's graph check, while
+`indexGeneration` names its original ranking generation.
+
+Expiry or loss of a retained basis returns HTTP 409 with
+`search_restart_required`; the client restarts without a cursor. Data restore
+or a native process restart also invalidates its cursors. The native owner
+retains at most 64 distinct reader generations, sharing a generation across
+searches. When admission is full it refuses a new basis with HTTP 503, preserving
+active traversals until expiry. Expired reader references are released on reads
+and by periodic cleanup. Current graph and authority fences remain in force
+during each request; an unrelated write between pages is not a restart reason.
 
 ## Public Work typeahead
 

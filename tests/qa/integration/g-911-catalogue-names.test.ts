@@ -95,10 +95,11 @@ test('G-911: catalogue ranks titles and multilingual aliases first, folds script
     expect((await read(`${marker} Lampes`)).results[0]!.work).toBe(named.work);
     expect((await read(`${marker} 魔法禁书目录`)).results[0]!.work).toBe(named.work);
 
-    // Simulate pre-G-911 units and use the stopped-writer rebuild recipe.
+    // A missing cached title does not remove the Work's authoritative name
+    // projection. The stopped-writer recipe repairs that independent cache.
     await stack.fuseki.update(`DELETE WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
       ${iri(named.unit)} <https://rezics.com/vocab/publicTitle> ?name } }`);
-    expect((await read(`${marker} Lampes`)).results).toEqual([]);
+    expect((await read(`${marker} Lampes`)).results.map(row => row.work)).toEqual([named.work]);
     expect(await backfillCatalogueNames(stack.env)).toBeGreaterThanOrEqual(3);
     expect((await read(`${marker} Lampes`)).results[0]!.work).toBe(named.work);
     expect((await read(`${marker} 魔法禁書目錄`)).results[0]!.work).toBe(named.work);
