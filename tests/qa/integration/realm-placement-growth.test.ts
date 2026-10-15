@@ -96,7 +96,14 @@ test('Realm placement publication stays bounded as its ranking grows and eight w
       expect(Math.max(...latenciesMs)).toBeLessThan(12_000);
     }
     expect(profiles[1]!.profile.postgresStatements).toBe(profiles[0]!.profile.postgresStatements);
-    expect(profiles[1]!.profile.nativeVisits).toEqual(profiles[0]!.profile.nativeVisits);
+    for (const [counter, value] of Object.entries(profiles[0]!.profile.nativeVisits)) {
+      // Sequence literals gain decimal digits as the source grows. Bound their
+      // bytes separately from visits/mutations, which must stay identical.
+      if (counter.endsWith('_literal_bytes')) {
+        expect(value).toBeLessThanOrEqual(512);
+        expect(profiles[1]!.profile.nativeVisits[counter]).toBeLessThanOrEqual(512);
+      } else expect(profiles[1]!.profile.nativeVisits[counter]).toBe(value);
+    }
   } finally {
     sampling = false;
     await sampler;
