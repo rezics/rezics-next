@@ -20,7 +20,7 @@ import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
-import { authorCreditTriples } from '../../../services/main/src/modules/work/author-credit.ts';
+import { adoptAuthorCredit } from '../../../services/main/src/modules/work/author-credit.ts';
 
 if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(process.env.REZICS_QA_RUN_ID ?? '')) {
   throw new Error('The Work page seed writes only into an isolated QA run');
@@ -42,7 +42,16 @@ const structureObjects = stack.objects('semantic/structure/');
 await Promise.all([workObjects.initialize(), structureObjects.initialize()]);
 Object.assign(stack.env, { objectDirectory, workObjects, structureObjects });
 try {
-  const [a, b, c] = await Promise.all(['reader-a', 'reader-b', 'reader-c'].map(name => stack.member(name)));
+  const [a, b, c] = await Promise.all(['reader-a', 'reader-b', 'reader-c'].map(name => stack.member(name, { verified: true })));
+  // Keep the failing public request in fixture diagnostics instead of reporting only the status.
+  for (const member of [a!, b!, c!]) {
+    const send = member.send;
+    member.send = async (method, path, body, key) => {
+      const response = await send(method, path, body, key);
+      if (!response.ok) throw new Error(`Work page seed ${method} ${path}: ${response.status} ${await response.text()}`);
+      return response;
+    };
+  }
   const title = `The Cartographer of Tides ${randomUUID().slice(0, 8)}`;
   // A Book, so its Main Version can own a table of contents; English is its selected text, Japanese a variant.
   const types = ['https://schema.org/Book'];
@@ -112,13 +121,13 @@ try {
       description: 'A surveyor maps a delta that redraws itself with every tide.' }] }), 200);
   await created(await metadata({ kind: 'relevance', ...adventure, level: 'central' }), 200);
 
-  // Credits arrive through source adoption, which has no route of its own; write the confirmed triples.
-  const credit = authorCreditTriples({ work: work.work, credit: `https://rezics.com/id/${randomUUID()}`,
+  // Use the admitted credit owner; the product dataset deliberately has no raw SPARQL update endpoint.
+  await adoptAuthorCredit(stack.env, stack.composition.dependencies.account!, stack.access,
+    new Request('http://main.local/credits', { headers: { authorization: `Bearer ${a!.token}` } }), {
+    work: work.work, credit: `https://rezics.com/id/${randomUUID()}`,
     revision: `https://rezics.com/id/${randomUUID()}`, expectedHead: revision, sourceKey: '/authors/OL2162284A',
-    sourceRoleKey: null, nativeOrdinal: 0, actingSubject: a!.actor }, stack.env.lineage.dataEpoch, '0');
-  await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> INSERT DATA {
-    GRAPH ${iri(GRAPHS.current)} { ${credit.current} }
-    GRAPH ${iri(GRAPHS.revisions)} { ${credit.revision} } }`);
+    sourceRoleKey: null, nativeOrdinal: 0, actingSubject: a!.actor },
+    `https://rezics.com/id/${randomUUID()}`, randomUUID());
 
   await a!.grant(`rating:context:${realm.realm}`, 'rating.context.create');
   const global = { context: await globalRatingContext(a!, work.work, 'How good is this Work overall?') };
@@ -144,10 +153,20 @@ try {
     media: stack.media, structureObjects, profiles: new ProfilesAccess(stack.accessPool),
     agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
     realmReplies: new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access,
-      stack.env), account: { verify: async () => a!.principal } });
-  const send = (method: string, path: string, body: unknown) => app.handle(new Request(`http://main.local${path}`, {
-    method, headers: { authorization: `Bearer ${a!.token}`, 'content-type': 'application/json',
-      'idempotency-key': randomUUID() }, body: JSON.stringify(body) }));
+      stack.env, stack.accessPool), account: stack.composition.dependencies.account! });
+  const send = async (method: string, path: string, body: unknown) => {
+    for (let attempt = 0; ; attempt++) {
+      const response = await app.handle(new Request(`http://main.local${path}`, {
+        method, headers: { authorization: `Bearer ${a!.token}`, 'content-type': 'application/json',
+          'idempotency-key': randomUUID() }, body: JSON.stringify(body) }));
+      // A moved read basis explicitly asks for a fresh admission of the same intent.
+      const moved = response.status === 409
+        && (await response.clone().json() as { code?: string }).code === 'read_basis_changed';
+      if (moved && attempt < 3) { await new Promise(done => setTimeout(done, 500)); continue; }
+      if (!response.ok) throw new Error(`Work page seed ${method} ${path}: ${response.status} ${await response.text()}`);
+      return response;
+    }
+  };
   const grantAs = async (actor: string, scope: string, action: string) => {
     await stack.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
     await stack.accessPool.query(`INSERT INTO access.representation(id, principal_id, subject_id, action, valid_until)
@@ -252,14 +271,14 @@ try {
   await a!.grant(`content:draft:${reply}`, 'content.draft');
   const saved = await created<{ revisionId: string }>(await send('POST', '/v1/member-reply-drafts', {
     profile: 'member-reply-draft-v1', reply, variantId: replyVariant, rootTarget: work.work, rootRevision,
-    language: 'en', direction: 'ltr', expectedHead: null, body: replyText, actingSubject: a!.actor }));
+    language: 'en', direction: 'ltr', expectedHead: null, body: replyText, actingSubject: author.agent }));
   const digest = (await stack.contentPool.query<{ byte_digest: string }>(
     'SELECT byte_digest FROM content.revision WHERE id = $1', [saved.revisionId])).rows[0]!.byte_digest;
   await a!.grant(`reply:create:${work.work}`, 'reply.create');
   await a!.grant(`review:decide:${realm.realm}`, 'review.decide');
   await a!.grant(`reply:place:${realm.realm}`, 'reply.place');
   await created(await send('POST', '/v1/realm-replies', { profile: 'realm-reply-identity-v1', reply,
-    variantId: replyVariant, revisionId: saved.revisionId, author: a!.actor, rootTarget: work.work,
+    variantId: replyVariant, revisionId: saved.revisionId, author: author.agent, rootTarget: work.work,
     rootRevision, parentReply: null, parentRevision: null, contextRevision: null }));
   const review = await created<{ decisionId: string }>(await send('POST', '/v1/realm-reply-reviews', {
     profile: 'realm-reply-review-v1', realm: realm.realm, reply, revisionId: saved.revisionId, revisionDigest: digest,

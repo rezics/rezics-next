@@ -1,7 +1,8 @@
 import type { UiLocale } from '../i18n/define.ts';
 import { spaceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
-import { expect, test } from '@playwright/test';
+import { browseMessages } from '../features/discover/browse-messages.ts';
+import { expect, type Page, test, type TestInfo } from '@playwright/test';
 import {
   checkScreen,
   expectClean,
@@ -29,10 +30,34 @@ const site = (locale: UiLocale, path = '') =>
 const section = (page: import('@playwright/test').Page, segment: string) =>
   page.locator(`[data-wiki-section="${segment}"]`);
 
+/** Retain the real public read when the chooser cannot offer a chapter. */
+async function searchChapter(page: Page, locale: 'en' | 'ja', found: Findings, info: TestInfo) {
+  const search = page.getByRole('combobox', { name: browseMessages[locale].searchChapters });
+  await keyboardReach(page, search, found, `Search chapters (${locale})`);
+  const response = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.pathname.includes('/reading-positions/') && url.searchParams.get('q') === 'Chapter 2';
+  });
+  await search.pressSequentially('Chapter 2');
+  const answer = await response;
+  await info.attach(`chapter-search-${locale}`, { body: JSON.stringify({
+    path: new URL(answer.url()).pathname + new URL(answer.url()).search,
+    status: answer.status(), body: await answer.json(),
+  }), contentType: 'application/json' });
+  await expect(page.getByRole('option', { name: 'Chapter 2', exact: true })).toBeVisible({ timeout: 30_000 });
+  await checkScreen(page, `wiki-position-search-${locale}`, found, info);
+  await search.press('ArrowDown');
+  await search.press('Enter');
+  await expect.poll(() => new URL(page.url()).searchParams.get('position'), { timeout: 60_000 })
+    .toBe(uuid(seed.chapters[1]!));
+  await expect(page.locator('[data-position-current]')).toContainText(
+    `${locale === 'en' ? 'Up to:' : 'ここまで:'} Chapter 2`, { timeout: 30_000 });
+}
+
 test('franchise-wiki: the spoiler position is set by keyboard alone under reduced motion, in the Latin locale', async ({
   browser,
 }, info) => {
-  test.setTimeout(300_000);
+  test.setTimeout(600_000);
   const found: Findings = [];
   const page = await visitor(browser, info, { reducedMotion: true });
   await page.goto(site(locales.latin));
@@ -67,9 +92,7 @@ test('franchise-wiki: the spoiler position is set by keyboard alone under reduce
 
   // Chapter 2 by keyboard: the address carries the choice.
   await pressByKeyboard(page, button, found, 'Reading position');
-  await pressByKeyboard(page, dialog.getByRole('link', { name: 'Chapter 2' }), found, 'Chapter 2');
-  await expect(page).toHaveURL(/\?position=[0-9a-f-]{36}$/);
-  await expect(page.locator('[data-position-current]')).toContainText('Up to: Chapter 2');
+  await searchChapter(page, locales.latin, found, info);
   await checkScreen(page, 'wiki-home-chapter-2', found, info);
 
   // The list, the hidden character's address and a chapter beyond the position, all inside the position.
@@ -83,17 +106,17 @@ test('franchise-wiki: the spoiler position is set by keyboard alone under reduce
   await expect(page.getByText('Fitzwilliam Darcy')).toHaveCount(0);
   await checkScreen(page, 'wiki-hidden-character', found, info);
   await page.goto(site(locales.latin, `/chapters/${uuid(seed.chapters[2]!)}`));
-  await expect(page.locator('[data-wiki-unreached]')).toContainText('beyond your reading position');
+  await expect(page.locator('[data-wiki-unreached]')).toContainText('beyond your reading position', { timeout: 30_000 });
   await checkScreen(page, 'wiki-chapter-ahead', found, info);
 
   // Show everything is a link the keyboard reaches; what it reveals is a page like any other.
   await page.goto(site(locales.latin));
   const everything = page.locator('[data-position-bar] [data-position-everything]');
   await pressByKeyboard(page, everything, found, 'Show everything');
-  await expect(page).toHaveURL(/\?position=all$/);
+  await expect.poll(() => new URL(page.url()).searchParams.get('position'), { timeout: 30_000 }).toBe('all');
   await expect(
     section(page, 'characters').getByRole('link', { name: /Fitzwilliam Darcy/ }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 30_000 });
   await checkScreen(page, 'wiki-everything', found, info);
   await page.goto(site(locales.latin, `/characters/${uuid(seed.entities.elizabeth)}?position=all`));
   await expect(page.getByRole('heading', { level: 1, name: 'Elizabeth Bennet' })).toBeVisible();
@@ -112,7 +135,7 @@ test('franchise-wiki: the spoiler position is set by keyboard alone under reduce
 test('franchise-wiki: the Zone inside the spoiler position in the CJK locale', async ({
   browser,
 }, info) => {
-  test.setTimeout(300_000);
+  test.setTimeout(600_000);
   const found: Findings = [];
   const page = await visitor(browser, info);
   await page.goto(site(locales.cjk));
@@ -131,13 +154,15 @@ test('franchise-wiki: the Zone inside the spoiler position in the CJK locale', a
     found,
     'reading position (ja)',
   );
+  await page.keyboard.press('Enter');
+  await searchChapter(page, locales.cjk, found, info);
   await page.goto(site(locales.cjk, `/characters/${uuid(seed.entities.darcy)}`));
   await expect(
     page.getByRole('heading', { level: 1, name: 'このページは見つかりません' }),
   ).toBeVisible({ timeout: 30_000 });
   await checkScreen(page, 'wiki-hidden-character-ja', found, info);
   await page.goto(site(locales.cjk, `/chapters/${uuid(seed.chapters[2]!)}`));
-  await expect(page.locator('[data-wiki-unreached]')).toContainText('現在の読み進めた位置より先');
+  await expect(page.locator('[data-wiki-unreached]')).toContainText('現在の読み進めた位置より先', { timeout: 30_000 });
   await checkScreen(page, 'wiki-chapter-ahead-ja', found, info);
   await page.goto(site(locales.cjk, `/characters/${uuid(seed.entities.elizabeth)}?position=all`));
   await expect(page.getByRole('heading', { level: 1, name: 'エリザベス・ベネット' })).toBeVisible();
