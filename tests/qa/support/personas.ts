@@ -1,4 +1,3 @@
-import { afterAll, afterEach } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -17,19 +16,11 @@ import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.t
 import { boundedPool } from '../../../services/main/src/infrastructure/pg-pool.ts';
 import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
 import { joiningAuthFixture } from './joining-auth.ts';
-import { outcomeResponse } from './outcome-test.ts';
+import { outcomeResponse } from './outcome-response.ts';
 import { provisionedAgent } from './provisioned-agent.ts';
 import { personaProofActive } from './proof-phase.ts';
 import { settledWrite } from './settled-write.ts';
-import { RequestWatch } from './request-watch.ts';
-
-const personaRequests = new RequestWatch();
-// Bun runs teardown hooks on assertion failures and timeouts, too. A successful
-// test with no outstanding request emits nothing; setup failures reach afterAll.
-if (Bun.env.REZICS_REALM_SOURCE_PREPARATION !== '1') {
-  afterEach(() => personaRequests.reportPending());
-  afterAll(() => personaRequests.reportPending());
-}
+import { personaRequests } from './request-watch.ts';
 
 export const personaNames = [
   'visitor',

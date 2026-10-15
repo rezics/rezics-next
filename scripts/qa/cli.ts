@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { independentRestorePreparationOptions, ownerErasurePreparationOptions } from './retained-source.ts';
-import { realmSourceBuildDeadlineMs } from '../../tests/qa/support/realm-discussion-source.ts';
+import { realmSourceBuildDeadlineMs } from '../../tests/qa/support/realm-discussion-budget.ts';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { redactCommandOutput } from '../fixture/command-output.ts';
@@ -776,8 +776,7 @@ async function runShardWork(
     const prepared = await commandAsync(root, 'bun', [
       'tests/qa/support/realm-discussion-source-runtime.ts', '--prepare',
     ], realmSourceBuildDeadlineMs + 600_000, { ...environment, ...apps,
-      REZICS_QA_RUN_ID: projectRunId, REZICS_QA_ARTIFACT_DIR: directory,
-      REZICS_REALM_SOURCE_PREPARATION: '1' }, noteMemory, { runDeadline });
+      REZICS_QA_RUN_ID: projectRunId, REZICS_QA_ARTIFACT_DIR: directory }, noteMemory, { runDeadline });
     writeFileSync(join(logs, `${label}-realm-discussion-source.log`), prepared.output);
     if (!prepared.ok) {
       errors.push(`Realm source preparation failed before operation clock (${label})`);

@@ -175,10 +175,15 @@ function linkedLines(step: ReadableOccurrence, page: ReadableRecipe, units: Unit
 function Steps({ page, units, messages: t, recordingFetch }: {
   page: ReadableRecipe; units: Units; messages: WorkPageMessages; recordingFetch?: typeof fetch;
 }) {
-  if (page.instructions?.length) return <InstructionReading instructions={page.instructions} messages={t} recordingFetch={recordingFetch} />;
-  const steps = page.occurrences.filter(item => item.role === 'step' && item.qualifier?.type === 'recipe-step');
+  const adopted = new Map(page.instructions?.map(item => [item.occurrence, item]));
+  const steps = page.occurrences.filter(item => adopted.has(item.occurrence)
+    || item.role === 'step' && item.qualifier?.type === 'recipe-step');
   const groups = new Map(page.occurrences.filter(item => item.role === 'group').map(item => [item.occurrence, item.labels[0]]));
   return <ol className="grid gap-5">{steps.map((step, index) => {
+    const selected = adopted.get(step.occurrence);
+    if (selected) return <li key={step.occurrence}>
+      <InstructionReading instructions={[selected]} messages={t} recordingFetch={recordingFetch} />
+    </li>;
     const instruction = step.qualifier?.type === 'recipe-step' ? step.qualifier.instructionText?.value ?? '' : '';
     const linked = linkedLines(step, page, units);
     const language = step.qualifier?.instructionText?.language;

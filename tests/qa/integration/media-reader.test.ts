@@ -100,7 +100,18 @@ test('a public page image serves its exact Use when the Asset also has a private
   expect(descriptor.status).toBe(200);
   expect(await descriptor.json()).toMatchObject({ use: f.own.use, url: f.image(f.own.use) });
   expect((await f.fixture.call('GET', f.image(other.use))).status).toBe(404);
-  expect((await f.fixture.call('GET', `/v1/media/representations/${f.asset.representation}/bytes`)).status).toBe(404);
+  // A bare representation can select the independently readable public Use;
+  // the private sibling still cannot authorize its own exact delivery.
+  const barePath = `/v1/media/representations/${f.asset.representation}/bytes`;
+  const bare = await f.fixture.call('GET', barePath);
+  expect(bare.status, await bare.clone().text()).toBe(200);
+  expect(bare.headers.get('cache-control')).toBe('public, no-cache');
+  expect(sha(new Uint8Array(await bare.arrayBuffer()))).toBe(sha(f.bytes));
+  const cached = await f.fixture.main.handle(new Request(`http://main.local${barePath}`, {
+    headers: { 'if-none-match': `"${sha(f.bytes)}"` },
+  }));
+  expect(cached.status).toBe(304);
+  expect(cached.headers.get('etag')).toBe(`"${sha(f.bytes)}"`);
 });
 
 test('a restricted sibling Use never leaks through a public page image of the same Asset', async () => {

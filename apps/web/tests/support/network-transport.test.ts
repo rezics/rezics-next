@@ -5,6 +5,55 @@ import { resolve } from 'node:path';
 import { createServer } from 'node:http';
 import { protectJourneyBrowser } from './network-transport.ts';
 
+test('online API commands survive Chrome network loss with their exact body and key, without transport replay', async () => {
+  const requests: { path: string; body: string; key: string | undefined }[] = [];
+  const server = createServer(async (request, response) => {
+    if (request.url === '/') {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<title>Journey transport</title>');
+      return;
+    }
+    let body = '';
+    for await (const chunk of request) body += chunk;
+    requests.push({ path: request.url!, body, key: request.headers['idempotency-key'] as string | undefined });
+    if (request.url === '/api/reset') { request.socket.destroy(); return; }
+    response.writeHead(request.url === '/api/refused' ? 503 : 201, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ body, key: request.headers['idempotency-key'], cookie: request.headers.cookie }));
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing test server port');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const browser = await chromium.launch();
+  const restore = protectJourneyBrowser(browser, origin);
+  try {
+    const page = await browser.newPage();
+    await page.goto(origin);
+    await page.context().addCookies([{ name: 'test-session', value: 'same-person', url: origin }]);
+    const cdp = await page.context().newCDPSession(page);
+    // Model a Chrome network-service outage, independently of a journey's explicit offline setting.
+    await cdp.send('Network.enable');
+    await cdp.send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+    const answer = await page.evaluate(async () => {
+      const response = await fetch('/api/write', { method: 'PUT', body: 'exact-body', headers: { 'idempotency-key': 'exact-key' } });
+      return { status: response.status, value: await response.json() };
+    });
+    expect(answer).toEqual({ status: 201, value: { body: 'exact-body', key: 'exact-key', cookie: 'test-session=same-person' } });
+    expect(await page.evaluate(async () => (await fetch('/api/refused')).status)).toBe(503);
+    expect(await page.evaluate(async () => {
+      try { await fetch('/api/reset', { method: 'POST', body: 'once' }); return 'loaded'; }
+      catch { return 'failed'; }
+    })).toBe('failed');
+    expect(requests).toEqual([{ path: '/api/write', body: 'exact-body', key: 'exact-key' },
+      { path: '/api/refused', body: '', key: undefined }, { path: '/api/reset', body: 'once', key: undefined }]);
+  } finally {
+    restore();
+    await browser.close();
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+}, 30_000);
+
 test('a static GET survives a socket reset before the server sends its response', async () => {
   let attempts = 0;
   const server = createServer((request, response) => {

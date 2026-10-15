@@ -51,7 +51,8 @@ async function mediaSelection(session: WorkReadSession, target: string, revision
 }
 
 /** Main connects Content's closed selectors to existing Semantic, Structure and Media owners. */
-export function contentReferenceOwners(session: WorkReadSession, contentClient?: PoolClient): ReferenceOwners {
+export function contentReferenceOwners(session: WorkReadSession, contentClient?: PoolClient,
+  publicSelection?: () => Promise<boolean>): ReferenceOwners {
   const deps = session.deps, env = deps.environment, principal = session.principal;
   const actingSubject = session.options.actingSubject;
   const viewer = disclosureViewer(principal, actingSubject);
@@ -98,36 +99,38 @@ export function contentReferenceOwners(session: WorkReadSession, contentClient?:
       return resource(target);
     },
     occurrence: (target, id, revision, occurrence) => structure(target, id, revision, occurrence),
-    content: async (target, variant, revision) => {
+    content: async (target, variant, revision, selector) => {
       if (!deps.content) throw new WorkReadUnavailable('Content owner is unavailable');
-      if (await deps.content.owningResourceForRevision(revision, contentClient) !== target) return null;
-      let privateReadable = false;
-      if (principal && actingSubject) {
-        try { privateReadable = await canReadContentTarget(env, deps.access, principal, actingSubject,
+      const privateAuthority = async () => {
+        if (!principal || !actingSubject) return false;
+        try { return await canReadContentTarget(env, deps.access, principal, actingSubject,
           target, await resolveContentTarget(env, target)); }
-        catch (error) { if (!(error instanceof ContentDraftUnavailable)) throw error; }
-      }
-      const published = async () => {
-        const read = () => isPublicContentRevision(env, target, revision, variant);
-        const visible = await read(); session.observeDependency(`content-public-selection:${variant}:${revision}`, visible, read);
-        return visible;
+        catch (error) { if (!(error instanceof ContentDraftUnavailable)) throw error; return false; }
       };
-      if (!privateReadable && !await published()) return null;
-      const read = async () => (await discloseContent(env,
-        await deps.content!.readExactBatch([revision], async ids => new Set(ids), contentClient), viewer))[0];
-      const result = await read(); session.observeDependency(`content-reference:${revision}`, result, read);
-      if (result?.status !== 'available' || result.reference.resourceId !== target
-        || result.reference.variantId !== variant
-        || !await publicDomainRevisionCurrent(result.reference, deps.rights?.store, contentClient)) return null;
-      if (privateReadable && principal && actingSubject) {
-        if (!await canReadContentTarget(env, deps.access, principal, actingSubject, target,
-          await resolveContentTarget(env, target))) return null;
-      } else if (!await published()) return null;
-      return retainedDocumentBody(result.body);
+      // Fence the selected authority, not just immutable bytes. This closure
+      // registers no dependencies while the session is fencing its inventory.
+      const privateReadable = !publicSelection && await privateAuthority();
+      const authority = privateReadable ? privateAuthority
+        : publicSelection ?? (() => isPublicContentRevision(env, target, revision, variant, selector));
+      const read = async () => {
+        if (await deps.content!.owningResourceForRevision(revision, contentClient) !== target
+          || !await authority()) return null;
+        const result = (await discloseContent(env,
+          await deps.content!.readExactBatch([revision], async ids => new Set(ids), contentClient), viewer))[0];
+        if (result?.status !== 'available' || result.reference.resourceId !== target
+          || result.reference.variantId !== variant
+          || !await publicDomainRevisionCurrent(result.reference, deps.rights?.store, contentClient)
+          || !await authority()) return null;
+        return result;
+      };
+      const result = await read();
+      session.observeDependency(`content-reference:${target}:${JSON.stringify(selector)}`, result, read);
+      return result ? retainedDocumentBody(result.body) : null;
     },
     representation: (target, revision, representation) => mediaSelection(session, target, revision, representation),
   };
 }
-export async function resolveContentReference(session: WorkReadSession, reference: ResourceReference): Promise<ReferenceResolution> {
-  return resolveResourceReference(reference, contentReferenceOwners(session));
+export async function resolveContentReference(session: WorkReadSession, reference: ResourceReference,
+  publicSelection?: () => Promise<boolean>): Promise<ReferenceResolution> {
+  return resolveResourceReference(reference, contentReferenceOwners(session, undefined, publicSelection));
 }

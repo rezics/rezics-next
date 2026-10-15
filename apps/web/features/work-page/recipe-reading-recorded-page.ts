@@ -60,7 +60,14 @@ async function settleCall<T>(call: () => Promise<CallResult<T>>): Promise<BooksR
  */
 export function recipePageReader(host: RecipeReadingHost, href: string) {
   return async (query: { cursor?: string; servings?: number }) => {
-    const answer = await followHref<RecipeWorkPage | null>(host.main, href, recipePageQuery(host.actingSubject, query))();
+    const read = followHref<RecipeWorkPage | null>(host.main, href, recipePageQuery(host.actingSubject, query));
+    let answer = await read();
+    const problem = answer.error?.value;
+    // A cancelled owner read established no page. One fresh read retains the exact selection and caller deadline.
+    if (answer.error?.status === 503 && (problem instanceof Error
+      || typeof problem === 'object' && problem !== null && 'code' in problem && problem.code === 'work_read_unavailable')) {
+      answer = await read();
+    }
     if (answer.data?.instructions?.length) return { ...answer, data: { ...answer.data,
       instructions: await readInstructionDetails(host.main as MainClient, answer.data.instructions, host.actingSubject) } };
     return answer;
@@ -115,7 +122,16 @@ export function recipeReadingReads(host: RecipeReadingHost) {
     },
     async readRecipe(href: string, query: { cursor?: string; servings?: number } = {}): Promise<BooksRead<RecipeWorkPage | null>> {
       try {
-        return await settleNullable(recipePageReader(host, href).bind(null, query));
+        return await settleNullable(async () => {
+          try {
+            const answer = await recipePageReader(host, href)(query);
+            if (answer.error) console.error(JSON.stringify({ event: 'recipe_page_read_failed', status: answer.error.status }));
+            return answer;
+          } catch (error) {
+            console.error(JSON.stringify({ event: 'recipe_page_read_failed', error: error instanceof Error ? error.name : 'UnknownError' }));
+            throw error;
+          }
+        });
       } catch (error) {
         rethrowRecorded(error);
         return { ok: false, failure: 'unavailable' };

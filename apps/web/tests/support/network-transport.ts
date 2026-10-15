@@ -2,9 +2,21 @@ import type { Browser, Route } from 'playwright';
 
 const resourceTypes = new Set(['script', 'stylesheet', 'font', 'image']);
 
-export async function serveJourneyResource(route: Route, origin: string): Promise<void> {
+export async function serveJourneyResource(route: Route, origin: string, online = true): Promise<void> {
   const request = route.request();
   const url = new URL(request.url());
+  if (online && url.origin === origin && url.pathname.startsWith('/api/')) {
+    // The real BFF still decides every API result. Keep Chrome's host-interface changes
+    // out of the transport, without following redirects or replaying a command here.
+    let response;
+    try {
+      response = await route.fetch({ maxRetries: 0, maxRedirects: 0 });
+      await route.fulfill({ response, body: await response.body() });
+    } catch {
+      await route.abort('failed').catch(() => {});
+    } finally { await response?.dispose(); }
+    return;
+  }
   if (url.origin !== origin || request.method() !== 'GET' || url.pathname.startsWith('/api/')
     || !resourceTypes.has(request.resourceType())) {
     await route.fallback();
@@ -26,7 +38,13 @@ export function protectJourneyBrowser(browser: Browser, origin: string): () => v
   const original = browser.newContext;
   browser.newContext = async options => {
     const context = await original.call(browser, options);
-    await context.route('**/*', route => serveJourneyResource(route, origin));
+    let online = options?.offline !== true;
+    const setOffline = context.setOffline.bind(context);
+    context.setOffline = async offline => {
+      online = !offline;
+      await setOffline(offline);
+    };
+    await context.route('**/*', route => serveJourneyResource(route, origin, online));
     const close = context.close.bind(context);
     let closing: Promise<void> | undefined;
     context.close = async closeOptions => {

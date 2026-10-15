@@ -5,6 +5,9 @@ import { signInAtAccounts } from './account-sign-in.ts';
 import { messages as workMessages } from '../features/work-page/messages.ts';
 import { copyOf } from '../features/recipe-editor/messages.ts';
 
+// Preserve the action request and navigation when creation fails before reaching the editor.
+test.use({ trace: 'retain-on-failure' });
+
 // A cook creates a recipe in Studio and writes it in the recipe editor: two ingredient sections that
 // each hold "butter", a step that uses one of them, a stale edit from a second tab, a reload, and
 // the published Work page. The browser signs in as the isolated QA stack's web member.
@@ -35,7 +38,8 @@ async function createRecipe(page: Page, title: string): Promise<string> {
   }).toPass({ timeout: 30_000 });
   await english.click();
   await page.getByRole('button', { name: /^Create as / }).click();
-  await page.waitForURL(/\/en\/w\/[1-9A-HJ-NP-Za-km-z]{22}\/edit\/recipe$/);
+  // Studio can retain the represented Agent in the query; the pathname identifies the editor.
+  await page.waitForURL(url => /^\/en\/w\/[1-9A-HJ-NP-Za-km-z]{22}\/edit\/recipe$/.test(url.pathname), { timeout: 30_000 });
   return new URL(page.url()).pathname.replace(/\/edit\/recipe$/, '');
 }
 

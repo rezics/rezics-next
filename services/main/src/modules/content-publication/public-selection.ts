@@ -1,8 +1,9 @@
 import { GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
+import type { ContentSelection } from '../../../../content/src/adoption.ts';
 
 /** Only the currently selected exact public Content decision grants these bytes. */
 export async function isPublicContentRevision(env: WorkActivationEnvironment, resource: string,
-  revision: string, variant?: string): Promise<boolean> {
+  revision: string, variant?: string, selection?: ContentSelection['selector']): Promise<boolean> {
   if ((await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
     GRAPH ${iri(GRAPHS.current)} { ${variant ? iri(variant) : '?variant'} rv:resource ${iri(resource)} ;
       rv:contentPublicationHead ?publication ; rv:publicSearchEligibilityHead ?eligibility }
@@ -15,5 +16,7 @@ export async function isPublicContentRevision(env: WorkActivationEnvironment, re
   }`, 4096)).boolean === true) return true;
   const { readPublicInstructionAdoptions } = await import('../work/instruction-adoption.ts');
   return (await readPublicInstructionAdoptions(env, { target: resource, contentRevision: revision }))
-    .some(item => item.selector.grain === 'content' && (!variant || item.selector.variantId === variant));
+    .some(item => item.selector.grain === 'content' && (!variant || item.selector.variantId === variant)
+      // A fragment grant cannot authorize a whole-revision read or a sibling block.
+      && (!item.selector.block || item.selector.block === selection?.block));
 }

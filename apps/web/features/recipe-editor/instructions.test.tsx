@@ -69,3 +69,18 @@ test('unavailable selections remain explicit and do not fall back to unselected 
   expect(html).toContain(englishMessages.contentsUnavailable);
   expect(html).not.toContain('Stir the tomatoes');
 });
+
+test('reading and editor preview keep written steps interleaved with adopted instructions', () => {
+  const written = (occurrence: string, text: string) => ({ occurrence, parent: page.structure, role: 'step',
+    state: 'active', labels: [], qualifier: { type: 'recipe-step', instructionText: { value: text, language: 'en' },
+      usesIngredient: [], media: [], scaling: 'linear' } });
+  const mixed = stateOf({ ...page, occurrences: [written(iri(10), 'Prepare the pan.'), page.occurrences[0]!,
+    written(iri(11), 'Serve while warm.')] });
+  const html = renderToStaticMarkup(createElement(RecipeContent, {
+    page: readingOf(mixed), units: 'written', messages: englishMessages,
+  }));
+  expect(html).toContain('Prepare the pan.');
+  expect(html).toContain('Serve while warm.');
+  expect(html.indexOf('Prepare the pan.')).toBeLessThan(html.indexOf('Stir the tomatoes'));
+  expect(html.indexOf('Stir the tomatoes')).toBeLessThan(html.indexOf('Serve while warm.'));
+});
