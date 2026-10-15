@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { Page } from '@playwright/test';
+import { wcagTags } from '../../../scripts/qa/accessibility.ts';
+export { wcagTags } from '../../../scripts/qa/accessibility.ts';
 
 // axe-core, the engine behind Storybook's a11y addon, run on whole pages of the
 // built site. Evaluated through the DevTools protocol, so the page's CSP does
@@ -8,7 +10,6 @@ import type { Page } from '@playwright/test';
 const source = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8');
 
 /** WCAG 2.2 A and AA, the level REZICS holds every page to. */
-export const wcagTags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] as const;
 
 export interface AxeViolation {
   id: string;

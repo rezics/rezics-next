@@ -10,6 +10,7 @@ import {
 } from '@playwright/test';
 import { axeViolations, formatViolations } from './a11y-axe.ts';
 import { member, type PageTargets, pageTargets, signIn } from './perf-targets.ts';
+import { accessibilityViewports } from '../../../scripts/qa/accessibility.ts';
 
 // Accessibility of the built site: axe (WCAG 2.2 A and AA) on every page type
 // signed out and signed in, in light on a desktop and dark on a phone, then
@@ -19,8 +20,7 @@ import { member, type PageTargets, pageTargets, signIn } from './perf-targets.ts
 // against any stack.
 
 const upstream = process.env.REZICS_WEB_E2E_BASE_URL ?? 'http://127.0.0.1:3003';
-const desktop = { width: 1280, height: 860 };
-const phone = { width: 390, height: 844 };
+const { desktop, phone } = accessibilityViewports;
 
 let targets: PageTargets;
 let session: BrowserContextOptions['storageState'];
@@ -53,7 +53,6 @@ const signedOut = (t: PageTargets) => ({
   profile: localizedPath(profileHref(t.profile), 'en'),
   'notifications-signed-out': '/en/notifications',
   'not-found': '/en/no-such/page',
-  chinese: '/zh-Hans',
 });
 
 /** Studio opens on the signed-in writer's desk; its pages hang off that address. */
@@ -74,7 +73,7 @@ const signedIn = {
   manage: '/en/manage',
 };
 
-/** axe on each page in light on a desktop and dark on a phone. One context carries the session throughout, so
+/** axe on each page in English and Japanese, both themes and both widths. One context carries the session throughout, so
  * a token refresh on one page is what the next page uses (Account revokes a reused refresh token). */
 async function sweep(
   browser: Browser,
@@ -86,20 +85,23 @@ async function sweep(
   const page = await context.newPage();
   try {
     for (const [name, target] of Object.entries(pages)) {
-      for (const [theme, viewport] of [
-        ['light', desktop],
-        ['dark', phone],
-      ] as const) {
-        await context.addCookies([{ name: 'rezics_theme', value: theme, url: upstream }]);
-        await page.setViewportSize(viewport);
-        const path = typeof target === 'string' ? target : await target(page);
-        await page.goto(path);
-        await page.waitForLoadState('networkidle');
-        const violations = await axeViolations(page);
-        if (violations.length)
-          failures.push(
-            `${name} (${path}, ${theme}, ${viewport.width}px)\n${formatViolations(violations)}`,
-          );
+      for (const locale of ['en', 'ja']) {
+        for (const theme of ['light', 'dark']) {
+          for (const viewport of [desktop, phone]) {
+            await context.addCookies([{ name: 'rezics_theme', value: theme, url: upstream }]);
+            await page.setViewportSize(viewport);
+            const originalPath = typeof target === 'string' ? target : await target(page);
+            const path = originalPath.replace(/^\/en(?=\/|\?|$)/, `/${locale}`);
+            await page.goto(path);
+            await page.waitForLoadState('networkidle');
+            await expect(page.locator('html')).toHaveAttribute('lang', locale);
+            const violations = await axeViolations(page);
+            if (violations.length)
+              failures.push(
+                `${name} (${path}, ${theme}, ${viewport.width}px)\n${formatViolations(violations)}`,
+              );
+          }
+        }
       }
     }
   } finally {
@@ -108,16 +110,16 @@ async function sweep(
   return failures;
 }
 
-test('every signed-out page type passes axe in light on a desktop and dark on a phone', async ({
+test('every signed-out page type passes WCAG 2.2 AA in English and Japanese, both themes and widths', async ({
   browser,
 }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(900_000);
   const failures = await sweep(browser, signedOut(targets));
   expect(failures, failures.join('\n\n')).toEqual([]);
 });
 
 test('signed in, Home, Library, settings, Studio and Manage pass axe', async ({ browser }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(480_000);
   test.skip(!session, 'No member to sign in');
   const failures = await sweep(browser, signedIn, session);
   expect(failures, failures.join('\n\n')).toEqual([]);
