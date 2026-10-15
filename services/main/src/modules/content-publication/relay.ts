@@ -453,7 +453,9 @@ async function projectEvent(env: WorkActivationEnvironment, content: ContentCore
       const validations = await projectionValidation(env, identity.anchor, identity.unit, eligibilityProfile);
       // An obsolete head needs only its owner/graph proofs; bytes are required
       // only for the exact current publication that will be projected.
-      await content.readProjectionPublication(event);
+      // The terminal metadata was proved before retention. Read the exact body
+      // once here so unavailable bytes remain a retryable target, while the
+      // erasure supersession check above still fences erased publications.
       const exact = (await content.readExactBatch([publication.reference.revisionId],
         async () => new Set([publication.reference.revisionId])))[0];
       if (exact?.status !== 'available' || exact.reference.byteDigest !== publication.reference.byteDigest) {
