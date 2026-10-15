@@ -99,6 +99,7 @@ for (const locale of ['en', 'ja'] as const) {
       const found: Findings = [];
       const read = page.locator('a[data-next-action][href*="/read"]:visible').first();
       await expect(async () => {
+        await page.reload();
         await expect(read).toBeVisible({ timeout: 5000 });
       }).toPass({ timeout: 60_000, intervals: [1000, 2000, 5000] });
       await pressByKeyboard(page, read, found, 'read the illustrated Work');
