@@ -122,6 +122,7 @@ async function exchangeRecipe(name: PersonaName) {
   await answer(sample('file-import-stale', 'POST', importPath(own, person), exported.recipe), 409);
   const importedRecipe = { ...own, revision: imported.revision };
   const roundTrip = await answer<Export>(sample('round-trip-export', 'GET', exportPath(importedRecipe, person)));
+  await answer(sample('selected-round-trip-export', 'GET', `/v1/recipes/${short(importedRecipe.structure)}/export${query(person)}&revision=${encodeURIComponent(importedRecipe.revision)}&format=schema-org`));
   expect(roundTrip.recipe).toEqual(exported.recipe);
   expect(roundTrip.residuals.map(item => (item as { text: string }).text)).toEqual(['flour', 'flour']);
   expect(roundTrip.sourceObservations).toEqual([imported.sourceObservation]);
@@ -199,7 +200,7 @@ async function exchangeReads(name: PersonaName, recipe: Recipe, prefix: string, 
     read(sample(`${prefix}-recipe`, 'GET', `/v1/recipes/works/${id}${query(person)}`)),
     read(sample(`${prefix}-notes-empty`, 'GET', `/v1/me/contributions${query(person)}&limit=20`)),
   ]);
-  if (prefix === 'editor') await read(sample('editor-composition-head', 'GET', `/v1/compositions/${short(recipe.structure)}${query(person)}`));
+  await read(sample(`${prefix}-composition-head`, 'GET', `/v1/compositions/${short(recipe.structure)}${query(person)}`));
 }
 
 // RootLayout and LocaleLayout share these reads for an English visit by Work UUID.

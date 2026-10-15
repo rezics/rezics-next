@@ -267,7 +267,7 @@ const importedStory = {
       ...destinationReads,
       { label: 'file-import', state: 'populated' },
       { label: 'imported-recipe', state: 'populated' },
-      { label: 'round-trip-export', state: 'populated' },
+      { label: 'selected-round-trip-export', state: 'populated' },
     ] as const,
   },
   play: async ({ canvasElement }) => {

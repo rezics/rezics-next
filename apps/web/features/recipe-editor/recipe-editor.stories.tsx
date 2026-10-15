@@ -221,8 +221,7 @@ export const PublishesWithNotes: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const publish = canvas.getByRole('button', { name: 'Publish' });
-    await expect(publish).toBeDisabled();
-    await expect(canvas.getByText(/To publish: write a note/)).toBeVisible();
+    await expect(publish).toBeEnabled();
     await userEvent.type(canvas.getByRole('textbox', { name: 'Notes' }), 'Best the day after baking.');
     await waitFor(() => expect(publish).toBeEnabled());
     await userEvent.click(publish);

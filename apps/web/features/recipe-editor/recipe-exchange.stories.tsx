@@ -37,14 +37,14 @@ function Page({ outcome, importOutcome = 'success', locale = 'en' }: {
   const [fake] = useState(() => {
     const world = fakeMain({ recipe: startRecipe });
     const recipes = world.main().v1.recipes;
-    world.main().v1.recipes = Object.assign((target: Parameters<typeof recipes>[0]) => ({ ...recipes(target), exports: {
-      'schema-org': { get: async ({ query }: { query: RecipeExportRequest }) => {
+    world.main().v1.recipes = Object.assign((target: Parameters<typeof recipes>[0]) => ({ ...recipes(target), export: {
+      get: async ({ query }: { query: RecipeExportRequest }) => {
         current.request = { structure, revision: query.revision, actingSubject: query.actingSubject };
         if (outcome === 'too-large') return { data: null, error: { status: 413, value: { code: 'recipe_export_too_large',
           detail: 'Recipe export exceeds 4,096 occurrences' } } };
         if (outcome === 'denied') return { data: null, error: { status: 403, value: { code: 'authority_denied' } } };
         return { data: exported, error: null };
-      } },
+      },
     } }), { works: recipes.works }) as MainClient['v1']['recipes'];
     return world;
   });
@@ -100,7 +100,7 @@ export const SelectedRevision: Story = {
     const canvas = within(canvasElement);
     await canvas.findByRole('textbox', { name: copyOf('en').title });
     await userEvent.click(canvas.getByRole('button', { name: copyOf('en').exportAction }));
-    await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('Downloaded revision 00000000-0000-4000-8000-000000000900.'));
+    await expect(canvas.findByText('Downloaded revision 00000000-0000-4000-8000-000000000900.')).resolves.toBeVisible();
     await expect(current.request).toEqual({ structure, revision, actingSubject });
     await expect(current.saved).toEqual(exported);
   },
@@ -140,10 +140,12 @@ export const ImportSuccess: Story = {
     await canvas.findByRole('textbox', { name: copyOf('en').title });
     await userEvent.upload(canvas.getByLabelText(copyOf('en').importAction, { selector: 'input' }), file());
     await expect(await canvas.findByText('Imported into revision 00000000-0000-4000-8000-000000000905.')).toBeVisible();
-    await expect(canvas.getByRole('textbox', { name: copyOf('en').sectionName })).toHaveValue('For the cake');
+    await expect(within(canvas.getByRole('region', { name: copyOf('en').ingredientsHeading }))
+      .getByDisplayValue('For the cake')).toHaveAccessibleName(copyOf('en').sectionName);
     await expect(within(canvas.getByRole('region', { name: copyOf('en').ingredientsHeading })).getByText('200 g butter')).toBeInTheDocument();
     await expect(within(canvas.getByRole('region', { name: copyOf('en').ingredientsHeading })).getByText('1 cup flour')).toBeInTheDocument();
-    await expect(canvas.getByRole('textbox', { name: copyOf('en').stepText({ number: '1' }) })).toHaveValue('Cream the butter with the sugar.');
+    await expect(within(canvas.getByRole('region', { name: copyOf('en').methodHeading }))
+      .getByRole('textbox', { name: copyOf('en').stepText({ number: '1' }) })).toHaveValue('Cream the butter with the sugar.');
     await expect(exchangeCalls).toHaveLength(1);
     await expect(exchangeCalls[0]).toMatchObject({ structure, expectedHead: revision, actingSubject,
       idempotencyKey: 'recipe-file-import:story-1' });
