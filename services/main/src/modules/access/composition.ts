@@ -7,6 +7,8 @@ import { AccessPrivateRecipients } from './private-recipients.ts';
 import { AccessRoles } from './roles.ts';
 
 export { representedGrantProof } from './represented-work-proof.ts';
+export { actingContextFailure, actingContextProblemSchemas, actingContextUnavailable } from './acting-context-problems.ts';
+export { admissionFailure, authorityFailure, authorityDenied, idempotencyConflict, admissionConflictSchema } from './admission-problems.ts';
 
 export {
   AccessActingContexts, ActingContextDenied, ActingContextInvalid, ActingContextStale,

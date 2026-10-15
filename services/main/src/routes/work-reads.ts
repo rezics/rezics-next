@@ -1,15 +1,10 @@
-import { logWorkerFault } from '@rezics/observability/log';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems } from '../api-responses.ts';
-import { MediaUnavailable } from '../modules/media/store.ts';
-import { ContextCommandUnavailable } from '../modules/context/command.ts';
-import { SearchSnapshotMoved } from '../modules/work/search-readiness.ts';
 import { TargetNotBound, TargetUnavailable } from '../modules/target/resolve.ts';
-import { ReadingContinuityUnsupported } from '../modules/reading-position/errors.ts';
-import { WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
-  workRead } from '../modules/work/read-session.ts';
-import { readWorkHeader } from '../modules/work/read-header.ts';
+import { workRead } from '../modules/work/read-session.ts';
+import { workReadFailure } from '../modules/work/read-problems.ts';
+import { legacyFailureResponse } from '../modules/problem.ts';
 import { readWorkClassifications } from '../modules/work/read-classifications.ts';
 import { executeTemplate } from '../modules/query/template-read.ts';
 import { template as workCredits } from '../modules/query/templates/work-credits.schema.ts';
@@ -19,10 +14,12 @@ import { RatingTargetGrainMismatch } from '../modules/rating/release.ts';
 import { ratingContextOwner } from '../modules/rating/target-api.ts';
 import { questionLanguagesQuery, questionReadFields } from '../modules/rating/question-presentation-schema.ts';
 import { classificationItem, pageFields, pageQuery,
-  readId, readQuery, readScope, readUuid, scopeQuery,
-  workHeader } from '../modules/work/read-contract.ts';
+  readId, readQuery, readScope, readUuid, scopeQuery } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { operationPolicies } from './operation-policies.ts';
+import { workHeaderModels, workHeaderOperation } from './work-header.contract.ts';
+import { workHeaderHandler } from './work-header.handler.ts';
 
 export const workReadProblems = { ...authorizedReadProblems, 409: problemResult(409), 422: problemResult(422) };
 export function workReadError(error: unknown): Response {
@@ -30,17 +27,8 @@ export function workReadError(error: unknown): Response {
   if (error instanceof RatingTargetGrainMismatch) return problem(422, 'rating_target_grain_mismatch', 'Target grain differs from the RatingContext');
   if (error instanceof TargetNotBound) return problem(422, error.code, error.message);
   if (error instanceof TargetUnavailable) return problem(404, error.code, 'Resource is unavailable');
-  if (error instanceof WorkReadInvalid) return problem(400, 'invalid_work_read', error.message);
-  if (error instanceof WorkReadMissing) return problem(404, 'work_unavailable', 'Resource is unavailable');
-  if (error instanceof WorkReadMoved || error instanceof SearchSnapshotMoved) {
-    return problem(409, 'read_basis_changed', 'Restart the read from its first page');
-  }
-  if (error instanceof WorkReadLimit) return problem(422, 'work_read_budget_exceeded', 'Work read exceeds its budget');
-  if (error instanceof ReadingContinuityUnsupported) return problem(503, 'reading_continuity_unsupported', error.message);
-  if (error instanceof WorkReadUnavailable || error instanceof MediaUnavailable || error instanceof ContextCommandUnavailable) {
-    logWorkerFault('main.route.work_read_unavailable', error, { messages: false });
-    return problem(503, 'work_read_unavailable', 'Work read is unavailable');
-  }
+  const failure = workReadFailure(error);
+  if (failure) return legacyFailureResponse(failure, { headers: {} });
   return commandError(error);
 }
 const params = t.Object({ id: readUuid });
@@ -49,7 +37,7 @@ const headers = { 'cache-control': 'private, no-store' };
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
 // Bearer is optional for public reads; Mine requires it at runtime. No GET uses an idempotency key.
 export const openApiOperations = {
-  '/v1/works/{id}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
+  '/v1/works/{id}': { get: workHeaderOperation.policy },
   '/v1/works/{id}/classifications': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
   '/v1/works/{id}/credits': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
   '/v1/resources/{resource}/ratings': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
@@ -58,13 +46,9 @@ export const openApiOperations = {
 
 export function workReadRoutes(work: MainWorkDependencies) {
   return new Elysia()
-    .get('/v1/works/:id', { params, detail, query: t.Object(readQuery, { additionalProperties: false }),
-      response: { 200: workHeader, ...workReadProblems },
-    }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await workRead(work, request, { ...options, localBasis: true },
-        session => readWorkHeader(session, `https://rezics.com/id/${path.id}`)), { headers }); }
-      catch (error) { return workReadError(error); }
-    })
+    .use(operationPolicies(work))
+    .model(workHeaderModels)
+    [workHeaderOperation.method](workHeaderOperation.path, workHeaderOperation.options, workHeaderHandler(work))
     .get('/v1/works/:id/credits', { params, detail,
       query: t.Object(pageQuery, { additionalProperties: false }),
       response: { 200: workCredits.response, 304: t.Null(), ...workReadProblems },

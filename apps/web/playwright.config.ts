@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { loopbackChromiumLaunch } from '../../scripts/qa/chromium-loopback.ts';
 
 function e2eBaseURL(): string {
   const configured = process.env.REZICS_WEB_E2E_BASE_URL;
@@ -13,9 +14,10 @@ function e2eBaseURL(): string {
 // WebKit is not installed by default; on a host without it, `PLAYWRIGHT_BROWSERS_PATH` names a directory that
 // holds `playwright install webkit` (docs/development/launch-accessibility.md).
 const journeys = /g-743-[\w-]+\.e2e\.ts$/;
+const chromiumLaunch = loopbackChromiumLaunch(e2eBaseURL());
 const available = {
-  'desktop-chrome': { use: devices['Desktop Chrome'] },
-  'chromium-mobile': { use: devices['Pixel 7'], testMatch: journeys },
+  'desktop-chrome': { use: { ...devices['Desktop Chrome'], launchOptions: chromiumLaunch } },
+  'chromium-mobile': { use: { ...devices['Pixel 7'], launchOptions: chromiumLaunch }, testMatch: journeys },
   'webkit-mobile': { use: devices['iPhone 15'], testMatch: journeys },
 };
 const requested = process.env.REZICS_E2E_PROJECTS?.trim() || 'desktop-chrome';

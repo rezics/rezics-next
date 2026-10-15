@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { JobStore, JOB_INLINE_MS, JOB_WAIT_MS, jobDirectory, runJob, wakeJobs, type JobPassOptions } from './job.ts';
 import { coordinateWorkerJobs, stopTurnProcesses } from './coordinator.ts';
@@ -10,16 +10,28 @@ import { managerEvents } from './manager-commands.ts';
 import { GoalMailStore } from './mail.ts';
 import { resumeDecisionError } from './tasks.ts';
 import type { Ledger, Task } from './types.ts';
+import { fixtureProcessScope } from './fixtures/process-scope.ts';
 
 const directories: string[] = [];
-afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
+const scopes: ReturnType<typeof fixtureProcessScope>[] = [];
+const originalScope = process.env.GOAL_TEST_PROCESS_SCOPE;
+afterEach(() => {
+  for (const scope of scopes.splice(0)) scope.cleanup();
+  if (originalScope === undefined) delete process.env.GOAL_TEST_PROCESS_SCOPE;
+  else process.env.GOAL_TEST_PROCESS_SCOPE = originalScope;
+  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
 
 function fixture() {
+  const scope = fixtureProcessScope(); scopes.push(scope);
+  Object.assign(process.env, scope.env);
   const parent = join(import.meta.dir, '../../.temp/job-tests');
   mkdirSync(parent, { recursive: true });
   const cwd = mkdtempSync(join(parent, 'run-')); directories.push(cwd);
   // Detached completion now reads the ledger too; isolate it from the host's live worker ledger.
   expect(spawnSync('git', ['init', '-q', '-b', 'main'], { cwd }).status).toBe(0);
+  mkdirSync(join(cwd, 'scripts/goal'), { recursive: true });
+  symlinkSync(join(import.meta.dir, 'job.ts'), join(cwd, 'scripts/goal/job.ts'));
   const output = join(cwd, 'attempt.json');
   const lastMessage = join(cwd, 'attempt.last.md');
   writeFileSync(output, JSON.stringify({ type: 'thread.started', thread_id: 'native-worker-session' }));
@@ -73,6 +85,91 @@ function processFixture() {
   const ledger = () => JSON.parse(readFileSync(join(state, 'ledger.json'), 'utf8')) as Ledger;
   return { ...f, wakes, execute, start, pass, ledger };
 }
+
+test('one coordinator pass records a parked turn while its command is still running', async () => {
+  const f = fixture();
+  f.task.state = 'running';
+  const store = new JobStore(jobDirectory(f.cwd));
+  try {
+    store.put({ id: 'pending', task: f.task.id, attempt: 1, cwd: f.cwd, command: ['pending'],
+      created: Date.now(), phase: 'parked', owner: processIdentity(process.pid)! });
+    const before = Date.now();
+    await coordinateWorkerJobs(f.ledger, f.options);
+    expect(Date.parse(f.task.attempts[0]!.endedAt!)).toBeGreaterThanOrEqual(before);
+    expect(f.ledger.tasks.worker!.state).toBe('exited');
+    expect(store.get('pending')!.code).toBeUndefined();
+    expect(f.prompts).toHaveLength(0); expect(f.reports).toHaveLength(0);
+    const ended = f.task.attempts[0]!.endedAt;
+    await coordinateWorkerJobs(f.ledger, f.options);
+    expect(f.task.attempts[0]!.endedAt).toBe(ended);
+  } finally { store.close(); }
+});
+
+test('a durable final message records the end even while the engine is closing', async () => {
+  const f = fixture();
+  const worker = spawn(process.execPath, ['-e', 'await Bun.sleep(30000)', 'codex'], { stdio: 'ignore' });
+  const closed = new Promise(resolveExit => worker.once('close', resolveExit));
+  try {
+    f.task.state = 'running'; f.task.attempts[0]!.pid = worker.pid!;
+    rmSync(f.task.attempts[0]!.lastMessage!);
+    await coordinateWorkerJobs(f.ledger, f.options);
+    expect(f.task.attempts[0]!.endedAt).toBeUndefined();
+    await Bun.sleep(5);
+    writeFileSync(f.task.attempts[0]!.lastMessage!, 'RESULT: parked');
+    await coordinateWorkerJobs(f.ledger, f.options);
+    expect(f.task.attempts[0]!.endedAt).toBeDefined();
+    expect(f.task.state).toBe('running');
+    const ended = f.task.attempts[0]!.endedAt;
+    worker.kill('SIGKILL'); await closed;
+    await coordinateWorkerJobs(f.ledger, f.options);
+    expect(f.ledger.tasks.worker!.state).toBe('exited');
+    expect(f.task.attempts[0]!.endedAt).toBe(ended);
+  } finally { worker.kill('SIGKILL'); await closed; }
+});
+
+test('a wave worktree uses main job control to adopt and wake a later parked attempt', async () => {
+  const f = processFixture();
+  expect(spawnSync('git', ['config', 'user.email', 'fixture@example.invalid'], { cwd: f.cwd }).status).toBe(0);
+  expect(spawnSync('git', ['config', 'user.name', 'Fixture'], { cwd: f.cwd }).status).toBe(0);
+  expect(spawnSync('git', ['add', 'scripts'], { cwd: f.cwd }).status).toBe(0);
+  expect(spawnSync('git', ['commit', '-qm', 'Main runtime'], { cwd: f.cwd }).status).toBe(0);
+  const wave = join(f.cwd, '.temp/wave');
+  expect(spawnSync('git', ['worktree', 'add', '-qb', 'wave/2', wave], { cwd: f.cwd }).status).toBe(0);
+  rmSync(join(wave, 'scripts/goal/job.ts'));
+  // The caller can load its branch's entry point, but no detached control process may execute it.
+  writeFileSync(join(wave, 'scripts/goal/job.ts'),
+    'if (import.meta.main) throw new Error("stale coordination must never run");\n'
+    + readFileSync(join(import.meta.dir, 'job.ts'), 'utf8'));
+  for (const file of readdirSync(import.meta.dir)) {
+    if (file !== 'job.ts') symlinkSync(join(import.meta.dir, file), join(wave, 'scripts/goal', file));
+  }
+  symlinkSync(join(import.meta.dir, '../qa'), join(wave, 'scripts/qa'));
+  const ledger = f.ledger(); ledger.tasks.worker!.worktree = wave;
+  writeFileSync(join(f.cwd, '.temp/goal-orchestration/ledger.json'), JSON.stringify(ledger));
+  const release = join(f.cwd, '.temp/job-release');
+  const command = `import { existsSync } from 'node:fs';
+    while (!existsSync(${JSON.stringify(release)})) await Bun.sleep(10); console.log(process.cwd());`;
+  const output = await f.execute(`
+    import { runJob } from ${JSON.stringify(join(wave, 'scripts/goal/job.ts'))};
+    await runJob([process.execPath, '-e', ${JSON.stringify(command)}],
+      { cwd: ${JSON.stringify(wave)}, inlineMs: 1 });
+  `);
+  expect(output).toStartWith('PARKED job:');
+  const current = f.ledger(); const task = current.tasks.worker!;
+  task.attempts.push({ ...task.attempts[0]!, n: 2 }, { ...task.attempts[0]!, n: 3 });
+  writeFileSync(join(f.cwd, '.temp/goal-orchestration/ledger.json'), JSON.stringify(current));
+  writeFileSync(release, 'complete');
+  const store = new JobStore(jobDirectory(wave));
+  try {
+    // No coordinator rescue: main's detached completion must adopt this newer turn itself.
+    await until(() => store.all()[0]!.phase === 'woken' && existsSync(f.wakes));
+    const job = store.all()[0]!;
+    expect(job.attempt).toBe(3); expect(job.resumedAttempt).toBe(4);
+    expect(readFileSync(store.log(job.id), 'utf8')).toContain(wave);
+    expect(f.ledger().tasks.worker!.attempts[3]!.continuedFor).toBe('job');
+    expect(readFileSync(f.wakes, 'utf8').trim().split('\n')).toHaveLength(1);
+  } finally { store.close(); }
+});
 
 test('the default inline bound parks a running command in one 30-second tool call', async () => {
   const f = fixture(); const lines: string[] = [];

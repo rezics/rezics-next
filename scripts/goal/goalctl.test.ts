@@ -3,7 +3,7 @@ import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtemp
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { processRunning } from '../../tests/qa/support/process-liveness.ts';
-import { describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { inputSelectedNativeTests, testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { ownerTierBudgetMs } from '../qa/owner-tier-budget.ts';
 import { testLogEnvironment, tierTestTimeoutArg } from '../qa/core.ts';
@@ -24,6 +24,7 @@ import { fastForwardMain, typeRechecksSpent, introducedTypecheckDiagnostics, typ
 import { reviewPrompt } from './land.ts';
 import { POSTGRES_SOCKET_LIMIT, postgresSocketPath, postgresSocketRefusal } from './postgres-socket.ts';
 import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
+import { fixtureProcessScope } from './fixtures/process-scope.ts';
 
 // These fixtures exercise multiple CLI processes per case. Neither startup nor a whole case
 // has a latency contract; keep the test watchdog beyond the child's hang deadline.
@@ -2674,8 +2675,20 @@ describe('pre-merge unit selection', () => {
 });
 
 describe('goalctl shared lifecycle and launch gates', () => {
+  const cleanups: Array<() => void> = [];
+  afterEach(() => {
+    const failures: unknown[] = [];
+    for (const cleanup of cleanups.splice(0)) {
+      try { cleanup(); } catch (error) { failures.push(error); }
+    }
+    if (failures.length) throw new AggregateError(failures, 'Lifecycle fixture cleanup failed');
+  });
+
   function repo() {
     const dir = mkdtempSync(join(tmpdir(), 'goalctl-lifecycle-'));
+    const scope = fixtureProcessScope();
+    // Register before setup or launch can fail, including readiness and CLI timeouts.
+    cleanups.push(() => { scope.cleanup(); rmSync(dir, { recursive: true, force: true }); });
     const git = (...args: string[]) => {
       const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
       if (result.status !== 0) throw new Error(result.stderr);
@@ -2732,7 +2745,7 @@ child.on('close', code => process.exit(code ?? 1));
     chmodSync(join(dir, '.temp/bin/task'), 0o755);
     const ready = join(dir, '.temp/ready');
     mkdirSync(ready);
-    const env: NodeJS.ProcessEnv = { ...cliEnvironment(dir), GOAL_SLEEP_READY_DIR: ready,
+    const env: NodeJS.ProcessEnv = { ...cliEnvironment(dir), ...scope.env, GOAL_SLEEP_READY_DIR: ready,
       PATH: `${join(dir, '.temp/bin')}:${process.env.PATH}` };
     const ledgerPath = join(dir, '.temp/goal-orchestration/ledger.json');
     const ledger = (): Ledger => JSON.parse(readFileSync(ledgerPath, 'utf8')) as Ledger;
@@ -2800,17 +2813,7 @@ child.on('close', code => process.exit(code ?? 1));
             `${JSON.stringify({ dir, task, file, error })}\n`);
         }
       }
-      for (const entry of readdirSync('/proc')) {
-        if (!/^\d+$/.test(entry)) continue;
-        try {
-          if (readFileSync(`/proc/${entry}/environ`, 'utf8').split('\0').includes(`GOAL_SLEEP_READY_DIR=${ready}`)) {
-            process.kill(Number(entry), 'SIGKILL');
-          }
-        } catch { /* exited */ }
-      }
-      for (const { worker, child } of workers.values()) {
-        for (const pid of [worker, child]) { try { process.kill(pid, 'SIGKILL'); } catch { /* exited */ } }
-      }
+      scope.cleanup();
       rmSync(dir, { recursive: true, force: true });
     };
     return { dir, git, env, run, ledger, save, brief, start, workers, alive, stopFixture, commit, cleanup };

@@ -156,9 +156,18 @@ test('library-import-progress-export: import, progress on two devices and the do
   const start = sheetA.getByRole('region', { name: 'Start an attempt' });
   // An earlier engine project has already started the attempt on this stack; it is read, not started again.
   if (await start.isVisible()) {
-    await start
-      .getByLabel('Edition')
-      .selectOption({ label: 'Sword Art Online 1: Aincrad · paperback' });
+    const edition = start.getByRole('combobox', { name: 'Edition', exact: true });
+    await keyboardReach(a, edition, found, 'Edition');
+    await a.keyboard.press('Enter');
+    await expect(sheetA.getByRole('listbox', { name: 'Edition', exact: true })).toBeFocused();
+    await sheetA.getByRole('option', { name: 'Sword Art Online 1: Aincrad · paperback', exact: true }).waitFor();
+    const options = sheetA.getByRole('option');
+    const names = await options.allTextContents();
+    const index = names.indexOf('Sword Art Online 1: Aincrad · paperback');
+    if (index < 0) throw new Error('The attempt picker did not offer the seeded paperback');
+    await a.keyboard.press('Home');
+    for (let step = 0; step < index; step++) await a.keyboard.press('ArrowDown');
+    await a.keyboard.press('Enter');
     await keyboardReach(
       a,
       start.getByRole('button', { name: 'Start reading' }),

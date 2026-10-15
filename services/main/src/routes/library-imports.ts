@@ -203,21 +203,34 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
       try {
         const admission = await own(request,query.actingSubject); if (admission instanceof Response) return admission;
         const page = await deps.libraryFiles!.page(query.actingSubject,params.id,query.cursor ?? -1);
-        for (const row of page.rows) if (!row.match) {
-          const matched = row.resolution?.choice === 'private'
-            ? { kind: 'not-found' as const,work: null,target: null,candidates: [],truncated: false,
-              openLibrary: [],openLibraryAvailability: 'not-requested' as const }
-            : row.resolution?.work ? { kind: 'matched' as const,work: row.resolution.work,target: row.resolution.target ?? null,
-              candidates: [],truncated: false,openLibrary: [],openLibraryAvailability: 'not-requested' as const }
-              : await matchLibraryRow(deps.libraryImport!,request,query.actingSubject,row.source, search => searchLibrarySource(deps,request,search));
-          // Read consent permits candidate discovery, but only write consent may
-          // retain a match and advance the uploaded row's version.
-          if (admission.principal.accountScopes?.includes('library:write')) {
-            const current = await own(request,query.actingSubject,true);
-            if (current instanceof Response) return current;
-            await deps.libraryFiles!.saveMatch(query.actingSubject,params.id,row.index,matched);
+        // The store seeks at most one review page. Share its batch between two
+        // workers: serial matching multiplies source latency, while a worker
+        // per row overloads the native search owner's short read deadline.
+        // Drain every started row even on refusal; no matching or retention
+        // may continue after this request has answered.
+        const rows = page.rows.values();
+        const matching = await Promise.allSettled(Array.from({ length: FILE_IMPORT_COST.matchConcurrency }, async () => {
+          for (const row of rows) {
+            if (row.match) continue;
+            const matched = row.resolution?.choice === 'private'
+              ? { kind: 'not-found' as const,work: null,target: null,candidates: [],truncated: false,
+                openLibrary: [],openLibraryAvailability: 'not-requested' as const }
+              : row.resolution?.work ? { kind: 'matched' as const,work: row.resolution.work,target: row.resolution.target ?? null,
+                candidates: [],truncated: false,openLibrary: [],openLibraryAvailability: 'not-requested' as const }
+                : await matchLibraryRow(deps.libraryImport!,request,query.actingSubject,row.source, search => searchLibrarySource(deps,request,search));
+            // Read consent permits candidate discovery, but only write consent may
+            // retain a match and advance the uploaded row's version.
+            if (admission.principal.accountScopes?.includes('library:write')) {
+              const current = await own(request,query.actingSubject,true);
+              if (current instanceof Response) return current;
+              await deps.libraryFiles!.saveMatch(query.actingSubject,params.id,row.index,matched);
+            }
+            row.match = matched;
           }
-          row.match = matched;
+        }));
+        for (const result of matching) {
+          if (result.status === 'rejected') throw result.reason;
+          if (result.value instanceof Response) return result.value;
         }
         const saved = await deps.libraryFiles!.page(query.actingSubject,params.id,query.cursor ?? -1);
         const stillOwn = await own(request,query.actingSubject); if (stillOwn instanceof Response) return stillOwn;

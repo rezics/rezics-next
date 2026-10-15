@@ -43,3 +43,16 @@ private. An unsupported recipient needs a concrete residual, including when a
 named narrower concept and simultaneous local interpretations cannot round-trip.
 The [live source qualifications](../testing/source-conformance.md) remain scoped
 to their actual provider, surface and selected fixture.
+
+## Proposed activity observation export
+
+The pending [duration contract](../architecture/activity-duration.md) extends
+the owning private library export's portable session with `durationObservation`.
+It retains the exact observation/revision, selected target, metric, immutable
+procedure, platform, known/unknown result, unit, session state/version and
+contribution choice. Export never coerces unknown to zero or progress to elapsed
+time. A correction invalidates an outstanding owner snapshot. Older bundles
+omit this field; omission is not deletion. This step adds no import operation;
+a later importer must preserve the record privately and require fresh explicit
+consent before public contribution. Source-reported aggregates keep their own
+provenance and denominator and never export as fabricated native runs.

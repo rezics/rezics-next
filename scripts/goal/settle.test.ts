@@ -9,9 +9,10 @@ import { managerEvents } from './manager-commands.ts';
 import { classifyLandingRefusal } from './refusal.ts';
 import { scheduleConfirmation } from './confirm.ts';
 import { readDirectoryLease, releaseDirectoryLease } from '../qa/process/lease.ts';
+import { fixtureProcessScope } from './fixtures/process-scope.ts';
 
 const scratch = join(import.meta.dir, '../../.temp/settlement-tests');
-const fixtures: { directory: string; task: Task; ledger: () => Ledger }[] = [];
+const fixtures: { directory: string; scope: ReturnType<typeof fixtureProcessScope> }[] = [];
 
 test('pump confirmation requires a newer non-document commit, the interval, and no live run; zero disables it', () => {
   const f = fixture();
@@ -59,6 +60,8 @@ test('pump confirmation requires a newer non-document commit, the interval, and 
 function fixture(result = 'done', kind: Task['kind'] = 'tooling') {
   mkdirSync(scratch, { recursive: true });
   const directory = mkdtempSync(join(scratch, 'case-'));
+  const scope = fixtureProcessScope();
+  fixtures.push({ directory, scope });
   const state = join(directory, '.temp/goal-orchestration');
   const run = join(state, 'runs/G-001');
   mkdirSync(run, { recursive: true });
@@ -124,7 +127,7 @@ function fixture(result = 'done', kind: Task['kind'] = 'tooling') {
   mkdirSync(join(run, 'review-000'));
   // A retained completed review exercises settlement and the real landing/gate owners without a model call.
   writeFileSync(join(run, 'review-000/findings.json'), JSON.stringify({ findings: [] }));
-  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, GOAL_ID: 'program', GOAL_MEMORY_FLOOR_GIB: '0',
+  const env = { ...process.env, ...scope.env, PATH: `${bin}:${process.env.PATH}`, GOAL_ID: 'program', GOAL_MEMORY_FLOOR_GIB: '0',
     GOAL_MAX_WORKERS: '25', GOAL_CODEX_HOME: join(directory, '.temp/codex'), GOAL_MEMINFO_FILE: join(directory, '.temp/meminfo'),
     GOAL_USAGE_FILE: join(directory, '.temp/usage.json'), GOAL_UNIT_GATE_SCOPE: 'affected', GOAL_GATE_LANES: '25' };
   writeFileSync(env.GOAL_MEMINFO_FILE, 'MemAvailable: 67108864 kB\n');
@@ -135,13 +138,12 @@ function fixture(result = 'done', kind: Task['kind'] = 'tooling') {
     expect(code, stderr).toBe(0);
     return stdout;
   };
-  const current = { directory, state, run, task, output, release, gate, env, git, save, execute, launches, workerRelease,
+  const current = { directory, state, run, task, output, release, gate, env, git, save, execute, launches, workerRelease, scope,
     ledger: () => JSON.parse(readFileSync(ledgerPath, 'utf8')) as Ledger,
     commit: () => {
       writeFileSync(join(worktree, 'delivered.txt'), 'Delivered\n');
       git('-C', worktree, 'add', 'delivered.txt'); git('-C', worktree, 'commit', '-qm', 'Deliver file');
     } };
-  fixtures.push(current);
   return current;
 }
 
@@ -166,14 +168,26 @@ async function waitForLaunch(f: ReturnType<typeof fixture>): Promise<void> {
 }
 
 afterEach(() => {
+  const failures: unknown[] = [];
   for (const f of fixtures.splice(0)) {
-    for (const attempt of f.ledger().tasks[f.task.id]?.attempts ?? []) {
-      if (attempt.pid && attempt.pid !== 2147483647) { try { process.kill(attempt.pid, 'SIGKILL'); } catch { /* exited */ } }
-    }
-    const owner = f.ledger().tasks[f.task.id]?.settlement?.owner;
-    if (owner && owner.pid !== process.pid) { try { process.kill(owner.pid, 'SIGKILL'); } catch { /* exited */ } }
-    rmSync(f.directory, { recursive: true, force: true });
+    try { f.scope.cleanup(); }
+    catch (error) { failures.push(error); }
+    finally { rmSync(f.directory, { recursive: true, force: true }); }
   }
+  if (failures.length) throw new AggregateError(failures, 'Settlement fixture cleanup failed');
+});
+
+test('fixture cleanup stops a settlement and its gate after the ledger loses their owner', async () => {
+  const f = fixture();
+  f.commit();
+  await f.execute(['settle']);
+  await until(() => existsSync(f.gate));
+  const pids = f.scope.processes();
+  expect(pids.length).toBeGreaterThanOrEqual(2);
+  // A new attempt or failed setup can replace the only ledger references to live processes.
+  f.save({ tasks: {}, goals: {} });
+  f.scope.cleanup();
+  expect(f.scope.processes()).toEqual([]);
 });
 
 function stoppedLanding(f: ReturnType<typeof fixture>, refusal: string, automatic = true) {

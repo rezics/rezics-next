@@ -21,7 +21,7 @@ export function BottomNav() {
       {navigation.filter(item => item.bottom).map(item => {
         const count = item.href === '/notifications' && unread?.count ? unreadBadge(unread) : null;
         return <li key={item.href} className="min-w-0">
-          <Link href={localizedPath(item.href, locale)} aria-current={isCurrent(item, pathname) ? 'page' : undefined}
+          <Link prefetch={false} href={localizedPath(item.href, locale)} aria-current={isCurrent(item, pathname) ? 'page' : undefined}
             aria-label={count ? `${item.label[locale]} · ${t.notificationsUnread({ count })}` : item.label[locale]}
             className={cn('group flex h-full flex-col items-center justify-center gap-1 px-1 outline-none',
               'font-medium text-[11px] text-muted-foreground transition-colors',

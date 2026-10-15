@@ -38,7 +38,9 @@ export function SideNav({ variant, onNavigate, communities }: {
   return <div className="flex h-full min-h-0 min-w-0 flex-col">
     <nav aria-label={t.navigation} className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-3
       overflow-y-auto p-3">
-      {action ? <Link href={localizedPath(action.href, locale)} onClick={onNavigate} title={collapsed ? action.label[locale] : undefined}
+      {/* Persistent navigation must not start every destination's authenticated
+          reads while the reader is waiting for the page they chose. */}
+      {action ? <Link prefetch={false} href={localizedPath(action.href, locale)} onClick={onNavigate} title={collapsed ? action.label[locale] : undefined}
         aria-current={isCurrent(action, pathname) ? 'page' : undefined}
         className={cn(buttonVariants({ size: 'lg' }), 'min-w-0 w-full', collapsed && 'px-0')}>
         <action.icon aria-hidden="true" className="size-5 shrink-0" />
@@ -48,7 +50,7 @@ export function SideNav({ variant, onNavigate, communities }: {
         {navigation.filter(item => item !== action).map(item => {
           const count = item.href === '/notifications' && unread?.count ? unreadBadge(unread) : null;
           return <li key={item.href} className="min-w-0">
-            <Link href={localizedPath(item.href, locale)} onClick={onNavigate} title={collapsed ? item.label[locale] : undefined}
+            <Link prefetch={false} href={localizedPath(item.href, locale)} onClick={onNavigate} title={collapsed ? item.label[locale] : undefined}
               aria-current={isCurrent(item, pathname) ? 'page' : undefined}
               aria-label={count ? t.notificationsUnread({ count }) : undefined}
               className={cn('flex h-10 min-w-0 items-center gap-3 rounded-xl px-3 font-medium text-muted-foreground text-sm',

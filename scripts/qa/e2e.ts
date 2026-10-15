@@ -529,12 +529,16 @@ async function runE2e(): Promise<void> {
       },
       playwright: async args => {
         await measured('Playwright', budgets.playwright, async () => {
+          const churn = env.REZICS_QA_NETWORK_CHURN === '1'
+            ? launch('network-churn', 'bun', ['scripts/qa/browser-network-churn.ts', join(artifactDir, 'network-churn')]) : null;
+          if (churn) await started('network-churn', churn, '"event":"network_churn_started"', 30_000);
           const browser = launch('playwright', 'node_modules/.bin/playwright', ['test', '--config', 'apps/web/playwright.config.ts', ...args,
             '--reporter=junit', '--output', join(artifactDir, 'playwright')], {
             PLAYWRIGHT_JUNIT_OUTPUT_FILE: join(artifactDir, 'e2e.xml'),
             REZICS_WEB_E2E_BASE_URL: web.origin,
           });
           const code = await completed('Playwright', browser, budgets.playwright);
+          if (churn && churn.exitCode !== null) throw new Error('Network churn stopped before the journeys ended');
           if (code !== 0) throw new Error(`Playwright failed (${code}); see logs/e2e-playwright.log`);
         });
       },

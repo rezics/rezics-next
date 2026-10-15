@@ -48,6 +48,19 @@ test('work-hub: a reader chooses an edition with the keyboard alone, under reduc
   const found: Findings = [];
   const [one] = sao.volumes;
   const page = await device(browser, info, at(sao.series, locales.latin), { reducedMotion: true });
+  const diagnostics: Promise<unknown>[] = [];
+  page.on('response', response => {
+    if (new URL(response.url()).pathname.includes('/edition-preferences/')) {
+      diagnostics.push(response.text().then(body => info.attach('edition-preference-response', {
+        contentType: 'application/json', body: JSON.stringify({ url: response.url(), status: response.status(), body }),
+      })));
+    }
+  });
+  page.on('pageerror', error => diagnostics.push(info.attach('browser-error', {
+    contentType: 'text/plain', body: error.stack ?? error.message,
+  })));
+  await expect(page.getByRole('heading', { level: 1, name: sao.series.title, exact: true }))
+    .toBeVisible({ timeout: 30_000 });
 
   // The reader may already have an edition (the same stack serves every engine project): the primary action is then
   // Continue. Either way it is the first control after the header that the keyboard reaches, and it is followed.
@@ -62,16 +75,21 @@ test('work-hub: a reader chooses an edition with the keyboard alone, under reduc
   // Volume 1: pick the other of its two editions and save it, every control reached by Tab and operated by key.
   await page.goto(at(one!, locales.latin, '#availability'));
   const availability = page.getByRole('region', { name: 'Your edition and availability' });
-  await expect(availability).toBeVisible();
-  const edition = availability.getByLabel('Edition', { exact: true });
-  const current = await edition.evaluate(
-    (element) => (element as HTMLSelectElement).selectedOptions[0]?.textContent ?? '',
-  );
-  const options = await edition.locator('option:not([value=""])').allTextContents();
-  const label = options.find((option) => option !== current);
-  expect(label, `a second edition among ${options.join(' | ')}`).toBeTruthy();
-  await keyboardReach(page, edition, found, 'Edition');
-  await edition.selectOption({ label: label! });
+  await expect(availability).toBeVisible({ timeout: 30_000 });
+  const edition = availability.getByRole('combobox', { name: 'Edition', exact: true });
+  try { await expect(edition).toBeVisible({ timeout: 30_000 }); }
+  finally { await Promise.all(diagnostics); }
+  const current = (await edition.innerText()).trim();
+  await pressByKeyboard(page, edition, found, 'Edition');
+  const options = page.getByRole('option', { disabled: false });
+  await expect(options.first()).toBeVisible();
+  const labels = (await options.allTextContents()).map(label => label.trim());
+  const index = labels.findIndex(label => label !== 'Any edition' && label !== current);
+  expect(index, 'a second edition is offered').toBeGreaterThanOrEqual(0);
+  await page.keyboard.press('Home');
+  for (let stop = 0; stop < index; stop++) await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(edition).toHaveText(labels[index]!);
   await checkScreen(page, 'hub-volume-edition-picked', found, info);
   await pressByKeyboard(
     page,

@@ -1,4 +1,8 @@
 import { logWorkerFault } from '@rezics/observability/log';
+import { problem as nativeProblem } from 'elysia';
+import { dependencyUnavailable, legacyFailureResponse, type ProblemSet } from '../modules/problem.ts';
+import { accountFailure } from '../modules/account/problems.ts';
+import { scalarFailure } from '../modules/work/scalar-problems.ts';
 import type { SessionChanges, SessionState } from '../modules/session/contract.ts';
 import type { EditionPreference } from '../modules/session/preference-contract.ts';
 import type { OwnerPosition } from '../modules/protection/content-store.ts';
@@ -16,10 +20,10 @@ import { ContentCommentCursorStale, ContentCommentInvalid, ContentCommentMissing
 import { CommandRejected, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded }
   from '../infrastructure/fuseki.ts';
 import { profileViolation } from '../infrastructure/profile-violation.ts';
-import { AccountHasOwnedAgents, type AccountOwnedAgent, AdmissionConflict, AdmissionControllerContinuity, AdmissionDenied, AdmissionLockBusy, AdmissionUnavailable }
+import { AccountHasOwnedAgents, type AccountOwnedAgent }
   from '../modules/access/admission.ts';
 import {
-  ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable,
+  admissionFailure, actingContextFailure,
   GroupConflict, GroupDenied, GroupStale, GroupUnavailable,
   PrivateRecipientConflict, PrivateRecipientDenied, PrivateRecipientStale, PrivateRecipientUnavailable,
   RoleConflict, RoleDenied, RoleStale, RoleUnavailable,
@@ -61,22 +65,16 @@ import { AuthorCreditInvalid, AuthorCreditConflict, AuthorCreditUnavailable }
   from '../modules/work/author-credit.ts';
 import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim }
   from '../modules/address/claim.ts';
-import { AccountAssertionDenied, AccountAssertionUnavailable }
-  from '../modules/account/verify-assertion.ts';
-import { PendingAdmittedWork } from '../modules/work/create-admitted.ts';
 import { InvalidTranslationLink, TranslationBasisRequired, TranslationLinkConflict, TranslationSourceUnavailable,
   TranslationTargetUnavailable } from '../modules/work/translation-links.ts';
 import { InvalidWorkDerivation, WorkDerivationConflict, WorkDerivationStale,
   WorkDerivationUnavailable } from '../modules/work/derivations.ts';
 import { FixedReleaseStale, FixedReleaseUnavailable, InvalidFixedRelease }
   from '../modules/work/fixed-release.ts';
-import { StaleWorkHead, WorkEditUnavailable } from '../modules/work/edit.ts';
 import { TitleControlConflict, TitleControlInvalid, TitleControlUnavailable }
   from '../modules/work/title-control.ts';
 import { RevisionCorrupt, RevisionNotFound, RevisionUnavailable } from '../modules/work/history.ts';
-import { InvalidWorkScalarValue } from '../modules/work/scalar-value.ts';
-import { RecoveryHold } from '../modules/work/restore-lineage.ts';
-import { AuthorAgentUnavailable, CancelledActivation, IdempotencyConflict } from '../modules/work/activate.ts';
+import { AuthorAgentUnavailable, CancelledActivation } from '../modules/work/activate.ts';
 import { ContributionWorkUnavailable, InvalidContributionInput }
   from '../modules/contribution/draft.ts';
 import { ContributionEditUnavailable, StaleContributionDraftHead }
@@ -180,6 +178,17 @@ export function commandError(error: unknown): Response {
   return problem(503, 'dependency_unavailable', 'Work operation could not be completed', { 'retry-after': '1' });
 }
 
+export function logExpectedFailure(error: unknown, status: number) {
+  if (status >= 500) logWorkerFault('main.route.typed_refusal', error);
+}
+
+/** The native-return operations share only opaque fallback and fault reporting. */
+export function opaqueCommandFailure(error: unknown, set: ProblemSet) {
+  logWorkerFault('main.route.dependency_unavailable', error);
+  set.headers['retry-after'] = '1';
+  return nativeProblem(dependencyUnavailable.body);
+}
+
 /** Server refusals emit one bounded fault before a caller returns the response.
  * Status and problem for a typed refusal. Unrecognized errors return undefined;
  * callers choose the fallback (route handlers use 503, the app hook uses 500). */
@@ -190,6 +199,10 @@ export function typedRefusal(error: unknown, fault: unknown = error): Response |
 }
 
 function mapTypedRefusal(error: unknown): Response | undefined {
+  const set: ProblemSet = { headers: {} };
+  const owned = accountFailure(error, set) ?? admissionFailure(error, set)
+    ?? actingContextFailure(error) ?? scalarFailure(error, set);
+  if (owned) return legacyFailureResponse(owned, set);
   if (error instanceof PlatformClosed) return platformExposureProblem(error);
   if (error instanceof TranslationBasisRequired) return problem(409, error.code, error.message);
   if (error instanceof SourceIntakeInvalid) {
@@ -316,20 +329,9 @@ function mapTypedRefusal(error: unknown): Response | undefined {
   if (error instanceof InvalidAddressClaim) return problem(400, 'invalid_address_claim', 'Address claim is invalid');
   if (error instanceof AddressClaimConflict) return problem(409, 'address_claim_conflict', 'Address claim conflicts');
   if (error instanceof AddressClaimUnavailable) return problem(503, 'address_unavailable', 'Address owner is unavailable');
-  if (error instanceof PendingAdmittedWork) {
-    return Response.json({ operationId: error.operationId, status: 'reconciling', phase: error.phase,
-      result: null, retry: { allowed: true, afterMs: 1000 } }, {
-      status: 202, headers: { 'cache-control': 'no-store', 'retry-after': '1' },
-    });
-  }
   if (error instanceof AuthorAgentUnavailable) {
     return problem(409, 'author_agent_unavailable', 'Author Agent has no active graph record');
   }
-  if (error instanceof AccountAssertionDenied) {
-    return problem(401, 'account_assertion_denied', 'Account assertion is invalid or inactive',
-      { 'www-authenticate': 'Bearer' });
-  }
-  if (error instanceof AdmissionDenied) return problem(403, 'authority_denied', 'Authority is not admitted');
   if (error instanceof GroupDenied) return problem(403, 'group_denied', 'Group change is not admitted');
   if (error instanceof GroupConflict) return problem(409, 'group_key_conflict', 'Group change key binds another intent');
   if (error instanceof GroupStale) return problem(409, 'group_stale', 'Group generation changed');
@@ -362,10 +364,6 @@ function mapTypedRefusal(error: unknown): Response | undefined {
   if (error instanceof RoleConflict) return problem(409, 'role_key_conflict', 'Role key binds another intent');
   if (error instanceof RoleStale) return problem(409, 'role_stale', 'Role generation changed');
   if (error instanceof RoleUnavailable) return problem(503, 'role_unavailable', 'Role owner is unavailable');
-  if (error instanceof ActingContextInvalid) return problem(400, 'invalid_request', 'Acting context request is invalid');
-  if (error instanceof ActingContextDenied) return problem(403, 'acting_context_denied', 'Selected Agent is unavailable for this task');
-  if (error instanceof ActingContextStale) return problem(409, 'stale_context', 'Acting context authority changed');
-  if (error instanceof ActingContextUnavailable) return problem(503, 'acting_context_unavailable', 'Acting contexts are unavailable');
   if (error instanceof ContentDraftRightsDenied) {
     return problem(403, 'public_domain_assessment_required',
       'A current supported public-domain assessment for this Work is required');
@@ -435,23 +433,10 @@ function mapTypedRefusal(error: unknown): Response | undefined {
     || error instanceof InvalidRatingAggregateQuery) {
     return problem(400, 'invalid_request', 'Request fields are invalid');
   }
-  if (error instanceof AdmissionControllerContinuity) {
-    return problem(409, 'controller_continuity', 'This change would leave a resource without a controller');
-  }
-  if (error instanceof AdmissionLockBusy) {
-    return problem(409, 'admission_busy', 'Access admission is busy; retry the same request', { 'retry-after': '1' });
-  }
-  if (error instanceof AdmissionConflict || error instanceof IdempotencyConflict) {
-    return problem(409, 'idempotency_conflict', 'Idempotency key conflicts with an earlier request');
-  }
   if (error instanceof CancelledActivation) return problem(409, 'operation_cancelled', 'Work operation was cancelled');
   if (error instanceof TitleControlConflict) return problem(409, 'title_control_conflict', error.message);
   if (error instanceof TitleControlInvalid) return problem(400, 'invalid_title_control', error.message);
   if (error instanceof TitleControlUnavailable) return problem(503, 'title_control_unavailable', error.message);
-  if (error instanceof StaleWorkHead) return problem(409, 'stale_head', 'Expected Work revision is stale');
-  if (error instanceof InvalidWorkScalarValue) {
-    return problem(400, 'invalid_scalar_value', 'Work scalar value is invalid');
-  }
   if (error instanceof StaleContributionDraftHead) {
     return problem(409, 'stale_head', 'Expected Contribution draft revision is stale');
   }
@@ -488,7 +473,7 @@ function mapTypedRefusal(error: unknown): Response | undefined {
   if (error instanceof StaleRatingPolicy) {
     return problem(409, 'stale_head', 'Expected Rating policy head is stale');
   }
-  if (error instanceof WorkEditUnavailable || error instanceof ContributionWorkUnavailable) {
+  if (error instanceof ContributionWorkUnavailable) {
     return problem(404, 'work_unavailable', 'Work is unavailable');
   }
   if (error instanceof ContributionEditUnavailable || error instanceof PublicationUnavailable) {
@@ -598,13 +583,6 @@ function mapTypedRefusal(error: unknown): Response | undefined {
   if (error instanceof RevisionNotFound) return problem(404, 'revision_unavailable', 'Revision is unavailable');
   if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt) {
     return problem(503, 'revision_unavailable', 'Committed revision bytes are unavailable');
-  }
-  if (error instanceof RecoveryHold) {
-    return problem(503, 'recovery_hold', 'Product access is held for recovery reconciliation');
-  }
-  if (error instanceof AccountAssertionUnavailable || error instanceof AdmissionUnavailable) {
-    return problem(503, 'dependency_unavailable', 'A required authority service is unavailable',
-      { 'retry-after': '1' });
   }
   if (error instanceof LibraryImportTooLarge) {
     return problem(413, 'library_import_too_large', 'Import body exceeds 2 MiB plus the 16 KiB request envelope');
