@@ -1,5 +1,30 @@
 # State
 
+Checkpoint 8af73fc5-464c-4f77-b355-f440fdd25428 consolidates handled events
+mail:506310d8-d383-457e-a8e8-219cd2ae38be,
+mail:fc667953-9454-4e55-bd02-0f644baf8bb3 and task:G-2584:11.
+These dispositions supersede the affected task readings below; later events
+retain their own decisions.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2584 | Task:G-2584:11 accepts the completed surface handoff for wave/2 integration. Commit `00ef145503` was verified as an ancestor of wave/2. Six personas, 171 unchanged captured answers, 65 public Works and zero-miss production replay; capture `20261015t013431-a41174` at `1f11fd499e`. Final gate at `00ef145503` passed types/lint/guards, 299 units, answer-records, 92 stories and localization; phone/desktop inspected in `20261015t015629-2bf308`. Program received acceptance and the exact wave-gate file list in mail:0343c1ca. Leave exited for Program to close after the wave merges; no individual landing, restart or main row promotion. This supersedes the earlier capture-recovery hold. |
+| G-2586 | Mail:506310d8 classifies the ignored `.temp/` fixture-root failure as G-2570's regression, fixed on wave/2 at `15d2e21be` with 12/12 outcome-test support tests passing. Rebase onto wave/2 and continue; the deciding turn found it running and started no duplicate worker. Mail:fc667953 and brief decision `4deb9431bf` require an owner's private-revision preview to show the attached recording under the publication's rights, erasure and disclosure rules. G-2588 owns the API correction and owner outcome case. Finish against the current recorded answer, then, once G-2588 pushes, rebase and re-record that one owner visit through production. Preserve consistent identities, existing assertions/cells and applicable unaffected captures; retain binary fixture/hash replay. Acceptance needs the corrected visit, zero-miss replay, final phone/desktop preview inspection and complete affected gate. The deciding turn issued resume; no new continuation follows from this checkpoint. |
+
+G-2585's existing G-2587 hold and Program-owned resume remain unchanged.
+Wave tasks stay on wave/2 and reach main with the wave; accepting G-2584's
+handoff does not close it or promote a main API row. Concurrent status remains
+64/67 API rows, 384 proved/18 pending persona cells; both Codex accounts read
+74% of their weekly windows. The method's status and latest efficiency report
+were read: the latter remains dated 2026-10-13 21:49 UTC and supplies no current
+tokens-per-proved-row reading. Tool-attempt figures below retain their earlier
+checkpoint attribution; no efficiency gain is inferred from this handoff.
+The fixture-listing regression is a shared-tool cause, not a surface fix round;
+the preview answer is Program-owned API work. This checkpoint starts no worker,
+landing, closure, retry or watcher and changes only this file.
+
+## Retained wave/2 decisions
+
 Checkpoint d6994109-2a21-4bf9-9b38-9850a36e7303 consolidates handled events
 mail:f43329f1, mail:9f250c88, mail:7b3abd26, mail:8aa98c11,
 mail:3240321f, task:G-2585:4 and mail:91aa32a1. No surface row, landing
@@ -613,6 +638,11 @@ publication's `configuration.homeDocument` identity is web authoring in
 G-2267; keep the owner's correct record unchanged.
 
 ## Acknowledgements
+
+Mails 506310d8-d383-457e-a8e8-219cd2ae38be and
+fc667953-9454-4e55-bd02-0f644baf8bb3 were acknowledged by their deciding
+turns; task:G-2584:11 is handled in coordinator history. Checkpoint 8af73fc5
+acknowledges their consolidation and supplies no new mail to acknowledge.
 
 The six supplied mails are already acknowledged in durable mail history by
 their deciding turns; task:G-2585:4 is handled in coordinator history.
