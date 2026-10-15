@@ -11,6 +11,7 @@ import { importCollectionRecipe, collectionRecipeConflict } from '../modules/rec
 import { ReaderImportConflict, ReaderImportUnavailable } from '../modules/library-import/reader-import.ts';
 import { RecipeNotImportable } from '../modules/recipe/importer.ts';
 import { PendingActivation } from '../modules/work/activate.ts';
+import { judgmentScaleSchema } from '../modules/rating/scale.ts';
 
 export const openApiOperations = {
   '/v1/recipes/file-imports': { post: { exposure: 'public', rateLimitFamily: 'upload', bearer: true, idempotencyKey: true } },
@@ -20,6 +21,9 @@ const importedItem = t.Object({ index: t.Integer(), name: t.String(), identity: 
   content: t.Object({ post: t.String(), variantId: t.String(), revisionId: t.String() }, { additionalProperties: false }),
   sourceObservation: t.String(), kept: t.Array(t.String()), retainedOnly: t.Array(t.String()),
   sourceOmittedFields: t.Array(t.String()),
+  rating: t.Optional(t.Union([t.Object({ status: t.Literal('native'), context: t.String(), value: t.Number(),
+    revision: t.String(), scale: judgmentScaleSchema }, { additionalProperties: false }),
+  t.Object({ status: t.Literal('retained'), reason: t.String() }, { additionalProperties: false })])),
   losses: t.Array(t.Object({ field: t.String(), reason: t.String() }, { additionalProperties: false })),
   photos: t.Array(t.Object({ asset: t.String(), representation: t.Nullable(t.String()), clearance: t.String(),
     use: t.Optional(t.String()) }, { additionalProperties: false })), replayed: t.Boolean(),

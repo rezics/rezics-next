@@ -9,15 +9,26 @@ import type { RecipeCollectionOutcome } from '../../../services/main/src/modules
 import type { RecipeCollectionFormat } from '../../../services/main/src/modules/recipe/collection-file.ts';
 import type { OccurrenceRecord } from '../../../services/main/src/modules/structure/format.ts';
 import type { DocumentSnapshot } from '@rezics/document';
+import { grantPersonaFixtureAuthority } from '../support/persona-fixture-authority.ts';
+import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
 
 setDefaultTimeout(180_000);
 let sessions: PersonaSessions;
 let image: string;
+let ratingContext: string;
 beforeAll(async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through isolated integration QA');
   sessions = await personaSessions('public');
   image = (await sharp(randomBytes(640 * 480 * 3), { raw: { width: 640, height: 480, channels: 3 } })
     .png().toBuffer()).toString('base64');
+  await grantPersonaFixtureAuthority(sessions.owner, [{ scope: GLOBAL_CONTEXT_SCOPE, action: 'rating.context.create' }]);
+  ratingContext = (await json<{ context: string }>(sessions.owner.main('POST', '/v1/global-rating-contexts', {
+    profile: 'global-rating-standing-context-v2', question: 'How much did you like this recipe?',
+    scale: { min: 1, max: 5, step: 1 }, actingSubject: sessions.owner.actingSubject,
+  }), 201)).context;
+  await grantPersonaFixtureAuthority(sessions.owner, [
+    { scope: `rating:observe:${ratingContext}`, action: 'rating.observation.set' },
+  ]);
 }, 240_000);
 afterAll(async () => { await sessions?.close(); });
 
@@ -60,7 +71,14 @@ for (const format of ['paprikarecipes', 'melarecipes', 'melarecipe'] as const) {
     expect(imported).toMatchObject({ status: 'imported', replayed: false, losses: [] });
     expect(imported.kept).toContain('categories');
     expect(imported.kept).toContain('photos/0');
-    expect(imported.retainedOnly).toContain('rating');
+    if (format === 'paprikarecipes') {
+      expect(imported.kept).toContain('rating');
+      expect(imported.rating).toMatchObject({ status: 'native', context: ratingContext, value: 4,
+        scale: { min: 1, max: 5, step: 1 } });
+    } else {
+      expect(imported.retainedOnly).toContain('rating');
+      expect(imported.rating).toMatchObject({ status: 'retained', reason: 'unknown-source-scale' });
+    }
     expect(imported.retainedOnly).toContain('future_field');
     expect(imported.photos[0]?.use).toBeTruthy();
     const twice = await json<ImportedPage>(upload(owner, bytes, format));
@@ -100,8 +118,10 @@ for (const format of ['paprikarecipes', 'melarecipes', 'melarecipe'] as const) {
     expect(delivered.status).toBe(200);
     expect(Buffer.from(await delivered.arrayBuffer()).toString('base64')).toBe(image);
     expect((await stranger.main('GET', `${photoPath}&${query(stranger)}`)).status).toBe(404);
-    const library = await json<{ customShelves: Array<{ id: string; name: string }> }>(owner.main('GET',
+    const library = await json<{ customShelves: Array<{ id: string; name: string }>;
+      rating: { global: { value: number; scale: object } | null } }>(owner.main('GET',
       `/v1/works/${short(imported.work)}/reader-state?${query(owner)}`));
+    if (format === 'paprikarecipes') expect(library.rating.global).toMatchObject({ value: 4, scale: { min: 1, max: 5, step: 1 } });
     expect(library.customShelves.map(shelf => shelf.name).sort()).toEqual(['Family', '汤']);
     for (const shelf of library.customShelves) {
       expect((await stranger.main('GET', `/v1/collections/${short(shelf.id)}?${query(stranger)}`)).status).toBe(404);

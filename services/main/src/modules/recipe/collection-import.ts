@@ -11,12 +11,14 @@ import { derivedId } from '../structure/graph.ts';
 import type { DocumentNode } from '@rezics/document';
 import { structureProfileFor } from '../structure/profiles.ts';
 import { resourceTargetReader } from '../target/resolve.ts';
+import { importCollectionRating, type RecipeCollectionRating } from './collection-rating.ts';
 
 export interface RecipeCollectionOutcome {
   identity: string; status: 'imported'; work: string; structure: string; revision: string;
   content: { post: string; variantId: string; revisionId: string };
   sourceObservation: string; kept: string[]; retainedOnly: string[];
   sourceOmittedFields: string[];
+  rating?: RecipeCollectionRating;
   losses: Array<{ field: string; reason: string }>;
   photos: Array<{ asset: string; representation: string | null; clearance: string; use?: string }>;
   replayed: boolean;
@@ -151,12 +153,14 @@ export async function importCollectionRecipe(deps: MainWorkDependencies, request
     resourceTargetReader(deps, request, actor));
   if (!instruction.revision) throw new ReaderImportUnavailable('Recipe instructions are pending');
   revision = instruction.revision;
-  // B02 owns native score scales. Never round or publish a private source score.
-  const retainedOnly = [...recipe.retainedOnly, ...(recipe.rating !== undefined ? ['rating'] : [])];
+  const rating = await importCollectionRating(commands, recipe, { actor, work: created.work,
+    mainVersion: created.mainVersion, key: step('rating') });
+  if (rating?.status === 'native') kept.push('rating');
+  const retainedOnly = [...recipe.retainedOnly, ...(rating?.status === 'retained' ? ['rating'] : [])];
   const outcome: RecipeCollectionOutcome = { identity: recipe.identity, status: 'imported', work: created.work,
     structure, revision, content: { post: post.post, variantId: post.variantId,
       revisionId: contentRevision }, sourceObservation: retained.observation.observation,
-    kept, retainedOnly, sourceOmittedFields: recipe.sourceOmittedFields, losses, photos, replayed: false };
+    kept, retainedOnly, ...(rating ? { rating } : {}), sourceOmittedFields: recipe.sourceOmittedFields, losses, photos, replayed: false };
   await store.recordOutcome(actor, key, 0, outcome);
   return outcome;
 }
