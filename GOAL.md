@@ -2,7 +2,7 @@
 
 Running again since 2026-10-13 09:39 UTC: the maintainer started the
 supermanager in termspaces and ordered the whole Goal launched. The
-[program](docs/goals/program/GOAL.md) runs all four Goals; each `state.md` is its
+[program](docs/goals/program/GOAL.md) runs the Goals; each `state.md` is its
 checkpoint.
 The way of working was redesigned on 2026-10-12 after the maintainer stopped
 the run of 2026-10-07 to 2026-10-12.
@@ -19,7 +19,6 @@ the [goal page](docs/product/goal.md) and the
 | [Program](docs/goals/program/GOAL.md) | Supermanager: the scope, the method and the tool that enforces it, the shared host | Running since 2026-10-13 09:39 UTC |
 | [API](docs/goals/api/GOAL.md) | Every row of the first public scope is proved through the API, for each persona | Running since 2026-10-13 11:11 UTC |
 | [Web](docs/goals/web/GOAL.md) | Every proved row has its surface | Running since 2026-10-13 15:34 UTC: Books is proved, so surfaces start |
-| [Operations](docs/goals/operations/GOAL.md) | Erasure and restore proved on physical fixtures; deployment prepared | Running since 2026-10-13 15:34 UTC with restore, drills and the release image; erasure when its contract is stable |
 
 `task goal -- status` shows each running Goal's manager session and live tasks.
 The kernel, trust-ops and launch Goals of 2026-10-06 are archived on the local

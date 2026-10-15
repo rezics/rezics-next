@@ -208,6 +208,41 @@ protection record must not be interpreted as an open protection state.
 
 ### Timed recovery drill
 
+Run physical restore and erasure consumers through the normal Task selection:
+
+```sh
+export REZICS_FIXTURE_ROOT="$PWD/.temp/fixture"
+task fixture:build -- --profile small
+task test -- tests/qa/fault-recovery/g-727-launch-drill.test.ts tests/qa/fault-recovery/erasure-restore.test.ts tests/qa/fault-recovery/erasure-campaign-qualification.test.ts
+```
+
+Prepare the fixture explicitly once before selecting consumers. The local
+fixture root is required for a worker restricted to its checkout: the producer
+otherwise defaults to git-common shared custody. Do not let a routine consumer
+build or repair a missing, stale or incomplete backup. Keep the retained
+manifest, configuration and sealed physical backup together; missing
+`postgres_data` custody is a refusal, not permission to reconstruct it from a
+different fixture. Restores modify only their own copies.
+
+The executable schedule is
+[`serialRestoreDrillFiles`](../../scripts/qa/core.ts), partitioned by
+[`restoreDrillSchedule`](../../scripts/qa/preparation-selection.ts). Its 21
+registered entries run as singleton projects with one serial consumer, including
+the independent restore, authority and refusal drills. QA slot, startup and
+memory admission still apply; admission wait is recorded separately from active
+work. Each run retains `fault-recovery-schedule.json` with the actual order and
+retained-only selection. This is an execution order, not an installed recurring
+production job. Deployment owns off-host transfer and recurrence.
+
+Clean-main QA `20261015t221640-800048` on
+`54c95044eb7e5b5c77d7f90f81b3b697f9e66ca5` restored the retained 1,000-Work
+fixture `fx-small-c3f5d4e45d33` and passed the fixture command drill's 20
+assertions. Source restoration took 19,273 ms, encrypted backup 48,923 ms and
+verified recovery 53,280 ms, each below its unchanged 600,000 ms ceiling.
+`g-727-launch-restore.json` and the run's schedule retain the phase evidence.
+This small-fixture result does not establish launch-scale performance, recovery
+under host load or the separate [erasure replay qualification](erasure.md#retained-source-qualification).
+
 Each backup and each complete restore has a 600-second command deadline. Restore
 includes decryption, copying, startup, WAL replay, full owner comparison, lineage
 cutover, Lucene rebuild, samples and serving verification. Phase durations and

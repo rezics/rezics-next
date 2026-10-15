@@ -124,6 +124,22 @@ each TDB2 directory; a second host cannot mount the live files as a replica.
 
 ## Practical load objective
 
+Local completion uses the retained-fixture
+[restore schedule](recovery.md#timed-recovery-drill), the separate
+[erasure qualifications](erasure.md#retained-source-qualification) and the
+OCI startup check `task test -- tests/live/g-722-images.test.ts`. The image
+check builds the pinned release twice, compares identities, then exercises
+the actual runtime roles against isolated storage; a packaged Main response
+or an import-only check cannot substitute for image startup. Keep its QA run
+and `.temp/image-smoke` build/runtime logs with the release evidence described
+in [release and rollback](release.md).
+
+These local checks do not install a production restore adapter, schedule
+off-host backups, measure cross-host recovery or qualify the real storage's
+media destruction. The default restore CLI continues to refuse without
+authenticated `RestoreChecks`. Production opening still requires the gates
+above and the maintainer's [external conditions](external-conditions.md).
+
 `task load` runs the named host profile. Its executable thresholds and
 evidence checks live in [the load runner](../../scripts/load/practical.ts) and
 [OPS05 cases](../../scripts/qa/cases/operations.ts). The recorded
