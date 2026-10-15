@@ -113,6 +113,12 @@ export async function recordAnimeCatalogueVisits(recording: OutcomeRecorder, nam
         params: Promise.resolve({ locale: 'en', realm: siteKey }), searchParams: Promise.resolve(search),
       }, undefined, client);
       const model = modelOf(rendered);
+      if (!model) {
+        for (const [key, pending] of retained) if (key.startsWith(`${pageLabel}:`)) {
+          const response = await pending;
+          throw new Error(`${pageLabel} did not render: HTTP ${response.status}: ${await response.clone().text()}`);
+        }
+      }
       expect(model, `${pageLabel} rendered the production catalogue`).not.toBeNull();
       if (!model) throw new Error(`${pageLabel} has no catalogue`);
       ids.push(...model.items.map(work => work.id));
