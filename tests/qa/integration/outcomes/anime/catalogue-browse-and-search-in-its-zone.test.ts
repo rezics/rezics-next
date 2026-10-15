@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import { fromPlainText } from '@rezics/document';
 import { grantLaunchRecipeAuthority } from '../../../../../scripts/load/launch-corpus.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { recordAnimeCatalogueVisits, recordCatalogueStoryReads } from '../../../support/catalogue-story-reads.ts';
@@ -197,6 +198,26 @@ beforeAll(async () => {
   draft = await answer<Work>(owner.main('POST', '/v1/works', { profile: 'metadata-only-v1',
     title: `${phrase} unpublished original animation`, language: 'en', semanticTypes: ['https://schema.org/TVSeries'],
     authoring: 'own-work', actingSubject: actor }), 201);
+  // The real site route reads a published site cut, independently of Realm adoptions.
+  const zoneRoot = `/v1/zones/${short(sessions.zone)}`;
+  const current = await answer<{ revision: string }>(owner.main('GET', `${zoneRoot}/configuration?${acting(owner)}`));
+  await answer(owner.main('PUT', `${zoneRoot}/configuration`, {
+    expectedHead: current.revision, prepareHomeDocument: true, actingSubject: actor,
+  }));
+  const configuration = await answer<{ revision: string; configuration: { homeDocument: string } }>(
+    owner.main('GET', `${zoneRoot}/configuration?${acting(owner)}`));
+  const navigation = await answer<{ revision: string }>(owner.main('GET', `${zoneRoot}?${acting(owner)}`));
+  const variantId = `urn:rezics:variant:${randomUUID()}`;
+  const home = await answer<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
+    owner.main('POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: configuration.configuration.homeDocument,
+      variantId, expectedHead: null, document: fromPlainText('Original Anime fixture catalogue', 'blocks'),
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: actor }), 201);
+  await answer(owner.main('POST', `${zoneRoot}/site-publications`, {
+    routesRevision: navigation.revision, navigationRevision: navigation.revision,
+    expectedHead: configuration.revision, actingSubject: actor,
+    pages: [{ page: configuration.configuration.homeDocument, variantId, revisionId: home.revisionId,
+      byteDigest: home.byteDigest, contentEpoch: home.sourcePosition.dataEpoch }],
+  }), 201);
   await catalogueReady();
   } finally {
     preparationDurationMs = Date.now() - started;
