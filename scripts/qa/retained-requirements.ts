@@ -40,29 +40,29 @@ export function retainedRequirementKinds(root: string, files: readonly string[])
   return [...kinds].sort();
 }
 
-export function retainedRequirements(root: string, files: readonly string[]): RetainedRequirement[] {
+export function retainedRequirements(root: string, files: readonly string[], custodyRoot = root): RetainedRequirement[] {
+  const fixtureDirectory = process.env.REZICS_FIXTURE_ROOT ?? join(custodyRoot, '.temp', 'fixture');
   return retainedRequirementKinds(root, files).map(kind => ({
     source: kind,
     build: kind === 'realm' ? 'task goal -- test tests/qa/integration/realm-discussion-source.test.ts'
       : kind === 'seed' ? 'task goal -- test tests/qa/fault-recovery/work-profile-seed-build.test.ts'
       : kind === 'content' ? 'task goal -- test tests/qa/fault-recovery/retained-content-source-preparation.test.ts'
-      : kind === 'fixture-small' ? 'task fixture:build -- --profile small'
       : `task goal -- prepare-source ${kind}`,
     async check() {
       if (kind === 'fixture-small') {
         const { compatibleFixture } = await import('../fixture/restore.ts');
         const { verifyFixtureCustody } = await import('../fixture/custody.ts');
         const { dockerEnvironment } = await import('../fixture/stack.ts');
-        const manifest = compatibleFixture('small');
+        const manifest = compatibleFixture('small', undefined, fixtureDirectory);
         if (!manifest) throw new Error('small fixture build is missing or stale for the frozen owner/schema/image inputs');
-        verifyFixtureCustody(manifest, dockerEnvironment());
+        verifyFixtureCustody(manifest, dockerEnvironment(), join(fixtureDirectory, manifest.id));
         return manifest.id;
       }
       if (kind === 'realm') {
         const runtime = await import('../../tests/qa/support/realm-discussion-source-runtime.ts');
         const { realmDiscussionSourceAdapter } = await import('../../tests/qa/support/realm-discussion-source.ts');
         const adapter = realmDiscussionSourceAdapter(await runtime.realmSourceInputs(root), runtime.realmSourceRuntime('preflight'));
-        return (await new RetainedSources(runtime.realmSourceDirectory()).preflight(adapter)).key;
+        return (await new RetainedSources(join(custodyRoot, '.temp', 'realm-discussion-sources')).preflight(adapter)).key;
       }
       if (kind === 'seed') {
         const { preflightSeedCheckpoints } = await import('./seed-preflight.ts');
@@ -70,16 +70,17 @@ export function retainedRequirements(root: string, files: readonly string[]): Re
       }
       const { dockerEnvironment } = await import('../fixture/stack.ts');
       if (kind === 'content') {
-        const { retainedContentSourceAdapter, retainedContentSourceDirectory } = await import('../../tests/qa/fault-recovery/retained-content-source-support.ts');
-        return (await new RetainedSources(retainedContentSourceDirectory()).preflight(
-          retainedContentSourceAdapter(undefined, dockerEnvironment()))).key;
+        const { retainedContentSourceAdapter } = await import('../../tests/qa/fault-recovery/retained-content-source-support.ts');
+        const directory = join(custodyRoot, '.temp', 'fixture', 'retained-sources');
+        return (await new RetainedSources(directory).preflight(
+          retainedContentSourceAdapter(directory, dockerEnvironment()))).key;
       }
       if (kind.startsWith('independent')) {
         const { independentRestoreSourceAdapter } = await import('../../tests/qa/fault-recovery/independent-restore-support.ts');
-        return (await new RetainedSources().preflight(independentRestoreSourceAdapter(kind === 'independent-recipe'))).key;
+        return (await new RetainedSources(join(fixtureDirectory, 'retained-sources')).preflight(independentRestoreSourceAdapter(kind === 'independent-recipe'))).key;
       }
       const { ownerErasureSourceAdapter } = await import('../../tests/qa/fault-recovery/owner-restore-erasure-fixture.ts');
-      return (await new RetainedSources().preflight(ownerErasureSourceAdapter(
+      return (await new RetainedSources(join(fixtureDirectory, 'retained-sources')).preflight(ownerErasureSourceAdapter(
         { laterApiAdmission: kind === 'owner-later' }, dockerEnvironment()))).key;
     },
   }));

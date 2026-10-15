@@ -17,7 +17,7 @@ import { producerModules, retainedVolumeInventory } from '../fault-recovery/owne
 import { personaSessions, retainPersonaRealm, restorePersonaRealms } from './personas.ts';
 import { realmDiscussionSourceAdapter, realmDiscussionSourceSpecification, realmSourceAuthorityLifetimeMs, type RealmSourceRuntime, type RealmSourceSessions } from './realm-discussion-source.ts';
 
-export const realmSourceDirectory = () => join(root, '.temp', 'realm-discussion-sources');
+export const realmSourceDirectory = () => join(Bun.env.REZICS_QA_RETAINED_ROOT ?? root, '.temp', 'realm-discussion-sources');
 const physicalNamespace = sha256(root);
 // Separate local producer custody across worktrees without making a physical
 // path an API corpus input. Cleanup can affect only this checkout's resources.

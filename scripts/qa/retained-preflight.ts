@@ -16,15 +16,15 @@ export interface RetainedPreflight {
 /** All selected sources are checked before the caller starts its first test.
  * A refusal never delegates to a producer or falls back to a different key. */
 export async function preflightRetainedSources(root: string, files: readonly string[],
-  requirements?: RetainedRequirement[]): Promise<RetainedPreflight> {
+  requirements?: RetainedRequirement[], custodyRoot = process.env.REZICS_QA_RETAINED_ROOT ?? root): Promise<RetainedPreflight> {
   if (!requirements && resolve(root) !== resolve(import.meta.dir, '../..')
     && retainedRequirementKinds(root, files).length) {
     const frozen = await import(pathToFileURL(resolve(root, 'scripts/qa/retained-preflight.ts')).href) as {
       preflightRetainedSources: typeof preflightRetainedSources;
     };
-    return frozen.preflightRetainedSources(root, files);
+    return frozen.preflightRetainedSources(root, files, undefined, custodyRoot);
   }
-  requirements ??= retainedRequirements(root, files);
+  requirements ??= retainedRequirements(root, files, custodyRoot);
   const started = performance.now();
   const sources: RetainedPreflight['sources'] = [];
   for (const requirement of requirements) {

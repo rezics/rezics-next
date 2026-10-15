@@ -189,7 +189,7 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Con
     manifest.files = files.map(file => ({ file, tier: outcomeTier(file), outcome: 'pending' }));
     manifest.batches = manifest.files.map((file, index) => ({ id: `outcome-${index + 1}`, tier: file.tier as RegressionTier,
       files: [file.file], state: 'pending', attempts: [] }));
-    manifest.retainedSources = await (options.retainedPreflight ?? preflightRetainedSources)(checkout, files);
+    manifest.retainedSources = await (options.retainedPreflight ?? preflightRetainedSources)(checkout, files, undefined, repo);
     if (!manifest.retainedSources.ok) {
       manifest.preflight.ok = false;
       manifest.preflight.reason = retainedPreflightSummary(manifest.retainedSources);
@@ -202,8 +202,8 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Con
       const recordSource = recordTarget ? join('.temp', 'confirmation-records', runId, label) : undefined;
       try {
         batch.attempts.push(await runner(checkout!, batch, join(directory, label), 1, slots,
-          regressionBatchQaDirectory(directory, label), recordSource
-            ? { env: { ...process.env, OUTCOME_RECORD_DIR: recordSource } } : undefined));
+          regressionBatchQaDirectory(directory, label), { env: { ...process.env, REZICS_QA_RETAINED_ROOT: repo,
+            ...(recordSource ? { OUTCOME_RECORD_DIR: recordSource } : {}) } }));
       } catch (error) {
         batch.attempts.push({ code: 1, outcomes: {}, artifactPaths: [], queueMs: 0, testMs: 0, totalMs: 0,
           classification: 'infrastructure', evidence: String(error) });

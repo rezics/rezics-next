@@ -72,7 +72,7 @@ function producerFiles(root: string): string[] {
 export function retainedContentSourceDirectory(): string {
   // A worker's preparation writes only its own fixture directory. Consumers
   // can pass the accepted custody directory explicitly to this adapter/store.
-  return join(root, '.temp', 'fixture', 'retained-sources');
+  return join(Bun.env.REZICS_QA_RETAINED_ROOT ?? root, '.temp', 'fixture', 'retained-sources');
 }
 
 function sourceResources(directory: string, key: string) {

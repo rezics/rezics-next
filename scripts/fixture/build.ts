@@ -27,8 +27,8 @@ function moduleVersion(image: string): string {
   return version;
 }
 
-export function readManifest(id: string): FixtureManifest | undefined {
-  const path = join(fixtureDirectory(id), 'manifest.json');
+export function readManifest(id: string, directory = fixtureDirectory(id)): FixtureManifest | undefined {
+  const path = join(directory, 'manifest.json');
   return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as FixtureManifest : undefined;
 }
 

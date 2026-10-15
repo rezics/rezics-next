@@ -13,8 +13,8 @@ export interface FixtureCustody {
   digest: string;
 }
 
-function files(id: string) {
-  return Object.fromEntries(Object.entries(inventoryDirectory(fixtureDirectory(id)))
+function files(id: string, directory = fixtureDirectory(id)) {
+  return Object.fromEntries(Object.entries(inventoryDirectory(directory))
     .filter(([path]) => path !== 'manifest.json'));
 }
 
@@ -27,7 +27,7 @@ export function sealFixture(manifest: FixtureManifest, docker: NodeJS.ProcessEnv
   return { ...facts, digest: sha256(stable({ manifest: body, ...facts })) };
 }
 
-export function verifyFixtureCustody(manifest: FixtureManifest, docker: NodeJS.ProcessEnv): void {
+export function verifyFixtureCustody(manifest: FixtureManifest, docker: NodeJS.ProcessEnv, directory = fixtureDirectory(manifest.id)): void {
   const { custody, id, digest, build: _build, backup: _backup, ...core } = manifest;
   const expected = manifestIdentity(core);
   if (id !== expected.id || digest !== expected.digest) throw new Error(`fixture manifest key differs: ${id}; expected ${expected.id}`);
@@ -35,12 +35,12 @@ export function verifyFixtureCustody(manifest: FixtureManifest, docker: NodeJS.P
   const host = retainedRuntimeFacts();
   const differences = retainedRuntimeDifferences(custody.runtime, host);
   if (custody.files[POSTGRES_COLLATION_FILE])
-    differences.push(...retainedCollationDifferences(join(fixtureDirectory(id), POSTGRES_COLLATION_FILE), host));
+    differences.push(...retainedCollationDifferences(join(directory, POSTGRES_COLLATION_FILE), host));
   if (differences.length) throw new Error(`fixture ${id}: ${differences.join('; ')}`);
   const { digest: seal, ...facts } = custody;
   const { custody: _custody, ...body } = manifest;
   if (seal !== sha256(stable({ manifest: body, ...facts }))) throw new Error(`fixture ${id}: custody digest differs`);
-  if (stable(custody.files) !== stable(files(id))) throw new Error(`fixture ${id}: backup files differ`);
+  if (stable(custody.files) !== stable(files(id, directory))) throw new Error(`fixture ${id}: backup files differ`);
   for (const [volume, inventory] of Object.entries(custody.volumes))
     if (stable(inventory) !== stable(retainedVolumeInventory(volume, docker)))
       throw new Error(`fixture ${id}: backup volume integrity differs: ${volume}`);

@@ -47,11 +47,10 @@ export function fixtureRestoreInputs(docker: NodeJS.ProcessEnv,
 }
 
 /** Newest retained backup of this profile and seed that the current checkout can restore. */
-export function compatibleFixture(profile: FixtureProfile, seed = DEFAULT_SEED): FixtureManifest | undefined {
-  const directory = fixtureRoot;
+export function compatibleFixture(profile: FixtureProfile, seed = DEFAULT_SEED, directory = fixtureRoot): FixtureManifest | undefined {
   if (!existsSync(directory)) return undefined;
   const current = fixtureRestoreInputs(dockerEnvironment());
-  return readdirSync(directory).map(id => readManifest(id))
+  return readdirSync(directory).map(id => readManifest(id, join(directory, id)))
     .filter((manifest): manifest is FixtureManifest => manifest?.profile === profile && manifest.seed === seed
       && restoreCompatibility(manifest, current).compatible)
     .sort((a, b) => b.build.completedAt.localeCompare(a.build.completedAt))[0];

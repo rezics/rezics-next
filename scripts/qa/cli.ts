@@ -729,7 +729,7 @@ async function runShardWork(
       const prepared = await commandAsync(root, 'bun', [
         'tests/qa/fault-recovery/independent-restore-support.ts', '--prepare-retained-source', '--retained-only', '--evidence', evidence,
         ...(selected.withRecipe ? ['--recipe'] : []),
-      ], 600_000, { ...environment, ...apps, REZICS_FIXTURE_ROOT: environment.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture'),
+      ], 600_000, { ...environment, ...apps, REZICS_FIXTURE_ROOT: environment.REZICS_FIXTURE_ROOT ?? join(process.env.REZICS_QA_RETAINED_ROOT ?? root, '.temp', 'fixture'),
         REZICS_QA_RUN_ID: projectRunId, REZICS_QA_ARTIFACT_DIR: directory }, noteMemory, { runDeadline });
       writeFileSync(join(logs, `${label}-independent-source.log`), prepared.output);
       writeFileSync(join(directory, `independent-selection-${label}.json`), JSON.stringify({
@@ -746,7 +746,7 @@ async function runShardWork(
         && environment.INDEPENDENT_RESTORE_SOURCE_KEY !== report.manifest.key)
         throw new Error('supplied independent source key is incompatible');
       environment.INDEPENDENT_RESTORE_SOURCE_KEY = report.manifest.key;
-      environment.REZICS_FIXTURE_ROOT ??= join(root, '.temp', 'fixture');
+      environment.REZICS_FIXTURE_ROOT ??= join(process.env.REZICS_QA_RETAINED_ROOT ?? root, '.temp', 'fixture');
     }
     const preparations = new Map(files.flatMap(file => {
       const selected = ownerErasurePreparationOptions(file);
@@ -757,7 +757,7 @@ async function runShardWork(
       const prepared = await commandAsync(root, 'bun', [
         'tests/qa/fault-recovery/owner-restore-erasure-fixture.ts', '--prepare-retained-source', '--retained-only', '--evidence', evidence,
         ...(selected.laterApiAdmission ? ['--later-api-admission'] : []),
-      ], 600_000, { ...environment, ...apps, REZICS_FIXTURE_ROOT: environment.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture'),
+      ], 600_000, { ...environment, ...apps, REZICS_FIXTURE_ROOT: environment.REZICS_FIXTURE_ROOT ?? join(process.env.REZICS_QA_RETAINED_ROOT ?? root, '.temp', 'fixture'),
         REZICS_QA_RUN_ID: projectRunId, REZICS_QA_ARTIFACT_DIR: directory }, noteMemory, { runDeadline });
       writeFileSync(join(logs, `${label}-owner-erasure-source-${variant}.log`), prepared.output);
       writeFileSync(join(directory, `owner-erasure-selection-${label}-${variant}.json`), JSON.stringify({
@@ -769,7 +769,7 @@ async function runShardWork(
         return finish({ ok: false, timedOut: prepared.timedOut, noMatch: false,
           xml: xmlForCommand(tier, false, prepared.activeElapsedMs, prepared.output) });
       }
-      environment.REZICS_FIXTURE_ROOT ??= join(root, '.temp', 'fixture');
+      environment.REZICS_FIXTURE_ROOT ??= join(process.env.REZICS_QA_RETAINED_ROOT ?? root, '.temp', 'fixture');
     }
   }
   if (tier === 'integration' && files.includes('tests/qa/integration/realm-discussion-source.test.ts')) {
@@ -1024,7 +1024,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
   // Select retained custody once before shards. Missing custody refuses, never builds.
   const fixtureConsumers = smallRecoveryFixtureConsumers(selectedFiles, process.env);
   if (tier === 'fault/recovery' && Object.values(fixtureConsumers).some(Boolean)) {
-    const fixtureRoot = process.env.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture');
+    const fixtureRoot = process.env.REZICS_FIXTURE_ROOT ?? join(process.env.REZICS_QA_RETAINED_ROOT ?? root, '.temp', 'fixture');
     const preparationFile = join(directory, 'fault-recovery-fixture-preparation.json');
     const prepared = await withWorkSlot(reserveWork => admit('other', () => withStartupSlot(
       { ...qaStackEnvironment(process.env), REZICS_FIXTURE_ROOT: fixtureRoot },
