@@ -24,7 +24,7 @@ import {
   workNameScopeBasisTest,
 } from './acceptance.ts';
 import { expandTestPaths } from './core.ts';
-import { WORK_PROFILE_SEED_BUILD_FILE } from './preparation-selection.ts';
+import { RETAINED_SOURCE_BUILD_FILE, WORK_PROFILE_SEED_BUILD_FILE } from './preparation-selection.ts';
 import { dockerfileCopySources } from '../dev/fuseki-image.ts';
 import { selectRepositoryGuards } from './repository-guards.ts';
 
@@ -258,6 +258,8 @@ export function classify(path: string): Rule | undefined {
 export function routeTest(path: string): { tier: AffectedTier } | { deferred: string } | { workspace: FrontendWorkspace } | undefined {
   if (path === WORK_PROFILE_SEED_BUILD_FILE)
     return { deferred: 'Retained seed preparation; select its build command explicitly alone' };
+  if (path === RETAINED_SOURCE_BUILD_FILE)
+    return { deferred: 'Retained source preparation; select its build command explicitly alone' };
   const excluded = testExclusions.find(item => item.file === path && path.startsWith('apps/web/'));
   if (excluded) return { deferred: excluded.reason };
   const workspace = frontendWorkspace(path);
