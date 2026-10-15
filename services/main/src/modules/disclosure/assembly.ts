@@ -88,7 +88,7 @@ export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironmen
       const occurrence = row.use ? { owner: 'media' as const, kind: 'media-use' as const,
         resource: `https://rezics.com/id/${row.use}`, revision: `https://rezics.com/id/${row.use}` } : undefined;
       const { decisions } = await finalDisclosure(env, [
-        { owner: 'media', resource: `https://rezics.com/id/${args[0]}`, component: 'media_use', context, occurrence },
+        { owner: 'media', resource: `https://rezics.com/id/${args[0]}`, component: 'media_use', context },
         { owner: 'media', resource: `https://rezics.com/id/${row.asset}`, component: 'cover', context, occurrence },
         ...(row.use ? [{ owner: 'media' as const, resource: `https://rezics.com/id/${row.use}`,
           component: 'media_use' as const, context, occurrence }] : []),
