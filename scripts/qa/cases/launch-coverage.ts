@@ -120,7 +120,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
   {
     kind: 'recipes',
     capability: 'Collection tracking and progress',
-    api: missing('gap', 'outcomes/recipes/collection-tracking-and-progress.test.ts fails in setup on POST /v1/work-publications for the original Recipe composition: retries retain HTTP 202 reconciling, phase work-publication, so no collection or progress assertion runs. Reproduced alone in QA 20261014t190047-f360f9-r2.'),
+    api: api('tests/qa/integration/outcomes/recipes/collection-tracking-and-progress.test.ts',
+      'recipes/collection-tracking-and-progress / owner: curates repeated recipe members and retains private standing with replay and stale protection',
+      'Publishes an original Recipe, curates repeated collection members and checks private whole-recipe standing, replay and stale protection across all six personas. Passed in QA 20261015t015605-ab33e2.'),
     browser: browser('apps/web/tests/recipe-tracking.e2e.ts',
       'recipe-tracking / en: a cook saves a recipe, completes it and returns to persisted progress',
       'An ordinary signed-in cook creates and publishes an original Recipe through Main, saves Want to cook, Cooking and Cooked shelves, starts and completes whole-recipe progress and reloads every saved state; repeated in Japanese. Passed in QA 20261014t212008-cc1e5e.'),
@@ -158,8 +160,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
   {
     kind: 'recipes',
     capability: 'Instructions in any form',
-    api: missing('content-adoption',
-      'recipes/instructions-in-any-form: six pending persona outcomes require Post, exact recording, Content procedure, ordered adoption and qualified derivation before public opening.'),
+    api: api('tests/qa/integration/outcomes/recipes/instructions-in-any-form.test.ts',
+      'recipes/instructions-in-any-form / visitor: reads exact published Post, recording, procedure and ordered instructions while drafts stay concealed',
+      'All six personas read exact published Post, recording and structured procedure dependencies, ordered adoptions and transformation credit while private successors stay concealed. Passed in QA 20261015t015605-ab33e2.'),
     browser: missing('content-adoption', 'API acceptance precedes instruction surfaces.'),
   },
   {
