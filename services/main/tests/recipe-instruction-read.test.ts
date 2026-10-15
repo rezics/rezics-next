@@ -11,7 +11,7 @@ function contentPreview(target: string, revision: string, variantId: string) {
   const deps = { environment: { lineage: { dataEpoch: 'fixture', routingEpoch: 'fixture' },
     fuseki: { query: async (query: string) => ({ results: { bindings: query.includes('SELECT DISTINCT ?type')
       ? [{ type: { type: 'uri', value: 'https://rezics.com/vocab/Post' } }] : [] } }) } },
-    access: { canReadWork: async () => state.readable },
+    access: { canReadWork: async () => state.readable, canPreviewWork: async () => state.readable },
     rights: { store: { currentPublicDomainAssessment: async () => state.assessment } },
     content: { owningResourceForRevision: async () => target, readExactBatch: async (ids: string[]) => {
       state.reads++; expect(ids).toEqual([revision]);

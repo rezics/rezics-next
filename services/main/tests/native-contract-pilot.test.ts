@@ -235,6 +235,13 @@ test('native runtime validators reject a wrong success body and wrong code for t
 test('generated OpenAPI preserves baseline requests, operation IDs, success, policy, media and headers', async () => {
   const document = JSON.parse(await buildMainOpenApi());
   expect(JSON.stringify(invariantFingerprints(document))).toBe(JSON.stringify(baseline));
+  // The native header shares the publication rights and attribution extensions.
+  const header = workHeaderModels.WorkHeader;
+  expect(header.properties.rights.properties.basis.const).toBe('public-domain');
+  expect(header.properties.rights.properties.source.required).toContain('author');
+  expect(header.properties.factObligations).toBeDefined();
+  expect(header.required).not.toContain('rights');
+  expect(header.required).not.toContain('factObligations');
   const conflict = document.paths['/v1/works/{id}/scalar-value'].post.responses['409'];
   expect(conflict.content).toHaveProperty('application/problem+json');
   expect(conflict.content).not.toHaveProperty('application/json');
