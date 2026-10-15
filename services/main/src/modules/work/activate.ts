@@ -57,6 +57,8 @@ export interface GraphLineage {
 }
 
 export interface WorkActivationEnvironment {
+  /** Exact contribution edit receipts resolve their original actor through Access. */
+  accessAdmission?: Pick<import('../access/admission.ts').AccessAdmissionRegistry, 'admittedActingSubject'>;
   /** Shared Content database for linking payloads concurrently with erasure. */
   referenceFencePool?: import('pg').Pool;
   /** Exact original-manifest supplemental coverage owned by Content. */

@@ -554,8 +554,7 @@ function acceptCreateHead(head: ExactHeadFacts, receipt: string, rows: readonly 
 /** Main's Access registry, or the Access pool already attached to this process.
  * Contribution does not open a pool and does not write Access tables. */
 function editAccess(env: WorkActivationEnvironment): Pick<AccessAdmissionRegistry, 'admittedActingSubject'> {
-  const attached = (env as { accessAdmission?: Pick<AccessAdmissionRegistry, 'admittedActingSubject'> })
-    .accessAdmission;
+  const attached = env.accessAdmission;
   if (attached) return attached;
   const pool = (env as { eventTemporalAccess?: Pool }).eventTemporalAccess;
   if (pool) return new AccessAdmissionRegistry(pool);
