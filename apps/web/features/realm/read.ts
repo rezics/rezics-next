@@ -168,8 +168,13 @@ export const readRealmDecision = cache(
 
 export const readNewAdoptions = cache(
   async (realm: string, _locale: UiLocale, client?: RealmReadClient): Promise<Loaded<ZoneWorkPage>> =>
-    settle(() => (client?.main ?? main()).v1.realms({ realm }).modules['new-adoptions'].get({ query: {} })),
+    readNewAdoptionsAnswer(client?.main ?? main(), realm),
 );
+
+/** Public callers omit the Person; an authenticated supplied reader must carry its Person. */
+export function readNewAdoptionsAnswer(client: MainClient, realm: string, actingSubject?: string): Promise<Loaded<ZoneWorkPage>> {
+  return settle(() => client.v1.realms({ realm }).modules['new-adoptions'].get({ query: { actingSubject } }));
+}
 
 export const readRecentlyCompleted = cache(
   async (realm: string, _locale: UiLocale): Promise<Loaded<ZoneWorkPage>> =>

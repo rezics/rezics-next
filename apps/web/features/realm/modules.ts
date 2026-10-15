@@ -345,7 +345,7 @@ const intervals = ['day', 'week', 'month'] as const;
 export function rankingModuleReads(client: RealmReadClient) {
   return {
     cards: (context: AdaptContext) => realmCards(context, client),
-    rankings: (realm: string, _locale: UiLocale, interval: 'day' | 'week' | 'month', metric: ChartMetric) =>
+    rankings: (realm: string, _locale: UiLocale, interval: 'day' | 'week' | 'month', metric: RankingMetric) =>
       readRankingModuleAnswer(client.main, realm, interval, metric),
   };
 }

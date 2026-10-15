@@ -15,8 +15,9 @@ import { loadRankingsModule, rankingModuleReads } from './modules.ts';
 import { loadRealmView, privateJoinPage, RealmFrame, type RealmReplay } from './realm-page.tsx';
 import { RealmRankingBody } from './ranking-route.tsx';
 import { RealmNotFound, RealmUnavailable } from './states.tsx';
+import { realmHref } from './route.ts';
 
-export const rankingChart: PresentationModule = { id: 'realm-ranking', type: 'ranking',
+export const rankingChart: PresentationModule = { id: 'realm-ranking', type: 'ranking', title: '',
   source: { kind: 'query-block', block: 'realm-ranking' }, options: { layout: 'rows', metric: 'reads' } };
 
 /** The supplied session is a transport; the shared page resolves its acting Person. */
@@ -42,7 +43,7 @@ export async function rankingVisit({ replay, ref, locale, query, module }: {
     const state = replay.signedIn ? await replay.read('/v1/me/session-agent', true)
       .then(response => response.json() as Promise<MainSessionAgentState>) : null;
     const actingSubject = sessionReadSubject(state);
-    return privateJoinPage(view.page, locale, `/r/${ref}/discussions`, { actingSubject,
+    return privateJoinPage(view.page, locale, realmHref(locale, ref, 'discussions'), { actingSubject,
       ...(actingSubject ? { api: spaceAccessApi(() => replay.personal, view.page.space, view.page.id, actingSubject) } : {}),
     });
   }
