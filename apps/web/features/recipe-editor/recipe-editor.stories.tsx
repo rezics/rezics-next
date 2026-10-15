@@ -35,9 +35,11 @@ export const MixedMethodPreview: Story = {
       reference: { target: id(61), selector: { grain: 'content', revision: id(62), variantId: id(63) } } }] } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Preview' }));
-    await expect(canvas.getByText('Cream the butter with the sugar.')).toBeVisible();
-    await expect(canvas.getByText('Fold in the lemon zest.')).toBeVisible();
+    const toggle = canvas.queryByRole('button', { name: 'Preview' });
+    if (toggle) await userEvent.click(toggle);
+    const preview = within(canvas.getByRole('article', { name: 'Preview' }));
+    await expect(preview.getByText('Cream the butter with the sugar.')).toBeVisible();
+    await expect(preview.getByText('Fold in the lemon zest.')).toBeVisible();
   },
 };
 

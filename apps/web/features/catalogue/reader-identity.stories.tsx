@@ -45,5 +45,5 @@ export const SwitchAndSignOut: Story = { play: async ({ canvasElement }) => {
   await expect(canvas.getByLabelText('Current reader state')).toHaveTextContent('"status":"want-to-read","rating":2');
   await userEvent.click(canvas.getByRole('button', { name: 'End session' }));
   await expect(canvas.getByLabelText('Current reader state')).toHaveTextContent('signed-out');
-  await expect(canvas.getByRole('link', { name: 'Sign in to keep a reading list' })).toBeVisible();
+  await expect(canvas.getByRole('link', { name: /Sign in to keep a reading list/ })).toBeVisible();
 } };
