@@ -19,10 +19,17 @@ const language = /^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/i;
 async function studioAgent(form: FormData): Promise<AgentOption> {
   const locale = await requestLocale();
   const session = await readSession();
-  if (!session) redirect(signInPath(localizedPath('/studio', locale)));
+  if (!session) {
+    console.error(JSON.stringify({ event: 'studio_create_context_failed', reason: 'no-session' }));
+    redirect(signInPath(localizedPath('/studio', locale)));
+  }
   const named = String(form.get('agent') ?? '');
   const agent = session.agents.find(option => option.iri === named);
-  if (!agent) redirect(localizedPath('/studio', locale));
+  if (!agent) {
+    console.error(JSON.stringify({ event: 'studio_create_context_failed', reason: 'agent-not-listed',
+      publishingAgents: session.agents.length, identity: session.agent.status }));
+    redirect(localizedPath('/studio', locale));
+  }
   return agent;
 }
 
@@ -55,5 +62,6 @@ export async function createWork(previous: NewWorkState, form: FormData): Promis
   if (!response.data || 'operationId' in response.data) return { status: 'pending', message: t.createPending, key, values };
   // An author's own Work is always created here; a catalogue-grain redirect means the form sent the wrong grain.
   if ('outcome' in response.data) return { status: 'error', message: t.createUnavailable, key: crypto.randomUUID(), values };
+  console.info(JSON.stringify({ event: 'studio_create_redirect', presentation: offered.presentation }));
   redirect(localizedPath(createdWorkPath(agent, response.data.work, offered.presentation, writing), locale));
 }

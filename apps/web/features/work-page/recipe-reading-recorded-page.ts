@@ -115,7 +115,16 @@ export function recipeReadingReads(host: RecipeReadingHost) {
     },
     async readRecipe(href: string, query: { cursor?: string; servings?: number } = {}): Promise<BooksRead<RecipeWorkPage | null>> {
       try {
-        return await settleNullable(recipePageReader(host, href).bind(null, query));
+        return await settleNullable(async () => {
+          try {
+            const answer = await recipePageReader(host, href)(query);
+            if (answer.error) console.error(JSON.stringify({ event: 'recipe_page_read_failed', status: answer.error.status }));
+            return answer;
+          } catch (error) {
+            console.error(JSON.stringify({ event: 'recipe_page_read_failed', error: error instanceof Error ? error.name : 'UnknownError' }));
+            throw error;
+          }
+        });
       } catch (error) {
         rethrowRecorded(error);
         return { ok: false, failure: 'unavailable' };
