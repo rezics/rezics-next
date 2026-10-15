@@ -14,7 +14,7 @@ import { fusekiBuildInputs } from '../../../scripts/dev/fuseki-image.ts';
 import { classify, erasureCampaignNativeTest, formatPlan, heldReplayNativeTest, inputSelectedNativeTests, nativeIntegerPreservationTest, nativeModuleCopies, nativeModuleCopyInputs, nativeUnionTest, needsGraph, planAffected, routeTest, typecheckWorkspaces, workNameScopeBasisTest, type GraphModule } from '../../../scripts/qa/affected.ts';
 import { mergeUnitFiles, ownerFilesFromPlan, unitFilesFromPlan } from '../../../scripts/goal/goalctl.ts';
 import { regressionBatchCommand, regressionRegistry } from '../../../scripts/goal/regress.ts';
-import { WORK_PROFILE_SEED_BUILD_FILE } from '../../../scripts/qa/preparation-selection.ts';
+import { WORK_PROFILE_SEED_BUILD_FILE, OWNER_ERASURE_SOURCE_BUILD_FILE } from '../../../scripts/qa/preparation-selection.ts';
 import { affectedCommands, parseAffectedArgs, runAffected } from '../../../scripts/qa/test.ts';
 
 const edge = (resolved: string, module = resolved) => ({ module, resolved, couldNotResolve: false, coreModule: false });
@@ -836,6 +836,9 @@ test('affected selection defers retained seed preparation even when its own file
   const result = plan([WORK_PROFILE_SEED_BUILD_FILE], { exists: () => true });
   expect(Object.values(result.tests).flat()).not.toContain(WORK_PROFILE_SEED_BUILD_FILE);
   expect(result.deferred).toContainEqual({ file: WORK_PROFILE_SEED_BUILD_FILE, reason });
+  expect(routeTest(OWNER_ERASURE_SOURCE_BUILD_FILE)).toEqual({ deferred: reason });
+  expect(Object.values(plan([OWNER_ERASURE_SOURCE_BUILD_FILE], { exists: () => true }).tests).flat())
+    .not.toContain(OWNER_ERASURE_SOURCE_BUILD_FILE);
 });
 
 for (const size of [128, 256]) {

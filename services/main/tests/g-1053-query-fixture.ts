@@ -20,7 +20,10 @@ export async function startQueryHome(label: string, retainedOwners = false) {
       ACCOUNT_RELAY_DATABASE_URL: owners.urls.relay,
     });
   try {
-    const home = await startHomeStack(`${label}-${randomUUID()}`, { projectionStart: 'current' });
+    // Query builds its own Discovery population and consumes no Home feed.
+    // Replaying the complete inherited Main history would prepare an unrelated
+    // projection and grow with the preceding scale's command population.
+    const home = await startHomeStack(`${label}-${randomUUID()}`);
     const stop = home.stop;
     home.stop = async () => {
       try {

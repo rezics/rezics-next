@@ -11,6 +11,9 @@ import { WikiQuotationStore } from '../../../services/main/src/modules/wiki/quot
 import type { WikiExtraction } from '../../../services/main/src/modules/wiki/protocol.ts';
 import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
+import { readProgressOrder } from '../../../services/main/src/modules/progress/order.ts';
+import { memberAnchoring } from '../../../services/main/src/modules/reading-position/continuity.ts';
+import { readCompositionHeader } from '../../../services/main/src/modules/structure/graph.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
 import {
@@ -513,11 +516,15 @@ test('G931-M2: wiki candidate matching cannot identify a later alias at the read
       await candidateRequest(),
     );
     const progress = new StructureProgressStore(wiki.f.contentPool);
-    const write = (chapter: number, completed: boolean, expectedVersion: number) => progress.write({
-      principal: verified, agent: person.agent, structure: wiki.composition.structure,
-      occurrence: wiki.chapters.occurrences[chapter]!, completed, expectedVersion,
-      position: null, idempotencyKey: randomUUID(),
-    });
+    const write = async (chapter: number, completed: boolean, expectedVersion: number) => {
+      const header = (await readCompositionHeader(wiki.f.env, wiki.composition.structure))!;
+      const occurrence = wiki.chapters.occurrences[chapter]!;
+      const order = await readProgressOrder(wiki.f.env, header, occurrence);
+      return progress.write({ principal: verified, agent: person.agent,
+        structure: wiki.composition.structure, occurrence, completed, expectedVersion,
+        order, anchoring: await memberAnchoring(wiki.f.env, header, order),
+        position: null, idempotencyKey: randomUUID() });
+    };
     await write(0, true, 0);
     const early = await lookup();
     expect(early.items[0]).toMatchObject({ status: 'matched', candidates: [entity] });
