@@ -1,3 +1,4 @@
+import { ensureDependencies } from '../goal/dependencies.ts';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath, unitHarnessFiles, unitOwnerFiles } from './acceptance.ts';
@@ -338,6 +339,7 @@ if (import.meta.main) {
   const args = process.argv.slice(2);
   assertWideRunAllowed(['bun', 'scripts/qa/test.ts', ...args]);
   const affected = parseAffectedArgs(args);
+  if (!affected?.list) ensureDependencies(root);
   if (!affected) process.exit(await dispatchTest(args));
   const plan = affectedPlan(root, affected.ref);
   console.log(formatPlan(plan));

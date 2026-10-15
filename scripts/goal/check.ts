@@ -1,3 +1,4 @@
+import { ensureDependencies } from './dependencies.ts';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -150,6 +151,7 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
     writeFileSync(log, `${currency.line}\n`);
     return { code: 1, log, checks: [{ name: 'currency', code: 1, seconds: 0 }] };
   }
+  ensureDependencies(cwd);
   const changed = options.changed ?? checkChangedFiles(cwd);
   const briefPath = join(cwd, '.temp/goal/brief.md');
   const briefText = existsSync(briefPath) ? readFileSync(briefPath, 'utf8') : undefined;

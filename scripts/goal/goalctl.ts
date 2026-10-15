@@ -1,3 +1,4 @@
+import { ensureDependencies } from './dependencies.ts';
 // Goal worker-process control: exclusive claims, dispatch, waits, QA slots, gate lanes, scope and merge.
 // The manager is the only caller of the state-changing commands; see docs/goals/README.md.
 import { typecheckWorkspaces, TYPECHECK_WORKSPACES } from '../qa/affected.ts';
@@ -61,6 +62,7 @@ function loadGoalCommand(fileName: string) {
 }
 
 async function main(argv: string[]): Promise<number> {
+  if (resolve(process.cwd()) === resolve(root)) ensureDependencies(root);
   loadSettings();
   (await import('./coordinator.ts')).recordTurnCommand(argv);
   const [command, ...rest] = argv;
@@ -185,6 +187,7 @@ async function main(argv: string[]): Promise<number> {
       console.log(JSON.stringify({ ...await usageReport(), measures: await goalMeasures(readLedger(), { root }) }, null, 2));
       return 0;
     case 'test': {
+      ensureDependencies(process.cwd());
       const at = rest.indexOf('--result-file');
       const resultFile = at < 0 ? undefined : rest[at + 1];
       if (at >= 0 && (!resultFile || resultFile.startsWith('--'))) throw new Error('--result-file needs a path');
@@ -193,6 +196,7 @@ async function main(argv: string[]): Promise<number> {
       return withTestAdmission(['bun', 'scripts/qa/test.ts', ...args], isHeavyTest(rest), resultFile);
     }
     case 'slot': {
+      ensureDependencies(process.cwd());
       warnHarnessCurrency(process.cwd());
       if (rest[0] === '--recovery') {
         const command = rest.slice(1);
