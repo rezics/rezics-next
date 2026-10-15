@@ -35,6 +35,8 @@ export default defineConfig({
       env: { VITEST_BROWSER_IFRAME_TIMEOUT: '180000' },
       browser: { enabled: true, headless: true,
       ...screenshotCommands,
-      provider: storyBrowser(), instances: [{ browser: 'chromium' }] } },
+      // Assert settled states, as Accounts does: accessibility checks must not
+      // sample a newly enabled control halfway through its opacity transition.
+      provider: storyBrowser({ contextOptions: { reducedMotion: 'reduce' } }), instances: [{ browser: 'chromium' }] } },
   }] },
 });

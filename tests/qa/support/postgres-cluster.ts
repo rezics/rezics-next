@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { Client } from 'pg';
 import { ensurePostgresSocketDirectory, releasePostgresSocketDirectory } from '../../../scripts/goal/postgres-socket.ts';
 import { processRunning } from './process-liveness.ts';
+import { repairCopiedPostgresCollations, type PostgresCollationRepair } from '../../../scripts/fixture/postgres-collation.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -35,6 +36,7 @@ export type PostgresClusterConnection = {
 };
 
 export type PostgresCluster = {
+  collationRepairs?: PostgresCollationRepair[];
   directory: string;
   dataDirectory: string;
   port: number;
@@ -227,6 +229,7 @@ export async function startPostgresCluster(options: PostgresClusterOptions = {},
       '-D', dataDirectory,
       ...(options.role ? ['-U', options.role] : []),
       '-A', 'trust', '--no-instructions', '--no-sync',
+      '--locale-provider=builtin', '--locale=C.UTF-8', '--encoding=UTF8',
     ], { stdio: 'pipe', timeout: 60_000 });
     if (options.serverSettings?.trim()) {
       appendFileSync(join(dataDirectory, 'postgresql.conf'), `\n${options.serverSettings.trim()}\n`);
@@ -249,13 +252,15 @@ export async function startPostgresCluster(options: PostgresClusterOptions = {},
  * `remove` stops the server and leaves those files for the caller to delete.
  */
 export async function startPreparedPostgresCluster(dataDirectory: string,
-  options: { role?: string } = {}): Promise<PostgresCluster> {
+  options: { role?: string; password?: string } = {}): Promise<PostgresCluster> {
   const user = clusterUser(options.role);
   const directory = dirname(dataDirectory);
   const log = join(directory, `${basename(dataDirectory)}.log`);
   const port = await freePort();
+  let collationRepairs: PostgresCollationRepair[];
   try {
     launch(dataDirectory, log, port);
+    collationRepairs = await repairCopiedPostgresCollations({ ...connectionFor(port, user), password: options.password });
   } catch (error) {
     if (postmasterPid(dataDirectory) !== undefined || pidsUsing(dataDirectory).length) {
       ensureStopped(dataDirectory, 'immediate', port);
@@ -263,5 +268,5 @@ export async function startPreparedPostgresCluster(dataDirectory: string,
     releasePostgresSocketDirectory(root, '/tmp', port);
     throw error;
   }
-  return openCluster({ directory, dataDirectory, port, user, log, ownsDirectory: false });
+  return { ...openCluster({ directory, dataDirectory, port, user, log, ownsDirectory: false }), collationRepairs };
 }

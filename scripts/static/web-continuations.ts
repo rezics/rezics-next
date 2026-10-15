@@ -2,7 +2,8 @@ import { repositoryGlob } from '../lib/repository-files.ts';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join, normalize } from 'node:path';
-import { parseSync, visitorKeys, type Node } from 'oxc-parser';
+import { visitorKeys, type Node } from 'oxc-parser';
+import { webProgram, isWebDataModule } from './web-source-scan.ts';
 import type { ListOpenApi } from './list-convention.ts';
 
 export interface WebSource { path: string; source: string }
@@ -109,9 +110,9 @@ export function pagedOperations(api: ListOpenApi): Set<string> {
 export function continuationInventory(sources: readonly WebSource[]): ContinuationInventory {
   const violations: ContinuationInventory = [];
   for (const file of sources.filter(file => production(file.path))) {
-    const parsed = parseSync(file.path, file.source);
-    if (parsed.errors.length) throw new Error(`${file.path}: ${parsed.errors[0]!.message}`);
-    const linkBuilders = browseLinkBuilders(file, parsed.program);
+    const program = webProgram(file);
+    if (isWebDataModule(program)) continue;
+    const linkBuilders = browseLinkBuilders(file, program);
     const visit = (node: Node, consumer: string, context: string, parent?: Node) => {
       if (['FunctionDeclaration', 'ArrowFunctionExpression', 'FunctionExpression'].includes(node.type)) {
         context = createHash('sha256').update(syntax(node)).digest('hex');
@@ -161,7 +162,7 @@ export function continuationInventory(sources: readonly WebSource[]): Continuati
       }
     };
     const objectParents = new WeakMap<Node, Node>();
-    visit(parsed.program, '<module>', createHash('sha256').update(syntax(parsed.program)).digest('hex'));
+    visit(program, '<module>', createHash('sha256').update(syntax(program)).digest('hex'));
   }
   return [...new Map(violations.map(violation => [JSON.stringify(violation), violation])).values()]
     .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));

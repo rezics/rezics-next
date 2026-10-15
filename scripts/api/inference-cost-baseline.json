@@ -1,14 +1,14 @@
 {
   "format": 1,
-  "sourceRevision": "09fdc402c1a798ee45b101a8aebe9dc75552804b",
-  "recordedAt": "2026-10-15T11:53:59.641Z",
+  "sourceRevision": "860229077bb2a11f0292f2dea9639c0c291c3492",
+  "recordedAt": "2026-10-15T18:16:39.753Z",
   "versions": {
     "bun": "1.4.3",
     "typescript": "7.0.2",
-    "typescript-6": "6.0.2",
-    "elysia": "2.0.0-beta.16",
-    "@elysia/eden": "2.0.0-beta.5",
-    "typebox": "1.3.34"
+    "typescript-6": "6.0.3",
+    "elysia": "2.0.0-beta.32",
+    "@elysia/eden": "2.0.0-beta.6",
+    "typebox": "1.3.37"
   },
   "host": {
     "platform": "linux",
@@ -24,83 +24,83 @@
   },
   "measurements": {
     "main": {
-      "instantiations": 21163034,
-      "checkSeconds": 24.008,
-      "appBytes": 1164455,
-      "routesBytes": 1177638
+      "instantiations": 22896714,
+      "checkSeconds": 20.588,
+      "appBytes": 1043191,
+      "routesBytes": 1010729
     },
     "web": {
-      "instantiations": 32007438,
-      "checkSeconds": 44.267,
-      "appBytes": 1164455,
-      "routesBytes": 1177638
+      "instantiations": 34928607,
+      "checkSeconds": 33.873,
+      "appBytes": 1043191,
+      "routesBytes": 1010729
     },
     "eden": {
-      "instantiations": 13903588,
-      "checkSeconds": 14.614,
-      "appBytes": 1164455,
-      "routesBytes": 1177638
+      "instantiations": 14759843,
+      "checkSeconds": 13.175,
+      "appBytes": 1043191,
+      "routesBytes": 1010729
     }
   },
   "samples": [
     {
       "main": {
-        "instantiations": 21163034,
-        "checkSeconds": 29.86,
-        "appBytes": 1164455,
-        "routesBytes": 1177638
+        "instantiations": 22896714,
+        "checkSeconds": 15.961,
+        "appBytes": 1043191,
+        "routesBytes": 1010729
       },
       "web": {
-        "instantiations": 32007438,
-        "checkSeconds": 47.643,
-        "appBytes": 1164455,
-        "routesBytes": 1177638
+        "instantiations": 34928607,
+        "checkSeconds": 31.204,
+        "appBytes": 1043191,
+        "routesBytes": 1010729
       },
       "eden": {
-        "instantiations": 13903588,
-        "checkSeconds": 12.706,
-        "appBytes": 1164455,
-        "routesBytes": 1177638
+        "instantiations": 14759843,
+        "checkSeconds": 10.138,
+        "appBytes": 1043191,
+        "routesBytes": 1010729
       }
     },
     {
       "main": {
-        "instantiations": 21163034,
-        "checkSeconds": 20.24,
-        "appBytes": 1164455,
-        "routesBytes": 1177638
+        "instantiations": 22896714,
+        "checkSeconds": 20.588,
+        "appBytes": 1043191,
+        "routesBytes": 1010729
       },
       "web": {
-        "instantiations": 32007438,
-        "checkSeconds": 44.267,
-        "appBytes": 1164455,
-        "routesBytes": 1177638
+        "instantiations": 34928607,
+        "checkSeconds": 35.978,
+        "appBytes": 1043191,
+        "routesBytes": 1010729
       },
       "eden": {
-        "instantiations": 13903588,
-        "checkSeconds": 14.964,
-        "appBytes": 1164455,
-        "routesBytes": 1177638
+        "instantiations": 14759843,
+        "checkSeconds": 13.752,
+        "appBytes": 1043191,
+        "routesBytes": 1010729
       }
     },
     {
       "main": {
-        "instantiations": 21163034,
-        "checkSeconds": 24.008,
-        "appBytes": 1164455,
-        "routesBytes": 1177638
+        "instantiations": 22896714,
+        "checkSeconds": 27.087,
+        "appBytes": 1043191,
+        "routesBytes": 1010729
       },
       "web": {
-        "instantiations": 32007438,
-        "checkSeconds": 43.154,
-        "appBytes": 1164455,
-        "routesBytes": 1177638
+        "instantiations": 34928607,
+        "checkSeconds": 33.873,
+        "appBytes": 1043191,
+        "routesBytes": 1010729
       },
       "eden": {
-        "instantiations": 13903588,
-        "checkSeconds": 14.614,
-        "appBytes": 1164455,
-        "routesBytes": 1177638
+        "instantiations": 14759843,
+        "checkSeconds": 13.175,
+        "appBytes": 1043191,
+        "routesBytes": 1010729
       }
     }
   ]

@@ -6,11 +6,11 @@
     ".": "./src/index.ts"
   },
   "peerDependencies": {
-    "react": "19.3.0"
+    "react": "19.3.1"
   },
   "devDependencies": {
-    "@types/react": "19.2.18",
-    "react": "19.3.0",
+    "@types/react": "19.3.0",
+    "react": "19.3.1",
     "typescript": "7.0.2"
   }
 }

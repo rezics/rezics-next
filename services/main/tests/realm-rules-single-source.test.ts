@@ -131,7 +131,7 @@ function readSession(governance: GovernanceRules, profileRules: unknown, summary
 }
 
 test('profile publication refuses rules on every matched route form', async () => {
-  const request = new Elysia().error(({ error, request, route, params }) =>
+  const request = new Elysia().onError(({ error, request, route, params }) =>
     realmProfileSchemaError(error, request, route, params))
     .use(realmProfileRoutes({} as never));
   for (const path of [

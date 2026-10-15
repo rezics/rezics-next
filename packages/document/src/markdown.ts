@@ -1,7 +1,5 @@
-/// <reference path="./markdown-it-rule.d.ts" />
 // SPDX-License-Identifier: Apache-2.0
 import MarkdownIt from 'markdown-it';
-import blockquote from 'markdown-it/lib/rules_block/blockquote.mjs';
 import { Schema } from 'prosemirror-model';
 import { defaultMarkdownParser, MarkdownParser } from 'prosemirror-markdown';
 import { normalizeDocument, withDocumentIds } from './index.ts';
@@ -25,6 +23,11 @@ const nodeNames: Record<string, string> = {
 const markNames: Record<string, string> = { strong: 'bold', em: 'italic' };
 
 const tokenizer = new MarkdownIt('commonmark', { html: false });
+// Obtain the built-in rule through the public parser API; package internals
+// are not exported by markdown-it 15.
+const quoteRules = new MarkdownIt.ParserBlock().ruler;
+quoteRules.enableOnly('blockquote');
+const blockquote = quoteRules.getRules('')[0]!;
 // Reddit's existing >!spoiler!< spelling starts like a CommonMark blockquote.
 tokenizer.block.ruler.at(
   'blockquote',

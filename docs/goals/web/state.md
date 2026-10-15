@@ -1,5 +1,100 @@
 # State
 
+Checkpoint 5d008d59-27a4-4601-b876-106bd056a646 consolidates handled events
+task:G-2674:12, mail:5e29ae25-a413-4840-9a67-df9d8e344e10,
+task:G-2462:13, mail:4f43dece-2ea5-4f90-861c-c7d15c50ac0b and
+mail:d077b1cd-c6dc-4d6c-b611-589426275d9e. These dispositions supersede
+the affected holds below; later events retain their own decisions.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2674 | Task:G-2674:12 and decision `aee4b6569d` retain three consecutive browser passes (`20261015t193150-c51003`, `20261015t193801-870024`, `20261015t194429-70a0a5`) through `06de1f79d4`, but refuse landing on supplemental checks and the surface-selector mismatch. Mail:5e29ae25 and decision `00603aac4d` release the Program-ruling hold: classify as tooling with no rows, admit both inventory paths and reclaim before resuming integration. Preserve G-2675's landed corrections, unrelated proof expectations, strict registration checks and all journey assertions; apply only this journey's pending-marker removal, citations and count delta. No browser rerun is needed for an inventory-only change. Acceptance requires the complete coverage test and required types/lint/guards check on the integrated tree. The deciding turn authorized continuation; later handoffs retain their own decisions. A landing lock now exists: leave the brief and landing untouched, with no duplicate start or closure here. No API cell or whole surface row is promoted. |
+| G-2462 | Task:G-2462:13 and decision `c787c5ec68` reject landing after two failed canonical gates. Latest `run-K92Qfp` passed types/lint/AST and affected tests with confirmed main failures excused, but filtering timed out at 5.25s and stories were not reached. Mail:4f43dece assigns shared scan acceleration to G-2679 without raising timeouts. Mail:d077b1cd and decision `eb6019256f` keep the worker exited until that already-running landing is confirmed on main; unchanged inventories, planted-violation/cache-invalidation tests and faster standalone scans establish no canonical-load headroom. The next authorized continuation incorporates the correction and runs the complete canonical gate, including affected consumers, guards and stories, reporting initial and retry timings and every timeout for filtering, continuation and accepted-command guards. A passing retry alone does not establish headroom; another exhausted budget goes to Program and blocks acceptance. Preserve all six cells, recording `9269872c2b`, production replay/tests/stories `a0ebdb9f45`, and applicable integration and 18-story phone/desktop evidence. No timeout increase, assertion weakening, surface harness repair, waiver or landing acceptance. Later attempts are separate events. |
+
+G-2234's shared-path hold and G-2585's Program-owned retained-corpus hold
+remain as recorded below. This checkpoint accepts no new row or persona cell.
+
+The method's measures, current status and latest efficiency report were read.
+Concurrent scope remains 67/68 API rows and 402 proved/6 pending persona cells.
+Web's first-attempt share is 25% overall and 6% today (5 of 81); attempts per
+landed task have median 2.5 and maximum 25 (G-2237). Recorded tokens are
+2051.3M input/13M output, with two sessions unavailable and tokens per proved
+row unavailable. Attempt counts are 71 first, 50 step, 214 fix and 3 capacity;
+11 fixes are inferred from unavailable handoffs. Retained refusals count
+0 outcome, 11 gate, 0 failing-test findings and 18 other. These aggregate
+readings are not costs attributed to these five events. The latest efficiency
+report remains dated 2026-10-13 21:49 UTC. These events classify repeated work
+as an E2E brief's gate-kind/inventory mismatch and shared static-guard scan
+cost. Program's tooling ruling and shared guard repair address those causes;
+retaining applicable browser/capture evidence avoids unchanged reruns. Broader
+load still required guard retries, so no efficiency gain or headroom is inferred.
+
+All three supplied mails were acknowledged in their deciding turns; their
+acknowledgements were confirmed here. Both task events have recorded decisions.
+This checkpoint acknowledges their consolidation and supplies no new mail.
+It changes only this file and starts no worker, landing, closure or watcher.
+
+## Retained checkpoint bb27caf8
+
+Checkpoint bb27caf8-1d34-45db-82aa-75a980ce8cb8 consolidates handled events
+task:G-2462:10, mail:be780089-5c29-4f28-b8bf-f94028b4cef8,
+mail:4bd60a72-b6b2-4da5-ae56-1d1a5a55a47e and
+mail:66583548-964b-4f91-8811-f87f8ae094ce. These dispositions supersede
+the affected holds below; later events retain their own decisions.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2462 | Task:G-2462:10 leaves `527b24f390` unaccepted: six-persona production replay, 19 mapping tests, answer-record guard, 18 inspected stories and integration run `20261015t183902-8aa9e9` passed, but complete gate `run-LckSXp` failed. Decision `43cecc5ea3` removes the integration test only from the surface selector; its separate proof remains required. Mail:be780089 assigns shared gate recovery to G-2676 and inventory repair to web. Mail:66583548 reports G-2676's measured unit shards and isolation of deliberately failed child reports, with 45 tests passing in QA `20261015t190720-ad9548`; this is infrastructure proof, not a roster verdict. Program's later brief decision `d6fb35a086` records the fix on main and authorizes rebase and the complete gate rerun. Attempt 11 was already started; its result is a separate event. Preserve all six cells and applicable capture/inspection evidence; accept only after the complete canonical gate, including affected consumers, guards and stories. No waiver or landing accepted. |
+| G-2675 | Task:G-2462:10 created and dispatched the bounded inventory repair at `ce5c5f56f2`. Mail:4bd60a72 and decision `b247337343` additionally authorize the five missing-module citations in `scripts/qa/cases/launch-coverage.ts` to name their existing direct registered tests under OWNER CHANGES. The path was reclaimed and the worker resumed. Preserve proof evidence, scope, real gaps and strict registration checks; no proof promotion or harness work. The ledger now shows verified and the brief archived; that later disposition is not a new acceptance or closure by this checkpoint. |
+
+G-2234's shared-path hold and G-2585's Program-owned retained-corpus hold
+remain as recorded below. No API row or persona cell is promoted here.
+The method's measures, current status and latest efficiency report were read.
+Scope remains 67/68 API rows and 402 proved/6 pending persona cells. Web's
+first-attempt share is 26% overall and 7% today (5 of 73); attempts per landed
+task have median 2.5 and maximum 25 (G-2237). Recorded input/output tokens
+are 2046.2M/13M, with two sessions unavailable and tokens per proved row
+unavailable. Attempt counts are 71 first, 49 step, 206 fix and 3 capacity;
+11 fixes are inferred from unavailable handoffs. Retained refusals count
+0 outcome, 11 gate, 0 failing-test findings and 18 other. These are aggregate
+readings, not costs attributed to these four events. The latest efficiency
+report remains dated 2026-10-13 21:49 UTC. These events
+identify gate budgeting, child-report contamination and stale inventory
+expectations as shared causes; the recorded repairs preserve the acceptance
+bar. No efficiency improvement is inferred before a comparable measurement.
+
+All three supplied mails were acknowledged in their deciding turns; their
+acknowledgements were confirmed here. This checkpoint supplies no new mail
+to acknowledge. It changes only this file and starts no worker, landing,
+closure, retry or watcher.
+
+## Retained checkpoint a93e497a
+
+Checkpoint a93e497a-d9eb-4254-b6a8-29e44fc89eeb consolidates handled events
+task:G-2234:5 and task:G-2585:7. These dispositions supersede the affected
+holds below; other tasks and later events retain their own decisions.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2234 | Task:G-2234:5 reports no new edits or verification: G-2462 holds the needed shared paths. Keep exited until those claims are released, then restore the needed claims and reclaim before an authorized resume. Finish the production-route replay/access integration, phone/desktop inspection and complete surface gate. No new brief decision, landing or whole-row proof was accepted. |
+| G-2585 | Task:G-2585:7 and brief decision `0e9245e2be` replace the earlier G-2587 hold with G-2668's retained-source manifest prerequisite, reported in QA `20261015t180959-989152`. Keep exited until the correction is available on the integration baseline; Program owns the resume. Do not retry capture or repair the shared harness here. Then incorporate the correction and finish six-persona production captures, answer-records, zero-miss replay, phone/desktop inspection and the complete affected gate. Focused passing checks accept no captures or screenshots and do not complete the surface gate. |
+
+The method's measures, current status and latest efficiency report were read.
+Concurrent scope is 67/68 API rows and 402 proved/6 pending persona cells;
+this is a ledger measurement, not surface acceptance by these events. Codex,
+Codex-1 and Codex-2 use 10%, 9% and 1% of their weekly windows respectively.
+The latest efficiency report remains dated 2026-10-13 21:49 UTC and supplies
+no current tokens-per-proved-row reading; earlier attempt measures retain
+their checkpoint attribution. These two stops are shared-path ownership and
+a Program-owned retained-corpus fault, not accepted surface corrections.
+No efficiency improvement is inferred and no additional work is decided.
+
+Both task events were acknowledged in their deciding turns. This checkpoint
+supplies no mail to acknowledge and acknowledges their consolidation only.
+It changes only this file and starts no worker, landing, closure or watcher.
+
+## Retained checkpoint 6ca2314e
+
 Checkpoint 6ca2314e-45fa-491e-b0c5-74dea042fbdd consolidates handled events
 mail:d32cd50f-3ca9-4a2b-a9cb-4186047bfc10 and task:G-2586:22.
 This disposition supersedes G-2586's preview-proof remainder below; other

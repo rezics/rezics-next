@@ -166,7 +166,7 @@ test('a cutover crash after the hold is written makes a Work read unavailable un
     appendFileSync(join(restoredData, 'postgresql.auto.conf'),
       "\narchive_mode = off\nrestore_command = 'false'\n");
     writeFileSync(join(restoredData, 'recovery.signal'), '');
-    restoredCluster = await startPreparedPostgresCluster(restoredData, { role: 'postgres' });
+    restoredCluster = await startPreparedPostgresCluster(restoredData, { role: 'postgres', password: compose.POSTGRES_PASSWORD });
     const restoredPool = (database: string) => {
       const pool = new Pool({ host: '127.0.0.1', port: restoredCluster!.port, database,
         user: 'postgres', password: compose.POSTGRES_PASSWORD! });

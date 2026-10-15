@@ -21,12 +21,12 @@ const physicalNamespace = sha256(root);
 // path an API corpus input. Cleanup can affect only this checkout's resources.
 const backupIdentity = (key: string, namespace = physicalNamespace) => `realm-${sha256(stable([namespace, key])).slice(0, 54)}`;
 
-export async function realmSourceInputs() {
-  const files = producerModules(root, ['tests/qa/support/realm-discussion-source.ts',
+export async function realmSourceInputs(sourceRoot = root) {
+  const files = producerModules(sourceRoot, ['tests/qa/support/realm-discussion-source.ts',
     'tests/qa/support/realm-discussion-source-runtime.ts', 'tests/qa/support/personas.ts',
     'yarn.lock', 'package.json', 'services/main/package.json', 'services/content/package.json', 'services/account/package.json']);
-  return realmDiscussionSourceSpecification({ ...sourceFileDigests(root, files), ...migrationInventory(root) },
-    JSON.parse(stable({ storage: loadCompatibility(root), postgres: postgresImage() })) as RetainedOwnerState);
+  return realmDiscussionSourceSpecification({ ...sourceFileDigests(sourceRoot, files), ...migrationInventory(sourceRoot) },
+    JSON.parse(stable({ storage: loadCompatibility(sourceRoot), postgres: postgresImage() })) as RetainedOwnerState);
 }
 
 /** Restore changes transport addresses; it preserves Account's logical issuer

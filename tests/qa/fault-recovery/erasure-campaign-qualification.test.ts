@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
 import { readManifest } from '../../../scripts/fixture/build.ts';
@@ -331,8 +331,10 @@ test(
         workAt(corpus, i + 1),
       );
       const unrelated = `urn:rezics:content:revision:${randomUUID()}`;
-      const keptPublic = `urn:rezics:content:match-unit:${randomUUID()}`;
-      const keptPrivate = `urn:rezics:content:private-unit:${randomUUID()}`;
+      // Synthetic counterexamples carry no Content source pins. Keep them in the
+      // campaign namespace, like the target units, so native Content checks stay exact.
+      const keptPublic = `urn:rezics:campaign:kept-public-unit:${nonce}`;
+      const keptPrivate = `urn:rezics:campaign:kept-private-unit:${nonce}`;
       const forbiddenPublic = `erasurecampaignforbidden${nonce}`;
       const forbiddenPrivate = `erasurecampaignprivate${nonce}`;
       const retainedPhrase = `erasurecampaignretained${nonce}`;
@@ -373,6 +375,9 @@ test(
         const campaignFile = join(evidenceDirectory, `campaign-${index}.tsv`);
         campaignFiles.set(index, campaignFile);
         writeFileSync(campaignFile, rows, { mode: 0o400 });
+        // The native container runs as UID 10001. Its read-only bind needs read
+        // permission; the enclosing 0700 evidence directory keeps host access private.
+        chmodSync(campaignFile, 0o444);
         const nq: string[] = [];
         const quad = (s: string, p: string, o: string, graph: string) =>
           nq.push(`<${s}> <${p}> ${o} <${graph}> .`);

@@ -1,4 +1,4 @@
-import { Elysia, ParseError, ValidationError } from 'elysia';
+import { Elysia, ParseError, ValidationError, status, type Context } from 'elysia';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AccountAssertionDenied, verifyRequestAccount } from '../account/verify-assertion.ts';
 import {
@@ -10,6 +10,7 @@ import {
 import { anonymousIdentity, type RateLimitOptions, type RateLimitStore } from './store.ts';
 import { PrincipalBudgetCache } from './principal-cache.ts';
 import { problem } from '../../routes/problems.ts';
+import { legacyFailureResponse } from '../problem.ts';
 
 export interface MainRateLimit {
   store: RateLimitStore;
@@ -26,7 +27,12 @@ export function rateLimitHook(
   const pageResolution = (request: Request) =>
     (request.method === 'GET' || request.method === 'HEAD') &&
     new URL(request.url).pathname === '/v1/addresses/resolve';
-  const consume = async (request: Request, peer: string | undefined, family: RateLimitFamily) => {
+  const consume = async (
+    request: Request,
+    peer: string | undefined,
+    family: RateLimitFamily,
+    set: Context['set'],
+  ) => {
     if (!limit) return;
     if (pageResolution(request)) {
       if (charged.has(request)) return;
@@ -55,86 +61,70 @@ export function rateLimitHook(
         family,
         limit.budgets[principalClass][family],
       );
-      if (!decision.allowed)
-        return Response.json(
-          {
-            type: 'about:blank',
-            status: 429,
-            code: 'rate_limited',
-            title: 'Request budget exhausted',
-            family,
-          },
-          {
-            status: 429,
-            headers: {
-              'content-type': 'application/problem+json',
-              'retry-after': String(decision.retryAfter),
-              'cache-control': 'no-store',
-            },
-          },
-        );
-    } catch (error) {
-      const status = error instanceof AccountAssertionDenied ? 401 : 503;
-      return Response.json(
-        {
+      if (!decision.allowed) {
+        set.headers['content-type'] = 'application/problem+json';
+        set.headers['retry-after'] = String(decision.retryAfter);
+        set.headers['cache-control'] = 'no-store';
+        return status(429, {
           type: 'about:blank',
-          status,
-          code: status === 401 ? 'invalid_account_assertion' : 'rate_limit_unavailable',
-          title: status === 401 ? 'Account assertion refused' : 'Request budget unavailable',
-        },
-        {
-          status,
-          headers: {
-            'content-type': 'application/problem+json',
-            'cache-control': 'no-store',
-            ...(status === 503 ? { 'retry-after': '5' } : {}),
-          },
-        },
-      );
+          status: 429,
+          code: 'rate_limited',
+          title: 'Request budget exhausted',
+          family,
+        });
+      }
+    } catch (error) {
+      const code = error instanceof AccountAssertionDenied ? 401 : 503;
+      set.headers['content-type'] = 'application/problem+json';
+      set.headers['cache-control'] = 'no-store';
+      if (code === 503) set.headers['retry-after'] = '5';
+      return status(code, {
+        type: 'about:blank',
+        status: code,
+        code: code === 401 ? 'invalid_account_assertion' : 'rate_limit_unavailable',
+        title: code === 401 ? 'Account assertion refused' : 'Request budget unavailable',
+      });
     }
   };
   return new Elysia({ name: 'main-rate-limit-v1' })
-    .setup(() => {
+    .onStart(() => {
       limit?.store.startExpirySweep?.();
     })
-    .cleanup(async () => {
+    .onStop(async () => {
       await limit?.store.stopExpirySweep?.();
     })
-    .beforeHandle('global', async function enforceRateLimit({ request, server }) {
+    .onBeforeHandle('global', async function enforceRateLimit({ request, server, set }) {
       // Embedded route fixtures may omit deployment dependencies. The HTTP
       // composition root always supplies the store; no runtime fail-open switch.
       if (!limit) return;
       const family = rateLimitFamily(request.method, new URL(request.url).pathname);
       if (family === null) return;
-      if (family === undefined)
-        return Response.json(
-          {
-            type: 'about:blank',
-            status: 503,
-            code: 'rate_limit_unclassified',
-            title: 'Request budget policy unavailable',
-          },
-          {
-            status: 503,
-            headers: {
-              'content-type': 'application/problem+json',
-              'cache-control': 'no-store',
-              'retry-after': '5',
-            },
-          },
-        );
+      if (family === undefined) {
+        set.headers['content-type'] = 'application/problem+json';
+        set.headers['cache-control'] = 'no-store';
+        set.headers['retry-after'] = '5';
+        return status(503, {
+          type: 'about:blank',
+          status: 503,
+          code: 'rate_limit_unclassified',
+          title: 'Request budget policy unavailable',
+        });
+      }
       // Page navigation must first establish a miss. Batch enumeration,
       // availability and revision inventory retain their pre-read budgets.
       if (pageResolution(request)) return;
-      return consume(request, server?.requestIP(request)?.address, family);
+      // Native validators inspect the status body, so pass the Problem object
+      // directly while preserving non-success statuses in Eden's route union.
+      return consume(request, server?.requestIP(request)?.address, family, set);
     })
     .mapResponse('global', async ({ request, server, responseValue, set }) => {
       if (!pageResolution(request)) return;
       const status = responseValue instanceof Response ? responseValue.status : set.status;
       if (status !== 400 && status !== 404 && status !== 422) return;
-      return consume(request, server?.requestIP(request)?.address, 'address');
+      const refusal = await consume(request, server?.requestIP(request)?.address, 'address', set);
+      return refusal ? legacyFailureResponse(refusal, set) : undefined;
     })
-    .error('global', async ({ request, server, error }) => {
+    .onError('global', async ({ request, server, error, set }) => {
       // Validation precedes beforeHandle. Cover standalone route plugins too;
       // the composition root's own 400 is charged by mapResponse above.
       if (
@@ -143,7 +133,7 @@ export function rateLimitHook(
       )
         return;
       return (
-        (await consume(request, server?.requestIP(request)?.address, 'address')) ??
+        (await consume(request, server?.requestIP(request)?.address, 'address', set)) ??
         problem(400, 'invalid_request', 'Request does not match the Work contract')
       );
     });

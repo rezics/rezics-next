@@ -20,10 +20,13 @@ const property = (value: Value, key: string): Value => alternatives(choices(valu
 const callable = (node: ts.Node): node is Callable => ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)
   || ts.isArrowFunction(node) || ts.isMethodDeclaration(node);
 const sources = new Map<string, ts.SourceFile>();
+const parsedSources = new Map<string, ts.SourceFile>();
 export function resetCommandSources(): void { sources.clear(); }
 export function commandSource(file: string): ts.SourceFile {
-  // A guard invocation may rewrite fixtures between scans; never retain stale source.
-  const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+  const text = readFileSync(file, 'utf8');
+  const previous = parsedSources.get(file);
+  const source = previous?.text === text ? previous : ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  parsedSources.set(file, source);
   sources.set(file, source);
   return source;
 }

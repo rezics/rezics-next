@@ -10,11 +10,11 @@
   },
   "dependencies": {
     "@rezics/document": "workspace:*",
-    "drizzle-orm": "0.45.3",
-    "pg": "8.23.0"
+    "drizzle-orm": "0.45.4",
+    "pg": "8.23.1"
   },
   "devDependencies": {
-    "@types/bun": "1.4.2",
+    "@types/bun": "1.4.3",
     "@types/pg": "8.23.1",
     "typescript": "7.0.2"
   }

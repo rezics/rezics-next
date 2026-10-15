@@ -72,8 +72,9 @@ async function responseBody(page: Page, body: string, ref: string, link: string 
     for (const marker of markers) marker.parentNode?.removeChild(marker);
     // A font hint can move wholly into HTTP Link. Lift its complete metadata back into the compared body.
     const remaining = (link ?? '').split(/,\s*(?=<)/).filter(part => {
-      const style = part.match(/^<(\/_next\/static\/css\/[^>]+\.css)>; rel=preload; as="style"$/);
-      if (style && [...doc.querySelectorAll('link[rel="stylesheet"]')].some(node => node.getAttribute('href') === style[1])) return false;
+      const style = part.match(/^<(\/_next\/static\/css\/[^>]+\.css)>; rel=preload; as="style"(; crossorigin="anonymous")?$/);
+      if (style && [...doc.querySelectorAll('link[rel="stylesheet"]')].some(node =>
+        node.getAttribute('href') === style[1] && (!style[2] || ['', 'anonymous'].includes(node.getAttribute('crossorigin') ?? 'missing')))) return false;
       const font = part.match(/^<(\/_next\/static\/media\/[^>]+\.woff2)>; rel=preload; as="font"; crossorigin="anonymous"; type="font\/woff2"$/);
       if (!font) return Boolean(part);
       if (![...doc.querySelectorAll('link[rel="preload"][as="font"]')].some(node => node.getAttribute('href') === font[1])) {
@@ -91,7 +92,13 @@ async function responseBody(page: Page, body: string, ref: string, link: string 
       for (const attribute of attributes) preload.setAttribute(attribute.name, attribute.value);
     }
     preloads.sort((a, b) => a.outerHTML.localeCompare(b.outerHTML));
-    for (const preload of preloads) doc.head.append(preload);
+    // React may repeat an identical font hint when the head and a segment flush
+    // separately. Retain every distinct complete tag, including its metadata.
+    const seenPreloads = new Set<string>();
+    for (const preload of preloads) {
+      if (seenPreloads.has(preload.outerHTML)) preload.remove();
+      else { seenPreloads.add(preload.outerHTML); doc.head.append(preload); }
+    }
     return { body: doc.documentElement.outerHTML, primary: primary.join(''), compatibility: compatibility.join(''), link: remaining.join(', ') };
   }, { html: normalizeAddress(body, ref), link });
   expect(content.primary).toBe(content.compatibility);

@@ -125,9 +125,10 @@ import { ownerRoutes } from '../../../services/main/src/routes/owners.ts';
 import { ratingAccount, restoreRatingAccount, type RetainedRatingAuth } from '../../../tests/qa/support/rating-account.ts';
 import { stable } from '../../../scripts/fixture/corpus.ts';
 import { copyVolume, currentEngines, fixtureProject, postgresImage, removeVolumes, run, volumeExists } from '../../../scripts/fixture/stack.ts';
+import { repairCopiedPostgresCollations } from '../../../scripts/fixture/postgres-collation.ts';
 import { isRetainedJson, migrationInventory, type RetainedFileIntegrity, type RetainedJson, type RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
 import { fixtureModel } from '../../../scripts/fixture/model.ts';
-import { RetainedSourceRefusal, RetainedSources, SOURCE_PREPARATION_MS, sourceFileDigests, sourceKey, type RetainedSourceAdapter, type SourceContext, type RetainedSourceManifest } from '../../../scripts/qa/retained-source.ts';
+import { isRetainedSourceInput, RetainedSourceRefusal, RetainedSources, SOURCE_PREPARATION_MS, sourceFileDigests, sourceKey, type RetainedSourceAdapter, type SourceContext, type RetainedSourceManifest, type SourceInputs } from '../../../scripts/qa/retained-source.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { deliverRetainedContentEligibilityOnce } from '../../../services/main/src/modules/content-publication/eligibility-delivery.ts';
@@ -550,32 +551,6 @@ async function runOwnerRestoreErasureFixture(options: OwnerRestoreErasureFixture
   };
   const copyGraph = (from: string, to: string) => copyVolume(from, to, qa.dockerEnv);
   let retainedPort: number | undefined;
-  // Docker's libc can differ from the host running these disposable physical copies.
-  // Rebuild before acknowledging the new collation; refreshing alone leaves stale indexes.
-  const repairCopiedCollations = async (port: number, databaseNames: string[]) => {
-    const url = new URL(databases.urls.account);
-    url.hostname = '127.0.0.1'; url.port = String(port);
-    url.username = 'postgres'; url.password = qa.composeEnv.POSTGRES_PASSWORD!;
-    const catalog = new Client({ connectionString: url.toString() });
-    await catalog.connect();
-    try {
-      const mismatches = await catalog.query<{ datname: string }>(
-        `SELECT datname FROM pg_database WHERE datallowconn AND datname = ANY($1::text[])
-         AND datcollversion IS DISTINCT FROM pg_database_collation_actual_version(oid)`,
-        [databaseNames],
-      );
-      for (const { datname } of mismatches.rows) {
-        url.pathname = `/${datname}`;
-        const client = new Client({ connectionString: url.toString() });
-        await client.connect();
-        try {
-          const identifier = `"${datname.replaceAll('"', '""')}"`;
-          await client.query(`REINDEX DATABASE ${identifier}`);
-          await client.query(`ALTER DATABASE ${identifier} REFRESH COLLATION VERSION`);
-        } finally { await client.end(); }
-      }
-    } finally { await catalog.end(); }
-  };
   const admin = async (sql: string) => {
     const client = new Client({
       connectionString: `postgres://postgres:${encodeURIComponent(qa.composeEnv.POSTGRES_PASSWORD!)}@127.0.0.1:${retainedPort ?? qa.composeEnv.POSTGRES_PORT}/postgres`,
@@ -1527,11 +1502,10 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
           if (recovering) await Bun.sleep(100);
         }
         expect(recovering).toBe(false);
-        await repairCopiedCollations(retainedPort, [
-          ...Object.values(databases.urls).map(url => new URL(url).pathname.slice(1)),
-          new URL(saved.retainedRelayTemplate).pathname.slice(1),
-        ]);
       });
+      await timing.phase('retained.source-postgres-collation', () => repairCopiedPostgresCollations({
+        host: '127.0.0.1', port: retainedPort, user: 'postgres', password: qa.composeEnv.POSTGRES_PASSWORD,
+      }));
       const liveVolume = volume('source-current');
       await copyGraph(retainedSourceVolumes(retained!.context.key).current, liveVolume);
       const cutVolume = retainedSourceVolumes(retained!.context.key).cut;
@@ -1684,8 +1658,9 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
             if (recovering) await Bun.sleep(100);
           }
           expect(recovering).toBe(false);
-          await repairCopiedCollations(port,
-            Object.values(databases.urls).map(url => new URL(url).pathname.slice(1)));
+          await timing.phase('candidate.postgres-collation', () => repairCopiedPostgresCollations({
+            host: '127.0.0.1', port, user: 'postgres', password: qa.composeEnv.POSTGRES_PASSWORD,
+          }), ordinal);
           // Recovery connects as postgres while ordinary owner roles stay offline.
           await owners.account.query(
             'ALTER ROLE account NOLOGIN; ALTER ROLE access NOLOGIN; ALTER ROLE content NOLOGIN; ALTER ROLE relay NOLOGIN',
@@ -2075,9 +2050,10 @@ export function retainedVolumeInventory(volume: string, docker: NodeJS.ProcessEn
 export function producerModules(root: string, initial: readonly string[]): string[] {
   const paths = new Set<string>();
   const visit = (path: string) => {
-    if (paths.has(path)) return;
     const full = resolve(root, path);
     if (relative(root, full).startsWith('..')) throw new Error('producer input escapes checkout');
+    path = relative(root, full);
+    if (!isRetainedSourceInput(path) || paths.has(path)) return;
     paths.add(path);
     if (!path.endsWith('.ts')) return;
     for (const match of readFileSync(full, 'utf8').matchAll(/(?:from|import)\s*['"](\.[^'"]+)['"]/g)) {
@@ -2100,18 +2076,16 @@ export function producerModules(root: string, initial: readonly string[]): strin
   return [...paths].sort();
 }
 
-export function ownerErasureSourceAdapter(options: OwnerRestoreErasureFixtureOptions = {}): RetainedSourceAdapter<RetainedOwnerState, Awaited<ReturnType<typeof runOwnerRestoreErasureFixture>>> {
+export function ownerErasureSourceSpecification(root: string, options: OwnerRestoreErasureFixtureOptions,
+  compatibility: RetainedOwnerState): SourceInputs {
   if (Boolean(options.beforeCutApiSeed) !== Boolean(options.beforeCutSource))
     throw new Error('foreground seed requires explicit source identity, inputs and files');
   if (options.beforeCutSource && (!options.beforeCutSource.identity || !options.beforeCutSource.files.length))
     throw new Error('foreground seed requires an authored identity and source-affecting files');
-  const root = resolve(import.meta.dir, '../../..');
-  const docker = qaStack(requireFaultTier().runId).dockerEnv;
-  const engines = currentEngines(docker);
   const modules = producerModules(root, ['tests/qa/fault-recovery/owner-restore-erasure-fixture.ts',
     'yarn.lock', 'package.json', 'services/main/package.json', 'services/content/package.json', 'services/account/package.json',
     ...(options.beforeCutSource?.files ?? [])]);
-  const specification = {
+  return {
     producer: 'owner-erasure-source', version: '1',
     files: { ...sourceFileDigests(root, modules), ...migrationInventory(root) },
     inputs: {
@@ -2119,9 +2093,17 @@ export function ownerErasureSourceAdapter(options: OwnerRestoreErasureFixtureOpt
       quotedBody: 'authored annotation stays', language: 'en', direction: 'ltr',
       foregroundSeed: options.beforeCutSource ?? null, laterApiAdmission: options.laterApiAdmission ?? false,
     },
-    compatibility: JSON.parse(JSON.stringify({ engines, selectedNativeImage: pinnedImage(),
-      modelGeneration: fixtureModel(root).generation, postgresNative: execFileSync('postgres', ['--version'], { encoding: 'utf8' }).trim() })) as RetainedOwnerState,
+    compatibility,
   };
+}
+
+export function ownerErasureSourceAdapter(options: OwnerRestoreErasureFixtureOptions = {}): RetainedSourceAdapter<RetainedOwnerState, Awaited<ReturnType<typeof runOwnerRestoreErasureFixture>>> {
+  const root = resolve(import.meta.dir, '../../..');
+  const docker = qaStack(requireFaultTier().runId).dockerEnv;
+  const engines = currentEngines(docker);
+  const specification = ownerErasureSourceSpecification(root, options,
+    JSON.parse(JSON.stringify({ engines, selectedNativeImage: pinnedImage(),
+      modelGeneration: fixtureModel(root).generation, postgresNative: execFileSync('pg_config', ['--version'], { encoding: 'utf8' }).trim() })) as RetainedOwnerState);
   const sourceBuild = ownerErasureSourceBuild(phase => runOwnerRestoreErasureFixture(options, undefined, phase));
   return {
     specification,

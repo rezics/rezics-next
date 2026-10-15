@@ -1,8 +1,12 @@
+import { isolateTestSettings } from './fixtures/settings.ts';
+
 import { describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { efficiencyCommand, type EfficiencyRecord } from './efficiency.ts';
+
+isolateTestSettings();
 
 const FIXTURES = join(import.meta.dir, 'fixtures', 'efficiency');
 const TEST_ROOT = join(import.meta.dir, '../../.temp/efficiency-tests');
@@ -40,7 +44,7 @@ async function run(f: ReturnType<typeof fixture>, args: string[], at = '2026-10-
   const status = await efficiencyCommand(args, {
     stateDirectory: f.stateDirectory,
     nowMs: Date.parse(at),
-    env: {},
+    env: { GOAL_SETTINGS_DIRECTORY: join(f.root, '.goalctl') },
     print: line => output.push(line),
     reportError: line => errors.push(line),
     reportDiagnostic: line => diagnostics.push(line),

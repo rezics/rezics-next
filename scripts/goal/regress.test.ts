@@ -1,3 +1,5 @@
+import { isolateTestSettings } from './fixtures/settings.ts';
+
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statfsSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -24,11 +26,14 @@ import { appendInbox, checkoutNameLength, classify, regressionFailureCause, exec
   regressionBatchEnvironment, runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
 import { regressionLaneCount, regressionTiming, regressionTimingReport } from './regress.ts';
 
+isolateTestSettings();
+
 let repoSequence = 0;
 
 function repo(extraIntegration = 0) {
   const fixtureRoot = regressionCheckoutRoot(import.meta.dir, join(import.meta.dir, '../../.temp/r'));
   const dir = mkdtempSync(join(fixtureRoot, 'repo-'));
+  process.env.GOAL_SETTINGS_DIRECTORY = join(dir, '.goalctl');
   const checkoutRoot = join(fixtureRoot, `c${(repoSequence++).toString(36)}`);
   const git = (...args: string[]) => {
     const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });

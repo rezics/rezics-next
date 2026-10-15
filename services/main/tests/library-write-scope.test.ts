@@ -73,7 +73,7 @@ const mutations: Mutation[] = [
 function respond(plugin: { handle(request: Request): Promise<Response> }, incoming: Request) {
   // Library import intake throws its Account refusal. The composition root maps
   // it; a plugin mounted alone needs the same table in front.
-  return new Elysia().error(({ error }) => typedRefusal(error)).use(plugin as never).handle(incoming);
+  return new Elysia().onError(({ error }) => typedRefusal(error)).use(plugin as never).handle(incoming);
 }
 
 function request(operation: Pick<Mutation, 'method' | 'path' | 'body' | 'query'>) {

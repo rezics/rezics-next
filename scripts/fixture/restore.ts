@@ -22,6 +22,7 @@ import { redactCommandOutput } from './command-output.ts';
 import { fixtureModel } from './model.ts';
 import { alignFixtureModel, type FixtureModelAlignment } from './align-model.ts';
 import { ModelAlignmentTimeout } from './model-deadline.ts';
+import { repairCopiedPostgresCollations, type PostgresCollationRepair } from './postgres-collation.ts';
 
 export const RESTORE_DEADLINE_MS = 600_000;
 
@@ -61,6 +62,7 @@ export interface FixtureRestoreEvidence {
   deadlineMs: number; compatibility?: RestoreCompatibility; phases: Record<string, number>;
   copyMs?: Record<string, number>;
   modelAlignment?: FixtureModelAlignment;
+  collationRepairs?: PostgresCollationRepair[];
   appliedMigrations?: string[]; ready?: string[]; samples?: number; graph?: { generation: string; sequence: string };
   /** Active restore work; admission queueing is reported separately. */
   elapsedMs?: number; admissionWaitMs?: number;
@@ -201,6 +203,11 @@ export async function restoreFixture(id: string, target: string,
       }
     });
     const apps = runtime.readApps(join(targetDir, 'apps.env'));
+    evidence.collationRepairs = await phase('postgres-collation', () => {
+      const saved = readEnv(join(targetDir, 'compose.env'));
+      return repairCopiedPostgresCollations({ host: '127.0.0.1', port: Number(saved.POSTGRES_PORT),
+        user: 'postgres', password: saved.POSTGRES_PASSWORD });
+    });
     evidence.appliedMigrations = await phase('migrate', () => migrateFixtureOwners(apps));
     remaining();
     evidence.modelAlignment = await phase('align-model', () => runtime.alignModel(root, targetDir, apps, manifest,

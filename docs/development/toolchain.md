@@ -16,6 +16,14 @@ A few integration tests start a host PostgreSQL 18 with `initdb`; install the
 server and its contrib extensions (Fedora: `postgresql-server postgresql-contrib`)
 because Content migrations create `pg_trgm`.
 
+Compose and native QA clusters initialize with PostgreSQL's built-in `C.UTF-8`
+locale provider, so new physical fixtures share Unicode code-point ordering
+without inheriting different host and container glibc versions. Existing retained
+copies keep their original locale: restore rebuilds indexes before refreshing
+changed collation versions, and records repairs on the disposable copy. See
+[PostgreSQL locale providers](https://www.postgresql.org/docs/18/locale.html#LOCALE-PROVIDERS)
+and [collation version repair](https://www.postgresql.org/docs/18/sql-altercollation.html).
+
 The development host uses native Docker Engine 29.9 (`docker-ce`), context
 `default`, through `/var/run/docker.sock` as of 2026-10-14. It replaced Docker
 Desktop because the QEMU VM pinned up to 18 GiB of host RAM as shared memory
@@ -90,6 +98,76 @@ only the required package to `dependenciesMeta.<name>.built`; Yarn's global
 `enableScripts` remains disabled. The repository uses a private TypeScript 6
 parser for dependency-cruiser through `.yarnrc.yml`; product typechecks use the
 TypeScript version in their manifests.
+
+The October 2026 dependency refresh follows each existing release channel:
+stable dependencies follow `latest`, while Elysia and Storybook retain their
+beta and alpha lines. The maintainer authorized current releases, including
+ones younger than Yarn's one-day quarantine; the refresh used the command-local
+`YARN_NPM_MINIMAL_AGE_GATE=0` override without changing the install policy.
+
+Elysia beta.32 uses `onRequest`, `onStart`, `onStop`, `onBeforeHandle`,
+`onAfterResponse` and `onError`. Global admission refusals use typed `status`
+wrappers so Eden does not infer them as successful responses. The beta.2
+OpenTelemetry package still needs our socket/status patch. Generation after
+this group produced an identical Main OpenAPI contract, and the Eden consumer,
+OpenAPI, telemetry socket and private-delivery lifecycle checks passed.
+Native response validators require the Problem body directly inside a typed
+status result; global rate-limit and backpressure refusals preserve their
+status, media type and retry headers through that path. The address-miss
+response mapper serializes the same refusal at the final mapping boundary.
+Closed 429 response schemas also admit the existing optional budget `family`
+field: beta.32 validates typed admission replies against those schemas, so
+omitting the field from the schema turned upload refusals into validation errors.
+
+The inference baseline was recorded again with three fresh samples after the
+compiler environment changed and wave/2 merged. Relative to main’s previous
+baseline, Main, web and Eden instantiations rose by 8.2%, 9.1% and 6.2%; rendered
+route types shrank by 14.2%. Median checks were 20.588 s, 33.873 s and 13.175 s
+on the shared host. The recorded source revision includes the merged wave/2 tree.
+The baseline retains the existing 5% graph/display margin, timing margin and
+independent 30-second Eden wall limit. This records the cost of the new
+dependency cohort so future application changes are measured against it.
+
+Playwright, `@playwright/test` and the transitive `playwright-core` remain at
+main's 1.63.0 with its matching browser revision. Settlement observed different
+transport-loss behavior under 1.64.1 in the real-module forwarding and asset
+connection-reset tests in `scripts/qa/story-browser.test.ts`; the program held
+this browser cohort for separate investigation. Storybook 11 alpha.6, Vitest
+5.0.4 and its browser adapter remain upgraded; the adapter uses the installed
+Playwright rather than bundling another browser.
+Web story tests now use reduced motion, as Accounts already
+does, so automatic accessibility checks observe settled controls rather than
+an enabling opacity transition. Storybook asset forwarding retries only connection
+resets on idempotent asset GETs; HTTP errors, application API calls and stories
+are not retried. A real TCP-reset test covers that boundary. Browser journeys
+retain main’s loopback Chromium interface-change protection, route disposables
+and callback draining instead of intercepting assets; API commands are never replayed.
+The session lifecycle and bilingual Work-creation journeys allow 90 seconds
+for their multiple hydrated navigations; their existing assertions remain.
+
+The `typescript-6` aliases and dependency-cruiser's private parser use 6.0.3,
+the newest TypeScript release with the JavaScript compiler API. TypeScript
+7.0.2 lacks `createSourceFile`, which Astro's language service and our AST
+consumers need; the native product typechecker remains on 7.0.2.
+
+markdown-it 15 closes internal subpath exports and supplies its own types.
+The document adapter obtains its blockquote rule through the public parser API;
+the old private-module declaration and redundant DefinitelyTyped dependency are
+removed. Better Auth's Nanostores peer is deduplicated with the direct pin so
+its core types and plugin augmentations resolve to one instance. The OTLP test
+decoder models scalar values as the protocol's `oneof`, preserving explicit
+zero values under protobufjs 8.
+
+The newer accessibility run also exposed disabled radio labels being dimmed
+with their controls. Only the indicator now dims, preserving readable labels
+and help text while interaction remains disabled. The shared radio stories and
+the recorded Realm-creation and Zone-theme flows cover the correction.
+
+`@elysia/openapi` beta.6 still replaces authored `detail.responses` when a route
+also has a response schema: a focused probe lost its authored description and
+content schema. Keep the response overlay when rebasing onto the wave/2 tree;
+this refresh's starting tree did not contain it. The dependency groups preserved
+the existing generated Main contract; native pilot invariant checks also pass.
 
 `task dev` starts the shared local stack through Aspire in the main checkout.
 In a worktree it starts the Accounts app, web app and Storybook on allocated
@@ -320,7 +398,7 @@ by `goalctl` ([program](../goals/program/GOAL.md#how-managers-run-from-now-on));
 | Node.js | 26.8.2 | .nvmrc |
 | Yarn | yarn@4.18.0 | package.json |
 | Task | 3.53.1 | scripts/dev/cli.ts |
-| Aspire SDK | 13.5.4 | aspire.config.json |
+| Aspire SDK | 13.6.1 | aspire.config.json |
 | Go package oracle | 1.27.1 | scripts/package/go-oracle.ts |
 | Cargo package oracle | 1.98.1 | scripts/package/cargo-oracle.ts |
 | Repository index Rust/Cargo | 1.98.1 | tools/repo-index/Cargo.toml; Taskfile.yml |
@@ -332,40 +410,40 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 
 | Package | Pin | Manifest directories |
 | --- | --- | --- |
-| @ark-ui/react | 5.39.2 | packages/ui |
-| @ast-grep/cli | 0.45.3 | . |
+| @ark-ui/react | 5.39.3 | packages/ui |
+| @ast-grep/cli | 0.50.0 | . |
 | @astrojs/check | 0.9.10 | apps/about |
-| @astrojs/react | 7.0.0 | apps/about |
-| @better-auth/core | 1.7.5 | services/account |
-| @better-auth/oauth-provider | 1.7.5 | services/account |
-| @better-auth/passkey | 1.7.5 | services/account |
-| @better-auth/utils | 0.4.2 | services/account |
+| @astrojs/react | 7.0.1 | apps/about |
+| @better-auth/core | 1.7.9 | services/account |
+| @better-auth/oauth-provider | 1.7.9 | services/account |
+| @better-auth/passkey | 1.7.9 | services/account |
+| @better-auth/utils | 0.5.0 | services/account |
 | @better-fetch/fetch | 1.3.2 | services/account |
-| @cloudflare/vite-plugin | 1.58.0 | apps/accounts, apps/web |
-| @elysia/eden | 2.0.0-beta.5 | apps/web, services/account, services/main |
-| @elysia/openapi | 2.0.0-beta.4 | services/account, services/main |
-| @elysia/opentelemetry | 2.0.0-beta.1 | packages/observability |
+| @cloudflare/vite-plugin | 1.64.0 | apps/accounts, apps/web |
+| @elysia/eden | 2.0.0-beta.6 | apps/web, services/account, services/main |
+| @elysia/openapi | 2.0.0-beta.6 | services/account, services/main |
+| @elysia/opentelemetry | 2.0.0-beta.2 | packages/observability |
 | @emnapi/runtime | 1.11.3 | apps/about |
 | @fontsource-variable/geist-mono | 5.3.0 | apps/about, apps/web |
 | @fontsource-variable/manrope | 5.3.0 | apps/about, apps/accounts, apps/web |
-| @fontsource-variable/source-serif-4 | 5.3.0 | apps/about, apps/web |
+| @fontsource-variable/source-serif-4 | 5.3.1 | apps/about, apps/web |
 | @fontsource/manrope | 5.3.0 | apps/about |
 | @js-temporal/polyfill | 0.5.1 | services/main |
-| @microsoft/aspire-cli | 13.5.4 | apphost |
-| @modelcontextprotocol/client | 2.0.0 | services/main |
-| @modelcontextprotocol/server | 2.0.0 | services/main |
+| @microsoft/aspire-cli | 13.6.1 | apphost |
+| @modelcontextprotocol/client | 2.3.1 | services/main |
+| @modelcontextprotocol/server | 2.3.1 | services/main |
 | @opentelemetry/api | 1.9.1 | packages/observability |
-| @opentelemetry/api-logs | 0.222.0 | packages/observability |
-| @opentelemetry/core | 2.11.0 | packages/observability |
-| @opentelemetry/exporter-logs-otlp-proto | 0.222.0 | packages/observability |
-| @opentelemetry/exporter-metrics-otlp-proto | 0.222.0 | packages/observability |
-| @opentelemetry/exporter-trace-otlp-proto | 0.222.0 | packages/observability |
-| @opentelemetry/instrumentation-pg | 0.74.0 | packages/observability |
-| @opentelemetry/resources | 2.11.0 | packages/observability |
-| @opentelemetry/sdk-logs | 0.222.0 | packages/observability |
-| @opentelemetry/sdk-metrics | 2.11.0 | packages/observability |
-| @opentelemetry/sdk-node | 0.222.0 | packages/observability |
-| @opentelemetry/sdk-trace-base | 2.11.0 | packages/observability |
+| @opentelemetry/api-logs | 0.223.0 | packages/observability |
+| @opentelemetry/core | 2.12.0 | packages/observability |
+| @opentelemetry/exporter-logs-otlp-proto | 0.223.0 | packages/observability |
+| @opentelemetry/exporter-metrics-otlp-proto | 0.223.0 | packages/observability |
+| @opentelemetry/exporter-trace-otlp-proto | 0.223.0 | packages/observability |
+| @opentelemetry/instrumentation-pg | 0.75.0 | packages/observability |
+| @opentelemetry/resources | 2.12.0 | packages/observability |
+| @opentelemetry/sdk-logs | 0.223.0 | packages/observability |
+| @opentelemetry/sdk-metrics | 2.12.0 | packages/observability |
+| @opentelemetry/sdk-node | 0.223.0 | packages/observability |
+| @opentelemetry/sdk-trace-base | 2.12.0 | packages/observability |
 | @playwright/test | 1.63.0 | . |
 | @resvg/resvg-js | 2.6.2 | apps/about |
 | @rezics/account | workspace:* | apps/accounts |
@@ -375,101 +453,100 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @rezics/ui | workspace:* | apps/about, apps/accounts, apps/web |
 | @rezics/wiki-toolkit | workspace:* | packages/model, services/main |
 | @rezics/zone-sdk | workspace:* | apps/web |
-| @scalar/types | 0.18.3 | services/account, services/main |
-| @storybook/addon-a11y | 11.0.0-alpha.1 | apps/accounts, apps/web |
-| @storybook/addon-mcp | 11.0.0-alpha.1 | apps/web |
-| @storybook/addon-vitest | 11.0.0-alpha.1 | apps/accounts, apps/web |
-| @storybook/react-vite | 11.0.0-alpha.1 | apps/accounts, apps/web |
+| @scalar/types | 0.23.2 | services/account, services/main |
+| @storybook/addon-a11y | 11.0.0-alpha.6 | apps/accounts, apps/web |
+| @storybook/addon-mcp | 11.0.0-alpha.6 | apps/web |
+| @storybook/addon-vitest | 11.0.0-alpha.6 | apps/accounts, apps/web |
+| @storybook/react-vite | 11.0.0-alpha.6 | apps/accounts, apps/web |
 | @tailwindcss/vite | 4.3.3 | apps/about, apps/accounts, apps/web |
-| @tanstack/react-query | 5.103.2 | apps/web |
+| @tanstack/react-query | 5.104.3 | apps/web |
 | @tensorflow/tfjs | 4.22.0 | apps/web, services/main |
-| @tiptap/core | 3.31.4 | packages/ui |
-| @tiptap/extension-bubble-menu | 3.31.4 | packages/ui |
-| @tiptap/extension-image | 3.31.4 | packages/ui |
-| @tiptap/extension-list | 3.31.4 | packages/ui |
-| @tiptap/extension-placeholder | 3.31.4 | packages/ui |
-| @tiptap/extension-table | 3.31.4 | packages/ui |
-| @tiptap/extension-text-align | 3.31.4 | packages/ui |
-| @tiptap/extension-text-style | 3.31.4 | packages/ui |
-| @tiptap/extension-unique-id | 3.31.4 | packages/ui |
-| @tiptap/extensions | 3.31.4 | packages/ui |
-| @tiptap/pm | 3.31.4 | packages/ui |
-| @tiptap/react | 3.31.4 | packages/ui |
-| @tiptap/starter-kit | 3.31.4 | packages/ui |
-| @tiptap/suggestion | 3.31.4 | packages/ui |
-| @types/bun | 1.4.2 | apps/about, apps/accounts, packages/document, packages/model, packages/observability, services/account, services/content, services/main |
-| @types/markdown-it | 14.2.0 | packages/document |
+| @tiptap/core | 3.32.0 | packages/ui |
+| @tiptap/extension-bubble-menu | 3.32.0 | packages/ui |
+| @tiptap/extension-image | 3.32.0 | packages/ui |
+| @tiptap/extension-list | 3.32.0 | packages/ui |
+| @tiptap/extension-placeholder | 3.32.0 | packages/ui |
+| @tiptap/extension-table | 3.32.0 | packages/ui |
+| @tiptap/extension-text-align | 3.32.0 | packages/ui |
+| @tiptap/extension-text-style | 3.32.0 | packages/ui |
+| @tiptap/extension-unique-id | 3.32.0 | packages/ui |
+| @tiptap/extensions | 3.32.0 | packages/ui |
+| @tiptap/pm | 3.32.0 | packages/ui |
+| @tiptap/react | 3.32.0 | packages/ui |
+| @tiptap/starter-kit | 3.32.0 | packages/ui |
+| @tiptap/suggestion | 3.32.0 | packages/ui |
+| @types/bun | 1.4.3 | apps/about, apps/accounts, packages/document, packages/model, packages/observability, services/account, services/content, services/main |
 | @types/n3 | 1.26.4 | . |
-| @types/node | 26.6.2 | apphost, apps/about, apps/accounts, apps/web, packages/wiki-toolkit |
+| @types/node | 26.6.5 | apphost, apps/about, apps/accounts, apps/web, packages/wiki-toolkit |
 | @types/nodemailer | 8.0.2 | services/account |
 | @types/pg | 8.23.1 | packages/observability, services/account, services/content, services/main |
-| @types/react | 19.2.18 | apps/about, apps/accounts, apps/web, packages/ui, packages/zone-sdk |
-| @types/react-dom | 19.2.7 | apps/about, apps/accounts, apps/web, packages/ui |
-| @vinext/cloudflare | 1.0.0-beta.9 | apps/web |
-| @vitejs/plugin-react | 6.1.1 | apps/accounts, apps/web |
-| @vitejs/plugin-rsc | 0.5.35 | apps/accounts, apps/web |
-| @vitest/browser-playwright | 5.0.2 | apps/accounts, apps/web |
+| @types/react | 19.3.0 | apps/about, apps/accounts, apps/web, packages/ui, packages/zone-sdk |
+| @types/react-dom | 19.3.0 | apps/about, apps/accounts, apps/web, packages/ui |
+| @vinext/cloudflare | 1.0.0-beta.11 | apps/web |
+| @vitejs/plugin-react | 6.1.2 | apps/accounts, apps/web |
+| @vitejs/plugin-rsc | 0.5.38 | apps/accounts, apps/web |
+| @vitest/browser-playwright | 5.0.4 | apps/accounts, apps/web |
 | @xmldom/xmldom | 0.9.12 | packages/wiki-toolkit, services/main |
-| astro | 7.3.5 | apps/about |
+| astro | 7.3.8 | apps/about |
 | aws4fetch | 1.0.20 | services/main |
-| axe-core | 4.13.0 | apps/about, apps/web |
-| better-auth | 1.7.5 | services/account, services/main |
-| better-call | 1.4.0 | services/account |
+| axe-core | 4.14.0 | apps/about, apps/web |
+| better-auth | 1.7.9 | services/account, services/main |
+| better-call | 1.4.2 | services/account |
 | buffer | 6.0.3 | apps/web, services/main |
-| dependency-cruiser | 18.4.0 | . |
-| drizzle-orm | 0.45.3 | services/content |
-| elysia | 2.0.0-beta.16 | apps/web, packages/observability, services/account, services/main |
+| dependency-cruiser | 18.6.0 | . |
+| drizzle-orm | 0.45.4 | services/content |
+| elysia | 2.0.0-beta.32 | apps/web, packages/observability, services/account, services/main |
 | envalid | 8.2.0 | apps/accounts, apps/web, packages/observability, services/account, services/main |
 | exact-mirror | 1.2.6 | packages/observability, services/account, services/main |
 | fast-check | 4.10.2 | packages/model |
 | fflate | 0.8.3 | ., packages/wiki-toolkit |
 | iconv-lite | 0.7.3 | packages/wiki-toolkit |
 | jose | 6.2.12 | services/account, services/main |
-| knip | 6.38.0 | . |
+| knip | 6.41.0 | . |
 | kysely | 0.29.6 | services/account |
-| lucide-react | 1.47.0 | apps/about, apps/accounts, apps/web, packages/ui |
-| markdown-it | 14.3.2 | packages/document |
-| motion | 13.4.4 | apps/about |
-| n3 | 2.13.8 | . |
-| nanostores | 1.5.3 | services/account |
+| lucide-react | 1.57.0 | apps/about, apps/accounts, apps/web, packages/ui |
+| markdown-it | 15.0.2 | packages/document |
+| motion | 14.2.0 | apps/about |
+| n3 | 2.13.12 | . |
+| nanostores | 1.5.5 | services/account |
 | native-i18n | 0.2.0 | apps/accounts, apps/web |
-| next | 16.3.6 | apps/accounts, apps/web |
-| nodemailer | 10.0.10 | services/account |
+| next | 16.4.1 | apps/accounts, apps/web |
+| nodemailer | 10.1.1 | services/account |
 | nsfwjs | 4.4.0 | apps/web, services/main |
-| nuqs | 2.10.1 | apps/web |
+| nuqs | 2.10.2 | apps/web |
 | openapi-types | 12.1.3 | packages/observability, services/account, services/main |
-| oxfmt | 0.70.0 | . |
-| oxlint | 1.85.0 | . |
-| oxlint-tsgolint | 7.0.2003 | . |
-| pg | 8.23.0 | packages/observability, services/account, services/content, services/main |
+| oxfmt | 0.73.0 | . |
+| oxlint | 1.88.0 | . |
+| oxlint-tsgolint | 7.0.2004 | . |
+| pg | 8.23.1 | packages/observability, services/account, services/content, services/main |
 | playwright | 1.63.0 | apps/accounts, apps/web |
 | prosemirror-markdown | 1.13.8 | packages/document |
 | prosemirror-model | 1.25.12 | packages/document |
 | prosemirror-schema-basic | 1.2.5 | packages/document |
 | prosemirror-schema-list | 1.5.1 | packages/document |
 | prosemirror-tables | 1.8.5 | packages/document |
-| protobufjs | 7.6.6 | packages/observability |
-| react | 19.3.0 | apps/about, apps/accounts, apps/web, packages/ui, packages/zone-sdk |
-| react-dom | 19.3.0 | apps/about, apps/accounts, apps/web, packages/ui |
-| react-is | 19.3.0 | packages/ui |
-| react-server-dom-webpack | 19.3.0 | apps/accounts, apps/web |
+| protobufjs | 8.8.1 | packages/observability |
+| react | 19.3.1 | apps/about, apps/accounts, apps/web, packages/ui, packages/zone-sdk |
+| react-dom | 19.3.1 | apps/about, apps/accounts, apps/web, packages/ui |
+| react-is | 19.3.1 | packages/ui |
+| react-server-dom-webpack | 19.3.1 | apps/accounts, apps/web |
 | recharts | 3.10.1 | packages/ui |
-| satori | 0.33.5 | apps/about |
+| satori | 0.59.1 | apps/about |
 | sharp | 0.35.5 | services/main |
-| storybook | 11.0.0-alpha.1 | apps/accounts, apps/web |
+| storybook | 11.0.0-alpha.6 | apps/accounts, apps/web |
 | tailwind-variants | 3.3.1 | packages/ui |
 | tailwindcss | 4.3.3 | apps/about, apps/accounts, apps/web |
-| tsx | 4.23.13 | apphost |
+| tsx | 4.23.15 | apphost |
 | tw-animate-css | 1.4.0 | packages/ui |
-| typebox | 1.3.34 | packages/document, packages/model, packages/observability, packages/wiki-toolkit, services/account, services/main |
+| typebox | 1.3.37 | packages/document, packages/model, packages/observability, packages/wiki-toolkit, services/account, services/main |
 | typescript | 7.0.2 | apphost, apps/accounts, apps/web, packages/document, packages/model, packages/observability, packages/ui, packages/wiki-toolkit, packages/zone-sdk, services/account, services/content, services/main |
-| typescript-6 | npm:typescript@6.0.2 | apps/about, packages/wiki-toolkit |
-| vinext | 1.0.0-beta.11 | apps/accounts, apps/web |
-| vite | 8.3.0 | apps/about, apps/accounts, apps/web |
-| vitest | 5.0.2 | apps/accounts, apps/web |
-| vscode-jsonrpc | 8.2.1 | apphost |
-| webpack | 5.110.3 | apps/accounts, apps/web |
-| wrangler | 4.137.0 | apps/about, apps/accounts, apps/web |
+| typescript-6 | npm:typescript@6.0.3 | apps/about, packages/wiki-toolkit |
+| vinext | 1.0.0-beta.13 | apps/accounts, apps/web |
+| vite | 8.3.4 | apps/about, apps/accounts, apps/web |
+| vitest | 5.0.4 | apps/accounts, apps/web |
+| vscode-jsonrpc | 9.0.3 | apphost |
+| webpack | 5.111.1 | apps/accounts, apps/web |
+| wrangler | 4.151.0 | apps/about, apps/accounts, apps/web |
 
 ### Repository index crates
 

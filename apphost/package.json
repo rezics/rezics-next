@@ -3,12 +3,12 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "vscode-jsonrpc": "8.2.1"
+    "vscode-jsonrpc": "9.0.3"
   },
   "devDependencies": {
-    "@microsoft/aspire-cli": "13.5.4",
-    "@types/node": "26.6.2",
-    "tsx": "4.23.13",
+    "@microsoft/aspire-cli": "13.6.1",
+    "@types/node": "26.6.5",
+    "tsx": "4.23.15",
     "typescript": "7.0.2"
   }
 }

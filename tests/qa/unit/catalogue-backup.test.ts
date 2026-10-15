@@ -47,6 +47,7 @@ async function restoreScenario(mode: 'copy-failure' | 'volume-create-failure' | 
       now: () => elapsed,
       dockerEnvironment: () => ({}), projectRunning: () => false,
       freshPorts: async () => { if (mode === 'timing') elapsed += 10; return {}; },
+      repairCollations: async () => [],
       retargetGraphRoute: async apps => { retargeted.push(apps); if (mode === 'timing') elapsed += 50; },
       run: (_program, args) => {
         commands.push(args);

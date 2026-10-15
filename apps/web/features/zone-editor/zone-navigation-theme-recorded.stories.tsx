@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, waitFor, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import homeRendering from '../../../../tests/qa/fixtures/outcomes/zone/home-rendering.json';
 import navigationAndTheme from '../../../../tests/qa/fixtures/outcomes/zone/navigation-and-theme.json';
@@ -149,6 +149,7 @@ export const ThemeOwner: Story = {
     const acting = new URL(sample('owner', 'draft-configuration').path, 'https://recorded.invalid').searchParams.get('actingSubject');
     await expect(await canvas.findByRole('heading', { level: 1, name: answer.name })).toBeVisible();
     await expect(canvas.getByRole('radio', { name: copy.themeCompact })).toBeChecked();
+    await waitFor(() => expect(canvas.getByRole('radio', { name: copy.themeCompact })).toBeEnabled());
     await expect(canvas.getByRole('radio', { name: copy.themeCards })).toBeChecked();
     await expect(canvas.getByRole('radio', { name: copy.themeComfortable })).not.toBeChecked();
     await expect(canvas.getByRole('radio', { name: copy.themeFlat })).not.toBeChecked();

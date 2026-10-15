@@ -1,3 +1,5 @@
+import { isolateTestSettings } from './fixtures/settings.ts';
+
 import { spawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -27,6 +29,8 @@ import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
 import { fixtureProcessScope } from './fixtures/process-scope.ts';
 import { withTestAccounts, writeTestAccounts } from './fixtures/accounts.ts';
 
+isolateTestSettings();
+
 // These fixtures exercise multiple CLI processes per case. Neither startup nor a whole case
 // has a latency contract; keep the test watchdog beyond the child's hang deadline.
 const CLI_SPAWN_DEADLINE_MS = 5 * 60_000;
@@ -50,6 +54,7 @@ test('config reports effective settings and their layers, refuses invalid fields
   const scratch = join(import.meta.dir, '../../.temp/config-cli');
   mkdirSync(scratch, { recursive: true });
   const root = mkdtempSync(join(scratch, 'case-'));
+  expect(spawnSync('git', ['init', '-q', '-b', 'main'], { cwd: root }).status).toBe(0);
   const directory = join(root, '.goalctl');
   mkdirSync(directory);
   const sharedFile = join(directory, 'settings.json');
@@ -5280,6 +5285,7 @@ describe('goalctl archive', () => {
 
 test('QA slot settings migrate once and the environment can override one process', () => {
   const root = mkdtempSync(join(tmpdir(), 'qa-slot-count-'));
+  process.env.GOAL_SETTINGS_DIRECTORY = join(root, '.goalctl');
   try {
     const state = join(root, '.temp/goal-orchestration');
     mkdirSync(state, { recursive: true });
@@ -5351,6 +5357,7 @@ describe('gate lanes', () => {
 
   test('the lane count comes from the file beside the lanes unless the environment names one', async () => {
     const root = mkdtempSync(join(tmpdir(), 'gate-lane-count-'));
+    process.env.GOAL_SETTINGS_DIRECTORY = join(root, '.goalctl');
     const state = join(root, '.temp/goal-orchestration');
     mkdirSync(state, { recursive: true });
     const directory = join(state, 'gate-lanes');

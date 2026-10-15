@@ -67,7 +67,7 @@ function fixture() {
         version: 1, changedAt: '2026-10-14T00:00:00.000Z', replayed: false };
     } },
   } as unknown as MainWorkDependencies;
-  const app = new Elysia().error(({ error }) => typedRefusal(error)).use(libraryRoutes(deps));
+  const app = new Elysia().onError(({ error }) => typedRefusal(error)).use(libraryRoutes(deps));
   const write = (actor = person) => app.handle(new Request(`http://main.local/v1/works/${work.slice(-36)}/reader-status`, {
     method: 'PUT', headers: { authorization: 'Bearer moderator', 'content-type': 'application/json',
       'idempotency-key': 'start-watching' },

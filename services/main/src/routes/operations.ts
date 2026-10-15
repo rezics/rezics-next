@@ -1,12 +1,11 @@
 import { transportResponses } from '../transport-responses.ts';
-import { Elysia, t } from 'elysia';
+import { Elysia, t, problem, type Context } from 'elysia';
 import { BackpressureSaturated, BackpressureUnavailable,
   type AdmissionLease, type LeaseOutcome } from '../operations/admission-budget.ts';
 import { contentProjectionPositions, OperationsBackpressure,
   relayHandoffPositions } from '../operations/backpressure.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { readProblems } from '../api-responses.ts';
-import { problem } from './problems.ts';
 
 /** Every Content command appends one Content outbox event for the projection worker. */
 const WORKER_INTENTS = new Set(['/v1/content-drafts', '/v1/content-comments',
@@ -34,13 +33,19 @@ const backpressureResult = t.Object({ profile: t.String({ pattern: '^[a-z][a-z0-
     { additionalProperties: false })) }, { additionalProperties: false })]),
 }, { additionalProperties: false });
 
-function refusal(error: unknown): Response | undefined {
+function refusal(error: unknown, set: Context['set']) {
   if (error instanceof BackpressureSaturated) {
-    return problem(503, 'backpressure_saturated', `The ${error.lane} budget is saturated; retry later`,
-      { 'retry-after': String(error.retryAfterSeconds) });
+    set.headers['cache-control'] = 'no-store';
+    set.headers['retry-after'] = String(error.retryAfterSeconds);
+    return problem(503, { code: 'backpressure_saturated',
+      type: 'https://rezics.com/problems/backpressure_saturated',
+      title: `The ${error.lane} budget is saturated; retry later` });
   }
   if (error instanceof BackpressureUnavailable) {
-    return problem(503, 'backpressure_unavailable', `The ${error.lane} budget cannot be observed`);
+    set.headers['cache-control'] = 'no-store';
+    return problem(503, { code: 'backpressure_unavailable',
+      type: 'https://rezics.com/problems/backpressure_unavailable',
+      title: `The ${error.lane} budget cannot be observed` });
   }
   return undefined;
 }
@@ -81,7 +86,7 @@ export function operationsRoutes(work: MainWorkDependencies,
   }, work.backpressureProfile)) {
   const leases = new WeakMap<Request, AdmissionLease>();
   return new Elysia({ name: 'operations-backpressure' })
-    .beforeHandle('global', async ({ request }) => {
+    .onBeforeHandle('global', async ({ request, set }) => {
       if (request.method !== 'POST') return;
       const path = new URL(request.url).pathname;
       try {
@@ -91,12 +96,12 @@ export function operationsRoutes(work: MainWorkDependencies,
           leases.set(request, backpressure.objects.admit(declaredBytes(request)));
         }
       } catch (error) {
-        const response = refusal(error);
+        const response = refusal(error, set);
         if (response) return response;
         throw error;
       }
     })
-    .afterResponse('global', (context) => {
+    .onAfterResponse('global', (context) => {
       const lease = leases.get(context.request);
       if (!lease) return;
       leases.delete(context.request);

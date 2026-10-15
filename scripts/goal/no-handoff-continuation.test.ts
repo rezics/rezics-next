@@ -1,3 +1,5 @@
+import { isolateTestSettings } from './fixtures/settings.ts';
+
 import { afterEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -7,6 +9,8 @@ import { GoalMailStore } from './mail.ts';
 import { managerEvents } from './manager-commands.ts';
 import { goalMeasures, measureLines } from './measures.ts';
 import type { Attempt, Ledger, Task } from './types.ts';
+
+isolateTestSettings();
 
 const scratch = join(import.meta.dir, '../../.temp/no-handoff-tests');
 const fixtures: { directory: string; task: Task; ledger: () => Ledger }[] = [];
@@ -44,7 +48,7 @@ function fixture(text = progress, state: Task['state'] = 'running') {
   const save = (ledger: Ledger) => writeFileSync(ledgerPath, JSON.stringify(ledger));
   save({ tasks: { [task.id]: task }, goals: { program: { manager: 'fixture-manager', startedAt: attempt.startedAt } } });
   const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, GOAL_ID: 'program', GOAL_MEMORY_FLOOR_GIB: '0',
-    GOAL_MAX_WORKERS: '25', GOAL_CODEX_HOME: join(directory, '.temp/codex'),
+    GOAL_MAX_WORKERS: '25', GOAL_SETTINGS_DIRECTORY: join(directory, '.goalctl'), GOAL_CODEX_HOME: join(directory, '.temp/codex'),
     GOAL_USAGE_FILE: join(directory, '.temp/usage.json') };
   const execute = async (source: string) => {
     const child = Bun.spawn([process.execPath, '-e', source], { cwd: directory, env, stdout: 'pipe', stderr: 'pipe' });

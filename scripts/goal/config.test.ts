@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { configuredAccounts, loadSettings } from './config.ts';
@@ -18,6 +19,64 @@ function fixture() {
 }
 
 describe('goalctl layered settings', () => {
+  test('older schemas ignore newer user fields once, including nested fields, and migration preserves them', () => {
+    const f = fixture();
+    try {
+      f.layer('user', { futureSetting: { value: true }, qaSlots: 7,
+        codexCompactTokens: { sol: 160000, luna: 200000, futureModel: 300000 } });
+      writeFileSync(join(f.stateDirectory, 'gate-lane-count'), '4');
+      const loaded = loadSettings(f.options);
+      expect(loaded.settings.qaSlots).toBe(7);
+      expect(loaded.settings.gateLanes).toBe(4);
+      expect(loaded.settings).not.toHaveProperty('futureSetting');
+      expect(loaded.settings.codexCompactTokens).not.toHaveProperty('futureModel');
+      const warnings = f.reports.filter(line => line.includes('ignored'));
+      expect(warnings).toEqual([
+        `${f.directory}/settings.user.json: settings.futureSetting is unknown; ignored`,
+        `${f.directory}/settings.user.json: settings.codexCompactTokens.futureModel is unknown; ignored`,
+      ]);
+      expect(JSON.parse(readFileSync(join(f.directory, 'settings.user.json'), 'utf8'))).toMatchObject({
+        futureSetting: { value: true }, codexCompactTokens: { futureModel: 300000 }, gateLanes: 4,
+      });
+      f.layer('user', { futureSetting: true, qaSlots: 0 });
+      expect(() => loadSettings(f.options)).toThrow('settings.qaSlots must be at least 1');
+      f.layer('shared', { futureSetting: true });
+      expect(() => loadSettings(f.options)).toThrow('settings.json: settings.futureSetting is unknown');
+    } finally { f.cleanup(); }
+  });
+
+  test('worktrees read their own tracked settings and the main checkout user settings', () => {
+    const f = fixture();
+    const git = (cwd: string, ...args: string[]) => {
+      const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+      expect(result.status, result.stderr).toBe(0);
+    };
+    try {
+      git(f.root, 'init', '-q', '-b', 'main');
+      git(f.root, 'config', 'user.name', 'Settings test');
+      git(f.root, 'config', 'user.email', 'settings@example.invalid');
+      f.layer('shared', { qaSlots: 5 });
+      git(f.root, 'add', '.goalctl/settings.json');
+      git(f.root, 'commit', '-qm', 'tracked settings');
+      const worktree = join(f.root, 'older-tree');
+      git(f.root, 'worktree', 'add', '-q', '-b', 'older', worktree);
+      writeFileSync(join(worktree, '.goalctl/settings.json'), JSON.stringify({ version: 1, qaSlots: 2 }));
+      f.layer('shared', { qaSlots: 8, futureSharedField: true });
+      f.layer('user', { futureUserField: true, accounts: [{ engine: 'sample-c', home: './account', weight: 1 }] });
+      const options = { cwd: worktree, env: { GOAL_SETTINGS_DIRECTORY: '' }, report: f.options.report };
+      const loaded = loadSettings(options);
+      expect(loaded.settings.qaSlots).toBe(2);
+      expect(loaded.sources.qaSlots).toBe(join(worktree, '.goalctl/settings.json'));
+      expect(loaded.sources.accounts).toBe(join(f.directory, 'settings.user.json'));
+      expect(configuredAccounts(options)[0]!.home).toBe(join(f.directory, 'account'));
+      expect(f.reports[0]).toBe(`${f.directory}/settings.user.json: settings.futureUserField is unknown; ignored`);
+      // An inherited launcher override must not redirect the tracked layer to main.
+      expect(loadSettings({ ...options, env: { GOAL_SETTINGS_DIRECTORY: f.directory } }).settings.qaSlots).toBe(2);
+      f.layer('shared', { qaSlots: 8 });
+      expect(loadSettings({ ...options, cwd: f.root }).settings.qaSlots).toBe(8);
+    } finally { f.cleanup(); }
+  });
+
   test('simultaneous first loads migrate once without losing user fields', async () => {
     const f = fixture();
     try {
@@ -61,10 +120,8 @@ console.log(JSON.stringify(loadSettings(${JSON.stringify({ directory: f.director
     [{ codexCompactTokens: { sol: 0, luna: 200000 } }, 'codexCompactTokens.sol'],
     [{ codexCompactTokens: { sol: 160000.5, luna: 200000 } }, 'codexCompactTokens.sol'],
     [{ codexCompactTokens: { sol: 160000 } }, 'codexCompactTokens'],
-    [{ codexCompactTokens: { sol: 160000, luna: 200000, other: 1 } }, 'codexCompactTokens.other'],
     [{ qaSlots: 0 }, 'qaSlots'],
     [{ gateLanes: 'many' }, 'gateLanes'],
-    [{ unexpected: true }, 'unexpected'],
     [{ accounts: [{ engine: 'sample-c', home: './home', weight: -1 }] }, 'accounts[0].weight'],
     [{ accounts: [{ engine: 'sol', launcher: 'tool', weight: 1 }] }, 'accounts[0].engine'],
     [{ accounts: [{ engine: 'sample-c', weight: 1 }] }, 'accounts[0]'],

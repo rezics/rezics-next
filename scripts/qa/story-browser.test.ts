@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import { serveStoryAsset } from './story-browser.ts';
 
@@ -53,5 +54,47 @@ test('real modules survive browser transport loss without masking server errors 
   } finally {
     await browser.close();
     await server.stop(true);
+  }
+}, 30_000);
+
+test('asset connection resets are retried without retrying HTTP errors', async () => {
+  let resets = 0;
+  let refusals = 0;
+  const server = createServer((request, response) => {
+    if (request.url === '/reset.js' && ++resets === 1) {
+      request.socket.destroy();
+      return;
+    }
+    if (request.url === '/refused.js') {
+      refusals++;
+      response.writeHead(503).end('unavailable');
+      return;
+    }
+    response.setHeader('content-type', request.url === '/' ? 'text/html' : 'text/javascript');
+    response.end(request.url === '/' ? '<!doctype html><title>Assets</title>' : 'export const value = 42;');
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('HTTP server has no TCP port');
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const origin = `http://127.0.0.1:${address.port}`;
+    await page.route('**/*', route => serveStoryAsset(route, origin));
+    await page.goto(origin);
+    expect(await page.evaluate(async () => {
+      const path = '/reset.js';
+      return (await import(path)).value;
+    })).toBe(42);
+    expect(resets).toBe(2);
+    expect(await page.evaluate(async () => {
+      const path = '/refused.js';
+      try { await import(path); return 'loaded'; }
+      catch { return 'refused'; }
+    })).toBe('refused');
+    expect(refusals).toBe(1);
+  } finally {
+    await browser.close();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 }, 30_000);

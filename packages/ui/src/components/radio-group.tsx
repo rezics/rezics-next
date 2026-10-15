@@ -30,7 +30,7 @@ export const RadioGroupItem = (props: React.ComponentProps<typeof ArkRadioGroup.
 
   return (
     <ArkRadioGroup.Item
-      className={cn('inline-flex items-start gap-2', 'data-disabled:opacity-64', className)}
+      className={cn('inline-flex items-start gap-2', className)}
       data-slot="radio-group-item"
       {...rest}
     >
@@ -43,6 +43,8 @@ export const RadioGroupItem = (props: React.ComponentProps<typeof ArkRadioGroup.
           'size-5',
           'border-2 border-muted-foreground/75 shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)]',
           'bg-primary/5',
+          // Dim the disabled control while keeping its label and help text readable.
+          'data-disabled:opacity-64',
           'rounded-full',
           'transition-[border-color,background-color]',
           'before:size-2.5 before:rounded-full',

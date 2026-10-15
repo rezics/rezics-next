@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { Elysia, problem } from 'elysia';
+import { Elysia, problem, t } from 'elysia';
 import { Value } from 'typebox/value';
 import { createMainApp } from '../src/app.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
@@ -13,6 +13,8 @@ import { RecoveryHold } from '../src/modules/work/restore-lineage.ts';
 import { InvalidWorkScalarValue } from '../src/modules/work/scalar-value.ts';
 import { RATE_LIMIT_V1 } from '../src/modules/rate-limit/budgets.ts';
 import { rateLimitHook } from '../src/modules/rate-limit/hook.ts';
+import { OperationsBackpressure } from '../src/operations/backpressure.ts';
+import { operationsRoutes } from '../src/routes/operations.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { workScalarModels, workScalarOperation } from '../src/routes/work-scalar.contract.ts';
 import { actingContextPreferenceModels, actingContextPreferenceOperation } from '../src/routes/acting-context-preference.contract.ts';
@@ -102,6 +104,31 @@ test('shared policy enforcement keeps public reads exempt and returns the write 
   expect(f.charges()).toBe(1);
 });
 
+test('global backpressure refuses native validated commands before their handlers', async () => {
+  for (const unavailable of [false, true]) {
+    const f = fixture();
+    let effects = 0;
+    const budget = new OperationsBackpressure({ broker: async () => {
+      if (unavailable) throw new Error('checkpoint unavailable');
+      return { dataEpoch: 'one', head: 1000n, delivered: 0n };
+    } });
+    const app = new Elysia().onError(() => new Response('invalid refusal', { status: 500 }))
+      .use(operationsRoutes(f.work, budget))
+      .post('/v1/works', { response: { 503: t.Object({ type: t.String(), title: t.String(),
+        status: t.Literal(503), code: t.Union([t.Literal('backpressure_saturated'),
+          t.Literal('backpressure_unavailable')]) }, { additionalProperties: false }) } }, () => { effects++; });
+    const response = await app.handle(new Request('http://main.test/v1/works', { method: 'POST' }));
+    expect(response.status).toBe(503);
+    expect(response.headers.get('content-type')).toContain('application/problem+json');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('retry-after')).toBe(unavailable ? null : '5');
+    const code = unavailable ? 'backpressure_unavailable' : 'backpressure_saturated';
+    expect(await response.json()).toEqual({ type: `https://rezics.com/problems/${code}`, status: 503,
+      code, title: unavailable ? 'The broker budget cannot be observed' : 'The broker budget is saturated; retry later' });
+    expect(effects).toBe(0);
+  }
+});
+
 test('preference domain refusals keep their exact Problem identity, status and opaque fallback', async () => {
   const f = fixture();
   for (const [error, status, code] of [
@@ -177,7 +204,7 @@ test('native runtime validators reject a wrong success body and wrong code for t
   const f = fixture();
   // Intentionally hostile implementations simulate unchecked external data.
   const invalidSuccess = () => ({ leaked: 'invalid-success-marker' }) as never;
-  const base = () => new Elysia().use(operationPolicies(f.work)).error(() => new Response('rejected', { status: 500 }));
+  const base = () => new Elysia().use(operationPolicies(f.work)).onError(() => new Response('rejected', { status: 500 }));
   for (const [operation, app] of [
     [workHeaderOperation, base().model(workHeaderModels).get(workHeaderOperation.path, workHeaderOperation.options, invalidSuccess)],
     [actingContextPreferenceOperation, base().model(actingContextPreferenceModels)

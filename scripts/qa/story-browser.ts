@@ -16,8 +16,9 @@ export async function serveStoryAsset(route: Route, origin: string): Promise<voi
   }
   // Chromium cancels in-flight loopback module requests with ERR_NETWORK_CHANGED when
   // other QA stacks change host interfaces. Node's HTTP client keeps those requests alive.
-  // Forward the real server response, including errors; never synthesize a module or retry a story.
-  const response = await route.fetch({ timeout: 180_000 });
+  // Retry connection resets only for these idempotent assets. HTTP errors retain
+  // their real response; API calls and story execution are never retried here.
+  const response = await route.fetch({ timeout: 180_000, maxRetries: 2 });
   try { await route.fulfill({ response, body: await response.body() }); }
   finally { await response.dispose(); }
 }

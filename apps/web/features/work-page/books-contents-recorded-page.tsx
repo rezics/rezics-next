@@ -17,7 +17,8 @@ import type { Loaded, ReadFailure, WorkHeader } from './types.ts';
 
 type InventoryGet = ReturnType<MainClient['v1']['reading-positions']>['get'];
 type InventoryArgs = NonNullable<Parameters<InventoryGet>[0]>;
-export type BooksContentsInventoryQuery = NonNullable<InventoryArgs['query']>;
+// These route adapters parse numeric input before constructing the Eden query.
+export type BooksContentsInventoryQuery = NonNullable<InventoryArgs['query']> & { limit?: number };
 export type BooksContentsInventoryAnswer = Awaited<ReturnType<InventoryGet>>;
 
 /**

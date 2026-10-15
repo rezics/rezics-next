@@ -1,3 +1,5 @@
+import { isolateTestSettings } from './fixtures/settings.ts';
+
 import { afterEach, expect, test } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -11,6 +13,8 @@ import { GoalMailStore } from './mail.ts';
 import { resumeDecisionError } from './tasks.ts';
 import type { Ledger, Task } from './types.ts';
 import { fixtureProcessScope } from './fixtures/process-scope.ts';
+
+isolateTestSettings();
 
 const directories: string[] = [];
 const scopes: ReturnType<typeof fixtureProcessScope>[] = [];
@@ -28,6 +32,7 @@ function fixture() {
   const parent = join(import.meta.dir, '../../.temp/job-tests');
   mkdirSync(parent, { recursive: true });
   const cwd = mkdtempSync(join(parent, 'run-')); directories.push(cwd);
+  process.env.GOAL_SETTINGS_DIRECTORY = join(cwd, '.goalctl');
   // Detached completion now reads the ledger too; isolate it from the host's live worker ledger.
   expect(spawnSync('git', ['init', '-q', '-b', 'main'], { cwd }).status).toBe(0);
   mkdirSync(join(cwd, 'scripts/goal'), { recursive: true });

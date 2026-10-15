@@ -1,7 +1,11 @@
+import { isolateTestSettings } from './fixtures/settings.ts';
+
 import { Database } from 'bun:sqlite';
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+isolateTestSettings();
 
 const TOKEN = 'fake-telegram-token-should-never-appear';
 const CLI = join(import.meta.dir, 'notify.ts');
@@ -22,6 +26,7 @@ interface Fixture {
 function fixture(): Fixture {
   mkdirSync(scratch, { recursive: true });
   const directory = mkdtempSync(join(scratch, 'case-'));
+  process.env.GOAL_SETTINGS_DIRECTORY = join(directory, '.goalctl');
   const stateDir = join(directory, '.temp/goal-orchestration');
   const secrets = join(directory, 'fake-bots.json');
   writeFileSync(secrets, JSON.stringify({ telegram: [{ token: TOKEN }] }));
@@ -47,6 +52,7 @@ function fixture(): Fixture {
       const env = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
       Object.assign(env, {
         GOAL_MAIL_STATE_DIR: stateDir,
+        GOAL_SETTINGS_DIRECTORY: join(directory, '.goalctl'),
         GOAL_TELEGRAM_SECRETS: secrets,
         GOAL_TELEGRAM_CHAT: 'test-chat-22',
         GOAL_TELEGRAM_API: server.url.origin,

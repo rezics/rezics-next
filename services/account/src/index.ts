@@ -59,7 +59,7 @@ const app = createAccountApp(createAccountAuth({ baseURL, secret, resource, pool
   mailEventsSecret: config.ACCOUNT_MAIL_EVENTS_SECRET,
   contentEvidenceSecret: config.ACCOUNT_MAIN_CLIENT_SECRET,
   notificationDigest: { accountSecret: secret, mainSecret: config.ACCOUNT_MAIN_CLIENT_SECRET } })
-  .cleanup(() => { clearInterval(deliveryTimer); })
+  .onStop(() => { clearInterval(deliveryTimer); })
   .listen({ hostname: process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', port });
 telemetryLog('account_listening');
 let stopping = false;
