@@ -391,7 +391,7 @@ test('Reader library shelf and Work status costs follow unrelated Work and own-s
     for (const cut of cuts) {
       activeCut = cut;
       const scale = cut.manifest.dimensions[workAxis];
-      const target = `lib-growth-${cut.manifest.dimension}-${cut.manifest.scale}-${runId}`;
+      const target = `lib-growth-${cut.manifest.dimension.toLowerCase()}-${cut.manifest.scale}-${runId}`;
       targets.push(target);
       const restoreStarted = performance.now();
       const elapsedMs = await restoreWorkProfileCorpus(cut.manifest, target, driver, restoreStarted);
