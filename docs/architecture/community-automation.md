@@ -220,3 +220,12 @@ physical plans/counters. A later surface must expose scope, reason, dry-run,
 activation/expiry, held work and guarded recovery through those same APIs.
 This note establishes a reviewable design, not implemented automation,
 operator-retention improvement or competitor replacement parity.
+
+## Program review
+
+Accepted on 2026-10-16 as the design for B07, and deferred: it is not part of
+the first public launch. The competitor report rates it an operator-retention
+gap, not a switching blocker, and backend complexity is the cost to avoid while
+B03, B04, B05 and B06 are built. Its contract step is briefed when operator load
+on launched Realms gives evidence of the repeated work it removes; it reuses the
+durable-job machinery decided in scheduled-plans.md.
