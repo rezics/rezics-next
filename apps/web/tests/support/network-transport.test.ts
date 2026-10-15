@@ -8,6 +8,9 @@ import { protectJourneyBrowser } from './network-transport.ts';
 test('API commands retain their exact body and key without replaying a reset or refusal', async () => {
   const requests: { path: string; body: string; key: string | undefined }[] = [];
   const server = createServer(async (request, response) => {
+    // Exercise the reset on a fresh connection, avoiding Chromium's stale
+    // keep-alive recovery before the command's exact-once assertion.
+    response.setHeader('connection', 'close');
     if (request.url === '/') {
       response.writeHead(200, { 'content-type': 'text/html' });
       response.end('<title>Journey transport</title>');
