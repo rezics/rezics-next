@@ -1,15 +1,15 @@
 # Actionable collections and ingredient reconciliation
 
-Status: proposed for program review, 2026-10-15. This note decides ownership
-and semantics; it installs no capability. API contracts and the six pending
-`recipes/cook-and-shop` outcome cells follow after wave/2 merges. Implementation
-requires a later brief and review of this decision.
+Status: decided by program, 2026-10-15, with exact-conversion and vocabulary
+amendments. This note decides ownership and semantics; it installs no capability.
+API contracts and the six pending `recipes/cook-and-shop` outcome cells follow
+after wave/2 merges. Implementation requires a later brief.
 
 The competitor coverage report (2026-10-15, baseline `57b03b2435`), B04 and its
 closing decision, identifies the missing job: turn captured recipes into a
 shared list, see what to buy, then check off purchases and cooking steps.
 Capture alone does not complete that loop. The report keeps recipe-manager
-acquisition closed until the loop works; this proposal does not change that cut.
+acquisition closed until the loop works; this decision does not change that cut.
 
 ## Evidence and existing owners
 
@@ -39,8 +39,9 @@ members keep their current meaning. An entry may additionally anchor an exact
 source occurrence, or record several sources for a derived line. The extension
 must admit entries without a single resource target: a combined purchase line
 can have contributions from multiple recipes. Labels alone never identify an
-entry, an ingredient or its sources. New qualifier meaning gets its own term
-and schema; existing profiles are not silently tightened.
+entry, an ingredient or its sources. Map qualifier meaning to existing
+vocabulary first; add a local term only for a documented semantic gap and its
+schema. Existing profiles are not silently tightened.
 
 An exact source reference carries the source Collection member occurrence
 (when selected through a plan), source resource, Structure, revision and
@@ -58,6 +59,31 @@ Moving an entry does not change its identity; a changed plan or reconciliation
 creates a new entry-set revision and an explicitly new run. It does not silently
 move checkoffs onto a different purchase requirement. Historical source pins
 retain meaning but confer no continuing right to read erased or hidden data.
+
+Use [schema:Action](https://schema.org/Action) for the run and for each
+run-scoped entry action. The run's `schema:object` is its pinned Collection
+entry-set revision; each entry action's object is the entry occurrence. Map the
+entry's `pending` and `checked` API values through
+[schema:actionStatus](https://schema.org/actionStatus) to
+[schema:PotentialActionStatus](https://schema.org/PotentialActionStatus) and
+[schema:CompletedActionStatus](https://schema.org/CompletedActionStatus),
+respectively. A check records the participant's completion of that entry in
+that run, not completion of the underlying recipe or another run. These terms
+describe the execution and its disposition, so no local Run class or duplicate
+Pending/Checked status vocabulary is needed.
+
+The one additional relationship proposed here is `rv:inRun`, from an entry
+action to exactly one run action. Action's object and status do not express
+which shared execution scopes an entry action; the same occurrence can be
+acted on in several runs. This relationship preserves that distinction and
+the `(run, entry occurrence)` uniqueness constraint. Exact source/binding pins
+and compare-and-set item versions also require owner contract fields: Action
+does not define their revision or concurrency semantics. Each future RDF
+property for those fields must first be checked against existing vocabulary
+and justified in its owning schema. [prov:Activity](https://www.w3.org/TR/prov-o/#Activity)
+can describe a performed derivation and its provenance, but does not itself
+supply the pending/completed disposition needed by the checklist. These are
+semantic mappings, not grants; Access still authorizes every operation.
 
 Checking sets an explicit desired status; it is never a toggle. Two shoppers
 checking the same pending item converge on checked. A same-status write can
@@ -112,14 +138,20 @@ The procedure applies these rules:
    Names, translations, substring matches and preparation text do not prove
    interchangeability. Optional ingredients and substitution alternatives need
    an explicit inclusion choice; do not silently add every alternative.
-3. Add exact amounts only within an ingredient group and an admitted identical
-   unit. Registered aliases may resolve to that identity; raw unit text or a
-   matching namespace is insufficient. The first procedure version does not
-   convert different units, even dimensionally compatible ones. Mass, volume,
-   count and unknown measures remain separate. A range or missing amount,
-   including “to taste”, is an unresolved entry with its reason and source;
-   it is neither zero nor one of the numeric subtotal's contributors.
-4. Apply explicitly supplied stock once per ingredient-and-unit group:
+3. Within an ingredient group, convert registered units in the same dimension
+   when the unit registry defines an exact rational factor. Metric prefixes
+   such as g/kg and ml/l qualify; tsp/tbsp and other equivalences qualify only
+   when defined exactly by the registry. Express each compatible subtotal in
+   one declared unit of its group and retain every source's lexical quantity,
+   original unit and conversion factor. Raw unit text or a matching namespace
+   is insufficient. Density, count-to-mass and food-equivalence conversions
+   are excluded. Locale-ambiguous units such as an unqualified “cup” stay
+   separate, as do incompatible dimensions and units without an admitted exact
+   factor. A range or missing amount, including “to taste”, is an unresolved
+   entry with its reason and source; it is neither zero nor one of the numeric
+   subtotal's contributors.
+4. Convert eligible stock to the group's declared unit under the same exact
+   rules, then apply explicitly supplied stock once per ingredient-and-unit group:
    `used = min(required, stock)` and `toBuy = required - used`. Return required,
    stock used, remaining demand and unused stock as exact rationals. Retain a
    zero-demand entry with its provenance. Missing stock means no offset was
@@ -131,13 +163,13 @@ The procedure applies these rules:
    A private stock input can only be shared with the owner's explicit authority
    to disclose that input and its derived demand.
 
-The conservative unit rule is a deliberate first-version choice.
 [UCUM 2.2](https://ucum.org/ucum), dated 2024-06-17, distinguishes unit equality
-from commensurability and magnitude (§§18–20). That distinction supports keeping
-unit identity separate from conversion. It does not supply food equivalence,
-egg sizes, package quantities or flour density. A later conversion policy would
-need a named, versioned rule and its own counterexamples; display rounding is
-not such evidence.
+from commensurability and magnitude (§§18–20). That distinction supports the
+same-dimension check; program's decision additionally requires an exact rational
+factor from the unit registry. UCUM does not supply food equivalence, egg sizes,
+package quantities or flour density. Registry conversion definitions and their
+version form part of the pinned procedure input; display rounding and its
+conversion conventions cannot establish those definitions.
 
 ## Authority, disclosure and bounded work
 
@@ -185,11 +217,13 @@ atomicity and replay in the Collection and Recipe owning contracts, then add
 | --- | --- |
 | Two selected recipes require 2 and 3 eggs in the same admitted count unit; stock input is 1 egg. | Required 5, stock used 1, to buy 4; both source occurrences remain visible. |
 | One recipe uses 100 g flour in one step and 50 g in another. | Shopping subtotal 150 g retains both occurrences and their step links. Cooking checkoffs remain separate. |
+| The selected recipes require 1 kg and 200 g of the same flour; the declared subtotal unit is kg. | Required 6/5 kg (1.2 kg), retaining both lexical quantities and exact conversion factors. |
+| The same flour occurs as 1 unqualified cup and 100 g. | Two separate lines; no density or locale assumption bridges the units. |
 | Salt is “to taste”; another flour occurrence is measured in cups. | Salt remains unresolved; flour cups remain separate from flour grams. |
 | Owner and granted shopper check the same egg entry concurrently, lose answers and retry. | One checked state; replay adds no effect. A stale opposite-status update conflicts. Recipe revisions and contents remain unchanged. |
 
 Each persona needs its own public-API test on a real stack, without owner
-mocks. The proposed authority matrix for that fixture is:
+mocks. The decided authority matrix for that fixture is:
 
 | Persona | What the API should allow |
 | --- | --- |

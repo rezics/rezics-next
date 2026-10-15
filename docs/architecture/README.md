@@ -10,7 +10,7 @@
 - [Storage ownership](../storage/ownership-and-placement.md): one writer, multiple stores and placement.
 - [Decision evidence](evidence.md): sources, selected lessons and remaining qualification.
 - [Native API contract pilot](api-contracts.md): precision, ownership and compiler-cost evidence for separating contracts and handlers.
-- [Actionable collections](actionable-collections.md): proposed occurrence-based runs and optional ingredient sum/stock offset, awaiting program review.
+- [Actionable collections](actionable-collections.md): decided occurrence-based runs and optional ingredient sum/stock offset; contracts and outcome proofs follow.
 - [Target architecture](target-architecture.md): the design record of 2026-10-07 (Traditional Chinese) that the Goals build towards; its decisions move into their owner documents as they settle in code.
 
 ## Domain contracts
