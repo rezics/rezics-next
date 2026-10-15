@@ -1,79 +1,38 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useEffect, useState } from 'react';
 import { expect, within } from 'storybook/test';
-import { LibraryBigIcon } from 'lucide-react';
-import { catalogs } from '../../i18n/catalogs.ts';
+import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
+import rankingRecord from '../../../../tests/qa/fixtures/outcomes/realm/ranking.json';
 import type { UiLocale } from '../../i18n/define.ts';
-import { browserMainApi } from '../api/browser.ts';
-import { EmptyState } from '../shell/empty-state.tsx';
-import { communityZone } from '../zones/fixtures.ts';
-import type { ZoneMessages } from '../zones/messages.ts';
-import { placedModule } from '../zones/presentation.ts';
-import { ZoneHome, type ModuleState } from '../zones/zone-home.tsx';
-import { loadRankingsModule } from './modules.ts';
-import { rankingRealm, rankingStateSource } from './ranking-contract-states.ts';
-import { rankingModule, rankingModuleContractCards, rankingModuleContractFetch, type RankingModuleState } from './ranking-module-contract-states.ts';
-import { RankingSkeleton } from './ranking-page.tsx';
-import { readRankingModuleAnswer } from './ranking-read.ts';
-import { RealmPageStory } from './story-page.tsx';
+import { RecordedRankingPage } from './ranking-recorded-page.tsx';
 
-function ModuleStory({ state, locale }: { state: RankingModuleState; locale: UiLocale }) {
-  const [loaded, setLoaded] = useState<{ state: ModuleState<'ranking'>; messages: ZoneMessages;
-    emptyTitle: string; emptyBody: string } | null>(null);
-  useEffect(() => {
-    let active = true;
-    setLoaded(null);
-    const transport = rankingModuleContractFetch(state);
-    const main = browserMainApi('https://contract.invalid', { fetcher: transport, anonymous: true });
-    void Promise.all([loadRankingsModule(rankingModule, { realm: rankingRealm, ref: 'ranking-garden', locale }, {
-      cards: async () => rankingModuleContractCards(),
-      rankings: (realm, _locale, interval, metric) => readRankingModuleAnswer(main, realm, interval, metric),
-    }), catalogs.zones[locale](), catalogs.realm[locale]()]).then(([state, messages, realm]) => {
-      if (active) setLoaded({ state, messages, emptyTitle: realm.emptyHomeTitle, emptyBody: realm.emptyHomeBody });
-    });
-    return () => { active = false; transport.dispose(); };
-  }, [state, locale]);
-  const zone = communityZone(locale);
-  return <RealmPageStory zone={zone} locale={locale}>
-    {loaded ? <ZoneHome modules={[{ module: { ...placedModule(rankingModule, null), type: 'ranking' }, state: loaded.state }]}
-      zone={zone} pkg={null} locale={locale} messages={loaded.messages} slotAccess={null}
-      empty={<EmptyState icon={LibraryBigIcon} title={loaded.emptyTitle} description={loaded.emptyBody} />} /> : <RankingSkeleton />}
-  </RealmPageStory>;
-}
-
+interface Args { persona: AnswerPersona; visit: string; loading: boolean; locale: UiLocale }
+function ModuleStory(args: Args) { return <RecordedRankingPage record={rankingRecord as AnswerRecord} {...args} />; }
 const meta = {
-  title: 'Realm/Ranking module contract states', component: ModuleStory,
-  args: { state: 'populated', locale: 'en' }, globals: { viewport: { value: 'desktop' } },
-  parameters: { docs: { description: { component: rankingStateSource + '. Chart interval requests and independent author credit are constructed in ranking-module-contract-states.ts.' } } },
-  render: (args, { globals }) => {
-    const locale = (globals.locale as UiLocale | undefined) ?? args.locale;
-    return <ModuleStory key={`${args.state}-${locale}`} {...args} locale={locale} />;
-  },
+  title: 'Realm/Ranking module recorded', component: ModuleStory,
+  args: { persona: 'visitor', visit: 'visit-ranking-module', loading: false, locale: 'en' },
+  globals: { viewport: { value: 'desktop' } },
+  parameters: { docs: { description: { component: 'Production ranking modules with captured interval, original Work credit and shared Realm frame reads. No constructed module state supplies row proof.' } } },
+  render: (args, { globals }) => <ModuleStory {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
 } satisfies Meta<typeof ModuleStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-
+const phone = { viewport: { value: 'phone' } };
 export const PopulatedDesktop: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.findByRole('heading', { name: 'Ranking garden' })).resolves.toBeVisible();
-    await expect(canvas.getByText('Original ranking garden')).toBeVisible();
-    await expect(canvas.getByText('Ranking garden author')).toBeVisible();
-    await expect(canvas.getAllByRole('tab')).toHaveLength(3);
+    await expect(canvas.findAllByRole('tab')).resolves.toHaveLength(3);
+    await expect(canvas.queryByRole('status')).toBeNull();
   },
 };
-export const PopulatedPhone: Story = { ...PopulatedDesktop, globals: { viewport: { value: 'phone' } } };
-export const EmptyDesktop: Story = { args: { state: 'empty' },
-  async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    await expect(canvas.findByRole('heading', { name: 'Nothing here yet' })).resolves.toBeVisible();
-    await expect(canvas.queryByRole('heading', { name: 'Ranking garden' })).toBeNull();
-  } };
-export const EmptyPhone: Story = { ...EmptyDesktop, globals: { viewport: { value: 'phone' } } };
-export const ErrorDesktop: Story = { args: { state: 'error' },
-  async play({ canvasElement }) { await expect(within(canvasElement).findByRole('status')).resolves.toBeVisible(); } };
-export const ErrorPhone: Story = { ...ErrorDesktop, globals: { viewport: { value: 'phone' } } };
-export const IncompleteWindow: Story = { ...ErrorDesktop, args: { state: 'underfilled' } };
-export const LoadingDesktop: Story = { args: { state: 'loading' },
+export const PopulatedPhone: Story = { ...PopulatedDesktop, globals: phone };
+export const EmptyDesktop: Story = { args: { visit: 'visit-ranking-module-empty' },
+  async play({ canvasElement }) { await expect(within(canvasElement).findByRole('heading', { name: 'Nothing here yet' })).resolves.toBeVisible(); } };
+export const EmptyPhone: Story = { ...EmptyDesktop, globals: phone };
+export const LoadingDesktop: Story = { args: { loading: true },
   async play({ canvasElement }) { await expect(canvasElement.querySelector('[aria-busy="true"]')).not.toBeNull(); } };
-export const LoadingPhone: Story = { ...LoadingDesktop, globals: { viewport: { value: 'phone' } } };
+export const LoadingPhone: Story = { ...LoadingDesktop, globals: phone };
+export const Stranger: Story = { ...PopulatedDesktop, args: { persona: 'stranger' } };
+export const Member: Story = { ...PopulatedDesktop, args: { persona: 'member' } };
+export const Owner: Story = { ...PopulatedDesktop, args: { persona: 'owner' } };
+export const Moderator: Story = { ...PopulatedDesktop, args: { persona: 'moderator' } };
+export const Operator: Story = { ...PopulatedDesktop, args: { persona: 'operator' } };

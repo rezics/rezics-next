@@ -59,19 +59,25 @@ afterAll(async () => {
 async function captureVisit(sessions: PersonaSessions, name: PersonaName, label: string,
   query: DiscussionQuery, chart = false) {
   let ordinal = 0;
+  let refreshFollow = false;
   const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init), url = new URL(request.url);
     if (!url.pathname.startsWith(`${BFF_PREFIX}/`)) throw new Error(`Unexpected visit request: ${url.pathname}`);
     const person = request.credentials === 'omit' ? sessions.visitor : sessions[name];
-    return recording.session(name, person)(`${label}-${++ordinal}`, request.method,
+    const response = await recording.session(name, person)(`${label}-${++ordinal}`, request.method,
       url.pathname.slice(BFF_PREFIX.length) + url.search, undefined, undefined,
       { headers: Object.fromEntries(request.headers.entries()), settle: false });
+    if (url.pathname.startsWith(`${BFF_PREFIX}/v1/follows/`)) {
+      const follow = response.ok ? await response.clone().json() as { following: boolean | null; level: string | null } : null;
+      refreshFollow = !follow || follow.following === null || follow.level === null;
+    }
+    return response;
   }) as typeof fetch;
   const page = await rankingVisit({ replay: rankingVisitHost(fetcher, name !== 'visitor'),
     ref: short(sessions.realm), locale: 'en', query, ...(chart ? { module: rankingChart } : {}) });
   expect(page).not.toBeNull();
   // The shared relationship control refreshes unknown follow levels on mount.
-  if (sessions[name].actingSubject) await mainRelationships(sessions[name].actingSubject!, {
+  if (refreshFollow && sessions[name].actingSubject) await mainRelationships(sessions[name].actingSubject!, {
     origin: 'https://recorded.invalid', fetch: fetcher,
   }).state(sessions.realm, 'realm');
 }
