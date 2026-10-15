@@ -143,8 +143,9 @@ async function place(body: string, parent?: Reply): Promise<Reply> {
   return { reply: id, variantId, ...saved, placement: placed.placement, reviewDecisionId: review.decisionId };
 }
 async function installManager(target: Realm) {
-  const policy = await json<{ policyRevision: string; termsRevision: string }>(await call('GET',
-    `/v1/realms/${short(target.realm)}/joining?actingSubject=${encodeURIComponent(manager.actor)}`, manager));
+  const { invitation: policy } = await json<{ invitation: { policyRevision: string; termsRevision: string } }>(
+    await call('POST', `/v1/realms/${short(target.realm)}/invitations`, builder,
+      { actingSubject: builder.actor, member: manager.actor, expiresInSeconds: 3600 }));
   const consent = await json<{ consentReference: string }>(await call('POST', '/v1/me/membership-consents', manager,
     { profile: 'access-membership-consent-v1', kind: 'realm', ownerSubject: target.realm, memberSubject: manager.actor,
       expectedGeneration: '0', expectedPolicyRevision: policy.policyRevision, termsRevision: policy.termsRevision }));
