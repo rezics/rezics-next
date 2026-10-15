@@ -18,15 +18,15 @@ test('GOV11/GOV22: vote scopes and receipt event classes are owner-discovered', 
     'MandateApprovalRecordedEvent', 'VotePollCancelledEvent', 'VoteSeatCancelledEvent',
     'VoteBallotCancelledEvent', 'VoteInvalidationCancelledEvent',
   ];
-  for (const kind of kinds) expect(ownerOutboxEventHandler(`${RV}${kind}`)).toBeDefined();
-  expect(ownerOutboxEventHandler(`${RV}VoteCommandCancelledEvent`)).toBeUndefined();
+  for (const kind of kinds) expect(await ownerOutboxEventHandler(`${RV}${kind}`)).toBeDefined();
+  expect(await ownerOutboxEventHandler(`${RV}VoteCommandCancelledEvent`)).toBeUndefined();
 
   const admissionId = '00000000-0000-4000-8000-000000000001';
   const action = 'governance.poll.administer';
   const receipt = `urn:rezics:receipt:${hash(`${admissionId}\0${receiptFamilies[action]}`)}`;
   const suffix = hash(`${receipt}\0rejected`);
   const eventId = `urn:rezics:event:${suffix}`;
-  const handler = ownerOutboxEventHandler(`${RV}VotePollCancelledEvent`)!;
+  const handler = (await ownerOutboxEventHandler(`${RV}VotePollCancelledEvent`))!;
   const fields: Record<string, string> = { admissionId, receipt, outcome: `${RV}Cancelled`,
     reason: `${RV}VoteRejected`, digest: 'a'.repeat(64), authorityEpoch: '1',
     scope: 'vote:poll:00000000-0000-4000-8000-000000000001' };

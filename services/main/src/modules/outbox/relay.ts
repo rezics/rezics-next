@@ -1035,7 +1035,8 @@ export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOu
 }
 
 async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
-  eventId: string, handlerFor: (kind: string) => OwnerOutboxEventHandler | undefined,
+  eventId: string, handlerFor: (kind: string) => OwnerOutboxEventHandler | undefined
+    | Promise<OwnerOutboxEventHandler | undefined>,
 ): Promise<DeliveredMainEvent> {
   const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?kind ?ordinal ?action ?receipt ?eventOperation ?eventWork ?outcome ?admissionId

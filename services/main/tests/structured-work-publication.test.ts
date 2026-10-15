@@ -87,13 +87,13 @@ test('WORK10/COMP08: publication intent digest binds the exact source, disclosur
     rightsBasis: 'imported-material' as 'original-contribution' })).toThrow('invalid structured Work publication source');
 });
 
-test('WORK10: publication receipt families and typed outbox handlers are owner-discovered', () => {
+test('WORK10: publication receipt families and typed outbox handlers are owner-discovered', async () => {
   expect(receiptFamilyFor('work.publish')).toBe('work-structure-publication-v1');
   expect(receiptFamilyFor('work.withdraw-publication')).toBe('work-structure-withdrawal-v1');
   expect(receiptFamilyFor('work.publish')).not.toBe(receiptFamilyFor('work.withdraw-publication'));
-  expect(ownerOutboxEventHandler(`${RV}WorkStructurePublicationEvent`)
+  expect((await ownerOutboxEventHandler(`${RV}WorkStructurePublicationEvent`))
     ?.type).toBe('com.rezics.work.structure-publication.v1');
-  expect(ownerOutboxEventHandler(`${RV}WorkStructureWithdrawalEvent`)
+  expect((await ownerOutboxEventHandler(`${RV}WorkStructureWithdrawalEvent`))
     ?.type).toBe('com.rezics.work.structure-withdrawal.v1');
   expect(workStructurePublicationReceiptIri(admissionId, 'work.publish'))
     .toBe(`urn:rezics:receipt:${hash(`${admissionId}\0work-structure-publication-v1`)}`);
@@ -144,7 +144,7 @@ test('WORK10: publication and withdrawal events are reconstructed from their exa
   ];
   for (const { action, kind, eventType, receipt } of cases) {
     const eventId = `urn:rezics:event:${hash(receipt.receipt)}`;
-    const handler = ownerOutboxEventHandler(`${RV}${kind}`)!;
+    const handler = (await ownerOutboxEventHandler(`${RV}${kind}`))!;
     const envelope = await handler.read({
       fuseki: { query: async (query: string) => query.includes('SELECT ?admission')
         ? { results: { bindings: [{ admission: { value: admissionId },
