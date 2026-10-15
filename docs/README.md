@@ -53,7 +53,7 @@ remain in code and the contract owners linked by the decision index.
 | Owner | Responsibility |
 | --- | --- |
 | [Product](product/capabilities.md) | Scope, capability coverage and the [design principles](product/design-principles.md) for capabilities, APIs and screens. |
-| [Architecture](architecture/README.md) | System boundaries, selected technologies and cross-domain invariants. |
+| [Architecture](architecture/README.md) | System boundaries, selected technologies and cross-domain invariants; the [private anchored journals proposal](architecture/anchored-journals.md) awaits program review. |
 | [Contracts](contracts/README.md) | Identity, operations, state transitions, authority and observable outcomes. |
 | [Services](architecture/services.md) | Service boundaries, owned data and the [Account service](services/account.md) procedures. |
 | [Implementation blueprints](implementation/README.md) | Concrete representations, extension procedures and producer-to-consumer protocols. |
