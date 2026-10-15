@@ -1,6 +1,6 @@
 # Private plans and scheduled actions
 
-Proposal for program review, 2026-10-15. This decides the smallest Scheduled
+Decided by program on 2026-10-15, with the amendment under "Program review" below. This decides the smallest Scheduled
 extension behind competitor-coverage finding B05. It proposes ownership and
 semantics; it adds no contracts, scope rows, operations or implementation.
 
@@ -304,3 +304,20 @@ and complete the same actions through those APIs. This static decision review
 does not establish a human journey, public calendar readiness or competitor
 replacement parity. This step hands only this proposal to program review;
 contracts, persona rows, proof, implementation and surfaces follow separately.
+
+## Program review
+
+Accepted on 2026-10-15 with one simplification. Because a series is finite
+(at most 512 occurrences within two years), the command that defines, edits or
+cancels a series writes its complete occurrence set and due actions in the same
+transaction. That is bounded work per command, independent of how many plans
+exist. Ordinary edits therefore have no preparing generation, checkpointed
+preparation or published-generation state; a read never sees a partial series.
+Resumable, checkpointed work remains only where the trigger is not one
+person's command: a timezone-rules update that touches many schedules, export,
+cleanup and catch-up after downtime. Backend complexity is the cost to avoid,
+and this keeps the first cut to what its finite admission already makes safe.
+The other budgets, the due-sweep design and the notification gate stand as
+written. Meal plans bound to Collection entries are the first configuration to
+prove; reading clubs, return reminders and airing calendars follow on the same
+owners.
