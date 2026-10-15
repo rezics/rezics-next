@@ -46,6 +46,12 @@ test('creating a recipe opens the recipe editor, and a book or other work keeps 
     `${studioHref(agent, `/works/${idOf(created)}/write`)}?language=zh-Hans`);
 });
 
+test('creation already in the eligible session Agent opens the canonical editor without another redirect', () => {
+  expect(createdWorkPath(agent, created, 'recipe', 'en', agent.iri)).toBe(recipeEditHref(created));
+  expect(createdWorkPath(agent, created, 'recipe', 'en', agents[1]!.iri)).toBe(withAgent(recipeEditHref(created), agent));
+  expect(createdWorkPath(agent, created, 'recipe', 'en', null)).toBe(withAgent(recipeEditHref(created), agent));
+});
+
 const cook = agents[0]!;
 const recipeText = { id: ids.texts.recipe, revision: 'https://rezics.com/id/00000000-0000-4000-8000-000000000302' };
 
