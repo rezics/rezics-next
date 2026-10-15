@@ -37,7 +37,9 @@ export default function LocalizedLink({
     <Link
       href={destination}
       {...props}
-      prefetch={navigateDocument ? false : props.prefetch}
+      // A visible Work link can render a full live owner read. Keep speculative
+      // reads opt-in so a hub's links cannot spend the backend's capacity before navigation.
+      prefetch={navigateDocument ? false : props.prefetch ?? false}
       onClick={(event) => {
         onClick?.(event);
         const anchor = event.currentTarget;

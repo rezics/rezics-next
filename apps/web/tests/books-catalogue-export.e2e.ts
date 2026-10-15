@@ -9,6 +9,7 @@ import libraryJa from '../features/library/messages/ja.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import type { BooksCatalogue } from './books-catalogue-seed.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
+import { reloadJourney, visitJourney } from './journey-navigation.ts';
 import { expectClean, type Findings, keyboardReach, pressByKeyboard } from './g-743-matrix.ts';
 import { credentials, uuid, visitor } from './g-743-stack.ts';
 
@@ -48,7 +49,7 @@ for (const locale of ['en', 'ja'] as const) {
     const found: Findings = [];
     const [book, other] = seed.books;
     const browse = localizedPath(spaceHref(seed.handle, 'site', ['browse']), locale);
-    await page.goto(browse);
+    await visitJourney(page, browse);
     await expect(page.locator('html')).toHaveAttribute('lang', locale);
     const results = page.locator('#browse-title').locator('..');
     await expect(results.getByRole('link', { name: book!.title, exact: true }).first()).toBeVisible();
@@ -63,7 +64,7 @@ for (const locale of ['en', 'ja'] as const) {
     await expect(results.getByRole('link', { name: other!.title, exact: true })).toHaveCount(0);
     await expect(results.getByRole('link', { name: seed.outside.title, exact: true })).toHaveCount(0);
     await page.waitForLoadState('load');
-    await page.reload();
+    await reloadJourney(page);
     await expect(search).toHaveValue('Lighthouse');
     await expect(results.getByRole('link', { name: book!.title, exact: true }).first()).toBeVisible();
     await expect(results.getByRole('link', { name: other!.title, exact: true })).toHaveCount(0);
@@ -77,7 +78,7 @@ for (const locale of ['en', 'ja'] as const) {
     await expect(page).toHaveURL(url => url.pathname.startsWith(zoneWorkPath) || url.pathname.startsWith(workPath), { timeout: 60_000 });
     await expect(page.getByRole('heading', { level: 1, name: book!.title, exact: true })).toBeVisible({ timeout: 30_000 });
     await page.waitForLoadState('load');
-    await page.reload();
+    await reloadJourney(page);
     await expect(page.locator('html')).toHaveAttribute('lang', locale);
     await expect(page.getByRole('heading', { level: 1, name: book!.title, exact: true })).toBeVisible();
     expectClean(found);
@@ -97,7 +98,7 @@ for (const locale of ['en', 'ja'] as const) {
       await expect(page.getByRole('heading', { level: 1, name: t.title, exact: true })).toBeVisible({ timeout: 30_000 });
       await expect(page.getByRole('heading', { level: 3, name: book.title, exact: true })).toBeVisible();
       await page.waitForLoadState('load');
-      await page.reload();
+      await reloadJourney(page);
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
       await expect(page.getByRole('heading', { level: 3, name: book.title, exact: true })).toBeVisible();
       await openBackup(page, t.backupTitle, found);
@@ -126,3 +127,49 @@ for (const locale of ['en', 'ja'] as const) {
     }
   });
 }
+
+
+test('books: keyboard shelving receives a status response on ten fresh Work visits', async ({ page }, info) => {
+  test.setTimeout(600_000);
+  const book = seed.outside;
+  const account = credentials();
+  const path = `/api/main/v1/works/${uuid(book.work)}/reader-status`;
+  const statePath = `/api/main/v1/works/${uuid(book.work)}/reader-state?actingSubject=${encodeURIComponent(account.actingSubject)}`;
+  const found: Findings = [];
+  const requests: string[] = [];
+  page.on('request', request => requests.push(`${request.method()} ${new URL(request.url()).pathname}`));
+  page.on('requestfailed', request => requests.push(`FAILED ${request.url()} ${request.failure()?.errorText}`));
+  await signInAtAccounts(page, localizedPath(resourceHref('/w/', uuid(book.work)), 'en'), account.member);
+  try {
+    for (let visit = 0; visit < 10; visit++) {
+      const state = await page.request.get(statePath);
+      expect(state.status(), await state.text()).toBe(200);
+      const current = (await state.json() as { status: { version: number; status: string | null } }).status;
+      if (current.status !== null) {
+        const removed = await page.request.put(path, { data: {
+          actingSubject: account.actingSubject, expectedVersion: current.version, status: null,
+        }, headers: { 'Idempotency-Key': crypto.randomUUID() } });
+        expect(removed.status(), await removed.text()).toBe(200);
+      }
+      await visitJourney(page, localizedPath(resourceHref('/w/', uuid(book.work)), 'en'));
+      await expect(page.getByRole('heading', { level: 1, name: book.title, exact: true })).toBeVisible({ timeout: 30_000 });
+      const add = page.getByRole('button', { name: 'Want to read', exact: true });
+      await expect(add).toBeEnabled();
+      const written = page.waitForResponse(response => new URL(response.url()).pathname === path
+        && response.request().method() === 'PUT', { timeout: 30_000 });
+      await pressByKeyboard(page, add, found, 'Want to read');
+      const response = await written;
+      expect(response.status(), await response.text()).toBe(200);
+      expect(await response.json()).toMatchObject({ status: 'want-to-read' });
+      const saved = page.getByRole('button', { name: `Want to read — Shelve “${book.title}”`, exact: true });
+      await expect(saved).toBeVisible();
+      await expect(saved).not.toHaveAttribute('aria-busy', 'true');
+      await reloadJourney(page);
+      await expect(saved).toBeVisible({ timeout: 30_000 });
+    }
+    await page.screenshot({ path: info.outputPath('books-keyboard-shelved.png'), fullPage: true });
+    expectClean(found);
+  } finally {
+    await info.attach('shelving-requests', { body: requests.join('\n'), contentType: 'text/plain' });
+  }
+});

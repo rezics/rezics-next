@@ -6,6 +6,7 @@ import { realmWorkHref, siteHref } from '../../features/realm/route.ts';
 import { parseAddressSegment } from '../../features/address/path.ts';
 import { credentials } from '../g-743-stack.ts';
 import { signInAtAccounts } from '../account-sign-in.ts';
+import { reloadJourney, visitJourney } from '../journey-navigation.ts';
 import { expectClean, type Findings, keyboardReach, pressByKeyboard } from '../g-743-matrix.ts';
 import type { GamesCatalogue } from '../games-seed.ts';
 
@@ -67,8 +68,14 @@ export function registerGamesJourneys() {
       const found: Findings = [];
       const work = games.works[0]!;
       const words = copy[locale];
+      const speculativeWorks: string[] = [];
+      page.on('request', request => {
+        const headers = request.headers();
+        if ((headers['next-router-prefetch'] || headers.purpose === 'prefetch')
+          && new URL(request.url()).pathname.includes('/w/')) speculativeWorks.push(request.url());
+      });
       await signInAtAccounts(page, '/en', credentials().member);
-      await page.goto(localizedPath(realmWorkHref(games.handle, work.work), locale));
+      await visitJourney(page, localizedPath(realmWorkHref(games.handle, work.work), locale));
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
       await expect(page.getByRole('heading', { level: 1, name: work.title, exact: true })).toBeVisible();
       const availability = page.getByRole('region', { name: words.region, exact: true });
@@ -82,7 +89,7 @@ export function registerGamesJourneys() {
           await pressByKeyboard(page, page.getByRole('button', { name: words.retry, exact: true }), found, 'retry Work page');
         } else if (recoveries < 3 && await availability.getByRole('alert').isVisible()) {
           recoveries++;
-          await page.reload();
+          await reloadJourney(page);
         }
         await expect(language).toBeVisible({ timeout: 5_000 });
       }).toPass({ timeout: 60_000, intervals: [1_000] });
@@ -113,10 +120,22 @@ export function registerGamesJourneys() {
       });
       expect(response.status()).toBe(200);
       await expect(availability.getByRole('status')).toHaveText(words.saved);
-      await page.reload();
+      await reloadJourney(page);
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
       await expect(edition).toHaveText(selected);
       await expect(language).toHaveText(words.english);
+      // Saving a private preference must leave every public hub read usable.
+      const editions = page.locator('section[aria-labelledby="editions-preview"]');
+      await expect(editions).toBeVisible();
+      for (const release of games.releases) await expect(editions.getByRole('link', { name: release.title, exact: true })).toBeVisible();
+      for (const id of ['editions-preview', 'work-ratings', 'work-adoption']) {
+        const panel = page.locator(`section[aria-labelledby="${id}"]`);
+        await expect(panel).toBeVisible();
+        await expect(panel.getByRole('alert')).toHaveCount(0);
+        await expect(panel.locator('[aria-busy="true"]')).toHaveCount(0);
+      }
+      await expect(page.locator('section[aria-labelledby="work-adoption"]').getByRole('link', { name: /Games/ })).toBeVisible();
+      expect(speculativeWorks, 'hub links must not launch speculative live Work reads').toEqual([]);
       await capture(page, info, `${locale}-saved-game-edition`);
       expectClean(found);
     });
@@ -127,7 +146,7 @@ export function registerGamesJourneys() {
       test.setTimeout(180_000);
       const found: Findings = [];
       const words = copy[locale];
-      await page.goto(siteHref(locale, games.handle, ['browse']));
+      await visitJourney(page, siteHref(locale, games.handle, ['browse']));
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
       const cards = page.locator('main h3 a');
       await expect(cards).toHaveCount(games.works.length);
@@ -142,7 +161,7 @@ export function registerGamesJourneys() {
       const matches = games.works.filter(work => work.title.startsWith('Starfall'));
       const expected = matches.map(work => work.title).sort();
       expect((await cards.allTextContents()).map(text => text.trim()).sort()).toEqual(expected);
-      await page.reload();
+      await reloadJourney(page);
       await expect(search).toHaveValue('Starfall');
       await expect(cards).toHaveCount(2);
       expect((await cards.allTextContents()).map(text => text.trim()).sort()).toEqual(expected);
@@ -156,7 +175,7 @@ export function registerGamesJourneys() {
           && address?.kind !== 'alias' && address?.id === matches[0]!.work.slice(-36);
       });
       await expect(page.getByRole('heading', { level: 1, name: matches[0]!.title, exact: true })).toBeVisible();
-      await page.reload();
+      await reloadJourney(page);
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
       await expect(page.getByRole('heading', { level: 1, name: matches[0]!.title, exact: true })).toBeVisible();
       await capture(page, info, `${locale}-game-search-result`);

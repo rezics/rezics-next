@@ -101,6 +101,10 @@ const withdrawn: ReaderActions = { kind: 'unavailable' };
 /** The reader's status with an optimistic update: shown at once, reverted with a note when Main refuses. Choices made while one is saving are coalesced by the store, newest wins. */
 function useStatus(work: string) {
   const actions = useReaderActions();
+  // Server HTML arrives before the write handler and store lifetime connect.
+  // A native disabled control keeps an early keyboard press from being lost.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const known = actions.kind === 'ready' ? actions.stateOf(work).status : null;
   const [pending, setPending] = useState<{ status: ReadingStatus | null } | null>(null);
   const [state, setState] = useState<'idle' | 'saving' | 'failed'>('idle');
@@ -118,7 +122,7 @@ function useStatus(work: string) {
     setPending(null);
     setState(saved ? 'idle' : 'failed');
   }
-  return { actions, status, state, choose };
+  return { actions, status, state, choose, hydrated };
 }
 
 /**
@@ -162,7 +166,7 @@ const markClass = cn('absolute end-2 top-2 z-20 grid size-9 place-items-center r
 /** The shelf control on a cover's corner, for tiles in shelves and grids. */
 export function ShelfMark({ work, title, locale }: { work: string; title: string; locale: UiLocale }) {
   const t = materializeData(messages[locale], { locale });
-  const { actions, status, state, choose } = useStatus(work);
+  const { actions, status, state, choose, hydrated } = useStatus(work);
   if (actions.kind === 'unavailable') return null;
   if (actions.kind === 'signed-out') {
     return <Link href={actions.signInHref} aria-label={t.signInToShelve} title={t.signInToShelve} className={markClass}>
@@ -170,7 +174,7 @@ export function ShelfMark({ work, title, locale }: { work: string; title: string
   }
   const label = status ? `${t.shelve({ title })} · ${statusLabel(status, t)}` : t.shelve({ title });
   return <Menu onSelect={selectStatus(next => void choose(next))}>
-    <MenuTrigger aria-label={label} title={label} data-shelved={status ? '' : undefined}
+    <MenuTrigger disabled={!hydrated} aria-label={label} title={label} data-shelved={status ? '' : undefined}
       aria-busy={state === 'saving' || undefined} className={markClass}>
       {status ? <BookmarkCheckIcon aria-hidden="true" className="size-4.5" />
         : <BookmarkPlusIcon aria-hidden="true" className="size-4.5" />}
@@ -192,7 +196,7 @@ export function ShelfButton({ work, title, locale, size = 'lg', variant = 'defau
   variant?: 'default' | 'outline'; className?: string;
 }) {
   const t = materializeData(messages[locale], { locale });
-  const { actions, status, state, choose } = useStatus(work);
+  const { actions, status, state, choose, hydrated } = useStatus(work);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsAsked, setDetailsAsked] = useState(false);
   if (actions.kind === 'unavailable') return null;
@@ -211,7 +215,7 @@ export function ShelfButton({ work, title, locale, size = 'lg', variant = 'defau
   if (status) {
     return <div className={cn('grid gap-1.5', className)}>
       <Menu onSelect={onSelect}>
-        <MenuTrigger className={cn(buttonVariants({ size, variant: 'outline', pill: true }), 'w-full')}
+        <MenuTrigger disabled={!hydrated} className={cn(buttonVariants({ size, variant: 'outline', pill: true }), 'w-full')}
           aria-label={`${statusLabel(status, t, words)} — ${t.shelve({ title })}`} aria-busy={state === 'saving' || undefined}>
           <CheckIcon aria-hidden="true" className="text-primary" />{statusLabel(status, t, words)}
           <ChevronDownIcon aria-hidden="true" className="ms-auto" />
@@ -224,11 +228,11 @@ export function ShelfButton({ work, title, locale, size = 'lg', variant = 'defau
   }
   return <div className={cn('grid gap-1.5', className)}>
     <ButtonGroup className="w-full">
-      <Button size={size} variant={variant} className="flex-1 rounded-s-full" isLoading={state === 'saving'}
+      <Button disabled={!hydrated} size={size} variant={variant} className="flex-1 rounded-s-full" isLoading={state === 'saving'}
         onClick={() => void choose('want-to-read')}>
         <BookmarkPlusIcon aria-hidden="true" />{words?.wantToRead ?? t.wantToRead}</Button>
       <Menu onSelect={onSelect}>
-        <MenuTrigger aria-label={t.shelfOptions}
+        <MenuTrigger disabled={!hydrated} aria-label={t.shelfOptions}
           className={cn(buttonVariants({ variant, size: size === 'lg' ? 'icon-lg' : size === 'md' ? 'icon-md' : 'icon-sm' }),
             'w-11 flex-none rounded-e-full', variant === 'default' && 'border-s border-s-primary-foreground/25')}>
           <ChevronDownIcon aria-hidden="true" /></MenuTrigger>

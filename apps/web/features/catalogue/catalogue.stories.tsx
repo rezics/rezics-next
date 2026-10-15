@@ -329,3 +329,20 @@ export const ImportedCoverCreditsPhone: Story = {
   ...ImportedCoverCredits, args: { locale: 'ja' },
   globals: { viewport: { value: 'phone' }, locale: 'ja' },
 };
+
+
+/** The one-press Work action is available once its write handler is mounted. */
+export const ShelfByKeyboard: Story = {
+  render: () => <ReaderActionsProvider signedIn signInHref={signInHref} actions={memoryReaderActions()}>
+    <div className="w-64 p-6"><ShelfButton work={storyWorkId(1)} title="Pride and Prejudice" locale="en" /></div>
+  </ReaderActionsProvider>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const add = canvas.getByRole('button', { name: 'Want to read', exact: true });
+    await waitFor(() => expect(add).toBeEnabled());
+    await userEvent.tab();
+    await expect(add).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(canvas.getByRole('button', { name: /^Want to read — Shelve/ })).toBeVisible());
+  },
+};
