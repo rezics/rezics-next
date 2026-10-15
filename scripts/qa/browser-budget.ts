@@ -6,6 +6,18 @@ export function browserProjectCount(selected = process.env.REZICS_E2E_PROJECTS):
   return !value ? 1 : value === 'all' ? 3 : value.split(',').length;
 }
 
+/** Explicit API proofs can precede browser apps on the same storage stack.
+ * Their fixture apps release the listeners before the browser apps start. */
+export function browserApiOutcomeFiles(raw = process.env.REZICS_E2E_API_OUTCOME_FILES): string[] {
+  if (!raw) return [];
+  const files: unknown = JSON.parse(raw);
+  if (!Array.isArray(files) || files.length < 1 || files.length > 4
+    || files.some(file => typeof file !== 'string'
+      || !/^tests\/qa\/integration\/outcomes\/(?:[a-z0-9-]+\/)+[a-z0-9-]+\.test\.ts$/.test(file))
+    || new Set(files).size !== files.length) throw new Error('Provide one to four distinct API outcome test paths');
+  return files as string[];
+}
+
 export interface E2eBrowserPlan {
   /** Journey files named on the command. Empty means every registered web journey. */
   selectedFiles: string[];
@@ -56,7 +68,7 @@ export function browserBudgets(playwrightFiles: number, storyFiles: number, proj
   }
   return {
     // Account ready, Accounts Worker build, Main ready, Web Worker build.
-    setup: 30_000 + 240_000 + 30_000 + 240_000,
+    setup: 30_000 + 240_000 + 30_000 + 240_000 + (browserApiOutcomeFiles().length ? 600_000 : 0),
     playwright: Math.max(minimum, 30_000 + playwrightFiles * 30_000) * projects,
     // Accounts journeys allow 120s each and several share a file, so the file allowance is wider than web's.
     accountsPlaywright: accountsPlaywright === 0 ? 0

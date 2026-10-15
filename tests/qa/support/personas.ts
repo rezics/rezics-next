@@ -253,6 +253,20 @@ interface PersonaOptions {
 async function applications(options: PersonaOptions) {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId) throw new Error('Persona sessions require the QA integration tier');
+  if (Bun.env.REZICS_QA_BROWSER_OUTCOMES === '1') {
+    // The browser stack already chose its first administrator. API proofs sign
+    // in as that same fixture identity; they never designate a second holder.
+    const file = Bun.env.REZICS_WEB_AUTH_PRIVATE_PATH;
+    if (!file) throw new Error('Shared browser outcome requires its private fixture');
+    const fixture = JSON.parse(readFileSync(file, 'utf8')) as {
+      member: { id: string; email: string; password: string }; actingSubject: string;
+    };
+    if (fixture.member?.id !== Bun.env.PLATFORM_FIRST_ADMIN_ACCOUNT
+      || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(fixture.actingSubject))
+      throw new Error('Shared browser outcome must retain the configured first administrator');
+    firstOperator = { runId, email: fixture.member.email, password: fixture.member.password,
+      actingSubject: fixture.actingSubject };
+  }
   const auth = options.retainedAuth ? undefined : await joiningAuthFixture(runId);
   const authDirectory = auth ? dirname(auth.publicConfigPath) : undefined;
   const runtime = auth ? readEnv(auth.runtimeEnvPath) : {

@@ -1,10 +1,23 @@
 import { afterEach, expect, test } from 'bun:test';
-import { browserBudgets } from './browser-budget.ts';
+import { browserApiOutcomeFiles, browserBudgets } from './browser-budget.ts';
 
 const original = process.env.REZICS_E2E_PLAYWRIGHT_BUDGET_MS;
+const originalApi = process.env.REZICS_E2E_API_OUTCOME_FILES;
 afterEach(() => {
   if (original === undefined) delete process.env.REZICS_E2E_PLAYWRIGHT_BUDGET_MS;
   else process.env.REZICS_E2E_PLAYWRIGHT_BUDGET_MS = original;
+  if (originalApi === undefined) delete process.env.REZICS_E2E_API_OUTCOME_FILES;
+  else process.env.REZICS_E2E_API_OUTCOME_FILES = originalApi;
+});
+test('shared API outcome proofs use only explicit paths and one bounded preparation allowance', () => {
+  delete process.env.REZICS_E2E_API_OUTCOME_FILES;
+  const base = browserBudgets(1, 1);
+  const files = ['tests/qa/integration/outcomes/realm/ranking.test.ts'];
+  process.env.REZICS_E2E_API_OUTCOME_FILES = JSON.stringify(files);
+  expect(browserApiOutcomeFiles()).toEqual(files);
+  expect(browserBudgets(1, 1)).toEqual({ ...base, setup: base.setup + 600_000 });
+  for (const value of [[], [...files, ...files], ['../ranking.test.ts'], ['services/main/tests/search.test.ts']])
+    expect(() => browserApiOutcomeFiles(JSON.stringify(value))).toThrow();
 });
 test('ordinary browser runs retain their deadline', () => {
   delete process.env.REZICS_E2E_PLAYWRIGHT_BUDGET_MS;

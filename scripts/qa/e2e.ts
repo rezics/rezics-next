@@ -322,7 +322,7 @@ async function runE2e(): Promise<void> {
   const { Pool } = await import('pg');
   const { initializeRelayCheckpoint } = await import('../../services/main/src/modules/outbox/relay.ts');
   const { readEnv } = await import('../dev/config.ts');
-  const { browserBudgets, browserFileCounts, browserProjectCount, e2eBrowserPlan, storybookCommands } = await import('./browser-budget.ts');
+  const { browserApiOutcomeFiles, browserBudgets, browserFileCounts, browserProjectCount, e2eBrowserPlan, storybookCommands } = await import('./browser-budget.ts');
   const root = resolve(import.meta.dir, '../..');
   const rawArgs = process.argv.slice(2);
   const storybookRequested = rawArgs.includes('--storybook') || process.env.REZICS_E2E_STORYBOOK === '1';
@@ -335,6 +335,8 @@ async function runE2e(): Promise<void> {
   const appRunId = process.env.REZICS_BROWSER_STACK_RUN_ID ?? runId;
   const plan = e2eBrowserPlan(playwrightArgs, storybookRequested);
   const counts = browserFileCounts(root, playwrightArgs);
+  const apiOutcomes = browserApiOutcomeFiles();
+  const apiOutcomeBudget = apiOutcomes.length ? 600_000 : 0;
   const budgets = browserBudgets(counts.playwright, counts.storybook, browserProjectCount(), {
     playwright: plan.accountsJourneys ? counts.accountsPlaywright : 0,
     stories: plan.stories ? counts.accountsStories : 0,
@@ -452,7 +454,20 @@ async function runE2e(): Promise<void> {
     const failuresPath = join(artifactDir, 'e2e-preparation-failures.json');
     const initialFailures: JourneyPreparationFailure[] = existsSync(failuresPath)
       ? JSON.parse(readFileSync(failuresPath, 'utf8')) : [];
-    await measured('Application setup', budgets.setup, async () => {
+    if (apiOutcomes.length) {
+      await measured('API outcomes on browser stack', apiOutcomeBudget, async () => {
+        for (const file of apiOutcomes) if (!existsSync(join(root, file))) throw new Error(`Missing API outcome ${file}`);
+        await admitIntegrationWorkScope({ root, projectRunId: appRunId, fusekiUrl: env.FUSEKI_URL!,
+          maintenanceToken: env.FUSEKI_MAINTENANCE_TOKEN, environment: env });
+        const outcomes = launch('api-outcomes', 'bun', ['test', ...apiOutcomes,
+          '--reporter=junit', `--reporter-outfile=${join(artifactDir, 'browser-api-outcomes.xml')}`], {
+          REZICS_QA_BROWSER_OUTCOMES: '1',
+        });
+        const code = await completed('API outcomes on browser stack', outcomes, apiOutcomeBudget);
+        if (code !== 0) throw new Error(`API outcomes failed (${code}); see logs/e2e-api-outcomes.log`);
+      });
+    }
+    await measured('Application setup', budgets.setup - apiOutcomeBudget, async () => {
       if (!env.MAIN_RELAY_DATABASE_URL || !env.MAIN_RELAY_CONSUMER || !env.MAIN_DATA_EPOCH) {
         throw new Error('The e2e stack needs a Main relay checkpoint');
       }
