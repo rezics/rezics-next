@@ -1,3 +1,4 @@
+import { RANKED_SEARCH_EXPECTED_COST, assertRankedSearchDeclaration } from '../../../scripts/load/ranked-search-contract.ts';
 import { beforeAll, expect, test } from 'bun:test';
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -231,7 +232,9 @@ async function profileRankedSearch() {
 if (process.env.REZICS_RANKED_SEARCH_PROFILE_CHILD === '1') {
   await profileRankedSearch();
 } else {
-  const { PUBLIC_SEARCH_PAGE_COST } = await import('../../../services/main/src/modules/work/search-continuation.ts');
+  const { PUBLIC_SEARCH_PAGE_COST: declaration } = await import('../../../services/main/src/modules/work/search-continuation.ts');
+  assertRankedSearchDeclaration(declaration);
+  const PUBLIC_SEARCH_PAGE_COST = RANKED_SEARCH_EXPECTED_COST;
   let evidence: Evidence[];
   let attempts: Attempt[];
   beforeAll(async () => {

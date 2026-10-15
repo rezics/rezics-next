@@ -23,9 +23,9 @@ export interface FixtureOwner {
   /** `offline-graph` loads the stopped, bootstrapped TDB2; `online` runs with services up. */
   readonly phase: 'offline-graph' | 'online';
   /** Authored profiles whose shapes and vocabulary the loader's records use. */
-  readonly modelProfiles?: readonly string[];
+  modelProfiles?(corpus: Corpus): readonly string[];
   /** Repository inputs whose change makes stored records of this owner stale. */
-  compatibilityInputs(root: string): Record<string, string>;
+  compatibilityInputs(root: string, corpus: Corpus): Record<string, string>;
   /** Deterministic digest and per-kind counts of the records `load` writes. */
   summarize(corpus: Corpus): OwnerSummary;
   load(corpus: Corpus, target: LoadTarget): Promise<OwnerLoadResult>;

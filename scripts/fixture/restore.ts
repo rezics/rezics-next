@@ -8,10 +8,10 @@ import { type StartupMemoryOptions } from '../qa/memory-admission.ts';
 import { qaStartupServices, rememberQaStack, QA_STACK_TIER } from '../qa/stack-ownership.ts';
 import { ownerReady } from '../load/restore.ts';
 import { readManifest } from './build.ts';
-import { DEFAULT_SEED, type FixtureProfile } from './corpus.ts';
+import { type Corpus, DEFAULT_SEED, type FixtureProfile } from './corpus.ts';
 import { FixtureWorkBudget } from './budget.ts';
 import { type FixtureManifest, type RestoreCompatibility, migrationInventory,
-  restoreCompatibility } from './manifest.ts';
+  restoreCompatibility, manifestCorpus } from './manifest.ts';
 import { migrateFixtureOwners } from './migrate.ts';
 import { fixtureOwners } from './owners/index.ts';
 import type { FixtureOwner } from './owners/types.ts';
@@ -38,9 +38,9 @@ export function startRestoredFixture<T>(budget: FixtureWorkBudget, env: NodeJS.P
 
 /** Owner generators, migration bytes and engine images a restore compares with a manifest. */
 export function fixtureRestoreInputs(docker: NodeJS.ProcessEnv,
-  owners: readonly FixtureOwner[] = fixtureOwners): Parameters<typeof restoreCompatibility>[1] {
+  corpus: Corpus, owners: readonly FixtureOwner[] = fixtureOwners): Parameters<typeof restoreCompatibility>[1] {
   return { owners: Object.fromEntries(owners.map(owner => [owner.name,
-    { generator: owner.generator, inputs: owner.compatibilityInputs(root) }])),
+    { generator: owner.generator, inputs: owner.compatibilityInputs(root, corpus) }])),
   migrations: migrationInventory(root), engines: currentEngines(docker),
   modelGeneration: fixtureModel(root).generation };
 }
@@ -49,10 +49,10 @@ export function fixtureRestoreInputs(docker: NodeJS.ProcessEnv,
 export function compatibleFixture(profile: FixtureProfile, seed = DEFAULT_SEED): FixtureManifest | undefined {
   const directory = fixtureRoot;
   if (!existsSync(directory)) return undefined;
-  const current = fixtureRestoreInputs(dockerEnvironment());
+  const docker = dockerEnvironment();
   return readdirSync(directory).map(id => readManifest(id))
     .filter((manifest): manifest is FixtureManifest => manifest?.profile === profile && manifest.seed === seed
-      && restoreCompatibility(manifest, current).compatible)
+      && restoreCompatibility(manifest, fixtureRestoreInputs(docker, manifestCorpus(manifest))).compatible)
     .sort((a, b) => b.build.completedAt.localeCompare(a.build.completedAt))[0];
 }
 
@@ -143,7 +143,7 @@ export async function restoreFixture(id: string, target: string,
   let pools: { access: Pool; content: Pool } | undefined;
   try {
     const compatibility = await phase('compatibility', () => restoreCompatibility(manifest,
-      runtime.inputs(docker, owners)));
+      runtime.inputs(docker, manifestCorpus(manifest), owners)));
     evidence.compatibility = compatibility;
     if (!compatibility.compatible) {
       throw new Error(`Fixture ${id} is stale; rebuild it: ${compatibility.reasons.join('; ')}`);

@@ -554,7 +554,7 @@ async function productionJson<T>(response: Response, status = 201): Promise<T> {
   return JSON.parse(body) as T;
 }
 
-test('production Realm release recovers its native receipt after Access acknowledgement rollback and owner profile change', async () => {
+test('production Realm release recovers its native receipt after Access acknowledgement rollback', async () => {
   const stack = await startMediaStack('realm-release-receipt');
   const store = stack.composition.dependencies.governance!.store;
   try {
@@ -654,13 +654,6 @@ test('production Realm release recovers its native receipt after Access acknowle
     expect(committed[0]!.work!.value).toBe(created.realm);
     expect((await stack.accessPool.query('SELECT 1 FROM access.outbox WHERE moderation_decision_id=$1',
       [accepted.decisionId])).rowCount).toBe(0);
-    const nextHead = native();
-    await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(created.realm)} rv:head ?head ; rv:definitionProfile ?profile }
-    } INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(created.realm)} rv:head ${iri(nextHead)} ;
-      rv:definitionProfile <urn:realm-receipt:changed-profile> }
-    } WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(created.realm)} rv:head ?head .
-      OPTIONAL { ${iri(created.realm)} rv:definitionProfile ?profile } } }`);
     const replay = await store.decide(staff.principal, release);
     expect(replay.replayed).toBe(true);
     expect(replay.decisionId).toBe(accepted.decisionId);

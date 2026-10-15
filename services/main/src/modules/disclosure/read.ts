@@ -931,10 +931,11 @@ async function currentHeads(env: WorkActivationEnvironment, selections: readonly
 }
 async function evaluateSelections(env: WorkActivationEnvironment, selections: readonly DisclosureSelection[],
   viewer: Viewer, channel: DisclosureChannel, client: PoolClient | undefined, anonymousNames: boolean) {
+  const legacyOnly = selections.every(selection => isLegacy(selection.ancestry));
   requireSelections(env, selections);
   const reader = selectionReader(env, selections);
   const selectedTargets = selections.map(selection => ({ ...selection.target, ancestry: selection.ancestry }));
-  if (selections.every(selection => isLegacy(selection.ancestry))) {
+  if (legacyOnly) {
     selectedTargets.forEach(target => Object.freeze(target));
     Object.freeze(selectedTargets);
   }
@@ -959,9 +960,10 @@ async function evaluateSelections(env: WorkActivationEnvironment, selections: re
     const current = legacySelection(env, legacy.targets[legacyIndex++]!);
     ancestryState(env).selections.set(current.ancestry, current);
     issuedAncestry.set(current.ancestry, { selection: current, environment: env });
-    return snapshotLegacyTarget({ ...current.target, ancestry: current.ancestry });
+    const target = { ...current.target, ancestry: current.ancestry };
+    return legacyOnly ? snapshotLegacyTarget(target) : target;
   });
-  if (selections.every(selection => isLegacy(selection.ancestry))) Object.freeze(targets);
+  if (legacyOnly) Object.freeze(targets);
   requireSelections(env, selections);
   try {
     const evaluated = reader?.readAtCut

@@ -209,6 +209,12 @@ export function migrationInventory(root: string): Record<string, string> {
   );
 }
 
+/** Recover the exact generator input, including custom population dimensions. */
+export function manifestCorpus(manifest: FixtureManifestCore): Corpus {
+  return { profile: manifest.profile, seed: manifest.seed, ...manifest.entities,
+    lineage: { ...manifest.lineage }, importOperation: manifest.importOperation };
+}
+
 export function manifestCore(
   root: string,
   corpus: Corpus,
@@ -230,7 +236,7 @@ export function manifestCore(
         {
           generator: owner.generator,
           ...owner.summarize(corpus),
-          inputs: owner.compatibilityInputs(root),
+          inputs: owner.compatibilityInputs(root, corpus),
         },
       ]),
     ),

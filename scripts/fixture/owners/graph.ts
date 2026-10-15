@@ -14,11 +14,10 @@ import { SELECTION_POLICY, SPACE_REALM_PROFILE_V1 } from '../../../services/main
 import { CONTRIBUTION_PROFILE } from '../../../services/main/src/modules/contribution/draft.ts';
 import { PUBLICATION_PROFILE } from '../../../services/main/src/modules/contribution/publish.ts';
 import { REALM_SELECTION_PROFILE } from '../../../services/main/src/modules/work/select-realm.ts';
-import { fixtureModelInputs, type FixtureModelUse } from '../model.ts';
+import { fixtureModel, fixtureModelInputs, type FixtureModelUse } from '../model.ts';
 import {
   type Corpus,
   type FixtureWork,
-  fixtureCorpus,
   IMPORT_SEQUENCE,
   RecordDigest,
   corpusWorks,
@@ -26,6 +25,7 @@ import {
   fixtureRealm,
   sampleIndices,
   sha256,
+  stable,
   workAt,
 } from '../corpus.ts';
 import { componentObjects } from './objects.ts';
@@ -147,38 +147,42 @@ async function* nquads(corpus: Corpus, recordModelProfile?: (profile: string) =>
   if (chunk) yield chunk;
 }
 
-let modelUse: FixtureModelUse | undefined;
-/** The same writers produce stored bytes and their model dependency inventory.
- * The small corpus spans the loader's types, languages and publication branches. */
-export function graphModelUse(): FixtureModelUse {
-  if (modelUse) return modelUse;
+let modelUseCache: { key: string; use: FixtureModelUse } | undefined;
+/** Walk the requested corpus. Compatibility needs only route-condition values:
+ * deduplicate those record shapes as we go instead of retaining a medium store
+ * in memory. Each Work emits its complete, disjoint set of record subjects. */
+export function graphModelUse(corpus: Corpus, paths?: ReadonlySet<string>): FixtureModelUse {
+  const key = stable({ corpus, paths: paths ? [...paths].sort() : null });
+  if (modelUseCache?.key === key) return modelUseCache.use;
   const profiles = new Set<string>();
-  const records = new Map<string, { types: Set<string>; values: Map<string, Set<string>> }>();
-  const corpus = fixtureCorpus('small');
+  const shapes = new Map<string, FixtureModelUse['records'][number]>();
   for (const work of corpusWorks(corpus)) {
+    const records = new Map<string, { types: Set<string>; values: Map<string, Set<string>> }>();
     for (const [graph, , declaration] of workQuads(corpus, work)) {
       profiles.add(declaration.profile);
-      const key = `${graph}\0${declaration.subject}`;
-      let record = records.get(key);
-      if (!record) { record = { types: new Set(), values: new Map() }; records.set(key, record); }
-      const value = declaration.object.startsWith('<') ? declaration.object.slice(1, -1) : declaration.object;
-      if (declaration.predicate === RDF_TYPE) record.types.add(value);
+      const recordKey = `${graph}\0${declaration.subject}`;
+      let record = records.get(recordKey);
+      if (!record) { record = { types: new Set(), values: new Map() }; records.set(recordKey, record); }
+      if (declaration.predicate === RDF_TYPE) record.types.add(declaration.object.slice(1, -1));
+      if (paths && !paths.has(declaration.predicate)) continue;
       const values = record.values.get(declaration.predicate) ?? new Set<string>();
       values.add(declaration.object);
       record.values.set(declaration.predicate, values);
     }
+    for (const record of records.values()) {
+      const shape = { types: [...record.types].sort(), values: Object.fromEntries([...record.values].map(([path, values]) => {
+        // Match CanonicalPolicy.singleObject, including language-tagged lexical values.
+        if (values.size !== 1) return [path, []];
+        const value = [...values][0]!;
+        const literal = /^("(?:[^"\\]|\\.)*")/.exec(value);
+        return [path, [value.startsWith('<') ? value.slice(1, -1) : literal ? JSON.parse(literal[1]!) as string : value]];
+      })) };
+      shapes.set(stable(shape), shape);
+    }
   }
-  modelUse = { profiles: [...profiles].sort(), records: [...records.values()].map(record => ({
-    types: [...record.types].sort(), values: Object.fromEntries([...record.values].map(([path, values]) => {
-      // CanonicalPolicy.singleObject admits only one RDF value and compares its
-      // URI or literal lexical form, regardless of datatype or language tag.
-      if (values.size !== 1) return [path, []];
-      const value = [...values][0]!;
-      const literal = /^("(?:[^"\\]|\\.)*")/.exec(value);
-      return [path, [value.startsWith('<') ? value.slice(1, -1) : literal ? JSON.parse(literal[1]!) as string : value]];
-    })),
-  })) };
-  return modelUse;
+  const use = { profiles: [...profiles].sort(), records: [...shapes.values()] };
+  modelUseCache = { key, use };
+  return use;
 }
 
 async function count(fuseki: FusekiClient, graph: string): Promise<number> {
@@ -192,13 +196,15 @@ export const graphOwner: FixtureOwner = {
   name: 'graph',
   generator: 'graph-work-public-search-v4',
   phase: 'offline-graph',
-  get modelProfiles() { return graphModelUse().profiles; },
-  compatibilityInputs(root) {
+  modelProfiles(corpus) { return graphModelUse(corpus, new Set()).profiles; },
+  compatibilityInputs(root, corpus) {
     const dockerfile = readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8');
+    const paths = new Set(fixtureModel(root).manifest.canonical.flatMap(entry =>
+      entry.routes.flatMap(route => route.when.map(condition => condition.path))));
     return {
       jena: /^ARG FUSEKI_VERSION=(\d+\.\d+\.\d+)$/m.exec(dockerfile)?.[1] ?? 'unknown',
       'infra/jena/fuseki-text.ttl': sha256(readFileSync(join(root, 'infra/jena/fuseki-text.ttl'))),
-      ...fixtureModelInputs(root, graphModelUse()),
+      ...fixtureModelInputs(root, graphModelUse(corpus, paths)),
     };
   },
   summarize(corpus) {

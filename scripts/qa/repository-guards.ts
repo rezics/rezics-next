@@ -124,8 +124,13 @@ export const repositoryGuards = [
     reason: 'Every public OpenAPI list operation must meet the list convention without new debt.',
   },
   {
+    file: 'scripts/lib/dependency-analysis.test.ts',
+    reads: ['scripts/**/*.ts'],
+    reason: 'Every dependency analysis uses the host-wide admission wrapper and fails closed on a busy lane.',
+  },
+  {
     file: 'scripts/static/web-continuations.test.ts',
-    reads: [webSourcePattern, ...generatedContractReads, 'scripts/static/web-continuations*'],
+    reads: [webSourcePattern, ...generatedContractReads, 'scripts/static/web-continuations*', 'scripts/static/ast-grep/rules/no-cursor-arithmetic.yml'],
     reason: 'Web list consumers preserve continuations and offer a route beyond capped results.',
   },
   {

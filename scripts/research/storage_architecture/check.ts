@@ -1,3 +1,6 @@
+import { dependencyAnalysis } from '../../lib/dependency-analysis.ts';
+import { resolve } from 'node:path';
+const root = resolve(import.meta.dir, '../../..');
 // One root static gate: types, generated contracts, docs, lint, format, and imports.
 const backend = process.argv.slice(2).includes('--backend');
 if (process.argv.slice(2).some((arg) => arg !== '--backend')) {
@@ -97,9 +100,7 @@ for (const command of commands) {
   if ((await child.exited) !== 0) process.exit(1);
 }
 
-const graph = Bun.spawnSync({
-  cmd: [
-    'node_modules/.bin/depcruise',
+const graph = dependencyAnalysis(root, [
     '--config',
     '.dependency-cruiser.json',
     '--output-type',
@@ -123,15 +124,12 @@ const graph = Bun.spawnSync({
     'services/main/src',
     'services/account/src',
     'services/content/src',
-  ],
-  stdout: 'pipe',
-  stderr: 'pipe',
-});
+  ], { encoding: 'utf8' });
 const graphOutput = Buffer.from(graph.stdout).toString();
 process.stdout.write(graphOutput);
 process.stderr.write(Buffer.from(graph.stderr).toString());
 if (
-  graph.exitCode !== 0 ||
+  graph.status !== 0 ||
   !/\([1-9]\d* modules, [1-9]\d* dependencies cruised\)/.test(graphOutput)
 ) {
   console.error('Dependency graph gate failed or scanned no TypeScript dependencies');

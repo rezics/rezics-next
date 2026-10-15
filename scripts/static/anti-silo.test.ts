@@ -1,3 +1,4 @@
+import { dependencyAnalysis } from '../lib/dependency-analysis.ts';
 import { spawnSync } from 'node:child_process';
 import { repositoryFiles } from '../lib/repository-files.ts';
 // Baseline guard for the backend-one rule. A count or key below the baseline passes.
@@ -422,21 +423,15 @@ function withTree(files: Record<string, string>, run: (tree: string) => void) {
 }
 
 function cruise(target: string) {
-  const result = Bun.spawnSync({
-    cmd: [
-      join(root, 'node_modules/.bin/depcruise'),
+  const result = dependencyAnalysis(root, [
       '--config',
       '.dependency-cruiser.json',
       '--output-type',
       'err-long',
       target,
-    ],
-    cwd: root,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
+    ], { encoding: 'utf8' });
   return {
-    code: result.exitCode,
+    code: result.status,
     // err-long wraps rule comments, so callers match the prose with the breaks removed.
     output:
       `${Buffer.from(result.stdout).toString()}${Buffer.from(result.stderr).toString()}`.replaceAll(

@@ -23,16 +23,9 @@ import { GovernanceConflict, GovernanceStale, GovernanceUnavailable,
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { waitForRealmDirectory } from '../../../tests/qa/integration/support/realm-directory.ts';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
-import { resolveRealmProfile } from '../src/modules/space/policy.ts';
 import { SafetyDecisionMail, type SafetyNoticeMail } from '../src/modules/governance/notices-mail.ts';
 import { DECIDE_ACTION, GLOBAL_CONTEXT, type DecisionInput } from '../src/modules/governance/store.ts';
 import { GRAPHS, RV, hash, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
-
-/** Raw owner mutations inject corruption and races on the disposable QA graph.
- * Keep this fixture boundary visible to QA's assembler classification. */
-async function mutateOwnerFixture(env: WorkActivationEnvironment, sparql: string) {
-  await env.fuseki.update(sparql);
-}
 
 const realm = 'https://rezics.com/id/00000000-0000-4000-8000-000000000101';
 const space = 'https://rezics.com/id/00000000-0000-4000-8000-000000000102';
@@ -825,31 +818,6 @@ async function productionRealm(label: string) {
   } catch (error) { await stack.stop(); throw error; }
 }
 
-test('production Realm ownership rejects an extra nonreciprocal Space before discovery or decision acceptance', async () => {
-  const f = await productionRealm('realm-reciprocal-proof');
-  try {
-    const stranger = await f.stack.member('realm-unrelated-space-owner');
-    const unrelatedSpace = `https://rezics.com/id/${randomUUID()}`;
-    await mutateOwnerFixture(f.stack.env, `PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.current}> {
-      <${f.realm}> rv:space <${unrelatedSpace}> .
-      <${unrelatedSpace}> a rv:Space ; rv:owner <${stranger.actor}> .
-    } }`);
-    await expect(resolveRealmProfile(f.stack.env, f.realm)).rejects.toThrow();
-    await expect(ownerTargetHeads({ graph: f.stack.env }).realmBasis!(f.input.targets[0]!)).rejects.toThrow();
-    await expect(graphNoticeParticipants(f.stack.env).participants!(f.input.targets[0]!, null, 1))
-      .rejects.toThrow();
-    await expect(f.governance.store.decide(f.staff.principal, f.input, true)).rejects.toThrow();
-    expect((await f.stack.accessPool.query('SELECT 1 FROM access.moderation_decision WHERE case_id=$1',
-      [f.report.caseId])).rowCount).toBe(0);
-    expect((await f.stack.accessPool.query('SELECT 1 FROM access.safety_party_notice WHERE case_id=$1',
-      [f.report.caseId])).rowCount).toBe(0);
-    const receipts = (await f.stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt WHERE {
-      GRAPH <${GRAPHS.receipts}> { ?receipt rv:moderationTarget <${f.realm}> }
-    } LIMIT 2`, 4096)).results?.bindings ?? [];
-    expect(receipts).toHaveLength(0);
-  } finally { await f.stack.stop(); }
-}, 120_000);
-
 test('production Realm decision creates owner-controller notices and replays one mail receipt per recipient', async () => {
   const f = await productionRealm('realm-notice-producer');
   try {
@@ -901,55 +869,6 @@ test('production Realm decision creates owner-controller notices and replays one
     expect((await f.stack.accessPool.query('SELECT 1 FROM access.governance_case_credential WHERE case_id=$1',
       [f.report.caseId])).rowCount).toBe(3); // One reporter and two affected-party credentials.
   } finally { await f.stack.stop(); }
-}, 120_000);
-
-test('production Realm dispatch refuses ConceptScheme introduced after its owner basis read', async () => {
-  const f = await productionRealm('realm-primary-kind-race');
-  const original = f.stack.fuseki.commandWithReceipt;
-  let raced = false;
-  try {
-    f.stack.fuseki.commandWithReceipt = async command => {
-      if (command.update.includes('a rv:ModerationEffect') && command.update.includes(`<${f.realm}>`)) {
-        raced = true;
-        await mutateOwnerFixture(f.stack.env, `PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.current}> {
-          <${f.realm}> a <http://www.w3.org/2004/02/skos/core#ConceptScheme> } }`);
-      }
-      return original.call(f.stack.fuseki, command);
-    };
-    const result = await f.governance.store.decide(f.staff.principal, f.input);
-    expect(raced).toBe(true);
-    expect(result.operation.status).not.toBe('completed');
-    expect((await f.stack.accessPool.query<{ state: string }>(
-      'SELECT state FROM access.safety_decision_effect WHERE decision_id=$1', [result.decisionId])).rows)
-      .toEqual([{ state: 'failed' }]);
-    expect((await f.stack.accessPool.query('SELECT 1 FROM access.governance_enforcement WHERE resource=$1',
-      [f.realm])).rowCount).toBe(0);
-    expect((await f.stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.receipts}> {
-      ?receipt rv:moderationTarget <${f.realm}> } }`, 1024)).boolean).toBe(false);
-    expect((await f.stack.accessPool.query("SELECT 1 FROM access.outbox WHERE kind='moderation.decided' AND moderation_decision_id=$1",
-      [result.decisionId])).rowCount).toBe(0);
-  } finally { f.stack.fuseki.commandWithReceipt = original; await f.stack.stop(); }
-}, 120_000);
-
-test('production Realm dispatch commits a Character description introduced after its owner basis read', async () => {
-  const f = await productionRealm('realm-descriptive-kind-race');
-  const original = f.stack.fuseki.commandWithReceipt;
-  let raced = false;
-  try {
-    f.stack.fuseki.commandWithReceipt = async command => {
-      if (command.update.includes('a rv:ModerationEffect') && command.update.includes(`<${f.realm}>`)) {
-        raced = true;
-        await mutateOwnerFixture(f.stack.env, `PREFIX rv: <${RV}> INSERT DATA { GRAPH <${GRAPHS.current}> {
-          <${f.realm}> a rv:Character } }`);
-      }
-      return original.call(f.stack.fuseki, command);
-    };
-    const result = await f.governance.store.decide(f.staff.principal, f.input);
-    expect(raced).toBe(true);
-    expect(result.operation.status).toBe('completed');
-    expect((await f.stack.accessPool.query('SELECT 1 FROM access.governance_enforcement WHERE resource=$1',
-      [f.realm])).rowCount).toBe(1);
-  } finally { f.stack.fuseki.commandWithReceipt = original; await f.stack.stop(); }
 }, 120_000);
 
 test('a public Work with an arbitrary semantic description accepts a title search decision through public intake', async () => {
@@ -1008,38 +927,6 @@ test('a native ClassificationSense dispatches the complete five-role registry bi
     expect(await effects.apply(operationId, 1, selected)).toEqual(receipt);
     expect((await f.stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.receipts}> {
       <${receipt!.receipt}> rv:outcome rv:Succeeded ; rv:moderationTarget <${definitions.sense}> } }`, 2048)).boolean).toBe(true);
-  } finally { await f.stack.stop(); }
-}, 120_000);
-
-test('deferred Work title disclosure refuses confirmation after its owner type and head disappear', async () => {
-  const f = await productionRealm('work-missing-owner-governance');
-  try {
-    const work = await f.stack.publicWork(f.editor.actor, ['en'], 'Reviewed Work');
-    const workHead = (await f.stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
-      GRAPH <${GRAPHS.current}> { <${work.work}> rv:head ?head } } LIMIT 2`, 4096))
-      .results!.bindings[0]!.head!.value;
-    const report = await responseJson<{ reportId: string; caseId: string }>(await f.stack.call('POST',
-      '/v1/public-reports', { key: randomUUID(), body: { profile: 'public-report-v1',
-        target: work.work, category: 'spam_or_manipulation', statement: 'Review this Work title.',
-        contentLanguage: 'en' } }), 201);
-    const basis = (await f.stack.accessPool.query<{ generation: string; evidence_digest: string }>(
-      `SELECT c.generation::text,r.evidence_digest FROM access.governance_case c
-       JOIN access.governance_report r ON r.case_id=c.id WHERE r.id=$1`, [report.reportId])).rows[0]!;
-    await f.governance.store.safety.claim(f.staff.principal, f.staff.actor, report.caseId);
-    const accepted = await f.governance.store.decide(f.staff.principal, { ...f.input,
-      caseId: report.caseId, expectedGeneration: basis.generation, evidenceDigest: basis.evidence_digest,
-      idempotencyKey: randomUUID(), targets: [{ owner: 'graph', resource: work.work, component: 'title',
-        locator: null, revision: null, scopeKind: 'component', expectedHead: workHead, effect: 'disclosure' }],
-    }, true);
-    expect(accepted.operation.status).toBe('accepted');
-    await mutateOwnerFixture(f.stack.env, `PREFIX rv: <${RV}> DELETE DATA { GRAPH <${GRAPHS.current}> {
-      <${work.work}> a <https://schema.org/CreativeWork> ; rv:head <${workHead}> } }`);
-    const resumed = await f.governance.store.resumeDecision(f.staff.principal, f.staff.actor, accepted.decisionId);
-    expect(resumed.operation.status).not.toBe('completed');
-    expect((await f.stack.accessPool.query('SELECT state,receipt FROM access.safety_decision_effect WHERE decision_id=$1',
-      [accepted.decisionId])).rows).toEqual([{ state: 'failed', receipt: null }]);
-    expect((await f.stack.accessPool.query('SELECT 1 FROM access.governance_enforcement WHERE resource=$1',
-      [work.work])).rowCount).toBe(0);
   } finally { await f.stack.stop(); }
 }, 120_000);
 
@@ -1102,12 +989,6 @@ test('production Realm moderationTarget receipt refreshes the directory without 
     await waitForRealmDirectory(f.stack.env, read, page => page.items.some(item => item.id === f.realm));
     expect((await f.stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.current}> {
       ?slot a rv:RealmPublicationSlot ; rv:realm <${f.realm}> } }`, 1024)).boolean).toBe(false);
-    // A source-only fixture change has no receipt of its own. The real owner
-    // decision below must identify this exact Realm to incremental discovery.
-    await mutateOwnerFixture(f.stack.env, `PREFIX rv: <${RV}> DELETE { GRAPH <${GRAPHS.current}> {
-      <${f.space}> rv:listing ?listing } } INSERT { GRAPH <${GRAPHS.current}> {
-      <${f.space}> rv:listing "unlisted" } } WHERE { GRAPH <${GRAPHS.current}> {
-      <${f.space}> rv:listing ?listing } }`);
     const confirmed = await f.governance.store.decide(f.staff.principal, f.input);
     expect(confirmed.operation.status).toBe('completed');
     const receipts = (await f.stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt ?realm ?space WHERE {

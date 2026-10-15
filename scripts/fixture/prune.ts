@@ -352,7 +352,7 @@ async function collectInventory(): Promise<PruneInventory> {
   } = await import('./stack.ts');
   const { readManifest } = await import('./build.ts');
   const { fixtureRestoreInputs } = await import('./restore.ts');
-  const { restoreCompatibility, manifestCore, manifestIdentity } = await import('./manifest.ts');
+  const { restoreCompatibility, manifestCore, manifestIdentity, manifestCorpus } = await import('./manifest.ts');
   const { DEFAULT_SEED, PROFILES, fixtureCorpus } = await import('./corpus.ts');
   const { fixtureOwners } = await import('./owners/index.ts');
   const docker = dockerEnvironment();
@@ -374,7 +374,6 @@ async function collectInventory(): Promise<PruneInventory> {
     const match = /^rezics-fixture-(fx-(?:small|medium)-[0-9a-f]{12})$/.exec(volume.project ?? '');
     if (match?.[1]) ids.add(match[1]);
   }
-  const inputs = fixtureRestoreInputs(docker);
   const generations: ListedGeneration[] = [...ids].sort().map((id) => {
     const manifest = readManifest(id);
     const profile = manifest?.profile ?? (id.startsWith('fx-small-') ? 'small' : 'medium');
@@ -385,14 +384,15 @@ async function collectInventory(): Promise<PruneInventory> {
       seed: manifest?.seed ?? '',
       project: fixtureProject(id),
       ...(manifest ? { completedAt: manifest.build.completedAt } : {}),
-      compatible: manifest ? restoreCompatibility(manifest, inputs).compatible : false,
+      compatible: manifest ? restoreCompatibility(manifest, fixtureRestoreInputs(docker, manifestCorpus(manifest))).compatible : false,
       manifest: manifest !== undefined,
       directory: existsSync(directory),
       volumes: [],
       buildInProgress: buildLockHeld(`${directory}.lock`),
     };
   });
-  const engines = inputs.engines;
+  const { currentEngines } = await import('./stack.ts');
+  const engines = currentEngines(docker);
   const pairs = new Map<string, { profile: 'small' | 'medium'; seed: string }>();
   const addPair = (profile: string, seed: string) => {
     if (profile !== 'small' && profile !== 'medium') return;

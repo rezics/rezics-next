@@ -1,4 +1,5 @@
-import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
+import { dependencyAnalysis as depcruise } from '../lib/dependency-analysis.ts';
+import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, dirname, join, posix, resolve } from 'node:path';
@@ -631,17 +632,6 @@ const graphRoots = [
   'infra',
 ];
 
-// One analysis holds about 2 GiB for half a minute, and every merge gate and every worker's affected
-// plan runs one: four at once left the host 4 GiB on 2026-10-12. Two lanes host-wide; a lane that stays
-// busy for a minute is not waited for, so a caller's own deadline is never spent in the queue.
-const DEPCRUISE_LANE_BUSY = 75;
-function depcruise(root: string, args: string[]): SpawnSyncReturns<string> {
-  const program = join(root, 'node_modules/.bin/depcruise');
-  const options = { cwd: root, encoding: 'utf8' as const, maxBuffer: 256 * 1024 * 1024 };
-  const lane = `/tmp/rezics-depcruise-${process.pid % 2}.lock`;
-  const queued = spawnSync('flock', ['-w', '60', '-E', String(DEPCRUISE_LANE_BUSY), lane, program, ...args], options);
-  return queued.error || queued.status === DEPCRUISE_LANE_BUSY ? spawnSync(program, args, options) : queued;
-}
 
 export function backendGraph(root: string, includeFrontend = false): GraphModule[] {
   const result = depcruise(

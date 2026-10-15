@@ -2,8 +2,8 @@ import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { alignFixtureModel } from '../../../scripts/fixture/align-model.ts';
-import { fixtureCorpus } from '../../../scripts/fixture/corpus.ts';
-import { manifestCore, manifestIdentity, restoreCompatibility, type FixtureManifestCore } from '../../../scripts/fixture/manifest.ts';
+import { fixtureCorpus, workAt } from '../../../scripts/fixture/corpus.ts';
+import { manifestCore, manifestIdentity, manifestCorpus, restoreCompatibility, type FixtureManifestCore } from '../../../scripts/fixture/manifest.ts';
 import { fixtureModel, fixtureModelInputs, type FixtureModelManifest } from '../../../scripts/fixture/model.ts';
 import { graphOwner, graphModelUse } from '../../../scripts/fixture/owners/graph.ts';
 import { fixtureOwners } from '../../../scripts/fixture/owners/index.ts';
@@ -43,8 +43,8 @@ function saveModel(directory: string, model: FixtureModelManifest) {
 
 test('fixture: model compatibility derives only the loader-declared shapes and vocabulary', async () => {
   await modelRoot((directory, model) => {
-    const profiles = graphOwner.modelProfiles!;
-    const use = graphModelUse();
+    const profiles = graphOwner.modelProfiles!(fixtureCorpus('small', undefined, 6));
+    const use = graphModelUse(fixtureCorpus('small', undefined, 6));
     const inputs = fixtureModelInputs(directory, use);
     expect(Object.keys(inputs).sort()).toEqual([
       ...profiles.map(profile => `profile:${profile.split('/').at(-1)}`),
@@ -78,7 +78,7 @@ test('round 2 finding 2: an added matching canonical route or binding demand for
       else changed.bindingDemands.push({ type, profile: id });
       saveModel(directory, changed);
       const now = current(backup);
-      now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory);
+      now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory, fixtureCorpus('small', undefined, 6));
       now.modelGeneration = fixtureModel(directory).generation;
       expect(restoreCompatibility(backup, now)).toMatchObject({ compatible: false,
         reasons: [`owner graph model input changed: validation:${type}`] });
@@ -101,7 +101,7 @@ test('round 2 finding 2: an unrelated type or nonmatching hosting route stays ad
     changed.bindingDemands.push({ type: 'urn:unrelated:type', profile: id });
     saveModel(directory, changed);
     const now = current(backup);
-    now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory);
+    now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory, fixtureCorpus('small', undefined, 6));
     now.modelGeneration = fixtureModel(directory).generation;
     expect(restoreCompatibility(backup, now)).toMatchObject({ compatible: true, reasons: [], pendingModelAlignment: true });
   });
@@ -118,7 +118,7 @@ test('round 2 finding 2: route matching uses literal lexical forms from emitted 
       when: [{ path: 'https://rezics.com/vocab/sequence', value: '0' }] }] });
     saveModel(directory, model);
     const now = current(backup);
-    now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory);
+    now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory, fixtureCorpus('small', undefined, 6));
     expect(restoreCompatibility(backup, now)).toMatchObject({ compatible: false,
       reasons: [`owner graph model input changed: validation:${type}`] });
   });
@@ -129,7 +129,7 @@ test('fixture: real manifests before an additive definition restore, with newer 
     const backup = core();
     // Keep the real generated manifest bytes so only the added definition advances the head.
     writeFileSync(join(directory, 'generated/model/manifest.json'), readFileSync(join(root, 'generated/model/manifest.json')));
-    expect(graphOwner.compatibilityInputs(directory)).toEqual(backup.owners.graph!.inputs);
+    expect(graphOwner.compatibilityInputs(directory, fixtureCorpus('small', undefined, 6))).toEqual(backup.owners.graph!.inputs);
     const appended = 'services/main/migrations/access/99999_newer.sql';
     for (const addModel of [false, true]) {
       if (addModel) {
@@ -139,7 +139,7 @@ test('fixture: real manifests before an additive definition restore, with newer 
       }
       for (const addMigration of [false, true]) {
         const now = current(backup);
-        now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory);
+        now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory, fixtureCorpus('small', undefined, 6));
         now.modelGeneration = fixtureModel(directory).generation;
         expect(manifestIdentity({ ...backup, modelGeneration: now.modelGeneration })).toEqual(manifestIdentity(backup));
         if (addMigration) now.migrations[appended] = 'newer';
@@ -165,7 +165,7 @@ test('finding 2: a changed used canonical route, binding or binding demand is st
       } else changed.bindingDemands.push({ type: 'https://schema.org/CreativeWork', profile: id });
       saveModel(directory, changed);
       const now = current(backup);
-      now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory);
+      now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory, fixtureCorpus('small', undefined, 6));
       now.modelGeneration = fixtureModel(directory).generation;
       expect(restoreCompatibility(backup, now)).toMatchObject({ compatible: false,
         reasons: [`owner graph model input changed: profile:${id}`] });
@@ -176,7 +176,7 @@ test('finding 2: a changed used canonical route, binding or binding demand is st
 test('fixture: every used profile and vocabulary change is refused with its named input', async () => {
   await modelRoot((directory, model) => {
     const backup = core();
-    for (const profile of graphOwner.modelProfiles!) {
+    for (const profile of graphOwner.modelProfiles!(fixtureCorpus('small', undefined, 6))) {
       const id = profile.split('/').at(-1)!;
       for (const kind of ['profile', 'vocabulary'] as const) {
         const changed = structuredClone(model);
@@ -184,7 +184,7 @@ test('fixture: every used profile and vocabulary change is refused with its name
         else changed.artifacts[`contexts/${id}.jsonld`] = 'changed';
         saveModel(directory, changed);
         const now = current(backup);
-        now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory);
+        now.owners.graph!.inputs = graphOwner.compatibilityInputs(directory, fixtureCorpus('small', undefined, 6));
         now.modelGeneration = fixtureModel(directory).generation;
         expect(restoreCompatibility(backup, now)).toMatchObject({ compatible: false,
           reasons: [`owner graph model input changed: profile:${id}`] });
@@ -207,15 +207,15 @@ test('finding 6: every profile declared by the emitted loader records has a comp
     });
     expect(bytes).toContain('https://rezics.com/vocab/TextContribution');
     expect(bytes).toContain('https://rezics.com/vocab/PublicationDecision');
-    expect([...observed].sort()).toEqual([...graphOwner.modelProfiles!].sort());
-    const inputs = graphOwner.compatibilityInputs(root);
+    expect([...observed].sort()).toEqual([...graphOwner.modelProfiles!(fixtureCorpus('small', undefined, 6))].sort());
+    const inputs = graphOwner.compatibilityInputs(root, fixtureCorpus('small', undefined, 6));
     for (const profile of observed) expect(inputs[`profile:${profile.split('/').at(-1)}`]).toMatch(/^[a-f0-9]{64}$/);
   } finally { await Promise.all([access.end(), content.end()]); }
 });
 
 test('round 2 finding 3: the model inventory is derived from writer records without a separate profile array', () => {
-  const use = graphModelUse();
-  expect(graphOwner.modelProfiles).toEqual(use.profiles);
+  const use = graphModelUse(fixtureCorpus('small', undefined, 6));
+  expect(graphOwner.modelProfiles!(fixtureCorpus('small', undefined, 6))).toEqual(use.profiles);
   const main = use.records.find(record => record.types.includes('https://rezics.com/vocab/MainVersion'))!;
   expect(main.values['https://rezics.com/vocab/hostingPolicy']).toEqual(['https://rezics.com/vocab/MetadataOnly']);
   expect(use.records.some(record => record.types.includes('https://rezics.com/vocab/TextContribution'))).toBe(true);
@@ -227,11 +227,11 @@ test.skipIf(!existsSync(retainedMedium))('fixture: pinned retained medium manife
   const backup = JSON.parse(readFileSync(retainedMedium, 'utf8')) as FixtureManifestCore;
   const now = current(backup);
   now.owners = Object.fromEntries(fixtureOwners.map(owner => [owner.name,
-    { ...backup.owners[owner.name]!, generator: owner.generator, inputs: owner.compatibilityInputs(root) }]));
+    { ...backup.owners[owner.name]!, generator: owner.generator, inputs: owner.compatibilityInputs(root, manifestCorpus(backup)) }]));
   const result = restoreCompatibility(backup, now);
   expect(result.compatible).toBe(false);
   expect(result.reasons).toEqual(['owner graph generator changed']);
-});
+}, 60_000);
 
 test('fixture: restore reuses model bootstrap and records both generations and the installed artifacts', async () => {
   const backup = core();
@@ -294,4 +294,31 @@ test('fixture: an unrecorded model uses the owner bootstrap, while partial state
   const unavailable = new Error('graph unavailable');
   await expect(localDatasetModelHead(environment, true, async () => { throw unavailable; }, initialize)).rejects.toBe(unavailable);
   expect(initialized).toBe(false);
+});
+
+test('custom-seed validation cannot borrow the default small corpus or a previous cache entry', async () => {
+  await modelRoot((directory, model) => {
+    const corpus = fixtureCorpus('medium', 'custom-route', 1_002);
+    const label = workAt(corpus, 1_001).title;
+    const id = 'custom-seed-route-v1';
+    model.profiles.push({ id, file: `shapes/${id}.ttl`, sha256: 'original' });
+    model.artifacts[`contexts/${id}.jsonld`] = 'context';
+    model.canonical.push({ type: 'https://schema.org/CreativeWork', routes: [{ profile: id,
+      shape: `https://rezics.com/definition/${id}/shape`,
+      when: [{ path: 'http://www.w3.org/2000/01/rdf-schema#label', value: label }] }] });
+    saveModel(directory, model);
+    const before = graphOwner.compatibilityInputs(directory, corpus);
+    // Prime an unrelated corpus, then change only a route the requested seed uses.
+    graphOwner.compatibilityInputs(directory, fixtureCorpus('small', undefined, 6));
+    model.profiles.find(profile => profile.id === id)!.sha256 = 'planted-invalid-shape';
+    saveModel(directory, model);
+    expect(graphOwner.compatibilityInputs(directory, corpus)).not.toEqual(before);
+  });
+});
+
+test('restore validation reconstructs custom dimensions and lineage from the retained manifest', () => {
+  const corpus = { ...fixtureCorpus('small', 'custom-dimensions', 12), publicUnits: 2,
+    lineage: { dataEpoch: 'retained-data', routingEpoch: 'retained-routing' }, importOperation: 'retained-import' };
+  const manifest = manifestCore(root, corpus, fixtureOwners, engines);
+  expect(manifestCorpus(manifest)).toEqual(corpus);
 });

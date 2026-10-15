@@ -51,9 +51,9 @@ function* visibilityQuads(corpus: Corpus) {
 const rankedGraphOwner: FixtureOwner = {
   ...graphOwner,
   generator: 'g556-ranked-selected-publication-bilingual-v4',
-  compatibilityInputs(root) {
+  compatibilityInputs(root, corpus) {
     return {
-      ...graphOwner.compatibilityInputs(root),
+      ...graphOwner.compatibilityInputs(root, corpus),
       'g556-ranked-fixture': sha256(
         readFileSync(join(root, 'tests/qa/integration/g-556-ranked-fixture.ts')),
       ),

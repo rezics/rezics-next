@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import { rawSparqlIntegrationFiles, rawSparqlIntegrationScan } from './isolated-integration-files.ts';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { rawSparqlIntegrationFiles, rawSparqlIntegrationScan, scanRawSparqlIntegrationFiles } from './isolated-integration-files.ts';
 
 /** The scan parses every test file's imports: about five seconds alone, more beside other guards. */
 const SCAN_TIMEOUT_MS = 60_000;
@@ -171,11 +173,6 @@ const ceiling = new Set<string>([
   'tests/qa/integration/validation-command.test.ts',
   'tests/qa/integration/work-address-api.test.ts',
   'tests/qa/integration/model-generation-refusal.test.ts',
-  // Landed on 2026-10-12 while no handoff check ran this guard; their owners owe the migration to commands.
-  'services/main/tests/governance-realm-restoration.test.ts',
-  'services/main/tests/governance-realm-target.test.ts',
-  'tests/qa/integration/structured-work-publication-native.test.ts',
-  'tests/qa/integration/work-read-session-concurrent-writes.test.ts',
 ]);
 
 test('raw SPARQL integration files only shrink', () => {
@@ -196,3 +193,26 @@ test('discovery replay inherits raw-fixture classification from its imported tes
     expect(sites.some(site => site.startsWith(`${source}:`))).toBe(true);
   }
 }, SCAN_TIMEOUT_MS);
+
+const commandOnlyFiles = ['services/main/tests/governance-realm-authority.test.ts',
+  'services/main/tests/governance-realm-restoration.test.ts',
+  'services/main/tests/governance-realm-target.test.ts',
+  'tests/qa/integration/structured-work-publication-native.test.ts',
+  'tests/qa/integration/work-read-session-concurrent-writes.test.ts'];
+
+test('migrated Realm, publication and concurrent-read fixtures cannot regain raw writes', () => {
+  const files = rawSparqlIntegrationFiles();
+  expect(commandOnlyFiles.filter(file => files.has(file))).toEqual([]);
+}, SCAN_TIMEOUT_MS);
+
+test('a planted raw write in any migrated fixture is detected and has no ceiling exemption', () => {
+  const directory = mkdtempSync(resolve('.temp/raw-write-regression-'));
+  try {
+    for (const path of commandOnlyFiles) {
+      mkdirSync(dirname(join(directory, path)), { recursive: true });
+      writeFileSync(join(directory, path), "export const seed = graph => graph.update('INSERT DATA {}');\n");
+    }
+    const scan = scanRawSparqlIntegrationFiles(directory);
+    expect([...scan.files].filter(file => !ceiling.has(file)).sort()).toEqual([...commandOnlyFiles].sort());
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

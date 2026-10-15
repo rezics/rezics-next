@@ -833,6 +833,12 @@ test('failed small-fixture preparation stops before any erasure shard starts', a
     expect(events.filter(event => event.phase === 'prepare')).toHaveLength(1);
     expect(events.some(event => event.phase === 'stack-up' || event.phase === 'test')).toBe(false);
     expect(existsSync(join(harness.control, 'failed-preparation-started'))).toBe(false);
+    const output = (await run.output).join('\n');
+    const artifacts = /QA artifacts: (.+)/.exec(output)?.[1];
+    expect(artifacts).toBeDefined();
+    const manifest = JSON.parse(readFileSync(join(artifacts!, 'acceptance.json'), 'utf8'));
+    expect(manifest.tiers).toContainEqual(expect.objectContaining({ name: 'fault/recovery', status: 'failed' }));
+    expect(readFileSync(join(artifacts!, 'fault-recovery.xml'), 'utf8')).toContain('Small-fixture preparation failed');
   } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
 }, PROCESS_HANG_MS * 4);
 

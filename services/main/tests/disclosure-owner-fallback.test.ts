@@ -138,6 +138,26 @@ test('P2-2 mixed registered and legacy owners pair visible, hidden, visible deci
   expect(f.requested.at(-1)!.map(input => input.owner)).toEqual(['content', 'graph', 'source']);
 });
 
+test('mixed submissions retain the strict policy-target contract for legacy entries', async () => {
+  const f = fixture(), strict = { owner: 'graph' as const, resource: id(11), component: 'record' as const };
+  const proof = evidence(f.env, strict);
+  configureDisclosureAncestrySource(f.env, 'graph', { read: async () => [proof], reread: async () => [proof] });
+  let observed = false;
+  configureDisclosure(f.env, {
+    read: f.reader.read.bind(f.reader),
+    readAtCut: async (targets, ...args) => {
+      observed = true;
+      expect(Object.isFrozen(targets)).toBe(false);
+      expect(targets.map(target => Object.isFrozen(target))).toEqual([false, false]);
+      return f.reader.readAtCut(targets, ...args);
+    },
+  });
+  const selections = await resolveDisclosureSelections(f.env, [target('content'), strict]);
+  const cuts = await captureDisclosure(f.env, selections, ANONYMOUS_VIEWER, 'read');
+  expect(cuts.map(cut => cut.decision)).toEqual(['visible', 'visible']);
+  expect(observed).toBe(true);
+});
+
 test('legacy structural ownership and names resolve the previous current Work revisions and paired name gate', async () => {
   const f = fixture(), input: DisclosureTarget = { owner: 'graph', resource: work, component: 'title' };
   expect(await f.reader.read([{ ...input, work }], ANONYMOUS_VIEWER, 'read')).toEqual(['visible']);
