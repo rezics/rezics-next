@@ -1001,7 +1001,8 @@ async function fixedReleaseEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch
 
 export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
   eventId: string,
-  handlerFor: (kind: string) => OwnerOutboxEventHandler | undefined = ownerOutboxEventHandler,
+  handlerFor: (kind: string) => OwnerOutboxEventHandler | undefined
+    | Promise<OwnerOutboxEventHandler | undefined> = ownerOutboxEventHandler,
   ownerOutbox?: CustodiedOutboxSource,
 ): Promise<DeliveredMainEvent> {
   if (batch.streamScope !== undefined && batch.streamScope !== MAIN_RELAY_STREAM_SCOPE) {
@@ -1206,7 +1207,7 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
   if (rows.length !== 1 || !row) throw new OutboxIncomplete('event receipt is unavailable or ambiguous');
   const value = (name: string): string | undefined => row[name]?.value;
   const kind = value('kind');
-  const ownerHandler = kind ? handlerFor(kind) : undefined;
+  const ownerHandler = kind ? await handlerFor(kind) : undefined;
   // The original system Agent events did not carry an action. Their exact RDF
   // kind and immutable receipt establish the action in the owner handler.
   const action = value('action') ?? (ownerHandler?.authority === 'system'

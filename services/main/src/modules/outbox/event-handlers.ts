@@ -67,5 +67,10 @@ export async function discoverOutboxEventHandlers(directory = join(import.meta.d
   return handlers;
 }
 
-const handlers = await discoverOutboxEventHandlers();
-export function ownerOutboxEventHandler(kind: string) { return handlers.get(kind); }
+// Owner modules also use relay helpers. Discover after module evaluation so
+// importing an owner cannot wait on its own unfinished module through the relay.
+let handlers: ReturnType<typeof discoverOutboxEventHandlers> | undefined;
+export async function ownerOutboxEventHandler(kind: string) {
+  handlers ??= discoverOutboxEventHandlers();
+  return (await handlers).get(kind);
+}
