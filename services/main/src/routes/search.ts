@@ -247,7 +247,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
               results: await discloseCatalogueMatches(work.environment, rows,
                 fieldOwners().restrictedTitles, query.realm), total: rows.length, sourcePosition: position,
               context: query.realm ? { kind: 'realm-local' as const, id: query.realm } : 'main-version-default' as const,
-            })).results, selection?.generation, candidate => boundedSearchHydration(async () => {
+            })).results, candidate => boundedSearchHydration(async () => {
               const types = await observeSearchPhase('catalogue-types',
                 () => phraseWorkTypes(work.environment, candidate.results, position));
               return observeSearchPhase('catalogue-card-hydration', () => enrichSearchCardPage(work, request, { ...candidate,

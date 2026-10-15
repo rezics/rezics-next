@@ -101,24 +101,31 @@ test('G-556: Realm rank reads restrict the native scope and page join to actual 
   expect(calls[2]).toContain(`rv:realm <${realm}>`);
 });
 
-test('G-556: retained ranks survive writes; epoch, instance and viewer changes restart; a changed query is invalid', async () => {
+test('G-556: retained ranks survive writes; epoch and instance changes restart; a changed query is invalid', async () => {
   const { env, read } = fixture();
-  const page = await read(() => readRankedCatalogue(env, request, undefined, 'mutes-1'));
+  const page = await read(() => readRankedCatalogue(env, request));
   for (const changed of [{ ...position, sequence: '10' }, { ...position,
     generation: 'urn:rezics:text-index-generation:22222222-2222-4222-8222-222222222222' },
     { ...position, publicSearchWriteEpoch: '2' }]) {
-    const continued = await read(() => readRankedCatalogue(env, { ...request, continuation: page.next! }, undefined, 'mutes-1'), changed);
+    const continued = await read(() => readRankedCatalogue(env, { ...request, continuation: page.next! }), changed);
     expect(continued.results.map(row => row.work)).toEqual(Array.from({ length: 20 }, (_, n) => id(n + 20)));
     expect(continued.indexGeneration).toBe(page.indexGeneration);
   }
   for (const changed of [{ ...position, dataEpoch: 'restored-epoch' }, { ...position, serverInstanceId: 'new-process' }]) {
-    await expect(read(() => readRankedCatalogue(env, { ...request, continuation: page.next! }, undefined, 'mutes-1'), changed))
+    await expect(read(() => readRankedCatalogue(env, { ...request, continuation: page.next! }), changed))
       .rejects.toBeInstanceOf(SearchContinuationRestart);
   }
-  await expect(read(() => readRankedCatalogue(env, { ...request, continuation: page.next! }, undefined, 'mutes-2')))
-    .rejects.toBeInstanceOf(SearchContinuationRestart);
   await expect(read(() => readRankedCatalogue(env, { ...request, phrase: 'different phrase', continuation: page.next! })))
     .rejects.toBeInstanceOf(InvalidSearchContinuation);
+});
+
+test('current presentation filtering advances through the retained ranking without expiring its cursor', async () => {
+  const { env, read } = fixture(100);
+  const first = await read(() => readRankedCatalogue(env, request));
+  const continued = await read(() => readRankedCatalogue(env, { ...request, continuation: first.next! },
+    async rows => rows.filter(row => Number(row.work.slice(-12)) >= 30)));
+  expect(continued.results.map(row => row.work)).toEqual(Array.from({ length: 20 }, (_, n) => id(n + 30)));
+  expect(new Set([...first.results, ...continued.results].map(row => row.work)).size).toBe(40);
 });
 
 test('deferred catalogue hydration resumes the same first, middle and terminal page without counting undelivered matches', async () => {
@@ -127,7 +134,7 @@ test('deferred catalogue hydration resumes the same first, middle and terminal p
   const works: string[] = [];
   for (let pageNumber = 0; pageNumber < 3; pageNumber++) {
     const selected = { ...request, continuation };
-    const deferred = await read(() => readRankedCatalogue(env, selected, undefined, undefined, async () => null));
+    const deferred = await read(() => readRankedCatalogue(env, selected, undefined, async () => null));
     expect(deferred.results).toEqual([]);
     expect(deferred.count).toEqual({ value: works.length, precision: 'lower-bound' });
     expect(deferred.next).not.toBeNull();

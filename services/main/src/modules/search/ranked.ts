@@ -24,8 +24,7 @@ interface RankHit { id: string; key: string | null; score: string; document?: nu
 interface RankEnvelope { hits: RankHit[]; commit: string; more: boolean; restart?: boolean; expiresAt?: number }
 export interface RankedCatalogueMatch { matchUnit: string; work: string; mainVersion: string;
   contribution: string; revision: string; selection: string; language: string; score: number; reason?: string }
-interface Cursor { after: RankAfter | null; visible: number; generation: string; instance: string;
-  presentation: string | null }
+interface Cursor { after: RankAfter | null; visible: number; generation: string; instance: string }
 export interface RankedCataloguePage {
   profile: 'public-catalogue-ranked-v1'; resultGrain: 'mainVersion'; retrieval: 'ranked';
   context: 'main-version-default' | { kind: 'realm-local'; id: string };
@@ -49,7 +48,6 @@ async function rankQuery(env: WorkActivationEnvironment, sparql: string): Promis
 
 export async function readRankedCatalogue(env: WorkActivationEnvironment, input: RankedCatalogueRequest,
   filter: (rows: RankedCatalogueMatch[]) => Promise<RankedCatalogueMatch[]> = async rows => rows,
-  presentationGeneration?: string,
   hydrate?: (page: RankedCataloguePage) => Promise<RankedCataloguePage | null>): Promise<RankedCataloguePage> {
   const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
   if (phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)
@@ -83,8 +81,7 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
         || typeof prior.after.commit !== 'string' || !decimal.test(prior.after.commit)
         || prior.after.document !== undefined && (!Number.isSafeInteger(prior.after.document) || prior.after.document < 0))
         || !Number.isSafeInteger(prior.visible) || prior.visible < 0) throw new WorkReadInvalid('rank cursor');
-      if (prior.instance !== position.serverInstanceId
-        || prior.presentation !== (presentationGeneration ?? null)) throw new WorkReadExpired('rank basis changed');
+      if (prior.instance !== position.serverInstanceId) throw new WorkReadExpired('rank basis changed');
     }
   } catch (error) {
     if (error instanceof WorkReadExpired) throw new SearchContinuationRestart('ranked search changed; restart at page one');
@@ -200,8 +197,7 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
   }
   const visibleCount = (prior?.visible ?? 0) + results.length;
   const continuation = more && after ? encodeReadCursor(binding, position, JSON.stringify({ after,
-    visible: visibleCount, generation, instance: position.serverInstanceId,
-    presentation: presentationGeneration ?? null } satisfies Cursor), '', expiresAt) : null;
+    visible: visibleCount, generation, instance: position.serverInstanceId } satisfies Cursor), '', expiresAt) : null;
   const page: RankedCataloguePage = { profile: 'public-catalogue-ranked-v1' as const, resultGrain: 'mainVersion' as const,
     context: input.realm ? { kind: 'realm-local' as const, id: input.realm } : 'main-version-default' as const,
     retrieval: 'ranked' as const, count: { value: visibleCount, precision: more ? 'lower-bound' as const : 'exact' as const },
@@ -215,6 +211,5 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
   // visible count, including a resumable first page and a deferred last page.
   return { ...page, results: [], count: { value: prior?.visible ?? 0, precision: 'lower-bound' },
     next: encodeReadCursor(binding, position, JSON.stringify({ after: beginning ?? null,
-      visible: prior?.visible ?? 0, generation, instance: position.serverInstanceId,
-      presentation: presentationGeneration ?? null } satisfies Cursor), '', expiresAt) };
+      visible: prior?.visible ?? 0, generation, instance: position.serverInstanceId } satisfies Cursor), '', expiresAt) };
 }
