@@ -313,7 +313,7 @@ test('the shared administrator proof holds the platform gate until its transacti
   const closerPool = boundedPool({ ...cluster!.connection, database: f.pool.options.database, max: 1 });
   const proofClient = await f.pool.connect();
   const closer = new AccessAdmissionRegistry(closerPool);
-  const epoch = (await f.pool.query<{ authority_epoch: string }>(
+  const epoch = (await proofClient.query<{ authority_epoch: string }>(
     "SELECT authority_epoch FROM access.scope_gate WHERE id='platform:access'",
   )).rows[0]!.authority_epoch;
   try {
