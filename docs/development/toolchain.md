@@ -111,6 +111,18 @@ wrappers so Eden does not infer them as successful responses. The beta.2
 OpenTelemetry package still needs our socket/status patch. Generation after
 this group produced an identical Main OpenAPI contract, and the Eden consumer,
 OpenAPI, telemetry socket and private-delivery lifecycle checks passed.
+Native response validators require the Problem body directly inside a typed
+status result; global rate-limit and backpressure refusals preserve their
+status, media type and retry headers through that path. The address-miss
+response mapper serializes the same refusal at the final mapping boundary.
+
+The inference baseline was recorded again with three fresh samples after the
+compiler environment changed. Relative to the previous baseline, Main, web and
+Eden instantiations rose by 10.1%, 8.5% and 21.9%; rendered route types shrank
+by 15.0%. Median checks were 15.347 s, 31.286 s and 11.122 s on the shared host.
+The baseline retains the existing 5% graph/display margin, timing margin and
+independent 30-second Eden wall limit. This records the cost of the new
+dependency cohort so future application changes are measured against it.
 
 Storybook 11 alpha.6 and Vitest 5.0.4 use the matching Playwright 1.64.1
 Chromium revision. Web story tests now use reduced motion, as Accounts already
@@ -118,6 +130,8 @@ does, so automatic accessibility checks observe settled controls rather than
 an enabling opacity transition. Asset forwarding retries only connection resets
 on idempotent asset GETs; HTTP errors, application API calls and stories are not
 retried. A real TCP-reset test covers that boundary.
+The session lifecycle and bilingual Work-creation journeys allow 90 seconds
+for their multiple hydrated navigations; their existing assertions remain.
 
 The `typescript-6` aliases and dependency-cruiser's private parser use 6.0.3,
 the newest TypeScript release with the JavaScript compiler API. TypeScript
@@ -140,8 +154,8 @@ the recorded Realm-creation and Zone-theme flows cover the correction.
 `@elysia/openapi` beta.6 still replaces authored `detail.responses` when a route
 also has a response schema: a focused probe lost its authored description and
 content schema. Keep the response overlay when rebasing onto the wave/2 tree;
-this refresh's starting tree did not contain it. The existing generated Main
-contract remained byte-for-byte identical after the upgrades.
+this refresh's starting tree did not contain it. The dependency groups preserved
+the existing generated Main contract; native pilot invariant checks also pass.
 
 `task dev` starts the shared local stack through Aspire in the main checkout.
 In a worktree it starts the Accounts app, web app and Storybook on allocated

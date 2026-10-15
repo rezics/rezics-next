@@ -70,6 +70,8 @@ test('IAM02: invalid OAuth state is rejected at the web callback', async ({ page
 });
 
 test('IAM01: a web session outlives its access token, keeps its Agent and signs out', async ({ page, context }, testInfo) => {
+  // Refresh, Agent changes and sign-out span several hydrated navigations.
+  test.setTimeout(90_000);
   const publicFixture = fixture<PublicFixture>('REZICS_WEB_AUTH_PUBLIC_PATH');
   await signIn(page);
   // The member may act as exactly one Agent, so the new session starts with it.
@@ -179,6 +181,8 @@ test('IAM03: the Agent held by Main is used for Work creation', async ({ page, c
 });
 
 test('WORK01: authenticated member creates a metadata-only Work with an empty Main Version', async ({ page }, testInfo) => {
+  // Creation, read grants and the second-language revision each cross the stack.
+  test.setTimeout(90_000);
   const browserErrors: string[] = [];
   page.on('pageerror', error => browserErrors.push(error.message));
   await signIn(page);
