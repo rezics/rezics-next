@@ -26,6 +26,7 @@ export async function authorPost(deps: MainWorkDependencies, request: Request, i
     await deps.access.claim(admission.id, digest, principal);
     const post = derivedId(`${admission.id}\0post`), revision = derivedId(`${admission.id}\0post-head`);
     const receipt = workReceiptIri(admission.id), operation = `urn:rezics:operation:${hash(admission.id)}`;
+    const event = `urn:rezics:event:${hash(`${receipt}\0post`)}`;
     const manifest = prepareComponent(env.objectDirectory, post,
       { publisher: input.actingSubject, labels: [input.title] }, 'https://rezics.com/definition/post-v1');
     const validations = await profileValidations(env.fuseki, 'post-v1', [
@@ -45,10 +46,13 @@ export async function authorPost(deps: MainWorkDependencies, request: Request, i
           GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
             rv:action "work.create" ; rv:admissionId ${lit(admission.id)} ; rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
             rv:admittedScope ${lit(admission.scope)} ; rv:requestDigest ${lit(digest)} ;
+            rv:operation ${iri(operation)} ; rv:author ${iri(input.actingSubject)} ;
             rv:work ${iri(post)} ; rv:mainVersion ${iri(post)} ; rv:workRevision ${iri(revision)} ; rv:mainRevision ${iri(revision)} ;
             rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
           GRAPH ${iri(GRAPHS.outbox)} { ${iri(`urn:rezics:outbox:${hash(receipt)}`)} a rv:OutboxBatch ;
-            rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 0 . }
+            rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
+            ${iri(event)} a rv:PostCreatedEvent ; rv:ordinal 0 ; rv:action "work.create" ;
+              rv:receipt ${iri(receipt)} ; rv:post ${iri(post)} . }
         } WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
             rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n .
             FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
