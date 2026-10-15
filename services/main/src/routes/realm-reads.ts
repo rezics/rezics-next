@@ -27,7 +27,7 @@ function realmReadError(error: unknown): Response {
   if (error instanceof WorkReadMoved) return problem(409, 'read_basis_changed', 'Restart from the first page');
   if (error instanceof WorkReadLimit) return problem(422, 'realm_read_budget_exceeded', 'Realm read exceeds its budget');
   if (error instanceof WorkReadUnavailable || error instanceof RealmProfileUnavailable) {
-    logWorkerFault('main.route.realm_read_unavailable', realmFaultCause(error));
+    logWorkerFault('main.route.realm_read_unavailable', realmFaultCause(error), { messages: false });
     return problem(503, 'realm_read_unavailable', error instanceof RealmProfileUnavailable
       ? 'Realm public profile is unavailable' : 'Realm read is unavailable');
   }

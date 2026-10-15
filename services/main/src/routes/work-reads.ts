@@ -38,7 +38,7 @@ export function workReadError(error: unknown): Response {
   if (error instanceof WorkReadLimit) return problem(422, 'work_read_budget_exceeded', 'Work read exceeds its budget');
   if (error instanceof ReadingContinuityUnsupported) return problem(503, 'reading_continuity_unsupported', error.message);
   if (error instanceof WorkReadUnavailable || error instanceof MediaUnavailable || error instanceof ContextCommandUnavailable) {
-    logWorkerFault('main.route.work_read_unavailable', error);
+    logWorkerFault('main.route.work_read_unavailable', error, { messages: false });
     return problem(503, 'work_read_unavailable', 'Work read is unavailable');
   }
   return commandError(error);

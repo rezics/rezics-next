@@ -70,7 +70,7 @@ function themeError(error: unknown): Response {
   if (error instanceof ThemeUnavailable) return problem(503, 'theme_unavailable',
     'The current theme approval state could not be verified. Try again later.');
   // An error no branch above names is a defect, not an outage: log its class only.
-  logWorkerFault('main.theme.approval', error);
+  logWorkerFault('main.theme.approval', error, { messages: false });
   return problem(503, 'theme_unavailable', 'Theme approval service is unavailable');
 }
 
