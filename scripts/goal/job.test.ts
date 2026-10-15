@@ -343,7 +343,7 @@ test('capacity queues the wake; timeout and a lost command owner reach the manag
     await wakeJobs(store, f.options);
     expect(store.get('completed')!.phase).toBe('parked'); expect(f.reports).toHaveLength(0);
     await wakeJobs(store, { ...f.options, now: Date.now() + JOB_WAIT_MS + 1 });
-    expect(f.reports).toEqual(['wait exceeded 45 minutes']);
+    expect(f.reports).toEqual(['wait exceeded 4 hours']);
     store.update('completed', job => { job.phase = 'parked'; delete job.code; });
     await wakeJobs(store, { ...f.options, alive: () => false });
     expect(f.reports[1]).toBe('command owner exited without recording a result');

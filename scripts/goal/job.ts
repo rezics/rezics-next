@@ -14,7 +14,9 @@ import { gateRefusal } from './queue.ts';
 import { GoalMailStore } from './mail.ts';
 
 export const JOB_INLINE_MS = 20_000;
-export const JOB_WAIT_MS = 45 * 60_000;
+// A parked worker costs nothing while it waits; a dead command is caught by the owner check, so this bound only
+// catches a command that hangs. The merge gate's unit and owner run takes more than 45 minutes.
+export const JOB_WAIT_MS = 4 * 60 * 60_000;
 export const parkedResult = (text: string): boolean => /^RESULT:[ \t]*parked[ \t]*$/m.test(text);
 
 /** A turn that ended while its own job is parked or waking is that job's to continue, whatever it wrote, unless it
@@ -223,7 +225,7 @@ export async function wakeJobs(store: JobStore, options: JobPassOptions = {}, id
         (options.report ?? reportJob)(job, reason, ledger);
         store.update(job.id, current => { current.phase = 'reported'; current.reason = reason; });
       };
-      if ((options.now ?? Date.now()) - job.created > JOB_WAIT_MS) { report('wait exceeded 45 minutes'); return; }
+      if ((options.now ?? Date.now()) - job.created > JOB_WAIT_MS) { report('wait exceeded 4 hours'); return; }
       const later = task && lastAttempt(task).n > job.attempt && !['verified', 'cancelled', 'stopped'].includes(task.state)
         ? lastAttempt(task) : undefined;
       if (later) {
