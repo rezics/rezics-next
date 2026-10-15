@@ -1,7 +1,7 @@
 import { repositoryGlob } from '../lib/repository-files.ts';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
+import { dirname, join, normalize } from 'node:path';
 import { parseSync, visitorKeys, type Node } from 'oxc-parser';
 import type { ListOpenApi } from './list-convention.ts';
 
@@ -48,6 +48,48 @@ function syntax(node: Node): string {
   return JSON.stringify(node, (key, value) => ['start', 'end', 'raw', 'loc', 'range', 'comments'].includes(key) ? undefined : typeof value === 'bigint' ? `${value}n` : value);
 }
 
+/** One supported URL encoder, identified by its import, never by a call's name
+ * alone. Reject shadowed bindings file-wide rather than modelling scope/flow. */
+function browseLinkBuilders(file: WebSource, program: Node): Set<string> {
+  const builders = new Set<string>();
+  for (const node of children(program)) {
+    if (node.type !== 'ImportDeclaration' || node.importKind === 'type'
+      || normalize(join(dirname(file.path), String(node.source.value))) !== 'apps/web/features/zones/browse-state.ts') continue;
+    for (const specifier of node.specifiers) if (specifier.type === 'ImportSpecifier'
+      && name(specifier.imported) === 'browseHref' && specifier.importKind !== 'type') builders.add(name(specifier.local));
+  }
+  const namesIn = (node: Node): string[] => node.type === 'Identifier' ? [node.name] : children(node).flatMap(namesIn);
+  const checkBindings = (node: Node) => {
+    const bindings = node.type === 'VariableDeclarator' ? [node.id]
+      : node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression'
+        ? [...node.params, ...node.type !== 'ArrowFunctionExpression' && node.id ? [node.id] : []]
+        : node.type === 'ClassDeclaration' || node.type === 'ClassExpression' ? node.id ? [node.id] : []
+          : node.type === 'CatchClause' ? node.param ? [node.param] : []
+            : node.type === 'AssignmentExpression' ? [node.left]
+              : node.type === 'UpdateExpression' ? [node.argument] : [];
+    for (const binding of bindings) for (const identifier of namesIn(binding)) builders.delete(identifier);
+    for (const child of children(node)) checkBindings(child);
+  };
+  checkBindings(program);
+  return builders;
+}
+
+function forwardsBrowseLink(value: Node, envelope: string, builders: ReadonlySet<string>): boolean {
+  if (value.type !== 'ConditionalExpression' || value.test.type !== 'MemberExpression'
+    || !continuations.has(name(value.test.property)) || syntax(value.test.object) !== envelope
+    || value.alternate.type !== 'Literal' || value.alternate.value !== null) return false;
+  const call = value.consequent;
+  if (call.type !== 'CallExpression' || call.optional || call.callee.type !== 'Identifier'
+    || !builders.has(call.callee.name) || call.arguments.length !== 2) return false;
+  const state = call.arguments[1]!;
+  if (state.type !== 'ObjectExpression') return false;
+  const cursor = state.properties.at(-1);
+  // Last, unique, literal key: a later spread/computed key cannot replace it.
+  return cursor?.type === 'Property' && !cursor.computed && name(cursor.key) === 'cursor'
+    && syntax(cursor.value) === syntax(value.test)
+    && state.properties.filter(property => property.type === 'Property' && name(property.key) === 'cursor').length === 1;
+}
+
 export function pagedOperations(api: ListOpenApi): Set<string> {
   const page = (schema: unknown): boolean => {
     if (!schema || typeof schema !== 'object') return false;
@@ -60,8 +102,8 @@ export function pagedOperations(api: ListOpenApi): Set<string> {
     .map(([method]) => `${method.toUpperCase()} ${path}`)));
 }
 /** Conservative syntax guard. Projecting items requires an explicit sibling
- * continuation from the same envelope. Aliases, loops and helper calls do not
- * establish forwarding: those sites require an exact expression exception.
+ * continuation from the same envelope, either directly or through the tested
+ * browse URL encoder. Other helpers, aliases and loops need an exact exception.
  * Its syntax context also pins the enclosing function: changing a cap or an
  * alias initializer cannot silently inherit the exception. Trivia stays benign. */
 export function continuationInventory(sources: readonly WebSource[]): ContinuationInventory {
@@ -69,6 +111,7 @@ export function continuationInventory(sources: readonly WebSource[]): Continuati
   for (const file of sources.filter(file => production(file.path))) {
     const parsed = parseSync(file.path, file.source);
     if (parsed.errors.length) throw new Error(`${file.path}: ${parsed.errors[0]!.message}`);
+    const linkBuilders = browseLinkBuilders(file, parsed.program);
     const visit = (node: Node, consumer: string, context: string, parent?: Node) => {
       if (['FunctionDeclaration', 'ArrowFunctionExpression', 'FunctionExpression'].includes(node.type)) {
         context = createHash('sha256').update(syntax(node)).digest('hex');
@@ -84,10 +127,15 @@ export function continuationInventory(sources: readonly WebSource[]): Continuati
         const explicit = parent?.type === 'Property' && parent.value === node;
         // Only this object literal can prove the projection carries its remainder.
         const container = explicit ? objectParents.get(parent) : undefined;
-        const forwarded = container?.type === 'ObjectExpression' && container.properties.some(property =>
-          property.type === 'Property' && continuations.has(name(property.key))
-          && property.value.type === 'MemberExpression' && continuations.has(name(property.value.property))
-          && syntax(property.value.object) === envelope);
+        const forwarded = container?.type === 'ObjectExpression' && container.properties.some((property, index) => {
+          if (property.type !== 'Property' || property.computed) return false;
+          const direct = continuations.has(name(property.key))
+            && property.value.type === 'MemberExpression' && continuations.has(name(property.value.property))
+            && syntax(property.value.object) === envelope;
+          const link = name(property.key) === 'next' && forwardsBrowseLink(property.value, envelope, linkBuilders);
+          return (direct || link) && container.properties.slice(index + 1).every(later =>
+            later.type === 'Property' && !later.computed && name(later.key) !== name(property.key));
+        });
         if (!forwarded) report('dropped-continuation');
       }
       if (node.type === 'ObjectPattern' && node.properties.some(property =>

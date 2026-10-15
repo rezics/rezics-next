@@ -30,6 +30,8 @@ test.each([
   forwarded.replace('return { items: page.items, nextCursor: page.nextCursor };', 'const {items,nextCursor} = page; return {items,nextCursor};'),
   forwarded.replace('return { items: page.items, nextCursor: page.nextCursor };', 'const ignored = page.nextCursor; return page.items;'),
   forwarded.replace('return { items: page.items, nextCursor: page.nextCursor };', 'delete page.nextCursor; return page;'),
+  forwarded.replace('nextCursor: page.nextCursor }', 'nextCursor: page.nextCursor, ...other }'),
+  forwarded.replace('nextCursor: page.nextCursor }', 'nextCursor: page.nextCursor, nextCursor: null }'),
   forwarded.replace('const page =', 'const seek = Number(cursor) + 20; const page =').replace('cursor, limit', 'cursor: seek, limit'),
 ])('planted drops, mutations and uncertain alias flows fail: %s', text => {
   expect(continuationInventory([source(text)]).length).toBeGreaterThan(0);
@@ -80,4 +82,50 @@ test('cursor arithmetic is checked in every formerly excluded TS and TSX file', 
   expect(missingCursorProbes(rule)).toEqual([]);
   const excluded = rule.replaceAll('severity: error', 'ignores:\n  - apps/web/features/library/import-api.ts\nseverity: error');
   expect(missingCursorProbes(excluded)).toContain('apps/web/features/library/import-api.ts');
+});
+
+const browseLink = `import { browseHref } from './browse-state.ts';
+export function pageModel(base, state, page) { return { items: page.items,
+  next: page.nextCursor ? browseHref(base, { ...state, cursor: page.nextCursor }) : null }; }`;
+const browseSource = (text: string) => source(text, 'apps/web/features/zones/example.ts');
+
+test('the imported browse encoder carries a sibling page continuation into the next link', () => {
+  expect(continuationInventory([browseSource(browseLink)])).toEqual([]);
+  const aliased = browseLink.replace('{ browseHref }', '{ browseHref as href }').replace('? browseHref(', '? href(');
+  expect(continuationInventory([browseSource(aliased)])).toEqual([]);
+  expect(continuationInventory([browseSource(browseLink.replaceAll('browseHref', 'href'))])).toHaveLength(1);
+});
+
+test.each([
+  browseLink.replace('cursor: page.nextCursor', 'cursor: null'),
+  browseLink.replace('cursor: page.nextCursor', 'cursor: other.nextCursor'),
+  browseLink.replace('cursor: page.nextCursor', 'cursor: state.cursor'),
+  browseLink.replace('cursor: page.nextCursor', 'cursor: page.nextCursor + "suffix"'),
+  browseLink.replace('cursor: page.nextCursor', 'cursor: page.nextCursor, ...other'),
+  browseLink.replace('page.nextCursor ? browseHref', 'page.items.length ? browseHref'),
+  browseLink.replace('}) : null', '}) : other.nextCursor'),
+  browseLink.replace("'./browse-state.ts'", "'./unverified.ts'"),
+  browseLink.replace('pageModel(base, state, page)', 'pageModel(base, state, page, browseHref)'),
+  browseLink.replace('cursor: page.nextCursor', 'cursor: page.nextCursor, cursor: null'),
+  browseLink.replace('}; }', ', ...other }; }'),
+  browseLink.replace('}; }', ', next: null }; }'),
+])('a planted missing, changed, shadowed or overridden browse continuation is rejected: %s', text => {
+  expect(continuationInventory([browseSource(text)]).some(row => row.rule === 'dropped-continuation')).toBe(true);
+});
+
+test('the real browseModel carries its cursor, and dropping its next URL is detected without an exception', () => {
+  const path = 'apps/web/features/zones/browse-view.ts';
+  const original = readFileSync(join(root, path), 'utf8');
+  const projection = (text: string) => continuationInventory([source(text, path)])
+    .filter(row => row.consumer === 'browseModel' && row.rule === 'dropped-continuation' && row.expression === 'page.items');
+  expect(projection(original)).toEqual([]);
+  const next = 'next: page.nextCursor ? browseHref(base, { ...state, cursor: page.nextCursor }) : null';
+  expect(original).toContain(next);
+  expect(projection(original.replace(next, 'next: null'))).toHaveLength(1);
+});
+
+test.each(['opaque:+/%?=&雪', '0', ''])('the supported URL encoder preserves opaque cursor bytes: %s', async cursor => {
+  const { browseHref, parseBrowseState } = await import('../../apps/web/features/zones/browse-state.ts');
+  const href = browseHref('/zone/browse', { ...parseBrowseState({ status: 'ongoing' }), cursor });
+  expect(new URL(href, 'https://rezics.example').searchParams.get('cursor')).toBe(cursor || null);
 });
