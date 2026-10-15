@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -139,11 +140,12 @@ test('WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact pub
     ]);
     expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
     expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
-    await expect(relayContentProjectionOnce(env, content, cursor, consumer))
-      .rejects.toBeInstanceOf(ContentProjectionUnavailable);
-    expect((await cursor.read(consumer)).sequence).toBe('2');
-    await expect(queryPublicContentPhrase(env, content, cursor, consumer,
-      { phrase: 'native Content', language: 'en' })).rejects.toBeInstanceOf(ContentProjectionUnavailable);
+    // A proved absence of approval is terminal; the later Public approval
+    // arrives through its own durable Content event.
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
+    expect((await cursor.read(consumer)).sequence).toBe('3');
+    expect(await queryPublicContentPhrase(env, content, cursor, consumer,
+      { phrase: 'native Content', language: 'en' })).toMatchObject({ complete: true, total: 0 });
 
     const eligibilityInput: ContentSearchEligibilityInput = { resourceId: created.work,
       variantId, publicationDecision: first.decision!, expectedEligibilityHead: null,
@@ -167,10 +169,11 @@ test('WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact pub
     expect(eligibility.outcome).toBe('succeeded');
     expect(eligibility.decision).toBeTruthy();
     expect((await selectPublicContentSearch(env, content, registry, claimed, eligibilityInput)).replayed).toBe(true);
+    await deliverFixtureContentEligibility(env, content);
     const projected = await relayContentProjectionOnce(env, content, cursor, consumer);
     expect(projected?.disposition).toBe('projected');
-    expect(projected?.sourceSequence).toBe(events[2]!.position.sequence);
-    expect((await cursor.read(consumer)).sequence).toBe(events[2]!.position.sequence);
+    expect(projected?.sourceSequence).toBe('4');
+    expect((await cursor.read(consumer)).sequence).toBe('4');
     const phrase = await queryPublicContentPhrase(env, content, cursor, consumer,
       { phrase: 'native Content', language: 'en' });
     expect(phrase.complete).toBe(true);
@@ -419,11 +422,13 @@ test('WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact pub
     const replacementEligibility = await selectPublicContentSearch(env, content,
       registry, replacementClaimed, replacementEligibilityInput);
     expect(replacementEligibility.outcome).toBe('succeeded');
+    await deliverFixtureContentEligibility(env, content);
     await expect(queryPublicContentPhrase(env, content, cursor, consumer,
       { phrase: 'native Content', language: 'en' }))
       .rejects.toBeInstanceOf(ContentProjectionUnavailable);
     expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
     expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('ignored');
+    expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('superseded');
     expect((await relayContentProjectionOnce(env, content, cursor, consumer))?.disposition).toBe('projected');
     const selectedReplacement = await queryPublicContentPhrase(env, content, cursor,
       consumer, { phrase: lostBody, language: 'en' });
@@ -444,7 +449,7 @@ test('WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact pub
       if (!replayed) throw new Error('Content source replay stopped before its owner cut');
       replayDispositions.push(replayed.disposition);
     }
-    expect(replayDispositions.filter(value => value === 'superseded')).toHaveLength(1);
+    expect(replayDispositions.filter(value => value === 'superseded')).toHaveLength(3);
     expect(replayDispositions.filter(value => value === 'projected')).toHaveLength(1);
     expect(await queryPublicContentPhrase(env, content, cursor, replayConsumer,
       { phrase: lostBody, language: 'en' })).toMatchObject({ complete: true, total: 1 });

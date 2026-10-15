@@ -1,5 +1,6 @@
 import { postBookPlacement } from '../../../services/main/src/modules/post/patterns.ts';
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { RightsStore, PUBLIC_DOMAIN_TEXT_USE, publicDomainWorkMaterial } from '../../../services/main/src/modules/rights/store.ts';
@@ -107,6 +108,7 @@ test(`Studio ${basis} chapter Content resolves to its public Book on the Main ph
     const command = new FusekiClient(Bun.env.FUSEKI_URL!, Bun.env.FUSEKI_MAINTENANCE_TOKEN!,
       Bun.env.FUSEKI_COMMAND_TOKEN!);
     const relayEnv = { ...stack.env, fuseki: command };
+    await deliverFixtureContentEligibility(relayEnv, stack.content);
     const cut = await stack.content.ownerPosition();
     for (let i = 0; i < 12 && (await stack.contentCursor.read(stack.contentConsumer)).sequence !== cut.sequence; i++) {
       if (!await relayContentProjectionOnce(relayEnv, stack.content,

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -130,6 +131,7 @@ test('WORK10/SEARCH20/SEARCH08/OPS10: published erasure fences replay and replac
       return { revisionId: saved.revisionId, preparationId: input.preparationId };
     };
     const relayToHead = async () => {
+      await deliverFixtureContentEligibility(env, content);
       const high = await content.ownerPosition();
       for (let i = 0; i < 12 && (await cursor.read(consumer)).sequence !== high.sequence; i++) {
         if (!await relayContentProjectionOnce(env, content, cursor, consumer)) {

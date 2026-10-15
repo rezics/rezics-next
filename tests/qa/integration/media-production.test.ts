@@ -32,7 +32,9 @@ test('VIEW08/SEARCH15: a media receipt advances the Content cursor without text 
   expect(settled).toMatchObject({ sourceEpoch: position.dataEpoch,
     sourceSequence: position.sequence, disposition: 'ignored' });
   expect(await cursor.read(consumer)).toMatchObject(position);
-  expect(fuseki.queries).toBe(graphQueries);
+  // The shared source checks the public-search anchor before acknowledging;
+  // media events require no text-profile or body hydration.
+  expect(fuseki.queries).toBe(graphQueries + 1);
   expect((await contentPool.query(`SELECT recipe FROM content.outbox
     WHERE data_epoch = $1 AND sequence = $2`, [position.dataEpoch, position.sequence])).rows[0])
     .toEqual({ recipe: 'media-v1' });
