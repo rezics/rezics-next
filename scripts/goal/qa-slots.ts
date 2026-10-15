@@ -188,7 +188,10 @@ export function qaSlotAdmission(directory: string, total: number, options: SlotS
       try {
         const tickets: { path: string; pid: number; start?: string; boot?: string; goal?: string; since: string; seq?: string; waitingFor?: string }[] = [];
         for (const name of readdirSync(waiters)) {
-          if (!name.endsWith('.json') || name.startsWith('memory-')) continue;
+          // Status survives nonblocking retries; only an outstanding acquisition
+          // can own a queue turn. Otherwise a startup waiting on memory can head
+          // this queue while the startup ahead of it waits for this slot.
+          if (!name.startsWith('ordered-slot-') || !name.endsWith('.json')) continue;
           const candidatePath = join(waiters, name);
           try {
             const candidate = JSON.parse(readFileSync(candidatePath, 'utf8')) as typeof tickets[number];
@@ -205,7 +208,7 @@ export function qaSlotAdmission(directory: string, total: number, options: SlotS
         const first = tickets.find(ticket => !ticket.goal || ticket.goal === 'program' || !goals.has(ticket.goal)
           || holders.filter(holder => holder.goal === ticket.goal).length < share
           || !tickets.some(other => other.goal && other.goal !== ticket.goal));
-        if (!admitted && first?.pid !== pid) return 'held';
+        if (!admitted && first?.path !== path) return 'held';
         const lease = tryAcquireQaSlot(directory, total, slot, options);
         if (lease !== 'held') { admitted = true; rmSync(path, { force: true }); }
         return lease;
