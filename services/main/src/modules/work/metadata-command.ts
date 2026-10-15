@@ -136,6 +136,7 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
   const old = expectedHead ? iri(expectedHead) : '?absentHead';
   const names = state.kind === 'header'
     ? (await catalogueNameProjection(env, [work], { work, header: state })).get(work)! : null;
+  // Header names and relevance resolve wider graph cuts; editions use their component and Work heads.
   const update = `PREFIX rv: <${RV}>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
@@ -180,7 +181,8 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
     }
     WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . FILTER(?n = ${row.sequence.value}) }
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n .
+        ${state.kind !== 'edition' ? `FILTER(?n = ${row.sequence.value})` : ''} }
       GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:head ${iri(row.head.value)} ; rv:mainVersion ${iri(row.main.value)} .
         OPTIONAL { ${iri(component)} rv:editionState ?oldStatus }
         OPTIONAL { ${iri(component)} rv:editionLanguage ?oldLanguage }
@@ -348,7 +350,7 @@ async function commitEditionV2(env: WorkActivationEnvironment, admission: Regist
     }
     WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . FILTER(?n = ${row.sequence.value}) }
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(row.head.value)} .
         OPTIONAL { ${iri(component)} rv:editionState ?oldStatus }
         OPTIONAL { ${iri(component)} rv:editionLanguage ?oldLanguage }

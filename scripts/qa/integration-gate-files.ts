@@ -98,4 +98,5 @@ export const integrationGateFiles = [
   'services/main/tests/realm-closure-roster-discussion.test.ts',
   'services/account/tests/authentication-subject.integration.test.ts',
   'services/main/tests/rate-limit.integration.test.ts',
+  'services/main/tests/release-concurrency.integration.test.ts',
 ] as const;
