@@ -1,5 +1,29 @@
 # State
 
+Checkpoint 6ca2314e-45fa-491e-b0c5-74dea042fbdd consolidates handled events
+mail:d32cd50f-3ca9-4a2b-a9cb-4186047bfc10 and task:G-2586:22.
+This disposition supersedes G-2586's preview-proof remainder below; other
+tasks and later events retain their own decisions.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2586 | Mail:d32cd50f reports G-2588's owner-preview correction on wave/2 at `4839f1ece`, with private revisions returning 404 to peers. Brief decision `f65c08318` resumed attempt 16 to rebase and re-record only the owner editor preview visit, preserving unaffected proof. Task:G-2586:22 accepts the completed handoff at `abec6c1154`, verified on wave/2 with the API and Storybook fixes included. Six-persona instruction capture `20261015t022436-4612e5` includes the retained private recording; six production replays have zero missing requests. Final 11 instruction stories and phone/desktop inspection passed in `20261015t023708-75e9fd`; affected consumers, binary validation, answer-records, types/lint/AST/guards, web types and localization passed across the recorded final checks. Authorized recorder/replay, authored-response generator and six-MIME media declaration corrections are included. Leave exited for Program to close after the wave merges; no individual landing, restart or main row promotion. |
+
+G-2584's accepted wave handoff and G-2585's G-2587 hold remain unchanged.
+The supplied mail was acknowledged in its deciding turn and its acknowledgement
+was confirmed here. This checkpoint changes only this file and starts no work.
+
+The method's measures, status and latest efficiency report were read. Concurrent
+scope remains 64/67 API rows and 384 proved/18 pending persona cells; both Codex
+accounts read 74% of their weekly windows. The latest efficiency report remains
+2026-10-13 21:49 UTC, with no current tokens-per-proved-row reading. Earlier
+attempt measures retain their checkpoint attribution; no efficiency gain is
+inferred. The API preview correction was Program-owned; the accepted continuation
+reused unaffected proof and resolved its recorded story/capture gaps without
+weakening assertions or cells. No further correction or dispatch is decided.
+
+## Retained checkpoint 8af73fc5
+
 Checkpoint 8af73fc5-464c-4f77-b355-f440fdd25428 consolidates handled events
 mail:506310d8-d383-457e-a8e8-219cd2ae38be,
 mail:fc667953-9454-4e55-bd02-0f644baf8bb3 and task:G-2584:11.
