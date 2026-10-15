@@ -45,14 +45,13 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     const first = await create('First space');
     const second = await create('Second space');
     const third = await create('Unpublished space');
-    const scheme = `https://rezics.com/id/${randomUUID()}`;
-    const topic = `https://rezics.com/id/${randomUUID()}`;
-    await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-      INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(scheme)} a skos:ConceptScheme, rv:VocabularyDefinition ; rv:schemeState rv:Active .
-        ${iri(topic)} a skos:Concept ; skos:inScheme ${iri(scheme)} ; rv:conceptState rv:Active ;
-          skos:prefLabel "Mystery"@en, "悬疑"@zh-Hans .
-      } }`);
+    await editor.grant('classification:define:global', 'classification.proposition.define');
+    const { concept: topic } = await json<{ concept: string }>(await editor.send('POST',
+      '/v1/classification-vocabulary', {
+        profile: 'classification-proposition-v2', scheme: null,
+        labels: [{ language: 'en', value: 'Mystery' }, { language: 'zh-Hans', value: '悬疑' }],
+        alternativeLabels: [], broader: [], narrower: [], actingSubject: editor.actor,
+      }), 201);
     const vocabulary = await json<{ items: { id: string; label: string }[] }>(
       await stack.call('GET', '/v1/classification-vocabulary?language=zh-CN&q=Mystery'));
     expect(vocabulary.items).toContainEqual({ id: topic, label: '悬疑' });
