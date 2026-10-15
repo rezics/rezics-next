@@ -1,5 +1,33 @@
 # State
 
+Checkpoint d6994109-2a21-4bf9-9b38-9850a36e7303 consolidates handled events
+mail:f43329f1, mail:9f250c88, mail:7b3abd26, mail:8aa98c11,
+mail:3240321f, task:G-2585:4 and mail:91aa32a1. No surface row, landing
+or closure is accepted by these events. Later results retain their own events.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2584 | Anime catalogue surface committed at `725a5b2814` and dispatched under mail:f43329f1. Decision `d456e2395f` applies Program's API promotion at wave/2 `88b05ef2e`: rebase, verify ancestry and record normally without changing declarations. The deciding turn resumed it. Mail:7b3abd26 then found capture job `c79ee3e3` reported replaced-attempt ownership while capture processes remained alive with no result; Program received the recovery question with the brief path. Preserve the existing capture for reconciliation; no duplicate retry was started or authorized. Finish whole production visits, replay, phone/desktop and complete gate after recovery. |
+| G-2585 | Realm Best/Top ranking surface committed at `3e9503d2b1` and dispatched. Decision `de8d5aabf1` applies the same wave/2 promotion and recording rule; it was already running, so no duplicate resume started. Mail:3240321f classifies capture timeout as the API projection fault `EventSourceUnavailable`, assigned to G-2587. Hold exited until G-2587 pushes to wave/2; Program owns the resume. Task:G-2585:4 confirms that disposition without new proof, retry or brief edit. Then rebase and finish six-persona capture, replay, tests, phone/desktop and full gate. |
+| G-2586 | Recipe instruction-form surface committed at `0db7780aa7` and dispatched. Decision `6e92396a52` implements mail:8aa98c11's binary-record ruling: status, content-type, length, sha256 and repository fixture path, never bytes in JSON; replay reads the fixture and verifies its hash. Test valid binary, mismatched hash and absent source; JSON behavior and assertions stay intact. Resume was refused because the worker was running. Decision `2264ce0cc8` authorizes the narrow media bytes 200 declaration correction, retained formats including audio/wav, unchanged behavior/operation, regenerated contract and strict media-type checks. Running-task reclaim/resume initially refused and claim settlement went to Program. Mail:91aa32a1 settles it: added claims are registered while running; `eda7906be3` records permission to edit unclaimed shared media.ts alongside G-2577, preserving both through wave rebase. No restart followed. Finish binary recording and the unchanged complete surface gate before wave handoff. |
+
+All three are wave/2 build tasks explicitly authorized to record their own
+production requests on a wave/2 stack now. Recording, zero-miss replay,
+phone/desktop inspection and complete checks precede handoff; they land with
+the wave, without individual landing or a deferred second proof pass.
+Program's API promotions are wave-local: Anime/ranking at `88b05ef2e`,
+Recipe instruction forms at `b10513e88`; the concurrent main scope reading
+below remains 64/67 and is not changed by this checkpoint.
+
+The settled claim procedure is to reclaim added claims directly on a running
+surface; do not wait for its exit or mail Program for that routine addition.
+The shared media.ts exception above is specific to the wave's overlapping
+work. Preserve assertions, persona cells, whole-record identities and exact
+production requests. Unaffected prior decisions remain below; this checkpoint
+starts no worker, retry or landing and changes only this file.
+
+## Retained checkpoint decisions
+
 Checkpoint 0e8878ac-c589-41ea-8840-41fd8e825ae6 consolidates handled events
 task:G-2233:9, task:G-2237:19 and task:G-2237:23.
 No complete surface row, new landing or closure is accepted. These current
@@ -93,7 +121,7 @@ The method's measures, `task goal -- status` and
 `task goal -- efficiency --last --json` were read at this checkpoint.
 Scope and accounts are concurrent snapshots, not acceptance of later events.
 Status still reports 64/67 API rows and 384 proved/18 pending persona cells;
-accounts read codex 72% and codex-1 72% of their weekly windows. Historical
+accounts read codex 73% and codex-1 73% of their weekly windows. Historical
 classifications below remain attributed to their earlier checkpoints.
 Raw attempts below are retained from checkpoint 844479ae. Tool and token
 measures were refreshed from `goalctl status` for this checkpoint; concurrent
@@ -109,12 +137,12 @@ It supplies no current tokens-per-proved-row reading.
 | Web surfaces | Complete surface-row total unavailable; G-2240's landed step and G-2332's accepted management evidence are not whole-row proof; G-2234/G-2237 are bounded steps; G-2333/G-2235 remain unaccepted; G-2381 is a mechanism with no rows |
 | Raw web attempts | Retained ledger: 124 across 65 attempted tasks, 65 first and 59 subsequent; queued work excluded; raw first share 52% |
 | Attempts per landed web task | Retained raw ledger sample: median 2, maximum 6 across 35 merged or verified web tasks; bounded steps are included; ledger state does not accept a later landing mail |
-| Web tool measures | 31% first share, daily 0% (0 of 7); 66 first, 49 step, 145 fix, 3 capacity; 11 fixes inferred from unavailable handoffs; landed-task median 2, maximum 24 (G-2237) |
-| Web tokens | 1975.4M input, 12.8M output, 2 unavailable sessions; tokens per proved row unavailable |
+| Web tool measures | 31% first share, daily 14% (3 of 22); 69 first, 49 step, 157 fix, 3 capacity; 11 fixes inferred from unavailable handoffs; landed-task median 2, maximum 25 (G-2237) |
+| Web tokens | 2010.7M input, 12.9M output, 2 unavailable sessions; tokens per proved row unavailable |
 | Web recorded refusals | 0 outcome, 11 gate, 0 failing-test finding, 18 other in retained reports; Program owns the classified tool/main/host faults below |
-| Program measures | 38% first attempts, today 6% (1 of 17); landed-task median 1, maximum 17 (G-2576); 2084.9M input, 8.3M output, 80 unavailable sessions; tokens per proved row unavailable |
+| Program measures | 38% first attempts, today 7% (3 of 41); landed-task median 1, maximum 17 (G-2576); 2121.3M input, 8.4M output, 80 unavailable sessions; tokens per proved row unavailable |
 | Program refusals | 0 outcome, 12 gate, 0 failing-test finding, 10 other in retained reports |
-| Accounts | Concurrent status: codex 72%, codex-1 72% of weekly windows |
+| Accounts | Concurrent status: codex 73%, codex-1 73% of weekly windows |
 | Audit 5 web interval | 21:50–00:48 UTC: 22 starts for 7 landings (3.14 per landing); 13 of 16 ended handoffs not done, 12 without handoff text; exit-to-command median 56 minutes, maximum over 155, first mention after 3 minutes |
 
 The concurrent API reading is 64 of 67; this checkpoint closes no task
@@ -124,7 +152,7 @@ it does not measure tokens per proved row. Its deciding turn accounted for prior
 commands and found all eight queued surfaces missing prerequisites on main.
 The retained raw first share is 52%; the earlier tool daily share
 was below half at 38%, prompting the classifications below. The current tool
-daily share is 0%; Program's daily share is 6%, both below half. Program
+daily share is 14%; Program's daily share is 7%, both below half. Program
 owns the shared tooling causes classified below; this notice adds no fix
 round or missing-input restart. Tokens per proved row remain unavailable. Repeated work
 comes from incomplete production-path records, omitted layout decisions,
@@ -271,11 +299,21 @@ integration cause was a stale loaned Realm-page hunk: keeping main's transport
 and requiring fresh rendered-source proof resolves that conflict without
 substituted refresh answers or repeated valid captures. Attempts 10, 20 and
 24 were already resumed in the deciding turns; this checkpoint starts none.
-The refreshed daily shares are web 0% and Program 6%, with no new row proof
+The refreshed daily shares are web 14% and Program 7%, with no new row proof
 or measured efficiency gain from these events. Later status dispositions do
 not accept their landing-result events here.
 Unavailable tokens per proved row establish no efficiency improvement. Program's measures cover other Goals as well; concurrent status
 and ledger measurements do not decide later handoffs or landing results.
+
+Checkpoint d6994109 classifies its repeated work as capture-job ownership
+(G-2584), an API projection fault (G-2585), and binary recording/declaration
+plus running-claim tooling limits (G-2586). No frequency ranking among these
+causes is established by the seven events. Program owns capture reconciliation
+and G-2587's repair; the binary fixture rule and direct running-task reclaim
+settle the other reported blockers. Three ready briefs were dispatched rather
+than held for the low first-attempt share. No unchanged capture retry or
+duplicate worker followed; these procedural decisions prove no efficiency
+gain while tokens per proved row remain unavailable.
 
 ## Work and next actions
 
@@ -576,9 +614,10 @@ G-2267; keep the owner's correct record unchanged.
 
 ## Acknowledgements
 
-The three supplied task events are handled in the durable coordinator history
-and acknowledged by their deciding turns. This checkpoint supplies no mail;
-the web mail inbox was empty. Earlier acknowledgements remain in durable mail
+The six supplied mails are already acknowledged in durable mail history by
+their deciding turns; task:G-2585:4 is handled in coordinator history.
+This checkpoint supplies no new mail to acknowledge and leaves later inbox
+deliveries to their own events. Earlier acknowledgements remain in durable mail
 history. This checkpoint acknowledges the requested consolidation only: no brief edit,
 worker start, landing, closure, watcher or wait. Later mail and task results
 retain their own events.
