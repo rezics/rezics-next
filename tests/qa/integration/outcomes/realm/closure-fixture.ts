@@ -310,7 +310,9 @@ export function closureHydrationFence() {
       redirect: 'manual', signal: request.signal,
     });
     const query = body ? new TextDecoder().decode(body) : '';
+    // Background summaries must not consume holds intended for public readers.
     if (held < expected && incoming.pathname.endsWith('/query')
+      && request.headers.has('x-rezics-search-budget-ms')
       && /SELECT\s+\?epoch\s+\?sequence\s+\?hold\s+\?r\s+\?type\s+\?work/.test(query)
       && targets.some(target => query.includes(`<${target}>`))) {
       const bytes = await response.arrayBuffer();

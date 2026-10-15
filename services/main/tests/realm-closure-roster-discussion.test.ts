@@ -159,6 +159,11 @@ test('completed closure conceals discussion reads and consented roster while cre
       .toMatchObject({ items: [{ status: 'available' }] });
     const imageBytes = await stack.call('GET', `/v1/media/uses/${mediaUse.use}`);
     expect(imageBytes.status, await imageBytes.clone().text()).toBe(200);
+    await member.grant(`content:publish:${original.work}`, 'media.use');
+    const independentImage = await command<{ use: string }>(member, 'POST', '/v1/media/uses', {
+      actingSubject: member.actor, target: original.work, representation: illustration.representation,
+      occurrence: randomUUID(), context: 'urn:rezics:context:global', conceal: false,
+    }, 201);
     const threads = await command<{ nextCursor: string; items: { reply: string }[] }>(owner, 'GET', `${root}/threads?sort=new&limit=1`);
     expect(roster.nextCursor).not.toBeNull();
     expect(threads.nextCursor).not.toBeNull();
@@ -202,6 +207,13 @@ test('completed closure conceals discussion reads and consented roster while cre
     expect((await call(undefined, 'POST', '/v1/media/metadata', metadataBody, 200)).body)
       .toEqual({ items: [{ status: 'unavailable', reference: metadataBody.items[0] }] });
     expect((await stack.call('GET', `/v1/media/uses/${mediaUse.use}`)).status).toBe(404);
+    for (const path of [`/v1/media/uses/${independentImage.use}`,
+      `/v1/media/representations/${illustration.representation}/bytes?use=${independentImage.use}`,
+      `/v1/media/representations/${illustration.representation}/bytes`]) {
+      const response = await stack.call('GET', path);
+      expect(response.status, `${path}: ${await response.clone().text()}`).toBe(200);
+      expect(new Uint8Array(await response.arrayBuffer())).toEqual(imageData);
+    }
     expect((await call(undefined, 'GET', root))).toEqual(await call(undefined, 'GET', absentRoot));
     phase = 'delivery';
     const failures: unknown[] = [];

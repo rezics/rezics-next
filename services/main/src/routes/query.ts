@@ -25,6 +25,8 @@ import { readReleaseWorks, withReleaseQueryBudget } from '../modules/facets/rele
 import { resourceListQuery, resourceListPage, type ResourceListQuery } from '../modules/query/resource-contract.ts';
 import { readResourceList } from '../modules/query/resources.ts';
 import { withResourceListBudget } from '../modules/query/budget.ts';
+import { resourceTypeKinds } from '../modules/query/work-drive.ts';
+import { admittedTypes } from '../modules/types/registry.ts';
 import { executeTemplate, templateRequests, templateResponses } from '../modules/query/template-read.ts';
 import type { TemplateInput } from '../modules/query/template-schema.ts';
 
@@ -117,7 +119,8 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         try {
           result = await withResourceListBudget(() => publicWorkRead(work, request,
             { limit: query.limit, cursor: query.cursor },
-            session => readResourceList(session, compiled.request)), query.scope.kind);
+            session => readResourceList(session, compiled.request)), query.scope.kind,
+          resourceTypeKinds(compiled.request.conditions, admittedTypes));
         } catch (error) { return discoveryError(error); }
         return Response.json({ profile: 'query-v1', template: 'resource-list-v1',
           selection: { context: query.context, scope: query.scope, filter: query.filter ?? { all: [] },

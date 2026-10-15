@@ -5,6 +5,7 @@ import { RESOURCE_LIST_COST } from '../src/modules/query/resource-contract.ts';
 import { conceptResourceMatches } from '../src/modules/query/resources.ts';
 import type { WorkReadSession } from '../src/modules/work/read-session.ts';
 import type { DiscoveryReadGeneration } from '../src/modules/discovery/store.ts';
+import { REALM_DIRECTORY_COST } from '../src/modules/realm-directory/contract.ts';
 
 test('G1032: nested resource Query charges one allocation including readiness and final fences', async () => {
   const outer = { signal: new AbortController().signal, callsLeft: 40, bytesLeft: 1024 };
@@ -59,4 +60,24 @@ test('G1032: Work-only Concept matching never queries the unrelated resource top
       meaning,
     ),
   ).toEqual(new Set());
+});
+
+test('Realm directory source uses its owner allocation and still debits an enclosing budget', async () => {
+  const outer = { signal: new AbortController().signal, callsLeft: 80, bytesLeft: 1024 };
+  await withResourceListBudget(async () => {
+    expect(fusekiReadBudget.getStore()!.callsLeft).toBe(
+      RESOURCE_LIST_COST.graphCalls + REALM_DIRECTORY_COST.graphCalls);
+  }, 'all', ['realm']);
+  await fusekiReadBudget.run(outer, () => withResourceListBudget(async () => {
+    const budget = fusekiReadBudget.getStore()!;
+    expect(budget.callsLeft).toBe(80);
+    budget.callsLeft -= 33;
+    expect(outer.callsLeft).toBe(47);
+    await withResourceListBudget(async () => {
+      const nested = fusekiReadBudget.getStore()!;
+      expect(nested.callsLeft).toBe(47);
+      nested.callsLeft -= 47;
+      expect(outer.callsLeft).toBe(0);
+    }, 'all', ['realm']);
+  }, 'all', ['work', 'realm']));
 });

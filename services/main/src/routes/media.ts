@@ -14,7 +14,7 @@ import { activateUploadedBytes, changeAdmittedAssetState, MediaDenied, reserveAd
   type MediaDependencies } from '../modules/media/commands.ts';
 import { concealCommand, documentUseCommand, imageLabelCommand, inferenceCommand,
   importedCoverIntent, mediaDescriptor, metadataRead, metadataResult } from '../modules/media/presentation-contract.ts';
-import type { MetadataRef } from '../modules/media/presentation.ts';
+import type { MetadataBasis, MetadataRef } from '../modules/media/presentation.ts';
 import { ShowcaseRefused, campaignArtCommand } from '../modules/media/showcase-contract.ts';
 import { DEFAULT_MEDIA_CONTEXT, MAX_UPLOAD_BYTES, MediaConflict, MediaFenced, MediaInvalid, MediaMissing, MediaStale,
   MediaUnavailable, avatarImageEligible, MEDIA_TYPES } from '../modules/media/store.ts';
@@ -257,7 +257,8 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       ? async (contexts: readonly string[]) => work.mediaAccess!.canReadPrivateContexts(
         await work.account.verify(request, ['context:read']), actingSubject, contexts) : undefined };
   };
-  const metadataFor = async (request: Request,refs: readonly MetadataRef[],actingSubject?:string) => {
+  const metadataFor = async (request: Request,refs: readonly MetadataRef[],actingSubject?:string): Promise<Array<
+    (MetadataBasis & { publicTarget: boolean }) | null>> => {
     if (!work.media) throw new MediaUnavailable('media owner unavailable');
     await assertGraphAdmissionOpen(fuseki,work.environment.lineage);
     const reader=await readerFor(request,actingSubject);
@@ -314,8 +315,9 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       const own=[facts.length];
       const asset: DisclosureTarget={owner:'media',resource:`https://rezics.com/id/${basis.metadata.asset}`,
         component:'cover',context:basis.context};
-      assetFences.push(basis.structureInstruction && basis.metadata.use ? { ...asset, resource: `https://rezics.com/id/${basis.metadata.use}`,
-        component: 'media_use', work: basis.target ?? undefined } : asset);
+      assetFences.push(basis.metadata.use ? { ...asset,
+        occurrence: { owner: 'media', kind: 'media-use', resource: `https://rezics.com/id/${basis.metadata.use}`,
+          revision: `https://rezics.com/id/${basis.metadata.use}` } } : asset);
       // A page image names one attachment. Its sibling Uses cannot determine
       // this audience; direct Asset governance still fences every occurrence.
       if (basis.metadata.use) {
@@ -327,7 +329,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     const decisions=await discloseInventory(work.environment,facts,reader.viewer??ANONYMOUS_VIEWER,'media');
     const assetDecisions=await disclose(work.environment,assetFences,reader.viewer??ANONYMOUS_VIEWER,'media');
     const publicMedia=await mediaVisibility(work.environment,facts,ANONYMOUS_VIEWER);
-    return Promise.all(bases.map(async (basis,index)=>{
+    const results = await Promise.all(bases.map(async (basis,index)=>{
       const assetDecision=assetDecisions[indexes[index]![0]!];
       if (!basis || assetDecision!=='visible' || basis.target && !available.has(`${basis.context}\0${basis.target}`)
         || indexes[index]!.some(index=>decisions[index]!=='visible')
@@ -351,6 +353,17 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         controls:{nsfw,ageRating,conceal},
         canEdit:nsfw.canEdit||ageRating.canEdit||!!conceal?.canEdit,canProtect:canProtectLabels||canProtectConceal}};
     }));
+    // A bare representation can be independently public through a current Use.
+    // Resolve that exact witness through the same gates; a bare Asset still
+    // keeps its conservative all-attachments policy.
+    for (const [index, reference] of refs.entries()) {
+      if (results[index] || !('representation' in reference) || reference.use) continue;
+      const uses = await work.media.store.presentation.representationUses(reference.representation);
+      if (!uses?.length) continue;
+      const witnesses = await metadataFor(request, uses.map(use => ({ representation: reference.representation, use })), actingSubject);
+      results[index] = witnesses.find(witness => witness?.publicTarget && witness.disclosure === 'public') ?? null;
+    }
+    return results;
   };
   const fieldResult=t.Object({revision:t.Nullable(nativeId),position,replayed:t.Boolean(),admission:t.String()});
   const fieldResponses={200:fieldResult,201:fieldResult,...writeProblems,404:problemResult(404)};

@@ -99,6 +99,15 @@ export function validateImageInference(input: ImageInferenceInput): ImageNsfw {
 
 export class MediaPresentationStore {
   constructor(private readonly pool: Pool) {}
+  /** A bare rendition needs one readable current occurrence. The caller
+   * admits these owner-selected Uses individually and refuses overflow. */
+  async representationUses(representation: string): Promise<string[] | null> {
+    if (!UUID.test(representation)) throw new MediaInvalid('invalid representation');
+    const rows = (await this.pool.query<{ id: string; representation_id: string }>(`SELECT id,representation_id FROM media.use
+      WHERE asset_id = (SELECT asset_id FROM media.representation WHERE id = $1)
+      ORDER BY id LIMIT 65`, [representation])).rows;
+    return rows.length > 64 ? null : rows.filter(row => row.representation_id === representation).map(row => row.id);
+  }
   /** The command's operation is acknowledged with its exact position, resolved
    * after commit; a recorded rejection is numbered before it is reported. */
   private async transaction<T>(operation: string, run: (client: PoolClient) => Promise<T>,
