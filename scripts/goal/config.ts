@@ -23,7 +23,7 @@ type Schema = { type?: string; const?: unknown; enum?: unknown[]; minimum?: numb
   additionalProperties?: boolean; items?: Schema; uniqueItems?: boolean };
 
 /** Validate the vocabulary used by the checked-in schema, which is the single format definition. */
-function validate(value: unknown, rule: Schema, field: string, file: string): void {
+function validate(value: unknown, rule: Schema, field: string, file: string, reportUnknown?: (message: string) => void): void {
   const fail = (reason: string): never => { throw new Error(`${file}: ${field} ${reason}`); };
   if ('const' in rule && value !== rule.const) fail(`must be ${JSON.stringify(rule.const)}`);
   if (rule.enum && !rule.enum.includes(value)) fail(`must be one of ${rule.enum.join(', ')}`);
@@ -34,14 +34,18 @@ function validate(value: unknown, rule: Schema, field: string, file: string): vo
     if (rule.anyOf && !rule.anyOf.some(option => (option.required ?? []).every(key => key in object))) fail('requires launcher or home');
     for (const [key, item] of Object.entries(object)) {
       const property = rule.properties?.[key];
-      if (!property && rule.additionalProperties === false) throw new Error(`${file}: ${field}.${key} is unknown`);
-      if (property) validate(item, property, `${field}.${key}`, file);
+      if (!property && rule.additionalProperties === false) {
+        if (!reportUnknown) throw new Error(`${file}: ${field}.${key} is unknown`);
+        reportUnknown(`${file}: ${field}.${key} is unknown; ignored`);
+        delete object[key];
+      }
+      if (property) validate(item, property, `${field}.${key}`, file, reportUnknown);
     }
   } else if (rule.type === 'array') {
     if (!Array.isArray(value)) fail('must be an array');
     const array = value as unknown[];
     if (rule.uniqueItems && new Set(array.map(item => JSON.stringify(item))).size !== array.length) fail('must contain unique values');
-    array.forEach((item, index) => validate(item, rule.items!, `${field}[${index}]`, file));
+    array.forEach((item, index) => validate(item, rule.items!, `${field}[${index}]`, file, reportUnknown));
   } else if (rule.type === 'string') {
     if (typeof value !== 'string') fail('must be a string');
     const string = value as string;
@@ -74,9 +78,9 @@ export function settingsDirectory(options: SettingsOptions = {}): string {
   const roots = repositoryRoots(cwd);
   if (options.stateDirectory) {
     const repository = dirname(dirname(resolve(options.stateDirectory)));
-    return join(repository === roots.common ? roots.worktree : repository, '.goalctl');
+    return join(repository, '.goalctl');
   }
-  return join(roots.worktree, '.goalctl');
+  return join(roots.common, '.goalctl');
 }
 const legacy: Record<string, keyof Omit<Settings, 'version' | 'accounts'>> = {
   'codex-service-tier': 'codexServiceTier', 'review-engine': 'reviewEngine',
@@ -84,12 +88,12 @@ const legacy: Record<string, keyof Omit<Settings, 'version' | 'accounts'>> = {
   'qa-slot-count': 'qaSlots', 'regress-lane-count': 'regressLaneCount',
   'unit-gate-scope': 'unitGateScope', 'unit-gate-shards': 'unitGateShards', 'telegram-chat': 'telegramChat',
 };
-function readLayer(file: string): Partial<Settings> {
+function readLayer(file: string, reportUnknown?: (message: string) => void): Partial<Settings> {
   if (!existsSync(file)) return {};
   let value: unknown;
   try { value = JSON.parse(readFileSync(file, 'utf8')); }
   catch (error) { throw new Error(`${file}: settings ${String(error)}`); }
-  validate(value, schema as Schema, 'settings', file);
+  validate(value, schema as Schema, 'settings', file, reportUnknown);
   const { $schema: _schema, ...layer } = value as Partial<Settings> & { $schema?: string };
   const engines = new Set<string>();
   for (const [index, account] of (layer.accounts ?? []).entries()) {
@@ -103,10 +107,12 @@ function readLayer(file: string): Partial<Settings> {
 export function loadSettings(options: SettingsOptions = {}): { settings: Settings; sources: Record<keyof Settings, string>; directory: string } {
   validate(defaults, schema as Schema, 'settings', 'built-in');
   const directory = settingsDirectory(options);
-  const sharedFile = join(directory, 'settings.json'), userFile = join(directory, 'settings.user.json');
+  // Launcher overrides select machine-local settings; tracked settings belong to the executing tree.
+  const sharedDirectory = options.directory ? resolve(options.directory) : join(repositoryRoots(options.cwd ?? process.cwd()).worktree, '.goalctl');
+  const sharedFile = join(sharedDirectory, 'settings.json'), userFile = join(directory, 'settings.user.json');
   const shared = readLayer(sharedFile);
   if (shared.accounts?.length) throw new Error(`${sharedFile}: settings.accounts belongs in settings.user.json`);
-  let user = readLayer(userFile);
+  let user = readLayer(userFile, options.report ?? console.error);
   const localState = join(dirname(directory), '.temp/goal-orchestration');
   const state = options.stateDirectory && dirname(dirname(resolve(options.stateDirectory))) === dirname(directory)
     ? options.stateDirectory : localState;
@@ -131,7 +137,9 @@ export function loadSettings(options: SettingsOptions = {}): { settings: Setting
 }
 
 function migrateSettings(state: string, directory: string, userFile: string, report = console.error): Partial<Settings> {
-  let user = readLayer(userFile);
+  let user = readLayer(userFile, () => {});
+  // Preserve fields owned by newer code when this version migrates legacy values.
+  const storedUser = existsSync(userFile) ? JSON.parse(readFileSync(userFile, 'utf8')) as Record<string, unknown> : {};
   const migrated: string[] = [];
   for (const [name, key] of Object.entries(legacy)) {
     const file = join(state, name);
@@ -141,13 +149,14 @@ function migrateSettings(state: string, directory: string, userFile: string, rep
       const value = typeof defaults[key] === 'number' ? Number(stored) : stored;
       validate(value, (schema.properties as Record<string, Schema>)[key]!, `settings.${key}`, file);
       user = { ...user, [key]: value };
+      storedUser[key] = value;
     }
     migrated.push(file);
   }
   if (migrated.length) {
     mkdirSync(directory, { recursive: true });
     const temporary = join(state, `settings.${process.pid}.user.json`);
-    writeFileSync(temporary, `${JSON.stringify({ version: 1, ...user }, null, 2)}\n`, { mode: 0o600 });
+    writeFileSync(temporary, `${JSON.stringify({ version: 1, ...storedUser }, null, 2)}\n`, { mode: 0o600 });
     renameSync(temporary, userFile);
     for (const file of migrated) {
       renameSync(file, `${file}.migrated`);

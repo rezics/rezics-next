@@ -1,3 +1,5 @@
+import { isolateTestSettings } from './fixtures/settings.ts';
+
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -6,6 +8,8 @@ import { describe, expect, test } from 'bun:test';
 import { findingsFromText, handoffResult, land, needsReview, reviewBranch, reviewEngine, reviewPrompt } from './land.ts';
 import { parseBrief, validateBrief, type Ledger, type Task } from './goalctl.ts';
 import { testAccountSettings } from './fixtures/accounts.ts';
+
+isolateTestSettings();
 
 // A refused review pass is run again after a wait; the tests do not wait.
 process.env.GOAL_REVIEW_RETRY_MS = '1';

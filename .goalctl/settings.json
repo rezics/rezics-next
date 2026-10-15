@@ -1,4 +1,5 @@
 {
   "$schema": "./settings.schema.json",
-  "version": 1
+  "version": 1,
+  "codexCompactTokens": { "sol": 160000, "luna": 200000 }
 }
