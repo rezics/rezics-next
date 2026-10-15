@@ -172,8 +172,8 @@ test('a reader starts with an empty library, shelves a Work and manages it from 
     ).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 20_000 });
 
-  // The page at desktop and phone sizes, light and dark, in English and Chinese, with no sideways scroll.
-  for (const locale of ['en', 'zh-Hans'] as const) {
+  // The page at desktop and phone sizes, light and dark, with no sideways scroll.
+  for (const locale of ['en', 'zh-Hans', 'ja'] as const) {
     for (const theme of ['light', 'dark'] as const) {
       await context.addCookies([{ name: 'rezics_theme', value: theme, url: page.url() }]);
       for (const viewport of [
