@@ -236,8 +236,7 @@ async function grow(sessions: PersonaSessions, work: RealmSourceWork, bodies: st
     return { reply, variantId, ...draft, body, author: person.actingSubject!, rootTarget: work.work, rootRevision: work.workRevision,
       parentReply: parent?.reply ?? null, parentRevision: parent?.revisionId ?? null, contextRevision: null };
   }));
-  // Content drafts can overlap. Graph publications share one writer, so keep
-  // their queue out of each command's 12-second bound and identity root reads.
+  // Content drafts can overlap. Keep identity's root reads clear of writes.
   for (const item of drafts) {
     const identity = { profile: 'realm-reply-identity-v1', reply: item.reply, variantId: item.variantId, revisionId: item.revisionId,
       author: item.author, rootTarget: item.rootTarget, rootRevision: item.rootRevision,
@@ -247,13 +246,15 @@ async function grow(sessions: PersonaSessions, work: RealmSourceWork, bodies: st
       requireFact(saved[field] === identity[field], `identity publication changed ${field}`);
   }
   const placed: RealmSourceReply[] = [];
-  for (const item of drafts) {
+  // Eight queued graph commands exceeded the native 12-second command bound.
+  // Pairs overlap admission/settlement without building that writer queue.
+  for (let start = 0; start < drafts.length; start += 2) placed.push(...await together(drafts.slice(start, start + 2).map(async item => {
     const placement = await command<{ placement: string }>(person, work, '/v1/realm-reply-placements', {
       profile: 'realm-reply-placement-v1', realm: sessions.realm, reply: item.reply,
       revisionId: item.revisionId, revisionDigest: item.revisionDigest, reviewDecisionId: null,
       expectedHead: null, actingSubject: person.actingSubject });
-    placed.push({ ...item, placement: placement.placement });
-  }
+    return { ...item, placement: placement.placement };
+  })));
   return placed;
 }
 

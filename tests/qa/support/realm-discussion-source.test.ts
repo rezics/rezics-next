@@ -200,21 +200,25 @@ test('Account diagnostics omit verification credentials without changing the act
 
 test('complete builder uses 552 public draft/identity/placement commands with exact nested and episode bindings', async () => {
   const f = fixture(), directory = mkdtempSync(join(import.meta.dir, '../../../.temp/realm-corpus-unit-'));
-  let graphPublications = 0, maximumGraphPublications = 0;
+  let graphPublications = 0, maximumGraphPublications = 0, identityPublications = 0;
   for (const realm of Object.values(f.sessions)) {
     const person = realm.owner, call = person.main;
     person.main = async (...args) => {
       if (!['/v1/realm-replies', '/v1/realm-reply-placements'].includes(args[1])) return call(...args);
+      const identity = args[1] === '/v1/realm-replies';
+      if (identity) expect(graphPublications).toBe(0);
+      else expect(identityPublications).toBe(0);
+      if (identity) identityPublications++;
       maximumGraphPublications = Math.max(maximumGraphPublications, ++graphPublications);
       try { await Promise.resolve(); return await call(...args); }
-      finally { graphPublications--; }
+      finally { graphPublications--; if (identity) identityPublications--; }
     };
   }
   mkdirSync(join(directory, 'backup'));
   try {
     const result = await buildRealmDiscussionCorpus(f.runtime, { key: 'unit', directory, backup: join(directory, 'backup'), budget: new FixtureWorkBudget(1_800_000) });
     validateRealmSourceMetadata(result.metadata);
-    expect(maximumGraphPublications).toBe(1);
+    expect(maximumGraphPublications).toBe(2);
     expect(f.requests.filter(request => request.path === '/v1/member-reply-drafts')).toHaveLength(552 + 21);
     expect(f.requests.filter(request => request.path === '/v1/realm-replies')).toHaveLength(552 + 21);
     expect(f.requests.filter(request => request.path === '/v1/realm-reply-placements')).toHaveLength(552 + 21);
