@@ -3835,14 +3835,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@playwright/test@npm:1.64.1":
-  version: 1.64.1
-  resolution: "@playwright/test@npm:1.64.1"
+"@playwright/test@npm:1.63.0":
+  version: 1.63.0
+  resolution: "@playwright/test@npm:1.63.0"
   dependencies:
-    playwright: "npm:1.64.1"
+    playwright: "npm:1.63.0"
   bin:
     playwright: cli.js
-  checksum: 10c0/0a1a853d76d6c532cafaf0366a5448584b766737ebd39bbd23dc0580f3d3b6ef4c833082af47a792e7fc2501f444debdfaad37a87a76cc5b195f3803fc80ea3c
+  checksum: 10c0/795cd06c2eb6cb6142e72792f4df8f97665aa8c551c16278a7f2b3f31664e0cff07ed3c066490da55daf2fe51bc18e9c1ec6cba05b2c37387a0c49ad63017db8
   languageName: node
   linkType: hard
 
@@ -4199,7 +4199,7 @@ __metadata:
     lucide-react: "npm:1.57.0"
     native-i18n: "npm:0.2.0"
     next: "npm:16.4.1"
-    playwright: "npm:1.64.1"
+    playwright: "npm:1.63.0"
     react: "npm:19.3.1"
     react-dom: "npm:19.3.1"
     react-server-dom-webpack: "npm:19.3.1"
@@ -4402,7 +4402,7 @@ __metadata:
     next: "npm:16.4.1"
     nsfwjs: "npm:4.4.0"
     nuqs: "npm:2.10.2"
-    playwright: "npm:1.64.1"
+    playwright: "npm:1.63.0"
     react: "npm:19.3.1"
     react-dom: "npm:19.3.1"
     react-server-dom-webpack: "npm:19.3.1"
@@ -12211,23 +12211,23 @@ __metadata:
   languageName: node
   linkType: hard
 
-"playwright-core@npm:1.64.1":
-  version: 1.64.1
-  resolution: "playwright-core@npm:1.64.1"
+"playwright-core@npm:1.63.0":
+  version: 1.63.0
+  resolution: "playwright-core@npm:1.63.0"
   bin:
     playwright-core: cli.js
-  checksum: 10c0/91c4f5ed1cff4b0e18b6ac62f66770f5f1b6c204d4aebd6a321c07466dca18a70822ac692597c6059705a703f9768097ac551df179fb49294d639509148e04f3
+  checksum: 10c0/39c1ebae4029ca2e9371e00a5588d962038e24b6e0bdb7d0d27374dde04838f349b83ae0c8b3b648653d0935cba7fb9011f1201adaab9dd0db7801ad6c75e9aa
   languageName: node
   linkType: hard
 
-"playwright@npm:1.64.1":
-  version: 1.64.1
-  resolution: "playwright@npm:1.64.1"
+"playwright@npm:1.63.0":
+  version: 1.63.0
+  resolution: "playwright@npm:1.63.0"
   dependencies:
-    playwright-core: "npm:1.64.1"
+    playwright-core: "npm:1.63.0"
   bin:
     playwright: cli.js
-  checksum: 10c0/edf52d0a79feca37bf383e841a467aa68750684128218eac560063991c9e4b615a94901f580cd8a088bb05fd53008ab4a0e5e8d976067698b60ae5d1de2459f3
+  checksum: 10c0/d1fd048a89be27c9aba6757dc4f70eff4a5163b49f439ad691767be8b2a482327d0dd1928b4f73c8fe0d8b33aab2c9dc2670424ab60f112d9e98e91b94e3b090
   languageName: node
   linkType: hard
 
@@ -12969,7 +12969,7 @@ __metadata:
   resolution: "rezics@workspace:."
   dependencies:
     "@ast-grep/cli": "npm:0.50.0"
-    "@playwright/test": "npm:1.64.1"
+    "@playwright/test": "npm:1.63.0"
     "@types/n3": "npm:1.26.4"
     dependency-cruiser: "npm:18.6.0"
     fflate: "npm:0.8.3"

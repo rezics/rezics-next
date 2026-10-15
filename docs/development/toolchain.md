@@ -128,8 +128,14 @@ The baseline retains the existing 5% graph/display margin, timing margin and
 independent 30-second Eden wall limit. This records the cost of the new
 dependency cohort so future application changes are measured against it.
 
-Storybook 11 alpha.6 and Vitest 5.0.4 use the matching Playwright 1.64.1
-Chromium revision. Web story tests now use reduced motion, as Accounts already
+Playwright, `@playwright/test` and the transitive `playwright-core` remain at
+main's 1.63.0 with its matching browser revision. Settlement observed different
+transport-loss behavior under 1.64.1 in the real-module forwarding and asset
+connection-reset tests in `scripts/qa/story-browser.test.ts`; the program held
+this browser cohort for separate investigation. Storybook 11 alpha.6, Vitest
+5.0.4 and its browser adapter remain upgraded; the adapter uses the installed
+Playwright rather than bundling another browser.
+Web story tests now use reduced motion, as Accounts already
 does, so automatic accessibility checks observe settled controls rather than
 an enabling opacity transition. Storybook asset forwarding retries only connection
 resets on idempotent asset GETs; HTTP errors, application API calls and stories
@@ -438,7 +444,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @opentelemetry/sdk-metrics | 2.12.0 | packages/observability |
 | @opentelemetry/sdk-node | 0.223.0 | packages/observability |
 | @opentelemetry/sdk-trace-base | 2.12.0 | packages/observability |
-| @playwright/test | 1.64.1 | . |
+| @playwright/test | 1.63.0 | . |
 | @resvg/resvg-js | 2.6.2 | apps/about |
 | @rezics/account | workspace:* | apps/accounts |
 | @rezics/document | workspace:* | apps/web, packages/ui, services/content, services/main |
@@ -513,7 +519,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | oxlint | 1.88.0 | . |
 | oxlint-tsgolint | 7.0.2004 | . |
 | pg | 8.23.1 | packages/observability, services/account, services/content, services/main |
-| playwright | 1.64.1 | apps/accounts, apps/web |
+| playwright | 1.63.0 | apps/accounts, apps/web |
 | prosemirror-markdown | 1.13.8 | packages/document |
 | prosemirror-model | 1.25.12 | packages/document |
 | prosemirror-schema-basic | 1.2.5 | packages/document |
