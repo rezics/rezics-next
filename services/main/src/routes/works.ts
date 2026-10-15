@@ -6,7 +6,6 @@ import { candidateText, declaredGrain, grainOwner, CatalogueInvalid, CataloguePe
 import { readTranslationLinks } from '../modules/work/translation-links.ts';
 import { readWorkDerivations } from '../modules/work/derivations.ts';
 import { createAdmittedFixedRelease, readFixedRelease, type FixedRelease } from '../modules/work/fixed-release.ts';
-import { setAdmittedWorkScalar } from '../modules/work/edit-admitted.ts';
 import { readExactMainRevision, readExactWorkRevision, RevisionCorrupt }
   from '../modules/work/history.ts';
 import { sameScalar, scalarExport, scalarFromBinding, SCALAR_PREDICATE }
@@ -15,11 +14,14 @@ import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { iri, InvalidWorkSemanticTypes, InvalidWorkTitleLanguage, MAX_WORK_SEMANTIC_TYPES } from '../modules/work/activate.ts';
 import { registryWorkType } from '../modules/types/contract.ts';
 import { exactMainRevision, exactWorkRevision, pendingOperation, problemResult, workResult,
-  workScalarRead, workScalarValue, workScalarWrite } from '../api-contract.ts';
+  workScalarRead } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
+import { operationPolicies } from './operation-policies.ts';
+import { workScalarModels, workScalarOperation } from './work-scalar.contract.ts';
+import { workScalarHandler } from './work-scalar.handler.ts';
 
 const translationLinkRef = t.Object({ link: t.String(), targetWork: t.String(),
   targetMainVersion: t.String(), targetMainRevision: t.String(),
@@ -81,6 +83,8 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
   }, { additionalProperties: false });
   return new Elysia()
+    .use(operationPolicies(work))
+    .model(workScalarModels)
     .post('/v1/works', {
       body: t.Union([
         t.Object({ ...createBody.properties, authoring: t.Literal('own-work') }, { additionalProperties: false }),
@@ -233,34 +237,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
-    .post('/v1/works/:id/scalar-value', {
-      params: t.Object({ id: groupUuid }),
-      body: t.Object({ profile: t.Literal('work-scalar-state-v1'),
-        expectedHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-        scalarValue: t.Optional(workScalarValue),
-        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }),
-      response: { 200: workScalarWrite, 202: pendingOperation,
-        ...writeProblems, 404: problemResult(404) },
-    }, async ({ request, params, body }) => {
-      const idempotencyKey = request.headers.get('idempotency-key');
-      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
-        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
-      }
-      try {
-        const value = body.scalarValue;
-        const receipt = await setAdmittedWorkScalar(work.environment, work.account, work.access,
-          request, { work: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
-            ...(value === undefined ? {} : { scalarValue: value }),
-            actingSubject: body.actingSubject, idempotencyKey });
-        return Response.json({ profile: 'work-scalar-state-v1', work: receipt.work,
-          revision: receipt.revision, predecessor: receipt.predecessor,
-          ...(value === undefined ? {} : { scalarValue: value }),
-          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
-            sequence: receipt.sequence }, replayed: receipt.replayed },
-        { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
-    })
+    [workScalarOperation.method](workScalarOperation.path, workScalarOperation.options, workScalarHandler(work))
     .get('/v1/works/:id/scalar-value', {
       params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: t.String({
@@ -376,7 +353,7 @@ export const openApiOperations = {
   '/v1/revisions/{revision}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
   '/v1/main-versions/{mainVersion}/revisions/{revision}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
   '/v1/works/{id}/scalar-value/revisions/{revision}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
-  '/v1/works/{id}/scalar-value': { get: { exposure: 'public', rateLimitFamily: 'read' }, post: { exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/works/{id}/scalar-value': { get: { exposure: 'public', rateLimitFamily: 'read' }, post: workScalarOperation.policy },
   '/v1/fixed-releases/{release}': { get: { exposure: 'platform:commerce', rateLimitFamily: 'read' } },
   '/v1/fixed-releases': { post: { exposure: 'platform:commerce', rateLimitFamily: 'write' } },
   '/v1/main-versions/{mainVersion}/revisions/{revision}/work-derivations': { get: { exposure: 'public', rateLimitFamily: 'read' } },

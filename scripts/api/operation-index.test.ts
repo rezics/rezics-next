@@ -7,10 +7,22 @@ import {
   groupTestFiles,
   searchOperations,
   sourceCallsPath,
+  routeHandlerLocations,
   type IndexedOperation,
 } from './operation-index.ts';
 
 let operations: IndexedOperation[];
+
+it('locates native contract bindings, including imported aliases, without another route registry', () => {
+  const locations = routeHandlerLocations([
+    { file: 'services/main/src/routes/example.contract.ts', source: `export const operation = {
+      method: 'post', path: '/v1/example/:id', options: {}
+    } as const;` },
+    { file: 'services/main/src/routes/example.ts', source: `import { operation as command } from './example.contract.ts';
+new Elysia()[command.method](command.path, command.options, handler);` },
+  ]);
+  expect(locations.get('POST /v1/example/{}')).toEqual({ file: 'services/main/src/routes/example.ts', line: 2 });
+});
 
 beforeAll(async () => {
   operations = await buildOperationIndex();

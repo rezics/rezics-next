@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import ts from 'typescript-6';
 
 type OperationDeclaration = {
   exposure: string;
@@ -62,8 +63,56 @@ function mainSourceFiles(root: string): { file: string; source: string }[] {
     .map((file) => ({ file, source: readFileSync(join(root, file), 'utf8') }));
 }
 
-function routeHandlerLocations(sources: readonly { file: string; source: string }[]): Map<string, { file: string; line: number }> {
+export function routeHandlerLocations(sources: readonly { file: string; source: string }[]): Map<string, { file: string; line: number }> {
   const locations = new Map<string, { file: string; line: number }>();
+  const contracts = new Map<string, Map<string, { method: string; path: string }>>();
+  const parsed = sources.map(({ file, source }) => ({ file,
+    ast: ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true) }));
+  for (const { file, ast } of parsed) {
+    const entries = new Map<string, { method: string; path: string }>();
+    for (const statement of ast.statements) {
+      if (!ts.isVariableStatement(statement)) continue;
+      for (const declaration of statement.declarationList.declarations) {
+        let value = declaration.initializer;
+        while (value && (ts.isAsExpression(value) || ts.isSatisfiesExpression(value))) value = value.expression;
+        if (!ts.isIdentifier(declaration.name) || !value || !ts.isObjectLiteralExpression(value)) continue;
+        const literals = new Map(value.properties.flatMap(property => ts.isPropertyAssignment(property)
+          && ts.isStringLiteral(property.initializer) ? [[property.name.getText(ast).replace(/['"]/g, ''), property.initializer.text]] : []));
+        const method = literals.get('method'), path = literals.get('path');
+        if (method && path && /^(get|post|put|patch|delete|head|options|all|ws)$/.test(method)) entries.set(declaration.name.text, { method, path });
+      }
+    }
+    contracts.set(resolve(file), entries);
+  }
+  for (const { file, ast } of parsed) {
+    const visible = new Map(contracts.get(resolve(file)));
+    for (const statement of ast.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+      const bindings = statement.importClause?.namedBindings;
+      if (!bindings || !ts.isNamedImports(bindings)) continue;
+      const imported = contracts.get(resolve(file, '..', statement.moduleSpecifier.text));
+      for (const binding of bindings.elements) {
+        const operation = imported?.get(binding.propertyName?.text ?? binding.name.text);
+        if (operation) visible.set(binding.name.text, operation);
+      }
+    }
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && ts.isElementAccessExpression(node.expression)) {
+        const method = node.expression.argumentExpression;
+        const path = node.arguments[0];
+        if (ts.isPropertyAccessExpression(method) && method.name.text === 'method' && ts.isIdentifier(method.expression)
+          && path && ts.isPropertyAccessExpression(path) && path.name.text === 'path'
+          && path.expression.getText(ast) === method.expression.text) {
+          const operation = visible.get(method.expression.text);
+          if (operation) locations.set(operationKey(operation.method, operation.path), {
+            file, line: ast.getLineAndCharacterOfPosition(method.getStart(ast)).line + 1,
+          });
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(ast);
+  }
   const directRoute = /\.(get|post|put|patch|delete|options|head|all|ws)\s*\(\s*(?:(['"])([^'"]+)\2|`((?:\\.|[^`])*)`|([A-Za-z_$][\w$]*))/g;
   const routeMethod = /\.route\s*\(\s*(['"])([A-Z]+)\1\s*,\s*(['"])([^'"]+)\3/g;
   for (const { file, source } of sources) {
