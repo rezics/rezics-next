@@ -121,12 +121,24 @@ wording and directions that later ones replaced are in this file's history.
     first where it lacks evidence. What only the maintainer can decide reaches
     him over Telegram, and other work continues meanwhile
     ([program](program/GOAL.md#asking-the-maintainer)).
-16. **Audit efficiency every three hours; adjust by measurement** (2026-10-13).
-    "每 3h 启动一次，派发 6.1 sol 做 token 效率调研，当然包括解决方案和指导意见 …
-    如果调研结果是效率依然很差，那 manager 需要自主判断，进行适当调整，通过实测和
-    持续迭代来找出最优方案." And where to stop: if at the measured pace the
-    product is done and fit to go live, apart from what is not a matter of
-    code, in about twelve hours with allowance to spare, nothing is optimised
+16. **Efficiency is a continuous duty, never waited for** (2026-10-13,
+    2026-10-16). "每 3h 启动一次，派发 6.1 sol 做 token 效率调研 … 通过实测和持续迭代来找出最优方案."
+    And on 2026-10-16, after repeating it many times: "prioritize efficiency and
+    proactively optimize it … The amount of useful work accomplished … as well
+    as the token consumption caused by rework, are both major concerns." The
+    supermanager monitors and optimizes efficiency all the time, without being
+    asked and alongside everything else; it is never paused because work looks
+    nearly done. Concretely:
+    - **Measure.** The hourly monitor runs throughout. At least every three
+      hours, measure the last full 12-hour window: useful work (tasks landed,
+      rows proved, product and test lines) against tokens, attempts per landed
+      task, and the tokens spent on rework by cause
+      (`task goal -- efficiency --since … --until …`, and a read-only Sol
+      analysis of turns and causes).
+    - **Act.** Remove the largest cause the same day, by fixing the mechanism
+      (tool, harness, protocol, brief), not by capping attempts (direction 3).
+    - **Verify.** Judge each change by the same measures over the next full
+      12-hour window, and record the before and after in the checkpoint.
     ([program](program/GOAL.md#the-efficiency-audit)).
 
 ## Resources
