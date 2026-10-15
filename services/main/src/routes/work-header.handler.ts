@@ -1,6 +1,6 @@
 import { type Context, type UnwrapRoute } from 'elysia';
 import { accountFailure } from '../modules/account/problems.ts';
-import { authorityFailure } from '../modules/access/admission-problems.ts';
+import { authorityFailure } from '../modules/access/composition.ts';
 import { workReadFailure } from '../modules/work/read-problems.ts';
 import { readWorkHeader } from '../modules/work/read-header.ts';
 import { workRead } from '../modules/work/read-session.ts';

@@ -7,7 +7,7 @@ import { RecoveryHold } from './restore-lineage.ts';
 import { InvalidWorkScalarValue } from './scalar-value.ts';
 import type { Static } from 'typebox';
 import { pendingOperation } from '../../api-contract.ts';
-import { admissionConflictSchema, idempotencyConflict } from '../access/admission-problems.ts';
+import { admissionConflictSchema, idempotencyConflict } from '../access/composition.ts';
 
 export const invalidIdempotencyKey = problemDefinition(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
 export const invalidScalarValue = problemDefinition(400, 'invalid_scalar_value', 'Work scalar value is invalid');

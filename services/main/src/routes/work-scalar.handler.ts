@@ -1,6 +1,6 @@
 import { problem, type Context, type UnwrapRoute } from 'elysia';
 import { accountFailure } from '../modules/account/problems.ts';
-import { admissionFailure } from '../modules/access/admission-problems.ts';
+import { admissionFailure } from '../modules/access/composition.ts';
 import { setAdmittedWorkScalar } from '../modules/work/edit-admitted.ts';
 import { invalidIdempotencyKey, scalarFailure } from '../modules/work/scalar-problems.ts';
 import type { MainWorkDependencies } from './dependencies.ts';

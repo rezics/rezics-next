@@ -14,8 +14,7 @@ import { RatingTargetGrainMismatch } from '../modules/rating/release.ts';
 import { ratingContextOwner } from '../modules/rating/target-api.ts';
 import { questionLanguagesQuery, questionReadFields } from '../modules/rating/question-presentation-schema.ts';
 import { classificationItem, pageFields, pageQuery,
-  readId, readQuery, readScope, readUuid, scopeQuery,
-  } from '../modules/work/read-contract.ts';
+  readId, readQuery, readScope, readUuid, scopeQuery } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { operationPolicies } from './operation-policies.ts';

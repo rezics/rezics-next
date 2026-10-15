@@ -1,5 +1,5 @@
 import { problem, type Context, type UnwrapRoute } from 'elysia';
-import { actingContextFailure, actingContextUnavailable } from '../modules/access/acting-context-problems.ts';
+import { actingContextFailure, actingContextUnavailable } from '../modules/access/composition.ts';
 import type { VerifiedAccountAssertion } from '../modules/account/verify-assertion.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { logExpectedFailure, opaqueCommandFailure } from './problems.ts';

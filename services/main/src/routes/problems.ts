@@ -2,8 +2,6 @@ import { logWorkerFault } from '@rezics/observability/log';
 import { problem as nativeProblem } from 'elysia';
 import { dependencyUnavailable, legacyFailureResponse, type ProblemSet } from '../modules/problem.ts';
 import { accountFailure } from '../modules/account/problems.ts';
-import { admissionFailure } from '../modules/access/admission-problems.ts';
-import { actingContextFailure } from '../modules/access/acting-context-problems.ts';
 import { scalarFailure } from '../modules/work/scalar-problems.ts';
 import type { SessionChanges, SessionState } from '../modules/session/contract.ts';
 import type { EditionPreference } from '../modules/session/preference-contract.ts';
@@ -25,6 +23,7 @@ import { profileViolation } from '../infrastructure/profile-violation.ts';
 import { AccountHasOwnedAgents, type AccountOwnedAgent }
   from '../modules/access/admission.ts';
 import {
+  admissionFailure, actingContextFailure,
   GroupConflict, GroupDenied, GroupStale, GroupUnavailable,
   PrivateRecipientConflict, PrivateRecipientDenied, PrivateRecipientStale, PrivateRecipientUnavailable,
   RoleConflict, RoleDenied, RoleStale, RoleUnavailable,

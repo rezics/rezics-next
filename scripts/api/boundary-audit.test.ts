@@ -51,6 +51,11 @@ test('unions containing a broad code stay broad, while concrete variants are rec
   expect(schemaCodeKind({ anyOf: [exact, broad] })).toBe('string');
   expect(schemaCodeKind({ oneOf: [exact] })).toBe('literal');
   expect(schemaCodeKind(undefined)).toBe('absent');
+  const models = { Conflict: { anyOf: [exact, exact] }, Loop: { $ref: '#/components/schemas/Loop' } };
+  expect(schemaCodeKind({ $ref: '#/components/schemas/Conflict' }, models)).toBe('literal');
+  expect(schemaCodeKind({ $ref: '#/components/schemas/Missing' }, models)).toBe('absent');
+  expect(schemaCodeKind({ $ref: '#/components/schemas/Loop' }, models)).toBe('absent');
+  expect(schemaCodeKind({ anyOf: [exact, {}] })).toBe('absent');
 });
 
 test('handler factories contribute local status candidates without pretending to infer domain reachability', () => {

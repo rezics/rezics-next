@@ -119,8 +119,12 @@ function canonical(value: Json): string {
   return JSON.stringify(value);
 }
 
-export function schemaCodeKind(schema: Json | undefined): 'string' | 'literal' | 'absent' {
+export function schemaCodeKind(schema: Json | undefined, models: Record<string, Json> = {}, seen = new Set<string>()): 'string' | 'literal' | 'absent' {
   if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return 'absent';
+  if (typeof schema.$ref === 'string') {
+    if (!schema.$ref.startsWith('#/components/schemas/') || seen.has(schema.$ref)) return 'absent';
+    return schemaCodeKind(models[schema.$ref.slice('#/components/schemas/'.length)], models, new Set([...seen, schema.$ref]));
+  }
   const properties = schema.properties;
   if (properties && typeof properties === 'object' && !Array.isArray(properties)) {
     const code = properties.code;
@@ -132,9 +136,9 @@ export function schemaCodeKind(schema: Json | undefined): 'string' | 'literal' |
   for (const key of ['anyOf', 'oneOf', 'allOf']) {
     const variants = schema[key];
     if (!Array.isArray(variants)) continue;
-    const kinds = variants.map(schemaCodeKind);
+    const kinds = variants.map(variant => schemaCodeKind(variant, models, seen));
     if (kinds.includes('string')) return 'string';
-    if (kinds.includes('literal')) return 'literal';
+    if (kinds.length > 0 && kinds.every(kind => kind === 'literal')) return 'literal';
   }
   return 'absent';
 }
@@ -146,7 +150,8 @@ export async function auditBoundary(root: string) {
   writeFileSync(join(output, 'openapi.json'), openApiText);
   const document = JSON.parse(openApiText) as { paths: Record<string, Record<string, {
     responses?: Record<string, { content?: Record<string, { schema?: Json }> }>;
-  }>> };
+  }>>; components?: { schemas?: Record<string, Json> } };
+  const models = document.components?.schemas ?? {};
   const index = await buildOperationIndex(root);
   const groups = new Map<string, number>();
   const codeKinds = { string: 0, literal: 0, absent: 0 };
@@ -156,7 +161,7 @@ export async function auditBoundary(root: string) {
       if (Number(status) < 400) continue;
       const schema = response.content?.['application/problem+json']?.schema;
       errorSchemas++;
-      codeKinds[schemaCodeKind(schema)]++;
+      codeKinds[schemaCodeKind(schema, models)]++;
       if (schema) groups.set(canonical(schema), (groups.get(canonical(schema)) ?? 0) + 1);
     }
   }
@@ -216,7 +221,7 @@ export async function auditBoundary(root: string) {
     })),
     nonBroadErrors: Object.entries(document.paths).flatMap(([path, methods]) => Object.entries(methods).flatMap(([method, operation]) =>
       Object.entries(operation.responses ?? {}).flatMap(([status, response]) => {
-        const kind = schemaCodeKind(response.content?.['application/problem+json']?.schema);
+        const kind = schemaCodeKind(response.content?.['application/problem+json']?.schema, models);
         return Number(status) >= 400 && kind !== 'string' ? [{ method, path, status, kind }] : [];
       }))),
     openApiBytes: Buffer.byteLength(openApiText),

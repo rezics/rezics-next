@@ -1,7 +1,7 @@
 import { t } from 'elysia';
 import { pendingOperation, workScalarValue, workScalarWrite } from '../api-contract.ts';
 import { accountProblems } from '../modules/account/problems.ts';
-import { authorityDenied } from '../modules/access/admission-problems.ts';
+import { authorityDenied } from '../modules/access/composition.ts';
 import { dependencyUnavailable, internalError, invalidRequest } from '../modules/problem.ts';
 import { rateLimitedSchema, rateLimitUnavailable, rateLimitUnclassified } from '../modules/rate-limit/problems.ts';
 import { scalarProblemSchemas } from '../modules/work/scalar-problems.ts';

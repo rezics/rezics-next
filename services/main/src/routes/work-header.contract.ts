@@ -1,6 +1,6 @@
 import { t } from 'elysia';
 import { accountProblems } from '../modules/account/problems.ts';
-import { authorityDenied } from '../modules/access/admission-problems.ts';
+import { authorityDenied } from '../modules/access/composition.ts';
 import { dependencyUnavailable, internalError, invalidRequest } from '../modules/problem.ts';
 import { rateLimitUnavailable, rateLimitUnclassified } from '../modules/rate-limit/problems.ts';
 import { readQuery, readUuid, workHeader } from '../modules/work/read-contract.ts';

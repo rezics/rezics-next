@@ -1,7 +1,7 @@
 import { t } from 'elysia';
 import { actingContextPreference } from '../api-responses.ts';
 import { accountProblems } from '../modules/account/problems.ts';
-import { actingContextProblemSchemas } from '../modules/access/acting-context-problems.ts';
+import { actingContextProblemSchemas } from '../modules/access/composition.ts';
 import { dependencyUnavailable, internalError } from '../modules/problem.ts';
 import { rateLimitedSchema, rateLimitUnavailable, rateLimitUnclassified } from '../modules/rate-limit/problems.ts';
 
