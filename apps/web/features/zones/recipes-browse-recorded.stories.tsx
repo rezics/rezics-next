@@ -169,8 +169,8 @@ function at(base: Story, viewport: 'phone' | 'desktop'): Story {
 
 /** The header refresh settles after the catalogue. A missing follow-state answer draws this notice. */
 async function expectNoRelationshipNotice(canvas: ReturnType<typeof within>) {
-  await waitFor(() => {
-    expect(canvas.queryByText(relationshipCopy.unavailable)).toBeNull();
+  await waitFor(async () => {
+    await expect(canvas.queryByText(relationshipCopy.unavailable)).toBeNull();
   });
 }
 
