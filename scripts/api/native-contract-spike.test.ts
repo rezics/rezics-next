@@ -6,8 +6,8 @@ import { measureSpike, prepareSpike, probeSpike, spikeVersions, type SpikeReleas
 // An explicit scratch dependency installation can run this same evidence against next.
 const supplied = process.env.API_NATIVE_SPIKE_ROOT;
 const installed = JSON.parse(readFileSync('node_modules/elysia/package.json', 'utf8')) as { version: string };
-const release: SpikeRelease = process.env.API_NATIVE_SPIKE_RELEASE === 'next' ||
-  installed.version === spikeVersions.next.elysia ? 'next' : 'pinned';
+const release: SpikeRelease = process.env.API_NATIVE_SPIKE_RELEASE === 'pinned' ? 'pinned'
+  : process.env.API_NATIVE_SPIKE_RELEASE === 'next' || installed.version === spikeVersions.next.elysia ? 'next' : 'pinned';
 mkdirSync('.temp', { recursive: true });
 const root = supplied ? resolve(supplied) : mkdtempSync(resolve('.temp/native-contract-test-'));
 let probe: Awaited<ReturnType<typeof probeSpike>>;
