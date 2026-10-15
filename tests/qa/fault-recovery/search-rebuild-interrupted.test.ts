@@ -1,5 +1,6 @@
 import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
@@ -12,7 +13,7 @@ import { queryPublicContentPhrase } from '../../../services/main/src/modules/con
 import { SEARCH_REBUILD_CRASH_AT, SEARCH_REBUILD_CRASH_FLAG, SEARCH_REBUILD_CRASH_POINTS,
   type SearchRebuildCrashPoint } from '../../../services/main/src/modules/content-publication/rebuild.ts';
 import { querySearchFields } from '../../../services/main/src/modules/search/fields.ts';
-import { DATASET, GRAPHS, PUBLIC_SEARCH_ANCHOR, RV, initializeFreshGraph, iri }
+import { DATASET, GRAPHS, PUBLIC_SEARCH_ANCHOR, RV, initializeFreshGraph, iri, lit }
   from '../../../services/main/src/modules/work/activate.ts';
 import { assertPublicTextReady } from '../../../services/main/src/modules/work/search-readiness.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/select-main.ts';
@@ -61,6 +62,7 @@ test('an interrupted public search rebuild resumes through activation', async ()
     cursor = new ContentProjectionCursor(contentPool);
     consumer = apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
     await seedRecoveryContent(env, contentPool, accessPool);
+    await deliverFixtureContentEligibility(env, content, apps.MAIN_RELAY_DATABASE_URL);
     const cut = await content.ownerPosition();
     await cursor.initialize(consumer);
     for (let i = 0; i < 10 && (await cursor.read(consumer)).sequence !== cut.sequence; i++) {
@@ -85,9 +87,8 @@ test('an interrupted public search rebuild resumes through activation', async ()
         expect(await controlGeneration(fuseki)).toBe(generation);
       }
       if (point === 'after-replay') {
-        // The cursor is at the cut. Removing the offline receipt reproduces a
-        // replay that never recorded indexer evidence. The same job cannot
-        // accept those projection receipts again.
+        // Deleting a committed offline receipt corrupts the frozen authority
+        // chain. Refuse it, then restore the exact retained proof and resume.
         if (!content || !contentPool) throw new Error('search rebuild fixture is absent');
         const saved = JSON.parse(readFileSync(join(stack.directory, 'content-rebuild.json'), 'utf8')) as { id: string };
         const cursorAt = await contentPool.query(
@@ -98,6 +99,20 @@ test('an interrupted public search rebuild resumes through activation', async ()
         const evidence = `PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.receipts)} {
           ?receipt rv:rebuildJob ${JSON.stringify(saved.id)} ; rv:indexRebuildDigest ?digest . } }`;
         expect((await fuseki.query(evidence)).boolean).toBe(true);
+        const retained = (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt ?p ?o WHERE {
+          GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:rebuildJob ${lit(saved.id)} ;
+            rv:indexRebuildDigest ?digest ; ?p ?o } }`)).results!.bindings;
+        const retainedIri = (value: string) => {
+          if (!/^(?:https?:|urn:)[^<>"\s]+$/u.test(value)) throw new Error('Invalid retained proof IRI');
+          return `<${value}>`;
+        };
+        const restore = `INSERT DATA { GRAPH ${iri(GRAPHS.receipts)} {
+          ${retained.map(row => {
+            const value = row.o!;
+            const object = value.type === 'uri' ? retainedIri(value.value) : lit(value.value)
+              + (value['xml:lang'] ? `@${value['xml:lang']}` : value.datatype ? `^^${retainedIri(value.datatype)}` : '');
+            return `${retainedIri(row.receipt!.value)} ${retainedIri(row.p!.value)} ${object} .`;
+          }).join('\n')} } }`;
         // The persistent product assembler has no SPARQL update service. The
         // fault write goes through tdb2 while Fuseki is stopped, then the same
         // server comes back.
@@ -116,16 +131,23 @@ rm -f /tmp/drop-offline-evidence.ru`);
           await stack.runner.start();
         }
         expect((await fuseki.query(evidence)).boolean).toBe(false);
+        const refused = await refusedRootCommand(['search:rebuild', ...stack.args, '--reserve-bytes', '0'], 420_000);
+        expect(refused).toContain('graph authority moved after frozen rebuild cut');
+        stack.runner.stop();
+        try {
+          stack.runner.offline(`cat > /tmp/restore-offline-evidence.ru << 'EOF'
+${restore}
+EOF
+java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate --loc=/fuseki/databases/rezics/tdb2 --update=/tmp/restore-offline-evidence.ru
+rm -f /tmp/restore-offline-evidence.ru`);
+        } finally {
+          await stack.runner.start();
+        }
+        expect((await fuseki.query(evidence)).boolean).toBe(true);
         const resumed = await rebuild();
-        expect(resumed).toContain('content-rebuild step: fresh job ');
-        expect(resumed).toContain(`(previous job ${saved.id} had no offline evidence)`);
-        expect(resumed).toContain('content-rebuild step: cleared');
-        expect(resumed).toContain('content-rebuild step: offline-indexed');
-        expect(resumed).toContain('content-rebuild step: replayed');
         expect(resumed).toContain('content-rebuild step: activated');
-        expect(resumed).not.toContain('fresh job refused');
         const fresh = lastJson<RebuildJson>(resumed);
-        expect(fresh.job).not.toBe(saved.id);
+        expect(fresh.job).toBe(saved.id);
         expect(fresh.generation).not.toBe(generation);
         generation = fresh.generation;
         await expectReady(generation, population);
