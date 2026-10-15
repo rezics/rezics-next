@@ -5,8 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { type Ledger, type Task } from './types.ts';
 import { landedTaskCommit } from './merge-normalise.ts';
 
-const fixtures: ReturnType<typeof fixture>[] = [];
-function fixture() {
+const fixtures: ReturnType<typeof createFixture>[] = [];
+function createFixture() {
   const scratch = join(import.meta.dir, '../../.temp/merge-landing');
   mkdirSync(scratch, { recursive: true });
   const directory = mkdtempSync(join(scratch, 'case-'));
@@ -82,6 +82,11 @@ function fixture() {
     return { child, result };
   };
   const current = { directory, state, run, git, task, ledger, save, ready, release, start, children };
+  return current;
+}
+
+function fixture() {
+  const current = createFixture();
   fixtures.push(current);
   return current;
 }
