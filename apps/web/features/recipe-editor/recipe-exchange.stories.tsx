@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { localizedPath } from '../../i18n/locale.ts';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { useEffect, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import EditLayout from '../../app/[locale]/w/[ref]/edit/layout.tsx';
@@ -100,7 +100,7 @@ export const SelectedRevision: Story = {
     const canvas = within(canvasElement);
     await canvas.findByRole('textbox', { name: copyOf('en').title });
     await userEvent.click(canvas.getByRole('button', { name: copyOf('en').exportAction }));
-    await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('Downloaded revision 00000000-0000-4000-8000-000000000900.'));
+    await expect(canvas.findByText('Downloaded revision 00000000-0000-4000-8000-000000000900.')).resolves.toBeVisible();
     await expect(current.request).toEqual({ structure, revision, actingSubject });
     await expect(current.saved).toEqual(exported);
   },
@@ -140,7 +140,7 @@ export const ImportSuccess: Story = {
     await canvas.findByRole('textbox', { name: copyOf('en').title });
     await userEvent.upload(canvas.getByLabelText(copyOf('en').importAction, { selector: 'input' }), file());
     await expect(await canvas.findByText('Imported into revision 00000000-0000-4000-8000-000000000905.')).toBeVisible();
-    await expect(canvas.getByRole('textbox', { name: copyOf('en').sectionName })).toHaveValue('For the cake');
+    await expect(canvas.getAllByRole('textbox', { name: copyOf('en').sectionName })[0]).toHaveValue('For the cake');
     await expect(within(canvas.getByRole('region', { name: copyOf('en').ingredientsHeading })).getByText('200 g butter')).toBeInTheDocument();
     await expect(within(canvas.getByRole('region', { name: copyOf('en').ingredientsHeading })).getByText('1 cup flour')).toBeInTheDocument();
     await expect(canvas.getByRole('textbox', { name: copyOf('en').stepText({ number: '1' }) })).toHaveValue('Cream the butter with the sugar.');

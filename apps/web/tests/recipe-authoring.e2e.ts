@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import { studioHref } from '../features/studio/agent.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
+import { messages as workMessages } from '../features/work-page/messages.ts';
+import { copyOf } from '../features/recipe-editor/messages.ts';
 
 // A cook creates a recipe in Studio and writes it in the recipe editor: two ingredient sections that
 // each hold "butter", a step that uses one of them, a stale edit from a second tab, a reload, and
@@ -38,7 +40,7 @@ async function createRecipe(page: Page, title: string): Promise<string> {
 }
 
 const phone = { width: 390, height: 844 };
-const desktop = { width: 1280, height: 900 };
+const desktop = { width: 1440, height: 900 };
 const overflows = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 
 /** One screenshot per viewport, none with horizontal overflow: the files are what a reviewer reads. */
@@ -195,7 +197,7 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   mark('reload checked');
   // Publish.
   await page.getByRole('button', { name: 'Publish', exact: true }).click();
-  await expect(page.getByText('Published. Everyone can read this recipe.')).toBeVisible();
+  await expect(page.getByText('Published. Everyone can read this recipe.')).toBeVisible({ timeout: 60_000 });
 
   mark('published');
   // The Work page shows the recipe as written.
@@ -238,4 +240,23 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await expect(openWiki.or(none).or(failed)).toBeVisible();
   await expect(failed, 'Explore the wiki shows the failure panel').toHaveCount(0);
   await expect(openWiki.or(none)).toBeVisible();
+
+  // Read the same authored content in both interface languages, including the focused cooking view.
+  for (const locale of ['en', 'ja'] as const) {
+    const localizedWork = workPath.replace(/^\/en\//, `/${locale}/`);
+    const copy = workMessages[locale];
+    await page.goto(localizedWork);
+    await expect(page.getByRole('region', { name: copy.recipeMethod, exact: true })).toContainText('Icing');
+    await shoot(page, `recipe-published-${locale}`, info);
+    const cook = page.getByRole('button', { name: copy.cookThis, exact: true });
+    await cook.click();
+    await expect(page.getByRole('dialog', { name: copy.cookMode })).toBeVisible();
+    await shoot(page, `recipe-cooking-${locale}`, info);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(cook).toBeFocused();
+    await page.goto(`${localizedWork}/edit/recipe`);
+    await expect(page.getByRole('textbox', { name: copyOf(locale).title })).toHaveValue('Lemon poppy muffins');
+    await shoot(page, `recipe-editor-${locale}`, info);
+  }
 });

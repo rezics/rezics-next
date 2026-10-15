@@ -22,7 +22,7 @@ import type { RecipeWorkPage, WorkHeader } from './types.ts';
 
 const record = recipes as AnswerRecord;
 type Persona = AnswerPersona;
-type Locale = 'en' | 'zh-Hans';
+type Locale = 'en' | 'zh-Hans' | 'ja';
 type Phase = 'published' | 'loading' | 'scale' | 'continuation';
 
 function sample(persona: Persona, label: string): AnswerSample {
@@ -349,3 +349,7 @@ export const ScaledPhone: Story = {
 
 export const SimplifiedChinese: Story = published('visitor', 'zh-Hans', 'desktop');
 export const SimplifiedChinesePhone: Story = published('visitor', 'zh-Hans', 'phone');
+
+export const EnglishWide: Story = { ...Visitor, globals: { locale: 'en', viewport: { value: 'desktop1440' } } };
+export const JapaneseWide: Story = { ...published('visitor', 'ja', 'desktop'), globals: { locale: 'ja', viewport: { value: 'desktop1440' } } };
+export const JapanesePhone: Story = published('visitor', 'ja', 'phone');
