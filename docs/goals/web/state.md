@@ -324,7 +324,7 @@ cross-Goal claim hold, G-2325/G-2235's Program-owned Vite recovery,
 G-2229's membership-transport loan remain as previously decided. G-2333's
 later Cargo-stop disposition supersedes its earlier missing-UTC no-start
 reading for the reported verification job. Program's
-[content-adoption decision](../../architecture/content-adoption.md#decision-supermanager-2026-10-14)
+[content-adoption decision](../../architecture/content-adoption.md#field-meaning-and-admitted-forms)
 at `ab29e5c26` separates a field's semantic role from its value's form;
 content form, derivation and in-content references are separate dimensions.
 Recipe is the first case. Recipes remain in the first public scope and open
