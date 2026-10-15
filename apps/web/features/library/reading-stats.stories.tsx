@@ -24,11 +24,13 @@ export const Year: Story = { async play({ canvasElement }) {
     .toHaveLength(12);
 } };
 
-export const OneBookAndChapter: Story = { args: { stats: { ok: true, data: { ...stats.data, books: 1, chapters: 1 } } },
+export const OneBookAndChapter: Story = { args: { stats: { ok: true, data: { ...stats.data, books: 1, chapters: 1,
+  months: stats.data.months.map(month => ({ ...month, books: month.month === 1 ? 1 : 0, chapters: month.month === 1 ? 1 : 0 })) } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('1 book finished')).toBeVisible();
     await expect(canvas.getByText('1 chapter completed')).toBeVisible();
+    await expect(canvas.getByRole('listitem', { name: 'Jan: 1 book finished, 1 chapter completed' })).toBeVisible();
   } };
 
 export const Chinese: Story = { args: { locale: 'zh-Hans', messages: { ...messages, ...zhHans } },

@@ -28,6 +28,7 @@ test('a chapter written in Studio keeps its old address: it moves for good to th
   const studio = `/en/studio/@agent-${uuid(session)}`;
   await signInAtAccounts(page, studio, fixture<PrivateFixture>('REZICS_WEB_AUTH_PRIVATE_PATH').member);
   await page.goto(`${studio}/new`);
+  await page.locator('button[aria-label="Account menu"][data-hydrated="true"]').first().waitFor({ timeout: 30_000 });
   await page.getByRole('textbox', { name: 'Title' }).fill(`Chapter address book ${Date.now()}`);
   await page.getByRole('radio', { name: /^Book/ }).check();
   await page.getByRole('combobox', { name: 'Language you’ll write in' }).click();

@@ -102,7 +102,7 @@ export default {
   knownChapters: insert("Kapitel in beendeten Werken mit bekannter Länge: {{count}} (Werke: {{books}})", { count: String, books: String }),
   topConcepts: "Häufigste Themen",
   titleLanguages: "Sprachen der erfassten Titel",
-  monthStats: insert("{{month}}: Bücher: {{books}}, Kapitel: {{chapters}}", { month: String, books: String, chapters: String }),
+  monthStats: insert("{{month}}: {{books}}, {{chapters}}", { month: String, books: String, chapters: String }),
   importTitle: "Bücher importieren",
   importFileSelected: insert("Ausgewählte Datei: {{name}}", { name: String }),
   importMatching: insert("Zuordnungen werden geprüft: {{done}} von {{total}}", { done: String, total: String }),

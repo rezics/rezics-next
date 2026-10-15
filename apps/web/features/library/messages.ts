@@ -27,7 +27,7 @@ export const messages = {
     { count: String, books: String }),
   topConcepts: 'Top Concepts',
   titleLanguages: 'Recorded title languages',
-  monthStats: insert('{{month}}: {{books}} books, {{chapters}} chapters',
+  monthStats: insert('{{month}}: {{books}}, {{chapters}}',
     { month: String, books: String, chapters: String }),
   importTitle: 'Import your books',
   importFileSelected: insert('Selected file: {{name}}', { name: String }),

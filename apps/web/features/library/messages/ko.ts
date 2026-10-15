@@ -93,7 +93,7 @@ export default {
   averageRating: insert('평균 평점: {{rating}} / 5 ({{count}}권 평가)', { rating: String, count: String }),
   knownChapters: insert('분량을 아는 완독 작품 {{books}}편에서 {{count}}개 챕터 완료', { count: String, books: String }),
   topConcepts: '자주 분류된 개념', titleLanguages: '기록된 제목 언어',
-  monthStats: insert('{{month}}: 책 {{books}}권, 챕터 {{chapters}}개', { month: String, books: String, chapters: String }),
+  monthStats: insert('{{month}}: {{books}}, {{chapters}}', { month: String, books: String, chapters: String }),
   importTitle: '책 가져오기',
   importFileSelected: insert('선택한 파일: {{name}}', { name: String }),
   importMatching: insert('일치 항목 확인 중: {{done}} / {{total}}', { done: String, total: String }),

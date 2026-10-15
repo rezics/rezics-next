@@ -45,7 +45,7 @@ export function ReadingStats({ stats, locale, messages }: { stats: Loaded<Readin
           const name = new Intl.DateTimeFormat(locale, { month: 'short', timeZone: 'UTC' })
             .format(new Date(Date.UTC(data.year, month.month - 1, 1)));
           return <li key={month.month} aria-label={t.monthStats({ month: name,
-            books: number(month.books), chapters: number(month.chapters) })}
+            books: t.booksFinished({ count: month.books }), chapters: t.chaptersFinished({ count: month.chapters }) })}
             className="grid justify-items-center gap-1 text-xs tabular-nums">
             <span className="font-medium">{number(month.books)}</span>
             <span aria-hidden="true" className="flex h-20 w-full items-end rounded-sm bg-background/70">

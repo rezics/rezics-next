@@ -93,7 +93,7 @@ export default {
   averageRating: insert('平均評分：{{rating}} / 5（已評 {{count}} 本）', { rating: String, count: String }),
   knownChapters: insert('{{books}} 部已讀作品共 {{count}} 章（只統計已知章節數）', { count: String, books: String }),
   topConcepts: '常見概念', titleLanguages: '已記錄的標題語言',
-  monthStats: insert('{{month}}：{{books}} 本書、{{chapters}} 個章節', { month: String, books: String, chapters: String }),
+  monthStats: insert('{{month}}：{{books}}、{{chapters}}', { month: String, books: String, chapters: String }),
   importTitle: '匯入你的書籍',
   importFileSelected: insert('已選擇檔案：{{name}}', { name: String }),
   importMatching: insert('正在比對：{{done}} / {{total}}', { done: String, total: String }),

@@ -95,7 +95,7 @@ export default {
   averageRating: insert('評価の平均：{{rating}} / 5（{{count}}冊を評価）', { rating: String, count: String }),
   knownChapters: insert('長さが分かる{{books}}作品で{{count}}章を読了', { count: String, books: String }),
   topConcepts: 'よく読まれる概念', titleLanguages: '記録されたタイトルの言語',
-  monthStats: insert('{{month}}：{{books}}冊、{{chapters}}章', { month: String, books: String, chapters: String }),
+  monthStats: insert('{{month}}：{{books}}、{{chapters}}', { month: String, books: String, chapters: String }),
   importTitle: '本をインポート',
   importFileSelected: insert('選択したファイル：{{name}}', { name: String }),
   importMatching: insert('照合中：{{done}} / {{total}}', { done: String, total: String }),

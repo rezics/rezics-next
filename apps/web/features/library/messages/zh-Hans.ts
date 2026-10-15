@@ -23,7 +23,7 @@ export default {
     { count: String, books: String }),
   topConcepts: '常见概念',
   titleLanguages: '已记录的标题语言',
-  monthStats: insert('{{month}}：读完 {{books}} 本、{{chapters}} 章',
+  monthStats: insert('{{month}}：{{books}}、{{chapters}}',
     { month: String, books: String, chapters: String }),
   importTitle: '导入书架',
   importFileSelected: insert('已选择：{{name}}', { name: String }),
