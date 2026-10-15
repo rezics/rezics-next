@@ -12,7 +12,7 @@ import { assertPhaseDRestore, PHASE_D_FIXTURE } from '../load/fixture-phase-d.ts
 import { processStartTime } from '../../../scripts/qa/process/identity.ts';
 import { tryAcquireDirectoryLease } from '../../../scripts/qa/process/lease.ts';
 import { startupChildEnvironment } from '../../../scripts/qa/stack-startup.ts';
-import { qaWaitStatusLines } from '../../../scripts/goal/qa-slots.ts';
+import { qaSlotAdmission, qaWaitStatusLines } from '../../../scripts/goal/qa-slots.ts';
 import { admissionCpuPressure, GiB, measuredAdmissionMessage, memoryBytes, parseMemoryReading, qaMemoryNeed, waitForMemory as waitForMemoryImpl,
   isLocalQaRun, qaMemoryDeadline, withMemoryStartup as withMemoryStartupImpl, withQaStackStartup,
   type MemoryReading, type MemoryWaitOptions, type StartupMemoryOptions } from '../../../scripts/qa/memory-admission.ts';
@@ -816,6 +816,61 @@ for (const outcome of ['retry', 'failed', 'late'] as const) {
   });
 }
 
+test('a slot-less startup stays outside the startup queue until lifetime-slot holders drain', async () => {
+  const directory = mkdtempSync(join(scratch, 'qa-startup-slot-inversion-'));
+  readingDirectories.push(directory);
+  const slots = join(directory, 'slots');
+  mkdirSync(slots);
+  const state = fixtureMemoryState();
+  const gate = join(directory, 'gate.json');
+  writeFileSync(gate, JSON.stringify({ token: 'slot-inversion', status: 'pending' }));
+  let now = 100, stop = false;
+  const env = { ...qaEnv, GOAL_ID: 'program', GOAL_QA_SLOT_DIRECTORY: slots };
+  const leases = [0, 1].map(slot => {
+    const lease = tryAcquireDirectoryLease(join(slots, String(slot)));
+    if (lease === 'held') throw new Error('private slot already held');
+    return lease;
+  });
+  const ticket = qaSlotAdmission(slots, 2, { env, now: () => now, workerGoals: () => [] });
+  const blocked = deferred<void>(), wake = deferred<void>();
+  const starts: string[] = [];
+  const options = { env, state, deadline: 1000, now: () => now, pollMs: 5,
+    read: async () => plenty, announce: () => {} };
+  const head = withMemoryStartupImpl(need, { ...options,
+    env: { ...env, GOAL_IN_SLOT: '0', REZICS_QA_STARTUP_SLOT_GATE: gate },
+    announce: message => {
+      const match = /^QA_STARTUP_SLOT_READY (\S+) (\S+) (\d+)$/.exec(message);
+      if (!match) return;
+      const lease = ticket.acquire(0);
+      if (lease !== 'held') leases.push(lease);
+      writeFileSync(gate, JSON.stringify({ token: match[1], requester: match[2], sequence: Number(match[3]),
+        status: lease === 'held' ? 'retry' : 'granted' }));
+    },
+    sleep: async ms => { blocked.resolve(); await wake.promise; if (stop) throw new Error('test cleanup'); now += ms; },
+  }, () => { starts.push('slot-less'); });
+  const result = head.catch(error => error as Error);
+  try {
+    await blocked.promise;
+    // No promise and no queue head may belong to a request that cannot own a slot.
+    const tables = state.query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'table'").all();
+    if (tables.some(table => table.name === 'startup_waiters'))
+      expect(state.query('SELECT id FROM startup_waiters').all()).toHaveLength(0);
+    for (const [id, lease] of leases.slice().entries()) {
+      await withMemoryStartupImpl(need, { ...options, env: { ...env, GOAL_IN_SLOT: '1' } }, () => {
+        starts.push(`holder-${id}`); lease.release();
+      });
+    }
+    wake.resolve();
+    expect(await result).toBeUndefined();
+    expect(starts).toEqual(['holder-0', 'holder-1', 'slot-less']);
+    expect(state.query('SELECT id FROM startup_waiters').all()).toHaveLength(0);
+    expect(state.query('SELECT id FROM startup_promises WHERE completed = 0').all()).toHaveLength(0);
+  } finally {
+    stop = true; wake.resolve(); await result;
+    ticket.release(); for (const lease of leases) lease.release();
+  }
+});
+
 test('sixteen lifetime-slot holders advance past an older startup awaiting its slot', async () => {
   const directory = mkdtempSync(join(scratch, 'qa-startup-slot-order-'));
   readingDirectories.push(directory);
@@ -858,6 +913,32 @@ test('sixteen lifetime-slot holders advance past an older startup awaiting its s
     await Promise.all(holders);
     expect((await headResult).message).toContain('deadline reached');
   }
+});
+
+test('slot arrival order survives children reaching startup admission in reverse order', async () => {
+  const scenario = pressureScenario();
+  const waiting = [deferred<void>(), deferred<void>()];
+  const release = deferred<void>();
+  const order: number[] = [];
+  const runs: Promise<void>[] = [];
+  try {
+    for (const id of [1, 0]) {
+      const env = { ...scenario.options.env, GOAL_IN_SLOT: '1',
+        GOAL_QA_ARRIVED_AT: new Date(id).toISOString(), GOAL_QA_ARRIVAL_SEQUENCE: String(id).padStart(24, '0') };
+      const ticket = qaSlotAdmission(join(scenario.directory, 'qa-slots'), 2, { env, workerGoals: () => [] });
+      const lease = ticket.acquire(id);
+      ticket.release();
+      if (lease === 'held') throw new Error('private lifetime slot was not admitted');
+      const run = withMemoryStartupImpl(need, { ...scenario.options, env,
+        sleep: async ms => { waiting[id]!.resolve(); await release.promise; scenario.advance(ms); },
+      }, () => { order.push(id); }).finally(() => lease.release());
+      runs.push(run);
+      await waiting[id]!.promise;
+    }
+    scenario.setPressure(0); release.resolve();
+    await Promise.all(runs);
+    expect(order).toEqual([0, 1]);
+  } finally { scenario.setPressure(0); release.resolve(); await Promise.all(runs); }
 });
 
 test('a startup ignores another process grant with the same sequence', async () => {
