@@ -6,7 +6,9 @@ import { createServer } from 'node:http';
 import { protectJourneyBrowser } from './network-transport.ts';
 
 test('closing a journey cancels and drains page and context route reads before returning', async () => {
-  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch() { return new Response('<title>Journey</title>'); } });
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch() {
+    return new Response('<title>Journey</title>', { headers: { 'content-type': 'text/html' } });
+  } });
   const browser = await chromium.launch();
   const restore = protectJourneyBrowser(browser);
   try {
