@@ -203,7 +203,12 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
       try {
         const admission = await own(request,query.actingSubject); if (admission instanceof Response) return admission;
         const page = await deps.libraryFiles!.page(query.actingSubject,params.id,query.cursor ?? -1);
-        for (const row of page.rows) if (!row.match) {
+        // The store seeks at most one review page. Match that bounded batch
+        // together so source latency is paid once per page, not once per row.
+        // Drain every started row even on refusal; no matching or retention
+        // may continue after this request has answered.
+        const matching = await Promise.allSettled(page.rows.map(async row => {
+          if (row.match) return;
           const matched = row.resolution?.choice === 'private'
             ? { kind: 'not-found' as const,work: null,target: null,candidates: [],truncated: false,
               openLibrary: [],openLibraryAvailability: 'not-requested' as const }
@@ -218,6 +223,10 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
             await deps.libraryFiles!.saveMatch(query.actingSubject,params.id,row.index,matched);
           }
           row.match = matched;
+        }));
+        for (const result of matching) {
+          if (result.status === 'rejected') throw result.reason;
+          if (result.value instanceof Response) return result.value;
         }
         const saved = await deps.libraryFiles!.page(query.actingSubject,params.id,query.cursor ?? -1);
         const stillOwn = await own(request,query.actingSubject); if (stillOwn instanceof Response) return stillOwn;
