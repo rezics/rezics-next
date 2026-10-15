@@ -5,7 +5,6 @@ import { randomUUID } from 'node:crypto';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { foregroundCounted } from './support/operation-cost.ts';
 
 const short = (id: string) => id.slice(-36);
 
@@ -50,6 +49,7 @@ async function concurrentReadProfiles() {
   } });
   startTelemetry('main', { ...process.env, ...sink.env,
     OTEL_EXPORTER_OTLP_ENDPOINT: telemetryIngress.url.origin });
+  const { foregroundCounted } = await import('./support/operation-cost.ts');
   const { startHomeStack } = await import('./feed-read-support.ts');
   const { seedPublicProfileWork } = await import('../../../scripts/load/work-profile-work.ts');
   const { workProfileCorpusApi } = await import('../../../scripts/load/work-profile-corpus.ts');

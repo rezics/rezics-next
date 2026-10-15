@@ -4,7 +4,6 @@ import { execFileSync } from 'node:child_process';
 import { context, ROOT_CONTEXT, trace, TraceFlags } from '@opentelemetry/api';
 import { fromPlainText } from '@rezics/document';
 import type { QueryResult } from 'pg';
-import { foregroundCounted } from '../../support/operation-cost.ts';
 import { startTelemetry, flushTelemetryTraces, shutdownTelemetry } from '../../../../../packages/observability/src/runtime.ts';
 import { startWorkProfileSink, summarizeWorkProfile } from '../../../support/work-profile.ts';
 import { runWorkProfileChild } from '../../../support/work-profile-child.ts';
@@ -29,6 +28,7 @@ if (process.env.REZICS_ZONE_COST_CHILD === 'measure') {
     MAIN_ORIGIN: `http://127.0.0.1:${process.env.MAIN_PORT}`,
     ACCOUNT_ORIGIN: `http://127.0.0.1:${process.env.ACCOUNT_PORT}` });
   const { Client } = await import('pg');
+  const { foregroundCounted } = await import('../../support/operation-cost.ts');
   type SparqlResult = { results?: { bindings: unknown[] }; boolean?: boolean };
   interface Statement {
     text: string; started: number; originSpanId: string; elapsedMs?: number;
