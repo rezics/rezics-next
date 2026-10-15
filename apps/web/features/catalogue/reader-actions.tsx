@@ -72,10 +72,18 @@ const ReaderActionsContext = createContext<ReaderActions>({ kind: 'unavailable' 
  * state they read for the Works on the page (plus, on a Work page, what its
  * stars rate); `actions` overrides all of it (stories).
  */
-export function ReaderActionsProvider({ signedIn, signInHref, actingSubject, seed, ratingTarget, actions, children }: {
+type ReaderActionsProviderProps = {
   signedIn: boolean; signInHref: string; actingSubject?: string | null; seed?: ReaderSeed;
   ratingTarget?: RatingTarget | null; actions?: ReaderActions; children: ReactNode;
-}) {
+};
+
+export function ReaderActionsProvider(props: ReaderActionsProviderProps) {
+  // A retained layout must never carry another reader's entries, pending choices or write clients.
+  const identity = JSON.stringify([props.signedIn, props.actingSubject ?? null, props.ratingTarget ?? null]);
+  return <ReaderActionsLifetime key={identity} {...props} />;
+}
+
+function ReaderActionsLifetime({ signedIn, signInHref, actingSubject, seed, ratingTarget, actions, children }: ReaderActionsProviderProps) {
   const [store] = useState(() => signedIn && actingSubject && !actions
     ? createReaderStore({ actingSubject, seed, ratingTarget }) : null);
   // Leaving the page cancels the store's queued choices and read-back timers, so it cannot write after a newer store has.
