@@ -72,3 +72,36 @@ or [Data Cube](https://www.w3.org/TR/vocab-data-cube/) observation.
 
 The owner README lists these items as deferred work; they are not part of the
 current bounded aggregate API.
+
+## Proposed activity duration operations
+
+B03 is pending review; these operations are contracts, not implemented routes.
+[The decision](../architecture/activity-duration.md) records the boundary and
+the [session request/response types](../../services/main/src/modules/session/duration-contract.ts)
+and [aggregate request/response types](../../services/main/src/modules/rating/duration-contract.ts)
+carry exact payloads. Duration has its own metric/procedure, not a 1–10 rating.
+
+| Operation | Request | Response |
+| --- | --- | --- |
+| `PUT /v1/me/sessions/{id}/duration-observation` | `SetSessionDurationRequest`, own Person bearer with `library:write`, `Idempotency-Key`; exact selected target, metric, procedure, platform, explicit known/unknown seconds, contribution, session version and expected observation head. | 200 `SetSessionDurationResponse`; receipt and immutable revision, preserving the private session. |
+| `GET /v1/me/sessions/{id}/duration-observation` | Own Person bearer with `work:read`; query `actingSubject`. | 200 `{ observation: SessionDurationObservation \| null }`; null only for an owned session with no observation. `Cache-Control: private, no-store`. |
+| `POST /v1/activity-duration-estimates` | `ActivityDurationEstimatesRequest`; read-only public operation, no idempotency key or bearer required; optional actingSubject selects ordinary read authority. | 200 `ActivityDurationEstimatesResponse`; exact request-ordered cohorts, native counts/mean/evidence and separately retained source statistics. Empty native populations return no-data, never zero-time. |
+| `GET /v1/me/library-export` (changed) | Existing own-Person selection, limit, snapshot and cursor contract. | Existing paged bundle, each session's portable `session` gains `PortableSessionDuration`; preserves the complete observation, procedure and unit. |
+
+All bodies reject unknown members. Capture: 400 invalid lexical/value or bounds;
+401 missing/expired bearer; 403 foreign actingSubject; 404 absent or foreign
+session/hidden target; 409 stale head/session version or conflicting key;
+422 unsupported metric/procedure/unit or target not selected by that session;
+503 admission/evidence unavailable. A durable unfinished capture answers 202
+through the existing command-status protocol and never pretends it has sealed.
+GET has the same authority/availability failures but no write conflict.
+
+Estimate requests reject empty/duplicate/oversized cohort or source selections
+with 400; unsupported definitions/mismatched source cohorts with 422; hidden or
+missing targets/sources with 404; inconsistent, over-budget or unavailable owner
+evidence with 503. They never return a partially checked 200. They use the read
+rate-limit family; capture uses write. New public exposure requires the existing
+trust-ops review at implementation. Public statistics contain no private IDs or
+counts of non-consenting sessions. Public target policy is rechecked before
+return; ordinary moderation and operator identity do not override own-Person
+session authority. Export retains its existing 401/403/409 snapshot behavior.

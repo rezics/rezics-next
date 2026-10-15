@@ -271,6 +271,12 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'Marks the required VideoGame route played on a phone, completes it on desktop while the extra route stays untouched, rejects stale progress and resets route and partless-game completion.'),
   },
   {
+    kind: 'games',
+    capability: 'Play duration estimates',
+    api: missing('B03', 'Duration observation and qualified cohort query contracts are proposed; six persona outcomes remain pending.'),
+    browser: missing('B03', 'Surface follows the proved duration API.'),
+  },
+  {
     kind: 'realm',
     capability: 'Create a Realm',
     api: api('tests/qa/integration/realm-create.test.ts',
