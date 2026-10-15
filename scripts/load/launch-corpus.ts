@@ -291,6 +291,7 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
   importFile: (key: string, actor: string, composition: RecipeCompositionReceipt,
     file: Record<string, unknown>, signal: AbortSignal) => Promise<RecipeFileImportReceipt>,
   signal: AbortSignal) {
+  await authorize(`agent:control:${actor}`, 'agent.control');
   await authorize('space:create:root', 'space.create');
   const space = await api.command<{ space: string; realm: string }>(`${key}:space`, {
     method: 'POST', path: '/v1/spaces', body: { profile: 'space-realm-v2', name: 'Recipes',
@@ -387,9 +388,10 @@ export async function grantLaunchRecipeAuthority(pool: Pool, principalId: string
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const lifetime = action === 'agent.control' ? 'infinity' : '8 hours';
     await grantFixtureAuthority(client, { scope, requireDispatch: true,
-      representations: [{ principalId, actor, action, lifetime: '8 hours' }],
-      grant: { actor, action, lifetime: '8 hours', requireSelfIssuer: true } });
+      representations: [{ principalId, actor, action, lifetime }],
+      grant: { actor, action, lifetime, requireSelfIssuer: true } });
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
