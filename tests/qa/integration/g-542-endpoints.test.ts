@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
 import { randomUUID } from 'node:crypto';
 import { startHomeStack, seedHome } from './feed-read-support.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
@@ -59,6 +60,7 @@ test('G-542: endpoints enforce governance while returning rated content to unkno
     const cursor = new ContentProjectionCursor(stack.contentPool), consumer = `g542-${randomUUID()}`;
     await cursor.initialize(consumer);
     const projectContent = async () => {
+      await deliverFixtureContentEligibility(stack.env, stack.content);
       for (let i = 0; i < 200; i++) if (!await relayContentProjectionOnce(stack.env, stack.content, cursor, consumer)) return;
       throw new Error('Content fixture projection exceeded its preparation budget');
     };
@@ -150,7 +152,7 @@ test('G-542: endpoints enforce governance while returning rated content to unkno
         outcome: 'restrict' as const, evidenceDigest: report.evidenceDigest,
         rule: { ref: rule.ref, revision: rule.revision, digest: rule.digest },
         targets: [{ ...target, locator, scopeKind: 'exact_revision' as const,
-          expectedHead: target.owner === 'media' ? null : target.revision, effect: 'disclosure' as const }],
+          expectedHead: target.revision, effect: 'disclosure' as const }],
         reversesDecisionId: null, answersStepId: null, rationale: 'Endpoint matrix', disclosure: 'parties' as const,
         reasons: fixtureReasons, idempotencyKey: randomUUID() };
       await claimFixture(stack.accessPool, report.caseId, member.principalId, actor);
@@ -159,7 +161,7 @@ test('G-542: endpoints enforce governance while returning rated content to unkno
       return async (expectedHead = target.revision) => {
         await claimFixture(stack.accessPool, report.caseId, member.principalId, actor);
         return governance.decide(principal, { ...input,
-          targets: input.targets.map(target => ({ ...target, expectedHead: target.owner === 'media' ? null : expectedHead })),
+          targets: input.targets.map(target => ({ ...target, expectedHead })),
           outcome: 'reverse', expectedGeneration: decision.caseGeneration,
           reversesDecisionId: decision.decisionId, idempotencyKey: randomUUID() });
       };

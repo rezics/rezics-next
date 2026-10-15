@@ -15,6 +15,8 @@ import { fusekiImageFromCompose } from '../../../scripts/load/image.ts';
 import type { FusekiStateRunner } from '../../../scripts/operations/search-state.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
+import { SEARCH_REBUILD_CRASH_AT, SEARCH_REBUILD_CRASH_FLAG }
+  from '../../../services/main/src/infrastructure/search-rebuild-crash.ts';
 
 export const root = resolve(import.meta.dir, '../../..');
 
@@ -38,6 +40,26 @@ export async function refusedRootCommand(args: string[], timeout: number): Promi
   const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status === 0) throw new Error(`yarn ${args[0]} unexpectedly succeeded`);
   return redactCommandOutput(`${result.stdout}${result.stderr}`);
+}
+
+/** Stop the real operation after its persisted frontier and quarantine commit. */
+export async function quarantineFixtureContentRebuild(stackArgs: string[], jobId: string): Promise<void> {
+  const previousFlag = process.env[SEARCH_REBUILD_CRASH_FLAG];
+  const previousAt = process.env[SEARCH_REBUILD_CRASH_AT];
+  process.env[SEARCH_REBUILD_CRASH_FLAG] = '1';
+  process.env[SEARCH_REBUILD_CRASH_AT] = 'after-quarantine';
+  try {
+    const output = await refusedRootCommand(['search:rebuild', ...stackArgs, '--job', jobId,
+      '--reserve-bytes', '0'], 420_000);
+    if (!output.includes('search rebuild crash: after-quarantine')) {
+      throw new Error(`Content rebuild did not reach quarantine: ${output.slice(-2000)}`);
+    }
+  } finally {
+    if (previousFlag === undefined) delete process.env[SEARCH_REBUILD_CRASH_FLAG];
+    else process.env[SEARCH_REBUILD_CRASH_FLAG] = previousFlag;
+    if (previousAt === undefined) delete process.env[SEARCH_REBUILD_CRASH_AT];
+    else process.env[SEARCH_REBUILD_CRASH_AT] = previousAt;
+  }
 }
 
 /** Runs a root command without blocking, so a test can probe the API meanwhile. */

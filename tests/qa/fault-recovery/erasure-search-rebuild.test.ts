@@ -1,6 +1,7 @@
 import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -31,6 +32,7 @@ import { SearchIndexUnavailable }
   from '../../../services/main/src/modules/work/search-readiness.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
+import { quarantineFixtureContentRebuild } from './search-ops-support.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -165,6 +167,7 @@ test('SEARCH20/SEARCH08/WORK10/OPS10: erasure survives lost projection and offli
       return { revisionId: saved.revisionId, preparationId: input.preparationId };
     };
     const relayToHead = async () => {
+      await deliverFixtureContentEligibility(env, content, apps.MAIN_RELAY_DATABASE_URL);
       const high = await content.ownerPosition();
       for (let i = 0; i < 12 && (await cursor.read(consumer)).sequence !== high.sequence; i++) {
         if (!await relayContentProjectionOnce(env, content, cursor, consumer)) {
@@ -296,6 +299,7 @@ test('SEARCH20/SEARCH08/WORK10/OPS10: erasure survives lost projection and offli
     const lostUnit = beforeRebuild.results[0]?.matchUnit;
     if (!lostUnit) throw new Error('replacement unit is missing before fault');
     const jobId = randomUUID();
+    await quarantineFixtureContentRebuild(stackArgs, jobId);
     const job = await quarantinePublicContentSearch(env, content, jobId);
     expect(job.cut).toEqual(await content.ownerPosition());
     expect(job.cut).toEqual(replayCut);

@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { discloseInventory, DisclosureUnavailable } from '../../../services/main/src/modules/disclosure/read.ts';
 import { SuitabilityStore } from '../../../services/main/src/modules/suitability/store.ts';
 import type { Assessed } from '../../../services/main/src/modules/suitability/contract.ts';
-import type { Labels } from '../../../services/main/src/modules/suitability/policy.ts';
+import { ANONYMOUS_VIEWER, type Labels } from '../../../services/main/src/modules/suitability/policy.ts';
 import { startHomeStack, seedHome } from './feed-read-support.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
@@ -42,6 +43,7 @@ test('G-897 H1: interactive reads return rated payload while public previews ret
     const cursor = new ContentProjectionCursor(home.stack.contentPool), consumer = `g897-${randomUUID()}`;
     await cursor.initialize(consumer);
     const projectContent = async () => {
+      await deliverFixtureContentEligibility(home.stack.env, home.stack.content, databases.urls.relay);
       for (let i = 0; i < 200; i++) if (!await relayContentProjectionOnce(home.stack.env, home.stack.content, cursor, consumer)) return;
       throw new Error('Content fixture projection exceeded its preparation budget');
     };
@@ -216,7 +218,7 @@ test('G-897 H1: interactive reads return rated payload while public previews ret
     expect(JSON.stringify(ratedResults)).toContain(work.work);
     for (const child of [work.mainVersion, work.variants[0]!.contribution, release.release]) {
       expect((await discloseInventory(home.stack.env, [{ owner: 'graph', resource: child, component: 'record' }],
-        undefined, 'read'))[0]).toBe('visible');
+        ANONYMOUS_VIEWER, 'read'))[0]).toBe('visible');
     }
     // Moderation is a command proof, independent of permission to read rated
     // content. Withdraw this Agent's Work read grant before correcting it.

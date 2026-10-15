@@ -2,6 +2,7 @@ import { applyQaSqlMigrations } from '../../../scripts/qa/bootstrap.ts';
 import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -21,6 +22,7 @@ import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/sel
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { seedRecoveryContent } from './search-content-fixture.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
+import { quarantineFixtureContentRebuild } from './search-ops-support.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const original = { phrase: 'exact content beacon', language: 'en' };
@@ -69,6 +71,7 @@ test('SEARCH17: quarantined bare-TDB2 import stays unavailable until exact offli
       const consumer = apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1';
       const env = { fuseki, lineage, objectDirectory: apps.MAIN_OBJECT_DIRECTORY! };
       const corpus = await seedRecoveryContent(env, contentPool, accessPool);
+      await deliverFixtureContentEligibility(env, content, apps.MAIN_RELAY_DATABASE_URL);
       const cut = await content.ownerPosition();
       await cursor.initialize(consumer);
       for (let i = 0; i < 10 && (await cursor.read(consumer)).sequence !== cut.sequence; i++) {
@@ -89,6 +92,7 @@ test('SEARCH17: quarantined bare-TDB2 import stays unavailable until exact offli
       expect(exact.body.body).toBe(original.phrase);
 
       const jobId = randomUUID();
+      await quarantineFixtureContentRebuild(stackArgs, jobId);
       const job = await quarantinePublicContentSearch(env, content, jobId);
       expect(job.cut).toEqual(cut);
       await expect(assertPublicTextReady(fuseki, lineage)).rejects.toBeInstanceOf(SearchIndexUnavailable);

@@ -552,11 +552,12 @@ test('BOOK10: offline replay keeps the queued command identity and current CAS a
     offline.draft(neverSent.body, lostCommitted.revisionId), neverSent.key);
   expect(queuedAfterRevocation.status).toBe(403);
   expect(await admissions([neverSent.key])).toEqual([]);
-  // A committed receipt is still reconciled exactly; it creates no second revision.
+  // Receipt disclosure requires current authority too. The retained command
+  // remains committed, but a closed scope does not disclose its receipt.
   const committedAfterScopeFence = await lostSend();
-  expect(committedAfterScopeFence.status).toBe(200);
+  expect(committedAfterScopeFence.status).toBe(403);
   expect(await committedAfterScopeFence.json()).toMatchObject({
-    revisionId: lostCommitted.revisionId, replayed: true });
+    code: 'authority_denied' });
   expect(await draftHead(offline.variantId)).toBe(lostCommitted.revisionId);
   expect(await revisions(offline.variantId)).toHaveLength(4);
 
