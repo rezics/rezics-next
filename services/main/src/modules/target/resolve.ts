@@ -52,7 +52,7 @@ export type TargetReadSession = Pick<WorkReadSession, 'query' | 'checkDeadline' 
     & Partial<Pick<WorkReadSession['deps'], 'account' | 'governance'
       | 'media' | 'mediaAccess' | 'contextSelections' | 'content'>>
     & { access?: Partial<Pick<WorkReadSession['deps']['access'], 'realmReadProof'
-      | 'canReadWork' | 'canReadSemanticResource'>> & { client?: PoolClient } };
+      | 'canReadWork' | 'canReadSemanticResource' | 'canReadSemanticResources'>> & { client?: PoolClient } };
 };
 
 /** Four common graph probes per exact target, including the read envelope's
@@ -222,7 +222,8 @@ export function targetSummaryReader(session: TargetReadSession): SummaryReader {
     canReadSemantic: access?.canReadSemanticResource
       ? resource => Promise.resolve(access.canReadSemanticResource!(null, null, resource)) : undefined,
     canReadSemantics: deps.mediaAccess ? resources => deps.mediaAccess!.canReadSemantics(
-      null, null, resources, deps.environment.fuseki) : undefined };
+      null, null, resources, deps.environment.fuseki) : access?.canReadSemanticResources
+        ? resources => access.canReadSemanticResources!(null, null, resources) : undefined };
   if (!access) throw new WorkReadUnavailable('Target authority is unavailable');
   let verifiedContext: ReturnType<NonNullable<typeof deps.account>['verify']> | undefined;
   const contextPrincipal = () => {
@@ -237,7 +238,9 @@ export function targetSummaryReader(session: TargetReadSession): SummaryReader {
     canReadSemantic: resource => Promise.resolve(
       access.canReadSemanticResource?.(principal, actingSubject, resource) ?? false),
     canReadSemantics: deps.mediaAccess
-      ? resources => deps.mediaAccess!.canReadSemantics(principal, actingSubject, resources, deps.environment.fuseki) : undefined,
+      ? resources => deps.mediaAccess!.canReadSemantics(principal, actingSubject, resources, deps.environment.fuseki)
+      : access.canReadSemanticResources
+        ? resources => access.canReadSemanticResources!(principal, actingSubject, resources) : undefined,
     canReadPrivateContext: deps.contextSelections
       ? async context => deps.contextSelections!.canReadPrivate(await contextPrincipal(), actingSubject, context)
       : undefined,

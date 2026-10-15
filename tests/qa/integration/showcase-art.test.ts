@@ -376,6 +376,7 @@ test('showcase reads preserve per-key context removal and conceal hidden, erased
     expect(batch.cost).toEqual(requestCost(targets.length));
     expect(mediaQueries).toBe(1);
     expect(fuseki.queries - graphBefore).toBeLessThanOrEqual(7);
+    console.info('Showcase graph reads for 64 targets:', fuseki.queries - graphBefore);
     expect(batch.cost.graphQueries).not.toBe(fuseki.queries - graphBefore);
     expect(mediaAccess.batches - accessBefore).toBe(0);
   } finally {

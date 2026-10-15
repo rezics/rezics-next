@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { Client, type Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import {
   GovernanceUnavailable,
   type DecisionResult,
@@ -60,13 +60,16 @@ async function migrate(pool: Pool) {
 
 /** Capture the statements the owners execute, including interpolated shared SQL.
  * EXPLAIN replays those statements, never a parallel test-only query model. */
-async function capture<T>(work: () => Promise<T>, allDecisionReads = false) {
+async function capture<T>(pool: Pool, work: () => Promise<T>, allDecisionReads = false) {
   const statements: Statement[] = [];
-  const original = Client.prototype.query;
-  const probe = spyOn(Client.prototype, 'query').mockImplementation(function (
-    this: Client,
-    ...args
-  ) {
+  // Statement accounting installs an own query method on pooled clients. Observe
+  // the lent driver method rather than a prototype it may no longer call.
+  const originals = new Map<PoolClient, PoolClient['query']>();
+  const observe = (client: PoolClient) => {
+    if (originals.has(client)) return;
+    const original = client.query;
+    originals.set(client, original);
+    client.query = function (...args: unknown[]) {
     const [query, values] = args;
     if (
       typeof query === 'string' &&
@@ -76,12 +79,25 @@ async function capture<T>(work: () => Promise<T>, allDecisionReads = false) {
     ) {
       statements.push({ text: query, values: Array.isArray(values) ? values : [] });
     }
-    return original.apply(this, args);
+      return Reflect.apply(original, this, args);
+    } as PoolClient['query'];
+  };
+  const connect = pool.connect;
+  const probe = spyOn(pool, 'connect').mockImplementation(function (...args: unknown[]) {
+    const callback = args[0];
+    if (typeof callback === 'function') {
+      return Reflect.apply(connect, pool, [(error: Error | undefined, client: PoolClient | undefined, release: unknown) => {
+        if (client) observe(client);
+        callback(error, client, release);
+      }]);
+    }
+    return (Reflect.apply(connect, pool, args) as Promise<PoolClient>).then(client => { observe(client); return client; });
   });
   try {
     return { result: await work(), statements };
   } finally {
     probe.mockRestore();
+    for (const [client, query] of originals) client.query = query;
   }
 }
 
@@ -226,7 +242,7 @@ test('admission, due queue and alert checks seek one answer across thousands of 
     const receipt = await f.report(image, 'ncii', nciiDeclaration);
     const step = await f.removalStep(receipt);
     const initial = await f.input(receipt, image, 'restrict', null, step.id);
-    const admission = await capture(() => f.decide(initial));
+    const admission = await capture(f.stack.accessPool, () => f.decide(initial));
     const accepted = await json<DecisionResult>(admission.result, 202);
     const admissionQuery = admission.statements.find((query) =>
       query.text.includes('SELECT 1 FROM ('),
@@ -253,7 +269,7 @@ test('admission, due queue and alert checks seek one answer across thousands of 
       (counts.admission ??= []).push(
         await answerVisits(f.stack.accessPool, admissionQuery, history > 1),
       );
-      const due = await capture(() => f.read('/v1/safety-cases/due-steps'));
+      const due = await capture(f.stack.accessPool, () => f.read('/v1/safety-cases/due-steps'));
       expect(
         (await json<{ items: { stepId: string }[] }>(due.result)).items.some(
           (item) => item.stepId === step.id,
@@ -277,7 +293,7 @@ test('admission, due queue and alert checks seek one answer across thousands of 
         ],
       };
       (counts.alertSource ??= []).push(await answerVisits(f.stack.accessPool, source, history > 1));
-      const alerts = await capture(() => f.safetyAlerts.runOnce());
+      const alerts = await capture(f.stack.accessPool, () => f.safetyAlerts.runOnce());
       expect(alerts.statements.some((query) => query.text === source.text)).toBe(true);
       const resolve = alerts.statements.find((query) =>
         query.text.includes('SELECT a.id,a.case_id'),
@@ -426,7 +442,7 @@ test('automatic counter-notice continuation seeks the current attempt without re
       if (!args[3]) throw new GovernanceUnavailable('synthetic restoration owner interruption');
       return original.apply(this, args);
     });
-    const latest = await capture(() => f.governance.restoreCounterNotice(counter.stepId), true);
+    const latest = await capture(f.stack.accessPool, () => f.governance.restoreCounterNotice(counter.stepId), true);
     expect(latest.result.phase).toBe('restoring');
     const currentQuery = latest.statements.find((query) =>
       query.text.includes('COALESCE(o.cancelled,false)'),
@@ -443,7 +459,7 @@ test('automatic counter-notice continuation seeks the current attempt without re
         )
       ).rows[0]!.count,
     ).toBe(4000);
-    const bounded = await capture(() => f.governance.restoreCounterNotice(counter.stepId), true);
+    const bounded = await capture(f.stack.accessPool, () => f.governance.restoreCounterNotice(counter.stepId), true);
     expect(bounded.result.phase).toBe('restoring');
     const bigQuery = bounded.statements.find((query) =>
       query.text.includes('COALESCE(o.cancelled,false)'),

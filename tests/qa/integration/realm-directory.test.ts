@@ -75,6 +75,7 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
     const activity = await json<DirectoryPage>(activityRead.value);
     // One additional batch joins Realm identities to Space canonical addresses.
     expect(activityRead.calls).toBeLessThanOrEqual(16);
+    console.info('Realm directory graph reads:', activityRead.calls);
     expect(activity.items.map(item => item.id)).toEqual([second.realm]);
     expect(activity.items[0]?.reviewMode).toBe('mandatory');
     await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {

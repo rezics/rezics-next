@@ -436,6 +436,10 @@ async function scopedResourceDecision(client: PoolClient, graph: Pick<FusekiClie
   facts: ScopedReadFacts, privatePreview = false): Promise<boolean> {
   const { principalId, gateOpen, hasPolicy } = facts;
   if (gateOpen === false || !principalId) return false;
+  // A batched explicit permit is sufficient without probing alternate graph
+  // baselines for every member. Installed policy still evaluates its witness.
+  if (gateOpen && !hasPolicy && facts.authority?.subject
+    && facts.authority.represented && facts.authority.granted) return true;
   if (!privatePreview && platformAdministratorAction(action, scope)
     && !hasPolicy
     && await platformAdministratorProof(client, principalId, actingSubject)

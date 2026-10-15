@@ -25,7 +25,7 @@ import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/
 import { standingRatingSlotIri } from '../../../services/main/src/modules/rating/observation.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 
-const scopes = 'openid work:create work:edit work:read work:correct work:review work:protect source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read address:claim agent:create space:create rating:configure rating:submit follow:write follow:read';
+const scopes = 'openid work:create work:edit work:read work:correct work:review work:protect source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read address:claim agent:create space:create rating:configure rating:submit follow:write follow:read library:write';
 interface Command { proposal: string; revision: number; outcome: string; receipt?: OwnerReceipt }
 
 test('G836: public SAO merge and unmerge require independent humans, survive lost acknowledgement, resolve old addresses and reconcile person state', async () => {
@@ -116,6 +116,7 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
   const path = (id: string,suffix = '') => `/v1/editorial/proposals/${id}${suffix}`;
   try {
     await accountPool.query('UPDATE "user" SET "emailVerified"=true WHERE id=ANY($1::text[])',[[f.account.a.id,f.account.b.id]]);
+    f.account.tokenA = await f.account.tokenFor(f.account.a,scopes);
     const tokenB = await f.account.tokenFor(f.account.b,scopes);
     const email = `g836-${randomUUID()}@example.test`, password = randomBytes(24).toString('base64url');
     const third = await json<{ user: { id: string } }>(await fetch(`${f.account.issuer}/sign-up/email`,{ method: 'POST',

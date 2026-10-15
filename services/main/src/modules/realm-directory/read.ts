@@ -1,4 +1,5 @@
 import type { Static } from 'typebox';
+import { identityCanonical } from '../address/canonical.ts';
 import { fallbackAvatar } from '../media/summary.ts';
 import { selectDisplayName } from '../display-language/select.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
@@ -6,7 +7,7 @@ import type { PublicProfile } from '../realm-profile/schema.ts';
 import { pageResult, WorkReadInvalid, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { realmDirectoryItem } from './contract.ts';
-import { GRAPHS, iri } from '../work/activate.ts';
+import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { DisclosureUnavailable, hasDisclosure } from '../disclosure/read.ts';
 import type { RealmDirectorySort } from './index.ts';
 import { sharedConceptHeadPattern, visibleSharedConcepts } from './vocabulary.ts';
@@ -54,10 +55,11 @@ export async function readRealmDirectory(session: WorkReadSession,
   // The projection is a source page, not current disclosure authority. Keep its
   // opaque continuation even when the current owner omits every candidate.
   if (page.rows.length && !hasDisclosure(session.deps.environment)) throw new WorkReadUnavailable('Realm disclosure is unavailable');
-  const readBasis = () => page.rows.length ? session.query(`SELECT ?realm ?space ?head ?mode WHERE {
+  const readBasis = () => page.rows.length ? session.query(`SELECT ?realm ?space ?head ?mode ?disclosure WHERE {
     VALUES (?realm ?space) { ${page.rows.map(row => `(${iri(row.realm)} ${iri(row.space)})`).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space ; rv:head ?head .
       ?space a rv:Space ; rv:realmCapability ?realm .
+      OPTIONAL { ?space rv:disclosure ?disclosure }
       OPTIONAL { ?realm rv:reviewMode ?mode } }
   } LIMIT ${page.rows.length + 1}`, page.rows.length + 1) : Promise.resolve([]);
   const modes = await readBasis();
@@ -90,11 +92,26 @@ export async function readRealmDirectory(session: WorkReadSession,
   if ([...modeByRealm.values()].some(mode => !['mandatory', 'trusted-members', 'open'].includes(mode))) {
     throw new WorkReadUnavailable('Realm review policy is invalid');
   }
-  const summaries = await session.summaries(candidates.map(row => row.realm));
+  // Published text already belongs to this coherent directory snapshot. Only
+  // missing profiles and selected images need the general summary hydrator.
+  // Keep live Space visibility and name disclosure for the snapshot text.
+  const snapshotProfiles = candidates.filter(row => row.profile && !row.profile.iconSelection
+    && basisByRealm.get(row.realm)?.disclosure?.value === `${RV}Public`);
+  const snapshotIds = new Set(snapshotProfiles.map(row => row.realm));
+  const profileNames = await session.disclosure(snapshotProfiles.map(row => ({ owner: 'graph' as const,
+    resource: row.realm, component: 'name' as const, revision: basisByRealm.get(row.realm)!.head!.value,
+    nameOwnerResolved: true })), 'summary');
+  const summaries = await session.summaries(candidates.filter(row => !snapshotIds.has(row.realm)).map(row => row.realm));
+  for (const [ordinal, row] of snapshotProfiles.entries()) {
+    if (profileNames[ordinal] !== 'visible') continue;
+    summaries.push({ reference: row.realm, status: 'available', type: 'realm', disclosure: 'public',
+      base: null, work: null, address: identityCanonical('realm', row.realm, localized(row.profile!, session.displayLanguages, 'name').value),
+      name: localized(row.profile!, session.displayLanguages, 'name'), avatar: fallbackAvatar('realm', row.realm) });
+  }
   const summaryById = new Map(summaries.map(summary => [summary.reference, summary]));
   const items: Item[] = candidates.flatMap(candidate => {
     const summary = summaryById.get(candidate.realm);
-    if (summary?.status === 'unavailable') return [];
+    if (summary?.status === 'unavailable' || snapshotIds.has(candidate.realm) && !summary) return [];
     if (summary?.status !== 'available' || summary.type !== 'realm' || summary.disclosure !== 'public') {
       throw new WorkReadMoved('Realm visibility changed');
     }
@@ -125,7 +142,7 @@ export async function readRealmDirectory(session: WorkReadSession,
     || finalBasis.some(row => {
       const prior = basisByRealm.get(row.realm?.value);
       return !prior || row.space?.value !== prior.space?.value || row.head?.value !== prior.head?.value
-        || row.mode?.value !== prior.mode?.value;
+        || row.mode?.value !== prior.mode?.value || row.disclosure?.value !== prior.disclosure?.value;
     })) throw new WorkReadMoved('Realm identity changed');
   const final = await classify();
   if (topicBasis && !(await visibleSharedConcepts(session, [topicBasis])).has(topicBasis.id)) {
