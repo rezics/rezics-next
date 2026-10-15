@@ -196,7 +196,9 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
       if (fact.attachmentOverflow) return false;
       if ((fact.disclosure !== 'public' && !grantedUses.has(probe.reference) || fact.pending) && !(canManage && actor === fact.owner))
         return false;
-      return fact.attachments.length === 0 || fact.attachments.some((attachment) =>
+      // A bare Asset exposes no selected Use to establish its audience. Require
+      // every attachment; an exact Use carries only its own attachment above.
+      return fact.attachments.every((attachment) =>
         readable.has(`${attachment.context}\0${attachment.target}`)
         || fact.structureInstruction && grantedUses.has(probe.reference) && attachment.context === DEFAULT_MEDIA_CONTEXT);
     });
