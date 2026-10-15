@@ -330,6 +330,7 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
         semanticTypes: ['https://schema.org/Recipe'], actingSubject: actor },
     }, signal);
     await authorize(`work:edit:${work.work}`, 'recipe.edit');
+    await authorize(`work:edit:${work.work}`, 'work.edit');
     await authorize(`work:read:${work.work}`, 'work.read');
     const composition = await api.command<RecipeCompositionReceipt>(
       `${key}:composition:${source.pinId}:${source.recipeId}`, { method: 'POST', path: '/v1/compositions',
