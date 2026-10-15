@@ -199,6 +199,36 @@ async function walk(records: readonly OccurrenceRecord[], options?: { servings?:
   return { seen, pages, sizes };
 }
 
+test('long Recipe reader and editor share bounded first and continuation pages', async () => {
+  const samples = [];
+  for (const size of [250, 500, 1000]) {
+    const records = Array.from({ length: size }, (_, index) => ingredient(structure, index, `1 cup ingredient ${index}`));
+    for (const audience of ['reader', 'editor']) {
+      const source = fixture(records);
+      const start = performance.now();
+      const first = await readRecipeHierarchyPage({ structure, revision, measures: [],
+        readChildren: source.readChildren, readParent: source.readParent });
+      expect(first.profile).toBe('recipe-work-page-v1');
+      if (first.profile !== 'recipe-work-page-v1') throw new Error('unexpected stale Recipe');
+      expect(first.occurrences).toHaveLength(RECIPE_WORK_PAGE_OCCURRENCES);
+      expect(first.next).toBeString();
+      samples.push({ size, audience, page: 'first', reads: first.cost.pages,
+        rows: first.occurrences.length, ms: performance.now() - start });
+      source.reset();
+      const continued = performance.now();
+      const next = await readRecipeHierarchyPage({ structure, revision, cursor: first.next, measures: [],
+        readChildren: source.readChildren, readParent: source.readParent });
+      if (next.profile !== 'recipe-work-page-v1') throw new Error('unexpected stale Recipe');
+      expect(next.occurrences).toHaveLength(RECIPE_WORK_PAGE_OCCURRENCES);
+      expect(next.occurrences[0]?.occurrence).toBe(records[RECIPE_WORK_PAGE_OCCURRENCES]!.occurrence);
+      samples.push({ size, audience, page: 'next', reads: next.cost.pages,
+        rows: next.occurrences.length, ms: performance.now() - continued });
+    }
+  }
+  console.table(samples);
+  for (const sample of samples) expect(sample.reads, JSON.stringify(sample)).toBeLessThanOrEqual(RECIPE_WORK_PAGE_READ_BOUND);
+});
+
 test('a nested recipe fills depth-first in one call', async () => {
   const sauce = node(structure, 1, 'group', undefined, 'Sauce');
   const tomato = ingredient(sauce.occurrence, 0, '1 cup tomato');

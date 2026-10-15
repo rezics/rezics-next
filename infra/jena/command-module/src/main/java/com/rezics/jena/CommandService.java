@@ -1282,7 +1282,9 @@ final class CommandService extends ActionService {
             UpdateAction.execute(plan.request(), DatasetFactory.wrap(primary));
             MembershipNormalFormPolicy.Result membership = MembershipNormalFormPolicy.check(primary, profiles, deadline);
             if (membership.error() != null) return invalid(membership.error());
+            var libraryCurators = LibraryCollectionPosition.curators(dataset, primary.additions(), primary.removals());
             primary.apply();
+            libraryCurators.addAll(LibraryCollectionPosition.curators(dataset, primary.additions(), primary.removals()));
             CommandWork.enter("invariants");
             String stored = receiptValue(dataset, receipt, "requestDigest");
             if (stored == null) return Map.of("status", "guard-unmatched");
@@ -1354,6 +1356,7 @@ final class CommandService extends ActionService {
             PublicNameProjection.refresh(CommandWork.observe(dataset), plan, receipt, validations, delta == null ? List.of() : delta.changes(), deadline,
                 AlsoEnjoyedCandidates.changedSubjects(primary.additions(), primary.removals()));
             RatingPopulationProjection.refresh(CommandWork.observe(dataset), plan, receipt, validations);
+            LibraryCollectionPosition.advance(CommandWork.observe(dataset), libraryCurators, receipt);
             CommandWork.enter("journal");
             if (delta != null) {
                 if (touchesPublicIndex && !plan.bootstrap() && !plan.rebuild()

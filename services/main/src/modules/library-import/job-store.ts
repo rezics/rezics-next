@@ -61,9 +61,8 @@ export class LibraryImportJobStore {
       await seal?.(client);
       let job = (await client.query<ImportJob>(`SELECT state,reason,lease_token FROM reader.library_import_job
         WHERE agent=$1 AND file_id=$2 FOR UPDATE`,[agent,id])).rows[0];
-      const counts=(await client.query<{ total: number; completed: number; issues: number }>(`SELECT count(*)::integer AS total,
-        count(outcome)::integer AS completed,count(*) FILTER(WHERE jsonb_array_length(outcome->'issues')>0)::integer AS issues
-        FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2`,[agent,id])).rows[0]!;
+      const counts=(await client.query<{ total: number; completed: number; issues: number }>(`SELECT total_count AS total,
+        completed_count AS completed,issue_count AS issues FROM reader.library_import_file WHERE agent=$1 AND id=$2`,[agent,id])).rows[0]!;
       let token: string | null = null;
       if ((!job || resume && ['failed','stalled'].includes(job.state)) && counts.completed<counts.total) {
         token=randomUUID();

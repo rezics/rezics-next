@@ -49,7 +49,13 @@ test('G-892: complete sparse traversal skips more than a page of hidden pairs an
   const rows = Array.from({ length: 225 }, (_, i) => pair(i + 100));
   rows.push(pair(325, 700), pair(325, 701), pair(326), pair(327));
   const f = fixture(rows, new Set(rows.slice(0, 225).map(row => row.work.value)));
-  const first = await readCollectionGrain(f.session, id(5), { grain: 'parts', limit: 1 });
+  let first = await readCollectionGrain(f.session, id(5), { grain: 'parts', limit: 1 });
+  let windows = 1;
+  while (!first.items.length && first.nextCursor) {
+    first = await readCollectionGrain(f.session, id(5), { grain: 'parts', limit: 1, cursor: first.nextCursor });
+    windows++;
+  }
+  expect(windows).toBeGreaterThan(1);
   expect(first.items).toEqual([{ work: id(325), mainVersion: id(10_325) }]);
   expect(first.nextCursor).toBeString();
   const next = await readCollectionGrain(f.session, id(5), { grain: 'parts', limit: 100, cursor: first.nextCursor! });
@@ -59,6 +65,25 @@ test('G-892: complete sparse traversal skips more than a page of hidden pairs an
   expect(f.queries[1]).toContain('rv:WorkComposition');
   expect(first).not.toHaveProperty('count');
   expect(JSON.stringify(first)).not.toContain(id(100));
+});
+
+test('sparse collection tracking spends one candidate window as membership grows', async () => {
+  const samples = [];
+  for (const size of [32, 128, 512]) {
+    const rows = Array.from({ length: size }, (_, i) => pair(i + 100));
+    const f = fixture(rows, new Set(rows.map(row => row.work.value)));
+    const start = performance.now();
+    const page = await readCollectionGrain(f.session, id(5), { grain: 'parts', limit: 1 });
+    samples.push({ size, graphCalls: f.queries.length,
+      summaryTargets: f.batches.reduce((sum, batch) => sum + batch.length, 0), next: !!page.nextCursor, ms: performance.now() - start });
+    expect(page.items).toEqual([]);
+  }
+  console.table(samples);
+  for (const sample of samples) {
+    expect(sample.graphCalls, JSON.stringify(sample)).toBeLessThanOrEqual(2);
+    expect(sample.summaryTargets, JSON.stringify(sample)).toBeLessThanOrEqual(COLLECTION_GRAIN_COST.summaryTargets);
+    expect(sample.next).toBe(true);
+  }
 });
 
 test('G-892: private or fenced parents and parts contribute neither results nor continuation', async () => {

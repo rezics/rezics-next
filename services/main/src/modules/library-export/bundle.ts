@@ -48,23 +48,14 @@ export class LibraryBundleExporter {
     if (!position) throw new WorkReadUnavailable('Library export position is unavailable');
     const principalId = await session.deps.access.activePrincipalId(session.principal!);
     if (!principalId) throw new WorkReadUnavailable('Library export principal is unavailable');
-    const ratings = await this.access.query<{ digest: string }>(`SELECT md5(coalesce(string_agg(
-      context||':'||work||':'||revision,'|' ORDER BY context,work),'')) AS digest
-      FROM (SELECT context,work,revision FROM access.rating_aggregate_head WHERE principal_id=$1 AND target_release IS NULL
-        UNION ALL SELECT context,target AS work,revision FROM access.target_rating_head WHERE principal_id=$1) heads`,[principalId]);
-    // Aggregate only this reader's collection heads. Jena preserves the ordered
-    // subquery input to GROUP_CONCAT; neither bodies nor memberships are returned.
-    const collections = await session.query(`SELECT (SHA256(GROUP_CONCAT(?part; separator="|")) AS ?digest) WHERE {
-      { SELECT ?part WHERE { GRAPH ${iri(GRAPHS.current)} {
-        ?id a rv:Collection ; rv:curator ${iri(agent)} ; rv:collectionState rv:Active ;
-          schema:name ?name ; rv:disclosure ?disclosure ; rv:structure ?structure .
-        ?structure rv:selectedGeneration ?generation .
-        OPTIONAL { ?id rv:protectionHead ?protection }
-        BIND(SHA256(CONCAT(STR(?id),"|",ENCODE_FOR_URI(STR(?name)),"|",STR(?disclosure),"|",STR(?generation),"|",COALESCE(STR(?protection),""))) AS ?part)
-      } } ORDER BY ?part }
-    } LIMIT 1`,1);
+    const ratings = await this.access.query<{ version: string }>(`SELECT library_rating_version::text AS version
+      FROM access.principal WHERE id=$1 AND active`,[principalId]);
+    if (ratings.rows.length !== 1) throw new WorkReadUnavailable('Library export principal is unavailable');
+    const collections = await session.query(`SELECT ?position WHERE { GRAPH ${iri(GRAPHS.control)} {
+      ${iri(agent)} rv:libraryCollectionPosition ?position
+    } } LIMIT 2`,1);
     return { value: importDigest([position.data_epoch,position.version,position.expires_at?.toISOString(),
-      ratings.rows[0]?.digest,collections[0]?.digest?.value]),expiresAt: position.expires_at?.getTime() };
+      ratings.rows[0]!.version,collections[0]?.position?.value ?? null]),expiresAt: position.expires_at?.getTime() };
   }
   async page(session: WorkReadSession, agent: string, options: ExportOptions) {
     if (!session.principal) throw new WorkReadInvalid('Authentication is required');

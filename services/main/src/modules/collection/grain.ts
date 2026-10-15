@@ -9,8 +9,8 @@ export interface CollectionWork { work: string; mainVersion: string }
 /** Logical bounds, not a claim about Jena's physical join plan. Candidate pairs
  * are ordered by Work then member, so repeated uses and shared parts collapse
  * across page boundaries. At most 64 distinct Works need summary hydration per
- * batch. Sparse scans share workRead's call/byte budget and deadline; exhaustion
- * fails the read, never returns a falsely complete prefix.
+ * batch. A request examines only enough windows to fill its requested size;
+ * hidden candidates can leave an empty page with a continuation.
  * DISTINCT precedes LIMIT: https://www.w3.org/TR/sparql11-query/#modDistinct
  */
 export const COLLECTION_GRAIN_COST = { page: 100, candidatePairs: 32,
@@ -58,8 +58,10 @@ export async function readCollectionGrain(session: WorkReadSession, collection: 
   const memberWorks = publicWork('?member', '?memberMain');
   // ast-grep-ignore: capability-targets-use-resolver
   const catalogueWorks = publicWork('?work', '?main');
-  let afterPair: string | undefined;
-  while (true) {
+  let afterPair = cursor?.order || undefined;
+  let more = false;
+  const windows = Math.ceil((input.limit + 1) / COLLECTION_GRAIN_COST.candidatePairs);
+  for (let window = 0; window < windows; window++) {
     session.checkDeadline();
     const rows = await session.query(`SELECT DISTINCT ?work ?main ?member WHERE {
       GRAPH ${iri(GRAPHS.current)} {
@@ -104,17 +106,19 @@ export async function readCollectionGrain(session: WorkReadSession, collection: 
       items.set(work, { work, mainVersion });
       if (items.size > input.limit) break;
     }
-    if (items.size > input.limit || rows.length < COLLECTION_GRAIN_COST.candidatePairs) break;
+    if (items.size > input.limit) { more = true; afterPair = undefined; break; }
+    if (rows.length < COLLECTION_GRAIN_COST.candidatePairs) { more = false; break; }
     const last = rows.at(-1)!;
     afterPair = `${last.work!.value}|${last.member!.value}`;
+    more = true;
   }
   // A cursor never authorizes a Collection after its gate has closed.
   if (!await allowed()) throw new WorkReadMissing('Collection is unavailable');
   const disclosed = [...items.values()];
-  const hasNext = disclosed.length > input.limit;
   disclosed.splice(input.limit);
   return { collection, grain: input.grain, structure: root.structure.value,
     revision: root.revision.value, order: 'work-id' as const, items: disclosed,
-    nextCursor: hasNext ? encodeReadCursor(binding, session.position, disclosed.at(-1)!.work) : null,
+    nextCursor: more ? encodeReadCursor(binding, session.position,
+      disclosed.at(-1)?.work ?? afterWork ?? '', afterPair ?? '') : null,
     sourcePosition: { datasetId: 'product' as const, ...session.position } };
 }

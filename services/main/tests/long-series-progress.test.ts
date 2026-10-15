@@ -24,7 +24,7 @@ const id = () => `https://rezics.com/id/${randomUUID()}`;
 const binding = (value: string) => ({ value,
   type: value.startsWith('https://') || value.startsWith('urn:') ? 'uri' : 'literal' });
 
-async function fixture(grouped = false, _reverseNumbers = false, singletons = false, book = false, mutate?: (records: OccurrenceRecord[]) => void) {
+async function fixture(grouped = false, _reverseNumbers = false, singletons = false, book = false, mutate?: (records: OccurrenceRecord[]) => void, inventorySize = 1000) {
   const work = id(), structure = id(), revision = id(), generation = id(), specials = id(), main = id();
   const stored = new Map<string, Uint8Array>();
   let objectsRead = 0, rowsRead = 0, calls = 0;
@@ -40,8 +40,8 @@ async function fixture(grouped = false, _reverseNumbers = false, singletons = fa
       return body;
     },
   };
-  const parents = Array.from({ length: 1000 }, id);
-  const episodes: OccurrenceRecord[] = Array.from({ length: 1000 }, (_, index) => ({
+  const parents = Array.from({ length: inventorySize }, id);
+  const episodes: OccurrenceRecord[] = Array.from({ length: inventorySize }, (_, index) => ({
     occurrence: id(), state: 'active', parent: singletons ? parents[index]! : grouped ? main : structure, segmentKey: 'a',
     orderKey: (index + 1).toString(36).padStart(4, '0'), role: book ? 'chapter' : 'part', target: id(),
     ...(book ? { selection: { mode: 'follow-context' as const } } : {}), introducedBy: revision,
@@ -128,7 +128,7 @@ async function fixture(grouped = false, _reverseNumbers = false, singletons = fa
         rows = records.filter(record => wanted.includes(record.occurrence)).map(record => ({
           work: binding(work), structure: binding(structure), revision: binding(revision),
           occurrence: binding(record.occurrence), parent: binding(record.parent), segmentKey: binding(record.segmentKey!),
-          orderKey: binding(record.orderKey!), role: binding(`https://rezics.com/vocab/${record.role === 'part' ? 'PartRole' : 'GroupRole'}`),
+          orderKey: binding(record.orderKey!), role: binding(`https://rezics.com/vocab/${record.role === 'part' ? 'PartRole' : record.role === 'chapter' ? 'ChapterRole' : 'GroupRole'}`),
           ...(record.target ? { target: binding(record.target) } : {}),
           ...(record.qualifier?.type === 'work-part' ? { displayLabel: binding(record.qualifier.displayLabel) } : {}),
         }));
@@ -142,6 +142,27 @@ async function fixture(grouped = false, _reverseNumbers = false, singletons = fa
     ambiguous: () => { ambiguous = true; },
     measure: () => ({ objectsRead, rowsRead, calls, historyPages, indexRows, indexReads }) };
 }
+
+test('chapter and episode progress pages stay bounded across thousand-part inventories', async () => {
+  const samples = [];
+  for (const book of [false, true]) for (const size of [500, 1000, 2000]) {
+    const f = await fixture(false, false, false, book, undefined, size);
+    const before = f.measure(), start = performance.now();
+    const first = await f.traversal().page({ limit: 1 });
+    expect(first.items).toHaveLength(1);
+    expect(first.next).toBeString();
+    const after = f.measure();
+    samples.push({ kind: book ? 'chapters' : 'episodes', size,
+      graphCalls: after.calls - before.calls, rows: after.rowsRead - before.rowsRead,
+      objects: after.objectsRead - before.objectsRead, ms: performance.now() - start });
+  }
+  console.table(samples);
+  for (const sample of samples) {
+    expect(sample.graphCalls, JSON.stringify(sample)).toBeLessThan(10);
+    expect(sample.rows, JSON.stringify(sample)).toBeLessThan(40);
+    expect(sample.objects, JSON.stringify(sample)).toBeLessThanOrEqual(34);
+  }
+});
 
 test('completed progress pages keep sparse continuation and selection-qualified primary-key order', async () => {
   const structure = id(), occurrence = id(), later = id();

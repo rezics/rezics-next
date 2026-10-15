@@ -249,6 +249,7 @@ export interface NativeProofDeclaration {
 }
 /** A moved proof carries its selection, preparation and execution contract. */
 export const nativeProofDeclarations: readonly NativeProofDeclaration[] = [
+  { file: 'services/main/tests/library-collection-position-native.test.ts', deadlineMs: 310_000, imageInputs: 'module', preparedImage: null },
   { file: nativeModuleSuiteTest, deadlineMs: 2_710_000, imageInputs: 'module', preparedImage: null },
   { file: nativeUnionTest, deadlineMs: 910_000, imageInputs: 'module', preparedImage: null },
   { file: erasureCampaignNativeTest, deadlineMs: 310_000, imageInputs: 'module', preparedImage: null },

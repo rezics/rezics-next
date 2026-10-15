@@ -284,8 +284,9 @@ export class ReaderLibraryStatusStore {
   async counts(agent: string): Promise<Record<ReadingStatus, number>> {
     if (!ID.test(agent)) throw new InvalidLibraryStatus('invalid Agent');
     const rows = await contentConnection(this.pool).query<{ status: ReadingStatus; count: string }>(`
-      SELECT status, count(*)::text AS count FROM reader.library_status
-      WHERE agent = $1 AND status IS NOT NULL GROUP BY status`, [agent]);
+      SELECT s.status,s.count::text AS count FROM reader.library_status_revision r
+      CROSS JOIN LATERAL (VALUES ('want-to-read',r.want_to_read_count),('reading',r.reading_count),
+        ('read',r.read_count)) s(status,count) WHERE r.agent=$1`, [agent]);
     const result: Record<ReadingStatus, number> = { 'want-to-read': 0, reading: 0, read: 0 };
     for (const row of rows.rows) result[row.status] = Number(row.count);
     return result;
@@ -294,8 +295,13 @@ export class ReaderLibraryStatusStore {
   async shelves(agent: string): Promise<{ status: ReadingStatus; count: number; changedAt: string | null }[]> {
     if (!ID.test(agent)) throw new InvalidLibraryStatus('invalid Agent');
     const rows = await contentConnection(this.pool).query<{ status: ReadingStatus; count: string; changed_at: string | null }>(`
-      SELECT status, count(*)::text AS count, max(changed_at)::text AS changed_at
-      FROM reader.library_status WHERE agent = $1 AND status IS NOT NULL GROUP BY status`, [agent]);
+      SELECT s.status,s.count::text AS count,
+        (SELECT shelf.changed_at::text FROM reader.library_status AS shelf
+          WHERE shelf.agent=$1 AND shelf.status=s.status AND s.count>0
+          ORDER BY shelf.changed_at DESC,shelf.work DESC LIMIT 1) AS changed_at
+      FROM reader.library_status_revision r
+      CROSS JOIN LATERAL (VALUES ('want-to-read',r.want_to_read_count),('reading',r.reading_count),
+        ('read',r.read_count)) s(status,count) WHERE r.agent=$1`, [agent]);
     const found = new Map(rows.rows.map(row => [row.status, row]));
     return (['want-to-read', 'reading', 'read'] as const).map(status => ({ status,
       count: Number(found.get(status)?.count ?? 0), changedAt: found.get(status)?.changed_at ?? null }))

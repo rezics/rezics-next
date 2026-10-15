@@ -173,6 +173,9 @@ export class LibraryFileStore {
     const client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
+      // Summary updates take the file row; match review/accept's file-before-job
+      // lock order so completing a batch cannot deadlock a concurrent resume.
+      await client.query('SELECT id FROM reader.library_import_file WHERE agent=$1 AND id=$2 FOR UPDATE', [agent,id]);
       if (token && !(await client.query(`SELECT 1 FROM reader.library_import_job WHERE agent=$1 AND file_id=$2
         AND state='pending' AND lease_token=$3 FOR UPDATE`,[agent,id,token])).rowCount) throw new ImportJobLeaseLost('Import worker lease expired');
       await client.query(`UPDATE reader.library_import_source_row SET outcome=$4,version=version+1
@@ -184,10 +187,8 @@ export class LibraryFileStore {
   async progress(agent: string, id: string) {
     await this.file(agent,id);
     const job=await this.jobs.status(agent,id);
-    const result = await contentConnection(this.pool).query<{ total: number; completed: number; issues: number }>(`SELECT count(*)::integer AS total,
-      count(outcome)::integer AS completed,
-      count(*) FILTER (WHERE jsonb_array_length(outcome->'issues')>0)::integer AS issues
-      FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2`, [agent,id]);
+    const result = await contentConnection(this.pool).query<{ total: number; completed: number; issues: number }>(`SELECT total_count AS total,
+      completed_count AS completed,issue_count AS issues FROM reader.library_import_file WHERE agent=$1 AND id=$2`, [agent,id]);
     const counts=result.rows[0]!;
     const state=job?.state ?? (counts.completed===counts.total ? 'completed' as const : 'review' as const);
     return { ...counts,state,reason: job?.reason ?? null,pending: state==='pending' };
