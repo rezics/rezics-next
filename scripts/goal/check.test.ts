@@ -7,6 +7,8 @@ import { checkChangedFiles, checkFailureLines, parseCheckArgs, runCheckCommand, 
 import { tierBunTestArgs } from '../qa/core.ts';
 import { withSlot } from './qa-slots.ts';
 import { type SlowTestRecord } from './unit-gate.ts';
+import { inferenceGateCommand } from '../api/inference-cost.ts';
+import { runSurfaceGate } from './surface-gate.ts';
 
 const scratch = join(import.meta.dir, '../../.temp/worker-check-tests');
 const fixtures: string[] = [];
@@ -66,6 +68,38 @@ test('a failing type check prints its diagnostic and returns failure without pas
   expect(f.lines.join('\n')).not.toContain('compiler startup noise');
   expect(f.lines.join('\n')).not.toContain('passing case');
   expect(result.checks.filter(check => check.code !== 0).map(check => check.name)).toEqual(['types']);
+});
+
+test('API changes run the inference gate in the types lane and propagate a planted regression', async () => {
+  const f = fixture();
+  const changed = ['services/main/src/app.ts', 'tests/qa/client/main-contract.ts'];
+  const runner: CheckRunner = async (command, cwd, log) => command.includes('scripts/api/inference-cost.ts')
+    ? { code: 1, output: 'error: Inference cost regression:\neden.instantiations: 1100 exceeds 1050 (baseline 1000, +5%)' }
+    : f.runner(command, cwd, log);
+  const result = await workerCheck({ ...f, changed, only: ['types'], runner });
+  expect(result.code).toBe(1);
+  expect(result.checks.find(check => check.name === 'inference')?.code).toBe(1);
+  expect(f.lines.join('\n')).toContain('eden.instantiations: 1100 exceeds 1050');
+  const passing = await workerCheck({ ...f, changed, only: ['types'] });
+  expect(passing.code).toBe(0);
+  expect(f.commands).toContainEqual(inferenceGateCommand);
+});
+
+test('surface check and landing also refuse an inference regression before QA', async () => {
+  const f = fixture();
+  const selection = { main: 'main', rows: [], changed: ['tests/qa/client/main-contract.ts'], units: [], stories: [], guards: [], proofs: [] };
+  for (const workerStatic of [true, false]) {
+    let qaStarted = false;
+    const runner: CheckRunner = async (command, cwd, log) => {
+      if (command[1] === 'scripts/qa/test.ts') qaStarted = true;
+      return command.includes('scripts/api/inference-cost.ts') ? { code: 1, output: 'error: Inference cost regression' } : f.runner(command, cwd, log);
+    };
+    const result = await runSurfaceGate(f.cwd, selection, { ...f, runner, workerStatic, only: ['types'],
+      gateLaneOptions: { directory: join(f.cwd, '.temp/gate-lanes'), announce: () => {} } });
+    expect(result.code).toBe(1);
+    expect(result.checks.find(check => check.name === 'types')?.code).toBe(1);
+    expect(qaStarted).toBe(false);
+  }
 });
 
 test('worker guards use changed inputs and report empty changes without acquiring a QA slot', async () => {

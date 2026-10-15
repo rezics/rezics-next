@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import row from '../../../../../scripts/qa/cases/outcomes/zone/site-pages.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordJapaneseReads } from '../../../support/recorded-locale-visit.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 type Page = { page: string; variantId: string; revisionId: string; byteDigest: string; contentEpoch: string };
@@ -15,7 +16,7 @@ type Receipt = { receipt: string; revision: string; homeDocument: string; homeRe
 const publicationPageBound = 32;
 setDefaultTimeout(60_000);
 let sessions: PersonaSessions;
-const recording = new OutcomeRecorder(row);
+const recording = recordJapaneseReads(new OutcomeRecorder(row));
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession) => person.actingSubject
   ? `?actingSubject=${encodeURIComponent(person.actingSubject)}` : '';

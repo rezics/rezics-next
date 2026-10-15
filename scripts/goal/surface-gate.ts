@@ -14,6 +14,7 @@ import {
 import { repositoryGuardSelectionLine } from '../qa/repository-guards.ts';
 import * as repositoryGuardRunner from '../qa/repository-guards.ts';
 import { workerTypeCommands } from '../qa/worker-types.ts';
+import { inferenceGateCommand, needsInferenceGate } from '../api/inference-cost.ts';
 import { withGateLane, withSlot, type SlotRunOptions, type GateLaneOptions } from './qa-slots.ts';
 import { type loadOutcomes, personas, type RowOutcomes } from '../qa/cases/outcomes.ts';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath } from '../qa/acceptance.ts';
@@ -293,7 +294,10 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
   };
   if (!await part('contract', [['task', 'gen'], ['task', 'gen:check']])) return finish();
   const staticParts: [SurfacePart, string[][]][] = [
-    ...(only.includes('types') ? [['types', options.workerStatic ? workerTypeCommands(cwd, selection.changed) : [['task', 'web:typecheck']]] as [SurfacePart, string[][]]] : []),
+    ...(only.includes('types') ? [['types', [
+      ...(options.workerStatic ? workerTypeCommands(cwd, selection.changed) : [['task', 'web:typecheck']]),
+      ...(needsInferenceGate(selection.changed) ? [[...inferenceGateCommand]] : []),
+    ]] as [SurfacePart, string[][]]] : []),
     ...(only.includes('lint') ? [
       ['lint', directories.length ? [options.workerStatic
         ? ['node_modules/.bin/oxlint', ...existing.filter(file => /\.[cm]?[jt]sx?$/.test(file))]

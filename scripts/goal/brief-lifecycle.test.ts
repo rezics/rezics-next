@@ -142,6 +142,50 @@ function documentationLinks(repo: ReturnType<typeof repository>) {
 }
 
 describe('brief archive links', () => {
+  for (const scenario of ['verified', 'cancelled', 'shared'] as const) test(`${scenario} close retains uncommitted worker reports and rewrites handoff links`, () => {
+    const repo = repository();
+    try {
+      const task = closedBrief(repo);
+      repo.git('add', 'docs'); repo.git('commit', '-qm', 'Record review brief');
+      task.base = repo.git('rev-parse', 'HEAD');
+      task.state = 'exited'; task.paths = [];
+      repo.git('worktree', 'add', '-qb', task.branch, task.worktree);
+      const goal = join(task.worktree, '.temp/goal');
+      mkdirSync(goal, { recursive: true });
+      const review = '# Review\n\nTwo verified findings.\n';
+      writeFileSync(join(goal, 'review.md'), review);
+      writeFileSync(join(goal, 'findings.json'), '{"findings":2}\n');
+      writeFileSync(join(goal, 'brief.md'), 'Worker brief');
+      writeFileSync(join(goal, 'ignored.txt'), 'Not an output');
+      repo.write('.temp/handoff.json', JSON.stringify({ result: `RESULT: done\n[Review](.temp/goal/review.md)\n`
+        + `[Findings](${join(goal, 'findings.json')})`, is_error: false }));
+      task.attempts = [{ n: 1, engine: 'claude', effort: 'high', pid: 2147483647, session: 'fixture',
+        startedAt: new Date().toISOString(), output: join(repo.dir, '.temp/handoff.json') }];
+      if (scenario === 'shared') repo.ledger.tasks['G-002'] = { ...task, id: 'G-002' };
+      repo.save();
+      expect(repo.git('rev-list', '--count', `main..${task.branch}`)).toBe('0');
+      const result = repo.run(['close', task.id, scenario === 'cancelled' ? 'cancelled' : 'verified']);
+      expect(result.status, result.stderr).toBe(0);
+      expect(existsSync(task.worktree)).toBe(scenario === 'shared');
+      const run = join(repo.dir, '.temp/goal-orchestration/runs', task.id);
+      expect(readFileSync(join(run, 'outputs/review.md'), 'utf8')).toBe(review);
+      expect(readFileSync(join(run, 'outputs/findings.json'), 'utf8')).toBe('{"findings":2}\n');
+      expect(existsSync(join(run, 'outputs/brief.md'))).toBe(false);
+      expect(existsSync(join(run, 'outputs/ignored.txt'))).toBe(false);
+      expect(readFileSync(join(run, 'handoff.md'), 'utf8')).toContain('[Review](outputs/review.md)');
+      const archive = 'alpha-2026-10-13';
+      expect(repo.git('show', `archive/goals:${archive}/outputs/${task.id}/review.md`)).toBe(review.trim());
+      expect(repo.git('show', `archive/goals:${archive}/outputs/${task.id}/findings.json`)).toBe('{"findings":2}');
+      const handoff = repo.git('show', `archive/goals:${archive}/handoffs/${task.id}.md`);
+      expect(handoff).toContain(`[Review](../outputs/${task.id}/review.md)`);
+      expect(handoff).toContain(`[Findings](../outputs/${task.id}/findings.json)`);
+      const archiveHead = repo.git('rev-parse', 'archive/goals');
+      const tidy = repo.run(['tidy']);
+      expect(tidy.status, tidy.stderr).toBe(0);
+      expect(repo.git('rev-parse', 'archive/goals')).toBe(archiveHead);
+    } finally { repo.cleanup(); }
+  });
+
   test('indented code examples remain source text', () => {
     const repo = repository();
     try {

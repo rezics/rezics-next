@@ -296,7 +296,7 @@ function hostLoad(env: NodeJS.ProcessEnv): number {
 }
 
 interface StartupWaiter extends StartupPromise {
-  seq: number; vm_reserve: number; host_reserve: number; load_wait: number; slot_ready: number;
+  seq: number; arrival_seq: string; vm_reserve: number; host_reserve: number; load_wait: number; slot_ready: number;
 }
 interface StartupPromise {
   id: string; pid: number; start_time: string; vm: number; host: number; admitted_at: number;
@@ -456,8 +456,11 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
   const read = options.read ?? (need.vm + need.vmReserve > 0
     ? remaining => readMemory(remaining, options.env ?? process.env) : async () => readHostMemory());
   const promiseId = randomUUID();
-  const arrivedAt = now();
-  const arrivalSequence = process.hrtime.bigint().toString().padStart(24, '0');
+  // The runner's slot ticket and its child startup must agree on arrival order.
+  const env = options.env ?? process.env;
+  const arrivedAt = env.GOAL_QA_ARRIVED_AT === undefined ? now() : Date.parse(env.GOAL_QA_ARRIVED_AT);
+  const arrivalSequence = env.GOAL_QA_ARRIVAL_SEQUENCE ?? process.hrtime.bigint().toString().padStart(24, '0');
+  if (!Number.isFinite(arrivedAt)) { release(); throw new Error('Invalid QA arrival time'); }
   const startTime = options.startTime ?? processStartTime;
   const identity = startTime(process.pid);
   if (!identity) { release(); throw new Error('Cannot read QA startup process start time'); }
@@ -502,7 +505,7 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
           mutex.exec('ALTER TABLE startup_waiters ADD COLUMN load_wait INTEGER NOT NULL DEFAULT 0');
         if (!mutex.query<{ name: string }, []>('PRAGMA table_info(startup_waiters)').all().some(column => column.name === 'slot_ready'))
           mutex.exec('ALTER TABLE startup_waiters ADD COLUMN slot_ready INTEGER NOT NULL DEFAULT 0');
-        if (!registered) {
+        if (!registered && !slotReady.gated) {
           mutex.query(`INSERT INTO startup_waiters
             (id, pid, start_time, vm, host, vm_reserve, host_reserve, admitted_at, arrival_seq, slot_ready) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
             .run(promiseId, process.pid, identity, need.vm, need.host, need.vmReserve, need.hostReserve, arrivedAt, arrivalSequence, Number(!slotReady.gated));
@@ -572,6 +575,16 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
             mutex.query('DELETE FROM startup_waiters WHERE id = ?').run(waiter.id);
           else waiters.push(waiter);
         }
+        // A pending slot request may compete for admission, but cannot occupy
+        // the startup queue ahead of the holders it needs to finish first.
+        if (!waiters.some(waiter => waiter.id === promiseId)) {
+          waiters.push({ id: promiseId, pid: process.pid, start_time: identity,
+            vm: need.vm, host: need.host, vm_reserve: need.vmReserve, host_reserve: need.hostReserve,
+            admitted_at: arrivedAt, arrival_seq: arrivalSequence, seq: Number.MAX_SAFE_INTEGER,
+            completed: 0, processor_until: 0, load_wait: Number(loadWaitStarted !== undefined), slot_ready: 0 });
+          waiters.sort((a, b) => a.admitted_at - b.admitted_at
+            || a.arrival_seq.localeCompare(b.arrival_seq) || a.seq - b.seq);
+        }
         if (reading) measured = measuredAdmissionMessage(need, reading, live);
         const fits = (waiter: StartupWaiter) => reading !== undefined && memoryFits({
           vm: waiter.vm, host: waiter.host, vmReserve: waiter.vm_reserve, hostReserve: waiter.host_reserve,
@@ -584,9 +597,16 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
         // their turn, under the same admission transaction.
         const leaseReady = readingFits && (loadExpired ? loadLeaseReady
           : now() < options.deadline && slotReady.ready() && now() < options.deadline);
-        // An ungated waiter already owns its lifetime admission. Waiting for memory
-        // must not erase that readiness and let a fresh arrival bypass it.
-        mutex.query('UPDATE startup_waiters SET slot_ready = ? WHERE id = ?').run(Number(!slotReady.gated || leaseReady), promiseId);
+        if (slotReady.gated) {
+          if (leaseReady) {
+            mutex.query(`INSERT INTO startup_waiters
+              (id, pid, start_time, vm, host, vm_reserve, host_reserve, admitted_at, arrival_seq, slot_ready)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+              ON CONFLICT(id) DO UPDATE SET slot_ready = 1`)
+              .run(promiseId, process.pid, identity, need.vm, need.host, need.vmReserve, need.hostReserve, arrivedAt, arrivalSequence);
+          } else mutex.query('DELETE FROM startup_waiters WHERE id = ?').run(promiseId);
+        }
+        // Ungated callers retain their lifetime admission through memory waits.
         const readyWaiters = waiters.filter(waiter => waiter.id === promiseId ? leaseReady : waiter.slot_ready === 1);
         const first = readyWaiters.find(fits);
         if (first?.id === promiseId) headSince ??= new Date(now()).toISOString();

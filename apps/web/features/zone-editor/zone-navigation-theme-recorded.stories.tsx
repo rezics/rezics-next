@@ -61,6 +61,7 @@ const meta = {
   title: 'Zone editor/Navigation and theme recorded',
   component: RecordedNavigationTheme,
   args: { record, locale, zoneId: publishedZoneId },
+  render: (args, { globals }) => <RecordedNavigationTheme {...args} locale={globals.locale as import('../../i18n/define.ts').UiLocale} />,
   globals: { locale },
 } satisfies Meta<typeof RecordedNavigationTheme>;
 export default meta;

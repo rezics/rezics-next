@@ -13,6 +13,7 @@ import { settle } from '../../../../../apps/web/features/manage/read.ts';
 import { zoneThemePatch } from '../../../../../apps/web/features/zone-editor/theme.ts';
 import row from '../../../../../scripts/qa/cases/outcomes/zone/navigation-and-theme.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordJapaneseReads } from '../../../support/recorded-locale-visit.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 type ZonePresentation = { tokens: Record<string, string>;
@@ -28,7 +29,7 @@ type Receipt = { receipt: string; revision: string; homeDocument: string; homeRe
 setDefaultTimeout(180_000);
 const fileWall = setTimeout(() => { throw new Error('Navigation and theme file exceeded 480 s'); }, 480_000);
 let sessions: PersonaSessions;
-const recording = new OutcomeRecorder(row);
+const recording = recordJapaneseReads(new OutcomeRecorder(row));
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession) => person.actingSubject
   ? `?actingSubject=${encodeURIComponent(person.actingSubject)}` : '';

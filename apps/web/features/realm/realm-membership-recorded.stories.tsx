@@ -117,15 +117,17 @@ function ownerDecision(inbox: 'decision-confirm-inbox-declined' | 'decision-conf
   ];
 }
 
-function Recorded({ persona, selections, surface, sequence = false }: {
+function Recorded({ persona, selections, surface, sequence = false, locale = 'en' }: {
   persona: AnswerPersona; selections: readonly RecordedSelection[]; surface: MembershipSurface; sequence?: boolean;
+  locale?: import('../../i18n/define.ts').UiLocale;
 }) {
-  return <RecordedMembershipPage record={record} persona={persona} selections={selections} surface={surface} sequence={sequence} />;
+  return <RecordedMembershipPage record={record} persona={persona} selections={selections} surface={surface} sequence={sequence} locale={locale} />;
 }
 
 const meta = {
   title: 'Realm/Recorded membership',
   component: Recorded,
+  render: (args, { globals }) => <Recorded {...args} locale={globals.locale as import('../../i18n/define.ts').UiLocale} />,
   args: { persona: 'visitor', selections: visitorLanding, surface: 'landing' },
   parameters: { controls: { disable: true }, route: { pathname: realmHref('en', 'recorded') } },
   globals: { viewport: { value: 'desktop' } },

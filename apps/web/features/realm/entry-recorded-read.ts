@@ -9,7 +9,7 @@ import { recordedFetch } from '../stories/recorded-fetch.ts';
 
 /** Replay reaches the production resolver and private-page reader; it never supplies a Persona's authority. */
 export function recordedRealmEntry(record: AnswerRecord, persona: AnswerPersona, selections: readonly RecordedSelection[],
-  addressLabel: string, sessionLabel?: string) {
+  addressLabel: string, sessionLabel?: string, locale: UiLocale = 'en') {
   const sample = (label: string) => {
     const found = record.personas[persona].find(item => item.label === label);
     if (!found) throw new Error(`Missing recorded Realm entry: ${persona}/${label}`);
@@ -17,7 +17,7 @@ export function recordedRealmEntry(record: AnswerRecord, persona: AnswerPersona,
   };
   const key = new URL(sample(addressLabel).path, 'https://recorded.invalid').searchParams.get('key');
   if (!key) throw new Error('Recorded Realm entry has no address key');
-  const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
+  const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX, locale });
   const raw = (path: string) => replay.fetcher(new URL(`${BFF_PREFIX}${path}`, 'https://recorded.invalid'));
   const main = browserMainApi('https://recorded.invalid', { anonymous: true, fetcher: replay.fetcher });
   const personal = browserMainApi('https://recorded.invalid', { fetcher: replay.fetcher });

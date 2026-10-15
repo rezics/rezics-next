@@ -196,7 +196,7 @@ export function AuditExplorer({ initialState, initial, names }: { initialState: 
         <input ref={search} id="admin-search" type="search" role="searchbox" aria-label={t.auditSearch.label} value={draft}
           placeholder={t.auditSearch.placeholder} autoComplete="off" spellCheck={false} autoCapitalize="none" enterKeyHint="search" maxLength={400}
           aria-describedby="audit-search-help"
-          className="h-10 w-full rounded-xl border border-border/80 bg-primary/5 ps-10 pe-12 text-base outline-none transition-[color,box-shadow] placeholder:text-muted-foreground/64 hover:border-border focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 md:text-sm [&::-webkit-search-cancel-button]:hidden"
+          className="h-10 w-full rounded-xl border border-border/80 bg-primary/5 ps-10 pe-12 text-base outline-none transition-[color,box-shadow] placeholder:text-muted-foreground hover:border-border focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 md:text-sm [&::-webkit-search-cancel-button]:hidden"
           onChange={event => setDraft(event.currentTarget.value)}
           onCompositionStart={() => setComposing(true)}
           onCompositionEnd={event => { setComposing(false); setDraft(event.currentTarget.value); }}

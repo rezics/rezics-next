@@ -42,7 +42,7 @@ type Story = StoryObj<typeof meta>;
 const phone = { globals: { viewport: { value: 'phone' as const } } };
 export const OwnRecipe: Story = { play: async ({ canvasElement }) => {
   const canvas = within(canvasElement);
-  await expect(await canvas.findByText('Ginger lemon tea')).toBeVisible();
+  await expect(await canvas.findByRole('link', { name: 'Ginger lemon tea' })).toBeVisible();
   await expect(canvas.getByRole('link', { name: 'Continue writing' })).toHaveAttribute('href',
     localizedPath(editingHref(agent, ids.recipe, 'recipe', { language: 'en' }), 'en'));
   await expect(canvas.getByRole('region', { name: 'Writing as' })).toHaveTextContent(agent.label!);

@@ -6,6 +6,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { membershipRecordedTransition, type MembershipReplayPhase } from './membership-recorded-transition.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
+import shellJa from '../shell/messages/ja.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import {
   recordedIdentity, recordedMembersRoute, recordedRead, recordedReplay, recordedRequestsRoute, recordedRealmRoute, recordedSample, recordedManagementAgent,
@@ -32,8 +33,8 @@ export function RecordedMembershipPage({ record, persona, selections, surface, s
     let mounted = true;
     setView(null); setFailure(null);
     let missed: string | null = null;
-    const playback = phases ? membershipRecordedTransition(record, persona, phases)
-      : recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX, sequence });
+    const playback = phases ? membershipRecordedTransition(record, persona, phases, locale)
+      : recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX, sequence, locale });
     const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
       try { return await playback.fetcher(input, init); }
       catch (error) {
@@ -70,7 +71,7 @@ export function RecordedMembershipPage({ record, persona, selections, surface, s
     return () => { mounted = false; playback.dispose(); };
   }, [record, persona, selections, surface, sequence, phases, locale]);
   if (failure) throw failure;
-  if (!view) return <p role="status" aria-busy="true">{shellMessages.loading}</p>;
+  if (!view) return <p role="status" aria-busy="true">{locale === 'ja' ? shellJa.loading : shellMessages.loading}</p>;
   return view;
 }
 

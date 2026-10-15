@@ -462,6 +462,24 @@ test('wait can settle an unclaimed exit and a later pass leaves its claim alone'
   expect(f.ledger().tasks[f.task.id]!.settlement).toEqual(settlement);
 });
 
+test('settlement verifies a review without commits and retains its output with its archived handoff', async () => {
+  const f = fixture();
+  const ledger = f.ledger(); ledger.tasks[f.task.id]!.paths = []; f.save(ledger);
+  const review = '# Review\n\nTwo verified findings.\n';
+  writeFileSync(join(f.task.worktree, '.temp/goal/review.md'), review);
+  writeFileSync(f.output, JSON.stringify({ result: 'RESULT: done\n[Review](.temp/goal/review.md)', is_error: false }));
+  expect(f.git('rev-list', '--count', 'main..goal/fixture')).toBe('0');
+  await f.execute(['settle']);
+  await until(() => !!f.ledger().tasks[f.task.id]!.settlement?.settledAt);
+  expect(f.ledger().tasks[f.task.id]!.state, f.ledger().tasks[f.task.id]!.settlement?.reason).toBe('verified');
+  expect(existsSync(f.task.worktree)).toBe(false);
+  expect(readFileSync(join(f.run, 'outputs/review.md'), 'utf8')).toBe(review);
+  const archive = `program-${f.task.attempts[0]!.startedAt.slice(0, 10)}`;
+  expect(f.git('show', `archive/goals:${archive}/outputs/${f.task.id}/review.md`)).toBe(review.trim());
+  expect(f.git('show', `archive/goals:${archive}/handoffs/${f.task.id}.md`))
+    .toContain(`[Review](../outputs/${f.task.id}/review.md)`);
+});
+
 test('a read-only final step after a merged step closes verified despite its path claims', async () => {
   const f = fixture(); f.commit();
   f.git('merge', '--ff-only', 'goal/fixture');

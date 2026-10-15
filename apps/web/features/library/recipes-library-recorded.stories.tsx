@@ -4,6 +4,8 @@ import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer
 import collectionRecord from '../../../../tests/qa/fixtures/outcomes/recipes/collection-tracking-and-progress.json';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { BooksLibraryRecorded } from './books-library-recorded-page.tsx';
+import { messages } from './messages.ts';
+import ja from './messages/ja.ts';
 
 // Shelf names, the reading preview and a collection’s recipe rows are not drawn.
 // The route asks for `/v1/me/shelves` with `limit=20`, for the reading shelf
@@ -50,3 +52,12 @@ export const OwnerLoading: Story = {
   },
 };
 export const OwnerLoadingPhone: Story = { ...OwnerLoading, ...phone };
+export const OwnerLoadingWide: Story = { ...OwnerLoading, globals: { viewport: { value: 'desktop1440' } } };
+export const JapaneseLoadingPhone: Story = {
+  args: { locale: 'ja', messages: { ...messages, ...ja } },
+  globals: { locale: 'ja', viewport: { value: 'phone' } },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).findByRole('status')).resolves.toHaveTextContent(ja.loading);
+  },
+};
+export const JapaneseLoadingWide: Story = { ...JapaneseLoadingPhone, globals: { locale: 'ja', viewport: { value: 'desktop1440' } } };

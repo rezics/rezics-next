@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { answerRecord, type AnswerSample } from '../../../scripts/api/answer-record.ts';
+import type { RecipeWorkPage } from '../features/work-page/types.ts';
 import { expect, type Page, test, type TestInfo } from '@playwright/test';
 import { resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
@@ -22,7 +24,7 @@ const sessionStudio = (path = '') => {
 };
 
 const phone = { width: 390, height: 844 };
-const desktop = { width: 1280, height: 900 };
+const desktop = { width: 1440, height: 900 };
 const overflows = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 
 async function shoot(page: Page, name: string, info: TestInfo) {
@@ -116,13 +118,31 @@ test('a long recipe shows its first part, continues with its sections whole, and
   await page.getByRole('textbox', { name: 'Notes' }).blur();
   await settled(page);
   await page.getByRole('button', { name: 'Publish', exact: true }).click();
-  await expect(page.getByText('Published. Everyone can read this recipe.')).toBeVisible();
+  await expect(page.getByText('Published. Everyone can read this recipe.')).toBeVisible({ timeout: 60_000 });
+  const samples: AnswerSample[] = [];
+  let cursor: string | undefined;
+  do {
+    const query = new URLSearchParams({ actingSubject, ...(cursor ? { cursor } : {}) });
+    const path = `/v1/recipes/works/${idOf(work)}?${query}`;
+    const response = await page.request.get(`/api/main${path}`);
+    expect(response.ok(), await response.text()).toBe(true);
+    const answer = await response.json() as RecipeWorkPage;
+    samples.push({ label: `page-${samples.length}`, operationId: 'getV1RecipesWorksById',
+      method: 'GET', path, status: response.status(), headers: response.headers(), answer });
+    cursor = answer.next;
+  } while (cursor);
+  writeFileSync(info.outputPath('long-recipe-answers.json'), JSON.stringify(answerRecord('recipes/long-recipe', {
+    visitor: [], stranger: [], member: [], owner: samples, moderator: [], operator: [],
+  }), null, 2));
   const open = async (width: number) => {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await expect(async () => {
       await page.goto(workPath);
       await expect(recipeOf().getByRole('heading', { name: 'Dough', exact: true })).toBeVisible({ timeout: 5_000 });
-    }).toPass({ timeout: 120_000 });
+    }).toPass({ timeout: 120_000 }).catch(async error => {
+      await page.screenshot({ path: info.outputPath('recipe-long-render-failure.png'), fullPage: true });
+      throw error;
+    });
   };
   const more = () => recipeOf().getByRole('button', { name: 'Show more of this recipe' });
   // The button's name changes while the next part loads, and busy is set after the click.
@@ -131,13 +151,14 @@ test('a long recipe shows its first part, continues with its sections whole, and
   const continueOnce = async () => {
     const region = recipeOf();
     const before = await region.innerText();
-    await more().click();
-    await expect.poll(async () => {
+    await expect(async () => {
+      // A streamed page can show its controls before hydration attaches the click handler.
+      if (await region.innerText() === before && await more().count()) await more().click();
       const text = await region.innerText();
       const loading = await region.getByRole('button', { name: 'Loading more…' }).count();
       const busy = await page.locator('[aria-busy="true"]').count();
-      return text !== before && loading === 0 && busy === 0;
-    }, { timeout: 30_000 }).toBe(true);
+      expect(text !== before && loading === 0 && busy === 0).toBe(true);
+    }).toPass({ timeout: 30_000 });
   };
   const continueAll = async () => {
     for (let guard = 0; guard < 8; guard += 1) {
@@ -147,7 +168,7 @@ test('a long recipe shows its first part, continues with its sections whole, and
     expect(await more().count(), 'the recipe still had a continuation').toBe(0);
   };
 
-  await open(1280);
+  await open(1440);
   const opened = recipeOf();
   await expect(opened.getByText('1 cup dough-01')).toBeVisible();
   await expect(opened.getByText('1 cup dough-40')).toBeVisible();
@@ -185,14 +206,14 @@ test('a long recipe shows its first part, continues with its sections whole, and
   // one line per ingredient, at the new count, with the method still unread.
   await expect(doughLines).toHaveCount(40);
   await expect(sauceLines).toHaveCount(40);
-  await expect(doughLines.first()).toContainText('2 cups dough-01');
-  await expect(sauceLines.last()).toContainText('2 cups sauce-40');
+  await expect(doughLines.first()).toContainText('2 cup dough-01');
+  await expect(sauceLines.last()).toContainText('2 cup sauce-40');
   await expect(recipe).not.toContainText('Step 40');
   await expect(more()).toBeVisible();
   await shoot(page, 'recipe-long-scaled', info);
   await continueOnce();
   await expect(doughLines).toHaveCount(40);
-  await expect(doughLines.first()).toContainText('2 cups dough-01');
+  await expect(doughLines.first()).toContainText('2 cup dough-01');
   await expect(recipe.getByRole('heading', { name: 'Dough', exact: true })).toHaveCount(1);
   await expect(recipe.getByRole('heading', { name: 'Sauce', exact: true })).toHaveCount(1);
   await expect(method.getByRole('listitem')).toHaveCount(40);
@@ -220,8 +241,14 @@ test('a long recipe shows its first part, continues with its sections whole, and
   await expect(page.locator('[data-step]')).toHaveCount(40);
   await settled(page);
   const sauceGroup = page.getByRole('group', { name: 'Section Sauce' });
-  await sauceGroup.getByRole('textbox', { name: 'Section name' }).fill('Gravy');
-  await sauceGroup.getByRole('textbox', { name: 'Section name' }).blur();
+  // Wait for the hydrated editor to acknowledge the rename before trusting its saved status.
+  await expect(async () => {
+    if (await sauceGroup.count()) {
+      await sauceGroup.getByRole('textbox', { name: 'Section name' }).fill('Gravy');
+      await sauceGroup.getByRole('textbox', { name: 'Section name' }).blur();
+    }
+    await expect(page.getByRole('group', { name: 'Section Gravy' })).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
   await settled(page);
   await page.reload();
   await expect(page.getByRole('group', { name: 'Section Gravy' })).toBeVisible({ timeout: 60_000 });

@@ -28,3 +28,22 @@ export const OwnerEnglishDesktop: Story = { args: { locale: 'en', messages },
   async play({ canvasElement }) {
     await expect(within(canvasElement).findByRole('heading', { level: 1, name: messages.title })).resolves.toBeVisible();
   } };
+
+export const ShelvesJapaneseDesktop: Story = {
+  async play({ canvasElement }) {
+    const shelves = await within(canvasElement).findByRole('navigation', { name: ja.shelves });
+    shelves.scrollIntoView({ block: 'start' });
+    await expect(within(canvasElement).getByRole('region', { name: ja.reading })).toBeVisible();
+  },
+};
+export const ShelvesJapanesePhone: Story = { ...ShelvesJapaneseDesktop,
+  globals: { locale: 'ja', viewport: { value: 'phone' } } };
+export const ShelvesEnglishDesktop: Story = { args: { locale: 'en', messages },
+  globals: { locale: 'en', viewport: { value: 'desktop' } },
+  async play({ canvasElement }) {
+    const shelves = await within(canvasElement).findByRole('navigation', { name: messages.shelves });
+    shelves.scrollIntoView({ block: 'start' });
+    await expect(within(canvasElement).getByRole('region', { name: messages.reading })).toBeVisible();
+  } };
+export const ShelvesEnglishPhone: Story = { ...ShelvesEnglishDesktop,
+  globals: { locale: 'en', viewport: { value: 'phone' } } };

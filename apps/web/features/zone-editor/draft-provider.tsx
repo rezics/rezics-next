@@ -141,7 +141,7 @@ export function ZoneEditorDraftProvider({ zoneId, actingSubject, children }: {
     <Dialog open={selectedExit !== null} pending={saving} onOpenChange={({ open }) => { if (!open) setExit(null); }}>
       <DialogContent size="md">
         <DialogHeader className="pr-14" title={copy.exitTitle} description={awaitingConfirmation ? copy.exitPendingBody : copy.exitBody} />
-        {exitFailed ? <DialogBody><p role="alert" className="text-sm text-destructive">{copy.exitFailed}</p></DialogBody> : null}
+        {exitFailed ? <DialogBody><p role="alert" className="text-sm text-destructive-foreground">{copy.exitFailed}</p></DialogBody> : null}
         <DialogFooter className="sm:flex-wrap">
           <Button size="sm" disabled={saving} isLoading={saving} onClick={() => void saveAndLeave()}>{saving ? copy.exitSaving : copy.exitSave}</Button>
           <Button size="sm" variant="outline" disabled={saving} onClick={discardAndLeave}>{copy.exitDiscard}</Button>

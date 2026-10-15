@@ -123,7 +123,10 @@ function sectioned(page: ReadableRecipe): { key: string; heading: string | null;
     }), blocks.at(-1)!);
     block.items.push(item);
   }
-  return blocks.sort((left, right) => Number(left.key !== '') - Number(right.key !== ''));
+  // Preserve authored empty sections, but keep step-only groups out of the ingredient list.
+  return blocks.filter(block => block.items.length > 0
+    || !page.occurrences.some(item => item.parent === block.key && item.role === 'step'))
+    .sort((left, right) => Number(left.key !== '') - Number(right.key !== ''));
 }
 
 function IngredientList({ page, units, messages: t }: {
@@ -174,12 +177,16 @@ function Steps({ page, units, messages: t, recordingFetch }: {
 }) {
   if (page.instructions?.length) return <InstructionReading instructions={page.instructions} messages={t} recordingFetch={recordingFetch} />;
   const steps = page.occurrences.filter(item => item.role === 'step' && item.qualifier?.type === 'recipe-step');
+  const groups = new Map(page.occurrences.filter(item => item.role === 'group').map(item => [item.occurrence, item.labels[0]]));
   return <ol className="grid gap-5">{steps.map((step, index) => {
     const instruction = step.qualifier?.type === 'recipe-step' ? step.qualifier.instructionText?.value ?? '' : '';
     const linked = linkedLines(step, page, units);
     const language = step.qualifier?.instructionText?.language;
     const seconds = stepSeconds(instruction);
+    const group = index === 0 || steps[index - 1]?.parent !== step.parent ? groups.get(step.parent) : undefined;
     return <li key={step.occurrence} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3">
+      {group?.value ? <h4 lang={group.language} dir={group.language ? directionOf(group.language) : undefined}
+        className="col-span-2 font-medium">{group.value}</h4> : null}
       <span aria-hidden="true" className="bg-primary/10 flex size-8 items-center justify-center rounded-full font-semibold">
         {index + 1}</span>
       <div className="grid gap-2"><p lang={language} dir={language ? directionOf(language) : undefined} className="leading-7">{instruction}</p>

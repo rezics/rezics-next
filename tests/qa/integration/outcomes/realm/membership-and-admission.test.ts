@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import admission from '../../../../../scripts/qa/cases/outcomes/realm/membership-and-admission.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordJapaneseReads } from '../../../support/recorded-locale-visit.ts';
 import { expectQaPlatformAccess } from '../../../support/platform-access.ts';
 import { recordRealmDiscussion } from '../../../support/realm-discussion-recording.ts';
 import {
@@ -13,7 +14,7 @@ import {
 
 setDefaultTimeout(180_000);
 let sessions: PersonaSessions;
-const recording = new OutcomeRecorder(admission);
+const recording = recordJapaneseReads(new OutcomeRecorder(admission));
 const rootOf = (id: string) => `/v1/realms/${id.slice(-36)}`;
 const acting = (person: PersonaSession) =>
   `actingSubject=${encodeURIComponent(person.actingSubject ?? sessions.owner.actingSubject!)}`;

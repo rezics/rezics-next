@@ -80,6 +80,6 @@ export function ImageSettings({ metadata, onEditImageLabels: edit, conceal: auth
         </NativeSelect></label>{protection('ageRating', rating)}
       </div>
     </> : null}
-    {failed ? <p role="alert" className="text-xs text-destructive">{labels.saveFailed}</p> : null}
+    {failed ? <p role="alert" className="text-xs text-destructive-foreground">{labels.saveFailed}</p> : null}
   </div>;
 }

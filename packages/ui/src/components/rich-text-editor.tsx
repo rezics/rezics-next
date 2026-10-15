@@ -358,8 +358,8 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
     onCompositionEnd={() => { if (editor) requestAnimationFrame(() => { if (!editor.isDestroyed) publish(editor); }); }}>
     {/* A row of every control fits a pointer's screen; a phone keeps its keyboard toolbar. */}
     {editor && editable && toolbarMode === 'full' && !coarse ? <Toolbar editor={editor} labels={labels} io={io} blocks={blocks} /> : null}
-    {snapshotError ? <p role="alert" className="px-4 py-2 text-sm text-destructive">{labels.documentError}</p> : null}
-    {uploadFailed ? <p role="alert" className="px-4 py-2 text-sm text-destructive">{labels.uploadFailed}</p> : null}
+    {snapshotError ? <p role="alert" className="px-4 py-2 text-sm text-destructive-foreground">{labels.documentError}</p> : null}
+    {uploadFailed ? <p role="alert" className="px-4 py-2 text-sm text-destructive-foreground">{labels.uploadFailed}</p> : null}
     {uploads ? <p role="status" className="px-4 py-2 text-sm text-muted-foreground">{labels.uploading}</p> : null}
     <div ref={surface} className={cn('relative px-4 py-3 sm:px-6', !compact && 'min-h-[50dvh]')}>
       {editor ? <>
@@ -380,7 +380,7 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
         <DialogBody><form id={fieldId} onSubmit={event => { event.preventDefault(); apply(); }}>
           <FieldGroup>
             {mode === 'link' ? <Field invalid={invalidUrl}><FieldLabel>{labels.url}</FieldLabel><Input value={url} autoFocus aria-invalid={invalidUrl} onChange={event => { setUrl(event.target.value); setInvalidUrl(false); }} />
-              {invalidUrl ? <p role="alert" className="text-sm text-destructive">{labels.invalidUrl}</p> : null}</Field> : null}
+              {invalidUrl ? <p role="alert" className="text-sm text-destructive-foreground">{labels.invalidUrl}</p> : null}</Field> : null}
             {mode === 'ruby' ? <Field><FieldLabel>{labels.baseText}</FieldLabel><Input value={baseText} autoFocus onChange={event => setBaseText(event.target.value)} /></Field> : null}
             {mode === 'ruby' ? <Field><FieldLabel>{labels.annotation}</FieldLabel><Input value={detail} onChange={event => setDetail(event.target.value)} /></Field> : null}
             {mode === 'ruby' || mode === 'emphasis' ? <Field><FieldLabel>{labels.position}</FieldLabel><NativeSelect value={position} onChange={event => setPosition(event.target.value)}>

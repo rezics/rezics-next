@@ -275,7 +275,7 @@ type Titles = Record<
   string
 >;
 
-const titles: Record<'en' | 'zh-Hans', Titles> = {
+const titles: Record<'en' | 'zh-Hans' | 'ja', Titles> = {
   en: {
     picks: 'Featured',
     genres: 'Genres',
@@ -292,6 +292,23 @@ const titles: Record<'en' | 'zh-Hans', Titles> = {
     decisions: 'Recent decisions',
     people: 'Authors to follow',
     discussions: 'Talked about',
+  },
+  ja: {
+    picks: '注目',
+    genres: 'ジャンル',
+    announcement: '秋の連載コンテスト：最終候補の10作品を読む',
+    latest: '最新作品',
+    newChapters: '最新の章',
+    newlyAdded: '新着作品',
+    completed: '完結作品',
+    mustRead: 'おすすめ作品 (✧∇✧)',
+    rankings: 'ランキング',
+    lists: '編集者のリスト',
+    quotes: '読者の声',
+    rising: '注目の新作',
+    decisions: '最近の決定',
+    people: '注目の著者',
+    discussions: '話題のディスカッション',
   },
   'zh-Hans': {
     picks: '精选',
@@ -313,7 +330,7 @@ const titles: Record<'en' | 'zh-Hans', Titles> = {
 };
 
 export const titlesFor = (locale: UiLocale): Titles =>
-  titles[locale === 'zh-Hans' ? 'zh-Hans' : 'en'];
+  titles[locale === 'zh-Hans' || locale === 'ja' ? locale : 'en'];
 
 function module<Type extends ZoneModuleType>(
   id: string,

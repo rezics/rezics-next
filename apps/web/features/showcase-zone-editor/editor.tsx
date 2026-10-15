@@ -291,7 +291,7 @@ export function ZoneShowcaseEditor({ zone, realm, actingSubject, locale, head: i
         </AlertDescription></Alert> : null}
       {art.pending > 0 ? <p role="status" className="text-sm text-warning-foreground">{t.pendingImages(art.pending)}</p> : null}
       {heroNeeded && dirty ? <p className="text-muted-foreground text-sm">{t.needsModule}</p> : null}
-      {invalid ? <p className="text-destructive text-sm">{t.fixProblems}</p> : null}
+      {invalid ? <p role="alert" className="text-destructive-foreground text-sm">{t.fixProblems}</p> : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="font-medium text-sm">{dirty ? t.unsaved : t.allSaved}</span>
         <div className="flex flex-wrap gap-2">

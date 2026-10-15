@@ -352,7 +352,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
       onClick={() => setTranslations(before => [...before,
         { key: crypto.randomUUID(), language: '', name: '', description: '' }])}>
       <PlusIcon aria-hidden="true" />{words.addTranslation[locale]}</Button> : null}
-    {translationError ? <p role="alert" className="text-destructive text-sm">{words.translationError[locale]}</p> : null}
+    {translationError ? <p role="alert" className="text-destructive-foreground text-sm">{words.translationError[locale]}</p> : null}
     <fieldset className="grid gap-2" disabled={Boolean(creationIntent.current)}>
       <legend className="mb-2 text-sm font-semibold">{words.visibility[locale]}</legend>
       <RadioGroup value={visibility} onValueChange={details => {

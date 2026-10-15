@@ -1,19 +1,20 @@
 import { type RecordedMerge, unitFilesFromPlan, mergeUnitFiles, ownerFilesFromPlan, mergeOwnerFiles, streamUnitBaseline, preMergeUnitGate, preMergeSurfaceGate } from './unit-gate.ts';
 import { join } from 'node:path';
 import { stateDir, git, REGENERATION_COMMIT_SUBJECT, assertOwner, root, regenerationOnlyFiles, scopeViolations, landScopeRefusal, withLedger, retryGitIndexLock } from './ledger.ts';
-import { existsSync, readFileSync, appendFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, appendFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { type MergeEvent } from './regress.ts';
 import { type AffectedPlan, affectedPlanForChanges, typecheckWorkspaces } from '../qa/affected.ts';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { type Task, type Ledger, type Brief, HOLDING } from './types.ts';
 import { taskOf, running, changedFiles, branchChanges } from './launch.ts';
-import { landedBoundary, prepareCompositionMerge, compositionSyntaxFailure, type MigrationRename, normalizeMigrations } from './merge-normalise.ts';
+import { landedBoundary, landedTaskCommit, prepareCompositionMerge, compositionSyntaxFailure, type MigrationRename, normalizeMigrations } from './merge-normalise.ts';
 import { historyIntroductions, parseBrief, parseFrontmatter } from './briefs.ts';
 import { COMPOSITION_ROOTS } from './composition-roots.ts';
 import { preMergeTypecheckGate, reinstallStaleDependencies, missingPinnedImage } from './typecheck-gate.ts';
 import { withGateLane, type GateLaneOptions } from './qa-slots.ts';
 import { advanceLandingReview, finishLandingRebase, startLandingRebase } from './land.ts';
+import { readDirectoryLease, tryAcquireDirectoryLease, type AcquiredDirectoryLease } from '../qa/process/lease.ts';
 
 export function readMergeEvents(): RecordedMerge[] {
   const eventPath = join(stateDir, 'merges.jsonl');
@@ -208,16 +209,76 @@ export function clearRefusal(task: Task): void {
 
 export async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
   reviewGuard?: (task: Task) => void, landPermittedFiles?: readonly string[], gateOnly = false,
+  gateLane: GateLaneOptions = {}, landingLease?: AcquiredDirectoryLease): Promise<void> {
+  // Land already owns this lease across review, merge and close. A hand merge or gate must
+  // own the same lease across its unlocked gates, including every task sharing its branch.
+  const leases = await withLedger(ledger => {
+    const task = taskOf(ledger, id);
+    assertOwner(task);
+    const ids = new Set([id, ...Object.values(ledger.tasks).filter(other => other.worktree === task.worktree
+      && HOLDING.includes(other.state)).map(other => other.id)]);
+    const acquired: AcquiredDirectoryLease[] = [];
+    try {
+      for (const taskId of [...ids].sort()) {
+        const directory = join(stateDir, 'runs', taskId, 'land.lock');
+        if (taskId === id && landingLease) {
+          const current = readDirectoryLease(directory);
+          if (landingLease.directory !== directory || current?.token !== landingLease.token || current.pid !== process.pid)
+            throw new Error(`${id} landing lock ownership changed; not merging`);
+          continue;
+        }
+        mkdirSync(join(stateDir, 'runs', taskId), { recursive: true });
+        const lease = tryAcquireDirectoryLease(directory);
+        if (lease === 'held') throw new Error(`${taskId} landing lock is held; retry after its landing finishes`);
+        acquired.push(lease);
+      }
+      return acquired;
+    } catch (error) {
+      for (const lease of acquired) lease.release();
+      throw error;
+    }
+  });
+  try { await mergeUnderLease(id, flags, expectedHead, reviewGuard, landPermittedFiles, gateOnly, gateLane); }
+  finally { for (const lease of leases) lease.release(); }
+}
+
+async function mergeUnderLease(id: string, flags: Set<string>, expectedHead?: string,
+  reviewGuard?: (task: Task) => void, landPermittedFiles?: readonly string[], gateOnly = false,
   gateLane: GateLaneOptions = {}): Promise<void> {
   const landing = landPermittedFiles !== undefined;
   const runDir = join(stateDir, 'runs', id);
   const refuse = (task: Task, message: string, kind: NonNullable<Task['mergeStop']>['kind'] = 'task') =>
     recordRefusal(task, message, gateOnly, kind, landing);
+  const recoverLanding = (ledger: Ledger, task: Task, patches = true): boolean => {
+    if (gateOnly || !['exited', 'conflict', 'stopped', 'merged', 'verified'].includes(task.state) || running(task)) return false;
+    const sharers = Object.values(ledger.tasks).filter(other => other.id === id
+      || (other.worktree === task.worktree && HOLDING.includes(other.state)));
+    if (sharers.some(sharer => sharer.state === 'starting' || running(sharer)
+      || sharer.goal !== task.goal || sharer.branch !== task.branch)) return false;
+    const commit = landedTaskCommit(root, task, patches);
+    if (!commit) return false;
+    if (!sharers.every(sharer => sharer.mergedCommit === commit)) {
+      const boundary = landedBoundary(root, task, commit);
+      const files = git(root, ['diff', '--name-only', '--no-renames', `${boundary}..${commit}`]).split('\n').filter(Boolean);
+      writeMergeEvent({ before: boundary, after: commit, goal: task.goal ?? 'program',
+        taskIds: sharers.map(sharer => sharer.id).sort(), at: new Date().toISOString() }, files);
+    }
+    for (const sharer of sharers) {
+      if (sharer.state !== 'verified') sharer.state = 'merged';
+      sharer.mergedCommit = commit;
+      clearRefusal(sharer);
+    }
+    console.log(`${task.id} already landed at ${commit.slice(0, 12)}`);
+    return true;
+  };
   // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
   // callback would discard the state change, and main would stay eligible for a fast-forward retry.
   const prepareMerge = (ledger: Ledger): string | PreparedMerge | undefined => {
     const task = taskOf(ledger, id);
     assertOwner(task);
+    // Git is authoritative even if a previous process died after fast-forwarding but
+    // before writing the ledger, or settlement already removed the worktree.
+    if (recoverLanding(ledger, task, flags.has('--landed'))) return;
     reviewGuard?.(task);
     if (expectedHead && git(root, ['rev-parse', task.branch]) !== expectedHead) {
       throw new Error(`${task.id} review is stale: task branch changed after review; not merging`);
@@ -399,8 +460,10 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
     try {
       return await withGateLane(() => { entered = true; return work(); }, { ...gateLane, command: laneCommand });
     } catch (error) {
-      if (!entered && landing) await withLedger(ledger => refuse(taskOf(ledger, id),
-        error instanceof Error ? error.message : String(error), 'wait'));
+      if (!entered && landing) await withLedger(ledger => {
+        const task = taskOf(ledger, id);
+        if (!recoverLanding(ledger, task)) refuse(task, error instanceof Error ? error.message : String(error), 'wait');
+      });
       throw error;
     }
   };
@@ -434,6 +497,9 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
     const outcome = await withLedger((ledger): string | { rerun: PreparedMerge; workspaces?: string[] } | undefined => {
       const task = taskOf(ledger, id);
       assertOwner(task);
+      // A stale failed gate must never overwrite a successful landing. Check before
+      // review/drift guards, which may themselves require the now-removed worktree.
+      if (recoverLanding(ledger, task, !!gateFailure)) return;
       reviewGuard?.(task);
       const sharers = Object.values(ledger.tasks).filter(other => other.worktree === task.worktree && HOLDING.includes(other.state));
       // Classify the gate's result when recording the stop, never on a later land command.

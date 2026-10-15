@@ -44,7 +44,7 @@ export function LinkField({ editor, labels, range, onClose }: { editor: TiptapEd
       {linked ? <Button type="button" size="icon-sm" variant="ghost" aria-label={labels.unlink} title={labels.unlink} onClick={() => finish(null)}><UnlinkIcon aria-hidden="true" /></Button> : null}
       <Button type="button" size="icon-sm" variant="ghost" aria-label={labels.cancel} title={labels.cancel} onClick={cancel}><XIcon aria-hidden="true" /></Button>
     </div>
-    {invalid ? <p role="alert" className="px-1 text-xs text-destructive">{labels.invalidUrl}</p> : null}
+    {invalid ? <p role="alert" className="px-1 text-xs text-destructive-foreground">{labels.invalidUrl}</p> : null}
   </form>;
 }
 

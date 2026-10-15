@@ -15,6 +15,7 @@ import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { platformOperationOpen, type PlatformAccessSummary } from '../../../../../generated/openapi/main/exposure.ts';
 import row from '../../../../../scripts/qa/cases/outcomes/zone/home-rendering.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordJapaneseReads } from '../../../support/recorded-locale-visit.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 type ZonePresentation = { tokens: Record<string, string>;
@@ -32,7 +33,7 @@ setDefaultTimeout(180_000);
 const fileWall = setTimeout(() => { throw new Error('Zone home rendering file exceeded 480 s'); }, 480_000);
 let sessions: PersonaSessions;
 let platformOpenGroups: string | undefined;
-const recording = new OutcomeRecorder(row);
+const recording = recordJapaneseReads(new OutcomeRecorder(row));
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession) => person.actingSubject
   ? `?actingSubject=${encodeURIComponent(person.actingSubject)}` : '';

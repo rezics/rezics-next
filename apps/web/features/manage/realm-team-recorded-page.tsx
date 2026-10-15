@@ -11,6 +11,7 @@ import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { signInPath } from '../auth/paths.ts';
 import { recordedManagementAgent } from '../realm/realm-membership-recorded-page.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
+import shellJa from '../shell/messages/ja.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { adminApi } from './admin-api.ts';
 import { recoveryIndexKey } from './safety-pending.ts';
@@ -44,7 +45,7 @@ export function RealmTeamRecordedPage({ record, persona, selections, surface, lo
     let mounted = true;
     const realNow = Date.now;
     if (now !== undefined) Date.now = () => now;
-    const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX, sequence });
+    const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX, sequence, locale });
     const fetcher = replay.fetcher;
     const main = browserMainApi(recordedOrigin, { fetcher });
     const anonymous = browserMainApi(recordedOrigin, { anonymous: true, fetcher });
@@ -79,6 +80,6 @@ export function RealmTeamRecordedPage({ record, persona, selections, surface, lo
     return () => { mounted = false; Date.now = realNow; replay.dispose(); };
   }, [record, persona, selections, surface, locale, realm, actingSubject, sequence, now]);
   if (discrepancy) return <p role="alert">{discrepancy}</p>;
-  if (!view) return <p role="status" aria-busy="true">{shellMessages.loading}</p>;
+  if (!view) return <p role="status" aria-busy="true">{locale === 'ja' ? shellJa.loading : shellMessages.loading}</p>;
   return view;
 }

@@ -66,6 +66,6 @@ export function ReadingGoal({ agent, initial, locale, messages,
       {goal.target !== null ? <Button size="sm" type="button" variant="ghost" disabled={busy}
         onClick={() => void commit(null)}>{t.clearGoal}</Button> : null}
     </form> : null}
-    {error ? <p role="alert" className="text-destructive text-sm">{error}</p> : null}
+    {error ? <p role="alert" className="text-destructive-foreground text-sm">{error}</p> : null}
   </section>;
 }

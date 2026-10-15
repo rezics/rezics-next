@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { join, dirname, relative, basename, resolve } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { HISTORY_EXEMPT, goalOfBriefPath, GOALS_DIR, goalFile, goalAreas, ownerRefusal, goalBriefFile, isGeneratedOutput, outOfScope, pathsOverlap } from './briefs.ts';
@@ -49,6 +49,7 @@ export function archiveFiles(repo: string, files: readonly { path: string; conte
       git(repo, ['update-index', '--add', '--cacheinfo', `100644,${blob},${file.path}`], false, { env });
     }
     const tree = git(repo, ['write-tree'], false, { env });
+    if (parent && tree === git(repo, ['rev-parse', `${parent}^{tree}`])) return parent;
     const commit = git(repo, ['commit-tree', tree, ...parent ? ['-p', parent] : [], '-m', message]);
     git(repo, ['update-ref', '-m', message, ref, commit, parent]);
     return commit;
@@ -152,10 +153,35 @@ export function archiveDirOf(ledger: Ledger, goal: string): string {
   return ledger.goals?.[goal]?.archive ?? `${goal}-${(ledger.goals?.[goal]?.startedAt ?? new Date().toISOString()).slice(0, 10)}`;
 }
 
-function handoffText(task: Task): string {
-  return [`# ${task.id} handoffs: ${task.title}`, '',
+function outputNames(directory: string): string[] {
+  return existsSync(directory) ? readdirSync(directory, { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name !== 'brief.md' && /\.(md|json)$/.test(entry.name))
+    .map(entry => entry.name).sort((a, b) => b.length - a.length || a.localeCompare(b)) : [];
+}
+
+/** Keep authored reports before the ignored worktree directory is moved or deleted. */
+export function preserveTaskOutputs(task: Task): void {
+  const source = join(task.worktree, '.temp/goal');
+  const run = join(stateDir, 'runs', task.id);
+  const outputs = join(run, 'outputs');
+  for (const name of outputNames(source)) {
+    mkdirSync(outputs, { recursive: true });
+    copyFileSync(join(source, name), join(outputs, name));
+  }
+  if (outputNames(outputs).length) writeFileSync(join(run, 'handoff.md'), handoffText(task, 'outputs'));
+}
+
+function handoffText(task: Task, outputDirectory?: string): string {
+  let text = [`# ${task.id} handoffs: ${task.title}`, '',
     ...task.attempts.flatMap(attempt => [`## Attempt ${attempt.n} (${modelOf(engineOf(attempt))}/${attempt.effort}, `
       + `${attempt.startedAt})`, '', readResult(attempt).text.trim(), ''])].join('\n');
+  if (outputDirectory) for (const name of outputNames(join(stateDir, 'runs', task.id, 'outputs'))) {
+    const target = `${outputDirectory}/${name}`;
+    for (const source of [join(task.worktree, '.temp/goal', name), `./.temp/goal/${name}`, `.temp/goal/${name}`]) {
+      text = text.replaceAll(source, target);
+    }
+  }
+  return text;
 }
 
 function outOfClaimFiles(committed: string[], sharers: Task[], regenerated: readonly string[] = []): string[] {
@@ -383,6 +409,14 @@ export function archiveClosedBriefs(ledger: Ledger, tasks: readonly Task[], lega
   const files: { path: string; content: string }[] = [];
   const removed: string[] = [];
   const goals = new Set<string>();
+  for (const task of tasks.filter(task => ['verified', 'cancelled'].includes(task.state))) {
+    const dir = task.goal ? archiveDirOf(ledger, task.goal) : legacyDir;
+    if (!dir) continue;
+    const outputs = join(stateDir, 'runs', task.id, 'outputs');
+    files.push(...outputNames(outputs).map(name => ({ path: `${dir}/outputs/${task.id}/${name}`,
+      content: readFileSync(join(outputs, name), 'utf8') })),
+    { path: `${dir}/handoffs/${task.id}.md`, content: handoffText(task, `../outputs/${task.id}`) });
+  }
   const candidates = tasks.flatMap(task => {
     const path = ['verified', 'cancelled'].includes(task.state) ? briefPathOf(task) : undefined;
     return path?.startsWith(`${join(root, GOALS_DIR)}/`) ? [{ task, path, relativePath: relative(root, path) }] : [];
@@ -405,12 +439,14 @@ export function archiveClosedBriefs(ledger: Ledger, tasks: readonly Task[], lega
     if (!dir) { notes.push(`${task.id}: no Goal; pass tidy --legacy <archive directory>`); continue; }
     const cited = citations.filter(line => line.includes(relativePath));
     if (cited.length) { notes.push(`${task.id}: kept; cited by\n    ${cited.join('\n    ')}`); continue; }
-    files.push({ path: `${dir}/tasks/${task.id}.md`, content: readFileSync(path, 'utf8') },
-      { path: `${dir}/handoffs/${task.id}.md`, content: handoffText(task) });
+    files.push({ path: `${dir}/tasks/${task.id}.md`, content: readFileSync(path, 'utf8') });
     removed.push(relativePath);
     if (task.goal) goals.add(task.goal);
   }
-  if (!removed.length) return notes;
+  if (!removed.length) {
+    if (files.length) archiveFiles(root, files, 'Archive closed task handoffs and outputs');
+    return notes;
+  }
   if (git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main') throw new Error('Main checkout is not on main');
   const subject = removed.length === 1 ? `Archive the closed brief ${basename(removed[0]!, '.md')}`
     : `Archive ${removed.length} closed briefs`;

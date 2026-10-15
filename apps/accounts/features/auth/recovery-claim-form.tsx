@@ -283,7 +283,7 @@ export function RecoveryClaimForm({
         </div>
       )}
       <p className="mt-6 text-sm">
-        <a className="text-primary underline underline-offset-4" href={signIn}>
+        <a className="inline-flex min-h-6 items-center rounded-sm text-primary underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring" href={signIn}>
           {t.backToSignIn}
         </a>
       </p>

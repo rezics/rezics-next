@@ -1,0 +1,4061 @@
+{
+  "version": 1,
+  "row": "recipes/long-recipe",
+  "personas": {
+    "visitor": [],
+    "stranger": [],
+    "member": [],
+    "owner": [
+      {
+        "label": "page-0",
+        "operationId": "getV1RecipesWorksById",
+        "method": "GET",
+        "path": "/v1/recipes/works/01a13e93-54d1-73c9-8490-240e7c09fd98?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7e15ca89-8ce6-40a1-b73e-5a2b59750ccb",
+        "status": 200,
+        "answer": {
+          "profile": "recipe-work-page-v1",
+          "structure": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+          "revision": "https://rezics.com/id/fc80cb20-114a-8b56-a46e-b0deb76088ec",
+          "occurrences": [
+            {
+              "occurrence": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "i",
+              "role": "group",
+              "labels": [
+                {
+                  "value": "Dough",
+                  "language": "en"
+                }
+              ],
+              "introducedBy": "https://rezics.com/id/b19f47ca-ea89-8574-99ab-f3c880b3e92f"
+            },
+            {
+              "occurrence": "https://rezics.com/id/a29fdc0a-03d5-8452-8046-1060a4012564",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "i",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-01",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/5650ccfc-b1e5-807e-b6df-4cb57eda5495",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "r",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-02",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/e2bd41a7-ef68-8b59-bbc2-d198b20d14a4",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "w",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-03",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b049a28c-857a-8d6e-b28e-a35c472e0d2f",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "y",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-04",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/166d49e1-877e-8672-8c44-4b93fd81a626",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "z",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-05",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/7174113e-9ec3-84e0-bc57-fcbac44656a3",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "zi",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-06",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/6c2e900e-80d9-8e62-a810-af35bd6d7ec8",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "zr",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-07",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/9828b0dd-79ae-88f4-adee-af5ab8874bf4",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "zw",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-08",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/1fe89ab7-7fa9-89e9-b4c9-56db45a1f057",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "zy",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-09",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/69e9411b-e30d-8b98-93de-0f7992131309",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "zz",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-10",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/ca8eaf10-6c2f-859f-a33e-6c6e53ce7c65",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "zzi",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-11",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b63221bd-eddb-8a32-8d5a-64553b634d2c",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "zzr",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-12",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/5e28fe2a-2143-8553-b9ee-4e1d10936208",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "zzw",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-13",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/d1e75ae4-98ef-872f-8456-eb0f200912a3",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "zzy",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-14",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b669f4b0-a095-82d0-acbd-5f26b23a541a",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "zzz",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-15",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/57d2697a-fde8-8709-9ebd-e8fec67beb36",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i",
+              "orderKey": "zzzi",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-16",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/7d049d36-67b0-82cc-a9b8-8f77624ffff8"
+            },
+            {
+              "occurrence": "https://rezics.com/id/f0457ec0-c003-8427-b6e2-2da62a3d83f3",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzr",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-17",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/f6f44226-8570-80d2-be57-63c8f4ecdad9",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzw",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-18",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/db14753d-8215-8274-a105-94e32a8ba060",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzy",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-19",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/ee411d64-6cb4-84c3-b4ff-f36f3b20a14e",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzz",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-20",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/fed25c57-ff70-86dd-a196-90f9d8311f96",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzi",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-21",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/5acfdb26-8703-8845-b467-b488517d69a7",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzr",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-22",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b3f3acf8-dec8-8b49-b733-f40064a0014e",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzw",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-23",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/17e98eb0-1ed1-8183-8ce1-23b020c1dd1c",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzy",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-24",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/898a2386-63ae-80a6-943f-4ac178e9ea07",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzz",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-25",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/befe1b5f-1a36-881f-94e2-e857bb9a5edf",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzi",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-26",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/472e9808-d0c3-8c6d-80de-54128a89dff6",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzr",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-27",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/35605fab-58a7-80fb-a4cc-fbed9eb23ad4",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzw",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-28",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/de917a00-8f40-823e-8bd8-dd31463c70b3",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzy",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-29",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/c9c2f97f-5bdf-8715-bc40-3703ab93eb2f",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzz",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-30",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/7535aa2c-5acc-8a91-b948-e8f71a11494a",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzi",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-31",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/1f1ca47a-bb42-8ebb-96cf-5bce06b8b886",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzr",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-32",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/9c2a26a1-734b-863b-b1cc-2116e6139a50"
+            },
+            {
+              "occurrence": "https://rezics.com/id/6fdc892b-369a-8b76-9f6a-f79581e5cd09",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzw",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-33",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ecbddefe-96b1-8c5b-9ec0-102f68171627"
+            },
+            {
+              "occurrence": "https://rezics.com/id/32de5fbb-5a1c-88f8-8b6f-6fc75fcf8ab8",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzy",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-34",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ecbddefe-96b1-8c5b-9ec0-102f68171627"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b83906ee-4efb-8b52-8d0a-769b97428319",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzz",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-35",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ecbddefe-96b1-8c5b-9ec0-102f68171627"
+            },
+            {
+              "occurrence": "https://rezics.com/id/95844054-9933-8b5b-b8af-4ed4b7d67be9",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzi",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-36",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ecbddefe-96b1-8c5b-9ec0-102f68171627"
+            },
+            {
+              "occurrence": "https://rezics.com/id/5223b4a0-e16a-83f7-a740-e48a22a150f5",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzr",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-37",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ecbddefe-96b1-8c5b-9ec0-102f68171627"
+            },
+            {
+              "occurrence": "https://rezics.com/id/6ccab4d1-1a83-87d9-88b7-23d0b3b226de",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzw",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-38",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ecbddefe-96b1-8c5b-9ec0-102f68171627"
+            },
+            {
+              "occurrence": "https://rezics.com/id/86abb7d0-0c56-85ad-8ce9-e18c0533661f",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzy",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-39",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ecbddefe-96b1-8c5b-9ec0-102f68171627"
+            },
+            {
+              "occurrence": "https://rezics.com/id/270cd556-0a96-88e0-a723-9a59ef4589ac",
+              "state": "active",
+              "parent": "https://rezics.com/id/622c1cb1-4121-8519-af94-33affd125f97",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzz",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup dough-40",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ecbddefe-96b1-8c5b-9ec0-102f68171627"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "r",
+              "role": "group",
+              "labels": [
+                {
+                  "value": "Sauce",
+                  "language": "en"
+                }
+              ],
+              "introducedBy": "https://rezics.com/id/a281b1b1-ebdd-8b24-b3bf-a437494a10b1"
+            },
+            {
+              "occurrence": "https://rezics.com/id/37026024-f1a0-8a7e-87fb-11de0069a43e",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "i",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-01",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b4060a8e-f82b-8526-8c9c-0160d1f54287",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "r",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-02",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/7464629a-1916-896b-8d5c-4b3516254aa3",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "w",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-03",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/121a67d7-f2cf-88d8-a0fc-b798b0b74976",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "y",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-04",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/a3b91d9f-5c17-897a-8791-dbb3dc0bbcdb",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "z",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-05",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/4c05d217-6c89-8b04-9ffe-8615f9df99d8",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "zi",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-06",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/74585854-8480-87e6-85be-a2107f71caa5",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "zr",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-07",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b7bd4a51-4ec5-82b7-a90d-df04198e607a",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "zw",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-08",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/705660a8-f63a-86c8-abeb-2c0738c59a77",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "zy",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-09",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/34dbb498-023d-83a3-b001-bc063b2a10a7",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "zz",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-10",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/30d2f8be-962a-810b-8674-3e5219476289",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "zzi",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-11",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/6042f097-2d2a-8cfd-a8af-3e602145714e",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "zzr",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-12",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/bd8e6215-5251-8462-bc20-65a6612c6749",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "zzw",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-13",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/2a54a7e3-84d3-8e8e-943e-65708868bda3",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "zzy",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-14",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/7a2e9695-4f32-85aa-bc8b-fa8ae612e6c2",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "zzz",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-15",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/1755be87-c63f-8c5a-9d28-fe42dd2b9e52",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i",
+              "orderKey": "zzzi",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-16",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/6e6dc06a-10ac-8add-b652-500ced4a8cf3"
+            },
+            {
+              "occurrence": "https://rezics.com/id/ddcaef38-8d93-813a-a9ce-8e8c9653eab2",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzr",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-17",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/211a47db-4a34-8a62-89a1-e23834564cce",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzw",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-18",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/ee133f43-b4a3-889f-93e1-328fd98903d2",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzy",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-19",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/7a024518-8ed0-8e89-b584-7be8116420b0",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzz",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-20",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/24343cbb-7ee3-8700-979d-62d7b479948c",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzi",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-21",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/0c0b463e-d972-8efa-885a-3b2f7557d5d6",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzr",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-22",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/92a67307-bc55-83b2-960f-a0dc76eaf67a",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzw",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-23",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/1b4a1966-c3dd-8199-bb2f-b224ee9ddcf1",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzy",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-24",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/13983c7b-ef88-8d68-a7cd-9403d25af06d",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzz",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-25",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/4a4e92bb-114c-8af1-b5ee-5c251d66412b",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzi",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-26",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/79a03b87-a0cf-8d3f-865a-96cad8c9a262",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzr",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-27",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/4872da11-ee75-8213-b341-cab5cfcc8b8b",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzw",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-28",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/59161da8-df21-8203-8981-e5d4c052f263",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzy",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-29",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/6adc17b3-0506-8f75-bda7-441de1f6d5b1",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzz",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-30",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/38054e9c-aad8-8f99-9b3c-88b954668661",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzi",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-31",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/6f6fd70d-f426-8156-9a42-44a5a9d654d5",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzr",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-32",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ea7add58-da13-83b9-9cda-85ce4722b2dc"
+            },
+            {
+              "occurrence": "https://rezics.com/id/5653c642-b355-8144-9780-3bc7f1c42d94",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzw",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-33",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/04debea8-232d-84aa-9e38-63dc4209d9a0"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b89147ed-a06a-8bb4-b4dc-bb7d855e5e8b",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzy",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-34",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/04debea8-232d-84aa-9e38-63dc4209d9a0"
+            },
+            {
+              "occurrence": "https://rezics.com/id/ff4d5636-6c97-8b8b-add2-ddcbe8d2c30e",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzz",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-35",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/04debea8-232d-84aa-9e38-63dc4209d9a0"
+            },
+            {
+              "occurrence": "https://rezics.com/id/19c8e748-46e3-896a-9b1f-d5767ef5b2a5",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzi",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-36",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/04debea8-232d-84aa-9e38-63dc4209d9a0"
+            },
+            {
+              "occurrence": "https://rezics.com/id/88ba01c1-2b92-8503-a4ab-62ddb1c6f647",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzr",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-37",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/04debea8-232d-84aa-9e38-63dc4209d9a0"
+            },
+            {
+              "occurrence": "https://rezics.com/id/2d2d27ff-5e5c-87a5-bc96-40ef813f680c",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzw",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-38",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/04debea8-232d-84aa-9e38-63dc4209d9a0"
+            },
+            {
+              "occurrence": "https://rezics.com/id/ac5dba38-dfdd-8c5c-a31c-a4ec9f5ed48c",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzy",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-39",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/04debea8-232d-84aa-9e38-63dc4209d9a0"
+            },
+            {
+              "occurrence": "https://rezics.com/id/85f7538a-55ef-891f-bda3-ea37be7654c3",
+              "state": "active",
+              "parent": "https://rezics.com/id/b22fb34b-3a2d-8097-9014-925a195d8b2b",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzz",
+              "role": "ingredient",
+              "qualifier": {
+                "type": "ingredient-line",
+                "originalText": {
+                  "value": "1 cup sauce-40",
+                  "language": "en"
+                },
+                "amountLexical": "1",
+                "amount": {
+                  "numerator": 1,
+                  "denominator": 1
+                },
+                "unitText": "cup",
+                "optional": false,
+                "scaling": "linear",
+                "substituteFor": [],
+                "parseStatus": "parsed"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/04debea8-232d-84aa-9e38-63dc4209d9a0"
+            },
+            {
+              "occurrence": "https://rezics.com/id/d54b2532-56ba-8adb-99d0-2c484edc28cc",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "w",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 1",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/c644ae0a-a727-874a-baf0-4f270e91eb64",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "y",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 2",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/010c55f1-0f59-89b6-9159-0eb04b89d701",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "z",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 3",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/83e9e41a-65c4-82d4-8a59-fe7f161f7d45",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "zi",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 4",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/2f17dd82-0076-8935-8c72-2720e54c31f5",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "zr",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 5",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/f8e37568-c799-83dd-a94f-1f07c48e01ce",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "zw",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 6",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/79ad7b9e-3d2b-88ec-87a6-0a858f4fb610",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "zy",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 7",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/2bf6a6d4-0411-8a40-a08b-0ee9d5940f2a",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "zz",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 8",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/780b65df-3e13-844b-98fb-6410657fe889",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "zzi",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 9",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/1de184b9-b560-8fa4-b55a-770bf3d6e7bf",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "zzr",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 10",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/fb845455-8e41-865a-912d-00ef1f289497",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "zzw",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 11",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/33610fdb-eb48-88bb-94e2-8a57c3c95970",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "zzy",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 12",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/e763cfa0-6bef-8258-b909-fd63ebd1da0c",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "zzz",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 13",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/42364e59-a4e7-859a-b9c2-34b1828c8774",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i",
+              "orderKey": "zzzi",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 14",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/121529bc-3958-854a-8e49-88ed4f85806f",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzr",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 15",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/8ef4a278-2ba4-8ed1-bf36-20cad50ae625",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzw",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 16",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/cbf61e6e-92ee-8963-ad13-2d7abfdc3e5e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/25c33790-e29c-8083-bf0a-81c572198270",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzy",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 17",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/f8178ae7-d481-8edd-91d1-5364213b56cc",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzz",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 18",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            }
+          ],
+          "measures": [
+            {
+              "kind": "yield",
+              "value": {
+                "numerator": 4,
+                "denominator": 1
+              },
+              "basis": "whole-recipe",
+              "coverage": "complete",
+              "provenance": "declared",
+              "unitText": "servings"
+            },
+            {
+              "kind": "servings",
+              "value": {
+                "numerator": 4,
+                "denominator": 1
+              },
+              "unitText": "servings",
+              "basis": "whole-recipe",
+              "coverage": "complete",
+              "provenance": "declared"
+            }
+          ],
+          "ingredients": [
+            {
+              "occurrence": "https://rezics.com/id/a29fdc0a-03d5-8452-8046-1060a4012564",
+              "originalText": "1 cup dough-01",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-01"
+            },
+            {
+              "occurrence": "https://rezics.com/id/5650ccfc-b1e5-807e-b6df-4cb57eda5495",
+              "originalText": "1 cup dough-02",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-02"
+            },
+            {
+              "occurrence": "https://rezics.com/id/e2bd41a7-ef68-8b59-bbc2-d198b20d14a4",
+              "originalText": "1 cup dough-03",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-03"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b049a28c-857a-8d6e-b28e-a35c472e0d2f",
+              "originalText": "1 cup dough-04",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-04"
+            },
+            {
+              "occurrence": "https://rezics.com/id/166d49e1-877e-8672-8c44-4b93fd81a626",
+              "originalText": "1 cup dough-05",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-05"
+            },
+            {
+              "occurrence": "https://rezics.com/id/7174113e-9ec3-84e0-bc57-fcbac44656a3",
+              "originalText": "1 cup dough-06",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-06"
+            },
+            {
+              "occurrence": "https://rezics.com/id/6c2e900e-80d9-8e62-a810-af35bd6d7ec8",
+              "originalText": "1 cup dough-07",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-07"
+            },
+            {
+              "occurrence": "https://rezics.com/id/9828b0dd-79ae-88f4-adee-af5ab8874bf4",
+              "originalText": "1 cup dough-08",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-08"
+            },
+            {
+              "occurrence": "https://rezics.com/id/1fe89ab7-7fa9-89e9-b4c9-56db45a1f057",
+              "originalText": "1 cup dough-09",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-09"
+            },
+            {
+              "occurrence": "https://rezics.com/id/69e9411b-e30d-8b98-93de-0f7992131309",
+              "originalText": "1 cup dough-10",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-10"
+            },
+            {
+              "occurrence": "https://rezics.com/id/ca8eaf10-6c2f-859f-a33e-6c6e53ce7c65",
+              "originalText": "1 cup dough-11",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-11"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b63221bd-eddb-8a32-8d5a-64553b634d2c",
+              "originalText": "1 cup dough-12",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-12"
+            },
+            {
+              "occurrence": "https://rezics.com/id/5e28fe2a-2143-8553-b9ee-4e1d10936208",
+              "originalText": "1 cup dough-13",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-13"
+            },
+            {
+              "occurrence": "https://rezics.com/id/d1e75ae4-98ef-872f-8456-eb0f200912a3",
+              "originalText": "1 cup dough-14",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-14"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b669f4b0-a095-82d0-acbd-5f26b23a541a",
+              "originalText": "1 cup dough-15",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-15"
+            },
+            {
+              "occurrence": "https://rezics.com/id/57d2697a-fde8-8709-9ebd-e8fec67beb36",
+              "originalText": "1 cup dough-16",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-16"
+            },
+            {
+              "occurrence": "https://rezics.com/id/f0457ec0-c003-8427-b6e2-2da62a3d83f3",
+              "originalText": "1 cup dough-17",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-17"
+            },
+            {
+              "occurrence": "https://rezics.com/id/f6f44226-8570-80d2-be57-63c8f4ecdad9",
+              "originalText": "1 cup dough-18",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-18"
+            },
+            {
+              "occurrence": "https://rezics.com/id/db14753d-8215-8274-a105-94e32a8ba060",
+              "originalText": "1 cup dough-19",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-19"
+            },
+            {
+              "occurrence": "https://rezics.com/id/ee411d64-6cb4-84c3-b4ff-f36f3b20a14e",
+              "originalText": "1 cup dough-20",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-20"
+            },
+            {
+              "occurrence": "https://rezics.com/id/fed25c57-ff70-86dd-a196-90f9d8311f96",
+              "originalText": "1 cup dough-21",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-21"
+            },
+            {
+              "occurrence": "https://rezics.com/id/5acfdb26-8703-8845-b467-b488517d69a7",
+              "originalText": "1 cup dough-22",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-22"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b3f3acf8-dec8-8b49-b733-f40064a0014e",
+              "originalText": "1 cup dough-23",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-23"
+            },
+            {
+              "occurrence": "https://rezics.com/id/17e98eb0-1ed1-8183-8ce1-23b020c1dd1c",
+              "originalText": "1 cup dough-24",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-24"
+            },
+            {
+              "occurrence": "https://rezics.com/id/898a2386-63ae-80a6-943f-4ac178e9ea07",
+              "originalText": "1 cup dough-25",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-25"
+            },
+            {
+              "occurrence": "https://rezics.com/id/befe1b5f-1a36-881f-94e2-e857bb9a5edf",
+              "originalText": "1 cup dough-26",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-26"
+            },
+            {
+              "occurrence": "https://rezics.com/id/472e9808-d0c3-8c6d-80de-54128a89dff6",
+              "originalText": "1 cup dough-27",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-27"
+            },
+            {
+              "occurrence": "https://rezics.com/id/35605fab-58a7-80fb-a4cc-fbed9eb23ad4",
+              "originalText": "1 cup dough-28",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-28"
+            },
+            {
+              "occurrence": "https://rezics.com/id/de917a00-8f40-823e-8bd8-dd31463c70b3",
+              "originalText": "1 cup dough-29",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-29"
+            },
+            {
+              "occurrence": "https://rezics.com/id/c9c2f97f-5bdf-8715-bc40-3703ab93eb2f",
+              "originalText": "1 cup dough-30",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-30"
+            },
+            {
+              "occurrence": "https://rezics.com/id/7535aa2c-5acc-8a91-b948-e8f71a11494a",
+              "originalText": "1 cup dough-31",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-31"
+            },
+            {
+              "occurrence": "https://rezics.com/id/1f1ca47a-bb42-8ebb-96cf-5bce06b8b886",
+              "originalText": "1 cup dough-32",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-32"
+            },
+            {
+              "occurrence": "https://rezics.com/id/6fdc892b-369a-8b76-9f6a-f79581e5cd09",
+              "originalText": "1 cup dough-33",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-33"
+            },
+            {
+              "occurrence": "https://rezics.com/id/32de5fbb-5a1c-88f8-8b6f-6fc75fcf8ab8",
+              "originalText": "1 cup dough-34",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-34"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b83906ee-4efb-8b52-8d0a-769b97428319",
+              "originalText": "1 cup dough-35",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-35"
+            },
+            {
+              "occurrence": "https://rezics.com/id/95844054-9933-8b5b-b8af-4ed4b7d67be9",
+              "originalText": "1 cup dough-36",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-36"
+            },
+            {
+              "occurrence": "https://rezics.com/id/5223b4a0-e16a-83f7-a740-e48a22a150f5",
+              "originalText": "1 cup dough-37",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-37"
+            },
+            {
+              "occurrence": "https://rezics.com/id/6ccab4d1-1a83-87d9-88b7-23d0b3b226de",
+              "originalText": "1 cup dough-38",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-38"
+            },
+            {
+              "occurrence": "https://rezics.com/id/86abb7d0-0c56-85ad-8ce9-e18c0533661f",
+              "originalText": "1 cup dough-39",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-39"
+            },
+            {
+              "occurrence": "https://rezics.com/id/270cd556-0a96-88e0-a723-9a59ef4589ac",
+              "originalText": "1 cup dough-40",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup dough-40"
+            },
+            {
+              "occurrence": "https://rezics.com/id/37026024-f1a0-8a7e-87fb-11de0069a43e",
+              "originalText": "1 cup sauce-01",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-01"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b4060a8e-f82b-8526-8c9c-0160d1f54287",
+              "originalText": "1 cup sauce-02",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-02"
+            },
+            {
+              "occurrence": "https://rezics.com/id/7464629a-1916-896b-8d5c-4b3516254aa3",
+              "originalText": "1 cup sauce-03",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-03"
+            },
+            {
+              "occurrence": "https://rezics.com/id/121a67d7-f2cf-88d8-a0fc-b798b0b74976",
+              "originalText": "1 cup sauce-04",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-04"
+            },
+            {
+              "occurrence": "https://rezics.com/id/a3b91d9f-5c17-897a-8791-dbb3dc0bbcdb",
+              "originalText": "1 cup sauce-05",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-05"
+            },
+            {
+              "occurrence": "https://rezics.com/id/4c05d217-6c89-8b04-9ffe-8615f9df99d8",
+              "originalText": "1 cup sauce-06",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-06"
+            },
+            {
+              "occurrence": "https://rezics.com/id/74585854-8480-87e6-85be-a2107f71caa5",
+              "originalText": "1 cup sauce-07",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-07"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b7bd4a51-4ec5-82b7-a90d-df04198e607a",
+              "originalText": "1 cup sauce-08",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-08"
+            },
+            {
+              "occurrence": "https://rezics.com/id/705660a8-f63a-86c8-abeb-2c0738c59a77",
+              "originalText": "1 cup sauce-09",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-09"
+            },
+            {
+              "occurrence": "https://rezics.com/id/34dbb498-023d-83a3-b001-bc063b2a10a7",
+              "originalText": "1 cup sauce-10",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-10"
+            },
+            {
+              "occurrence": "https://rezics.com/id/30d2f8be-962a-810b-8674-3e5219476289",
+              "originalText": "1 cup sauce-11",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-11"
+            },
+            {
+              "occurrence": "https://rezics.com/id/6042f097-2d2a-8cfd-a8af-3e602145714e",
+              "originalText": "1 cup sauce-12",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-12"
+            },
+            {
+              "occurrence": "https://rezics.com/id/bd8e6215-5251-8462-bc20-65a6612c6749",
+              "originalText": "1 cup sauce-13",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-13"
+            },
+            {
+              "occurrence": "https://rezics.com/id/2a54a7e3-84d3-8e8e-943e-65708868bda3",
+              "originalText": "1 cup sauce-14",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-14"
+            },
+            {
+              "occurrence": "https://rezics.com/id/7a2e9695-4f32-85aa-bc8b-fa8ae612e6c2",
+              "originalText": "1 cup sauce-15",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-15"
+            },
+            {
+              "occurrence": "https://rezics.com/id/1755be87-c63f-8c5a-9d28-fe42dd2b9e52",
+              "originalText": "1 cup sauce-16",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-16"
+            },
+            {
+              "occurrence": "https://rezics.com/id/ddcaef38-8d93-813a-a9ce-8e8c9653eab2",
+              "originalText": "1 cup sauce-17",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-17"
+            },
+            {
+              "occurrence": "https://rezics.com/id/211a47db-4a34-8a62-89a1-e23834564cce",
+              "originalText": "1 cup sauce-18",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-18"
+            },
+            {
+              "occurrence": "https://rezics.com/id/ee133f43-b4a3-889f-93e1-328fd98903d2",
+              "originalText": "1 cup sauce-19",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-19"
+            },
+            {
+              "occurrence": "https://rezics.com/id/7a024518-8ed0-8e89-b584-7be8116420b0",
+              "originalText": "1 cup sauce-20",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-20"
+            },
+            {
+              "occurrence": "https://rezics.com/id/24343cbb-7ee3-8700-979d-62d7b479948c",
+              "originalText": "1 cup sauce-21",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-21"
+            },
+            {
+              "occurrence": "https://rezics.com/id/0c0b463e-d972-8efa-885a-3b2f7557d5d6",
+              "originalText": "1 cup sauce-22",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-22"
+            },
+            {
+              "occurrence": "https://rezics.com/id/92a67307-bc55-83b2-960f-a0dc76eaf67a",
+              "originalText": "1 cup sauce-23",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-23"
+            },
+            {
+              "occurrence": "https://rezics.com/id/1b4a1966-c3dd-8199-bb2f-b224ee9ddcf1",
+              "originalText": "1 cup sauce-24",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-24"
+            },
+            {
+              "occurrence": "https://rezics.com/id/13983c7b-ef88-8d68-a7cd-9403d25af06d",
+              "originalText": "1 cup sauce-25",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-25"
+            },
+            {
+              "occurrence": "https://rezics.com/id/4a4e92bb-114c-8af1-b5ee-5c251d66412b",
+              "originalText": "1 cup sauce-26",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-26"
+            },
+            {
+              "occurrence": "https://rezics.com/id/79a03b87-a0cf-8d3f-865a-96cad8c9a262",
+              "originalText": "1 cup sauce-27",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-27"
+            },
+            {
+              "occurrence": "https://rezics.com/id/4872da11-ee75-8213-b341-cab5cfcc8b8b",
+              "originalText": "1 cup sauce-28",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-28"
+            },
+            {
+              "occurrence": "https://rezics.com/id/59161da8-df21-8203-8981-e5d4c052f263",
+              "originalText": "1 cup sauce-29",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-29"
+            },
+            {
+              "occurrence": "https://rezics.com/id/6adc17b3-0506-8f75-bda7-441de1f6d5b1",
+              "originalText": "1 cup sauce-30",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-30"
+            },
+            {
+              "occurrence": "https://rezics.com/id/38054e9c-aad8-8f99-9b3c-88b954668661",
+              "originalText": "1 cup sauce-31",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-31"
+            },
+            {
+              "occurrence": "https://rezics.com/id/6f6fd70d-f426-8156-9a42-44a5a9d654d5",
+              "originalText": "1 cup sauce-32",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-32"
+            },
+            {
+              "occurrence": "https://rezics.com/id/5653c642-b355-8144-9780-3bc7f1c42d94",
+              "originalText": "1 cup sauce-33",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-33"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b89147ed-a06a-8bb4-b4dc-bb7d855e5e8b",
+              "originalText": "1 cup sauce-34",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-34"
+            },
+            {
+              "occurrence": "https://rezics.com/id/ff4d5636-6c97-8b8b-add2-ddcbe8d2c30e",
+              "originalText": "1 cup sauce-35",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-35"
+            },
+            {
+              "occurrence": "https://rezics.com/id/19c8e748-46e3-896a-9b1f-d5767ef5b2a5",
+              "originalText": "1 cup sauce-36",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-36"
+            },
+            {
+              "occurrence": "https://rezics.com/id/88ba01c1-2b92-8503-a4ab-62ddb1c6f647",
+              "originalText": "1 cup sauce-37",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-37"
+            },
+            {
+              "occurrence": "https://rezics.com/id/2d2d27ff-5e5c-87a5-bc96-40ef813f680c",
+              "originalText": "1 cup sauce-38",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-38"
+            },
+            {
+              "occurrence": "https://rezics.com/id/ac5dba38-dfdd-8c5c-a31c-a4ec9f5ed48c",
+              "originalText": "1 cup sauce-39",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-39"
+            },
+            {
+              "occurrence": "https://rezics.com/id/85f7538a-55ef-891f-bda3-ea37be7654c3",
+              "originalText": "1 cup sauce-40",
+              "sourceLexical": "1",
+              "amount": {
+                "numerator": 1,
+                "denominator": 1
+              },
+              "unitText": "cup",
+              "scaled": true,
+              "line": "1 cup sauce-40"
+            }
+          ],
+          "next": "eyJ2IjoxLCJzdHJ1Y3R1cmUiOiJodHRwczovL3Jlemljcy5jb20vaWQvYWNiM2MyZDAtZmQ0NC04MWE1LWIzMDUtMzk1YjhlNGQzY2JjIiwicmV2aXNpb24iOiJodHRwczovL3Jlemljcy5jb20vaWQvZmM4MGNiMjAtMTE0YS04YjU2LWE0NmUtYjBkZWI3NjA4OGVjIiwic2VydmluZ3MiOm51bGwsImZhY3RvciI6eyJuIjoiMSIsImQiOiIxIn0sInN0YWNrIjpbeyJwYXJlbnQiOiJodHRwczovL3Jlemljcy5jb20vaWQvYWNiM2MyZDAtZmQ0NC04MWE1LWIzMDUtMzk1YjhlNGQzY2JjIiwiYWZ0ZXIiOiJodHRwczovL3Jlemljcy5jb20vaWQvYWNiM2MyZDAtZmQ0NC04MWE1LWIzMDUtMzk1YjhlNGQzY2JjXHUwMDAxaTAwMDAwMDFcdTAwMDF6enp6In1dfQ.DEVlIkA6mmTvtdjJH2ldMxwzOW_SoEgsxDDq5TZlbQg",
+          "cost": {
+            "pages": 4,
+            "pagesRead": 10,
+            "occurrences": 100
+          }
+        },
+        "headers": {
+          "content-type": "application/json;charset=utf-8",
+          "cache-control": "no-store"
+        }
+      },
+      {
+        "label": "page-1",
+        "operationId": "getV1RecipesWorksById",
+        "method": "GET",
+        "path": "/v1/recipes/works/01a13e93-54d1-73c9-8490-240e7c09fd98?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7e15ca89-8ce6-40a1-b73e-5a2b59750ccb&cursor=eyJ2IjoxLCJzdHJ1Y3R1cmUiOiJodHRwczovL3Jlemljcy5jb20vaWQvYWNiM2MyZDAtZmQ0NC04MWE1LWIzMDUtMzk1YjhlNGQzY2JjIiwicmV2aXNpb24iOiJodHRwczovL3Jlemljcy5jb20vaWQvZmM4MGNiMjAtMTE0YS04YjU2LWE0NmUtYjBkZWI3NjA4OGVjIiwic2VydmluZ3MiOm51bGwsImZhY3RvciI6eyJuIjoiMSIsImQiOiIxIn0sInN0YWNrIjpbeyJwYXJlbnQiOiJodHRwczovL3Jlemljcy5jb20vaWQvYWNiM2MyZDAtZmQ0NC04MWE1LWIzMDUtMzk1YjhlNGQzY2JjIiwiYWZ0ZXIiOiJodHRwczovL3Jlemljcy5jb20vaWQvYWNiM2MyZDAtZmQ0NC04MWE1LWIzMDUtMzk1YjhlNGQzY2JjXHUwMDAxaTAwMDAwMDFcdTAwMDF6enp6In1dfQ.DEVlIkA6mmTvtdjJH2ldMxwzOW_SoEgsxDDq5TZlbQg",
+        "status": 200,
+        "answer": {
+          "profile": "recipe-work-page-v1",
+          "structure": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+          "revision": "https://rezics.com/id/fc80cb20-114a-8b56-a46e-b0deb76088ec",
+          "occurrences": [
+            {
+              "occurrence": "https://rezics.com/id/3c633c4b-6dcd-8beb-a6be-dd7152c71d11",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzi",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 19",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/196e83c0-13be-8103-af16-ddd1686c00ed",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzr",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 20",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b8112b4f-0938-845d-8349-228bb423260f",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzw",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 21",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/532162d6-181d-849c-92aa-02664f70ba8f",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzy",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 22",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/bec2ddbf-f220-87d9-89a7-60a9e7e244d4",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzz",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 23",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/10291f42-f59f-835a-bbf5-3698f7696f33",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzi",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 24",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/26524a26-df03-843d-a9fb-8986c6099543",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzr",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 25",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/712d732d-e49a-87ed-bd82-457e3f994a38",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzw",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 26",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/ca320bee-cb37-8811-944b-2e5aa26cce7e",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzy",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 27",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/2f0810fa-3d70-8dab-8621-0fbd5f2699c8",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzz",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 28",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/9ef69b68-f0b8-8305-8ce4-0309568be9bb",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzi",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 29",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/9ab0c1d7-f11c-80dc-9194-1aceb1913803",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzr",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 30",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/51c33955-10f3-8135-91d8-4556ae573200",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzw",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 31",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/006c921b-dd39-80dd-9b90-06dc0fa5a5c3",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzy",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 32",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/acb02f54-8978-84e8-af04-7708f379a94a"
+            },
+            {
+              "occurrence": "https://rezics.com/id/1c7b008e-ecb9-84ed-b224-4974ee7b7a51",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzz",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 33",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/4cad7dad-919f-83ad-a8bc-04bc0053095e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/b3b0c690-d877-8139-80b3-185737f11c1a",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzi",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 34",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/4cad7dad-919f-83ad-a8bc-04bc0053095e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/ffe13ef7-5cd5-8c0d-badf-b914355493c6",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzr",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 35",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/4cad7dad-919f-83ad-a8bc-04bc0053095e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/80e7f098-9e59-80d7-8ad8-ef8ebecd4aa8",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzw",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 36",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/4cad7dad-919f-83ad-a8bc-04bc0053095e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/1ae18a6c-1ef7-87a4-9bbe-6205ab0bb22d",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzy",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 37",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/4cad7dad-919f-83ad-a8bc-04bc0053095e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/1cfaccd5-3ec5-8596-a3c3-1455739fa887",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzz",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 38",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/4cad7dad-919f-83ad-a8bc-04bc0053095e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/79848be4-a06f-8f7d-b5fb-d41f4c5b87d4",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzzi",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 39",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/4cad7dad-919f-83ad-a8bc-04bc0053095e"
+            },
+            {
+              "occurrence": "https://rezics.com/id/936a57ba-9941-8ac9-80a8-bd79dc555cff",
+              "state": "active",
+              "parent": "https://rezics.com/id/acb3c2d0-fd44-81a5-b305-395b8e4d3cbc",
+              "segmentKey": "i0000001",
+              "orderKey": "zzzzzzzzr",
+              "role": "step",
+              "qualifier": {
+                "type": "recipe-step",
+                "instructionText": {
+                  "value": "Step 40",
+                  "language": "en"
+                },
+                "usesIngredient": [],
+                "media": [],
+                "scaling": "linear"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/4cad7dad-919f-83ad-a8bc-04bc0053095e"
+            }
+          ],
+          "measures": [
+            {
+              "kind": "yield",
+              "value": {
+                "numerator": 4,
+                "denominator": 1
+              },
+              "basis": "whole-recipe",
+              "coverage": "complete",
+              "provenance": "declared",
+              "unitText": "servings"
+            },
+            {
+              "kind": "servings",
+              "value": {
+                "numerator": 4,
+                "denominator": 1
+              },
+              "unitText": "servings",
+              "basis": "whole-recipe",
+              "coverage": "complete",
+              "provenance": "declared"
+            }
+          ],
+          "ingredients": [],
+          "cost": {
+            "pages": 2,
+            "pagesRead": 4,
+            "occurrences": 22
+          }
+        },
+        "headers": {
+          "content-type": "application/json;charset=utf-8",
+          "cache-control": "no-store"
+        }
+      }
+    ],
+    "moderator": [],
+    "operator": []
+  }
+}

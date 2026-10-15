@@ -8,6 +8,7 @@ const screenshotDirectory = process.env[STORY_SCREENSHOTS_ENV];
 const screenshotSetup = screenshotDirectory ? {
   setupFiles: [fileURLToPath(new URL('.storybook/story-screenshots.setup.ts', import.meta.url))],
 } : {};
+const accessibilitySetup = fileURLToPath(new URL('../../scripts/qa/story-accessibility.setup.ts', import.meta.url));
 const screenshotCommands = screenshotDirectory ? {
   commands: { captureStoryScreenshot: storyScreenshotCommand(screenshotDirectory, fileURLToPath(new URL('../..', import.meta.url))) },
 } : {};
@@ -28,7 +29,7 @@ export default defineConfig({
     ] },
     // Interaction stories type and wait like a person; on a host shared with other stacks the 5 s default
     // failed whole stories that pass alone (Give Role With Impact took 5.08 s in a loaded QA run).
-    test: { name: 'storybook', ...screenshotSetup, testTimeout: 15_000,
+    test: { name: 'storybook', setupFiles: [accessibilitySetup, ...(screenshotSetup.setupFiles ?? [])], testTimeout: 15_000,
       // Vitest's iframe readiness timer is separate from testTimeout and browser.connectTimeout.
       // Cold transforms on a host running other QA stacks can exceed its 60 s default.
       env: { VITEST_BROWSER_IFRAME_TIMEOUT: '180000' },

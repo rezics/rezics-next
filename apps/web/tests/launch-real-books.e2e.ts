@@ -59,6 +59,7 @@ async function openChoice(page: Page, control: Locator, findings: Findings): Pro
   await page.keyboard.press('Enter');
   const options = page.getByRole('option');
   await expect(options.first()).toBeVisible();
+  await expect(page.getByRole('listbox')).toBeFocused();
   return options;
 }
 

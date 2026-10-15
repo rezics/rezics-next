@@ -12,14 +12,14 @@ export interface MembershipReplayPhase {
 /** Membership commands repeat reads at the same address. Each phase still uses
  * the strict recorded transport; neither a receipt nor call count invents a read. */
 export function membershipRecordedTransition(record: AnswerRecord, persona: AnswerPersona,
-  phases: readonly MembershipReplayPhase[]) {
+  phases: readonly MembershipReplayPhase[], locale = 'en') {
   if (!phases.length) throw new Error('Membership replay needs a phase');
   for (const [index, selected] of phases.entries()) {
     if (selected.advanceOn && (index + 1 === phases.length || !selected.selections.some(item => item.label === selected.advanceOn))) {
       throw new Error(`Membership phase has no recorded continuation: ${selected.advanceOn}`);
     }
   }
-  const playbacks = phases.map(phase => recordedFetch(record, persona, phase.selections, { pathPrefix: BFF_PREFIX }));
+  const playbacks = phases.map(phase => recordedFetch(record, persona, phase.selections, { pathPrefix: BFF_PREFIX, locale }));
   let phase = 0;
   const calls: { method: string; path: string; body: unknown; key: string | null; credentials: RequestCredentials }[] = [];
   const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {

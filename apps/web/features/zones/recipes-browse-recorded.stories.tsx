@@ -3,6 +3,7 @@ import { materializeData } from 'native-i18n';
 import { useEffect, useState, type ReactNode } from 'react';
 import { expect, waitFor, within } from 'storybook/test';
 import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
+import type { UiLocale } from '../../i18n/define.ts';
 import browseFixture from '../../../../tests/qa/fixtures/outcomes/recipes/catalogue-browse-and-search-in-its-zone.json';
 import paginationFixture from '../../../../tests/qa/fixtures/outcomes/recipes/catalogue-pagination-in-its-zone.json';
 import { localizedPath } from '../../i18n/locale.ts';
@@ -107,8 +108,8 @@ const pending = <PageContainer><p role="status" aria-busy="true">{shellMessages.
  * Browse, search and the next page through `ZoneSiteRoute`.
  * `cursor-newest-q-refused` stays in the mapping test: the page never sends that query, so it is not drawn.
  */
-function ProductionVisit({ source, persona, label, routeLabel, state }: {
-  source: Source; persona: Persona; label: string; routeLabel: string; state: RecordedState;
+function ProductionVisit({ source, persona, label, routeLabel, state, locale = 'en' }: {
+  source: Source; persona: Persona; label: string; routeLabel: string; state: RecordedState; locale?: UiLocale;
 }) {
   const [node, setNode] = useState<ReactNode>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -140,16 +141,16 @@ function ProductionVisit({ source, persona, label, routeLabel, state }: {
       active = false;
       replay.dispose();
     };
-  }, [source, persona, label, routeLabel, state]);
+  }, [source, persona, label, routeLabel, state, locale]);
   if (error) throw error;
   if (!node) return pending;
   return node;
 }
 
-function RecipesCatalogueBrowse({ source, persona, label, routeLabel, state }: {
-  source: Source; persona: Persona; label: string; routeLabel: string; state: RecordedState;
+function RecipesCatalogueBrowse({ source, persona, label, routeLabel, state, locale }: {
+  source: Source; persona: Persona; label: string; routeLabel: string; state: RecordedState; locale?: UiLocale;
 }) {
-  return <ProductionVisit source={source} persona={persona} label={label} routeLabel={routeLabel} state={state} />;
+  return <ProductionVisit source={source} persona={persona} label={label} routeLabel={routeLabel} state={state} locale={locale} />;
 }
 
 const meta = {
@@ -386,3 +387,31 @@ export const SearchContinuationModeratorPhone: Story = at(searchContinuation('mo
 export const SearchContinuationModeratorDesktop: Story = at(searchContinuation('moderator'), 'desktop');
 export const SearchContinuationOperatorPhone: Story = at(searchContinuation('operator'), 'phone');
 export const SearchContinuationOperatorDesktop: Story = at(searchContinuation('operator'), 'desktop');
+
+function japanese(base: Story, viewport: 'phone' | 'desktop1440'): Story {
+  return { ...base, args: { ...base.args, locale: 'ja' }, globals: { locale: 'ja', viewport: { value: viewport } },
+    play: async ({ canvasElement, args }) => {
+      const canvas = within(canvasElement);
+      const copy = zoneMessagesFor('ja');
+      await expect(canvas.findByRole('heading', { level: 1,
+        name: headerName(recordOf(args.source ?? 'browse'), args.persona ?? 'visitor') })).resolves.toBeVisible();
+      if (args.state === 'empty') {
+        await expect(canvas.getByRole('heading', { name: copy.browseEmptyTitle })).toBeVisible();
+      } else {
+        const answer = pageOf(recordOf(args.source ?? 'browse'), args.persona ?? 'visitor', args.label!);
+        await expect(canvas.findByRole('link', { name: answer.items[0]!.title.value })).resolves.toBeVisible();
+        await expect(canvas.getByRole('navigation', { name: copy.sortLabel })).toBeVisible();
+      }
+      await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    } };
+}
+
+export const EnglishWide: Story = { ...PopulatedVisitorDesktop, globals: { locale: 'en', viewport: { value: 'desktop1440' } } };
+export const JapanesePhone: Story = japanese(populated('visitor'), 'phone');
+export const JapaneseWide: Story = japanese(populated('visitor'), 'desktop1440');
+export const JapaneseSearchPhone: Story = japanese(search('visitor'), 'phone');
+export const JapaneseSearchWide: Story = japanese(search('visitor'), 'desktop1440');
+export const JapaneseNextPhone: Story = japanese(searchContinuation('visitor'), 'phone');
+export const JapaneseNextWide: Story = japanese(searchContinuation('visitor'), 'desktop1440');
+export const JapaneseEmptyPhone: Story = japanese(empty('visitor'), 'phone');
+export const JapaneseEmptyWide: Story = japanese(empty('visitor'), 'desktop1440');

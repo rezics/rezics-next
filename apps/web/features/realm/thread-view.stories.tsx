@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { useState } from 'react';
+import { materializeData } from 'native-i18n';
+import { realmMessagesFor } from './catalog.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { contentLanguageCookie, displayLanguageHeaders } from '../../i18n/display-languages.ts';
@@ -37,19 +39,20 @@ const rules = [
 function ThreadPage({ read, mode, signedIn, locale, api = memoryThreads(), sort = 'best', language, readPage }: Args) {
   const zone = communityZone(locale);
   const here = localizedPath(threadHref(storyRealm.path, read.focus), locale);
+  const memberCount = materializeData(realmMessagesFor(locale), { locale }).members(10);
   const feedMessages = locale === 'zh-Hans' ? { ...messages, ...zhHans }
     : locale === 'ja' ? { ...messages, ...ja } : messages;
-  return <RealmPageStory zone={zone} locale={locale} members={locale === 'zh-Hans' ? '10 位成员' : '10 members'}>
+  return <RealmPageStory zone={zone} locale={locale} members={memberCount}>
     <FeedProvider locale={locale} messages={feedMessages} now={THREAD_NOW}
       signedIn={signedIn} actingSubject={signedIn ? 'https://rezics.com/id/00000802-bbbb-7a6f-8c2d-3e7b5c1a9f40' : null}
       signInHref={`/auth/start?next=${encodeURIComponent(here)}`} avatarQuery="" tab="all" followedRealms={null}
       api={memoryFeed()}>
       <DiscussionColumns rail={<ThreadRail name={{ value: zone.name.value, lang: zone.name.lang }}
         description={zone.description ? { value: zone.description.value, lang: zone.description.lang } : null}
-        members={locale === 'zh-Hans' ? '10 位成员' : '10 members'} aboutHref={zone.links.about} rules={rules}
-        labels={{ about: locale === 'zh-Hans' ? zhHans.aboutCommunity : messages.aboutCommunity,
-          rules: locale === 'zh-Hans' ? zhHans.communityRules : messages.communityRules,
-          more: locale === 'zh-Hans' ? zhHans.moreAboutCommunity : messages.moreAboutCommunity }} />}>
+        members={memberCount} aboutHref={zone.links.about} rules={rules}
+        labels={{ about: feedMessages.aboutCommunity,
+          rules: feedMessages.communityRules,
+          more: feedMessages.moreAboutCommunity }} />}>
         <ThreadView read={read} sort={sort} replyMode={mode} threadApi={api} readPage={readPage}
           realm={storyRealm} sortHrefs={Object.fromEntries((['best', 'top', 'new'] as const).map(value => {
             const query = new URLSearchParams();

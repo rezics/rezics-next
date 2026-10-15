@@ -1,10 +1,11 @@
+import { materializeData } from 'native-i18n';
 import { spaceHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import fiction from '../../zones/official/fiction/index.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
-import { RealmPageStory } from '../realm/story-page.tsx';
+import { RealmPageStory, realmMessagesFor } from '../realm/story-page.tsx';
 import type { Execution } from './execution.ts';
 import {
   communityModules,
@@ -17,14 +18,15 @@ import {
 type Mode = 'package' | 'fallback' | 'safe-mode' | 'standard-look' | 'community';
 
 function Page({ mode, locale }: { mode: Mode; locale: UiLocale }) {
-  const members = locale === 'zh-Hans' ? '12,408 位成员' : '12,408 members';
+  const text = materializeData(realmMessagesFor(locale), { locale });
+  const members = text.members(12408);
   if (mode === 'community') {
     return (
       <RealmPageStory
         zone={communityZone(locale)}
         modules={communityModules(locale)}
         locale={locale}
-        members={locale === 'zh-Hans' ? '约 860 位成员' : 'About 860 members'}
+        members={text.membersAbout(860)}
       />
     );
   }

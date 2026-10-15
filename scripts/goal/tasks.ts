@@ -1,5 +1,5 @@
 import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, type Ledger, isClaudeCode, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
-import { root, withLedger, briefGoal, unlandedChangeConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH, REGENERATION_COMMIT_SUBJECT } from './ledger.ts';
+import { root, withLedger, briefGoal, unlandedChangeConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, preserveTaskOutputs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH, REGENERATION_COMMIT_SUBJECT } from './ledger.ts';
 import { pathToFileURL } from 'node:url';
 import { join, resolve, basename, relative, dirname, posix } from 'node:path';
 import { readFileSync, existsSync, mkdirSync, writeFileSync, readdirSync, readlinkSync, renameSync } from 'node:fs';
@@ -436,7 +436,7 @@ export async function landTask(id: string, step = false, gateLane: GateLaneOptio
           || current.branch !== snapshot.task.branch || current.worktree !== snapshot.task.worktree) {
           throw new Error(`${current.id}: task or brief changed during review; review again`);
         }
-      }, permittedFiles, false, gateLane), close: () => closeTasks([id], 'verified') });
+      }, permittedFiles, false, gateLane, landingLease), close: () => closeTasks([id], 'verified') });
   } finally {
     landingLease.release();
   }
@@ -739,6 +739,7 @@ async function closeTask(id: string, outcome: 'verified' | 'cancelled'): Promise
     // A shared worktree stays while another open task still works in it.
     const sharers = Object.values(ledger.tasks).filter(other => other.id !== task.id
       && other.worktree === task.worktree && !['verified', 'cancelled'].includes(other.state));
+    preserveTaskOutputs(task);
     if (existsSync(task.worktree) && !sharers.length) {
       killWorktreeProcesses(task.worktree);
       removeWorktreeStack(task.worktree);

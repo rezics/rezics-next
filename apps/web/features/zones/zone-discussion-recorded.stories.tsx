@@ -8,6 +8,7 @@ import { localizedPath } from '../../i18n/locale.ts';
 import { spaceHref } from '../address/path.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
+import shellJa from '../shell/messages/ja.ts';
 import { PageContainer, PageHeader } from '../shell/page.tsx';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
 import { aboutDiscussionMessages } from './about-discussion-messages.ts';
@@ -32,7 +33,7 @@ if (!space) throw new Error('Recorded space key missing');
 const href = spaceHref(space, 'site', ['public']);
 const copy = aboutDiscussionMessages[locale];
 
-function RecordedZoneDiscussion({ hold }: { hold: string }) {
+function RecordedZoneDiscussion({ hold, locale = 'en' }: { hold: string | null; locale?: UiLocale }) {
   const [frame, setFrame] = useState<{
     zoneName: string;
     zoneLanguage: string;
@@ -51,9 +52,10 @@ function RecordedZoneDiscussion({ hold }: { hold: string }) {
       [
         { label: 'published-presentation', state: 'populated' },
         { label: 'realm-policy', state: 'populated' },
-        { label: hold, state: 'loading' },
+        ...['current-discussion-route', 'current-discussion-target', 'canonical-about-thread', 'joining-context', 'canonical-discussion-thread']
+          .map(label => ({ label, state: label === hold ? 'loading' as const : sample(label).status >= 400 ? 'error' as const : 'populated' as const })),
       ],
-      { pathPrefix: BFF_PREFIX },
+      { pathPrefix: BFF_PREFIX, locale },
     );
     const main = browserMainApi('https://recorded.invalid', {
       anonymous: true,
@@ -64,7 +66,7 @@ function RecordedZoneDiscussion({ hold }: { hold: string }) {
       'https://recorded.invalid',
     );
     const realmUrl = new URL(sample('realm-policy').path, 'https://recorded.invalid');
-    const routeUrl = new URL(sample(hold).path, 'https://recorded.invalid');
+    const routeUrl = new URL(sample(heldRequest).path, 'https://recorded.invalid');
     const actor = routeUrl.searchParams.get('actingSubject');
     async function load() {
       const [presentation, header] = await Promise.all([
@@ -113,11 +115,11 @@ function RecordedZoneDiscussion({ hold }: { hold: string }) {
       active = false;
       replay.dispose();
     };
-  }, [hold]);
+  }, [hold, locale]);
   if (error) throw error;
   const loading = (
     <p role="status" aria-busy="true">
-      {shellMessages.loading}
+      {locale === 'ja' ? shellJa.loading : shellMessages.loading}
     </p>
   );
   if (!frame) return <PageContainer>{loading}</PageContainer>;
@@ -143,6 +145,7 @@ function RecordedZoneDiscussion({ hold }: { hold: string }) {
 const meta = {
   title: 'Zones/Attached Realm discussion',
   component: RecordedZoneDiscussion,
+  render: (args, { globals }) => <RecordedZoneDiscussion {...args} locale={globals.locale as UiLocale} />,
   args: { hold: heldRequest },
   parameters: { route: { pathname: localizedPath(href, locale) } },
   globals: { locale },
@@ -178,3 +181,5 @@ export const LoadingStrangerDesktop: Story = {
   globals: { viewport: { value: 'desktop' }, locale },
   play: ({ canvasElement }) => expectHeldDiscussion(canvasElement),
 };
+
+export const PopulatedStrangerDesktop: Story = { args: { hold: null } };

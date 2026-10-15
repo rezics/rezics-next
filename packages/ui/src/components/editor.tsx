@@ -26,7 +26,7 @@ export const Editor = ({ className, typeface = 'serif', ...props }: React.Compon
       'bg-transparent px-0 py-2 text-foreground caret-primary',
       typeface === 'serif' ? 'font-work-title' : 'font-sans',
       'text-lg/[1.8] [text-autospace:normal] [overflow-wrap:anywhere]',
-      'placeholder:text-muted-foreground/64',
+      'placeholder:text-muted-foreground',
       'rounded-none border-0 outline-none focus-visible:outline-none',
       'read-only:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-64',
       className,
@@ -42,7 +42,7 @@ export const EditorTitle = ({ className, ...props }: React.ComponentProps<'input
   <input
     className={cn(
       'block w-full bg-transparent px-0 py-1 font-semibold font-work-title text-3xl/tight tracking-tight',
-      'text-foreground caret-primary [text-autospace:normal] placeholder:text-muted-foreground/64',
+      'text-foreground caret-primary [text-autospace:normal] placeholder:text-muted-foreground',
       'border-0 outline-none focus-visible:outline-none sm:text-4xl/tight',
       className,
     )}

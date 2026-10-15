@@ -63,7 +63,7 @@ export function reviewModeText(mode: ReviewMode | null, t: T): string {
 
 /** A region Main could not fill: a retry when it may answer later, the reason alone when it refused. */
 export function Failure({ title, help, retry, t }: { title: string; help?: string; retry: boolean; t: T }) {
-  return <Alert variant={retry ? 'destructive' : 'warning'}>
+  return <Alert role="alert" variant={retry ? 'destructive' : 'warning'}>
     <TriangleAlertIcon aria-hidden="true" />
     <AlertTitle>{title}</AlertTitle>
     {help || retry ? <AlertDescription className="grid justify-items-start gap-2">{help ? <p>{help}</p> : null}

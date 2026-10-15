@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mainApiWithToken } from '../../../../../apps/web/features/api/main.ts';
 import rules from '../../../../../scripts/qa/cases/outcomes/realm/rules.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordJapaneseReads } from '../../../support/recorded-locale-visit.ts';
 import { expectQaPlatformAccess } from '../../../support/platform-access.ts';
 import { recordFrameReads } from '../../../support/frame-reads.ts';
 import {
@@ -15,7 +16,7 @@ import {
 setDefaultTimeout(90_000);
 let publicRealm: PersonaSessions, privateRealm: PersonaSessions;
 let emptyRealm: PersonaSessions;
-const recording = new OutcomeRecorder(rules);
+const recording = recordJapaneseReads(new OutcomeRecorder(rules));
 const rootOf = (fixture: PersonaSessions) => `/v1/realms/${fixture.realm.slice(-36)}`;
 const acting = (person: PersonaSession) =>
   `actingSubject=${encodeURIComponent(person.actingSubject ?? publicRealm.owner.actingSubject!)}`;

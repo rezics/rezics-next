@@ -147,7 +147,7 @@ export function ZonePublicationRecordedPage({ record, persona, selections, local
           empty: mapped.kind === 'empty' ? <PageContainer><MemberList members={[]} /></PageContainer> : undefined,
         });
         content = mapped.kind === 'published' && mapped.credit
-          ? <>{home}<ZoneSiteRecordedCredit credit={mapped.credit} /></> : home;
+          ? <>{home}<ZoneSiteRecordedCredit credit={mapped.credit} locale={locale} /></> : home;
       }
       if (!mounted) return;
       setView({ kind: 'ready', view: loaded, content });
