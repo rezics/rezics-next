@@ -74,6 +74,8 @@ test('selected-unit search never substitutes a stale or unqualified checkpoint f
 test('a never-qualified native index refuses before selected-unit matching begins', async () => {
   const fixture = indexed('25');
   fixture.client.searchDeltaSince = async () => ({ available: false });
+  const query = fixture.client.query.bind(fixture.client);
+  fixture.client.query = async (...args) => args[0].includes('ASK') ? { boolean: true } : query(...args);
   let matched = false;
   await expect(withSearchGraphSnapshot(
     { fuseki: fixture.client, lineage, objectDirectory: '.temp/search-availability-owner' }, async () => {
