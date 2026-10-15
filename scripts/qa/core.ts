@@ -436,6 +436,8 @@ export interface ShardRecord {
   startupMs?: number;
   bootstrapMs?: number;
   cleanupMs?: number;
+  /** Fixture disposal has its own bound, outside the consumer operation clock. */
+  fixtureCleanupMs?: number;
   missingFiles?: string[];
 }
 export interface IsolationRecord { tier: Tier; file: string; afterProject: string; afterFiles: number;

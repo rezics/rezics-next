@@ -1,4 +1,5 @@
 import { expect } from 'bun:test';
+import { ownerErasureCleanup } from '../../../scripts/qa/owner-erasure-cleanup.ts';
 import { parseVolumeInventory, volumeInventoryScript } from '../../../scripts/qa/volume-inventory.ts';
 import { Elysia } from 'elysia';
 import { decodeJwt } from 'jose';
@@ -598,7 +599,7 @@ async function runOwnerRestoreErasureFixture(options: OwnerRestoreErasureFixture
   let attachmentCustody: ReturnType<typeof recoveryTestCustody> | undefined;
   let authenticated: Awaited<ReturnType<typeof ratingAccount>> | undefined;
   const close = () =>
-    timing.phase('fixture.final-disposal', async () => {
+    ownerErasureCleanup(() => timing.phase('fixture.final-disposal', async () => {
       const actions: RestoreCleanupAction[] = [];
       if (attachmentCustody)
         actions.push({
@@ -643,7 +644,10 @@ async function runOwnerRestoreErasureFixture(options: OwnerRestoreErasureFixture
           run: () => removeCandidateDirectory(path),
         });
       }
-      const failures = await attemptRestoreCleanup(actions);
+      const failures = await attemptRestoreCleanup(actions.map((action, index) => ({
+        ...action,
+        run: () => timing.phase(`fixture.cleanup-resource.${index + 1}`, action.run),
+      })));
       const hasOutstandingResources =
         pools.size > 0 ||
         graphResources.containers.length > 0 ||
@@ -669,7 +673,7 @@ async function runOwnerRestoreErasureFixture(options: OwnerRestoreErasureFixture
       }
       if (failures.length)
         throw restoreCleanupError(failures, 'restore fixture final disposal failed');
-    });
+    }));
   let sourceApiPhase: RestoreFixturePhaseHandle | undefined;
   let sourceProofPhase: RestoreFixturePhaseHandle | undefined;
   producerPhase?.registerCleanup(close);
@@ -1904,8 +1908,11 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
               throw restoreCleanupError(failures, `candidate ${ordinal} directory cleanup failed`);
           },
         },
-      ]);
-      const dispose = () => timing.phase('candidate.disposal', disposeResources, ordinal);
+      ].map((action, index) => ({
+        ...action,
+        run: () => timing.phase(`candidate.cleanup-resource.${index + 1}`, action.run, ordinal),
+      })));
+      const dispose = () => ownerErasureCleanup(() => timing.phase('candidate.disposal', disposeResources, ordinal));
       const copyElapsedMs = Date.now() - copyStarted;
       console.info('owner restore erasure copy ready', { ordinal, elapsedMs: copyElapsedMs });
       expect(copyElapsedMs).toBeLessThan(600_000);
