@@ -338,7 +338,7 @@ export const ShelfByKeyboard: Story = {
   </ReaderActionsProvider>,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const add = canvas.getByRole('button', { name: 'Want to read', exact: true });
+    const add = canvas.getByRole('button', { name: /^Want to read$/ });
     await waitFor(() => expect(add).toBeEnabled());
     await userEvent.tab();
     await expect(add).toHaveFocus();
