@@ -28,6 +28,17 @@ test('a failure after initdb leaves no directory', async () => {
   expect(existsSync(directory)).toBe(false);
 });
 
+test('a failed server start retains its reason after cleanup removes the log', async () => {
+  let directory = '';
+  await expect(startPostgresCluster({
+    serverSettings: "shared_preload_libraries = 'rezics_missing_startup_probe'",
+  }, {
+    afterInitdb(created) { directory = created.directory; },
+  })).rejects.toThrow('rezics_missing_startup_probe');
+  expect(directory).not.toBe('');
+  expect(existsSync(directory)).toBe(false);
+});
+
 test('a failure after start leaves no postgres process and no directory', async () => {
   let directory = '';
   let dataDirectory = '';

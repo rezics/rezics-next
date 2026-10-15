@@ -289,7 +289,7 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
   const createCandidate = async (cut: {
     name: string; ordinal: number; backupPostgres: string; backupObjects: string;
     nativeVolume: string; coverage: RecoveryCoverage; sourceCut: Awaited<ReturnType<typeof readGraphRecoverySource>>;
-    fenceGeneration: string; objectFiles: Array<[string, string]>;
+    fenceGeneration: string; objectFiles: Array<[string, string]>; postgresRecoveryMaxLocks: number;
   }): Promise<RecoveryCandidate> => {
     if (disposed) throw new Error('retained erasure recovery fixture is disposed');
     const { name, ordinal, backupPostgres, backupObjects, nativeVolume, coverage, sourceCut,
@@ -311,6 +311,7 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
       // https://www.postgresql.org/docs/18/runtime-config-error-handling.html#GUC-RECOVERY-INIT-SYNC-METHOD
       appendFileSync(join(postgresDirectory, 'postgresql.auto.conf'),
         "\narchive_mode = off\nrestore_command = 'false'\n"
+          + `max_locks_per_transaction = ${cut.postgresRecoveryMaxLocks}\n`
           + (process.platform === 'linux' ? "recovery_init_sync_method = 'syncfs'\n" : ''));
       writeFileSync(join(postgresDirectory, 'recovery.signal'), '');
       const cluster = await startPreparedPostgresCluster(postgresDirectory, { role: 'postgres' });
@@ -487,7 +488,13 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
         nativeSnapshot = { volume: nativeVolume, sourceCut };
       }
 
-      await phase('capture.postgres-backup', async () => {
+      const postgresRecoveryMaxLocks = await phase('capture.postgres-backup', async () => {
+        // Compose supplies this outside postgresql.conf. Every physical replay
+        // must retain at least the source lock-table capacity required by WAL.
+        const maxLocks = (await options.source.account.query<{ value: number }>(
+          `SELECT current_setting('max_locks_per_transaction')::integer AS value`)).rows[0]?.value;
+        if (!Number.isSafeInteger(maxLocks) || maxLocks === undefined || maxLocks < 1)
+          throw new Error('physical backup has no valid PostgreSQL recovery lock capacity');
         try {
           const remote = `/tmp/rezics-erasure-${suffix}-${name}`;
           const container = docker(['ps', '--quiet', '--no-trunc',
@@ -515,11 +522,12 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
             graphStopAttempted = false;
           }
         }
+        return maxLocks;
       });
 
       const authority = { sealedCoverage, hmacKey: options.recoveryKey };
       const captured = { name, backupPostgres, backupObjects, nativeVolume: nativeSnapshot.volume, coverage, sourceCut,
-        fenceGeneration, objectFiles };
+        fenceGeneration, objectFiles, postgresRecoveryMaxLocks };
       let candidateOrdinal = 0;
       const restore = async () => {
         const candidate = await createCandidate({ ...captured, ordinal: ++candidateOrdinal });

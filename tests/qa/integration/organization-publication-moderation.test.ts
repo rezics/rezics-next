@@ -14,6 +14,7 @@ import { AccessOrganizationModeration } from '../../../services/main/src/modules
 import { ownerEvidenceCapture, ownerTargetHeads } from '../../../services/main/src/modules/governance/evidence.ts';
 import { GovernanceRules } from '../../../services/main/src/modules/governance/rules.ts';
 import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
+import { configureDisclosure } from '../../../services/main/src/modules/disclosure/read.ts';
 import { ORGANIZATION_MODERATION_ACTION, ORGANIZATION_MODERATION_PROFILE }
   from '../../../services/main/src/modules/access/organization-publication.ts';
 import { GRAPHS, ID, type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
@@ -74,7 +75,8 @@ test('IAM23/IAM24: exact organization publication moderation and suspension affe
   const access = new AccessAdmissionRegistry(pool);
   const owner = new AccessOrganizationModeration(measured);
   const deps = { environment: env, account: account.verifier, access,
-    governance: { store: new GovernanceStore(pool, ownerEvidenceCapture({ graph: env }),
+    governance: { store: new GovernanceStore(pool, ownerEvidenceCapture({ graph: {
+      env, canReadWork: access.canReadWork.bind(access) } }),
       ownerTargetHeads({ graph: env }), new GovernanceRules(pool)) },
     accessPolicy: new AccessPolicyOwner(pool),
     orgRealmParticipation: new AccessOrgRealmParticipation(pool), organizationModeration: owner };
@@ -180,8 +182,14 @@ test('IAM23/IAM24: exact organization publication moderation and suspension affe
       createMainApp(fuseki, { ...deps, organizationModeration: new MissingOwner(pool) })), 503);
     const missingGraph = new Proxy(fuseki, { get: (client, key) => key === 'query'
       ? async () => { throw new Error('graph unavailable'); } : Reflect.get(client, key) });
-    await must(await post(endpoint, account.tokenA, body(), randomUUID(),
-      createMainApp(fuseki, { ...deps, environment: { ...env, fuseki: missingGraph } })), 503);
+    try {
+      await must(await post(endpoint, account.tokenA, body(), randomUUID(),
+        createMainApp(fuseki, { ...deps, environment: { ...env, fuseki: missingGraph } })), 503);
+    } finally {
+      // This fault app borrows the same owner pool. Restore its graph binding
+      // before returning to the healthy app's disclosure reads.
+      configureDisclosure(env, deps.governance.store.disclosure);
+    }
     // Fixed owner probes and writes at small unrelated-history scales.
     await pool.query(`INSERT INTO access.membership_policy (kind,owner_subject,revision,terms_revision)
       VALUES ('org',$1,1,'fixture-terms')`, [s.f.org]);

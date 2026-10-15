@@ -134,11 +134,18 @@ function ensureStopped(dataDirectory: string, mode: 'fast' | 'immediate', port: 
 }
 
 function launch(dataDirectory: string, log: string, port: number): void {
-  execFileSync('pg_ctl', [
-    '-D', dataDirectory, '-l', log,
-    '-o', `-h 127.0.0.1 -p ${port} ${socketArgument(port)}`,
-    '-t', '60', '-w', 'start',
-  ], { stdio: 'pipe', timeout: 90_000 });
+  try {
+    execFileSync('pg_ctl', [
+      '-D', dataDirectory, '-l', log,
+      '-o', `-h 127.0.0.1 -p ${port} ${socketArgument(port)}`,
+      '-t', '60', '-w', 'start',
+    ], { stdio: 'pipe', timeout: 90_000 });
+  } catch (error) {
+    // Callers remove failed clusters. Keep the bounded server reason before
+    // cleanup removes the only evidence behind pg_ctl's generic refusal.
+    const detail = existsSync(log) ? readFileSync(log, 'utf8').slice(-8192) : 'No server log';
+    throw new Error(`PostgreSQL startup failed: ${detail}`, { cause: error });
+  }
 }
 
 function connectionFor(port: number, user: string): PostgresClusterConnection {

@@ -19,6 +19,7 @@ import {
 } from '../../../services/main/src/infrastructure/pg-pool.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import type { RealmSettings } from '../../../services/main/src/modules/realm-admin/contract.ts';
 import { AliasRegistry } from '../../../services/main/src/modules/address/registry.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
@@ -117,7 +118,8 @@ test('one guarded Access connection projects and reads mandatory-review Realm di
       heldClient = client;
       return fenceClaim(client, ...args);
     };
-    const governance = new GovernanceStore(accessPool, ownerEvidenceCapture({ graph: env }),
+    const governance = new GovernanceStore(accessPool, ownerEvidenceCapture({ graph: {
+      env, canReadWork: access.canReadWork.bind(access) } }),
       ownerTargetHeads({ graph: env }), new GovernanceRules(accessPool));
     const content = new ContentCore(contentPool);
     const feed = new FeedStore(accessPool);
@@ -546,12 +548,23 @@ test('one guarded Access connection projects and reads mandatory-review Realm di
       replyOwner.preparePlacement = preparePlacement;
       invocation.emitDestroy();
     }
-    // Withdrawal after the native winner cannot strand its exact seal or
-    // prevent same-key receipt recovery; no new grant is issued for replay.
+    // Withdrawal after the native winner cannot strand its exact seal. Receipt
+    // disclosure still requires current authority, separately from dispatch.
     expect(await outcome('concurrent:place')).toMatchObject({
       state: 'sealed',
       graph_outcome: 'succeeded',
     });
+    expect((await placementRequest('concurrent:place', concurrent.placement)).status).toBe(403);
+    await grantFixtureAuthority(accessPool, {
+      scope: `reply:place:${realm}`, requireDispatch: true,
+      representations: [{ principalId, actor: moderator, action: 'reply.place', lifetime: '8 hours' }],
+      grant: { actor: moderator, action: 'reply.place', lifetime: '8 hours' },
+    });
+    expect((await access.register({ principal, actingSubject: moderator, action: 'reply.place',
+      scope: `reply:place:${realm}`, idempotencyKey: 'concurrent:place',
+      requestDigest: (await accessPool.query<{ request_digest: string }>(
+        'SELECT request_digest FROM access.admission WHERE id=$1', [(await outcome('concurrent:place')).id]))
+        .rows[0]!.request_digest })).dispatchEligible).toBe(false);
     expect(
       await api.command<{ replayed: boolean }>('concurrent:place', {
         method: 'POST',
