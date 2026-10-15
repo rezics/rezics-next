@@ -132,7 +132,8 @@ export async function readRealmAboutThread(session: WorkReadSession, realm: stri
   };
   const openingVisible = visible(await disclosure());
   const currentIdentity = await ownerRead(() => threads.aboutPlacement(realm, placed));
-  const currentTargets = await resolveVisibleTargets(session, [about], 'discussion');
+  const currentTargets = await session.selection(`about-thread-final-target:${about}`,
+    probe => resolveVisibleTargets(probe, [about], 'discussion'));
   const closingVisible = visible(await disclosure());
   const closingHistory = await history();
   if (openingHistory !== closingHistory) throw new WorkReadMoved('Realm history changed during the about lookup');
