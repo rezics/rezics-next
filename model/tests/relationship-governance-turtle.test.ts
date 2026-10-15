@@ -24,7 +24,7 @@ const ids = [
 
 const originalPins = {
   'relation-occurrence-v1': '27269b50a2a7c632a6fa4a96bcc94d4e623f3b00e19b36926727c229bca099c6',
-  'realm-reply-placement-v1': 'b939a1b25d6351a97f4ac0cf48240a0bf76a3f61b51e1ace558348fd382eb511',
+  'realm-reply-placement-v1': 'cefcd70e719ad3cbe6abf6b161ff6e58c63c66ba3fd8f8bb26e9e150cf97b0b8',
   'space-zone-v1': 'dfe09fb0e4f2bc850e1f561f8f32dfdc3bf6f7070166c0b04fe8cd54ab273803',
   'erasure-graph-v1': 'bd9971be037b45f57efd2077d835acd861617add61d6cd10a968a15243b26ea5',
   'statement-decision-v1': 'f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490',

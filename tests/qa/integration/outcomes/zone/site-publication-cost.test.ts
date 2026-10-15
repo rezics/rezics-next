@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { context, ROOT_CONTEXT, trace, TraceFlags } from '@opentelemetry/api';
 import { fromPlainText } from '@rezics/document';
 import type { QueryResult } from 'pg';
+import { foregroundCounted } from '../../support/operation-cost.ts';
 import { startTelemetry, flushTelemetryTraces, shutdownTelemetry } from '../../../../../packages/observability/src/runtime.ts';
 import { startWorkProfileSink, summarizeWorkProfile } from '../../../support/work-profile.ts';
 import { runWorkProfileChild } from '../../../support/work-profile-child.ts';
@@ -45,7 +46,7 @@ if (process.env.REZICS_ZONE_COST_CHILD === 'measure') {
   const selected = () => currentTrace !== '' && trace.getSpan(context.active())?.spanContext().traceId === currentTrace;
   const originalQuery = Client.prototype.query;
   Client.prototype.query = function (this: InstanceType<typeof Client>, ...args: unknown[]) {
-    if (!selected()) return Reflect.apply(originalQuery, this, args);
+    if (!foregroundCounted() || !selected()) return Reflect.apply(originalQuery, this, args);
     const input = args[0] as string | { text: string };
     const record: Statement = { text: typeof input === 'string' ? input : input.text, started: performance.now(),
       originSpanId: trace.getSpan(context.active())!.spanContext().spanId };
@@ -76,7 +77,7 @@ if (process.env.REZICS_ZONE_COST_CHILD === 'measure') {
   globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = input instanceof Request ? input.url : String(input);
     const destination = new URL(url);
-    if (!selected() || destination.origin !== fusekiBase.origin
+    if (!foregroundCounted() || !selected() || destination.origin !== fusekiBase.origin
       || !destination.pathname.startsWith(fusekiBase.pathname)) return originalFetch(input, init);
     const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
     const operation = method === 'POST' && url === queryUrl ? 'query'

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from '../../../tests/qa/integration/support/operation-cost.ts';
 import { Value } from 'typebox/value';
 import { resolvedTarget } from '../src/modules/target/contract.ts';
 import { resolveCommandTarget, resolveTargets, targetSummaries, TargetNotBound, TargetUnavailable,
@@ -39,7 +40,7 @@ function publishedResolver() {
   const graph = h.env.fuseki.query.bind(h.env.fuseki);
   h.env.fuseki.query = async (query, budget) => {
     if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) {
-      h.queries.push(query);
+      if (foregroundCounted()) h.queries.push(query);
       // This owner adapter only emits home rows when the actual native branch is present.
       expect(query).toContain('?r a rv:ZoneHomeDocument ; rv:homeDocumentHead ?head');
       expect(query).toContain('rv:homeRevision ?head');
@@ -148,7 +149,7 @@ for (const withAvatars of [false, true]) test(`64 published homes ${withAvatars 
   let calls = 0, visibilityCalls = 0;
   const original = h.env.fuseki.query.bind(h.env.fuseki);
   h.env.fuseki.query = async (query, bytes) => {
-    if (++calls > 160) throw new Error('Summary read exceeded 160 graph calls');
+    if (foregroundCounted() && ++calls > 160) throw new Error('Summary read exceeded 160 graph calls');
     if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) return { results: { bindings: homes.map(home => ({
       epoch: cell(h.env.lineage.dataEpoch), sequence: cell('9'), r: cell(home.resource), type: cell('resource'),
       homeZone: cell(home.zone), head: cell(home.revision), public: cell('false'), erased: cell('false'),

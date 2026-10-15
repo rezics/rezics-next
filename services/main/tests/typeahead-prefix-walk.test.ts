@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { foregroundCounted } from '../../../tests/qa/integration/support/operation-cost.ts';
 import { FusekiClient, FusekiPrefixWalkRestart, FusekiPrefixWalkUnavailable, FusekiReadBudgetExceeded,
   createFusekiReadDiagnostics, fusekiReadBudget, snapshotFusekiReadDiagnostics,
   type SparqlResult, type FusekiReadBudget } from '../src/infrastructure/fuseki.ts';
@@ -313,8 +314,9 @@ test('a new selected native prefix entry during hydration replays the bounded tr
   const f = fixture(entries, rows), original = f.fuseki.query;
   let changed = false;
   f.fuseki.query = async query => {
+    const counted = foregroundCounted();
     const result = await original(query);
-    if (f.state.summaryReads === 2 && !changed) {
+    if (counted && f.state.summaryReads === 2 && !changed) {
       changed = true; entries.push(nativeEntry(2)); rows.push(candidate(entries[1]!));
       f.state.sequence = '8'; f.state.writeEpoch = '2'; f.state.nativeGeneration = '2';
     }

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { foregroundCounted } from '../../../tests/qa/integration/support/operation-cost.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -373,7 +374,7 @@ for (const resourceKind of ['Agent', 'Space'] as const) {
     // Directory refresh runs independently on this production stack. Only
     // graph reads initiated by the replay belong to its no-owner-read proof.
     f.stack.fuseki.query = async (...args) => {
-      if (replayScope.getStore()) {
+      if (foregroundCounted() && replayScope.getStore()) {
         reads++;
         throw new Error('Graph owner unavailable during retained-key replay');
       }

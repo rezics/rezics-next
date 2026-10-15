@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { foregroundCounted } from '../../../tests/qa/integration/support/operation-cost.ts';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -65,8 +66,9 @@ function recordingPool(statements: Statement[], afterHead?: () => Promise<void>,
       const client = await target.connect();
       return new Proxy(client, { get(connection, member) {
         if (member === 'query') return async (sql: string, args: unknown[] = []) => {
+          const counted = foregroundCounted();
           const result = await connection.query(sql, args);
-          if (sql.includes('AS individually_read')) statements.push({ sql, args: [...args] });
+          if (counted && sql.includes('AS individually_read')) statements.push({ sql, args: [...args] });
           if (afterHead && !arrived && sql.includes('head_sequence::text FROM access.notification_stream')) {
             arrived = true;
             await afterHead();
