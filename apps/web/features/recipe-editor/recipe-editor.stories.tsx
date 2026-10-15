@@ -28,6 +28,19 @@ const meta = { title: 'Recipe editor/Editor', component: Page, args: { locale: '
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+export const MixedMethodPreview: Story = {
+  args: { start: { ...startRecipe, nodes: [...startRecipe.nodes, { occurrence: id(60), parent: startRecipe.structure!,
+    role: 'instruction', reference: { target: id(61), selector: { grain: 'content', revision: id(62), variantId: id(63) } } }],
+    instructions: [{ occurrence: id(60), status: 'available', text: 'Fold in the lemon zest.',
+      reference: { target: id(61), selector: { grain: 'content', revision: id(62), variantId: id(63) } } }] } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Preview' }));
+    await expect(canvas.getByText('Cream the butter with the sugar.')).toBeVisible();
+    await expect(canvas.getByText('Fold in the lemon zest.')).toBeVisible();
+  },
+};
+
 const t = copyOf('en');
 const noOverflow = async () => { await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth); };
 const changes = () => current.calls.filter(call => call.name === 'changes');
