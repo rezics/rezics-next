@@ -161,12 +161,13 @@ public class g556QualificationTest {
             removed.put("body", "common catalogue phrase 0");
             fixture.index.deleteEntity(removed);
             fixture.index.commit();
-            try {
-                ranked.ranked(BODY, "common catalogue phrase", 20, after);
-                fail("an index write must restart a ranked continuation");
-            } catch (org.apache.jena.query.text.TextIndexException expectedRestart) {
-                assertTrue(expectedRestart.getMessage().contains("requires restart"));
-            }
+            // Ranked continuations retain their committed reader through writes
+            // (docs/contracts/search.md). Qualification still checks the live
+            // index independently, so an unjournaled deletion cannot certify it.
+            var retained = ranked.ranked(BODY, "common catalogue phrase", 20, after);
+            assertEquals(after.commit(), retained.commit());
+            assertEquals(20, retained.hits().size());
+            assertEquals(retained.hits(), ranked.ranked(BODY, "common catalogue phrase", 20, after).hits());
             assertEquals(false, SearchDeltaJournal.qualifiedProof(fixture.data, -1, 0).get("available"));
             assertFalse(SearchDeltaJournal.qualify(fixture.data));
         }

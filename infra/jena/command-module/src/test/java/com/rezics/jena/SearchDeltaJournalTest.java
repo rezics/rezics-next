@@ -1138,7 +1138,9 @@ public class SearchDeltaJournalTest {
                     String id = field.equals("publicTitle") ? PublicNameProjection.PREFIX + "legacy-preserved" : "urn:test:legacy:" + field;
                     Entity entity = new Entity(id, field.equals("privateBody") ? CommandPolicy.PRIVATE_SEARCH
                         : field.equals("occurrenceLabel") ? CommandPolicy.CURRENT : CommandPolicy.PUBLIC_SEARCH, "en", null);
-                    entity.put(field, "preserved legacy literal"); f.index.addEntity(entity);
+                    // Preserve unrelated documents with the current title-tier
+                    // metadata; only the selected Content body is legacy here.
+                    entity.put(field, "preserved legacy literal"); f.filtered.addEntity(entity);
                 }
                 f.data.commit();
             } finally { f.data.end(); }
