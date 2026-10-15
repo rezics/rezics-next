@@ -190,9 +190,10 @@ test('explicit preparation retains one API-built store across six independent po
       writeFileSync(jsonPath, JSON.stringify(measured, null, 2) + '\n');
       const report = buildSeedCommandCostReport(measured);
       if (stage.axis === 'unrelatedWorks') stageCostRows[stageKey] = report.rows;
-      const interval = scale === 'small' ? 'Commands issued for the initial 4-Work cut, including scenario setup.'
-        : `Commands issued while growing from the ${scale === 'medium' ? '4' : '16'}-Work cut to the ${stageKey}-Work cut.`;
-      writeFileSync(markdownPath, `# ${stageKey}-Work cut command costs\n\n${report.markdown}\n${interval}\nBuild run ID: ${sourceRunId}\n`);
+      const interval = ordinal === 0 ? 'Includes initial scenario setup.'
+        : scale === 'small' ? 'Reuses the previous stopped cut; no population commands.'
+          : `Commands issued while growing ${stage.axis} to ${manifest.dimensions[stage.axis]}.`;
+      writeFileSync(markdownPath, `# ${stage.axis} ${scale} cut command costs\n\n${report.markdown}\n${interval}\nBuild run ID: ${sourceRunId}\n`);
       if (scale === 'large' && stage.axis === 'unrelatedWorks') {
         const comparison = buildSeedCommandCostComparison(stageCostRows);
         const comparisonPath = join(seedDirectory, 'command-cost-compare.md');
@@ -204,7 +205,8 @@ test('explicit preparation retains one API-built store across six independent po
     expect(posts).toHaveLength(64);
     expect(SEED_AXES.every(axis => retained.axes[axis].length === WORK_PROFILE_SCALES.length)).toBe(true);
     saveRetainedSeed(retained);
-    console.log('largest retained seed build seconds', retained.cuts[2]!.timing.totalMs / 1000,
+    console.log('largest retained seed build seconds', Math.max(...Object.values(retained.axes).flat()
+      .map(cut => cut.timing.totalMs)) / 1000,
       'total build workflow seconds', (performance.now() - startedAt) / 1000);
     console.log('seed command-cost report paths', JSON.stringify(commandCostReportPaths));
   } finally {
