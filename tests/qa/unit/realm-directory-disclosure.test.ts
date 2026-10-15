@@ -79,7 +79,8 @@ test('resource-list successor gates Realm records while retaining independent Wo
   expect(resourceDisclosureTarget({ id: closed, kind: 'realm', head: id(20) }))
     .toEqual({ owner: 'graph', resource: closed, component: 'record', nameOwnerResolved: true });
   expect(resourceDisclosureTarget({ id: live, kind: 'work', head: id(21) }))
-    .toEqual({ owner: 'graph', resource: live, component: 'name', work: live, workRevision: id(21), revision: id(21), nameOwnerResolved: true });
+    .toEqual({ owner: 'graph', resource: live, component: 'name', nameOwnerResolved: true,
+      work: live, workRevision: id(21), revision: id(21) });
 });
 
 for (const hiddenName of [false, true]) {

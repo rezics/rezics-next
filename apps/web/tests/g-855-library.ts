@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { expect, type Page, type TestInfo } from '@playwright/test';
 import { canonicalJson } from '../../../services/main/src/modules/connected-apps/json.ts';
 import { axeViolations, formatViolations } from './a11y-axe.ts';
+import { signInAtAccounts } from './account-sign-in.ts';
 
 // Shared by the G-855 e2e files: the QA web member, a bounded sign-in, and a library of 1,200 records
 // written through the same import API the Library page uses (so nothing is seeded behind Main's back).
@@ -12,23 +13,9 @@ export function credentials() {
   return JSON.parse(readFileSync(path, 'utf8')) as { actingSubject: string; member: { email: string; password: string } };
 }
 
-/** The sign-in journey, bounded and retried: on a loaded host the Accounts site is sometimes slow to answer. */
+/** Share the public Accounts flow, including an existing session and canonical destination addresses. */
 export async function signIn(page: Page, next: string, member: { email: string; password: string }): Promise<void> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      await page.goto(`/auth/start?next=${encodeURIComponent(next)}`);
-      await page.waitForURL(url => url.pathname === '/sign-in', { timeout: 40_000 });
-      await page.locator('html[data-hydrated]').waitFor({ timeout: 40_000 });
-      await page.getByRole('textbox', { name: 'Email' }).fill(member.email);
-      await page.getByRole('button', { name: 'Next' }).click();
-      await page.getByLabel('Enter your password').fill(member.password);
-      await page.getByRole('button', { name: 'Next' }).click();
-      await expect(page).toHaveURL(next, { timeout: 40_000 });
-      return;
-    } catch (error) {
-      if (attempt === 3) throw error;
-    }
-  }
+  await signInAtAccounts(page, next, member);
 }
 
 export type Row = Record<string, unknown>;

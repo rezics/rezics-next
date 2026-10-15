@@ -2,16 +2,19 @@ import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { readerLanguages } from '../modules/display-language/select.ts';
 import { AccountAssertionInsufficientScope } from '../modules/account/verify-assertion.ts';
-import { actingContextCheck, actingContextDiscovery, actingContextPreference,
+import { actingContextCheck, actingContextDiscovery,
   authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { operationPolicies } from './operation-policies.ts';
+import { actingContextPreferenceModels, actingContextPreferenceOperation } from './acting-context-preference.contract.ts';
+import { actingContextPreferenceHandler } from './acting-context-preference.handler.ts';
 
 export const openApiOperations = {
   '/v1/me/agents': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
   '/v1/me/acting-contexts': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
   '/v1/me/acting-context-checks': { post: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
-  '/v1/me/acting-context-preferences/work.create': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true } },
+  '/v1/me/acting-context-preferences/work.create': { put: actingContextPreferenceOperation.policy },
   '/v1/me/session-agent': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true },
     put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
   '/v1/me/main-agent-preference': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true },
@@ -59,6 +62,8 @@ function identityError(error: unknown) {
 
 export function actingContextRoutes(work: MainWorkDependencies) {
   return new Elysia()
+    .use(operationPolicies(work))
+    .model(actingContextPreferenceModels)
     .get('/v1/me/agents', {
       query: t.Object({ languages: t.Optional(t.String({ maxLength: 400 })) },
         { additionalProperties: false }),
@@ -117,26 +122,8 @@ export function actingContextRoutes(work: MainWorkDependencies) {
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
-    .put('/v1/me/acting-context-preferences/work.create', {
-      body: t.Object({ profile: t.Literal('work-create-acting-context-preference-v1'),
-        task: t.Literal('work.create'),
-        actingSubject: t.Nullable(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
-        expectedRevision: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
-        idempotencyKey: t.String({ minLength: 1, maxLength: 128 }),
-      }, { additionalProperties: false }),
-      response: transportResponses(openApiOperations["/v1/me/acting-context-preferences/work.create"].put, { 200: actingContextPreference, ...writeProblems }, 'PUT'),
-    }, async ({ request, body }) => {
-      try {
-        const principal = await work.account.verify(request, ['work:create']);
-        if (!work.actingContexts) {
-          return problem(503, 'acting_context_unavailable', 'Acting contexts are unavailable');
-        }
-        const result = await work.actingContexts.setPreference(principal,
-          { actingSubject: body.actingSubject,
-            expectedRevision: body.expectedRevision, idempotencyKey: body.idempotencyKey });
-        return Response.json(result, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
-    })
+    [actingContextPreferenceOperation.method](actingContextPreferenceOperation.path,
+      actingContextPreferenceOperation.options, actingContextPreferenceHandler(work))
     .get('/v1/me/session-agent', {
       headers: sessionKeyHeader,
       response: transportResponses(openApiOperations["/v1/me/session-agent"].get, { 200: sessionAgentRead, ...authorizedReadProblems }, 'GET'),

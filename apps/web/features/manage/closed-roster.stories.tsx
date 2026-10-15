@@ -7,13 +7,15 @@ import { browserMainApi } from '../api/browser.ts';
 import { bffAdminApi } from './admin-api.ts';
 import { acting, agents, members, now, outgoingInvitations, realm as liveRealm, roles } from './fixtures.ts';
 import { messages } from './messages.ts';
+import japanese from './messages/ja.ts';
 import { MembersView } from './members-view.tsx';
 import { ManageFailure } from './parts.tsx';
 import { mapRealmMembers, readRealmMembersPage } from './realm-team-recorded-page.ts';
 
 const record = recordFile as AnswerRecord;
 type Mapping = ReturnType<typeof mapRealmMembers>;
-function ClosedRoster({ persona, closesAfterFirstPage = false }: { persona: AnswerPersona; closesAfterFirstPage?: boolean }) {
+function ClosedRoster({ persona, closesAfterFirstPage = false, locale = 'en' }: { persona: AnswerPersona; closesAfterFirstPage?: boolean; locale?: 'en' | 'ja' }) {
+  const copy = locale === 'ja' ? { ...messages, ...japanese } : messages;
   const fixture = useMemo(() => {
     const sample = record.personas[persona].find(item => item.label === 'members-private-header')!;
     const url = new URL(sample.path, 'https://contract.invalid');
@@ -39,13 +41,14 @@ function ClosedRoster({ persona, closesAfterFirstPage = false }: { persona: Answ
       .then(read => { if (active) setMapped(mapRealmMembers(read.page, read.roles, read.invitations, null)); });
     return () => { active = false; };
   }, [fixture]);
-  if (!mapped) return <p role="status" aria-busy="true">{messages.loadingMore}</p>;
-  if (mapped.kind === 'refusal') return <ManageFailure failure={mapped.failure} locale="en" messages={messages} />;
+  if (!mapped) return <p role="status" aria-busy="true">{copy.loadingMore}</p>;
+  if (mapped.kind === 'refusal') return <ManageFailure failure={mapped.failure} locale={locale} messages={copy} />;
   return <MembersView principal="storybook:closed-roster" realm={fixture.realm} actingSubject={fixture.actor} first={mapped.page}
-    agents={agents} invitations={mapped.invitations} roles={mapped.roles} now={now} locale="en" messages={messages}
+    agents={agents} invitations={mapped.invitations} roles={mapped.roles} now={now} locale={locale} messages={copy}
     api={bffAdminApi(fixture.realm, fixture.actor, () => fixture.main)} />;
 }
 const meta = {
+  render: (args, { globals }) => <ClosedRoster {...args} locale={globals.locale === 'ja' ? 'ja' : 'en'} />,
   title: 'Manage/Closed roster (contract states)', component: ClosedRoster, args: { persona: 'owner' as AnswerPersona, closesAfterFirstPage: false },
   parameters: { route: { pathname: `/en/manage/r/${liveRealm}/members` }, contractState: {
     source: 'Management roster requests are unrecorded. Concealed problems use the unchanged closure-roster answers.',

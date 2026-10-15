@@ -1,6 +1,7 @@
 import { existsSync, statSync, readFileSync, readdirSync, mkdirSync, writeFileSync, readlinkSync, rmSync, mkdtempSync } from 'node:fs';
 import { join, resolve, relative, isAbsolute, dirname } from 'node:path';
 import { stateDir, root, git } from './ledger.ts';
+import { loadSettings } from './config.ts';
 import { testArgs, unitHarnessFiles, type TestResult, parseJUnit, decodeXml } from '../qa/acceptance.ts';
 import { repositoryGuards, selectRepositoryGuards, filterRepositoryGuardFiles, repositoryGuardSelectionLine } from '../qa/repository-guards.ts';
 import { affectedOwnerTierEntries, type AffectedPlan, affectedUnitTierEntries } from '../qa/affected.ts';
@@ -685,21 +686,17 @@ export function balanceUnitShards(files: readonly string[], shards: number): str
   return groups;
 }
 
-/** Which affected files a merge runs itself. Program chooses `changed` in `unit-gate-scope` in the orchestration
- * state when landing is the limit and it runs the full affected set on main; `GOAL_UNIT_GATE_SCOPE` overrides it. */
+/** Which affected files a merge runs itself; the environment overrides the configured scope. */
 function unitGateScope(): 'affected' | 'changed' {
-  const file = join(stateDir, 'unit-gate-scope');
-  const value = process.env.GOAL_UNIT_GATE_SCOPE ?? (existsSync(file) ? readFileSync(file, 'utf8').trim() : '');
+  const value = process.env.GOAL_UNIT_GATE_SCOPE ?? loadSettings({ stateDirectory: stateDir }).settings.unitGateScope;
   return value === 'changed' ? 'changed' : 'affected';
 }
 
-/** How many shards of one gate run at a time. Program sets it for every Goal in `unit-gate-shards` in the
- * orchestration state; `GOAL_UNIT_GATE_SHARDS` overrides it for one process. Each shard still passes memory admission. */
+/** How many shards of one gate run at a time; the environment overrides one process.
+ * Each shard still passes memory admission. */
 function unitGateShards(): number {
   if (process.env.GOAL_UNIT_GATE_SHARDS) return positiveInteger('GOAL_UNIT_GATE_SHARDS', 4);
-  const file = join(stateDir, 'unit-gate-shards');
-  const stored = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
-  return /^[1-9]\d*$/.test(stored) && Number.isSafeInteger(Number(stored)) ? Number(stored) : 4;
+  return loadSettings({ stateDirectory: stateDir }).settings.unitGateShards;
 }
 
 /** Wall clock for every shard of one side. Twelve minutes: one Access-sized run previously waited past 25.

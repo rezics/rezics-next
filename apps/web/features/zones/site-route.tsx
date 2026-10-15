@@ -222,7 +222,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps, cli
           moduleData={homeView.publication.moduleData}
           slideMedia={homeView.slideMedia} context={homeView.context} zone={homeView.zone}
           pkg={homeView.pkg} messages={homeView.zoneMessages} />
-        {mapped.credit ? <ZoneSiteRecordedCredit credit={mapped.credit} /> : null}
+        {mapped.credit ? <ZoneSiteRecordedCredit credit={mapped.credit} locale={locale} /> : null}
       </RealmFrame>;
     }
     return SiteHomeRoute(communityProps, async () => homeView);

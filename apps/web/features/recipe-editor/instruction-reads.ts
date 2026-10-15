@@ -17,6 +17,15 @@ export interface InstructionDetails {
 }
 export type ReadInstruction = Instruction & { details?: InstructionDetails };
 
+async function instructionRead<T>(operation: string, read: () => Promise<T>): Promise<T> {
+  try { return await read(); }
+  catch (error) {
+    console.error(JSON.stringify({ event: 'recipe_instruction_read_failed', operation,
+      error: error instanceof Error ? error.name : 'UnknownError' }));
+    throw error;
+  }
+}
+
 /** References are inspected once; resolving an intermediate Recipe never expands its dependencies. */
 function referencesIn(document: DocumentSnapshot): Reference[] {
   const references: Reference[] = [];
@@ -37,7 +46,8 @@ async function readReferences(main: MainClient, references: Reference[], query: 
   refusals: InstructionDetails['refusals']): Promise<Resolutions['items']> {
   const resolved: Resolutions['items'] = [];
   for (let offset = 0; offset < references.length; offset += 16) {
-    const page = await main.v1['resource-reference-resolutions'].post({ ...query, references: references.slice(offset, offset + 16) });
+    const page = await instructionRead('resource-reference-resolutions', () =>
+      main.v1['resource-reference-resolutions'].post({ ...query, references: references.slice(offset, offset + 16) }));
     if (page.error || page.status !== 200) refusals.push({ status: page.status, problem: page.error?.value ?? page.data });
     else if (page.data) resolved.push(...page.data.items);
   }
@@ -65,17 +75,17 @@ export async function readInstructionDetails(main: MainClient, instructions: rea
           return answer.data;
         };
         if (selector.grain === 'content') {
-          const exact = keep(await main.v1['content-revisions']({ revision: selector.revision }).get({ query }));
+          const exact = keep(await instructionRead('content-revisions', () => main.v1['content-revisions']({ revision: selector.revision }).get({ query })));
           if (exact) details.author = exact.reference.provenance.author;
-          const derivations = await main.v1['content-revisions']({ revision: selector.revision }).derivations.get({
+          const derivations = await instructionRead('content-derivations', () => main.v1['content-revisions']({ revision: selector.revision }).derivations.get({
             query: { ...query, limit: 20 },
-          });
+          }));
           const credits = [details.author, ...(derivations.data?.items.map(record =>
             typeof record.responsibleAgent === 'string' ? record.responsibleAgent : undefined) ?? [])];
           await Promise.all(credits.map(async agent => {
             if (!agent) return;
             let request = agents.get(agent);
-            if (!request) { request = main.v1.agents({ id: agent.slice(-36) }).get({ query }); agents.set(agent, request); }
+            if (!request) { request = instructionRead('agents', () => main.v1.agents({ id: agent.slice(-36) }).get({ query })); agents.set(agent, request); }
             const profile = keep(await request);
             if (profile) details.creditNames![agent] = profile.displayName;
           }));
@@ -84,9 +94,9 @@ export async function readInstructionDetails(main: MainClient, instructions: rea
           details.references = await readReferences(main, references, query, details.refusals);
           return { ...details, derivations: keep(derivations) ?? undefined };
         } else {
-          details.recording = keep(await main.v1.media.representations({ representation: selector.representation }).get({
+          details.recording = keep(await instructionRead('media-representations', () => main.v1.media.representations({ representation: selector.representation }).get({
             query: { ...query, ...(instruction.mediaUse ? { use: instruction.mediaUse } : {}) },
-          })) ?? undefined;
+          }))) ?? undefined;
         }
         return details;
       })();

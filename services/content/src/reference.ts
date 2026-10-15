@@ -1,12 +1,12 @@
 import { documentText, type DocumentSnapshot } from '@rezics/document';
-import { checkedResourceReference, contentDocumentNodes, resourceReferenceProjection, type ResourceReference } from './adoption.ts';
+import { checkedResourceReference, contentDocumentNodes, resourceReferenceProjection, type ContentSelection, type ResourceReference } from './adoption.ts';
 
 /** Owner adapters prove membership and disclosure at the exact requested grain. */
 export interface ReferenceOwners {
   resource(target: string): Promise<boolean>;
   revision(target: string, revision: string): Promise<boolean>;
   occurrence(target: string, structure: string, revision: string, occurrence: string): Promise<boolean>;
-  content(target: string, variant: string, revision: string): Promise<{ document?: DocumentSnapshot; body: string } | null>;
+  content(target: string, variant: string, revision: string, selector: ContentSelection['selector']): Promise<{ document?: DocumentSnapshot; body: string } | null>;
   representation(target: string, revision: string, representation: string): Promise<{ duration?: number } | null>;
 }
 export type ReferenceResolution = { status: 'unavailable' } | {
@@ -22,7 +22,7 @@ export async function resolveResourceReference(value: ResourceReference, owners:
     case 'revision': available = await owners.revision(reference.target, s.revision); break;
     case 'occurrence': available = await owners.occurrence(reference.target, s.structure, s.revision, s.occurrence); break;
     case 'content': {
-      const content = await owners.content(reference.target, s.variantId, s.revision);
+      const content = await owners.content(reference.target, s.variantId, s.revision, s);
       if (!content) break;
       document = content.document; text = content.body; available = true;
       if (s.block) {

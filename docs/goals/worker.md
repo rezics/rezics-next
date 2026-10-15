@@ -31,8 +31,11 @@ makes, stop and report that instead of building it.
 ## Scope
 
 - Change the files your claimed `paths` match. A needed file outside them: if
-  `task goal -- owner <path>` prints `unclaimed`, make the minimal change and
-  list it under OWNER CHANGES; if another task claims it, hand off that blocker.
+  `task goal -- owner <path>` prints `unclaimed` or an unlanded overlap, make the
+  minimal change and list it under OWNER CHANGES. An overlap on another branch
+  (including a wave, merge candidate, exited or stopped task) is resolved at
+  merge: proceed and note it in the handoff. Hand off a blocker only for another
+  starting or running task's explicit path claim on the same integration base.
   Other needed work goes under PROPOSED TASKS, not into your diff.
 - Name files, tests and identifiers by capability or acceptance ID, never by
   task ID; comments state reasons, not task IDs.
@@ -142,7 +145,22 @@ test files that call it. The query is part of an operationId or of a path;
 
 Run any command expected to take over a minute through
 `task goal -- job -- <command…>`, including checks, QA-stack tests and queued
-type checks. The command runs inline for up to 20 seconds. Set the tool call's
+type checks. Declare all remaining checks that need no intervention as one ordered
+sequence, rather than parking separately for each:
+
+```sh
+task goal -- job --then 'task docs:check' --then 'task goal -- check' -- task goal -- test scripts/goal/job.test.ts
+```
+
+The command after `--` runs first; each `--then` is a quoted shell command, run
+in order in the same worktree with the existing admission, its own log and a
+four-hour deadline per command. The owner stops at the first nonzero exit,
+signal, lost executor or timeout and wakes you once with the failed command,
+exit status and first error lines. When every command passes, it wakes you once
+with one result line and log path per command. A lost owner also fails the
+sequence; remaining commands never start. A plain job keeps its existing behavior.
+
+The whole sequence runs inline for up to 20 seconds. Set the tool call's
 `yield_time_ms` to exactly `30000` (30 seconds), including an orchestration
 wrapper's yield when using one: one call returns the result or `PARKED`, with
 no polling. If it finishes, read its result; otherwise it prints `PARKED job:<id>; end your turn with

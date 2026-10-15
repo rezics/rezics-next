@@ -118,7 +118,7 @@ export function ImageInsert({ editor, labels, request, upload, onClose }: {
         aria-label={labels.url} placeholder={labels.imageLinkPlaceholder} aria-invalid={invalid} value={url}
         onChange={event => { setUrl(event.target.value); setInvalid(false); }} />
     </Field>
-    {invalid ? <p role="alert" className="text-xs text-destructive">{labels.invalidUrl}</p> : null}
+    {invalid ? <p role="alert" className="text-xs text-destructive-foreground">{labels.invalidUrl}</p> : null}
     <Field>
       <FieldLabel className="text-xs text-muted-foreground">{labels.imageAlt}</FieldLabel>
       <Input size="sm" value={alt} onChange={event => setAlt(event.target.value)} />
@@ -143,7 +143,7 @@ export function ImageInsert({ editor, labels, request, upload, onClose }: {
         <Button autoFocus type="button" variant="outline" size="sm" disabled={busy} onClick={() => picker.current?.click()}>
           {busy ? <Spinner aria-hidden="true" /> : <UploadIcon aria-hidden="true" />}{busy ? labels.uploading : labels.uploadFile}
         </Button>
-        {failed ? <p role="alert" className="text-xs text-destructive">{labels.uploadFailed}</p> : null}
+        {failed ? <p role="alert" className="text-xs text-destructive-foreground">{labels.uploadFailed}</p> : null}
       </TabsContent>
       <TabsContent value="link" className="pt-2">{link}</TabsContent>
     </Tabs> : link}

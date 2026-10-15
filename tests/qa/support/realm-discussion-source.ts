@@ -5,18 +5,21 @@ import { stable } from '../../../scripts/fixture/corpus.ts';
 import type { RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
 import { RetainedSources, type RetainedSourceAdapter, type SourceContext, type SourceInputs } from '../../../scripts/qa/retained-source.ts';
 import type { PersonaName, PersonaSession, PersonaSessions, RetainedPersonaRealm } from './personas.ts';
+import { prepareRealmRankingStates } from './realm-ranking-fixture.ts';
+import { realmSourceBuildDeadlineMs } from './realm-discussion-budget.ts';
+export { realmSourceBuildDeadlineMs } from './realm-discussion-budget.ts';
 
 export const realmSourcePopulation = Object.freeze({ publicRanking: 261, retainedPrivate: 21,
   currentPrivate: 21, roots: 21, siblings: 193, nested: 34, privateRoots: 1 });
-export const realmSourceBuildDeadlineMs = 1_800_000;
 /** Bound fixture authority independently of active operation clocks. A retained
  * grant must survive producer work and the host's admission queue unchanged. */
 export const realmSourceAuthorityLifetimeMs = 86_400_000;
 export const realmSourceBuildEvidence = 'Measured retained attempt 20261014t020607-6ecee7: 189 serial identities in 290645ms; ' +
   '192 drafts in 77594ms and 184 placements in 42794ms. The complete 552-publication corpus extrapolates to about ' +
   '1200s of these phases, plus four persona bootstraps, authority/complete inventory reads and the admission transition. ' +
-  'Declare 1800s active producer work as a bounded estimate to recheck in prove, separately from the unchanged 600s physical cut. ' +
-  'This estimate establishes neither a product cause nor a measured complete-build pass.';
+  'The complete 573-publication attempts 20261015t103925-3e9ad8 and 20261015t112537-961239 exhausted 1800s during verification. ' +
+  'Allow 3600s only for the one-time producer; restore/readiness and the physical cut retain their separate 600s bounds. ' +
+  'Record the measured complete-build duration before reusing the retained result.';
 
 export const realmSourceRoles = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const;
 export type RealmSourceSessions = {
@@ -105,6 +108,7 @@ export type RealmSourceMetadata = {
     privateAccountId: string | null; privateActingSubject: string | null;
   }>>;
   ranking: { publicWork: RealmSourceWork; retainedWork: RealmSourceWork; currentWork: RealmSourceWork;
+    states: { emptyRealm: string; movedRealm: string };
     public: RealmSourceReply[]; retained: RealmSourceReply[]; current: RealmSourceReply[];
     admission: { before: RetainedOwnerState; after: RetainedOwnerState; settings: RetainedOwnerState } };
   discussion: { publicWork: RealmSourceWork; privateWork: RealmSourceWork; roots: RealmSourceReply[];
@@ -152,6 +156,9 @@ export function validateRealmSourceMetadata(metadata: RealmSourceMetadata, now =
   requireFact(stable(metadata.population) === stable(realmSourcePopulation), 'populations differ');
   requireFact(metadata.startingStatesValidUntil > now, 'original moderation starting states have expired');
   const { ranking, discussion } = metadata;
+  requireFact(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(ranking.states?.emptyRealm)
+    && /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(ranking.states?.movedRealm)
+    && ranking.states.emptyRealm !== ranking.states.movedRealm, 'ranking state Realms differ');
   const collections = [ranking.public, ranking.retained, ranking.current, discussion.roots,
     discussion.siblings, discussion.nested, [discussion.privateOpener]];
   const counts = Object.values(realmSourcePopulation);
@@ -230,8 +237,7 @@ async function grow(sessions: PersonaSessions, work: RealmSourceWork, bodies: st
     return { reply, variantId, ...draft, body, author: person.actingSubject!, rootTarget: work.work, rootRevision: work.workRevision,
       parentReply: parent?.reply ?? null, parentRevision: parent?.revisionId ?? null, contextRevision: null };
   }));
-  // Preserve the accepted before/after correction: draft/placement batches of
-  // eight, with no fixture graph writes overlapping identity's root read interval.
+  // Content drafts can overlap. Keep identity's root reads clear of writes.
   for (const item of drafts) {
     const identity = { profile: 'realm-reply-identity-v1', reply: item.reply, variantId: item.variantId, revisionId: item.revisionId,
       author: item.author, rootTarget: item.rootTarget, rootRevision: item.rootRevision,
@@ -240,13 +246,17 @@ async function grow(sessions: PersonaSessions, work: RealmSourceWork, bodies: st
     for (const field of Object.keys(identity) as (keyof typeof identity)[])
       requireFact(saved[field] === identity[field], `identity publication changed ${field}`);
   }
-  return together(drafts.map(async item => {
+  const placed: RealmSourceReply[] = [];
+  // Eight queued graph commands exceeded the native 12-second command bound.
+  // Pairs overlap admission/settlement without building that writer queue.
+  for (let start = 0; start < drafts.length; start += 2) placed.push(...await together(drafts.slice(start, start + 2).map(async item => {
     const placement = await command<{ placement: string }>(person, work, '/v1/realm-reply-placements', {
       profile: 'realm-reply-placement-v1', realm: sessions.realm, reply: item.reply,
       revisionId: item.revisionId, revisionDigest: item.revisionDigest, reviewDecisionId: null,
       expectedHead: null, actingSubject: person.actingSubject });
     return { ...item, placement: placement.placement };
-  }));
+  })));
+  return placed;
 }
 
 async function createWork(sessions: PersonaSessions, title: string) {
@@ -367,6 +377,7 @@ export async function buildRealmDiscussionCorpus(runtime: RealmSourceRuntime, co
     });
     const privateOpener = await phase('discussion-private-opener', async () => (await grow(live.discussionPrivate, privateWork,
       ['Private garden\nAn original contribution in a private Realm.']))[0]!);
+    const rankingStates = await phase('ranking-chart-and-cursor-states', () => prepareRealmRankingStates(live.rankingPublic));
     const realms = Object.fromEntries(Object.entries(live).map(([name, value]) => [name, runtime.retain(value)])) as RealmSourceMetadata['realms'];
     const authoritySnapshots = await phase('starting-authority-snapshots', async () => Object.fromEntries(await together(
       Object.entries(live).map(async ([name, realm]) => [name, await realmAuthoritySnapshot(realm)] as const))) as RealmSourceMetadata['authoritySnapshots']);
@@ -379,7 +390,7 @@ export async function buildRealmDiscussionCorpus(runtime: RealmSourceRuntime, co
     })) as RealmSourceMetadata['sequenceStarts'];
     const metadata: RealmSourceMetadata = { contract: 'realm-discussion-source-v1', population: realmSourcePopulation,
       realms, authoritySnapshots, startingStatesValidUntil: startedAt + realmSourceAuthorityLifetimeMs, sequenceStarts,
-      ranking: { publicWork, retainedWork, currentWork, public: pub, retained, current, admission },
+      ranking: { publicWork, retainedWork, currentWork, public: pub, retained, current, admission, states: rankingStates },
       discussion: { publicWork: discussionWork, privateWork, roots, siblings, nested, privateOpener },
       measurements: realmSourceMeasurements(requests, intervals) };
     await phase('verify-complete-source', () => verifyRealmDiscussionCorpus(live, metadata));
@@ -446,17 +457,24 @@ export async function verifyRealmDiscussionCorpus(sessions: RealmSourceSessions,
   for (const [realm, work, items] of inventories) {
     if (row && realm !== sessions.rankingPublic && realm !== sessions.rankingPrivate) continue;
     await authority(realm.owner, work);
+    // The producer proves every exact revision, and physical custody binds
+    // those immutable bytes. The ranking outcome traverses the complete restored
+    // inventory for all six readers; do not hydrate it once more during readiness.
+    if (row) continue;
     for (let start = 0; start < items.length; start += 8) await together(items.slice(start, start + 8).map(async expected => {
-      const selected = await answer<RealmSourceReply>(realm.owner.main('GET', `/v1/member-replies/${short(expected.reply)}?${acting(realm.owner)}`));
+      // These views read the completed source with no producer writes left.
+      const [selected, placed, branch] = await Promise.all([
+        answer<RealmSourceReply>(realm.owner.main('GET', `/v1/member-replies/${short(expected.reply)}?${acting(realm.owner)}`)),
+        answer<{ placement: string; realm: string; reply: string; revisionId: string; author: string; rootTarget: string }>(
+        realm.owner.main('GET', `/v1/realms/${encodeURIComponent(realm.realm)}/replies/${encodeURIComponent(expected.reply)}?${acting(realm.owner)}`)),
+        answer<{ rootRevision: string; items: { reply: string; parent: string | null; revisionId: string }[] }>(
+        realm.owner.main('GET', `/v1/realms/${short(realm.realm)}/threads/${short(expected.reply)}?${acting(realm.owner)}`)),
+      ]);
       for (const field of ['reply', 'variantId', 'revisionId', 'revisionDigest', 'author', 'rootTarget', 'rootRevision', 'body'] as const)
         requireFact(selected[field] === expected[field], `restored exact reply ${field} differs`);
-      const placed = await answer<{ placement: string; realm: string; reply: string; revisionId: string; author: string; rootTarget: string }>(
-        realm.owner.main('GET', `/v1/realms/${encodeURIComponent(realm.realm)}/replies/${encodeURIComponent(expected.reply)}?${acting(realm.owner)}`));
       for (const field of ['placement', 'reply', 'revisionId', 'author', 'rootTarget'] as const)
         requireFact(placed[field] === expected[field], `restored placement ${field} differs`);
       requireFact(placed.realm === realm.realm, 'restored placement Realm differs');
-      const branch = await answer<{ rootRevision: string; items: { reply: string; parent: string | null; revisionId: string }[] }>(
-        realm.owner.main('GET', `/v1/realms/${short(realm.realm)}/threads/${short(expected.reply)}?${acting(realm.owner)}`));
       const focus = branch.items.find(item => item.reply === expected.reply);
       requireFact(branch.rootRevision === expected.rootRevision && focus?.revisionId === expected.revisionId &&
         focus.parent === expected.parentReply, 'restored exact thread binding differs');

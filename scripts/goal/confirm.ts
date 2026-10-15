@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { loadSettings } from './config.ts';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath, UNEXECUTED_FILE_TEST } from '../qa/acceptance.ts';
@@ -287,8 +288,7 @@ export function scheduleConfirmation(options: ScheduleConfirmationOptions): bool
   const { repo, stateDir } = options;
   const now = options.now ?? Date.now();
   mkdirSync(stateDir, { recursive: true });
-  const intervalPath = join(stateDir, 'confirm-interval-minutes');
-  const minutes = existsSync(intervalPath) ? Number(readFileSync(intervalPath, 'utf8').trim()) : 90;
+  const minutes = loadSettings({ stateDirectory: stateDir, cwd: repo }).settings.confirmIntervalMinutes;
   if (!Number.isFinite(minutes) || minutes < 0 || minutes === 0 || confirmationRunning(stateDir)) return false;
   const record = latestConfirmation(stateDir);
   const startPath = join(stateDir, 'confirm-last-start');

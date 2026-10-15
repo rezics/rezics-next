@@ -101,7 +101,7 @@ async function expectOwnerLibrary(canvasElement: HTMLElement) {
   await expect(reading.getByText(/Next: Chapter 1/)).toBeVisible();
   await expect(reading.getByText(/2 chapters left/)).toBeVisible();
   await expect(canvas.getByRole('heading', { level: 2, name: 'Reading in 2026' })).toBeVisible();
-  await expect(canvas.getByText('1 chapters completed')).toBeVisible();
+  await expect(canvas.getByText('1 chapter completed')).toBeVisible();
 }
 
 /** Owner’s recorded shelves, reading status and the next chapter. */

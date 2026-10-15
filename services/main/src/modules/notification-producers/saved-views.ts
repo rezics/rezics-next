@@ -148,7 +148,7 @@ export class SavedViewNotifications implements NotificationSubjectReader {
           if (!(error instanceof QueryRejected)) throw error;
           // A saved document can outlive an executable template. Its typed
           // refusal must not stall unrelated followers behind it.
-          logWorkerFault('main.notification.saved-views', Object.assign(error, { code: error.refusal }));
+          logWorkerFault('main.notification.saved-views', Object.assign(error, { code: error.refusal }), { messages: false });
           continue;
         }
         if (!subject) continue;

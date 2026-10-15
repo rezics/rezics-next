@@ -23,7 +23,7 @@ function RecordedEntry({ persona, state, locale }: { persona: AnswerPersona; sta
     let active = true;
     const closed = state === 'closed';
     const record = (closed ? closure : admission) as AnswerRecord;
-    const labels = closed ? record.personas[persona].filter(sample => sample.label.startsWith('discussion-')).map(sample => sample.label)
+    const labels = closed ? record.personas[persona].filter(sample => sample.label.startsWith('discussion-') && !sample.label.includes('@')).map(sample => sample.label)
       : persona === 'visitor' ? ['join-address', 'private-realm-hidden', 'request-landing']
         : ['join-address', 'join-public-realm', 'join-realm', 'join-landing', 'join-session-agent',
           state === 'requested' ? 'join-own-request-pending' : state === 'withdrawn' ? 'join-own-request-withdrawn' : 'join-own-requests-before-request'];
@@ -32,7 +32,7 @@ function RecordedEntry({ persona, state, locale }: { persona: AnswerPersona; sta
       return { label, state: state === 'loading' && label === 'join-address' ? 'loading' : sample.status >= 400 ? 'error' : 'populated' };
     });
     const replay = recordedRealmEntry(record, persona, selections, closed ? 'discussion-space-address' : 'join-address',
-      persona === 'visitor' ? undefined : closed ? 'discussion-session-agent' : 'join-session-agent');
+      persona === 'visitor' ? undefined : closed ? 'discussion-session-agent' : 'join-session-agent', locale);
     void replay.read(locale).then(({ resolved, actingSubject }) => {
       if (!active) return;
       let content: ReactNode;

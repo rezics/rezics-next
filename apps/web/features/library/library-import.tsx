@@ -338,7 +338,7 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
                 if (file) void upload(file); }} /></label>}
           {uploading ? <p role="status" className="text-muted-foreground text-sm">{t.importUploading}</p> : null}
         </>}
-        {error ? <p role="alert" className="text-destructive text-sm">{error}</p> : null}
+        {error ? <p role="alert" className="text-destructive-foreground text-sm">{error}</p> : null}
         {active ? <div className="grid gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-muted-foreground text-sm">{t.importFileSelected({ name: active.entry.name })}</p>

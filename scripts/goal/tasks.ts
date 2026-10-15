@@ -1,9 +1,9 @@
-import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, type Ledger, isClaudeCode, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
-import { root, withLedger, briefGoal, unlandedChangeConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH, REGENERATION_COMMIT_SUBJECT } from './ledger.ts';
+import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, type Ledger, isClaudeCode, isCodex, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
+import { root, withLedger, briefGoal, briefClaimConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, preserveTaskOutputs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH, REGENERATION_COMMIT_SUBJECT } from './ledger.ts';
 import { pathToFileURL } from 'node:url';
 import { join, resolve, basename, relative, dirname, posix } from 'node:path';
 import { readFileSync, existsSync, mkdirSync, writeFileSync, readdirSync, readlinkSync, renameSync } from 'node:fs';
-import { parseBrief, validateBrief, mechanismSectionErrors, claimConflicts, areaConflicts, validGoalSlug, goalFile, GOALS_DIR, HISTORY_EXEMPT, nextTaskId, goalBriefFile } from './briefs.ts';
+import { parseBrief, validateBrief, mechanismSectionErrors, areaConflicts, validGoalSlug, goalFile, GOALS_DIR, HISTORY_EXEMPT, nextTaskId, goalBriefFile } from './briefs.ts';
 import { launchGates, briefFile, launch, workerPrompt, lastAttempt, taskOf, readResult, capacityRefusal, transportDrop, transportContinuations, transportContinuationPrompt, handoffContinuations, hasHandoff, cleanSessionEnd, changedFiles, elapsed, describe, running } from './launch.ts';
 import { postgresSocketRefusal, physicalPath } from './postgres-socket.ts';
 import { describeAccount } from './usage.ts';
@@ -74,10 +74,11 @@ export function neededFileWaits(brief: Brief): string[] {
     { cwd: root, encoding: 'utf8' }).status !== 0).map(path => `${brief.id} needs ${path}, which is absent from main`);
 }
 
-export async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
+export async function dispatch(briefPath: string, flags: Set<string>, overrideEngine?: string): Promise<void> {
   const absolute = resolve(briefPath);
   const text = readFileSync(absolute, 'utf8');
   const brief = parseBrief(text);
+  if (overrideEngine !== undefined) brief.engine = overrideEngine;
   const errors = [...validateBrief(brief), ...mechanismSectionErrors(text)];
   if (errors.length) throw new Error(`Invalid brief ${briefPath}:\n  ${errors.join('\n  ')}`);
   const methodErrors = await dispatchMethodErrors(brief, text);
@@ -89,8 +90,7 @@ export async function dispatch(briefPath: string, flags: Set<string>): Promise<v
     const reservedBy = ledger.reserved?.[brief.id];
     if (reservedBy && reservedBy !== goal) throw new Error(`${brief.id} is reserved for Goal ${reservedBy}; take an ID with \`new\``);
     const tasks = Object.values(ledger.tasks);
-    // Commits outside the claim are held until that task lands or closes, or land would refuse it.
-    const conflicts = [...claimConflicts(brief, tasks), ...unlandedChangeConflicts(brief, tasks)];
+    const conflicts = briefClaimConflicts(brief, tasks, goal);
     if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(brief.paths, goal, areasOf(activeGoals(ledger))));
     if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
     for (const id of brief.depends) {
@@ -436,7 +436,7 @@ export async function landTask(id: string, step = false, gateLane: GateLaneOptio
           || current.branch !== snapshot.task.branch || current.worktree !== snapshot.task.worktree) {
           throw new Error(`${current.id}: task or brief changed during review; review again`);
         }
-      }, permittedFiles, false, gateLane), close: () => closeTasks([id], 'verified') });
+      }, permittedFiles, false, gateLane, landingLease), close: () => closeTasks([id], 'verified') });
   } finally {
     landingLease.release();
   }
@@ -500,7 +500,7 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
     if (refusal) throw new Error(`${task.id}: ${refusal}`);
     const previousEngine = engineOf(previous);
     const nextEngine = engine === 'sol'
-      ? previousEngine === 'codex' || previousEngine === 'codex-1' ? previousEngine : dispatchEngine(engine)
+      ? isCodex(previousEngine) ? previousEngine : dispatchEngine(engine)
       : engine ?? previousEngine;
     const nextEffort = effort ?? previous.effort;
     if (!effortsOf(nextEngine).includes(nextEffort)) {
@@ -663,11 +663,8 @@ function replacementClaims(task: Task, ledger: Ledger, source: ReturnType<typeof
   const changed = Object.entries(claims).filter(([key, value]) => !isDeepStrictEqual(task[key as keyof Task], value))
     .map(([key]) => key);
   if (onlyChanged && !changed.length) return { claims, changed };
-  // A path this task already holds was claimed before any later change to it, so only added paths can
-  // collide with another task's unlanded change.
   const added = { ...brief, paths: brief.paths.filter(path => !task.paths.includes(path)) };
-  const conflicts = [...claimConflicts(brief, Object.values(ledger.tasks)),
-    ...unlandedChangeConflicts(added, Object.values(ledger.tasks))];
+  const conflicts = briefClaimConflicts(brief, Object.values(ledger.tasks), task.goal);
   // Another Goal's area is likewise checked for added paths only: a held path was admitted, with `--allow-area`
   // where it needed it, and a resume that changes anything else in the brief must not refuse it again.
   if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(added.paths, task.goal, areasOf(activeGoals(ledger))));
@@ -739,6 +736,7 @@ async function closeTask(id: string, outcome: 'verified' | 'cancelled'): Promise
     // A shared worktree stays while another open task still works in it.
     const sharers = Object.values(ledger.tasks).filter(other => other.id !== task.id
       && other.worktree === task.worktree && !['verified', 'cancelled'].includes(other.state));
+    preserveTaskOutputs(task);
     if (existsSync(task.worktree) && !sharers.length) {
       killWorktreeProcesses(task.worktree);
       removeWorktreeStack(task.worktree);

@@ -118,7 +118,7 @@ function CommunityList({
       >
         {shown.map((item) => (
           <li key={item.id} className="min-w-0">
-            <Link
+            <Link prefetch={false}
               href={localizedPath(item.href, locale)}
               onClick={onNavigate}
               title={item.name}
@@ -205,7 +205,7 @@ function CommunityList({
         </Button>
       ) : null}
       {collapsed && hasMore ? (
-        <Link
+        <Link prefetch={false}
           href={localizedPath('/following', locale)}
           onClick={onNavigate}
           className={cn(row, 'justify-center px-0')}
@@ -330,7 +330,7 @@ export function CommunityNav({
               avatarQuery={data.avatarQuery}
               onNavigate={onNavigate}
             />
-            <Link
+            <Link prefetch={false}
               href={localizedPath('/following', locale)}
               onClick={onNavigate}
               title={collapsed ? copy.manage : undefined}
@@ -345,7 +345,7 @@ export function CommunityNav({
       ) : null}
       {data.moderated.length ? (
         <Section title={t.moderation} collapsed={collapsed}>
-          <Link
+          <Link prefetch={false}
             href={localizedPath(manageHref(data.moderated), locale)}
             onClick={onNavigate}
             title={collapsed ? t.manage : undefined}

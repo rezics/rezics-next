@@ -71,7 +71,7 @@ function MoreReplies({ continuation, load, href }: {
     </button>
     {state === 'loading' ? <span role="status" className="sr-only">{t.loadingReplies}</span> : null}
     {state === 'failed' ? <div className="grid gap-1 text-sm">
-      <p role="alert" className="text-destructive">{t.moreRepliesFailed}</p>
+      <p role="alert" className="text-destructive-foreground">{t.moreRepliesFailed}</p>
       <LocalizedLink href={href} documentNavigation
         className="w-fit font-medium text-primary underline underline-offset-4">
         {t.continueThread}

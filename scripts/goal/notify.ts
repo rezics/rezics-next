@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
+import { loadSettings } from './config.ts';
 
 type DecisionOption = { letter: string; text: string };
 type DecisionRow = {
@@ -221,11 +222,8 @@ function telegramConfig(stateDir: string): TelegramConfig {
   } catch {
     // Missing or malformed secrets stay private and leave notices queued.
   }
-  let chat = process.env.GOAL_TELEGRAM_CHAT?.trim();
-  if (!chat) {
-    try { chat = readFileSync(join(stateDir, 'telegram-chat'), 'utf8').trim(); }
-    catch { /* An absent chat is reported without exposing the file path. */ }
-  }
+  const chat = process.env.GOAL_TELEGRAM_CHAT?.trim()
+    || loadSettings({ stateDirectory: stateDir }).settings.telegramChat;
   return { token, chat: chat || undefined, api: process.env.GOAL_TELEGRAM_API || 'https://api.telegram.org' };
 }
 

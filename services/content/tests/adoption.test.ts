@@ -72,13 +72,13 @@ test('Resource mentions keep fallback and refuse mismatched selector syntax with
 
 test('exact Content resolution pins the variant and revision, validates block spans, and conceals refused identities', async () => {
   const document = structuredClone(fromPlainText('Pinned instruction', 'blocks')); document.doc.content![0]!.attrs!.id = 'step';
-  const calls: string[][] = [];
+  const calls: unknown[][] = [];
   const owners: ReferenceOwners = { resource: async () => false, revision: async () => false,
     occurrence: async () => false, representation: async () => null,
     content: async (...ids) => { calls.push(ids); return ids[2] === revision ? { document, body: 'Pinned instruction' } : null; } };
   const selection: ResourceReference = { ...ref, selector: { ...ref.selector as Extract<ResourceReference['selector'], { grain: 'content' }>, block: 'step', span: { start: 0, end: 6 } } };
   expect(await resolveResourceReference(selection, owners)).toMatchObject({ status: 'available', reference: selection, text: 'Pinned' });
-  expect(calls[0]).toEqual([ref.target, 'urn:rezics:variant:00000000-0000-4000-8000-000000000002', revision]);
+  expect(calls[0]).toEqual([ref.target, 'urn:rezics:variant:00000000-0000-4000-8000-000000000002', revision, selection.selector]);
   expect(await resolveResourceReference({ ...ref, selector: { ...selection.selector as Extract<ResourceReference['selector'], { grain: 'content' }>, block: 'missing' } }, owners)).toEqual({ status: 'unavailable' });
   expect(await resolveResourceReference(ref, { ...owners, content: async () => null })).toEqual({ status: 'unavailable' });
   expect(await resolveResourceReference({ target: id(99), selector: { grain: 'resource' } }, owners)).toEqual({ status: 'unavailable' });

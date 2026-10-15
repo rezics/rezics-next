@@ -257,7 +257,7 @@ console.log('Owner deadline: ' + process.env.REZICS_QA_OWNER_BUDGET_MS);
     } finally { r.cleanup(); }
   });
 
-  test('the lane count file widens the batches in flight and its absence keeps two', async () => {
+  test('user settings widen the batches in flight and their absence keeps the caller default', async () => {
     const r = repo();
     let active = 0;
     let maximum = 0;
@@ -268,10 +268,10 @@ console.log('Owner deadline: ' + process.env.REZICS_QA_OWNER_BUDGET_MS);
       }
       r.commit();
       expect(regressionLaneLimit(r.options.stateDir, 2)).toBe(2);
-      mkdirSync(r.options.stateDir, { recursive: true });
-      writeFileSync(join(r.options.stateDir, 'regress-lane-count'), 'many\n');
-      expect(regressionLaneLimit(r.options.stateDir, 2)).toBe(2);
-      writeFileSync(join(r.options.stateDir, 'regress-lane-count'), '4\n');
+      expect(regressionLaneLimit(r.options.stateDir, 1)).toBe(1);
+      r.write('.goalctl/settings.user.json', JSON.stringify({ version: 1, regressLaneCount: 'many' }));
+      expect(() => regressionLaneLimit(r.options.stateDir, 2)).toThrow('regressLaneCount');
+      r.write('.goalctl/settings.user.json', JSON.stringify({ version: 1, regressLaneCount: 4 }));
       expect(regressionLaneLimit(r.options.stateDir, 2)).toBe(4);
       const result = await r.run({ runId: 'wide-lanes', slots: 3, only: ['owner'], runner: async (...args) => {
         // Each batch is given as many host slots as there are lanes, or the lanes queue for two slots.

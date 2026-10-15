@@ -2,6 +2,7 @@
 
 import type { UiLocale } from '../../i18n/define.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
+import shellJa from '../shell/messages/ja.ts';
 import { AboutDiscussion } from './about-discussion.tsx';
 import type { AboutDiscussionRead } from './about-discussion-api.ts';
 
@@ -18,7 +19,7 @@ export function ZoneDiscussionRecordedPage({
   if (!read)
     return (
       <p role="status" aria-busy="true">
-        {shellMessages.loading}
+        {locale === 'ja' ? shellJa.loading : shellMessages.loading}
       </p>
     );
   return <AboutDiscussion read={read} locale={locale} href={href} retain={false} />;

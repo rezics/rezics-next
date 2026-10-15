@@ -9,6 +9,33 @@ const work = 'https://rezics.com/id/019a5c00-0000-7000-8000-000000000001';
 const target = { work, context: 'https://rezics.com/id/019a5c00-0000-7000-8000-0000000000c1',
   mainVersion: 'https://rezics.com/id/019a5c00-0000-7000-8000-0000000000d1', max: 5 };
 
+test('a shelf write with a lost transport response reuses its exact command key and body', async () => {
+  const attempts: { body: unknown; key: string }[] = [];
+  const main = { v1: { works: () => ({ 'reader-status': { put: async (body: unknown,
+    options: { headers: { 'idempotency-key': string } }) => {
+    attempts.push({ body, key: options.headers['idempotency-key'] });
+    return attempts.length === 1 ? { data: null, error: { status: 503, value: new TypeError('Failed to fetch') } }
+      : { data: { work, status: 'want-to-read', version: 2, replayed: true }, error: null };
+  } } }) } } as unknown as MainClient;
+  const store = createReaderStore({ actingSubject: person, seed: { [work]: { status: null, version: 1, rating: null } }, main: () => main });
+  expect(await store.setStatus(work, 'want-to-read')).toBe(true);
+  expect(attempts).toHaveLength(2);
+  expect(attempts[1]).toEqual(attempts[0]);
+  expect(store.stateOf(work).status).toBe('want-to-read');
+});
+
+test('a shelf refusal is shown without replaying the command', async () => {
+  let writes = 0;
+  const main = { v1: { works: () => ({ 'reader-status': { put: async () => {
+    writes += 1;
+    return { data: null, error: { status: 503, value: { code: 'reader_status_unavailable' } } };
+  } } }) } } as unknown as MainClient;
+  const store = createReaderStore({ actingSubject: person, seed: { [work]: { status: null, version: 1, rating: null } }, main: () => main });
+  expect(await store.setStatus(work, 'want-to-read')).toBe(false);
+  expect(writes).toBe(1);
+  expect(store.stateOf(work).status).toBeNull();
+});
+
 /** A promise settled from outside, so a test decides the order Main's answers arrive in. */
 function deferred<T>() {
   let resolve!: (value: T) => void;

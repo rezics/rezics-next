@@ -82,7 +82,9 @@ async function expectRecipeRepresentation(page: Page, steps: string[]): Promise<
   const sections = page.locator('input[aria-label="Section name"]');
   await expect(sections.nth(0)).toHaveValue('Crème');
   await expect(sections.nth(1)).toHaveValue('Caramel');
-  await expect(page.locator('[data-line] span')).toHaveText(ingredientLines);
+  await expect(page.locator('[data-line] span')).toHaveText([
+    '1 ½ tasse de crème épaisse', '⅓ tasse de sucre en poudre', '1 ½ tasse de crème épaisse',
+  ]);
   expect(await page.locator('[data-step] textarea').evaluateAll(nodes =>
     nodes.map(node => (node as HTMLTextAreaElement).value))).toEqual(steps);
   expect(await page.locator('[data-line] span').evaluateAll(nodes => nodes.map(node => node.getAttribute('lang'))))

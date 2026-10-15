@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { JobStore, JOB_INLINE_MS, JOB_WAIT_MS, jobDirectory, runJob, wakeJobs, type JobPassOptions } from './job.ts';
 import { coordinateWorkerJobs, stopTurnProcesses } from './coordinator.ts';
@@ -10,16 +10,28 @@ import { managerEvents } from './manager-commands.ts';
 import { GoalMailStore } from './mail.ts';
 import { resumeDecisionError } from './tasks.ts';
 import type { Ledger, Task } from './types.ts';
+import { fixtureProcessScope } from './fixtures/process-scope.ts';
 
 const directories: string[] = [];
-afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
+const scopes: ReturnType<typeof fixtureProcessScope>[] = [];
+const originalScope = process.env.GOAL_TEST_PROCESS_SCOPE;
+afterEach(() => {
+  for (const scope of scopes.splice(0)) scope.cleanup();
+  if (originalScope === undefined) delete process.env.GOAL_TEST_PROCESS_SCOPE;
+  else process.env.GOAL_TEST_PROCESS_SCOPE = originalScope;
+  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
 
 function fixture() {
+  const scope = fixtureProcessScope(); scopes.push(scope);
+  Object.assign(process.env, scope.env);
   const parent = join(import.meta.dir, '../../.temp/job-tests');
   mkdirSync(parent, { recursive: true });
   const cwd = mkdtempSync(join(parent, 'run-')); directories.push(cwd);
   // Detached completion now reads the ledger too; isolate it from the host's live worker ledger.
   expect(spawnSync('git', ['init', '-q', '-b', 'main'], { cwd }).status).toBe(0);
+  mkdirSync(join(cwd, 'scripts/goal'), { recursive: true });
+  symlinkSync(join(import.meta.dir, 'job.ts'), join(cwd, 'scripts/goal/job.ts'));
   const output = join(cwd, 'attempt.json');
   const lastMessage = join(cwd, 'attempt.last.md');
   writeFileSync(output, JSON.stringify({ type: 'thread.started', thread_id: 'native-worker-session' }));
@@ -55,16 +67,16 @@ function processFixture() {
   chmodSync(join(bin, 'codex'), 0o755);
   const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, GOAL_TASK_ID: f.task.id,
     GOAL_MEMORY_FLOOR_GIB: '0', GOAL_MAX_WORKERS: '25', GOAL_USAGE_FILE: join(f.cwd, '.temp/usage.json'),
-    GOAL_CODEX_HOME: join(f.cwd, '.temp/codex'), GOAL_CODEX_1_HOME: join(f.cwd, '.temp/codex-1') };
+    GOAL_CODEX_HOME: join(f.cwd, '.temp/codex'), GOAL_SETTINGS_DIRECTORY: join(f.cwd, '.goalctl') };
   const execute = async (source: string) => {
     const child = Bun.spawn([process.execPath, '-e', source], { cwd: f.cwd, env, stdout: 'pipe', stderr: 'pipe' });
     const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
     expect(code, stderr).toBe(0);
     return stdout;
   };
-  const start = (command: string[], inlineMs = 1) => execute(`
+  const start = (command: string[], inlineMs = 1, timeoutMs?: number) => execute(`
     import { runJob } from ${JSON.stringify(join(import.meta.dir, 'job.ts'))};
-    process.exitCode = await runJob(${JSON.stringify(command)}, { inlineMs: ${inlineMs} });
+    process.exitCode = await runJob(${JSON.stringify(command)}, { inlineMs: ${inlineMs}, timeoutMs: ${timeoutMs} });
   `);
   const pass = () => execute(`
     import { coordinateWorkerJobs } from ${JSON.stringify(join(import.meta.dir, 'coordinator.ts'))};
@@ -73,6 +85,203 @@ function processFixture() {
   const ledger = () => JSON.parse(readFileSync(join(state, 'ledger.json'), 'utf8')) as Ledger;
   return { ...f, wakes, execute, start, pass, ledger };
 }
+
+function sequenceArgs(commands: string[][]): string[] {
+  const shell = (command: string[]) => command.map(arg => `'${arg.replaceAll("'", "'\\''")}'`).join(' ');
+  return [...commands.slice(1).flatMap(command => ['--then', shell(command)]), '--', ...commands[0]!];
+}
+
+test('an ordered green sequence stays parked between commands and wakes once with one line per command', async () => {
+  const f = processFixture();
+  const first = join(f.cwd, 'first'); const second = join(f.cwd, 'second'); const release = join(f.cwd, 'release');
+  const command = (source: string) => [process.execPath, '-e', source];
+  const commands = [
+    command(`await Bun.write(${JSON.stringify(first)}, 'first');`),
+    command(`if (!await Bun.file(${JSON.stringify(first)}).exists()) process.exit(4);
+      await Bun.write(${JSON.stringify(second)}, 'second');
+      while (!await Bun.file(${JSON.stringify(release)}).exists()) await Bun.sleep(10);`),
+    command('console.log("last check passed")'),
+  ];
+  expect(await f.start(sequenceArgs(commands))).toStartWith('PARKED job:');
+  const store = new JobStore(jobDirectory(f.cwd));
+  try {
+    await until(() => existsSync(second));
+    await f.pass();
+    expect(existsSync(f.wakes)).toBe(false);
+    expect(store.all()[0]!.code).toBeUndefined();
+    writeFileSync(release, 'go');
+    await until(() => store.all()[0]!.phase === 'woken' && existsSync(f.wakes));
+    await f.pass(); await f.pass();
+    const wakes = readFileSync(f.wakes, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { args: string[] });
+    expect(wakes).toHaveLength(1);
+    const prompt = wakes[0]!.args.at(-1)!;
+    expect(prompt.match(/^\d+\. exit:0 /gm)).toHaveLength(3);
+    expect(store.all()[0]!.sequence!.map(step => step.code)).toEqual([0, 0, 0]);
+    for (const step of store.all()[0]!.sequence!) expect(prompt).toContain(step.command.join(' ').replaceAll('\n', '\\n'));
+  } finally { store.close(); }
+});
+
+test('a middle failure stops the sequence and wakes once with only that command diagnostics', async () => {
+  const f = processFixture(); const remaining = join(f.cwd, 'must-not-run');
+  const commands = [
+    [process.execPath, '-e', 'console.log("error: passing command diagnostic")'],
+    [process.execPath, '-e', 'console.error("error: middle check failed"); process.exit(7)'],
+    [process.execPath, '-e', `await Bun.write(${JSON.stringify(remaining)}, 'ran')`],
+  ];
+  await f.start(sequenceArgs(commands));
+  const store = new JobStore(jobDirectory(f.cwd));
+  try {
+    await until(() => store.all()[0]!.phase === 'woken' && existsSync(f.wakes));
+    await f.pass(); await f.pass();
+    const wakes = readFileSync(f.wakes, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { args: string[] });
+    expect(wakes).toHaveLength(1);
+    const job = store.all()[0]!; const prompt = wakes[0]!.args.at(-1)!;
+    expect(job.code).toBe(7); expect(job.sequence!.map(step => step.code)).toEqual([0, 7, undefined]);
+    expect(prompt).toContain('exit status 7'); expect(prompt).toContain('process.exit(7)');
+    expect(prompt).toContain('error: middle check failed'); expect(prompt).not.toContain('passing command diagnostic');
+    expect(existsSync(remaining)).toBe(false);
+    expect(job.sequence![2]!.started).toBeUndefined();
+  } finally { store.close(); }
+});
+
+test('a stalled sequence command times out, kills its process group and wakes with a failure', async () => {
+  const f = processFixture(); const ready = join(f.cwd, 'stalled-pid'); const remaining = join(f.cwd, 'must-not-run');
+  await f.start(sequenceArgs([
+    [process.execPath, '-e', 'console.log("first passed")'],
+    [process.execPath, '-e', `await Bun.write(${JSON.stringify(ready)}, String(process.pid)); await Bun.sleep(30000)`],
+    [process.execPath, '-e', `await Bun.write(${JSON.stringify(remaining)}, 'ran')`],
+  ]), 1, 500);
+  const store = new JobStore(jobDirectory(f.cwd));
+  try {
+    await until(() => existsSync(ready));
+    const stalled = processIdentity(Number(readFileSync(ready, 'utf8')))!;
+    await until(() => store.all()[0]!.phase === 'woken' && existsSync(f.wakes));
+    await until(() => !processAlive(stalled));
+    await f.pass();
+    const wakes = readFileSync(f.wakes, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { args: string[] });
+    expect(wakes).toHaveLength(1);
+    expect(store.all()[0]!.code).toBe(124);
+    expect(wakes[0]!.args.at(-1)).toContain('timed out');
+    expect(existsSync(remaining)).toBe(false);
+  } finally { store.close(); }
+});
+
+test('a lost sequence owner fails the active command and wakes without starting the remaining commands', async () => {
+  const f = processFixture(); const ready = join(f.cwd, 'ready'); const remaining = join(f.cwd, 'must-not-run');
+  await f.start(sequenceArgs([
+    [process.execPath, '-e', `await Bun.write(${JSON.stringify(ready)}, String(process.pid)); await Bun.sleep(30000)`],
+    [process.execPath, '-e', `await Bun.write(${JSON.stringify(remaining)}, 'ran')`],
+  ]));
+  const store = new JobStore(jobDirectory(f.cwd));
+  try {
+    await until(() => existsSync(ready));
+    const command = processIdentity(Number(readFileSync(ready, 'utf8')))!;
+    const owner = store.all()[0]!.owner!;
+    process.kill(owner.pid, 'SIGKILL');
+    await until(() => !processAlive(owner));
+    await f.pass(); await f.pass();
+    await until(() => store.all()[0]!.phase === 'woken' && existsSync(f.wakes));
+    await until(() => !processAlive(command));
+    const wakes = readFileSync(f.wakes, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { args: string[] });
+    expect(wakes).toHaveLength(1);
+    expect(store.all()[0]!.code).toBe(1);
+    expect(wakes[0]!.args.at(-1)).toContain('command owner exited without recording a result');
+    expect(existsSync(remaining)).toBe(false);
+  } finally { store.close(); }
+});
+
+test('sequence options reject missing commands before publishing a job', async () => {
+  const f = fixture();
+  for (const command of [['--then'], ['--then', ' '], ['--then', '--'], ['--then', 'true'], ['--then', 'true', '--']]) {
+    await expect(runJob(command, { cwd: f.cwd, task: f.task })).rejects.toThrow();
+  }
+  expect(existsSync(join(jobDirectory(f.cwd), 'jobs.sqlite'))).toBe(false);
+});
+
+test('one coordinator pass records a parked turn while its command is still running', async () => {
+  const f = fixture();
+  f.task.state = 'running';
+  const store = new JobStore(jobDirectory(f.cwd));
+  try {
+    store.put({ id: 'pending', task: f.task.id, attempt: 1, cwd: f.cwd, command: ['pending'],
+      created: Date.now(), phase: 'parked', owner: processIdentity(process.pid)! });
+    const before = Date.now();
+    await coordinateWorkerJobs(f.ledger, f.options);
+    expect(Date.parse(f.task.attempts[0]!.endedAt!)).toBeGreaterThanOrEqual(before);
+    expect(f.ledger.tasks.worker!.state).toBe('exited');
+    expect(store.get('pending')!.code).toBeUndefined();
+    expect(f.prompts).toHaveLength(0); expect(f.reports).toHaveLength(0);
+    const ended = f.task.attempts[0]!.endedAt;
+    await coordinateWorkerJobs(f.ledger, f.options);
+    expect(f.task.attempts[0]!.endedAt).toBe(ended);
+  } finally { store.close(); }
+});
+
+test('a durable final message records the end even while the engine is closing', async () => {
+  const f = fixture();
+  const worker = spawn(process.execPath, ['-e', 'await Bun.sleep(30000)', 'codex'], { stdio: 'ignore' });
+  const closed = new Promise(resolveExit => worker.once('close', resolveExit));
+  try {
+    f.task.state = 'running'; f.task.attempts[0]!.pid = worker.pid!;
+    rmSync(f.task.attempts[0]!.lastMessage!);
+    await coordinateWorkerJobs(f.ledger, f.options);
+    expect(f.task.attempts[0]!.endedAt).toBeUndefined();
+    await Bun.sleep(5);
+    writeFileSync(f.task.attempts[0]!.lastMessage!, 'RESULT: parked');
+    await coordinateWorkerJobs(f.ledger, f.options);
+    expect(f.task.attempts[0]!.endedAt).toBeDefined();
+    expect(f.task.state).toBe('running');
+    const ended = f.task.attempts[0]!.endedAt;
+    worker.kill('SIGKILL'); await closed;
+    await coordinateWorkerJobs(f.ledger, f.options);
+    expect(f.ledger.tasks.worker!.state).toBe('exited');
+    expect(f.task.attempts[0]!.endedAt).toBe(ended);
+  } finally { worker.kill('SIGKILL'); await closed; }
+});
+
+test('a wave worktree uses main job control to adopt and wake a later parked attempt', async () => {
+  const f = processFixture();
+  expect(spawnSync('git', ['config', 'user.email', 'fixture@example.invalid'], { cwd: f.cwd }).status).toBe(0);
+  expect(spawnSync('git', ['config', 'user.name', 'Fixture'], { cwd: f.cwd }).status).toBe(0);
+  expect(spawnSync('git', ['add', 'scripts'], { cwd: f.cwd }).status).toBe(0);
+  expect(spawnSync('git', ['commit', '-qm', 'Main runtime'], { cwd: f.cwd }).status).toBe(0);
+  const wave = join(f.cwd, '.temp/wave');
+  expect(spawnSync('git', ['worktree', 'add', '-qb', 'wave/2', wave], { cwd: f.cwd }).status).toBe(0);
+  rmSync(join(wave, 'scripts/goal/job.ts'));
+  // The caller can load its branch's entry point, but no detached control process may execute it.
+  writeFileSync(join(wave, 'scripts/goal/job.ts'),
+    'if (import.meta.main) throw new Error("stale coordination must never run");\n'
+    + readFileSync(join(import.meta.dir, 'job.ts'), 'utf8'));
+  for (const file of readdirSync(import.meta.dir)) {
+    if (file !== 'job.ts') symlinkSync(join(import.meta.dir, file), join(wave, 'scripts/goal', file));
+  }
+  symlinkSync(join(import.meta.dir, '../qa'), join(wave, 'scripts/qa'));
+  const ledger = f.ledger(); ledger.tasks.worker!.worktree = wave;
+  writeFileSync(join(f.cwd, '.temp/goal-orchestration/ledger.json'), JSON.stringify(ledger));
+  const release = join(f.cwd, '.temp/job-release');
+  const command = `import { existsSync } from 'node:fs';
+    while (!existsSync(${JSON.stringify(release)})) await Bun.sleep(10); console.log(process.cwd());`;
+  const output = await f.execute(`
+    import { runJob } from ${JSON.stringify(join(wave, 'scripts/goal/job.ts'))};
+    await runJob([process.execPath, '-e', ${JSON.stringify(command)}],
+      { cwd: ${JSON.stringify(wave)}, inlineMs: 1 });
+  `);
+  expect(output).toStartWith('PARKED job:');
+  const current = f.ledger(); const task = current.tasks.worker!;
+  task.attempts.push({ ...task.attempts[0]!, n: 2 }, { ...task.attempts[0]!, n: 3 });
+  writeFileSync(join(f.cwd, '.temp/goal-orchestration/ledger.json'), JSON.stringify(current));
+  writeFileSync(release, 'complete');
+  const store = new JobStore(jobDirectory(wave));
+  try {
+    // No coordinator rescue: main's detached completion must adopt this newer turn itself.
+    await until(() => store.all()[0]!.phase === 'woken' && existsSync(f.wakes));
+    const job = store.all()[0]!;
+    expect(job.attempt).toBe(3); expect(job.resumedAttempt).toBe(4);
+    expect(readFileSync(store.log(job.id), 'utf8')).toContain(wave);
+    expect(f.ledger().tasks.worker!.attempts[3]!.continuedFor).toBe('job');
+    expect(readFileSync(f.wakes, 'utf8').trim().split('\n')).toHaveLength(1);
+  } finally { store.close(); }
+});
 
 test('the default inline bound parks a running command in one 30-second tool call', async () => {
   const f = fixture(); const lines: string[] = [];

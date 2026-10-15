@@ -197,15 +197,12 @@ const notModified = (header: string | null, etag: string) => !!header && (header
  * matching validator answers 304 without reading the object. Public targets share the same bytes
  * across readers, including signed-in readers; restricted targets stay in the reader's own cache. */
 async function deliver(request: Request, media: MediaDependencies, basis: { objectNamespace: string; sha256: string;
-  mediaType: string }, publicTarget: boolean, finalDisclosure?: () => Promise<boolean | null>): Promise<Response> {
+  mediaType: string }, finalDisclosure: () => Promise<boolean | null>): Promise<Response> {
   const etag = `"${basis.sha256}"`;
   const unchanged = notModified(request.headers.get('if-none-match'), etag);
   const bytes = unchanged ? undefined : await media.objects(basis.objectNamespace).get(basis.sha256);
-  if (finalDisclosure) {
-    const current = await finalDisclosure();
-    if (current === null) return unavailable();
-    publicTarget = current;
-  }
+  const publicTarget = await finalDisclosure();
+  if (publicTarget === null) return unavailable();
   const headers = { etag: `"${basis.sha256}"`, 'x-content-type-options': 'nosniff',
     // Revalidation keeps shared caches from outliving a revoked selection or disclosure.
     'cache-control': publicTarget ? 'public, no-cache' : 'private, no-store' };
@@ -416,12 +413,20 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       try {
         const basis=(await metadataFor(request,[{representation:params.representation,...(query.use?{use:query.use}:{})}],query.actingSubject))[0];
         if (!basis || !work.media) return unavailable();
+        // Keep the exact Use selected for a bare representation. Re-running
+        // the bare fallback could let a different Use authorize this delivery.
+        const reference = { representation: basis.metadata.representation,
+          ...(basis.metadata.use ? { use: basis.metadata.use } : {}) };
+        const finalDisclosure = async () => {
+          const current = (await metadataFor(request, [reference], query.actingSubject))[0];
+          return current ? current.publicTarget : null;
+        };
         if ((basis.campaign || query.zoneVariant !== undefined) && (!basis.metadata.use || !basis.target || !(await currentZoneCampaignUses(
           work.environment, basis.campaign ? basis.campaignZone : query.zone,
           await readerFor(request, query.actingSubject), basis.target
         )).has(basis.metadata.use))) return unavailable();
-        if (basis.disclosure==='public') return deliver(request,work.media,{objectNamespace:basis.objectNamespace,
-          sha256:basis.metadata.sha256,mediaType:basis.metadata.mediaType},basis.publicTarget);
+        if (basis.disclosure==='public') return await deliver(request,work.media,{objectNamespace:basis.objectNamespace,
+          sha256:basis.metadata.sha256,mediaType:basis.metadata.mediaType},finalDisclosure);
         if (query.actingSubject && basis.owner === query.actingSubject) {
           // An uploader's exact private representation uses the same Asset
           // authority as original bytes, including after attaching it to a Post.
@@ -429,8 +434,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           const viewer = disclosureViewer(principal, query.actingSubject);
           bindNativeAssetAudience(viewer, basis.metadata.asset);
           const result = await readClosedRealmMediaSelection(work.environment, async () => {
-            const current = (await metadataFor(request, [{ representation: params.representation,
-              ...(query.use ? { use: query.use } : {}) }], query.actingSubject))[0];
+            const current = (await metadataFor(request, [reference], query.actingSubject))[0];
             return current?.owner === query.actingSubject ? current : null;
           }, selected => ({ asset: selected.metadata.asset }), async selected => {
             const bytes = await work.media!.objects(selected.objectNamespace).get(selected.metadata.sha256);
@@ -446,14 +450,19 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         }
         // The shared metadata gate has established the uploader's own private
         // audience even before this image is attached to a Work.
-        if (!basis.target) return deliver(request,work.media,{objectNamespace:basis.objectNamespace,
-          sha256:basis.metadata.sha256,mediaType:basis.metadata.mediaType},false);
+        if (!basis.target) return await deliver(request,work.media,{objectNamespace:basis.objectNamespace,
+          sha256:basis.metadata.sha256,mediaType:basis.metadata.mediaType},finalDisclosure);
         if (!work.downloadLeases || !basis.target || !query.actingSubject) return unavailable();
         const principal=await work.account.verify(request,['work:read']);
         lease=await work.downloadLeases.admit(principal,query.actingSubject,basis.target,basis.metadata.asset);
         await work.downloadLeases.begin(lease,principal);
         const bytes=await work.media.objects(basis.objectNamespace).get(basis.metadata.sha256);
         if (bytes.byteLength!==basis.byteLength) throw new ObjectIntegrityError('media byte length differs');
+        if (await finalDisclosure() === null) {
+          await work.downloadLeases.finish(lease.id,'aborted');
+          lease=undefined;
+          return unavailable();
+        }
         return new Response(downloadBody(bytes,lease,work.downloadLeases),{headers:{'content-type':basis.metadata.mediaType,
           'content-length':String(basis.byteLength),'x-content-type-options':'nosniff','cache-control':'private, no-store'}});
       } catch(error) {
@@ -627,6 +636,11 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           : { decisions: await discloseInventory(work.environment, names,
             reader.viewer ?? ANONYMOUS_VIEWER, 'media'), anonymousNames: [] };
         if ((await discloseName()).decisions[0] !== 'visible') return unavailable();
+        const finalAvatarDisclosure = async () => {
+          const current = (await metadataFor(request,
+            [{ representation: basis.representation!, use: basis.use! }], query.actingSubject))[0];
+          return current ? current.publicTarget : null;
+        };
         const agents = (await fuseki.query(`PREFIX rv: <${RV}>
           PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
           SELECT ?avatar WHERE {
@@ -641,19 +655,21 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           if (basis.context !== DEFAULT_MEDIA_CONTEXT || agents.length !== 1
             || agents[0]?.avatar?.value !== params.selection) return unavailable();
           return await deliver(request, work.media, { objectNamespace: basis.objectNamespace,
-            sha256: basis.sha256!, mediaType: basis.mediaType! }, false, async () => {
+            sha256: basis.sha256!, mediaType: basis.mediaType! }, async () => {
             // Graph hydration and object retrieval may outlive the opening
             // name decision. Settle both visibility and cache scope at delivery.
             const current = await discloseName();
             if (current.decisions[0] !== 'visible') return null;
-            return !reader.viewer?.signedIn || current.anonymousNames[0] === 'visible';
+            const publicMedia = await finalAvatarDisclosure();
+            return publicMedia === null ? null : publicMedia
+              && (!reader.viewer?.signedIn || current.anonymousNames[0] === 'visible');
           });
         }
         const target = (await readResourceSummaries(work.environment, undefined,
           reader, { resources: [basis.target], context: basis.context!, language: null, channel: 'media' })).summaries[0]!;
         if (target.status !== 'available') return unavailable();
         return await deliver(request, work.media, { objectNamespace: basis.objectNamespace,
-          sha256: basis.sha256!, mediaType: basis.mediaType! }, target.disclosure === 'public');
+          sha256: basis.sha256!, mediaType: basis.mediaType! }, finalAvatarDisclosure);
       } catch (error) { return mediaError(error); }
     }))
     .get('/v1/media/uses/:use', {
@@ -676,7 +692,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const reference = { representation: item.representation, use: params.use };
         const basis = (await metadataFor(request, [reference], query.actingSubject))[0];
         if (!basis) return unavailable();
-        return await deliver(request, work.media, item, basis.publicTarget, async () => {
+        return await deliver(request, work.media, item, async () => {
           const current = (await metadataFor(request, [reference], query.actingSubject))[0];
           return current ? current.publicTarget : null;
         });
@@ -746,12 +762,21 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           return unavailable();
         }
         await work.downloadLeases.begin(lease, principal);
-        const bytes = await work.media.objects(basis.objectNamespace).get(basis.sha256);
-        if (bytes.byteLength !== basis.byteLength) throw new ObjectIntegrityError('media byte length differs');
-        return new Response(downloadBody(bytes, lease, work.downloadLeases), { headers: {
-          'content-type': basis.mediaType,
-          etag: `"${basis.sha256}"`,
-          'content-length': String(basis.byteLength),
+        const result = await readClosedRealmMediaSelection(work.environment, readBasis,
+          () => ({ asset: params.asset }), async selected => {
+            const bytes = await work.media!.objects(selected.objectNamespace).get(selected.sha256);
+            if (bytes.byteLength !== selected.byteLength) throw new ObjectIntegrityError('media byte length differs');
+            return { bytes, selected };
+          }, viewer);
+        if (!result) {
+          await work.downloadLeases.finish(lease.id, 'aborted');
+          lease = undefined;
+          return unavailable();
+        }
+        return new Response(downloadBody(result.bytes, lease, work.downloadLeases), { headers: {
+          'content-type': result.selected.mediaType,
+          etag: `"${result.selected.sha256}"`,
+          'content-length': String(result.selected.byteLength),
           'x-content-type-options': 'nosniff',
           'cache-control': 'private, no-store',
         } });

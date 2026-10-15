@@ -74,8 +74,8 @@ export function WorkTile({ work, slot = 2 / 3, headingLevel = 3, avatarQuery, lo
     <div className="mt-3 flex min-w-0 items-start gap-1.5">
       {titleStart}
       <Heading lang={work.title?.language} dir={work.title?.direction}
-        className="line-clamp-2 min-w-0 flex-1 text-pretty font-medium font-work-title text-[1.0625rem]/snug">
-        <Link href={work.href} className="rounded-sm outline-none decoration-1 underline-offset-2 hover:underline
+        className="min-w-0 flex-1 text-pretty font-medium font-work-title text-[1.0625rem]/snug">
+        <Link href={work.href} className="line-clamp-2 rounded-sm outline-none decoration-1 underline-offset-2 hover:underline
           focus-visible:ring-2 focus-visible:ring-ring">{title}</Link>
       </Heading>
       {titleEnd}

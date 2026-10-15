@@ -37,6 +37,7 @@ export const Combobox: ArkCombobox.RootComponent = (props) => {
     openOnClick = true,
     lazyMount = true,
     unmountOnExit = true,
+    positioning,
     children,
     ...rest
   } = props;
@@ -48,6 +49,7 @@ export const Combobox: ArkCombobox.RootComponent = (props) => {
       lazyMount={lazyMount}
       openOnClick={openOnClick}
       unmountOnExit={unmountOnExit}
+      positioning={{ fitViewport: true, slide: true, ...positioning }}
       {...rest}
     >
       <ClosedHighlight />
@@ -180,7 +182,7 @@ export const ComboboxContent = (props: React.ComponentProps<typeof ArkCombobox.C
         <ArkCombobox.Content
           className={cn(
             'relative z-50',
-            'max-h-96 min-w-(--reference-width)',
+            'max-h-96 min-w-[min(var(--reference-width),calc(100vw-2rem))]',
             'origin-(--transform-origin)',
             'p-1.5',
             'bg-popover',

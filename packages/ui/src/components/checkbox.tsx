@@ -21,14 +21,15 @@ export const CheckboxGroup = (props: React.ComponentProps<typeof ArkCheckbox.Gro
   );
 };
 
-// Aura's 20px control with a 2px border. The radius is 6px rather than the rounded-sm the
+// A 24px control and native input meet WCAG 2.5.8 even in compact editor panels.
+// The radius is 6px rather than the rounded-sm the
 // radius table lists, because at this size 12px reads as a radio button. The unchecked
 // border uses 75% muted-foreground to reach WCAG's 3:1 for control edges; --border is ~1.3:1.
 export const checkboxVariants = tv({
   base: [
     'relative',
     'inline-flex shrink-0 items-center justify-center',
-    'size-5',
+    'size-6',
     'bg-primary/5',
     'rounded-[6px] border-2 border-muted-foreground/75 shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)]',
     'transition-[border-color,background-color,box-shadow]',

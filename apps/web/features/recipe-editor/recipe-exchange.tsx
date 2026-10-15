@@ -179,7 +179,7 @@ export function RecipeExchange({ structure, revision, actingSubject, locale, mes
         <ul className="grid gap-1">{exportStage.losses.map((loss, index) => <li key={index} className="break-all text-xs">
           {loss.code} · {loss.occurrence} · {loss.pointer}</li>)}</ul>
       </div> : null}
-      {exportFailureText ? <p role="alert" className="max-w-72 text-left text-xs text-destructive sm:text-right">
+      {exportFailureText ? <p role="alert" className="max-w-72 text-left text-xs text-destructive-foreground sm:text-right">
         {exportFailureText}{exportStage.kind === 'failed' && exportStage.detail && exportStage.failure !== 'too-large'
           ? <span> {t.mainSays}: {exportStage.detail}</span> : null}
       </p> : null}
@@ -216,18 +216,18 @@ export function RecipeExchange({ structure, revision, actingSubject, locale, mes
           onClick={() => void refreshImported(importStage.result)}>
           {importStage.refreshing ? t.importRefreshing : t.importRefreshAction}</Button> : null}
       </div>
-      {importFailureText ? <p role="alert" className="max-w-80 text-left text-xs text-destructive sm:text-right">
+      {importFailureText ? <p role="alert" className="max-w-80 text-left text-xs text-destructive-foreground sm:text-right">
         {importFailureText}{importStage.kind === 'failed' && importStage.detail && importStage.failure !== 'too-large'
           && importStage.failure !== 'invalid' ? <span> {t.mainSays}: {importStage.detail}</span> : null}
       </p> : null}
       {importStage.kind === 'stale' || importStage.kind === 'stale-refresh-failed'
-        ? <p role="alert" className="max-w-80 text-left text-xs text-destructive sm:text-right">
+        ? <p role="alert" className="max-w-80 text-left text-xs text-destructive-foreground sm:text-right">
           {importStage.kind === 'stale-refresh-failed' ? t.importRefreshFailed : t.importStale}
           {importStage.detail ? <><span> {t.mainSays}: </span>{importStage.detail}</> : null}</p> : null}
       {importStage.kind === 'done' ? <>
         <p role="status" className="max-w-80 text-left text-xs text-muted-foreground sm:text-right">
           {t.importedRevision({ revision: revisionName(importStage.result.revision) })}</p>
-        {importStage.refreshFailed ? <p role="alert" className="max-w-80 text-left text-xs text-destructive sm:text-right">
+        {importStage.refreshFailed ? <p role="alert" className="max-w-80 text-left text-xs text-destructive-foreground sm:text-right">
           {t.importRefreshFailed}</p> : null}
       </> : null}
     </div> : null}

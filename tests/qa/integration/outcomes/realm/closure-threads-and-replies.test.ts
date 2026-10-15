@@ -1,4 +1,5 @@
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordJapaneseReads } from '../../../support/recorded-locale-visit.ts';
 import { recordRealmDiscussion } from '../../../support/realm-discussion-recording.ts';
 import { grantPersonaFixtureAuthority } from '../../../support/persona-fixture-authority.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -14,7 +15,7 @@ import {
 } from '../../../support/personas.ts';
 
 setDefaultTimeout(180_000);
-const recording = new OutcomeRecorder(declaration);
+const recording = recordJapaneseReads(new OutcomeRecorder(declaration));
 const visitRequest = new AsyncLocalStorage<{
   name: PersonaName;
   label: (path: string) => string;

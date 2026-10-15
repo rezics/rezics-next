@@ -70,13 +70,15 @@ export function handoverPrompt(handover: WorkerHandover, tests: readonly string[
   ].join('\n\n');
 }
 
-/** Resolve the account once at dispatch. Missing weekly figures cannot establish that an account has more left. */
-export function solAccount(accounts: readonly AccountUsage[] = codexAccounts()): 'codex' | 'codex-1' {
-  const known = accounts.filter(account => (account.account === 'codex' || account.account === 'codex-1')
-    && account.weekUsed !== undefined);
-  const selected = known.reduce<AccountUsage | undefined>((best, account) =>
-    !best || account.weekUsed! < best.weekUsed! ? account : best, undefined);
-  return selected?.account === 'codex-1' ? 'codex-1' : 'codex';
+/** Resolve once for new work; a resume retains its recorded account. */
+export function solAccount(accounts: readonly AccountUsage[] = codexAccounts()): string {
+  const available = accounts.filter(account => (account.weight ?? 1) > 0
+    && (!account.reached || account.pastAllowance?.length));
+  const score = (account: AccountUsage) => (account.weight ?? 1) * Math.max(0, 1 - (account.weekUsed ?? account.used ?? 0) / 100);
+  const selected = available.reduce<AccountUsage | undefined>((best, account) =>
+    !best || score(account) > score(best) ? account : best, undefined);
+  if (!selected) throw new Error('No configured Codex account is available for dispatch');
+  return selected.account;
 }
 
 export function dispatchEngine(engine: Engine): Engine {

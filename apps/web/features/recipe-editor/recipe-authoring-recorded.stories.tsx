@@ -97,7 +97,9 @@ async function expectRecipe(
   title: string,
   answer: RecipeAnswer,
   work: string,
+  locale: UiLocale = 'en',
 ) {
+  const copy = copyOf(locale);
   await expect(canvas.findByRole('textbox', { name: copy.title })).resolves.toHaveValue(title);
   const ingredients = within(canvas.getByRole('region', { name: copy.ingredientsHeading }));
   for (const line of linesOf(answer))
@@ -110,7 +112,7 @@ async function expectRecipe(
   }
   await expect(canvas.getByRole('link', { name: copy.backToRecipe })).toHaveAttribute(
     'href',
-    localizedPath(globalWorkHref(work), 'en'),
+    localizedPath(globalWorkHref(work), locale),
   );
 }
 
@@ -144,6 +146,15 @@ async function loadingAuthor({ canvasElement }: { canvasElement: HTMLElement }) 
 async function populatedExchange({ canvasElement }: { canvasElement: HTMLElement }) {
   const canvas = within(canvasElement);
   await expectRecipe(canvas, exchangeTitle, exchangeRecipe, exchangeHeader.id);
+  const previewToggle = canvas.queryByRole('button', { name: copy.viewPreview });
+  if (previewToggle) await userEvent.click(previewToggle);
+  const preview = within(canvas.getByRole('article', { name: copy.previewHeading }));
+  const ingredientSection = within(preview.getByRole('heading', { name: 'Ingredients' }).parentElement!);
+  for (const name of ['Mix', 'Finish']) {
+    await expect(ingredientSection.queryByRole('heading', { name })).toBeNull();
+    await expect(preview.getByRole('heading', { name })).toBeVisible();
+  }
+  if (previewToggle) await userEvent.click(canvas.getByRole('button', { name: copy.viewEdit }));
   const revision = new URL(exported.path, 'https://recorded.invalid').searchParams
     .get('revision')!
     .slice(-36);
@@ -327,3 +338,26 @@ export const ImportedOwnerPhone: Story = at(importedStory, 'phone');
 export const ImportedOwnerDesktop: Story = at(importedStory, 'desktop');
 export const StaleImportOwnerPhone: Story = at(staleImportStory, 'phone');
 export const StaleImportOwnerDesktop: Story = at(staleImportStory, 'desktop');
+
+function japanese(base: Story, viewport: 'phone' | 'desktop1440'): Story {
+  return { ...base, globals: { locale: 'ja', viewport: { value: viewport } },
+    play: async ({ canvasElement }) => {
+      const canvas = within(canvasElement);
+      const copy = copyOf('ja');
+      const exchangeVisit = base === populatedExchangeStory;
+      await expectRecipe(canvas, exchangeVisit ? exchangeTitle : authorTitle,
+        exchangeVisit ? exchangeRecipe : authorRecipe, exchangeVisit ? exchangeHeader.id : authorHeader.id, 'ja');
+      if (exchangeVisit) {
+        await userEvent.click(canvas.getByRole('button', { name: copy.exportAction }));
+        const revision = new URL(exported.path, 'https://recorded.invalid').searchParams.get('revision')!.slice(-36);
+        await expect(canvas.findByText(copy.exportedRevision({ revision }))).resolves.toBeVisible();
+      }
+      await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    } };
+}
+
+export const EnglishWide: Story = { ...populatedExchangeStory, globals: { locale: 'en', viewport: { value: 'desktop1440' } } };
+export const JapanesePhone: Story = japanese(populatedAuthorStory, 'phone');
+export const JapaneseWide: Story = japanese(populatedAuthorStory, 'desktop1440');
+export const JapaneseExchangePhone: Story = japanese(populatedExchangeStory, 'phone');
+export const JapaneseExchangeWide: Story = japanese(populatedExchangeStory, 'desktop1440');

@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { join, dirname, relative, basename, resolve } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
-import { HISTORY_EXEMPT, goalOfBriefPath, GOALS_DIR, goalFile, goalAreas, ownerRefusal, goalBriefFile, isGeneratedOutput, outOfScope, pathsOverlap } from './briefs.ts';
+import { HISTORY_EXEMPT, goalOfBriefPath, GOALS_DIR, goalFile, goalAreas, ownerRefusal, goalBriefFile, isGeneratedOutput, outOfScope, pathsOverlap, claimConflicts } from './briefs.ts';
 import { type Ledger, type Task, modelOf, engineOf, type Brief, UNLANDED, HOLDING } from './types.ts';
 import { readResult, taskOf, changedFiles } from './launch.ts';
 import { type LandScope } from './land.ts';
@@ -49,6 +49,7 @@ export function archiveFiles(repo: string, files: readonly { path: string; conte
       git(repo, ['update-index', '--add', '--cacheinfo', `100644,${blob},${file.path}`], false, { env });
     }
     const tree = git(repo, ['write-tree'], false, { env });
+    if (parent && tree === git(repo, ['rev-parse', `${parent}^{tree}`])) return parent;
     const commit = git(repo, ['commit-tree', tree, ...parent ? ['-p', parent] : [], '-m', message]);
     git(repo, ['update-ref', '-m', message, ref, commit, parent]);
     return commit;
@@ -152,10 +153,35 @@ export function archiveDirOf(ledger: Ledger, goal: string): string {
   return ledger.goals?.[goal]?.archive ?? `${goal}-${(ledger.goals?.[goal]?.startedAt ?? new Date().toISOString()).slice(0, 10)}`;
 }
 
-function handoffText(task: Task): string {
-  return [`# ${task.id} handoffs: ${task.title}`, '',
+function outputNames(directory: string): string[] {
+  return existsSync(directory) ? readdirSync(directory, { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name !== 'brief.md' && /\.(md|json)$/.test(entry.name))
+    .map(entry => entry.name).sort((a, b) => b.length - a.length || a.localeCompare(b)) : [];
+}
+
+/** Keep authored reports before the ignored worktree directory is moved or deleted. */
+export function preserveTaskOutputs(task: Task): void {
+  const source = join(task.worktree, '.temp/goal');
+  const run = join(stateDir, 'runs', task.id);
+  const outputs = join(run, 'outputs');
+  for (const name of outputNames(source)) {
+    mkdirSync(outputs, { recursive: true });
+    copyFileSync(join(source, name), join(outputs, name));
+  }
+  if (outputNames(outputs).length) writeFileSync(join(run, 'handoff.md'), handoffText(task, 'outputs'));
+}
+
+function handoffText(task: Task, outputDirectory?: string): string {
+  let text = [`# ${task.id} handoffs: ${task.title}`, '',
     ...task.attempts.flatMap(attempt => [`## Attempt ${attempt.n} (${modelOf(engineOf(attempt))}/${attempt.effort}, `
       + `${attempt.startedAt})`, '', readResult(attempt).text.trim(), ''])].join('\n');
+  if (outputDirectory) for (const name of outputNames(join(stateDir, 'runs', task.id, 'outputs'))) {
+    const target = `${outputDirectory}/${name}`;
+    for (const source of [join(task.worktree, '.temp/goal', name), `./.temp/goal/${name}`, `.temp/goal/${name}`]) {
+      text = text.replaceAll(source, target);
+    }
+  }
+  return text;
 }
 
 function outOfClaimFiles(committed: string[], sharers: Task[], regenerated: readonly string[] = []): string[] {
@@ -206,17 +232,22 @@ function regeneratedOnBranch(branch: string, base: string): string[] {
   return log ? filesOnlyRegenerated(log) : [];
 }
 
-/** Files this branch committed outside the claim that land would still refuse if another task claimed them.
+/** Branch edits are informational overlaps, whether or not its brief claimed them.
  * A solo task may edit union-merge files and regeneration output; a shared branch may not. */
-function unlandedOutOfClaim(task: Task, sharers: readonly Task[]): string[] {
+function unlandedBranchFiles(task: Task, sharers: readonly Task[]): string[] {
   // Inherited wave work belongs to the wave merge, not to this task's claim.
-  const base = existsSync(task.worktree) ? worktreeBase(task.worktree) : 'main';
+  const inheritedBase = existsSync(task.worktree) ? worktreeBase(task.worktree) : 'main';
+  const base = inheritedBase === task.branch ? 'main' : inheritedBase;
   const committed = git(root, ['diff', '--name-only', `${base}...${task.branch}`], true).split('\n').filter(Boolean);
   if (!committed.length) return [];
   const sharedTree = sharers.some(sharer => sharer.worktreeName) || sharers.length > 1;
   const union = sharedTree ? new Set<string>() : unionMerged(committed);
-  const watched = committed.filter(file => !union.has(file));
-  return outOfClaimFiles(watched, [...sharers], regeneratedOnBranch(task.branch, base));
+  // A wave-based merge candidate can also have merged main since it left the wave.
+  // Intersect the two diffs so main's incoming changes never become this task's edits.
+  const sinceMain = new Set(git(root, ['diff', '--name-only', `main...${task.branch}`], true).split('\n'));
+  const watched = committed.filter(file => !union.has(file) && sinceMain.has(file));
+  const regenerated = new Set(regeneratedOnBranch(task.branch, base));
+  return watched.filter(file => !isGeneratedOutput(file) && !regenerated.has(file));
 }
 
 export interface UnlandedChanges { worktree: string; branch: string; files: string[] }
@@ -233,31 +264,25 @@ export function unlandedChanges(tasks: readonly Task[], excludeId?: string): Unl
     const sharers = tasks.filter(other => other.worktree === task.worktree && other.branch === task.branch
       && HOLDING.includes(other.state));
     if (sharers.some(sharer => sharer.id === excludeId)) continue;
-    changes.push({ worktree: task.worktree, branch: task.branch, files: unlandedOutOfClaim(task, sharers) });
+    changes.push({ worktree: task.worktree, branch: task.branch, files: unlandedBranchFiles(task, sharers) });
   }
   return changes;
 }
 
-/** Out-of-claim commits of a task that has not landed or closed, matched the way a path claim is. */
-export function unlandedChangeConflicts(brief: Brief, tasks: readonly Task[], snapshot?: readonly UnlandedChanges[]): string[] {
-  if (!brief.paths.some(path => !isGeneratedOutput(path))) return [];
-  const conflicts: string[] = [];
-  for (const change of snapshot ?? unlandedChanges(tasks, brief.id)) {
-    const sharers = tasks.filter(task => task.worktree === change.worktree && task.branch === change.branch
-      && HOLDING.includes(task.state));
-    if (sharers.some(sharer => sharer.id === brief.id)) continue;
-    const names = sharers.filter(sharer => UNLANDED.includes(sharer.state)).map(sharer => sharer.id).sort().join(', ');
-    if (!names) continue;
-    for (const path of brief.paths) {
-      if (isGeneratedOutput(path)) continue;
-      const held = change.files.some(file => new Bun.Glob(path).match(file) || pathsOverlap(path, file));
-      if (held) conflicts.push(`path ${path} changed by ${names} (unlanded)`);
-    }
-  }
-  return conflicts;
+/** Claims coordinate live work on the same integration base; branch edits are merge overlaps. */
+export function sameClaimBase(task: Task, worktree: string): boolean {
+  return (existsSync(task.worktree) ? worktreeBase(task.worktree) : 'main')
+    === (existsSync(worktree) ? worktreeBase(worktree) : 'main');
 }
 
-/** Unlanded tasks that committed this exact path outside their claim. */
+export function briefClaimConflicts(brief: Brief, tasks: Task[], goal?: string): string[] {
+  const existing = tasks.find(task => task.id === brief.id);
+  const worktree = existing?.worktree ?? (brief.worktree
+    ? join(root, '.temp/worktrees', `${goal ?? 'legacy'}-${brief.worktree}`) : root);
+  return claimConflicts(brief, tasks, task => sameClaimBase(task, worktree));
+}
+
+/** Unlanded tasks that committed this exact path, for informational merge overlaps. */
 export function unlandedChangers(tasks: readonly Task[], path: string): Task[] {
   if (!path || isGeneratedOutput(path)) return [];
   const found: Task[] = [];
@@ -269,7 +294,7 @@ export function unlandedChangers(tasks: readonly Task[], path: string): Task[] {
     seen.add(key);
     const sharers = tasks.filter(other => other.worktree === task.worktree && other.branch === task.branch
       && HOLDING.includes(other.state));
-    if (!unlandedOutOfClaim(task, sharers).includes(path)) continue;
+    if (!unlandedBranchFiles(task, sharers).includes(path)) continue;
     found.push(...sharers.filter(sharer => UNLANDED.includes(sharer.state)));
   }
   return found.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
@@ -383,6 +408,14 @@ export function archiveClosedBriefs(ledger: Ledger, tasks: readonly Task[], lega
   const files: { path: string; content: string }[] = [];
   const removed: string[] = [];
   const goals = new Set<string>();
+  for (const task of tasks.filter(task => ['verified', 'cancelled'].includes(task.state))) {
+    const dir = task.goal ? archiveDirOf(ledger, task.goal) : legacyDir;
+    if (!dir) continue;
+    const outputs = join(stateDir, 'runs', task.id, 'outputs');
+    files.push(...outputNames(outputs).map(name => ({ path: `${dir}/outputs/${task.id}/${name}`,
+      content: readFileSync(join(outputs, name), 'utf8') })),
+    { path: `${dir}/handoffs/${task.id}.md`, content: handoffText(task, `../outputs/${task.id}`) });
+  }
   const candidates = tasks.flatMap(task => {
     const path = ['verified', 'cancelled'].includes(task.state) ? briefPathOf(task) : undefined;
     return path?.startsWith(`${join(root, GOALS_DIR)}/`) ? [{ task, path, relativePath: relative(root, path) }] : [];
@@ -405,12 +438,14 @@ export function archiveClosedBriefs(ledger: Ledger, tasks: readonly Task[], lega
     if (!dir) { notes.push(`${task.id}: no Goal; pass tidy --legacy <archive directory>`); continue; }
     const cited = citations.filter(line => line.includes(relativePath));
     if (cited.length) { notes.push(`${task.id}: kept; cited by\n    ${cited.join('\n    ')}`); continue; }
-    files.push({ path: `${dir}/tasks/${task.id}.md`, content: readFileSync(path, 'utf8') },
-      { path: `${dir}/handoffs/${task.id}.md`, content: handoffText(task) });
+    files.push({ path: `${dir}/tasks/${task.id}.md`, content: readFileSync(path, 'utf8') });
     removed.push(relativePath);
     if (task.goal) goals.add(task.goal);
   }
-  if (!removed.length) return notes;
+  if (!removed.length) {
+    if (files.length) archiveFiles(root, files, 'Archive closed task handoffs and outputs');
+    return notes;
+  }
   if (git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main') throw new Error('Main checkout is not on main');
   const subject = removed.length === 1 ? `Archive the closed brief ${basename(removed[0]!, '.md')}`
     : `Archive ${removed.length} closed briefs`;

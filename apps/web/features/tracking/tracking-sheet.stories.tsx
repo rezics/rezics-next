@@ -40,8 +40,13 @@ function pagingApi(count: number, failOnce: boolean): TrackingApi {
 }
 
 /** `attempt` opens the sheet on a Work that already has an active attempt, so no form to start one is shown. */
-function OpenSheet({ count, failOnce, attempt = false }: { count: number; failOnce: boolean; attempt?: boolean }) {
-  const [api] = useState(() => pagingApi(count, failOnce));
+function OpenSheet({ count, failOnce, attempt = false, cataloguePending = false }: {
+  count: number; failOnce: boolean; attempt?: boolean; cataloguePending?: boolean;
+}) {
+  const [api] = useState(() => {
+    const base = pagingApi(count, failOnce);
+    return cataloguePending ? { ...base, editions: () => new Promise<Awaited<ReturnType<TrackingApi['editions']>>>(() => {}) } : base;
+  });
   const [open, setOpen] = useState(true);
   const [ready, setReady] = useState(!attempt);
   useEffect(() => {
@@ -103,6 +108,16 @@ const meta = {
 } satisfies Meta<typeof OpenSheet>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+/** A successful sessions read is usable even when the edition catalogue never answers. */
+export const AttemptsBeforeCatalogue: Story = {
+  args: { attempt: true, cataloguePending: true },
+  async play() {
+    const dialog = await openDialog(true);
+    await expect(within(dialog).getByRole('article', { name: t.firstRead })).toBeVisible();
+    await expect(dialog.querySelector('[aria-busy="true"]')).toBeNull();
+  },
+};
 
 /** Forty-five releases, a page at a time, on a 390 px phone: later pages keep their order and can be filtered. */
 export const FortyFiveEditions: Story = {

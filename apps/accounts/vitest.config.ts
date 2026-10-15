@@ -8,6 +8,7 @@ const screenshotDirectory = process.env[STORY_SCREENSHOTS_ENV];
 const screenshotSetup = screenshotDirectory ? {
   setupFiles: [fileURLToPath(new URL('../web/.storybook/story-screenshots.setup.ts', import.meta.url))],
 } : {};
+const accessibilitySetup = fileURLToPath(new URL('../../scripts/qa/story-accessibility.setup.ts', import.meta.url));
 const screenshotCommands = screenshotDirectory ? {
   commands: { captureStoryScreenshot: storyScreenshotCommand(screenshotDirectory, fileURLToPath(new URL('../..', import.meta.url))) },
 } : {};
@@ -17,7 +18,7 @@ export default defineConfig({
   // concurrency as the web config does. STORYBOOK_MAX_WORKERS raises it on a quiet host.
   test: { maxWorkers: Number(process.env.STORYBOOK_MAX_WORKERS) || 6, projects: [{
     plugins: [storybookTest({ configDir: fileURLToPath(new URL('.storybook', import.meta.url)) })],
-    test: { name: 'storybook', ...screenshotSetup, browser: { enabled: true, headless: true,
+    test: { name: 'storybook', setupFiles: [accessibilitySetup, ...(screenshotSetup.setupFiles ?? [])], browser: { enabled: true, headless: true,
       ...screenshotCommands,
       // Stories assert states, not transitions: with reduced motion (which Rezics
       // UI honours) a field error or dialog is complete when it appears.

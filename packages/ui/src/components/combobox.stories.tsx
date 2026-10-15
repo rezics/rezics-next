@@ -224,3 +224,22 @@ export const Dark: Story = {
   globals: { theme: 'dark' },
   args: { defaultOpen: true, defaultValue: ['dark-forest'] },
 };
+
+export const OpenWhileZooming: Story = {
+  args: { defaultOpen: true },
+  async play({ canvasElement }) {
+    const { page: browser } = await import('vitest/browser');
+    const page = within(canvasElement.ownerDocument.body);
+    await page.findByRole('listbox');
+    for (const width of [1280, 640, 320, 390]) {
+      await browser.viewport(width, 860);
+      // Positioning follows ResizeObserver; assert its settled bounds, not the resize event itself.
+      await waitFor(() => {
+        const box = page.getByRole('listbox').closest('[data-slot="combobox-content"]')!.getBoundingClientRect();
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(width);
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      });
+    }
+  },
+};

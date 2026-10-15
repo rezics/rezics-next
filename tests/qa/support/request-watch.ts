@@ -82,3 +82,6 @@ export class RequestWatch {
       elapsedMs: Math.round(this.runtime.now() - entry.started), ...answer })}`);
   }
 }
+
+/** Shared by fixture requests and the runner's teardown diagnostics. */
+export const personaRequests = new RequestWatch();

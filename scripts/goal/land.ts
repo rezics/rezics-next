@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { processAlive, processIdentity } from '../qa/process/identity.ts';
+import { configuredAccounts, loadSettings } from './config.ts';
+import { engineEnv, launcherOf, modelOf } from './types.ts';
+import { solAccount } from './handover.ts';
 
 interface LandingState {
   accepted?: { head: string; brief: string; directory: string };
@@ -190,10 +193,8 @@ export function handoffResult(text: string, step = false): string | undefined {
     ?? (step && /^RESULT:[ \t]*done[ \t]+\S/.test(line) ? 'partial' : undefined);
 }
 
-/** Reviewers `GOAL_REVIEW_ENGINE` may select. Sol on the default Codex account is the norm; the others keep
- * landing possible while that account is exhausted (program, 2026-10-08: Codex out for a week). */
-export const REVIEW_ENGINES = ['codex', 'codex-1', 'sonnet'] as const;
-export type ReviewEngine = typeof REVIEW_ENGINES[number];
+export const reviewEngines = (): string[] => [...configuredAccounts().map(account => account.engine), 'sonnet'];
+export type ReviewEngine = string;
 const SONNET_REVIEW_MODEL = 'claude-sonnet-5-5';
 // Bounds the diff embedded for a reviewer that cannot run git itself.
 const EMBEDDED_DIFF_LIMIT = 400_000;
@@ -206,9 +207,10 @@ export function reviewEngineFile(cwd = process.cwd()): string {
 }
 
 export function reviewEngine(env: NodeJS.ProcessEnv = process.env, file = reviewEngineFile()): ReviewEngine {
-  const engine = env.GOAL_REVIEW_ENGINE?.trim() || (existsSync(file) ? readFileSync(file, 'utf8').trim() : '') || 'codex';
-  if (!(REVIEW_ENGINES as readonly string[]).includes(engine)) {
-    throw new Error(`GOAL_REVIEW_ENGINE must be one of ${REVIEW_ENGINES.join(', ')}`);
+  const configured = env.GOAL_REVIEW_ENGINE?.trim() || loadSettings({ stateDirectory: dirname(file) }).settings.reviewEngine;
+  const engine = configured === 'sol' ? solAccount() : configured;
+  if (!reviewEngines().includes(engine)) {
+    throw new Error(`GOAL_REVIEW_ENGINE must be one of ${reviewEngines().join(', ')}`);
   }
   return engine as ReviewEngine;
 }
@@ -223,11 +225,11 @@ export function findingsFromText(text: string): unknown {
   return JSON.parse(trimmed.slice(start, end + 1));
 }
 
-function runReviewer(program: string, args: string[], request: LandReview, prompt: string, again = false): Promise<void> {
+function runReviewer(program: string, args: string[], request: LandReview, prompt: string, again = false, env: Record<string, string> = {}): Promise<void> {
   // A pass that is run again keeps the output of the try that failed.
   const stdout = openSync(join(request.directory, 'stdout.log'), again ? 'a' : 'w');
   const stderr = openSync(join(request.directory, 'stderr.log'), again ? 'a' : 'w');
-  const child = spawn(program, args, { cwd: request.worktree, stdio: ['pipe', stdout, stderr] });
+  const child = spawn(program, args, { cwd: request.worktree, env: { ...process.env, ...env }, stdio: ['pipe', stdout, stderr] });
   const exited = new Promise<number | null>((resolve, reject) => {
     child.once('error', reject);
     child.once('exit', resolve);
@@ -347,12 +349,12 @@ async function reviewPass(request: LandReview, engine: ReviewEngine, prompt: str
     writeFileSync(join(request.directory, 'prompt.md'), prompt);
     // The service refuses a request now and then ("Selected model is at capacity" stopped a landing on
     // 2026-10-12), and a refused launch must not cost the review: the same account is
-    // tried again, then the other one. A reviewer needs no MCP server; an unreachable one only adds errors.
-    const accounts: ReviewEngine[] = [engine, engine, engine === 'codex' ? 'codex-1' : 'codex'];
+    // tried again, then the remaining configured accounts. A reviewer needs no MCP server.
+    const accounts: ReviewEngine[] = [engine, engine, ...configuredAccounts().filter(account => account.engine !== engine).map(account => account.engine)];
     for (const [attempt, account] of accounts.entries()) {
       try {
-        await runReviewer(account, ['exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high',
-          '-s', 'read-only', '-c', 'mcp_servers={}', '--output-schema', schema, '--output-last-message', output, '-'], request, prompt, attempt > 0);
+        await runReviewer(launcherOf(account), ['exec', '-m', modelOf(account), '-c', 'model_reasoning_effort=high',
+          '-s', 'read-only', '-c', 'mcp_servers={}', '--output-schema', schema, '--output-last-message', output, '-'], request, prompt, attempt > 0, engineEnv(account));
         break;
       } catch (error) {
         if (attempt === accounts.length - 1) throw error;

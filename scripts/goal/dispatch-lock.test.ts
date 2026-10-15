@@ -37,7 +37,7 @@ function repository() {
   writeFileSync(meminfo, 'MemAvailable: 67108864 kB\n');
   const env = { ...process.env, GOAL_ID: 'program', PATH: `${bin}:${process.env.PATH}`, GOAL_MEMORY_FLOOR_GIB: '12',
     GOAL_MAX_WORKERS: '25', GOAL_MEMINFO_FILE: meminfo, GOAL_USAGE_FILE: join(local, 'usage.json'),
-    GOAL_CODEX_HOME: join(local, 'codex'), GOAL_CODEX_1_HOME: join(local, 'codex-1') };
+    GOAL_CODEX_HOME: join(local, 'codex') };
   const ledgerPath = join(state, 'ledger.json');
   const save = (ledger: QueueLedger) => writeFileSync(ledgerPath, JSON.stringify(ledger));
   const ledger = (): QueueLedger => JSON.parse(readFileSync(ledgerPath, 'utf8')) as QueueLedger;

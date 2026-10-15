@@ -96,6 +96,21 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** A 1280 px window at 400% zoom has 320 CSS pixels for the feed and its controls. */
+export const SignedOutZoom: Story = {
+  args: props({ signedIn: false, operationGate: gateFor(NO_PLATFORM_ACCESS) }),
+  async play({ canvasElement }) {
+    const { page } = await import('vitest/browser');
+    await page.viewport(320, 860);
+    await waitFor(() => {
+      const overflow = [...canvasElement.querySelectorAll('*')]
+        .filter(element => element.getBoundingClientRect().right > 321)
+        .map(element => `${element.tagName}.${element.className}: ${Math.round(element.getBoundingClientRect().right)}`);
+      expect(document.documentElement.scrollWidth, overflow.slice(-12).join('\n')).toBeLessThanOrEqual(320);
+    });
+  },
+};
+
 /** Signed out: why to join, and All · Best under one control line. The official Zones are in the navigation. */
 export const SignedOut: Story = {
   args: props({ signedIn: false, operationGate: gateFor(NO_PLATFORM_ACCESS) }),

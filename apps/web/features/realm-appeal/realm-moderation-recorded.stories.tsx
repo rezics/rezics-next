@@ -111,16 +111,18 @@ function realmOf(persona: AnswerPersona, label: string): string {
   return new URL(path, 'https://recorded.invalid').pathname.split('/')[3] ?? '';
 }
 
-function Recorded({ persona, selections, realm, view }: {
+function Recorded({ persona, selections, realm, view, locale = 'en' }: {
   persona: AnswerPersona; selections: readonly RecordedSelection[]; realm: string; view: QueueView;
+  locale?: import('../../i18n/define.ts').UiLocale;
 }) {
   return <RecordedModerationPage record={record} persona={persona} selections={selections} realm={realm} view={view}
-    platformAccess={recordedPlatformAccess(record, persona)} />;
+    platformAccess={recordedPlatformAccess(record, persona)} locale={locale} />;
 }
 
 const meta = {
   title: 'Realm/Recorded moderation',
   component: Recorded,
+  render: (args, { globals }) => <Recorded {...args} locale={globals.locale as import('../../i18n/define.ts').UiLocale} />,
   args: { persona: 'owner' as const, selections: ownerQueue, realm: realmOf('owner', 'management-realm-header'), view: openView },
   parameters: { controls: { disable: true }, route: { pathname: '/en/manage/r/realm' } },
   globals: { viewport: { value: 'desktop' } },

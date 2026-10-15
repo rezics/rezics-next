@@ -1,4 +1,4 @@
-import { type Brief, type BriefKind, type Engine, DEFAULT_ENGINE, BRIEF_KINDS, ENGINES, effortsOf, type Task, HOLDING } from './types.ts';
+import { type Brief, type BriefKind, type Engine, DEFAULT_ENGINE, BRIEF_KINDS, engineNames, effortsOf, type Task, HOLDING } from './types.ts';
 import { isAbsolute, posix, win32 } from 'node:path';
 import { mechanisms } from '../static/mechanisms.ts';
 
@@ -60,7 +60,7 @@ export function validateBrief(brief: Brief): string[] {
   for (const row of brief.rows ?? []) if (!/^[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/.test(row)) errors.push(`bad outcome row: ${row}`);
   if (brief.land !== undefined && brief.land !== 'auto') errors.push(`land must be auto: ${brief.land}`);
   const engine = brief.engine ?? DEFAULT_ENGINE;
-  if (!ENGINES.includes(engine)) errors.push(`engine must be one of ${ENGINES.join(', ')}: ${engine}`);
+  if (!engineNames().includes(engine)) errors.push(`engine must be one of ${engineNames().join(', ')}: ${engine}`);
   else if (!effortsOf(engine).includes(brief.effort)) {
     errors.push(`${engine} effort must be one of ${effortsOf(engine).join(', ')}: ${brief.effort}`);
   }
@@ -194,16 +194,17 @@ export function isGeneratedOutput(path: string): boolean {
   return path === 'generated' || path.startsWith('generated/');
 }
 
-export function claimConflicts(brief: Brief, tasks: Task[]): string[] {
+export function claimConflicts(brief: Brief, tasks: Task[], sameBase: (task: Task) => boolean = () => true): string[] {
   const conflicts: string[] = [];
   for (const task of tasks) {
     if (task.id === brief.id || !HOLDING.includes(task.state)) continue;
     for (const id of brief.cases) if (task.cases.includes(id)) conflicts.push(`case ${id} is held by ${task.id}`);
     for (const path of brief.paths) {
+      if (!['starting', 'running'].includes(task.state)) continue;
       if (isGeneratedOutput(path)) continue;
       for (const held of task.paths) {
         if (isGeneratedOutput(held)) continue;
-        if (pathsOverlap(path, held)) conflicts.push(`path ${path} overlaps ${task.id} ${held}`);
+        if (pathsOverlap(path, held) && sameBase(task)) conflicts.push(`path ${path} overlaps ${task.id} ${held}`);
       }
     }
     for (const range of brief.migrations) {

@@ -1,4 +1,5 @@
-import { type Engine, GROK_MODEL, cursorModel, isCodex, MODELS, type Task, engineOf, modelOf, type Ledger, type Attempt, programOf, isClaudeCode, type UsageLevel, engineEnv, TRANSPORT_ERRORS } from './types.ts';
+import { type Engine, GROK_MODEL, cursorModel, isCodex, MODELS, type Task, engineOf, modelOf, type Ledger, type Attempt, programOf, launcherOf, isClaudeCode, type UsageLevel, engineEnv, TRANSPORT_ERRORS } from './types.ts';
+import { loadSettings, settingsDirectory } from './config.ts';
 import { join, resolve } from 'node:path';
 import { stateDir, root, pidAlive, readLedger, git, regenerationOnlyFiles } from './ledger.ts';
 import { existsSync, readFileSync, mkdirSync, openSync } from 'node:fs';
@@ -30,7 +31,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
   if (isCodex(engine)) {
     // Maintainer, 2026-10-03: Codex workers run on the fast service tier unless GOAL_CODEX_SERVICE_TIER says otherwise.
     const tier = process.env.GOAL_CODEX_SERVICE_TIER ?? codexServiceTier();
-    const common = ['-m', MODELS[engine], '-c', `model_reasoning_effort=${effort}`,
+    const common = ['-m', modelOf(engine), '-c', `model_reasoning_effort=${effort}`,
       '-c', 'features.multi_agent=false', '-c', 'features.multi_agent_v2=false',
       ...codexMcpOverrides(engine),
       ...(engine === 'luna' ? [] : ['-c', `model_context_window=${SOL_CONTEXT_WINDOW}`]),
@@ -38,7 +39,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
       '-c', `tool_output_token_limit=${codexToolOutputTokens()}`,
       ...(tier ? ['-c', `service_tier="${tier}"`] : []),
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', options.lastMessage ?? '/dev/null'];
-    return ['codex', resume ? ['exec', 'resume', session, ...common, '--', prompt]
+    return [launcherOf(engine), resume ? ['exec', 'resume', session, ...common, '--', prompt]
       : ['exec', ...common, '-C', options.worktree ?? '.', '--', prompt]];
   }
   return ['claude', ['-p', '--model', MODELS[engine], '--effort', effort, '--dangerously-skip-permissions',
@@ -48,7 +49,9 @@ export function launchCommand(options: { id: string; effort: string; session: st
 }
 
 function codexMcpOverrides(engine: Engine): string[] {
-  const config = join(engineEnv(engine).CODEX_HOME!, 'config.toml');
+  const home = engineEnv(engine).CODEX_HOME;
+  if (!home) return [];
+  const config = join(home, 'config.toml');
   if (!existsSync(config)) return [];
   const { mcp_servers: servers } = Bun.TOML.parse(readFileSync(config, 'utf8')) as { mcp_servers?: Record<string, unknown> };
   // Codex merges tables, so an empty mcp_servers override does not clear the account's servers.
@@ -59,19 +62,15 @@ function codexMcpOverrides(engine: Engine): string[] {
 /** Sol's context window in Codex since 2026-10-12 (it was 272,000). The account's own config still declares
  * 1,000,000 with compaction at 900,000, which is more than the model takes, so a worker states the real one. */
 export const SOL_CONTEXT_WINDOW = 500_000;
-/** Where a worker compacts its context. Every model call resends the whole context, so a larger limit
- * costs tokens and time on each step of a long session; a smaller one compacts sooner, and a compaction
- * loses detail the worker then reads again or gets wrong. Measured to 2026-10-12, counting each resumed
- * session by its growth and not by its running total: a step carries 44,000 tokens on average (Sol
- * 57,000), so the limit binds only on long sessions. Sol compacts at 80% of its window; Luna's window is
- * not published the same way and stays at 200,000. `GOAL_CODEX_COMPACT_TOKENS` overrides both.
- * (An earlier note here said resumed sessions averaged 780,000 tokens a call: that counted a resumed
- * session's cumulative total once per attempt. Their real average before any limit was 118,000.) */
-export const CODEX_COMPACT_TOKENS = { sol: 400_000, luna: 200_000 } as const;
+/** Each launch reads the layered per-family compaction limits; the project uses Sol 160,000 and Luna
+ * 200,000. GOAL_CODEX_COMPACT_TOKENS overrides either family. Measure fresh and resumed sessions by
+ * per-attempt token deltas, tracking re-sent context, wake prompt sizes, and rereads or mistakes after
+ * compaction to balance context cost against lost detail. */
 function codexCompactTokens(engine: Engine): number {
   const override = Number(process.env.GOAL_CODEX_COMPACT_TOKENS);
   if (Number.isSafeInteger(override) && override > 0) return override;
-  return engine === 'luna' ? CODEX_COMPACT_TOKENS.luna : CODEX_COMPACT_TOKENS.sol;
+  const limits = loadSettings({ stateDirectory: stateDir }).settings.codexCompactTokens;
+  return engine === 'luna' ? limits.luna : limits.sol;
 }
 
 /** What one command's output may add to a worker's context. Sol's own default is 10,000 tokens; a token
@@ -83,13 +82,11 @@ function codexToolOutputTokens(): number {
   return Number.isSafeInteger(override) && override > 0 ? override : CODEX_TOOL_OUTPUT_TOKENS;
 }
 
-/** The manager switches Codex between `fast` and `default` by writing this state file (fast when
- * absent); `GOAL_CODEX_SERVICE_TIER` overrides it for one invocation. */
+/** The environment can override the layered service tier for one invocation. */
 function codexServiceTier(): string {
   const override = process.env.GOAL_CODEX_SERVICE_TIER?.trim();
   if (override) return override;
-  const file = join(stateDir, 'codex-service-tier');
-  return existsSync(file) ? readFileSync(file, 'utf8').trim() : 'fast';
+  return loadSettings({ stateDirectory: stateDir }).settings.codexServiceTier;
 }
 
 /** Where a task's brief lives in its worktree; shared worktrees hold one brief per task. */
@@ -162,7 +159,7 @@ export function launchGates(tasks: Task[], engine: Engine, forceUsage: boolean) 
       throw new Error(`Claude usage is ${usage.level} (${usage.reason}); let running workers finish, `
         + 'use another engine or pass --force-usage');
     }
-    if (account?.reached) throw new Error(`${describeAccount(account)}; use another engine or pass --force-usage`);
+    if (account?.reached && !account.pastAllowance?.length) throw new Error(`${describeAccount(account)}; use another engine or pass --force-usage`);
   }
   return { live, limit, usage, account };
 }
@@ -177,7 +174,7 @@ export function managerWakeGates(engine: Engine): { live: number; limit: number;
   if (memory) throw new Error(memory);
   const claude = currentUsage().level;
   const account = codexAccounts().find(candidate => candidate.engines.includes(engine));
-  if (account?.reached) throw new Error(`${describeAccount(account)}; use another engine or pass --force-usage`);
+  if (account?.reached && !account.pastAllowance?.length) throw new Error(`${describeAccount(account)}; use another engine or pass --force-usage`);
   return { live, limit, claude };
 }
 
@@ -196,13 +193,16 @@ export function launch(task: Task, effort: string, session: string, prompt: stri
   mkdirSync(runDir, { recursive: true });
   const output = join(runDir, `attempt-${n}.json`);
   const lastMessage = isCodex(engine) ? join(runDir, `attempt-${n}.last.md`) : undefined;
+  // A wave can keep old application code; its detached job controller still follows current main.
+  prompt = `For recorded jobs, use \`bun ${join(root, 'scripts/goal/goalctl.ts')} job -- <command…>\``
+    + ` from this worktree, so job ownership and wake rules use main’s code.\n${prompt}`;
   const [program, args] = launchCommand({ id: task.id, effort, session, prompt, resume, engine,
     worktree: task.worktree, lastMessage });
   const child = spawn(program, args, {
     cwd: task.worktree, detached: true,
     stdio: ['ignore', openSync(output, 'w'), openSync(join(runDir, `attempt-${n}.err`), 'w')],
     env: { ...workerSessionEnvironment(process.env), ...engineEnv(engine), GOAL_TASK_ID: task.id,
-      GOAL_WORKTREE: resolve(task.worktree), GOAL_MANAGER: manager },
+      GOAL_WORKTREE: resolve(task.worktree), GOAL_MANAGER: manager, GOAL_SETTINGS_DIRECTORY: settingsDirectory() },
   });
   child.unref();
   if (!child.pid) throw new Error(`Could not start ${program}`);

@@ -23,7 +23,7 @@ export function NotificationsLink() {
   const pathname = usePathname();
   const unread = useUnread(signedIn);
   const label = unread?.count ? t.notificationsUnread({ count: unreadBadge(unread) }) : t.notifications;
-  return <Link href={localizedPath('/notifications', locale)} aria-label={label} title={label}
+  return <Link prefetch={false} href={localizedPath('/notifications', locale)} aria-label={label} title={label}
     aria-current={isCurrent({ href: '/notifications' }, pathname) ? 'page' : undefined}
     className={buttonVariants({ variant: 'ghost', size: 'icon-md',
       className: 'relative hidden text-muted-foreground aria-[current=page]:text-primary md:inline-flex' })}>

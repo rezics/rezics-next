@@ -7,7 +7,7 @@ export const FILE_IMPORT_COST = { bytes: 2 * 1024 * 1024, rowBytes: 1024 * 1024,
   // XML evidence expands into explicit node envelopes; repeated CSV headers
   // must not multiply a small upload into gigabytes of owner writes.
   parsedBytes: 64 * 1024 * 1024, nesting: 64,
-  cellCharacters: 20_000, page: 8, statuses: 50, searchPages: 4, candidates: 80 } as const;
+  cellCharacters: 20_000, page: 8, matchConcurrency: 2, statuses: 50, searchPages: 4, candidates: 80 } as const;
 const closed = { additionalProperties: false };
 export const sourceStatus = t.Union([t.Literal('want-to-read'), t.Literal('reading'), t.Literal('read'), t.Literal('paused'), t.Literal('dnf')]);
 export const csvMapping = t.Object({ title: t.String({ minLength: 1 }),

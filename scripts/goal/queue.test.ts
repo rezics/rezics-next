@@ -5,6 +5,7 @@ import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
 import type { QueueLedger } from './queue.ts';
 import type { Task } from './types.ts';
 import { GoalMailStore } from './mail.ts';
+import { testAccountSettings } from './fixtures/accounts.ts';
 
 const spawnSync = fixtureSpawns(60_000);
 const fixtures: { directory: string }[] = [];
@@ -19,7 +20,7 @@ function repository() {
     return result.stdout.trim();
   };
   git('init', '-qb', 'main'); git('config', 'user.email', 'queue@example.invalid'); git('config', 'user.name', 'Queue fixture');
-  writeFileSync(join(directory, '.gitignore'), '.temp/\n');
+  writeFileSync(join(directory, '.gitignore'), '.temp/\n.goalctl/*.user.json\n');
   writeFileSync(join(directory, 'claimed.ts'), 'export {};\n');
   git('add', '.'); git('commit', '-qm', 'Fixture');
   const local = join(directory, '.temp');
@@ -38,7 +39,10 @@ function repository() {
   writeFileSync(meminfo, 'MemAvailable: 67108864 kB\n');
   const env = { ...process.env, GOAL_ID: 'program', PATH: `${bin}:${process.env.PATH}`, GOAL_MEMORY_FLOOR_GIB: '12',
     GOAL_MAX_WORKERS: '25', GOAL_MEMINFO_FILE: meminfo, GOAL_USAGE_FILE: join(local, 'usage.json'),
-    GOAL_CODEX_HOME: join(local, 'codex'), GOAL_CODEX_1_HOME: join(local, 'codex-1') };
+    GOAL_CODEX_HOME: join(local, 'codex'), GOAL_TEST_SECOND_HOME: join(local, 'sample-b') };
+  Object.assign(env, { GOAL_SETTINGS_DIRECTORY: testAccountSettings(directory, [
+    { engine: 'codex', home: env.GOAL_CODEX_HOME }, { engine: 'sample-b', home: env.GOAL_TEST_SECOND_HOME },
+  ]) });
   const ledgerPath = join(state, 'ledger.json');
   const save = (ledger: QueueLedger) => writeFileSync(ledgerPath, JSON.stringify(ledger));
   const ledger = (): QueueLedger => JSON.parse(readFileSync(ledgerPath, 'utf8')) as QueueLedger;
@@ -158,10 +162,10 @@ test('resume does not recheck needed files for an already started task', () => {
   expect(f.ledger().tasks[task.id]!.state).toBe('running');
 });
 
-test('a path claim waits until its holder closes', () => {
-  const f = repository(); const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder('stopped', ['claimed.ts']); f.save(ledger);
+test('a live path claim waits until its holder stops', () => {
+  const f = repository(); const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder('running', ['claimed.ts']); f.save(ledger);
   expect(ok(f.run('queue', f.brief()))).toContain('overlaps G-001');
-  const closed = f.ledger(); closed.tasks['G-001']!.state = 'verified'; f.save(closed);
+  const closed = f.ledger(); closed.tasks['G-001']!.state = 'stopped'; f.save(closed);
   ok(f.run('settle')); expect(f.ledger().tasks['G-002']).toBeDefined();
 });
 
@@ -171,7 +175,7 @@ test('an area loan is refused without the flag and retained through a claim wait
   const area = join(f.directory, 'docs/goals/api/GOAL.md');
   mkdirSync(join(f.directory, 'docs/goals/api'), {recursive:true});
   writeFileSync(area, '---\nareas: [claimed.ts]\n---\n');
-  const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder('stopped', ['claimed.ts']); f.save(ledger);
+  const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder('running', ['claimed.ts']); f.save(ledger);
   const refused = f.run('queue', path);
   expect(refused.status).toBe(1);
   expect(refused.stderr).toContain("path claimed.ts lies in Goal api's area");
@@ -180,7 +184,7 @@ test('an area loan is refused without the flag and retained through a claim wait
   expect(f.ledger().queue!['G-002']!.allowArea).toBe(true);
   ok(f.run('settle'));
   expect(f.ledger().queue!['G-002']!.allowArea).toBe(true);
-  const closed = f.ledger(); closed.tasks['G-001']!.state = 'verified'; f.save(closed);
+  const closed = f.ledger(); closed.tasks['G-001']!.state = 'stopped'; f.save(closed);
   ok(f.run('settle'));
   expect(f.ledger().tasks['G-002']!.state).toBe('running');
   expect(f.ledger().queue?.['G-002']).toBeUndefined();
@@ -199,15 +203,14 @@ test('an area loan survives a dispatch memory refusal and accepts the flag befor
   expect(f.ledger().tasks['G-002']!.state).toBe('running');
 });
 
-test('an out-of-claim path waits until the branch lands', () => {
+test('an unlanded path overlap dispatches before the branch lands', () => {
   const f = repository();
   f.git('checkout', '-qb', 'goal/holder'); writeFileSync(join(f.directory, 'claimed.ts'), 'export const changed = true;\n');
   f.git('commit', '-qam', 'Change path outside claim'); f.git('checkout', '-q', 'main');
   const ledger = f.ledger(); const task = f.holder(); task.branch = 'goal/holder'; ledger.tasks[task.id] = task; f.save(ledger);
-  expect(ok(f.run('queue', f.brief()))).toContain('changed by G-001');
-  f.git('merge', '--ff-only', 'goal/holder');
-  const landed = f.ledger(); landed.tasks['G-001']!.state = 'merged'; f.save(landed);
-  ok(f.run('settle')); expect(f.ledger().tasks['G-002']).toBeDefined();
+  expect(ok(f.run('queue', f.brief()))).toContain('G-002 started');
+  expect(f.ledger().tasks['G-002']!.state).toBe('running');
+  expect(f.ledger().tasks['G-001']!.state).toBe('stopped');
 });
 
 test('a cancelled dependency stays queued and the listing names cancellation and time', () => {
@@ -231,7 +234,7 @@ test('a memory gate retains the brief and the next pass starts it', () => {
 });
 
 test('a cancelled path holder remains a wait even after its claim is released', () => {
-  const f = repository(); const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder('stopped', ['claimed.ts']); f.save(ledger);
+  const f = repository(); const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder('running', ['claimed.ts']); f.save(ledger);
   ok(f.run('queue', f.brief()));
   const cancelled = f.ledger(); cancelled.tasks['G-001']!.state = 'cancelled'; f.save(cancelled);
   ok(f.run('settle'));
@@ -240,7 +243,7 @@ test('a cancelled path holder remains a wait even after its claim is released', 
 });
 
 test('permanent validation and method errors are refused even while a path is held', () => {
-  const f = repository(); const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder('stopped', ['claimed.ts']); f.save(ledger);
+  const f = repository(); const ledger = f.ledger(); ledger.tasks['G-001'] = f.holder('running', ['claimed.ts']); f.save(ledger);
   for (const [extra, message] of [[['effort: imaginary'], 'effort must be'], [['kind: implementation'], 'needs at least one row'],
     [['depends: [G-999]'], 'Unknown dependency']] as const) {
     const result = f.run('queue', f.brief('G-002', [...extra]));
@@ -354,7 +357,7 @@ async function endedWorker(f: ReturnType<typeof repository>) {
 
 test.each(['memory', 'cap', 'account'])('a resume waits for %s admission and preserves its message and options', async gate => {
   const f = repository(); const task = await endedWorker(f);
-  const usageDirectory = join(f.env.GOAL_CODEX_1_HOME, 'sessions/2026/10/13');
+  const usageDirectory = join(f.env.GOAL_TEST_SECOND_HOME, 'sessions/2026/10/13');
   const usage = join(usageDirectory, 'usage.jsonl');
   if (gate === 'memory') writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n');
   if (gate === 'cap') f.env.GOAL_MAX_WORKERS = '0';
@@ -365,10 +368,10 @@ test.each(['memory', 'cap', 'account'])('a resume waits for %s admission and pre
     } } }));
   }
   const note = join(f.local, 'resume-note'); writeFileSync(note, 'Continue with the retained note.');
-  const output = ok(f.run('resume', task.id, '--file', note, '--engine', 'codex-1', '--effort', 'medium', '--fresh'));
+  const output = ok(f.run('resume', task.id, '--file', note, '--engine', 'sample-b', '--effort', 'medium', '--fresh'));
   expect(output).toContain('resume waiting:');
   expect(f.ledger().tasks[task.id]!.waitingResume).toMatchObject({ message: 'Continue with the retained note.',
-    engine: 'codex-1', effort: 'medium', fresh: true, forceUsage: false });
+    engine: 'sample-b', effort: 'medium', fresh: true, forceUsage: false });
   expect(f.ledger().tasks[task.id]!.attempts).toHaveLength(1);
   rmSync(note);
   const status = ok(f.run('status'));
@@ -477,13 +480,14 @@ test('a pass waiting on running dependencies performs no git work or outcome loa
   expect(f.ledger().queueRefusals!['G-002']!.reason).toContain('effort must be');
 });
 
-test('a pass scans an unlanded branch only once for several otherwise ready entries', () => {
+test('a pass never scans unlanded branches to admit otherwise ready entries', () => {
   const f = repository();
   f.git('checkout', '-qb', 'goal/holder'); writeFileSync(join(f.directory, 'claimed.ts'), 'export const changed = true;\n');
   f.git('commit', '-qam', 'Change path outside claim'); f.git('checkout', '-q', 'main');
   const ledger = f.ledger(); const holder = f.holder(); holder.branch = 'goal/holder'; ledger.tasks[holder.id] = holder; f.save(ledger);
-  for (const id of ['G-002', 'G-003', 'G-004']) expect(ok(f.run('queue', f.brief(id)))).toContain('changed by G-001');
+  writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n');
+  for (const id of ['G-002', 'G-003', 'G-004']) expect(ok(f.run('queue', f.brief(id)))).toContain('Memory floor reached');
   const git = recordingGit(f); const result = pump(f); expect(result.status, result.stderr).toBe(0);
-  const scans = git.calls().filter(args => args[0] === 'diff' && args.includes('main...goal/holder'));
-  expect(scans).toHaveLength(1); expect(Object.keys(f.ledger().queue!)).toHaveLength(3);
+  const scans = git.calls().filter(args => args[0] === 'diff');
+  expect(scans).toEqual([]); expect(Object.keys(f.ledger().queue!)).toHaveLength(3);
 });

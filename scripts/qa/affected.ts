@@ -154,12 +154,14 @@ export function affectedUnitTierFiles(root: string): string[] {
 }
 
 // The registered unit tier: `tests/qa/unit` plus its gate files.
-const registeredUnit = [...testArgs('unit'), ...unitHarnessFiles];
+let registeredUnit: string[] | undefined;
 const inRegisteredUnit = (path: string) =>
-  registeredUnit.some((entry) => path === entry || path.startsWith(`${entry}/`));
-const registeredOwner = testArgs('owner');
+  (registeredUnit ??= [...testArgs('unit'), ...unitHarnessFiles])
+    .some((entry) => path === entry || path.startsWith(`${entry}/`));
+let registeredOwner: string[] | undefined;
 const inRegisteredOwner = (path: string) =>
-  registeredOwner.some((entry) => path === entry || path.startsWith(`${entry}/`));
+  (registeredOwner ??= testArgs('owner'))
+    .some((entry) => path === entry || path.startsWith(`${entry}/`));
 
 type Rule = { match: RegExp; reason: string } & (
   | { effect: 'ignore' }

@@ -129,6 +129,7 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
+  const [createdChapter, setCreatedChapter] = useState<{ post: string; occurrence: string; title: string } | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [drop, setDrop] = useState<Drop | null>(null);
   // Drag events can follow each other before React renders; handlers read the dragged use from here.
@@ -328,6 +329,7 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
         setComposition({ structure: again.structure, head: again.head });
         form.reset();
         setAnnouncement(t.chapterAdded({ title: name }));
+        if (again.occurrence) setCreatedChapter({ post: again.chapter, occurrence: again.occurrence, title: name });
         if (parent) setOpen(current => new Set([...current, parent]));
         await refresh(parent ? [parent] : []);
       } else {
@@ -677,6 +679,14 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
     ...groups.map(group => ({ value: group.occurrence, label: groupName(group, locale, t), lang: group.label?.language }))];
   return <div className="grid gap-4">
     <p role="status" className="sr-only">{announcement}</p>
+    {/* The committed Post can be edited while its outline read is still in flight. */}
+    {createdChapter && ![...top.items, ...Object.values(levels).flatMap(level => level.items)]
+      .some(row => row.occurrence === createdChapter.occurrence) ?
+      <Link href={chapterHref(agent, book.id, createdChapter.post, undefined, book.language)}
+        aria-label={t.writeNamed({ title: createdChapter.title })}
+        className={buttonVariants({ variant: 'outline', size: 'sm',
+          className: 'max-w-full justify-self-start whitespace-normal text-start [overflow-wrap:anywhere]' })}>
+        <PenLineIcon aria-hidden="true" />{t.writeNamed({ title: createdChapter.title })}</Link> : null}
     <div className="flex flex-wrap items-center justify-end gap-2">
       <Button type="button" variant="outline" size="sm" disabled={busy !== null || creating}
         onClick={() => setCreating(true)}><PlusIcon aria-hidden="true" />{t.newVolume}</Button>

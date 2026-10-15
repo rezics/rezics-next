@@ -3,18 +3,16 @@ import { randomUUID } from 'node:crypto';
 import ranking from '../../../../../scripts/qa/cases/outcomes/realm/ranking.ts';
 import { readRankingAnswer, readRankingModuleAnswer } from '../../../../../apps/web/features/realm/ranking-read.ts';
 import { recordedMainClient } from '../../../support/recorded-main-client.ts';
-import { publishClosureOriginals, type ClosureOriginal } from './closure-original-credit-setup.ts';
+import { seedRealmRanking as seed } from '../../../support/realm-ranking-fixture.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import type { PersonaName, PersonaSession, PersonaSessions } from '../../../support/personas.ts';
 import { realmDiscussionSource } from '../../../support/realm-discussion-source.ts';
 
-type Work = { work: string; workRevision: string; mainVersion: string };
-type Draft = { revisionId: string; revisionDigest: string };
 type Page = {
   items: { reply: string; author: { id: string } | null; work: { id: string }; vote: { score: number } }[];
   nextCursor: string | null; count: { value: number; kind: string; total: null };
 };
-setDefaultTimeout(420_000);
+setDefaultTimeout(120_000);
 let publicRealm: PersonaSessions, privateRealm: PersonaSessions;
 const publicThreads: string[] = [], oldThreads: string[] = [], currentThreads: string[] = [];
 // Admission waits pause the runner's active-work clock, not Bun's hook timer.
@@ -32,74 +30,6 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   expect(response.status, `${response.status}: ${raw}`).toBe(status);
   return JSON.parse(raw) as T;
 }
-async function seedCommand(person: PersonaSession, target: Work, path: string, input: unknown) {
-  const key = randomUUID();
-  for (let attempt = 0; ; attempt++) {
-    const response = await person.main('POST', path, input, key);
-    if (response.status !== 409 || attempt === 24) {
-      if (!response.ok) console.info('Pending ranking population command', {
-        method: 'POST', path, status: response.status, request: input,
-        answer: await response.clone().json(),
-      });
-      return response;
-    }
-    const problem = await response.clone().json() as { code: string };
-    if (problem.code !== 'read_basis_changed') return response;
-    // Restart the public read basis; a receipt race does not change this
-    // command's key, credited author or exact intended root revision.
-    await answer(person.main('GET', `/v1/works/${short(target.work)}?${acting(person)}`));
-  }
-}
-async function publishRoot(sessions: PersonaSessions, target: Work) {
-  const person = sessions.owner, author = person.actingSubject!;
-  // Ranking readers need a public root; Realm membership governs its discussion separately.
-  const contribution = await answer<{ contribution: string; draftRevision: string }>(person.main('POST', '/v1/contributions', {
-    profile: 'text-contribution-v1', work: target.work, language: 'en',
-    body: 'An original essay about the ranking discussion garden.', actingSubject: author }), 201);
-  const publication = await answer<{ publicationDecision: string }>(person.main('POST', '/v1/contribution-publications', {
-    profile: 'text-publication-v1', contribution: contribution.contribution,
-    expectedDraftHead: contribution.draftRevision, expectedPublicationHead: null,
-    rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: author }), 201);
-  await answer(person.main('POST', '/v1/publication-selections', {
-    profile: 'main-default-selection-v1', work: target.work, contribution: contribution.contribution,
-    publicationDecision: publication.publicationDecision, expectedSelectionHead: null,
-    context: { kind: 'main-version-default', id: target.mainVersion }, selectionBasis: 'main-maintainer',
-    actingSubject: author }), 201);
-}
-async function seed(sessions: PersonaSessions, size: number, label: string) {
-  const person = sessions.owner, author = person.actingSubject!;
-  const target = await answer<Work>(person.main('POST', '/v1/works', {
-    profile: 'metadata-only-v1', title: `Original ${label} ranking garden`, language: 'en',
-    authoring: 'own-work', actingSubject: author }), 201);
-  await publishRoot(sessions, target);
-  const replies: string[] = [];
-  const create = async (index: number) => {
-    const reply = `https://rezics.com/id/${randomUUID()}`, variantId = `urn:rezics:variant:${randomUUID()}`;
-    const draft = await answer<Draft>(seedCommand(person, target, '/v1/member-reply-drafts', {
-      profile: 'member-reply-draft-v1', reply, variantId, rootTarget: target.work,
-      rootRevision: target.workRevision, originRealm: sessions.realm, language: 'en', direction: 'ltr',
-      expectedHead: null, body: `Original ${label} thread ${index}\nA synthetic discussion authored for this ranking proof.`,
-      actingSubject: author }), 201);
-    await answer(seedCommand(person, target, '/v1/realm-replies', {
-      profile: 'realm-reply-identity-v1', reply, variantId, revisionId: draft.revisionId,
-      author, rootTarget: target.work, rootRevision: target.workRevision,
-      parentReply: null, parentRevision: null, contextRevision: null }), 201);
-    await answer(seedCommand(person, target, '/v1/realm-reply-placements', {
-      profile: 'realm-reply-placement-v1', realm: sessions.realm, reply,
-      revisionId: draft.revisionId, revisionDigest: draft.revisionDigest,
-      reviewDecisionId: null, expectedHead: null, actingSubject: author }), 201);
-    return reply;
-  };
-  for (let start = 0; start < size; start += 8) {
-    const results = await Promise.allSettled(Array.from({ length: Math.min(8, size - start) },
-      (_, offset) => create(start + offset)));
-    replies.push(...results.map(result => {
-      if (result.status === 'rejected') throw result.reason;
-      return result.value;
-    }));
-  }
-  return replies;
-}
 beforeAll(async () => {
   const started = performance.now();
   const copy = restored;
@@ -109,27 +39,8 @@ beforeAll(async () => {
   publicThreads.push(...inventory.public.map(item => item.reply));
   oldThreads.push(...inventory.retained.map(item => item.reply));
   currentThreads.push(...inventory.current.map(item => item.reply));
+  ({ emptyRealm, movedRealm } = inventory.states);
   await recording.prepare();
-  const founder = publicRealm.stranger;
-  for (const state of ['empty', 'moved'] as const) {
-    const created = await answer<{ realm: string }>(founder.main('POST', '/v1/spaces', {
-      profile: 'space-realm-v2', name: `Original ${state} ranking garden`, language: 'en',
-      handle: `ranking-${randomUUID().slice(0, 12)}`, capabilities: ['realm'], actingSubject: founder.actingSubject,
-      initialSettings: { visibility: 'public', reviewRequired: false, reviewMode: 'open',
-        whoMaySubmit: 'members', selfJoin: false, rules: [] },
-    }), 201);
-    if (state === 'empty') emptyRealm = created.realm;
-    else movedRealm = created.realm;
-  }
-  await seed({ ...publicRealm, owner: publicRealm.stranger, realm: movedRealm }, 21, 'moving');
-  // Whole-Work progress is the public source of the chart's reads metric.
-  // Twelve adopted originals give its limit=10 request a real continuation.
-  const originals: ClosureOriginal[] = [];
-  await publishClosureOriginals(publicRealm, originals, `Rankinggarden${randomUUID().replaceAll('-', '')}`, 12);
-  for (const original of originals) await answer(publicRealm.owner.main('PUT',
-    `/v1/works/${short(original.work)}/progress`, {
-      actingSubject: publicRealm.owner.actingSubject, expectedVersion: 0, standing: 'started',
-    }));
   console.info('Ranking setup', JSON.stringify({ sourceKey: copy.manifest.key,
     restore: copy.candidate.preparation,
     totalMs: Math.round(performance.now() - started) }));

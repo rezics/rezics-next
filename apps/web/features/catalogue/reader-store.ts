@@ -266,8 +266,15 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
   }
 
   async function writeStatus(life: Lifetime, work: string, status: ReadingStatus | null, round: Round) {
-    const put = (entry: ReaderEntry) => putAnimeReaderStatus(main(), work,
-      readerStatusBody(actingSubject, entry.version, status), crypto.randomUUID());
+    const put = async (entry: ReaderEntry) => {
+      const body = readerStatusBody(actingSubject, entry.version, status);
+      const key = crypto.randomUUID();
+      let answer = await putAnimeReaderStatus(main(), work, body, key);
+      // No HTTP response means the command may have committed. Resolve that exact key before changing the plan.
+      if (!life.signal.aborted && answer.error?.status === 503 && answer.error.value instanceof Error)
+        answer = await putAnimeReaderStatus(main(), work, body, key);
+      return answer;
+    };
     const base = entries.get(work) ?? await refresh(work, life);
     if (!base || life.signal.aborted) return false;
     // The last round read what Main holds and was superseded by this choice: no write if Main already has it.

@@ -343,9 +343,30 @@ export function normalizeMigrations(worktree: string, branch: string): string | 
   return renames;
 }
 
+/** Recover a landing from git alone, including a removed worktree and cherry-picked commits.
+ * Verbatim patches preserve meaningful whitespace; every outstanding commit must be accounted for. */
+export function landedTaskCommit(repo: string, task: Pick<Task, 'base' | 'branch' | 'mergedCommit'>, patches = true): string | undefined {
+  const ancestor = (commit: string) => spawnSync('git', ['merge-base', '--is-ancestor', commit, 'main'], { cwd: repo }).status === 0;
+  const head = git(repo, ['rev-parse', '--verify', task.branch], true);
+  if (!head) return task.mergedCommit && ancestor(task.mergedCommit) ? task.mergedCommit : undefined;
+  if (head === task.base) return undefined;
+  if (ancestor(head)) return head;
+  if (!patches) return undefined;
+  const patch = (commit: string) => git(repo, ['patch-id', '--verbatim'], false,
+    { input: git(repo, ['show', '--format=', commit]) }).split(' ')[0];
+  const outstanding = git(repo, ['rev-list', '--reverse', `${task.base}..${head}`, '--not', 'main']).split('\n').filter(Boolean).map(patch);
+  if (!outstanding.length || outstanding.some(value => !value)) return undefined;
+  let matched = 0;
+  for (const commit of git(repo, ['rev-list', '--reverse', '--first-parent', `${task.base}..main`]).split('\n').filter(Boolean)) {
+    if (patch(commit) === outstanding[matched] && ++matched === outstanding.length) return commit;
+  }
+  return undefined;
+}
+
 /** A hand-landed cherry-pick is attributable only across its contiguous patch-equivalent suffix.
  * An unknown boundary is recorded with zero width, so unrelated manager commits cannot be blamed on this task. */
 export function landedBoundary(repo: string, task: Pick<Task, 'base' | 'branch'>, after: string): string {
+  if (!git(repo, ['rev-parse', '--verify', task.branch], true)) return after;
   const patch = (commit: string) => {
     const diff = git(repo, ['show', '--format=', commit]);
     // Whitespace can change strings and indentation-sensitive files; stable patch IDs discard it.

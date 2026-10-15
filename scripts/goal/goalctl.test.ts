@@ -3,7 +3,7 @@ import { appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtemp
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { processRunning } from '../../tests/qa/support/process-liveness.ts';
-import { describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { inputSelectedNativeTests, testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { ownerTierBudgetMs } from '../qa/owner-tier-budget.ts';
 import { testLogEnvironment, tierTestTimeoutArg } from '../qa/core.ts';
@@ -24,6 +24,8 @@ import { fastForwardMain, typeRechecksSpent, introducedTypecheckDiagnostics, typ
 import { reviewPrompt } from './land.ts';
 import { POSTGRES_SOCKET_LIMIT, postgresSocketPath, postgresSocketRefusal } from './postgres-socket.ts';
 import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
+import { fixtureProcessScope } from './fixtures/process-scope.ts';
+import { withTestAccounts, writeTestAccounts } from './fixtures/accounts.ts';
 
 // These fixtures exercise multiple CLI processes per case. Neither startup nor a whole case
 // has a latency contract; keep the test watchdog beyond the child's hang deadline.
@@ -36,10 +38,52 @@ function cliEnvironment(dir: string): NodeJS.ProcessEnv {
   mkdirSync(local, { recursive: true });
   const meminfo = join(local, 'meminfo');
   writeFileSync(meminfo, 'MemAvailable: 67108864 kB\n');
+  const accounts = [{ engine: 'codex', home: join(local, 'codex') },
+    { engine: 'sample-b', home: join(local, 'sample-b') }];
   return { PATH: process.env.PATH, GOAL_ID: 'alpha', GOAL_MAX_WORKERS: '25', GOAL_MEMORY_FLOOR_GIB: '0',
-    GOAL_MEMINFO_FILE: meminfo, GOAL_CODEX_HOME: join(local, 'codex'), GOAL_CODEX_1_HOME: join(local, 'codex-1'),
+    GOAL_MEMINFO_FILE: meminfo, GOAL_CODEX_HOME: join(local, 'codex'), GOAL_TEST_SECOND_HOME: join(local, 'sample-b'),
+    GOAL_SETTINGS_DIRECTORY: writeTestAccounts(dir, accounts),
     GOAL_USAGE_FILE: join(local, 'usage.json') };
 }
+
+test('config reports effective settings and their layers, refuses invalid fields and falls back after user removal', () => {
+  const scratch = join(import.meta.dir, '../../.temp/config-cli');
+  mkdirSync(scratch, { recursive: true });
+  const root = mkdtempSync(join(scratch, 'case-'));
+  const directory = join(root, '.goalctl');
+  mkdirSync(directory);
+  const sharedFile = join(directory, 'settings.json');
+  const userFile = join(directory, 'settings.user.json');
+  const config = () => spawnSync(process.execPath, [join(import.meta.dir, 'goalctl.ts'), 'config'], {
+    cwd: root, encoding: 'utf8', env: { PATH: process.env.PATH, GOAL_SETTINGS_DIRECTORY: directory },
+  });
+  try {
+    writeFileSync(sharedFile, JSON.stringify({ version: 1, qaSlots: 5 }));
+    writeFileSync(userFile, JSON.stringify({ version: 1, qaSlots: 7, telegramChat: 'synthetic-chat' }));
+    const layered = config();
+    expect(layered.status, layered.stderr).toBe(0);
+    expect(JSON.parse(layered.stdout)).toMatchObject({
+      settings: { version: 1, qaSlots: 7, telegramChat: 'synthetic-chat', accounts: [] },
+      sources: { qaSlots: userFile, telegramChat: userFile, gateLanes: 'built-in', accounts: 'built-in' },
+    });
+    writeFileSync(userFile, JSON.stringify({ version: 1, qaSlots: 'invalid' }));
+    const invalid = config();
+    expect(invalid.status).toBe(1);
+    expect(invalid.stderr).toContain(userFile);
+    expect(invalid.stderr).toContain('settings.qaSlots');
+    rmSync(userFile);
+    const fallback = config();
+    expect(fallback.status, fallback.stderr).toBe(0);
+    expect(JSON.parse(fallback.stdout)).toMatchObject({
+      settings: { qaSlots: 5, telegramChat: '', accounts: [] },
+      sources: { qaSlots: sharedFile, telegramChat: 'built-in', accounts: 'built-in' },
+    });
+    rmSync(sharedFile);
+    const defaults = config();
+    expect(defaults.status, defaults.stderr).toBe(0);
+    expect(JSON.parse(defaults.stdout)).toMatchObject({ settings: { qaSlots: 3 }, sources: { qaSlots: 'built-in' } });
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 test('a hung fixture child that ignores SIGTERM still fails with its command and deadline', () => {
   const hung = fixtureSpawns(100);
@@ -130,6 +174,9 @@ Body.
 function writeFixtureOutcomeOwner(root: string): void {
   const file = join(root, 'scripts/qa/cases/outcomes.ts');
   mkdirSync(dirname(file), { recursive: true });
+  mkdirSync(join(root, 'scripts/lib'), { recursive: true });
+  writeFileSync(join(root, 'scripts/lib/repository-files.ts'),
+    readFileSync(join(import.meta.dir, '../lib/repository-files.ts'), 'utf8'));
   // Load the real owner at the fixture's root, where its relative helper paths belong.
   const source = readFileSync(join(import.meta.dir, '../qa/cases/outcomes.ts'), 'utf8')
     .replace("from 'typescript-6'", `from ${JSON.stringify(Bun.resolveSync('typescript-6', import.meta.dir))}`)
@@ -234,7 +281,7 @@ describe('goalctl briefs', () => {
     const parsed = parseBrief(brief.replace('effort: xhigh', 'engine: claude\neffort: ultra').replace('services/main/src/modules/poll/**', '/etc/**')
       .replace('040-044', '044-040'));
     expect(validateBrief(parsed)).toHaveLength(3);
-    expect(validateBrief({ ...parseBrief(brief), engine: 'codex-1', effort: 'ultra' })).toEqual([]);
+    expect(withTestAccounts(() => validateBrief({ ...parseBrief(brief), engine: 'sample-b', effort: 'ultra' }))).toEqual([]);
     expect(validateBrief({ ...parseBrief(brief), engine: 'claude', effort: 'max' })).toEqual([]);
     expect(validateBrief({ ...parseBrief(brief), paths: ['.temp/x'] })).toHaveLength(1);
   });
@@ -2138,20 +2185,20 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', '/r/last.md', '-C', '/w']));
     expect(launchCommand({ id: 'G-081', effort: 'high', session: 't', prompt: 'p', resume: true, engine: 'codex' })[1]
       .slice(0, 3)).toEqual(['exec', 'resume', 't']);
-    // Sol states its real window and compacts at 80% of it; the account's own config declares more than the model takes.
+    // Sol states its real window and uses the project compaction limit.
     expect(args).toContain('model_context_window=500000');
-    expect(args).toContain('model_auto_compact_token_limit=400000');
+    expect(args).toContain('model_auto_compact_token_limit=160000');
     expect(args).toContain('tool_output_token_limit=4000');
     // Luna keeps its own limit and no window override, fresh or resumed.
     const resumed = launchCommand({ id: 'G-081', effort: 'high', session: 't', prompt: 'p', resume: true, engine: 'luna' })[1];
     expect(resumed).toContain('model_auto_compact_token_limit=200000');
     expect(resumed.some(arg => arg.startsWith('model_context_window='))).toBe(false);
     expect(launchCommand({ id: 'G-081', effort: 'high', session: 't', prompt: 'p', resume: true, engine: 'codex' })[1])
-      .toContain('model_auto_compact_token_limit=400000');
+      .toContain('model_auto_compact_token_limit=160000');
     const previous = process.env.GOAL_CODEX_COMPACT_TOKENS;
     try {
       process.env.GOAL_CODEX_COMPACT_TOKENS = '120000';
-      expect(launchCommand({ id: 'G-081', effort: 'high', session: '', prompt: 'p', resume: false, engine: 'codex-1' })[1])
+      expect(launchCommand({ id: 'G-081', effort: 'high', session: '', prompt: 'p', resume: false, engine: 'codex' })[1])
         .toContain('model_auto_compact_token_limit=120000');
     } finally {
       if (previous === undefined) delete process.env.GOAL_CODEX_COMPACT_TOKENS;
@@ -2159,12 +2206,12 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
     }
   });
 
-  test('runs Sol on the second Codex account with the same flags; its account is chosen by environment', () => {
+  test('runs Sol on a configured Codex account with the same flags', () => withTestAccounts(() => {
     const [program, args] = launchCommand({ id: 'G-101', effort: 'max', session: '', prompt: 'p', resume: false,
-      engine: 'codex-1', worktree: '/w', lastMessage: '/r/a.md' });
+      engine: 'sample-b', worktree: '/w', lastMessage: '/r/a.md' });
     expect(program).toBe('codex');
     expect(args).toEqual(expect.arrayContaining(['-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=max', '-C', '/w']));
-  });
+  }));
 
   test('runs Grok 4.7 through Cursor Agent with the effort in the model ID', () => {
     const [program, args] = launchCommand({ id: 'G-102', effort: 'xhigh', session: 'c', prompt: 'p', resume: true,
@@ -2205,7 +2252,7 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
     expect(validateBrief(brief('claude', 'max'))).toEqual([]);
     expect(validateBrief(brief('fable', 'max'))).toEqual([]);
     expect(validateBrief(brief('sonnet', 'max'))).toEqual([]);
-    expect(validateBrief(brief('codex-1', 'ultra'))).toEqual([]);
+    expect(withTestAccounts(() => validateBrief(brief('sample-b', 'ultra')))).toEqual([]);
     expect(validateBrief(brief('astra', 'high')).join()).toContain('engine must be one of');
     expect(validateBrief(brief('cursor', 'xhigh'))).toEqual([]);
     expect(validateBrief(brief('luna', 'ultra')).join()).toContain('luna effort');
@@ -2482,8 +2529,10 @@ describe('goalctl reclaim', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
-  test('dispatch and reclaim refuse a file an exited task committed outside its claim until that task is verified', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'goalctl-unlanded-'));
+  test('owner, dispatch and reclaim allow branch overlaps and refuse only live path claims', () => {
+    const scratch = join(process.cwd(), '.temp');
+    mkdirSync(scratch, { recursive: true });
+    const dir = mkdtempSync(join(scratch, 'goalctl-overlap-'));
     const env = cliEnvironment(dir);
     const git = (...args: string[]) => {
       const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8', env });
@@ -2523,7 +2572,8 @@ describe('goalctl reclaim', () => {
       const held = (id: string, paths: string[], branch: string, tree: string) => ({
         id, title: id, effort: 'high', engine: 'grok', cases: [], paths, migrations: [], shared: [],
         depends: [], brief: join(dir, `${id}.md`), worktree: tree, branch, base: '0', state: 'exited' as string,
-        attempts: [], goal: 'alpha',
+        attempts: [{ n: 1, effort: 'high', engine: 'grok', pid: process.pid, session: 'fixture',
+          output: join(dir, 'worker.json'), startedAt: '2026-10-09T00:00:00.000Z' }], goal: 'alpha',
       });
       const ledger = {
         goals: { alpha: { manager: 'alpha-manager', startedAt: '2026-10-09T00:00:00.000Z' } },
@@ -2537,67 +2587,48 @@ describe('goalctl reclaim', () => {
       const save = () => writeFileSync(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`);
       save();
       const caller = writeBrief('G-003', ['caller.ts']);
-      const refused = run(['dispatch', caller, '--dry-run']);
-      expect(refused.status).toBe(1);
-      expect(refused.stderr).toContain('Claim conflict for G-003:\n  path caller.ts changed by G-001 (unlanded)');
-      expect(refused.stderr).not.toContain('overlaps');
-      expect(JSON.parse(readFileSync(ledgerPath, 'utf8')).tasks['G-003']).toBeUndefined();
-      const glob = run(['dispatch', writeBrief('G-004', ['caller.*']), '--dry-run']);
-      expect(glob.status).toBe(1);
-      expect(glob.stderr).toContain('path caller.* changed by G-001 (unlanded)');
-      const reclaim = run(['reclaim', 'G-002', writeBrief('G-002', ['caller.ts'])]);
-      expect(reclaim.status).toBe(1);
-      expect(reclaim.stderr).toContain('path caller.ts changed by G-001 (unlanded)');
-      expect(JSON.parse(readFileSync(ledgerPath, 'utf8')).tasks['G-002'].paths).toEqual(['other.ts']);
-      const owner = run(['owner', 'caller.ts']);
-      expect(owner.status).toBe(1);
-      expect(owner.stdout).toContain('caller.ts: changed by G-001 (unlanded)');
-      expect(run(['owner', 'claimed.ts']).stdout).toContain('claimed.ts: claimed by G-001 (exited)');
-      for (const path of ['generated/note.json', 'union-file.ts', 'dirty.ts', 'fresh.ts']) {
-        const result = run(['dispatch', writeBrief('G-005', [path]), '--dry-run']);
-        expect(result.stderr).toBe('');
-        expect(result.status).toBe(0);
-        expect(result.stdout).toContain('G-005: claims ok');
-        expect(run(['owner', path]).stdout).toContain(`${path}: unclaimed`);
-      }
-      const adopted = run(['reclaim', 'G-001', writeBrief('G-001', ['claimed.ts', 'caller.ts'])]);
-      expect(adopted.stderr).toBe('');
-      expect(adopted.status).toBe(0);
-      expect(run(['owner', 'caller.ts']).stdout).toContain('caller.ts: claimed by G-001 (exited)');
-      const reverted = run(['reclaim', 'G-001', writeBrief('G-001', ['claimed.ts'])]);
-      expect(reverted.status).toBe(0);
-      expect(run(['owner', 'caller.ts']).stdout).toContain('caller.ts: changed by G-001 (unlanded)');
-      ledger.tasks['G-002'].paths = ['other.ts', 'caller.ts'];
-      save();
-      const kept = run(['reclaim', 'G-002', writeBrief('G-002', ['other.ts', 'caller.ts', 'extra.ts'])]);
-      expect(kept.stderr).toBe('');
-      expect(kept.status).toBe(0);
-      expect(JSON.parse(readFileSync(ledgerPath, 'utf8')).tasks['G-002'].paths).toEqual(['other.ts', 'caller.ts', 'extra.ts']);
-      ledger.tasks['G-002'].paths = ['other.ts'];
-      save();
-      for (const state of ['running', 'conflict', 'stopped']) {
+      for (const state of ['running', 'exited', 'conflict', 'stopped']) {
         ledger.tasks['G-001'].state = state;
         save();
-        expect(run(['dispatch', caller, '--dry-run']).stderr).toContain('changed by G-001 (unlanded)');
+        for (const paths of [['caller.ts'], ['caller.*']]) {
+          const allowed = run(['dispatch', writeBrief('G-003', paths), '--dry-run']);
+          expect(allowed.status, allowed.stderr).toBe(0);
+          expect(allowed.stdout).toContain('G-003: claims ok');
+        }
+        const reclaimed = run(['reclaim', 'G-002', writeBrief('G-002', ['caller.ts'])]);
+        expect(reclaimed.status, reclaimed.stderr).toBe(0);
+        const owner = run(['owner', 'caller.ts']);
+        expect(owner.status).toBe(0);
+        expect(owner.stdout).toContain('caller.ts: overlap with G-001 (unlanded; resolve at merge; proceed)');
       }
-      ledger.tasks['G-001'].state = 'merged';
+      for (const state of ['starting', 'running']) {
+        writeBrief('G-003', ['caller.ts']);
+        ledger.tasks['G-001'].state = state;
+        ledger.tasks['G-001'].paths = ['caller.ts'];
+        save();
+        const owner = run(['owner', 'caller.ts']);
+        expect(owner.status).toBe(1);
+        expect(owner.stdout).toContain(`caller.ts: claimed by G-001 (${state})`);
+        const refused = run(['dispatch', caller, '--dry-run']);
+        expect(refused.status).toBe(1);
+        expect(refused.stderr).toContain('path caller.ts overlaps G-001 caller.ts');
+        const reclaim = run(['reclaim', 'G-002', writeBrief('G-002', ['caller.ts'])]);
+        expect(reclaim.status).toBe(1);
+        expect(reclaim.stderr).toContain('path caller.ts overlaps G-001 caller.ts');
+      }
+      for (const state of ['exited', 'stopped', 'conflict', 'merged', 'verified', 'cancelled']) {
+        ledger.tasks['G-001'].state = state;
+        save();
+        expect(run(['owner', 'caller.ts']).status).toBe(0);
+        expect(run(['dispatch', caller, '--dry-run']).status).toBe(0);
+      }
+      ledger.tasks['G-001'].state = 'running';
       save();
-      expect(run(['dispatch', caller, '--dry-run']).status).toBe(0);
-      expect(run(['owner', 'caller.ts']).stdout).toContain('caller.ts: unclaimed');
-      expect(run(['owner', 'claimed.ts']).stdout).toContain('claimed.ts: claimed by G-001 (merged)');
-      ledger.tasks['G-001'].state = 'exited';
-      save();
-      expect(run(['dispatch', caller, '--dry-run']).stderr).toContain('changed by G-001 (unlanded)');
-      ledger.tasks['G-001'].state = 'verified';
-      save();
-      const allowed = run(['dispatch', caller, '--dry-run']);
-      expect(allowed.stderr).toBe('');
-      expect(allowed.status).toBe(0);
-      expect(allowed.stdout).toContain('G-003: claims ok');
-      expect(run(['owner', 'caller.ts']).stdout).toContain('caller.ts: unclaimed');
-      const released = run(['reclaim', 'G-002', writeBrief('G-002', ['caller.ts'])]);
-      expect(released.status).toBe(0);
-      expect(JSON.parse(readFileSync(ledgerPath, 'utf8')).tasks['G-002'].paths).toEqual(['caller.ts']);
+      for (const path of ['generated/note.json', 'union-file.ts', 'dirty.ts', 'fresh.ts']) {
+        const result = run(['dispatch', writeBrief('G-005', [path]), '--dry-run']);
+        expect(result.status, result.stderr).toBe(0);
+        expect(run(['owner', path]).stdout).toContain(`${path}: unclaimed`);
+      }
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
@@ -2611,7 +2642,7 @@ describe('goalctl reclaim', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('reclaim <id> <brief> [--allow-area]');
-    expect(result.stderr).toContain('dispatch <brief.md> [--dry-run] [--force-usage] [--allow-area]');
+    expect(result.stderr).toContain('dispatch <brief.md> [--engine <engine>] [--dry-run] [--force-usage] [--allow-area]');
     expect(result.stderr).toContain('gate <id> [--skip-unit-gate] [--skip-type-gate]');
   });
 });
@@ -2671,8 +2702,20 @@ describe('pre-merge unit selection', () => {
 });
 
 describe('goalctl shared lifecycle and launch gates', () => {
+  const cleanups: Array<() => void> = [];
+  afterEach(() => {
+    const failures: unknown[] = [];
+    for (const cleanup of cleanups.splice(0)) {
+      try { cleanup(); } catch (error) { failures.push(error); }
+    }
+    if (failures.length) throw new AggregateError(failures, 'Lifecycle fixture cleanup failed');
+  });
+
   function repo() {
     const dir = mkdtempSync(join(tmpdir(), 'goalctl-lifecycle-'));
+    const scope = fixtureProcessScope();
+    // Register before setup or launch can fail, including readiness and CLI timeouts.
+    cleanups.push(() => { scope.cleanup(); rmSync(dir, { recursive: true, force: true }); });
     const git = (...args: string[]) => {
       const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
       if (result.status !== 0) throw new Error(result.stderr);
@@ -2688,12 +2731,12 @@ describe('goalctl shared lifecycle and launch gates', () => {
       mkdirSync(join(dir, 'services/main/src/routes'), { recursive: true });
       writeFileSync(join(dir, 'services/main/src', root), 'export {};\n');
     }
-    writeFileSync(join(dir, '.gitignore'), '.temp/\n');
+    writeFileSync(join(dir, '.gitignore'), '.temp/\n.goalctl/*.user.json\n');
     git('add', '.');
     git('commit', '-qm', 'start');
     mkdirSync(join(dir, '.temp/bin'), { recursive: true });
     const fixture = join(import.meta.dir, 'fixtures/sleep-worker.ts');
-    for (const binary of ['grok', 'claude', 'codex', 'codex-1', 'cursor-agent']) {
+    for (const binary of ['grok', 'claude', 'codex', 'sample-b', 'cursor-agent']) {
       writeFileSync(join(dir, '.temp/bin', binary), `#!/usr/bin/env bun\nimport ${JSON.stringify(fixture)};\n`);
       chmodSync(join(dir, '.temp/bin', binary), 0o755);
     }
@@ -2729,7 +2772,7 @@ child.on('close', code => process.exit(code ?? 1));
     chmodSync(join(dir, '.temp/bin/task'), 0o755);
     const ready = join(dir, '.temp/ready');
     mkdirSync(ready);
-    const env: NodeJS.ProcessEnv = { ...cliEnvironment(dir), GOAL_SLEEP_READY_DIR: ready,
+    const env: NodeJS.ProcessEnv = { ...cliEnvironment(dir), ...scope.env, GOAL_SLEEP_READY_DIR: ready,
       PATH: `${join(dir, '.temp/bin')}:${process.env.PATH}` };
     const ledgerPath = join(dir, '.temp/goal-orchestration/ledger.json');
     const ledger = (): Ledger => JSON.parse(readFileSync(ledgerPath, 'utf8')) as Ledger;
@@ -2797,17 +2840,7 @@ child.on('close', code => process.exit(code ?? 1));
             `${JSON.stringify({ dir, task, file, error })}\n`);
         }
       }
-      for (const entry of readdirSync('/proc')) {
-        if (!/^\d+$/.test(entry)) continue;
-        try {
-          if (readFileSync(`/proc/${entry}/environ`, 'utf8').split('\0').includes(`GOAL_SLEEP_READY_DIR=${ready}`)) {
-            process.kill(Number(entry), 'SIGKILL');
-          }
-        } catch { /* exited */ }
-      }
-      for (const { worker, child } of workers.values()) {
-        for (const pid of [worker, child]) { try { process.kill(pid, 'SIGKILL'); } catch { /* exited */ } }
-      }
+      scope.cleanup();
       rmSync(dir, { recursive: true, force: true });
     };
     return { dir, git, env, run, ledger, save, brief, start, workers, alive, stopFixture, commit, cleanup };
@@ -4479,7 +4512,7 @@ process.exit(0);
       expect(memory.status).toBe(1);
       expect(memory.stderr).toContain('Memory floor reached: host MemAvailable');
       expect(memory.stderr).toContain('GOAL_MEMORY_FLOOR_GIB=1000000000');
-      for (const home of [r.env.GOAL_CODEX_HOME!, r.env.GOAL_CODEX_1_HOME!]) {
+      for (const home of [r.env.GOAL_CODEX_HOME!, r.env.GOAL_TEST_SECOND_HOME!]) {
         const sessions = join(home, 'sessions/2026/10/07');
         mkdirSync(sessions, { recursive: true });
         writeFileSync(join(sessions, 'rollout.jsonl'), JSON.stringify({ type: 'event_msg', payload: {
@@ -4487,7 +4520,7 @@ process.exit(0);
             resets_at: Date.now() / 1000 + 3600 } } } }));
       }
       // The second account stays open, so only the manager's own reached account refuses the wake.
-      writeFileSync(join(r.env.GOAL_CODEX_1_HOME!, 'sessions/2026/10/07/rollout.jsonl'), JSON.stringify({
+      writeFileSync(join(r.env.GOAL_TEST_SECOND_HOME!, 'sessions/2026/10/07/rollout.jsonl'), JSON.stringify({
         type: 'event_msg', payload: { type: 'token_count', rate_limits: { primary: { used_percent: 10,
           window_minutes: 10080, resets_at: Date.now() / 1000 + 3600 } } } }));
       for (const engine of ['codex', 'luna']) {
@@ -4496,7 +4529,7 @@ process.exit(0);
         expect(result.stderr).toContain('EXHAUSTED');
         expect(result.stderr).not.toContain('Claude usage is restricted');
       }
-      const other = admitWake(r.dir, { ...r.env, GOAL_MAX_WORKERS: '0' }, 'codex-1');
+      const other = admitWake(r.dir, { ...r.env, GOAL_MAX_WORKERS: '0' }, 'sample-b');
       expect(other.status, other.stderr).toBe(0);
       expect(JSON.parse(other.stdout)).toMatchObject({ live: 0, limit: 0, claude: 'restricted' });
     } finally { r.cleanup(); }
@@ -4680,16 +4713,16 @@ process.exit(0);
       await r.stopFixture('G-001');
       writeFileSync(r.env.GOAL_USAGE_FILE!, JSON.stringify({ at: Date.now() / 1000, rate_limits: {
         five_hour: { used_percentage: 100, resets_at: Date.now() / 1000 + 3600 } } }));
-      for (const home of [r.env.GOAL_CODEX_HOME!, r.env.GOAL_CODEX_1_HOME!]) {
+      for (const home of [r.env.GOAL_CODEX_HOME!, r.env.GOAL_TEST_SECOND_HOME!]) {
         const sessions = join(home, 'sessions/2026/10/07');
         mkdirSync(sessions, { recursive: true });
         writeFileSync(join(sessions, 'rollout.jsonl'), JSON.stringify({ type: 'event_msg', payload: {
           type: 'token_count', rate_limits: { primary: { used_percent: 100, window_minutes: 10080,
             resets_at: Date.now() / 1000 + 3600 } } } }));
       }
-      for (const engine of ['claude', 'sonnet', 'fable', 'codex', 'codex-1', 'luna']) {
+      for (const engine of ['claude', 'sonnet', 'fable', 'codex', 'sample-b', 'luna']) {
         const result = r.run(['resume', 'G-001', '-m', 'continue', '--engine', engine]);
-        const queued = engine.startsWith('codex') || engine === 'luna';
+        const queued = ['codex', 'sample-b', 'luna'].includes(engine);
         expect(result.status).toBe(queued ? 0 : 1);
         expect(queued ? result.stdout : result.stderr).toContain(queued ? 'EXHAUSTED' : 'Claude usage is critical');
         if (queued) expect(r.ledger().tasks['G-001']!.waitingResume).toMatchObject({ engine,
@@ -5245,15 +5278,22 @@ describe('goalctl archive', () => {
   });
 });
 
-test('the QA slot count comes from the file beside the slots unless the environment names one', () => {
+test('QA slot settings migrate once and the environment can override one process', () => {
   const root = mkdtempSync(join(tmpdir(), 'qa-slot-count-'));
   try {
-    const slots = join(root, 'qa-slots');
+    const state = join(root, '.temp/goal-orchestration');
+    mkdirSync(state, { recursive: true });
+    const slots = join(state, 'qa-slots');
     expect(qaSlotCount(slots, {})).toBe(3);
-    writeFileSync(join(root, 'qa-slot-count'), '6\n');
+    writeFileSync(join(state, 'qa-slot-count'), '6\n');
     expect(qaSlotCount(slots, {})).toBe(6);
+    expect(existsSync(join(state, 'qa-slot-count.migrated'))).toBe(true);
     expect(qaSlotCount(slots, { GOAL_QA_SLOTS: '2' })).toBe(2);
-    writeFileSync(join(root, 'qa-slot-count'), 'many\n');
+    writeFileSync(join(state, 'qa-slot-count'), 'many\n');
+    expect(qaSlotCount(slots, {})).toBe(6);
+    writeFileSync(join(root, '.goalctl/settings.user.json'), JSON.stringify({ version: 1, qaSlots: 'many' }));
+    expect(() => qaSlotCount(slots, {})).toThrow('qaSlots');
+    rmSync(join(root, '.goalctl/settings.user.json'));
     expect(qaSlotCount(slots, {})).toBe(3);
     expect(Number.isNaN(qaSlotCount(slots, { GOAL_QA_SLOTS: 'x' }))).toBe(true);
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -5311,7 +5351,9 @@ describe('gate lanes', () => {
 
   test('the lane count comes from the file beside the lanes unless the environment names one', async () => {
     const root = mkdtempSync(join(tmpdir(), 'gate-lane-count-'));
-    const directory = join(root, 'lanes');
+    const state = join(root, '.temp/goal-orchestration');
+    mkdirSync(state, { recursive: true });
+    const directory = join(state, 'gate-lanes');
     const previous = process.env.GOAL_GATE_LANES;
     delete process.env.GOAL_GATE_LANES;
     const waiting = async (): Promise<string> => {
@@ -5333,7 +5375,7 @@ describe('gate lanes', () => {
     };
     try {
       expect(await waiting()).toContain('2/2 gate lanes busy');
-      writeFileSync(join(root, 'gate-lane-count'), '3\n');
+      writeFileSync(join(state, 'gate-lane-count'), '3\n');
       expect(await waiting()).toBe('none waited');
       process.env.GOAL_GATE_LANES = '1';
       expect(await waiting()).toContain('1/1 gate lanes busy');
@@ -6310,9 +6352,12 @@ describe('Goal coordinator enrollment CLI', () => {
 
   test.skipIf(!independentServer)('enrolls two Goals with the engine account homes and preserves the first handover', () => {
     const directory = mkdtempSync(join(import.meta.dir, '../../.temp/coordinator-enrollment-'));
-    const homes = { codex: join(directory, 'codex'), 'codex-1': join(directory, 'codex-1') };
+    const homes = { codex: join(directory, 'codex'), 'sample-b': join(directory, 'sample-b') };
+    const settings = writeTestAccounts(directory, Object.entries(homes).map(([engine, home]) => ({ engine, home })));
+    const previousSettings = process.env.GOAL_SETTINGS_DIRECTORY;
+    process.env.GOAL_SETTINGS_DIRECTORY = settings;
     const env = { ...process.env, CODEX_HOME: '/inherited-worker-account', GOAL_MAIL_STATE_DIR: directory,
-      GOAL_CODEX_HOME: homes.codex, GOAL_CODEX_1_HOME: homes['codex-1'] };
+      GOAL_SETTINGS_DIRECTORY: settings };
     const invoke = (args: string[]) => spawnSync(process.execPath, [join(import.meta.dir, 'goalctl.ts'), 'coordinator', ...args],
       { cwd: join(import.meta.dir, '../..'), env, encoding: 'utf8' });
     const sessions = ['01a114cb-4d63-7f23-bf70-1610b4db2b2b', '01a114cb-4d63-7f23-bf70-1610b4db2b2c'];
@@ -6322,7 +6367,7 @@ describe('Goal coordinator enrollment CLI', () => {
         kernel: { manager: 'kernel-manager', startedAt: '2026-01-01T00:00:00Z' },
       } }));
       const enrolled: LaunchDescriptor[] = [];
-      for (const [index, engine] of (['codex', 'codex-1'] as const).entries()) {
+      for (const [index, engine] of (['codex', 'sample-b'] as const).entries()) {
         const session = sessions[index]!;
         const goal = index === 0 ? 'program' : 'kernel';
         const home = homes[engine];
@@ -6350,7 +6395,11 @@ describe('Goal coordinator enrollment CLI', () => {
       }
       expect(status.attempts).toEqual([]);
       expect(status.wakes).toEqual([]);
-    } finally { rmSync(directory, { recursive: true, force: true }); }
+    } finally {
+      if (previousSettings === undefined) delete process.env.GOAL_SETTINGS_DIRECTORY;
+      else process.env.GOAL_SETTINGS_DIRECTORY = previousSettings;
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   test('a launched worker cannot inherit its manager native session ownership', () => {
@@ -6366,8 +6415,8 @@ describe('Goal coordinator enrollment CLI', () => {
     expect(parent.CODEX_THREAD_ID).toBe('manager-session');
   });
 
-  test('records the named live owner identity and accepts every supported engine', () => {
-    for (const engine of ['codex', 'codex-1', 'luna']) {
+  test('records the named live owner identity and accepts every supported engine', () => withTestAccounts(() => {
+    for (const engine of ['codex', 'sample-b', 'luna']) {
       const options = coordinatorEnrollmentOptions([...enrollment, ...ownerFlag, '--engine', engine, '--tmux-socket', '/socket']);
       expect(options).toMatchObject({ goal: 'program', session: enrollment[2], engine, effort: 'high', cwd: '/manager',
         socket: '/socket', previousOwner: { pid: process.pid } });
@@ -6376,7 +6425,7 @@ describe('Goal coordinator enrollment CLI', () => {
       expect(options.previousOwner.cgroup).toBe(readFileSync(`/proc/${process.pid}/cgroup`, 'utf8').trim());
     }
     expect(coordinatorEnrollmentOptions([...enrollment, ...ownerFlag]).engine).toBe('codex');
-  });
+  }));
 
   test('requires an explicit positive integer PID and refuses a vanished previous owner', () => {
     expect(() => coordinatorEnrollmentOptions(enrollment)).toThrow('--previous-owner-pid <pid>');
@@ -6445,11 +6494,11 @@ describe('Goal mail CLI', () => {
     } finally { rmSync(directory,{recursive:true,force:true}); }
   });
 
-  test('worker launch adapters retain native resume, model, effort and account tier arguments', () => {
+  test('worker launch adapters retain native resume, model, effort and account tier arguments', () => withTestAccounts(() => {
     const prior = process.env.GOAL_CODEX_SERVICE_TIER;
     process.env.GOAL_CODEX_SERVICE_TIER = 'default';
     try {
-      for (const engine of ['codex','codex-1','luna'] as const) {
+      for (const engine of ['codex','sample-b','luna'] as const) {
         const [program,args] = launchCommand({id:'program',engine,effort:'high',session:'native-session',prompt:'mail prompt',
           resume:true,worktree:'/manager',lastMessage:'/manager/last.md'});
         expect(program).toBe('codex');
@@ -6460,7 +6509,7 @@ describe('Goal mail CLI', () => {
         expect(args.slice(-4)).toEqual(['-o','/manager/last.md','--','mail prompt']);
       }
     } finally { if (prior === undefined) delete process.env.GOAL_CODEX_SERVICE_TIER; else process.env.GOAL_CODEX_SERVICE_TIER = prior; }
-  });
+  }));
 });
 
 describe('registered Goal mail lifecycle', () => {

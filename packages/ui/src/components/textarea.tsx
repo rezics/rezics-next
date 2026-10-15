@@ -16,7 +16,7 @@ export const Textarea = (props: React.ComponentProps<typeof ArkField.Textarea>) 
         'bg-primary/5',
         'text-base md:text-sm',
         'rounded-2xl border border-border/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-border',
-        'placeholder:text-muted-foreground/64',
+        'placeholder:text-muted-foreground',
         'resize-none',
         'transition-[color,box-shadow]',
         'outline-none focus-visible:border-ring/50 focus-visible:ring-2 focus-visible:ring-ring/20',

@@ -590,8 +590,8 @@ export function ZoneNavigationEditor({
                     onChange={(event) => onPath(link, event.target.value)}
                   />
                 </label>
-                {invalid ? <p className="text-destructive text-sm">{copy.pathInvalid}</p> : null}
-                {taken ? <p className="text-destructive text-sm">{copy.duplicatePath}</p> : null}
+                {invalid ? <p className="text-destructive-foreground text-sm">{copy.pathInvalid}</p> : null}
+                {taken ? <p className="text-destructive-foreground text-sm">{copy.duplicatePath}</p> : null}
                 {savedPath ? (
                   <p
                     id={`path-note-${link.id}`}
@@ -643,7 +643,7 @@ export function ZoneNavigationEditor({
           signInHref={signInHref} api={client.current!}
           onQueryChange={value => { setPicked(null); setAddNotice(null); setQuery(value); }}
           onChoose={choice => { setPicked(choice); setQuery(choice.name); setAddNotice(null); }} />
-        {addNotice ? <p className="text-destructive text-sm">{addNotice}</p> : null}
+        {addNotice ? <p className="text-destructive-foreground text-sm">{addNotice}</p> : null}
         <Button
           variant="secondary"
           size="sm"

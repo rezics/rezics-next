@@ -7,7 +7,7 @@ import { sha256, stable } from '../../../scripts/fixture/corpus.ts';
 import { RetainedSources, sourceKey } from '../../../scripts/qa/retained-source.ts';
 import type { PersonaSession, RetainedPersonaRealm } from './personas.ts';
 import { buildRealmDiscussionCorpus, realmDiscussionSourceAdapter, realmDiscussionSourceSpecification,
-  realmSourceMeasurements, realmSourcePopulation, realmSourceRoles, validateRealmSourceMetadata,
+  realmSourceBuildDeadlineMs, realmSourceMeasurements, realmSourcePopulation, realmSourceRoles, validateRealmSourceMetadata,
   type RealmSourceReply, type RealmSourceRequest, type RealmSourceRuntime, type RealmSourceSessions } from './realm-discussion-source.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
@@ -28,6 +28,12 @@ function fixture(options: { retryIdentity?: boolean; denyIdentity?: boolean } = 
         main: async (method, path, input, key) => {
           const url = new URL(path, 'http://fixture.test'), body = input as Record<string, unknown>;
           if (method !== 'GET') requests.push({ path: url.pathname, body, key });
+          if (url.pathname === '/v1/spaces' && method === 'POST') return Response.json({ realm: id() }, { status: 201 });
+          if (url.pathname.endsWith('/role-impact')) return Response.json({ digest: sha256('role') });
+          if (url.pathname.endsWith('/role-changes')) return Response.json({}, { status: 201 });
+          if (url.pathname.endsWith('/progress')) return Response.json({});
+          if (url.pathname.endsWith('/agent-credits')) return Response.json({
+            items: [{ id: id(), agent: actor, role: 'author' }], nextCursor: null });
           if (url.pathname === '/v1/works' && method === 'POST') {
             const work = { work: id(), workRevision: id(), mainVersion: id() }; works.set(work.work, work); return Response.json(work, { status: 201 });
           }
@@ -58,7 +64,8 @@ function fixture(options: { retryIdentity?: boolean; denyIdentity?: boolean } = 
           }
           if (url.pathname === '/v1/realm-reply-placements') {
             const reply = replies.get(String(body.reply))!, placement = id(); reply.placement = placement;
-            placements.set(realm, [...placements.get(realm) ?? [], reply.reply]);
+            const placementRealm = String(body.realm);
+            placements.set(placementRealm, [...placements.get(placementRealm) ?? [], reply.reply]);
             if (name === 'rankingPrivate' && episode === 'old') oldPrivate.add(reply.reply);
             return Response.json({ placement, replayed: false }, { status: 201 });
           }
@@ -136,7 +143,27 @@ test('keys bind actual producer/helper/schema bytes, complete populations and na
 // Cold subprocess imports traverse Main and Account; allow host contention while retaining a bounded exit check.
 test('the explicit preparation entry imports outside the Bun test runner without starting an application', async () => {
   const child = Bun.spawn(['bun', '-e', "import('./tests/qa/support/realm-discussion-source-runtime.ts').then(m => { if (typeof m.realmSourceRuntime !== 'function') process.exit(2); })"],
-    { cwd: join(import.meta.dir, '../../..'), env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: '1' }, stdout: 'pipe', stderr: 'pipe' });
+    { cwd: join(import.meta.dir, '../../..'), env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: undefined }, stdout: 'pipe', stderr: 'pipe' });
+  const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(0);
+}, 30_000);
+
+test('the source cost contract imports in the QA planner without registering persona hooks', async () => {
+  const child = Bun.spawn(['bun', '-e', "import('./tests/qa/support/realm-discussion-source.ts')"], {
+    cwd: join(import.meta.dir, '../../..'),
+    env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: undefined },
+    stdout: 'pipe', stderr: 'pipe', signal: AbortSignal.timeout(20_000),
+  });
+  const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(0);
+}, 30_000);
+
+test('importing the shared Realm fixture installs no test hooks outside the runner', async () => {
+  const child = Bun.spawn(['bun', '-e', "await import('./tests/qa/support/personas.ts'); await import('./scripts/qa/bootstrap.ts')"], {
+    cwd: join(import.meta.dir, '../../..'),
+    env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: undefined },
+    stdout: 'pipe', stderr: 'pipe', signal: AbortSignal.timeout(20_000),
+  });
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
   expect(code, stderr).toBe(0);
 }, 30_000);
@@ -144,7 +171,7 @@ test('the explicit preparation entry imports outside the Bun test runner without
 test('the preparation entry reaches admission without awaiting its own dynamic import', async () => {
   const child = Bun.spawn(['bun', 'tests/qa/support/realm-discussion-source-runtime.ts', '--prepare'], {
     cwd: join(import.meta.dir, '../../..'),
-    env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: '1', REZICS_QA_RUN_ID: undefined },
+    env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: undefined, REZICS_QA_RUN_ID: undefined },
     stdout: 'pipe', stderr: 'pipe', signal: AbortSignal.timeout(20_000),
   });
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
@@ -166,21 +193,37 @@ test('Account diagnostics omit verification credentials without changing the act
       throw new Error('Account diagnostics must contain timing and identity only');
   `;
   const child = Bun.spawn(['bun', '-e', script], { cwd: join(import.meta.dir, '../../..'),
-    env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: '1' }, stdout: 'pipe', stderr: 'pipe' });
+    env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: undefined }, stdout: 'pipe', stderr: 'pipe' });
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
   expect(code, stderr).toBe(0);
 }, 30_000);
 
 test('complete builder uses 552 public draft/identity/placement commands with exact nested and episode bindings', async () => {
   const f = fixture(), directory = mkdtempSync(join(import.meta.dir, '../../../.temp/realm-corpus-unit-'));
+  let graphPublications = 0, maximumGraphPublications = 0, identityPublications = 0;
+  for (const person of new Set(Object.values(f.sessions).flatMap(realm => Object.values(realm)
+    .filter((value): value is PersonaSession => typeof value === 'object' && value !== null && 'main' in value)))) {
+    const call = person.main;
+    person.main = async (...args) => {
+      if (!['/v1/realm-replies', '/v1/realm-reply-placements'].includes(args[1])) return call(...args);
+      const identity = args[1] === '/v1/realm-replies';
+      if (identity) expect(graphPublications).toBe(0);
+      else expect(identityPublications).toBe(0);
+      if (identity) identityPublications++;
+      maximumGraphPublications = Math.max(maximumGraphPublications, ++graphPublications);
+      try { await Promise.resolve(); return await call(...args); }
+      finally { graphPublications--; if (identity) identityPublications--; }
+    };
+  }
   mkdirSync(join(directory, 'backup'));
   try {
     const result = await buildRealmDiscussionCorpus(f.runtime, { key: 'unit', directory, backup: join(directory, 'backup'), budget: new FixtureWorkBudget(1_800_000) });
     validateRealmSourceMetadata(result.metadata);
-    expect(f.requests.filter(request => request.path === '/v1/member-reply-drafts')).toHaveLength(552);
-    expect(f.requests.filter(request => request.path === '/v1/realm-replies')).toHaveLength(552);
-    expect(f.requests.filter(request => request.path === '/v1/realm-reply-placements')).toHaveLength(552);
-    expect(f.requests.filter(request => request.path === '/v1/publication-selections')).toHaveLength(5);
+    expect(maximumGraphPublications).toBe(2);
+    expect(f.requests.filter(request => request.path === '/v1/member-reply-drafts')).toHaveLength(552 + 21);
+    expect(f.requests.filter(request => request.path === '/v1/realm-replies')).toHaveLength(552 + 21);
+    expect(f.requests.filter(request => request.path === '/v1/realm-reply-placements')).toHaveLength(552 + 21);
+    expect(f.requests.filter(request => request.path === '/v1/publication-selections')).toHaveLength(5 + 1 + 24);
     expect(f.requests.filter(request => request.path === '/v1/contribution-publications')
       .every(request => request.body.disclosure === 'public')).toBe(true);
     expect(f.requests.filter(request => request.path === '/v1/realm-replies').every(request => Boolean(request.key))).toBe(true);
@@ -201,7 +244,7 @@ test('existing lifecycle retains once, isolates descriptor copies, and refuses c
     const store = new RetainedSources(directory);
     const adapter = realmDiscussionSourceAdapter(realmDiscussionSourceSpecification({ producer: sha256('fixture') }, { native: 'fixture' }), f.runtime);
     const prepared = await store.prepare(adapter);
-    expect(prepared.producerBuild?.deadlineMs).toBe(1_800_000);
+    expect(prepared.producerBuild?.deadlineMs).toBe(realmSourceBuildDeadlineMs);
     expect(prepared.manifest.provenance.producerBuild?.evidence).toContain('189 serial identities');
     expect((await store.prepare(adapter)).built).toBe(false);
     const first = await store.restore(adapter);
@@ -229,7 +272,7 @@ test('lawful read-basis retry retains the logical command key, body, author and 
   try {
     await buildRealmDiscussionCorpus(f.runtime, { key: 'unit', directory, backup: join(directory, 'backup'), budget: new FixtureWorkBudget(1_800_000) });
     const identities = f.requests.filter(request => request.path === '/v1/realm-replies');
-    expect(identities).toHaveLength(553);
+    expect(identities).toHaveLength(553 + 21);
     expect(identities[1]!.key).toBe(identities[0]!.key);
     expect(identities[1]!.body).toEqual(identities[0]!.body);
     expect(identities[1]!.body.author).toBe(f.sessions.rankingPublic.owner.actingSubject!);

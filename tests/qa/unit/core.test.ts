@@ -252,7 +252,7 @@ test('QA12: QA bootstrap rejects a Fuseki module that differs from the Compose p
 
 test('QA tier Bun runs drop agent output variables so logs list every test', () => {
   expect(testLogEnvironment({ PATH: '/bin', AGENT: '1', CLAUDECODE: '1', REPL_ID: 'x', FUSEKI_URL: 'u' }))
-    .toEqual({ PATH: '/bin', FUSEKI_URL: 'u' });
+    .toEqual({ PATH: '/bin', FUSEKI_URL: 'u', REZICS_NESTED_POOL_CHECKOUT: 'throw' });
 });
 
 test('QA02: fault/recovery is a selectable implemented tier with one artifact basename', () => {

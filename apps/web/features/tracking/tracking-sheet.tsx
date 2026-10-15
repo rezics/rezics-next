@@ -61,13 +61,20 @@ function useAttempts(work: string, api: TrackingApi, open: boolean) {
     const ticket = ++generation.current;
     const owner = subject.current;
     setAttempts({ status: 'loading' });
+    setEditions(null);
+    setEditionsFailed(false);
     setMoreFailed(false);
     setMoreBusy(false);
     setRestartEditions(false);
     readingMore.current = false;
-    const [read, offered] = await Promise.all([api.sessions(work), api.editions(work)]);
+    // Attempt history is the reader's private record. A slower catalogue read
+    // must not keep a successful sessions answer behind the sheet's skeleton.
+    const offeredRead = api.editions(work).catch(() => ({ ok: false as const, failure: 'unavailable' as const }));
+    const read = await api.sessions(work);
     if (ticket !== generation.current || owner !== subject.current) return;
     setAttempts(read.ok ? { status: 'ready', items: read.data.items, next: read.data.next } : { status: 'failed' });
+    const offered = await offeredRead;
+    if (ticket !== generation.current || owner !== subject.current) return;
     setEditions(offered.ok ? offered.data : null);
     setEditionsFailed(!offered.ok);
   }, [api, work]);

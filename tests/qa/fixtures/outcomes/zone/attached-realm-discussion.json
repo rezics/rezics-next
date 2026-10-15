@@ -7,11 +7,11 @@
         "label": "empty-about-thread",
         "operationId": "getV1RealmsByRealmAbout-thread",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13aff-faf9-76b4-be8f-762eae41c7c0",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13e7c-ae4d-7226-9cab-ca30a4f82684",
         "status": 200,
         "answer": {
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "about": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "about": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
           "thread": null
         },
         "headers": {
@@ -23,15 +23,15 @@
         "label": "signed-out-post-refused",
         "operationId": "postV1RealmsByRealmAbout-posts",
         "method": "POST",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/about-posts",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/about-posts",
         "body": {
           "profile": "realm-about-post-v1",
-          "zone": "https://rezics.com/id/e5ceb646-0eea-8334-bd79-3a3d68632748",
-          "about": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
-          "targetRevision": "https://rezics.com/id/01a13aff-faf9-76b6-9ad5-87099e80d71a",
-          "routeRevision": "https://rezics.com/id/01a13b00-b159-7778-b178-3ccbfafc83ef",
+          "zone": "https://rezics.com/id/30e168bc-5e38-82b6-a63c-8470549d4f21",
+          "about": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
+          "targetRevision": "https://rezics.com/id/01a13e7c-ae4d-7228-9b28-a8c600910d6b",
+          "routeRevision": "https://rezics.com/id/01a13e7d-0b29-72d0-a925-c2f9d7ce7cc6",
           "path": "/public",
-          "actingSubject": "https://rezics.com/id/24a18976-1ce8-42a8-bbf3-2390fecc62bd",
+          "actingSubject": "https://rezics.com/id/3aabd94a-25a1-4387-869d-9c2f5071ca7d",
           "language": "en",
           "direction": "ltr",
           "body": "Signed-out attempt"
@@ -52,7 +52,7 @@
         "label": "private-about-thread",
         "operationId": "getV1RealmsByRealmAbout-thread",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13b00-21c7-7756-ad1f-8fbf9c48060c",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13e7c-c1ff-705a-90b7-b02851c8ed91",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/work_unavailable",
@@ -69,11 +69,11 @@
         "label": "current-discussion-route",
         "operationId": "getV1ZonesByIdRoutes",
         "method": "GET",
-        "path": "/v1/zones/e5ceb646-0eea-8334-bd79-3a3d68632748/routes?path=%2Fpublic",
+        "path": "/v1/zones/30e168bc-5e38-82b6-a63c-8470549d4f21/routes?path=%2Fpublic",
         "status": 200,
         "answer": {
           "profile": "zone-route-v1",
-          "zone": "https://rezics.com/id/e5ceb646-0eea-8334-bd79-3a3d68632748",
+          "zone": "https://rezics.com/id/30e168bc-5e38-82b6-a63c-8470549d4f21",
           "path": "/public",
           "name": "Outcome Realm site",
           "language": "en",
@@ -84,11 +84,11 @@
             "robots": "index",
             "referrerPolicy": null
           },
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "revision": "https://rezics.com/id/01a13b00-b159-7778-b178-3ccbfafc83ef",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "revision": "https://rezics.com/id/01a13e7d-0b29-72d0-a925-c2f9d7ce7cc6",
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "70"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "163"
           },
           "cost": {
             "pageSize": 24,
@@ -105,13 +105,13 @@
           },
           "kind": "document",
           "mount": {
-            "occurrence": "https://rezics.com/id/b0f70d83-4254-8548-a6d1-1f8de38b89ee",
-            "target": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+            "occurrence": "https://rezics.com/id/615359dc-c242-86c2-a677-7693da7ed0c1",
+            "target": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
             "segment": "public",
             "key": "id"
           },
           "resource": {
-            "id": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+            "id": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
             "types": [
               "https://schema.org/CreativeWork"
             ],
@@ -123,7 +123,7 @@
             },
             "address": {
               "prefix": "/w/",
-              "key": "1Cg2MaJX3ktvyAAnkBJVkj",
+              "key": "1Cg3dvtLChDCsQxVjSUUYj",
               "suffixSource": "Original discussion fixture public"
             }
           }
@@ -137,31 +137,31 @@
         "label": "current-discussion-target",
         "operationId": "getV1ResourcesByResourcePage",
         "method": "GET",
-        "path": "/v1/resources/01a13aff-faf9-76b4-be8f-762eae41c7c0/page",
+        "path": "/v1/resources/01a13e7c-ae4d-7226-9cab-ca30a4f82684/page",
         "status": 200,
         "answer": {
           "profile": "entity-page-v1",
           "target": {
-            "resource": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+            "resource": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
             "base": "work",
-            "work": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
-            "revision": "https://rezics.com/id/01a13aff-faf9-76b6-9ad5-87099e80d71a",
+            "work": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
+            "revision": "https://rezics.com/id/01a13e7c-ae4d-7228-9b28-a8c600910d6b",
             "types": [
               "https://schema.org/CreativeWork"
             ],
             "disclosure": "public"
           },
           "summary": {
-            "reference": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+            "reference": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
             "status": "available",
             "type": "work",
             "address": {
               "prefix": "/w/",
-              "key": "1Cg2MaJX3ktvyAAnkBJVkj",
+              "key": "1Cg3dvtLChDCsQxVjSUUYj",
               "suffixSource": "Original discussion fixture public"
             },
             "base": "work",
-            "work": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+            "work": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
             "disclosure": "public",
             "name": {
               "value": "Original discussion fixture public",
@@ -173,7 +173,7 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "4962a7025cbfe3efb98201c688785bfa"
+              "key": "55adc409e8708edfa76cb6ba6206b2ba"
             }
           },
           "registry": {
@@ -238,9 +238,9 @@
           },
           "work": {
             "profile": "work-read-v1",
-            "id": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
-            "revision": "https://rezics.com/id/01a13aff-faf9-76b6-9ad5-87099e80d71a",
-            "mainVersion": "https://rezics.com/id/01a13aff-faf9-76b5-9fc5-c83356c8fab6",
+            "id": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
+            "revision": "https://rezics.com/id/01a13e7c-ae4d-7228-9b28-a8c600910d6b",
+            "mainVersion": "https://rezics.com/id/01a13e7c-ae4d-7227-afe9-221b462a363c",
             "title": {
               "value": "Original discussion fixture public",
               "language": "en",
@@ -251,7 +251,7 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "4962a7025cbfe3efb98201c688785bfa"
+              "key": "55adc409e8708edfa76cb6ba6206b2ba"
             },
             "types": [],
             "tagline": null,
@@ -267,63 +267,63 @@
             "description": null,
             "metadataRevision": null,
             "originalTitle": null,
-            "mainVersionRevision": "https://rezics.com/id/01a13b00-0313-714e-8402-fa7a1069dfd0",
+            "mainVersionRevision": "https://rezics.com/id/01a13e7c-b1c1-72b9-ba61-53748401f8d3",
             "mainVersionLabel": null,
             "selectedLanguage": "en",
             "sourcePosition": {
-              "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-              "sequence": "70"
+              "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+              "sequence": "163"
             },
             "links": {
               "versions": "/v1/query#work-versions",
-              "classifications": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/classifications",
+              "classifications": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/classifications",
               "adoptions": "/v1/query#work-adoptions",
-              "ratings": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/ratings",
-              "history": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/history",
-              "credits": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/credits",
-              "metadata": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/metadata",
-              "editions": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/editions"
+              "ratings": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/ratings",
+              "history": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/history",
+              "credits": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/credits",
+              "metadata": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/metadata",
+              "editions": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/editions"
             }
           },
           "sections": [
             {
               "id": "statements",
-              "href": "/v1/resources/01a13aff-faf9-76b4-be8f-762eae41c7c0/statements",
+              "href": "/v1/resources/01a13e7c-ae4d-7226-9cab-ca30a4f82684/statements",
               "actions": []
             },
             {
               "id": "releases",
-              "href": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/releases",
+              "href": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/releases",
               "actions": []
             },
             {
               "id": "contents",
-              "href": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/contents",
+              "href": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/contents",
               "actions": []
             },
             {
               "id": "relations",
-              "href": "/v1/resources/01a13aff-faf9-76b4-be8f-762eae41c7c0/relations",
+              "href": "/v1/resources/01a13e7c-ae4d-7226-9cab-ca30a4f82684/relations",
               "actions": []
             },
             {
               "id": "credits",
-              "href": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/credits",
+              "href": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/credits",
               "actions": []
             },
             {
               "id": "ratings",
-              "href": "/v1/resources/01a13aff-faf9-76b4-be8f-762eae41c7c0/ratings",
+              "href": "/v1/resources/01a13e7c-ae4d-7226-9cab-ca30a4f82684/ratings",
               "actions": []
             },
             {
               "id": "reviews",
-              "href": "/v1/resources/01a13aff-faf9-76b4-be8f-762eae41c7c0/reviews",
+              "href": "/v1/resources/01a13e7c-ae4d-7226-9cab-ca30a4f82684/reviews",
               "actions": []
             },
             {
               "id": "discussion",
-              "href": "/v1/resources/01a13aff-faf9-76b4-be8f-762eae41c7c0/discussion",
+              "href": "/v1/resources/01a13e7c-ae4d-7226-9cab-ca30a4f82684/discussion",
               "actions": []
             }
           ],
@@ -332,8 +332,8 @@
             "nextCursor": null
           },
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "70"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "163"
           }
         },
         "headers": {
@@ -345,16 +345,16 @@
         "label": "realm-policy",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68",
         "status": 200,
         "answer": {
           "profile": "realm-read-v1",
-          "id": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "space": "https://rezics.com/id/01a13aff-9bc4-76c7-81ba-d8da80502441",
-          "revision": "https://rezics.com/id/01a13aff-9c30-769c-b614-982ed65b2847",
+          "id": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "space": "https://rezics.com/id/01a13e7c-72a5-7597-a386-af1b7d614f2c",
+          "revision": "https://rezics.com/id/01a13e7c-72ea-734c-a180-b1e07d776968",
           "visibility": "public",
           "reviewMode": "open",
-          "policyRevision": "urn:rezics:receipt:989d945f56a86f8cbce417aeb72b9c6903629229be4f319e03729c4c02a65c70",
+          "policyRevision": "urn:rezics:receipt:2e63e5e6a85ffdfc1a00d26bd71bc2175f4ca9e00b2d0aaa551c889b024421e8",
           "history": "everything",
           "name": {
             "value": "Outcome public Realm",
@@ -366,7 +366,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "realm",
-            "key": "f0e7c41db038d9d0d3737c1b2e7e932b"
+            "key": "f16b585bd4f3959b52e283f4b5ce3cc0"
           },
           "originalName": {
             "value": "Outcome public Realm",
@@ -398,12 +398,82 @@
             "items": []
           },
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "70"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "163"
           },
           "links": {
-            "works": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/works",
-            "decisions": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/decisions"
+            "works": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/works",
+            "decisions": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "realm-policy@ja",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "space": "https://rezics.com/id/01a13e7c-72a5-7597-a386-af1b7d614f2c",
+          "revision": "https://rezics.com/id/01a13e7c-72ea-734c-a180-b1e07d776968",
+          "visibility": "public",
+          "reviewMode": "open",
+          "policyRevision": "urn:rezics:receipt:2e63e5e6a85ffdfc1a00d26bd71bc2175f4ca9e00b2d0aaa551c889b024421e8",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "f16b585bd4f3959b52e283f4b5ce3cc0"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "163"
+          },
+          "links": {
+            "works": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/works",
+            "decisions": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/decisions"
           }
         },
         "headers": {
@@ -415,11 +485,11 @@
         "label": "private-discussion-route",
         "operationId": "getV1ZonesByIdRoutes",
         "method": "GET",
-        "path": "/v1/zones/ab26af7c-b3f1-8802-bcce-c3a94f7e0c59/routes?path=%2Fprivate",
+        "path": "/v1/zones/d90eabc7-5f41-8932-8e4a-bacae142ce6f/routes?path=%2Fprivate",
         "status": 200,
         "answer": {
           "profile": "zone-route-v1",
-          "zone": "https://rezics.com/id/ab26af7c-b3f1-8802-bcce-c3a94f7e0c59",
+          "zone": "https://rezics.com/id/d90eabc7-5f41-8932-8e4a-bacae142ce6f",
           "path": "/private",
           "name": "Outcome Realm site",
           "language": "en",
@@ -431,10 +501,10 @@
             "referrerPolicy": null
           },
           "realm": null,
-          "revision": "https://rezics.com/id/01a13b00-3808-73e8-9b9f-ac6c97765cdd",
+          "revision": "https://rezics.com/id/01a13e7c-cc38-7756-b334-ee2c3b7e1c2d",
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "70"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "163"
           },
           "cost": {
             "pageSize": 24,
@@ -451,13 +521,13 @@
           },
           "kind": "document",
           "mount": {
-            "occurrence": "https://rezics.com/id/61afddc6-661f-8510-950b-d4bc17cd6016",
-            "target": "https://rezics.com/id/01a13b00-21c7-7756-ad1f-8fbf9c48060c",
+            "occurrence": "https://rezics.com/id/b3512a35-151f-8e02-ba45-0cd84c953bac",
+            "target": "https://rezics.com/id/01a13e7c-c1ff-705a-90b7-b02851c8ed91",
             "segment": "private",
             "key": "id"
           },
           "resource": {
-            "id": "https://rezics.com/id/01a13b00-21c7-7756-ad1f-8fbf9c48060c",
+            "id": "https://rezics.com/id/01a13e7c-c1ff-705a-90b7-b02851c8ed91",
             "types": [
               "https://schema.org/CreativeWork"
             ],
@@ -469,7 +539,7 @@
             },
             "address": {
               "prefix": "/w/",
-              "key": "1Cg2Mb2zRzatVyUECbYwpw",
+              "key": "1Cg3dwFtVPEqZMF2ERrU6U",
               "suffixSource": "Original discussion fixture private"
             }
           }
@@ -483,31 +553,31 @@
         "label": "private-discussion-target",
         "operationId": "getV1ResourcesByResourcePage",
         "method": "GET",
-        "path": "/v1/resources/01a13b00-21c7-7756-ad1f-8fbf9c48060c/page",
+        "path": "/v1/resources/01a13e7c-c1ff-705a-90b7-b02851c8ed91/page",
         "status": 200,
         "answer": {
           "profile": "entity-page-v1",
           "target": {
-            "resource": "https://rezics.com/id/01a13b00-21c7-7756-ad1f-8fbf9c48060c",
+            "resource": "https://rezics.com/id/01a13e7c-c1ff-705a-90b7-b02851c8ed91",
             "base": "work",
-            "work": "https://rezics.com/id/01a13b00-21c7-7756-ad1f-8fbf9c48060c",
-            "revision": "https://rezics.com/id/01a13b00-21c7-7758-8ea8-a5e12cd35def",
+            "work": "https://rezics.com/id/01a13e7c-c1ff-705a-90b7-b02851c8ed91",
+            "revision": "https://rezics.com/id/01a13e7c-c1ff-705c-ace8-06c0e33268f1",
             "types": [
               "https://schema.org/CreativeWork"
             ],
             "disclosure": "public"
           },
           "summary": {
-            "reference": "https://rezics.com/id/01a13b00-21c7-7756-ad1f-8fbf9c48060c",
+            "reference": "https://rezics.com/id/01a13e7c-c1ff-705a-90b7-b02851c8ed91",
             "status": "available",
             "type": "work",
             "address": {
               "prefix": "/w/",
-              "key": "1Cg2Mb2zRzatVyUECbYwpw",
+              "key": "1Cg3dwFtVPEqZMF2ERrU6U",
               "suffixSource": "Original discussion fixture private"
             },
             "base": "work",
-            "work": "https://rezics.com/id/01a13b00-21c7-7756-ad1f-8fbf9c48060c",
+            "work": "https://rezics.com/id/01a13e7c-c1ff-705a-90b7-b02851c8ed91",
             "disclosure": "public",
             "name": {
               "value": "Original discussion fixture private",
@@ -519,7 +589,7 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "e868f679adcd35d33be13bd8031ec62f"
+              "key": "47470e69ed46c6429adbffc77eb47666"
             }
           },
           "registry": {
@@ -584,9 +654,9 @@
           },
           "work": {
             "profile": "work-read-v1",
-            "id": "https://rezics.com/id/01a13b00-21c7-7756-ad1f-8fbf9c48060c",
-            "revision": "https://rezics.com/id/01a13b00-21c7-7758-8ea8-a5e12cd35def",
-            "mainVersion": "https://rezics.com/id/01a13b00-21c7-7757-993c-f508af2f4d43",
+            "id": "https://rezics.com/id/01a13e7c-c1ff-705a-90b7-b02851c8ed91",
+            "revision": "https://rezics.com/id/01a13e7c-c1ff-705c-ace8-06c0e33268f1",
+            "mainVersion": "https://rezics.com/id/01a13e7c-c1ff-705b-9637-aabf7ff96719",
             "title": {
               "value": "Original discussion fixture private",
               "language": "en",
@@ -597,7 +667,7 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "e868f679adcd35d33be13bd8031ec62f"
+              "key": "47470e69ed46c6429adbffc77eb47666"
             },
             "types": [],
             "tagline": null,
@@ -613,63 +683,63 @@
             "description": null,
             "metadataRevision": null,
             "originalTitle": null,
-            "mainVersionRevision": "https://rezics.com/id/01a13b00-2af7-75f2-90b7-039af419c80a",
+            "mainVersionRevision": "https://rezics.com/id/01a13e7c-c5c8-7096-ba55-8cde84ae672b",
             "mainVersionLabel": null,
             "selectedLanguage": "en",
             "sourcePosition": {
-              "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-              "sequence": "70"
+              "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+              "sequence": "163"
             },
             "links": {
               "versions": "/v1/query#work-versions",
-              "classifications": "/v1/works/01a13b00-21c7-7756-ad1f-8fbf9c48060c/classifications",
+              "classifications": "/v1/works/01a13e7c-c1ff-705a-90b7-b02851c8ed91/classifications",
               "adoptions": "/v1/query#work-adoptions",
-              "ratings": "/v1/works/01a13b00-21c7-7756-ad1f-8fbf9c48060c/ratings",
-              "history": "/v1/works/01a13b00-21c7-7756-ad1f-8fbf9c48060c/history",
-              "credits": "/v1/works/01a13b00-21c7-7756-ad1f-8fbf9c48060c/credits",
-              "metadata": "/v1/works/01a13b00-21c7-7756-ad1f-8fbf9c48060c/metadata",
-              "editions": "/v1/works/01a13b00-21c7-7756-ad1f-8fbf9c48060c/editions"
+              "ratings": "/v1/works/01a13e7c-c1ff-705a-90b7-b02851c8ed91/ratings",
+              "history": "/v1/works/01a13e7c-c1ff-705a-90b7-b02851c8ed91/history",
+              "credits": "/v1/works/01a13e7c-c1ff-705a-90b7-b02851c8ed91/credits",
+              "metadata": "/v1/works/01a13e7c-c1ff-705a-90b7-b02851c8ed91/metadata",
+              "editions": "/v1/works/01a13e7c-c1ff-705a-90b7-b02851c8ed91/editions"
             }
           },
           "sections": [
             {
               "id": "statements",
-              "href": "/v1/resources/01a13b00-21c7-7756-ad1f-8fbf9c48060c/statements",
+              "href": "/v1/resources/01a13e7c-c1ff-705a-90b7-b02851c8ed91/statements",
               "actions": []
             },
             {
               "id": "releases",
-              "href": "/v1/works/01a13b00-21c7-7756-ad1f-8fbf9c48060c/releases",
+              "href": "/v1/works/01a13e7c-c1ff-705a-90b7-b02851c8ed91/releases",
               "actions": []
             },
             {
               "id": "contents",
-              "href": "/v1/works/01a13b00-21c7-7756-ad1f-8fbf9c48060c/contents",
+              "href": "/v1/works/01a13e7c-c1ff-705a-90b7-b02851c8ed91/contents",
               "actions": []
             },
             {
               "id": "relations",
-              "href": "/v1/resources/01a13b00-21c7-7756-ad1f-8fbf9c48060c/relations",
+              "href": "/v1/resources/01a13e7c-c1ff-705a-90b7-b02851c8ed91/relations",
               "actions": []
             },
             {
               "id": "credits",
-              "href": "/v1/works/01a13b00-21c7-7756-ad1f-8fbf9c48060c/credits",
+              "href": "/v1/works/01a13e7c-c1ff-705a-90b7-b02851c8ed91/credits",
               "actions": []
             },
             {
               "id": "ratings",
-              "href": "/v1/resources/01a13b00-21c7-7756-ad1f-8fbf9c48060c/ratings",
+              "href": "/v1/resources/01a13e7c-c1ff-705a-90b7-b02851c8ed91/ratings",
               "actions": []
             },
             {
               "id": "reviews",
-              "href": "/v1/resources/01a13b00-21c7-7756-ad1f-8fbf9c48060c/reviews",
+              "href": "/v1/resources/01a13e7c-c1ff-705a-90b7-b02851c8ed91/reviews",
               "actions": []
             },
             {
               "id": "discussion",
-              "href": "/v1/resources/01a13b00-21c7-7756-ad1f-8fbf9c48060c/discussion",
+              "href": "/v1/resources/01a13e7c-c1ff-705a-90b7-b02851c8ed91/discussion",
               "actions": []
             }
           ],
@@ -678,8 +748,8 @@
             "nextCursor": null
           },
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "70"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "163"
           }
         },
         "headers": {
@@ -691,7 +761,24 @@
         "label": "private-realm-policy",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "private-realm-policy@ja",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -708,16 +795,16 @@
         "label": "canonical-discussion-thread",
         "operationId": "getV1RealmsByRealmThreadsByReply",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/threads/79bdccaf-2ed5-4988-ac82-fcccd3da4936",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/threads/a83753d0-3d12-48b7-a73c-593eb413b791",
         "status": 200,
         "answer": {
           "profile": "realm-thread-v1",
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "thread": "https://rezics.com/id/79bdccaf-2ed5-4988-ac82-fcccd3da4936",
-          "focus": "https://rezics.com/id/79bdccaf-2ed5-4988-ac82-fcccd3da4936",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "thread": "https://rezics.com/id/a83753d0-3d12-48b7-a73c-593eb413b791",
+          "focus": "https://rezics.com/id/a83753d0-3d12-48b7-a73c-593eb413b791",
           "sort": "best",
           "work": {
-            "id": "https://rezics.com/id/01a13aff-b970-744d-856b-84b90fa221c6",
+            "id": "https://rezics.com/id/01a13e7c-8c1b-7584-b525-a24b3c183f96",
             "title": {
               "value": "Original discussion fixture read-discussion",
               "language": "en",
@@ -728,25 +815,25 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "5f0e0d440d7e3509d2c7c3bda2496c92"
+              "key": "3a337009a0a72c0fbf6f2cba231f1d57"
             }
           },
-          "rootRevision": "https://rezics.com/id/01a13aff-b970-744f-86d0-8164dc0844f6",
+          "rootRevision": "https://rezics.com/id/01a13e7c-8c1b-7586-9748-76c3e953be03",
           "ancestors": [],
           "items": [
             {
-              "reply": "https://rezics.com/id/79bdccaf-2ed5-4988-ac82-fcccd3da4936",
-              "placement": "https://rezics.com/id/01a13b01-0207-7402-94d5-cc35c30e5828",
+              "reply": "https://rezics.com/id/a83753d0-3d12-48b7-a73c-593eb413b791",
+              "placement": "https://rezics.com/id/01a13e7d-259a-7341-a5b0-d1a03b1355c1",
               "parent": null,
               "author": {
-                "id": "https://rezics.com/id/24a18976-1ce8-42a8-bbf3-2390fecc62bd",
+                "id": "https://rezics.com/id/3aabd94a-25a1-4387-869d-9c2f5071ca7d",
                 "name": "Outcome owner",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:21:24.231Z",
+              "time": "2026-10-15T07:35:51.450Z",
               "language": "en",
-              "revisionId": "f2d1a779-99d8-4fe2-b999-e3b2de17d634",
+              "revisionId": "f9524de7-12f2-4a74-865f-04d7c49f2fe0",
               "title": "Original public discussion body and author credit.",
               "body": "",
               "vote": {
@@ -761,8 +848,8 @@
           "displayLanguages": [],
           "complete": true,
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "70"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "163"
           }
         },
         "headers": {
@@ -774,7 +861,7 @@
         "label": "private-canonical-discussion-thread",
         "operationId": "getV1RealmsByRealmThreadsByReply",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f/threads/0393823b-ee6f-4daa-8a42-6898a07acd6c",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95/threads/392188ec-9e84-40d9-a506-a0e93bd51281",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/work_unavailable",
@@ -793,7 +880,7 @@
         "label": "private-about-thread",
         "operationId": "getV1RealmsByRealmAbout-thread",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13b00-21c7-7756-ad1f-8fbf9c48060c&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F38210c0b-830a-4cea-82a5-31cd9de9da13",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13e7c-c1ff-705a-90b7-b02851c8ed91&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F324fbd68-5311-40eb-9f12-f24957e84165",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/work_unavailable",
@@ -810,14 +897,14 @@
         "label": "canonical-about-thread",
         "operationId": "getV1RealmsByRealmAbout-thread",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13aff-faf9-76b4-be8f-762eae41c7c0&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10da40e5-b43b-4fbf-956e-41009f19a308",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13e7c-ae4d-7226-9cab-ca30a4f82684&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F17d0b500-adc6-4b97-ad99-d55919516345",
         "status": 200,
         "answer": {
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "about": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "about": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
           "thread": {
-            "reply": "https://rezics.com/id/4ed36a4a-14eb-40e9-aa3e-580b9b39e194",
-            "rootRevision": "https://rezics.com/id/01a13aff-faf9-76b6-9ad5-87099e80d71a"
+            "reply": "https://rezics.com/id/282c26ad-caf6-4359-a879-a14c7a78f7d7",
+            "rootRevision": "https://rezics.com/id/01a13e7c-ae4d-7228-9b28-a8c600910d6b"
           }
         },
         "headers": {
@@ -829,16 +916,16 @@
         "label": "canonical-about-thread-body",
         "operationId": "getV1RealmsByRealmThreadsByReply",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/threads/4ed36a4a-14eb-40e9-aa3e-580b9b39e194?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10da40e5-b43b-4fbf-956e-41009f19a308",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/threads/282c26ad-caf6-4359-a879-a14c7a78f7d7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F17d0b500-adc6-4b97-ad99-d55919516345",
         "status": 200,
         "answer": {
           "profile": "realm-thread-v1",
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "thread": "https://rezics.com/id/4ed36a4a-14eb-40e9-aa3e-580b9b39e194",
-          "focus": "https://rezics.com/id/4ed36a4a-14eb-40e9-aa3e-580b9b39e194",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "thread": "https://rezics.com/id/282c26ad-caf6-4359-a879-a14c7a78f7d7",
+          "focus": "https://rezics.com/id/282c26ad-caf6-4359-a879-a14c7a78f7d7",
           "sort": "best",
           "work": {
-            "id": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+            "id": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
             "title": {
               "value": "Original discussion fixture public",
               "language": "en",
@@ -849,25 +936,25 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "4962a7025cbfe3efb98201c688785bfa"
+              "key": "55adc409e8708edfa76cb6ba6206b2ba"
             }
           },
-          "rootRevision": "https://rezics.com/id/01a13aff-faf9-76b6-9ad5-87099e80d71a",
+          "rootRevision": "https://rezics.com/id/01a13e7c-ae4d-7228-9b28-a8c600910d6b",
           "ancestors": [],
           "items": [
             {
-              "reply": "https://rezics.com/id/4ed36a4a-14eb-40e9-aa3e-580b9b39e194",
-              "placement": "https://rezics.com/id/01a13b01-5e58-7313-84b4-b9baa6ffb898",
+              "reply": "https://rezics.com/id/282c26ad-caf6-4359-a879-a14c7a78f7d7",
+              "placement": "https://rezics.com/id/01a13e7d-4c23-75f1-b89d-ac4c34da41cb",
               "parent": null,
               "author": {
-                "id": "https://rezics.com/id/10da40e5-b43b-4fbf-956e-41009f19a308",
+                "id": "https://rezics.com/id/17d0b500-adc6-4b97-ad99-d55919516345",
                 "name": "Outcome stranger",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:21:47.864Z",
+              "time": "2026-10-15T07:36:01.315Z",
               "language": "en",
-              "revisionId": "430293ec-5f6f-4f6a-bc24-b93498b804fd",
+              "revisionId": "5e506b1a-536e-4ae8-b156-b01b99499f54",
               "title": "Canonical original contribution",
               "body": "",
               "vote": {
@@ -878,47 +965,47 @@
               }
             },
             {
-              "reply": "https://rezics.com/id/d06bf392-f47f-4e61-b3f5-34a49d8ebe4c",
-              "placement": "https://rezics.com/id/01a13b01-80f5-77f2-94c8-0e24326c61b9",
-              "parent": "https://rezics.com/id/4ed36a4a-14eb-40e9-aa3e-580b9b39e194",
+              "reply": "https://rezics.com/id/c26e93a5-ed5e-4293-821b-cc583d156f50",
+              "placement": "https://rezics.com/id/01a13e7d-5986-706c-8084-ac0e28e65770",
+              "parent": "https://rezics.com/id/282c26ad-caf6-4359-a879-a14c7a78f7d7",
               "author": {
-                "id": "https://rezics.com/id/38e503b0-6d34-4bfe-b456-b1493cf36c79",
+                "id": "https://rezics.com/id/6e566505-3acb-4b5e-9418-0db53b3f46aa",
                 "name": "Outcome member",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:21:56.725Z",
+              "time": "2026-10-15T07:36:04.742Z",
               "language": "en",
-              "revisionId": "8c0b0826-69bc-40fe-a07d-ffd47d4179d3",
+              "revisionId": "a34769cc-4a94-4d35-b8f2-21b45a03f5e9",
               "title": null,
               "body": "Second independent contribution",
               "vote": {
                 "score": 0,
                 "value": 0,
                 "revision": null,
-                "open": true
+                "open": false
               }
             },
             {
-              "reply": "https://rezics.com/id/470e9c46-68c0-4929-8098-29e5814b33d0",
-              "placement": "https://rezics.com/id/01a13b01-80e6-70b7-b954-668e910ba18f",
-              "parent": "https://rezics.com/id/4ed36a4a-14eb-40e9-aa3e-580b9b39e194",
+              "reply": "https://rezics.com/id/8f3f70c0-bbd7-4f31-a4f5-aaa867eaa88c",
+              "placement": "https://rezics.com/id/01a13e7d-5982-77fe-89db-d174ae905b49",
+              "parent": "https://rezics.com/id/282c26ad-caf6-4359-a879-a14c7a78f7d7",
               "author": {
-                "id": "https://rezics.com/id/10da40e5-b43b-4fbf-956e-41009f19a308",
+                "id": "https://rezics.com/id/17d0b500-adc6-4b97-ad99-d55919516345",
                 "name": "Outcome stranger",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:21:56.710Z",
+              "time": "2026-10-15T07:36:04.738Z",
               "language": "en",
-              "revisionId": "a4a126c3-e9d5-471e-b723-3b3b21f4d22c",
+              "revisionId": "a8115b11-9803-4ba6-8f7a-9e011eeb5e0b",
               "title": null,
               "body": "First independent contribution",
               "vote": {
                 "score": 0,
                 "value": 0,
                 "revision": null,
-                "open": true
+                "open": false
               }
             }
           ],
@@ -926,8 +1013,8 @@
           "displayLanguages": [],
           "complete": true,
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "76"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "169"
           }
         },
         "headers": {
@@ -939,22 +1026,22 @@
         "label": "space-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a13aff-9bc4-76c7-81ba-d8da80502441&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10da40e5-b43b-4fbf-956e-41009f19a308",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13e7c-72a5-7597-a386-af1b7d614f2c&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F17d0b500-adc6-4b97-ad99-d55919516345",
         "status": 200,
         "answer": {
           "profile": "address-resolution-v1",
           "scope": "space",
-          "key": "01a13aff-9bc4-76c7-81ba-d8da80502441",
+          "key": "01a13e7c-72a5-7597-a386-af1b7d614f2c",
           "status": "resolved",
-          "holder": "https://rezics.com/id/01a13aff-9bc4-76c7-81ba-d8da80502441",
+          "holder": "https://rezics.com/id/01a13e7c-72a5-7597-a386-af1b7d614f2c",
           "state": "current",
           "canonical": {
             "prefix": "/r/",
-            "key": "outcome-0f8db531-ea2",
+            "key": "outcome-a60d3113-6d0",
             "suffixSource": "Outcome public Realm"
           },
           "capabilities": {
-            "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8"
+            "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68"
           }
         },
         "headers": {
@@ -966,12 +1053,12 @@
         "label": "published-presentation",
         "operationId": "getV1ZonesByIdPresentation",
         "method": "GET",
-        "path": "/v1/zones/e5ceb646-0eea-8334-bd79-3a3d68632748/presentation?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10da40e5-b43b-4fbf-956e-41009f19a308",
+        "path": "/v1/zones/30e168bc-5e38-82b6-a63c-8470549d4f21/presentation?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F17d0b500-adc6-4b97-ad99-d55919516345",
         "status": 200,
         "answer": {
           "profile": "zone-presentation-response-v2",
-          "zone": "https://rezics.com/id/e5ceb646-0eea-8334-bd79-3a3d68632748",
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
+          "zone": "https://rezics.com/id/30e168bc-5e38-82b6-a63c-8470549d4f21",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
           "listing": "listed",
           "discovery": {
             "indexable": true,
@@ -980,14 +1067,14 @@
           },
           "address": {
             "prefix": "/z/",
-            "key": "1Cg2MYcVyMGEZXtjdzNNyh",
+            "key": "1Cg3dup2i9945QWkcKEUxd",
             "suffixSource": "Outcome Realm site"
           },
           "name": "Outcome Realm site",
           "language": "en",
           "direction": "ltr",
           "official": null,
-          "revision": "https://rezics.com/id/01a13b00-b159-7778-b178-3ccbfafc83ef",
+          "revision": "https://rezics.com/id/01a13e7d-0b29-72d0-a925-c2f9d7ce7cc6",
           "presentation": {
             "profile": "zone-presentation-v2",
             "preset": "clean",
@@ -1009,9 +1096,9 @@
           },
           "navigation": [
             {
-              "occurrence": "https://rezics.com/id/ffadfc47-5a20-86da-b20c-1f6cd0e8baca",
+              "occurrence": "https://rezics.com/id/d19daae8-3c35-8ee1-9175-7fbc79272eb6",
               "segment": "read-discussion",
-              "target": "https://rezics.com/id/01a13aff-b970-744d-856b-84b90fa221c6",
+              "target": "https://rezics.com/id/01a13e7c-8c1b-7584-b525-a24b3c183f96",
               "kind": "document",
               "name": {
                 "value": "Original discussion fixture read-discussion",
@@ -1021,9 +1108,9 @@
               }
             },
             {
-              "occurrence": "https://rezics.com/id/b0f70d83-4254-8548-a6d1-1f8de38b89ee",
+              "occurrence": "https://rezics.com/id/615359dc-c242-86c2-a677-7693da7ed0c1",
               "segment": "public",
-              "target": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+              "target": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
               "kind": "document",
               "name": {
                 "value": "Original discussion fixture public",
@@ -1033,9 +1120,9 @@
               }
             },
             {
-              "occurrence": "https://rezics.com/id/6ab7f3a2-e4dd-8791-a6b9-6c19be76aeef",
+              "occurrence": "https://rezics.com/id/69b716eb-0188-80d5-8372-9cef4a6c3bf8",
               "segment": "owner",
-              "target": "https://rezics.com/id/01a13b00-4a08-762d-bcdb-f7b2ae1a86cf",
+              "target": "https://rezics.com/id/01a13e7c-d47a-732a-9780-419c293b3528",
               "kind": "document",
               "name": {
                 "value": "Original discussion fixture owner",
@@ -1045,9 +1132,9 @@
               }
             },
             {
-              "occurrence": "https://rezics.com/id/c56830c3-d5a9-884f-a041-4fb1e7759d25",
+              "occurrence": "https://rezics.com/id/72375d80-6389-85e2-a8b5-01753a4124bc",
               "segment": "moderation",
-              "target": "https://rezics.com/id/01a13b00-6cb7-719b-ace9-3094267f3575",
+              "target": "https://rezics.com/id/01a13e7c-ebec-7364-95db-974d71e31fba",
               "kind": "document",
               "name": {
                 "value": "Original discussion fixture moderation",
@@ -1057,9 +1144,9 @@
               }
             },
             {
-              "occurrence": "https://rezics.com/id/f953ae43-746f-858c-b2a0-e1bf4e735347",
+              "occurrence": "https://rezics.com/id/3757d867-f25a-886c-85b9-33e8e9209bf4",
               "segment": "operator",
-              "target": "https://rezics.com/id/01a13b00-9511-71ba-92af-f5034861aac3",
+              "target": "https://rezics.com/id/01a13e7d-003c-716d-92d2-255af97e4d87",
               "kind": "document",
               "name": {
                 "value": "Original discussion fixture operator",
@@ -1069,7 +1156,7 @@
               }
             }
           ],
-          "navigationRevision": "https://rezics.com/id/ca13cf52-56b3-8332-8296-609de1285213",
+          "navigationRevision": "https://rezics.com/id/540943a1-6f73-8818-a52b-4e775982e317",
           "navigationNext": null,
           "navigationComplete": true,
           "moduleData": [],
@@ -1081,7 +1168,7 @@
                   {
                     "attrs": {
                       "dir": null,
-                      "id": "4ebc5a1a-0336-4384-ab72-1620cbeb1e3b",
+                      "id": "d000c758-f991-43dd-9fa5-921ff946f001",
                       "lang": null,
                       "textAlign": null
                     },
@@ -1138,12 +1225,12 @@
             },
             "reference": {
               "owner": "content",
-              "resourceId": "https://rezics.com/id/01a13aff-c7fc-700c-882c-ea4246785dbc",
-              "variantId": "urn:rezics:variant:cceefc5a-3fa6-48b1-b9c1-144f5bc8d044",
-              "revisionId": "99a18fac-124e-41bc-ab3b-5a0605279cd9",
+              "resourceId": "https://rezics.com/id/01a13e7c-9486-77cd-a8cd-a623eb83eb07",
+              "variantId": "urn:rezics:variant:d92614ee-b5a2-45df-8d1f-8568f67d6706",
+              "revisionId": "ad922648-3090-4e09-9b32-8390db938dbc",
               "format": "rezics-content-json-v1",
               "model": "content-shape-v1",
-              "byteDigest": "0c38e2257a0ddd612cfbb00ad168b3710f3d40d5c4751581f0e3583773f8d169",
+              "byteDigest": "ab37b8016e87cc8f2cb360ae4c96063db559696b2e7cd7aa9af0fa7bd8b52fba",
               "byteLength": 344,
               "language": {
                 "kind": "tag",
@@ -1155,12 +1242,12 @@
               "predecessor": null,
               "provenance": {
                 "kind": "admitted-original-contribution-v1",
-                "scope": "content:draft:https://rezics.com/id/01a13aff-c7fc-700c-882c-ea4246785dbc",
-                "author": "https://rezics.com/id/24a18976-1ce8-42a8-bbf3-2390fecc62bd",
-                "admissionId": "01a13b00-adde-764c-9291-639edf60ce06",
+                "scope": "content:draft:https://rezics.com/id/01a13e7c-9486-77cd-a8cd-a623eb83eb07",
+                "author": "https://rezics.com/id/3aabd94a-25a1-4387-869d-9c2f5071ca7d",
+                "admissionId": "01a13e7d-09c9-72d9-b5a3-7f53ddc5202f",
                 "rightsBasis": "original-contribution",
                 "expectedHead": null,
-                "requestDigest": "f8be6a5bb7523e8ab0b3823a4008ee2f75f973408a8ed5d2ca6cecffddb7ac7b",
+                "requestDigest": "ad12f0e368eef04a3f006f1619665a5bfa2585f9d9233ea51f4bb8a9d523279a",
                 "authorityEpoch": "0"
               }
             }
@@ -1201,18 +1288,18 @@
         "headers": {
           "cache-control": "no-store",
           "content-type": "application/json;charset=utf-8",
-          "etag": "\"5c2d26e4a3af11402bc30c139d2357a8aa7d3ffe8859d33ffcce0f731b8fa7f9\""
+          "etag": "\"ade96eb348298b1a8c8fab84c527e177a5e836863a3e617d5455f160c6cd86f8\""
         }
       },
       {
         "label": "current-discussion-route",
         "operationId": "getV1ZonesByIdRoutes",
         "method": "GET",
-        "path": "/v1/zones/e5ceb646-0eea-8334-bd79-3a3d68632748/routes?path=%2Fpublic&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10da40e5-b43b-4fbf-956e-41009f19a308",
+        "path": "/v1/zones/30e168bc-5e38-82b6-a63c-8470549d4f21/routes?path=%2Fpublic&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F17d0b500-adc6-4b97-ad99-d55919516345",
         "status": 200,
         "answer": {
           "profile": "zone-route-v1",
-          "zone": "https://rezics.com/id/e5ceb646-0eea-8334-bd79-3a3d68632748",
+          "zone": "https://rezics.com/id/30e168bc-5e38-82b6-a63c-8470549d4f21",
           "path": "/public",
           "name": "Outcome Realm site",
           "language": "en",
@@ -1223,11 +1310,11 @@
             "robots": "index",
             "referrerPolicy": null
           },
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "revision": "https://rezics.com/id/01a13b00-b159-7778-b178-3ccbfafc83ef",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "revision": "https://rezics.com/id/01a13e7d-0b29-72d0-a925-c2f9d7ce7cc6",
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "76"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "169"
           },
           "cost": {
             "pageSize": 24,
@@ -1244,13 +1331,13 @@
           },
           "kind": "document",
           "mount": {
-            "occurrence": "https://rezics.com/id/b0f70d83-4254-8548-a6d1-1f8de38b89ee",
-            "target": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+            "occurrence": "https://rezics.com/id/615359dc-c242-86c2-a677-7693da7ed0c1",
+            "target": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
             "segment": "public",
             "key": "id"
           },
           "resource": {
-            "id": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+            "id": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
             "types": [
               "https://schema.org/CreativeWork"
             ],
@@ -1262,7 +1349,7 @@
             },
             "address": {
               "prefix": "/w/",
-              "key": "1Cg2MaJX3ktvyAAnkBJVkj",
+              "key": "1Cg3dvtLChDCsQxVjSUUYj",
               "suffixSource": "Original discussion fixture public"
             }
           }
@@ -1276,31 +1363,31 @@
         "label": "current-discussion-target",
         "operationId": "getV1ResourcesByResourcePage",
         "method": "GET",
-        "path": "/v1/resources/01a13aff-faf9-76b4-be8f-762eae41c7c0/page?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10da40e5-b43b-4fbf-956e-41009f19a308",
+        "path": "/v1/resources/01a13e7c-ae4d-7226-9cab-ca30a4f82684/page?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F17d0b500-adc6-4b97-ad99-d55919516345",
         "status": 200,
         "answer": {
           "profile": "entity-page-v1",
           "target": {
-            "resource": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+            "resource": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
             "base": "work",
-            "work": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
-            "revision": "https://rezics.com/id/01a13aff-faf9-76b6-9ad5-87099e80d71a",
+            "work": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
+            "revision": "https://rezics.com/id/01a13e7c-ae4d-7228-9b28-a8c600910d6b",
             "types": [
               "https://schema.org/CreativeWork"
             ],
             "disclosure": "public"
           },
           "summary": {
-            "reference": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+            "reference": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
             "status": "available",
             "type": "work",
             "address": {
               "prefix": "/w/",
-              "key": "1Cg2MaJX3ktvyAAnkBJVkj",
+              "key": "1Cg3dvtLChDCsQxVjSUUYj",
               "suffixSource": "Original discussion fixture public"
             },
             "base": "work",
-            "work": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+            "work": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
             "disclosure": "public",
             "name": {
               "value": "Original discussion fixture public",
@@ -1312,7 +1399,7 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "4962a7025cbfe3efb98201c688785bfa"
+              "key": "55adc409e8708edfa76cb6ba6206b2ba"
             }
           },
           "registry": {
@@ -1377,9 +1464,9 @@
           },
           "work": {
             "profile": "work-read-v1",
-            "id": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
-            "revision": "https://rezics.com/id/01a13aff-faf9-76b6-9ad5-87099e80d71a",
-            "mainVersion": "https://rezics.com/id/01a13aff-faf9-76b5-9fc5-c83356c8fab6",
+            "id": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
+            "revision": "https://rezics.com/id/01a13e7c-ae4d-7228-9b28-a8c600910d6b",
+            "mainVersion": "https://rezics.com/id/01a13e7c-ae4d-7227-afe9-221b462a363c",
             "title": {
               "value": "Original discussion fixture public",
               "language": "en",
@@ -1390,7 +1477,7 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "4962a7025cbfe3efb98201c688785bfa"
+              "key": "55adc409e8708edfa76cb6ba6206b2ba"
             },
             "types": [],
             "tagline": null,
@@ -1406,63 +1493,63 @@
             "description": null,
             "metadataRevision": null,
             "originalTitle": null,
-            "mainVersionRevision": "https://rezics.com/id/01a13b00-0313-714e-8402-fa7a1069dfd0",
+            "mainVersionRevision": "https://rezics.com/id/01a13e7c-b1c1-72b9-ba61-53748401f8d3",
             "mainVersionLabel": null,
             "selectedLanguage": "en",
             "sourcePosition": {
-              "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-              "sequence": "76"
+              "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+              "sequence": "169"
             },
             "links": {
               "versions": "/v1/query#work-versions",
-              "classifications": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/classifications",
+              "classifications": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/classifications",
               "adoptions": "/v1/query#work-adoptions",
-              "ratings": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/ratings",
-              "history": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/history",
-              "credits": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/credits",
-              "metadata": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/metadata",
-              "editions": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/editions"
+              "ratings": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/ratings",
+              "history": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/history",
+              "credits": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/credits",
+              "metadata": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/metadata",
+              "editions": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/editions"
             }
           },
           "sections": [
             {
               "id": "statements",
-              "href": "/v1/resources/01a13aff-faf9-76b4-be8f-762eae41c7c0/statements",
+              "href": "/v1/resources/01a13e7c-ae4d-7226-9cab-ca30a4f82684/statements",
               "actions": []
             },
             {
               "id": "releases",
-              "href": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/releases",
+              "href": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/releases",
               "actions": []
             },
             {
               "id": "contents",
-              "href": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/contents",
+              "href": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/contents",
               "actions": []
             },
             {
               "id": "relations",
-              "href": "/v1/resources/01a13aff-faf9-76b4-be8f-762eae41c7c0/relations",
+              "href": "/v1/resources/01a13e7c-ae4d-7226-9cab-ca30a4f82684/relations",
               "actions": []
             },
             {
               "id": "credits",
-              "href": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/credits",
+              "href": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/credits",
               "actions": []
             },
             {
               "id": "ratings",
-              "href": "/v1/resources/01a13aff-faf9-76b4-be8f-762eae41c7c0/ratings",
+              "href": "/v1/resources/01a13e7c-ae4d-7226-9cab-ca30a4f82684/ratings",
               "actions": []
             },
             {
               "id": "reviews",
-              "href": "/v1/resources/01a13aff-faf9-76b4-be8f-762eae41c7c0/reviews",
+              "href": "/v1/resources/01a13e7c-ae4d-7226-9cab-ca30a4f82684/reviews",
               "actions": []
             },
             {
               "id": "discussion",
-              "href": "/v1/resources/01a13aff-faf9-76b4-be8f-762eae41c7c0/discussion",
+              "href": "/v1/resources/01a13e7c-ae4d-7226-9cab-ca30a4f82684/discussion",
               "actions": []
             }
           ],
@@ -1471,8 +1558,8 @@
             "nextCursor": null
           },
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "76"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "169"
           }
         },
         "headers": {
@@ -1484,16 +1571,16 @@
         "label": "realm-policy",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10da40e5-b43b-4fbf-956e-41009f19a308",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F17d0b500-adc6-4b97-ad99-d55919516345",
         "status": 200,
         "answer": {
           "profile": "realm-read-v1",
-          "id": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "space": "https://rezics.com/id/01a13aff-9bc4-76c7-81ba-d8da80502441",
-          "revision": "https://rezics.com/id/01a13aff-9c30-769c-b614-982ed65b2847",
+          "id": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "space": "https://rezics.com/id/01a13e7c-72a5-7597-a386-af1b7d614f2c",
+          "revision": "https://rezics.com/id/01a13e7c-72ea-734c-a180-b1e07d776968",
           "visibility": "public",
           "reviewMode": "open",
-          "policyRevision": "urn:rezics:receipt:989d945f56a86f8cbce417aeb72b9c6903629229be4f319e03729c4c02a65c70",
+          "policyRevision": "urn:rezics:receipt:2e63e5e6a85ffdfc1a00d26bd71bc2175f4ca9e00b2d0aaa551c889b024421e8",
           "history": "everything",
           "name": {
             "value": "Outcome public Realm",
@@ -1505,7 +1592,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "realm",
-            "key": "f0e7c41db038d9d0d3737c1b2e7e932b"
+            "key": "f16b585bd4f3959b52e283f4b5ce3cc0"
           },
           "originalName": {
             "value": "Outcome public Realm",
@@ -1537,12 +1624,82 @@
             "items": []
           },
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "76"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "169"
           },
           "links": {
-            "works": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/works",
-            "decisions": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/decisions"
+            "works": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/works",
+            "decisions": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "realm-policy@ja",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F17d0b500-adc6-4b97-ad99-d55919516345",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "space": "https://rezics.com/id/01a13e7c-72a5-7597-a386-af1b7d614f2c",
+          "revision": "https://rezics.com/id/01a13e7c-72ea-734c-a180-b1e07d776968",
+          "visibility": "public",
+          "reviewMode": "open",
+          "policyRevision": "urn:rezics:receipt:2e63e5e6a85ffdfc1a00d26bd71bc2175f4ca9e00b2d0aaa551c889b024421e8",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "f16b585bd4f3959b52e283f4b5ce3cc0"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "169"
+          },
+          "links": {
+            "works": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/works",
+            "decisions": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/decisions"
           }
         },
         "headers": {
@@ -1554,10 +1711,10 @@
         "label": "joining-context",
         "operationId": "getV1RealmsByRealmJoining",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10da40e5-b43b-4fbf-956e-41009f19a308",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F17d0b500-adc6-4b97-ad99-d55919516345",
         "status": 200,
         "answer": {
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
           "policyRevision": "1",
           "termsRevision": "realm-membership-v1",
           "open": true,
@@ -1574,12 +1731,12 @@
         "label": "follow-context",
         "operationId": "getV1FollowsById",
         "method": "GET",
-        "path": "/v1/follows/01a13aff-9c30-769a-a2aa-6e215b9d11d8?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10da40e5-b43b-4fbf-956e-41009f19a308",
+        "path": "/v1/follows/01a13e7c-72ea-734a-9233-9151059c6a68?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F17d0b500-adc6-4b97-ad99-d55919516345",
         "status": 200,
         "answer": {
           "profile": "follow-state-v1",
           "target": {
-            "id": "https://rezics.com/id/01a13aff-9bc4-76c7-81ba-d8da80502441",
+            "id": "https://rezics.com/id/01a13e7c-72a5-7597-a386-af1b7d614f2c",
             "kind": "space",
             "name": {
               "value": "Outcome public Realm",
@@ -1591,10 +1748,10 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "realm",
-              "key": "f0e7c41db038d9d0d3737c1b2e7e932b"
+              "key": "f16b585bd4f3959b52e283f4b5ce3cc0"
             },
-            "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-            "href": "/r/01a13aff-9c30-769a-a2aa-6e215b9d11d8"
+            "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+            "href": "/r/01a13e7c-72ea-734a-9233-9151059c6a68"
           },
           "following": false,
           "revision": null,
@@ -1637,7 +1794,7 @@
             "worldbuilding"
           ],
           "operations": [],
-          "generation": "636151e5e0a89a9d873ceb3b75f553c00a7da4160a651d3a5b16142042c0160a"
+          "generation": "6ec14c7583f7a5ca7d16a2cf4c3a38263f82cc01dec1803d759e8725eb2355e0"
         },
         "headers": {
           "cache-control": "private, no-store",
@@ -1648,7 +1805,7 @@
         "label": "member-ban-absent",
         "operationId": "getV1RealmsByRealmMember-ban",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10da40e5-b43b-4fbf-956e-41009f19a308",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F17d0b500-adc6-4b97-ad99-d55919516345",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/appeal_unavailable",
@@ -1665,7 +1822,7 @@
         "label": "showcase-editor-refused",
         "operationId": "getV1ZonesByIdShowcase-editor",
         "method": "GET",
-        "path": "/v1/zones/e5ceb646-0eea-8334-bd79-3a3d68632748/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10da40e5-b43b-4fbf-956e-41009f19a308",
+        "path": "/v1/zones/30e168bc-5e38-82b6-a63c-8470549d4f21/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F17d0b500-adc6-4b97-ad99-d55919516345",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/zone_unavailable",
@@ -1682,16 +1839,16 @@
         "label": "canonical-discussion-thread",
         "operationId": "getV1RealmsByRealmThreadsByReply",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/threads/4ed36a4a-14eb-40e9-aa3e-580b9b39e194?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10da40e5-b43b-4fbf-956e-41009f19a308",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/threads/282c26ad-caf6-4359-a879-a14c7a78f7d7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F17d0b500-adc6-4b97-ad99-d55919516345",
         "status": 200,
         "answer": {
           "profile": "realm-thread-v1",
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "thread": "https://rezics.com/id/4ed36a4a-14eb-40e9-aa3e-580b9b39e194",
-          "focus": "https://rezics.com/id/4ed36a4a-14eb-40e9-aa3e-580b9b39e194",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "thread": "https://rezics.com/id/282c26ad-caf6-4359-a879-a14c7a78f7d7",
+          "focus": "https://rezics.com/id/282c26ad-caf6-4359-a879-a14c7a78f7d7",
           "sort": "best",
           "work": {
-            "id": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
+            "id": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
             "title": {
               "value": "Original discussion fixture public",
               "language": "en",
@@ -1702,25 +1859,25 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "4962a7025cbfe3efb98201c688785bfa"
+              "key": "55adc409e8708edfa76cb6ba6206b2ba"
             }
           },
-          "rootRevision": "https://rezics.com/id/01a13aff-faf9-76b6-9ad5-87099e80d71a",
+          "rootRevision": "https://rezics.com/id/01a13e7c-ae4d-7228-9b28-a8c600910d6b",
           "ancestors": [],
           "items": [
             {
-              "reply": "https://rezics.com/id/4ed36a4a-14eb-40e9-aa3e-580b9b39e194",
-              "placement": "https://rezics.com/id/01a13b01-5e58-7313-84b4-b9baa6ffb898",
+              "reply": "https://rezics.com/id/282c26ad-caf6-4359-a879-a14c7a78f7d7",
+              "placement": "https://rezics.com/id/01a13e7d-4c23-75f1-b89d-ac4c34da41cb",
               "parent": null,
               "author": {
-                "id": "https://rezics.com/id/10da40e5-b43b-4fbf-956e-41009f19a308",
+                "id": "https://rezics.com/id/17d0b500-adc6-4b97-ad99-d55919516345",
                 "name": "Outcome stranger",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:21:47.864Z",
+              "time": "2026-10-15T07:36:01.315Z",
               "language": "en",
-              "revisionId": "430293ec-5f6f-4f6a-bc24-b93498b804fd",
+              "revisionId": "5e506b1a-536e-4ae8-b156-b01b99499f54",
               "title": "Canonical original contribution",
               "body": "",
               "vote": {
@@ -1731,18 +1888,18 @@
               }
             },
             {
-              "reply": "https://rezics.com/id/d06bf392-f47f-4e61-b3f5-34a49d8ebe4c",
-              "placement": "https://rezics.com/id/01a13b01-80f5-77f2-94c8-0e24326c61b9",
-              "parent": "https://rezics.com/id/4ed36a4a-14eb-40e9-aa3e-580b9b39e194",
+              "reply": "https://rezics.com/id/c26e93a5-ed5e-4293-821b-cc583d156f50",
+              "placement": "https://rezics.com/id/01a13e7d-5986-706c-8084-ac0e28e65770",
+              "parent": "https://rezics.com/id/282c26ad-caf6-4359-a879-a14c7a78f7d7",
               "author": {
-                "id": "https://rezics.com/id/38e503b0-6d34-4bfe-b456-b1493cf36c79",
+                "id": "https://rezics.com/id/6e566505-3acb-4b5e-9418-0db53b3f46aa",
                 "name": "Outcome member",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:21:56.725Z",
+              "time": "2026-10-15T07:36:04.742Z",
               "language": "en",
-              "revisionId": "8c0b0826-69bc-40fe-a07d-ffd47d4179d3",
+              "revisionId": "a34769cc-4a94-4d35-b8f2-21b45a03f5e9",
               "title": null,
               "body": "Second independent contribution",
               "vote": {
@@ -1753,18 +1910,18 @@
               }
             },
             {
-              "reply": "https://rezics.com/id/470e9c46-68c0-4929-8098-29e5814b33d0",
-              "placement": "https://rezics.com/id/01a13b01-80e6-70b7-b954-668e910ba18f",
-              "parent": "https://rezics.com/id/4ed36a4a-14eb-40e9-aa3e-580b9b39e194",
+              "reply": "https://rezics.com/id/8f3f70c0-bbd7-4f31-a4f5-aaa867eaa88c",
+              "placement": "https://rezics.com/id/01a13e7d-5982-77fe-89db-d174ae905b49",
+              "parent": "https://rezics.com/id/282c26ad-caf6-4359-a879-a14c7a78f7d7",
               "author": {
-                "id": "https://rezics.com/id/10da40e5-b43b-4fbf-956e-41009f19a308",
+                "id": "https://rezics.com/id/17d0b500-adc6-4b97-ad99-d55919516345",
                 "name": "Outcome stranger",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:21:56.710Z",
+              "time": "2026-10-15T07:36:04.738Z",
               "language": "en",
-              "revisionId": "a4a126c3-e9d5-471e-b723-3b3b21f4d22c",
+              "revisionId": "a8115b11-9803-4ba6-8f7a-9e011eeb5e0b",
               "title": null,
               "body": "First independent contribution",
               "vote": {
@@ -1779,8 +1936,8 @@
           "displayLanguages": [],
           "complete": true,
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "76"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "169"
           }
         },
         "headers": {
@@ -1792,13 +1949,13 @@
         "label": "mounted-work-header",
         "operationId": "getV1WorksById",
         "method": "GET",
-        "path": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10da40e5-b43b-4fbf-956e-41009f19a308",
+        "path": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F17d0b500-adc6-4b97-ad99-d55919516345",
         "status": 200,
         "answer": {
           "profile": "work-read-v1",
-          "id": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
-          "revision": "https://rezics.com/id/01a13aff-faf9-76b6-9ad5-87099e80d71a",
-          "mainVersion": "https://rezics.com/id/01a13aff-faf9-76b5-9fc5-c83356c8fab6",
+          "id": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
+          "revision": "https://rezics.com/id/01a13e7c-ae4d-7228-9b28-a8c600910d6b",
+          "mainVersion": "https://rezics.com/id/01a13e7c-ae4d-7227-afe9-221b462a363c",
           "title": {
             "value": "Original discussion fixture public",
             "language": "en",
@@ -1809,7 +1966,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "work",
-            "key": "4962a7025cbfe3efb98201c688785bfa"
+            "key": "55adc409e8708edfa76cb6ba6206b2ba"
           },
           "types": [],
           "tagline": null,
@@ -1825,23 +1982,23 @@
           "description": null,
           "metadataRevision": null,
           "originalTitle": null,
-          "mainVersionRevision": "https://rezics.com/id/01a13b00-0313-714e-8402-fa7a1069dfd0",
+          "mainVersionRevision": "https://rezics.com/id/01a13e7c-b1c1-72b9-ba61-53748401f8d3",
           "mainVersionLabel": null,
           "selectedLanguage": "en",
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "76",
-            "dependencyToken": "8f2352a4d7cbcb958a9b0bb3575325ad0f1a838d65b3edf064cf97d36610252e"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "169",
+            "dependencyToken": "d2b588cd260b2259df82c6b2355cad04c02084272f19ad889faa4c96d7b4796f"
           },
           "links": {
             "versions": "/v1/query#work-versions",
-            "classifications": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/classifications",
+            "classifications": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/classifications",
             "adoptions": "/v1/query#work-adoptions",
-            "ratings": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/ratings",
-            "history": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/history",
-            "credits": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/credits",
-            "metadata": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/metadata",
-            "editions": "/v1/works/01a13aff-faf9-76b4-be8f-762eae41c7c0/editions"
+            "ratings": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/ratings",
+            "history": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/history",
+            "credits": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/credits",
+            "metadata": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/metadata",
+            "editions": "/v1/works/01a13e7c-ae4d-7226-9cab-ca30a4f82684/editions"
           }
         },
         "headers": {
@@ -1853,14 +2010,14 @@
         "label": "mounted-work-text",
         "operationId": "getV1Main-versionsByMainVersionSelection",
         "method": "GET",
-        "path": "/v1/main-versions/01a13aff-faf9-76b5-9fc5-c83356c8fab6/selection?language=en",
+        "path": "/v1/main-versions/01a13e7c-ae4d-7227-afe9-221b462a363c/selection?language=en",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13aff-faf9-76b4-be8f-762eae41c7c0",
-          "mainVersion": "https://rezics.com/id/01a13aff-faf9-76b5-9fc5-c83356c8fab6",
-          "selection": "https://rezics.com/id/01a13b00-0313-714d-8b9d-4d689eac2f2f",
-          "contribution": "https://rezics.com/id/01a13aff-fe88-759a-ba0a-e18d8a64103f",
-          "selectedDraft": "https://rezics.com/id/01a13aff-fe88-759b-8433-6aaf348413ec",
+          "work": "https://rezics.com/id/01a13e7c-ae4d-7226-9cab-ca30a4f82684",
+          "mainVersion": "https://rezics.com/id/01a13e7c-ae4d-7227-afe9-221b462a363c",
+          "selection": "https://rezics.com/id/01a13e7c-b1c1-72b8-b456-286bb4d65307",
+          "contribution": "https://rezics.com/id/01a13e7c-af5c-7509-b065-19ee1c4b2d42",
+          "selectedDraft": "https://rezics.com/id/01a13e7c-af5c-750a-be56-8a41a0d1c5f2",
           "language": "en",
           "body": "An original fixture essay about attachment and discussion."
         },
@@ -1873,7 +2030,7 @@
         "label": "private-canonical-discussion-thread",
         "operationId": "getV1RealmsByRealmThreadsByReply",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f/threads/0393823b-ee6f-4daa-8a42-6898a07acd6c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F38210c0b-830a-4cea-82a5-31cd9de9da13",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95/threads/392188ec-9e84-40d9-a506-a0e93bd51281?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F324fbd68-5311-40eb-9f12-f24957e84165",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/work_unavailable",
@@ -1892,11 +2049,11 @@
         "label": "private-about-thread",
         "operationId": "getV1RealmsByRealmAbout-thread",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13b00-21c7-7756-ad1f-8fbf9c48060c&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F90cf6f94-26f4-4505-a890-b3c95268a55d",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13e7c-c1ff-705a-90b7-b02851c8ed91&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F91743dba-c032-4a6f-9ccc-4f571158faec",
         "status": 200,
         "answer": {
-          "realm": "https://rezics.com/id/01a13aff-b2a8-715f-b9cf-4959c814587f",
-          "about": "https://rezics.com/id/01a13b00-21c7-7756-ad1f-8fbf9c48060c",
+          "realm": "https://rezics.com/id/01a13e7c-812b-730d-9c4d-90fa000d6f95",
+          "about": "https://rezics.com/id/01a13e7c-c1ff-705a-90b7-b02851c8ed91",
           "thread": null
         },
         "headers": {
@@ -1908,14 +2065,14 @@
         "label": "canonical-about-thread",
         "operationId": "getV1RealmsByRealmAbout-thread",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13b00-21c7-7756-ad1f-8fbf9c48060c&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F90cf6f94-26f4-4505-a890-b3c95268a55d",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13e7c-c1ff-705a-90b7-b02851c8ed91&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F91743dba-c032-4a6f-9ccc-4f571158faec",
         "status": 200,
         "answer": {
-          "realm": "https://rezics.com/id/01a13aff-b2a8-715f-b9cf-4959c814587f",
-          "about": "https://rezics.com/id/01a13b00-21c7-7756-ad1f-8fbf9c48060c",
+          "realm": "https://rezics.com/id/01a13e7c-812b-730d-9c4d-90fa000d6f95",
+          "about": "https://rezics.com/id/01a13e7c-c1ff-705a-90b7-b02851c8ed91",
           "thread": {
-            "reply": "https://rezics.com/id/3ba40177-5172-4043-b259-331dfb9a3430",
-            "rootRevision": "https://rezics.com/id/01a13b00-21c7-7758-8ea8-a5e12cd35def"
+            "reply": "https://rezics.com/id/577e3223-7eb6-4b7c-8851-d0183355225f",
+            "rootRevision": "https://rezics.com/id/01a13e7c-c1ff-705c-ace8-06c0e33268f1"
           }
         },
         "headers": {
@@ -1927,16 +2084,16 @@
         "label": "canonical-about-thread-body",
         "operationId": "getV1RealmsByRealmThreadsByReply",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f/threads/3ba40177-5172-4043-b259-331dfb9a3430?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F90cf6f94-26f4-4505-a890-b3c95268a55d",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95/threads/577e3223-7eb6-4b7c-8851-d0183355225f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F91743dba-c032-4a6f-9ccc-4f571158faec",
         "status": 200,
         "answer": {
           "profile": "realm-thread-v1",
-          "realm": "https://rezics.com/id/01a13aff-b2a8-715f-b9cf-4959c814587f",
-          "thread": "https://rezics.com/id/3ba40177-5172-4043-b259-331dfb9a3430",
-          "focus": "https://rezics.com/id/3ba40177-5172-4043-b259-331dfb9a3430",
+          "realm": "https://rezics.com/id/01a13e7c-812b-730d-9c4d-90fa000d6f95",
+          "thread": "https://rezics.com/id/577e3223-7eb6-4b7c-8851-d0183355225f",
+          "focus": "https://rezics.com/id/577e3223-7eb6-4b7c-8851-d0183355225f",
           "sort": "best",
           "work": {
-            "id": "https://rezics.com/id/01a13b00-21c7-7756-ad1f-8fbf9c48060c",
+            "id": "https://rezics.com/id/01a13e7c-c1ff-705a-90b7-b02851c8ed91",
             "title": {
               "value": "Original discussion fixture private",
               "language": "en",
@@ -1947,25 +2104,25 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "e868f679adcd35d33be13bd8031ec62f"
+              "key": "47470e69ed46c6429adbffc77eb47666"
             }
           },
-          "rootRevision": "https://rezics.com/id/01a13b00-21c7-7758-8ea8-a5e12cd35def",
+          "rootRevision": "https://rezics.com/id/01a13e7c-c1ff-705c-ace8-06c0e33268f1",
           "ancestors": [],
           "items": [
             {
-              "reply": "https://rezics.com/id/3ba40177-5172-4043-b259-331dfb9a3430",
-              "placement": "https://rezics.com/id/01a13b01-bd2f-7190-8c98-d2c12c3956b2",
+              "reply": "https://rezics.com/id/577e3223-7eb6-4b7c-8851-d0183355225f",
+              "placement": "https://rezics.com/id/01a13e7d-7a8b-7381-a269-b7ad3bdb3923",
               "parent": null,
               "author": {
-                "id": "https://rezics.com/id/90cf6f94-26f4-4505-a890-b3c95268a55d",
+                "id": "https://rezics.com/id/91743dba-c032-4a6f-9ccc-4f571158faec",
                 "name": "Outcome member",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:22:12.143Z",
+              "time": "2026-10-15T07:36:13.195Z",
               "language": "en",
-              "revisionId": "691755aa-643b-4764-8096-5f05eb263ab8",
+              "revisionId": "babf875e-9141-4467-ac93-56f3b7fff1e0",
               "title": "Canonical original contribution",
               "body": "",
               "vote": {
@@ -1976,18 +2133,18 @@
               }
             },
             {
-              "reply": "https://rezics.com/id/911e611d-757a-42ca-ab83-cc559836646c",
-              "placement": "https://rezics.com/id/01a13b01-ef06-7089-994d-f3ee6a708c8c",
-              "parent": "https://rezics.com/id/3ba40177-5172-4043-b259-331dfb9a3430",
+              "reply": "https://rezics.com/id/aa3d7314-a247-4e61-9212-c17d679946cb",
+              "placement": "https://rezics.com/id/01a13e7d-94e2-761d-9651-694de6199c34",
+              "parent": "https://rezics.com/id/577e3223-7eb6-4b7c-8851-d0183355225f",
               "author": {
-                "id": "https://rezics.com/id/486e4026-1b16-4be8-b0fe-276ced04fee8",
+                "id": "https://rezics.com/id/74834a13-735c-4994-b133-47b076d91eac",
                 "name": "Outcome owner",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:22:24.902Z",
+              "time": "2026-10-15T07:36:19.938Z",
               "language": "en",
-              "revisionId": "f885b61e-a0cf-4211-82d6-1770437fa4a3",
+              "revisionId": "0381f3ed-9d42-4190-90b1-0e8365d72009",
               "title": null,
               "body": "Second independent contribution",
               "vote": {
@@ -1998,18 +2155,18 @@
               }
             },
             {
-              "reply": "https://rezics.com/id/06af2720-33af-40ac-9641-7269a59e7193",
-              "placement": "https://rezics.com/id/01a13b01-d3f0-7188-af5c-9bc9645bb14b",
-              "parent": "https://rezics.com/id/3ba40177-5172-4043-b259-331dfb9a3430",
+              "reply": "https://rezics.com/id/0217c9a4-22d4-4c98-8a2d-3941e1b9e00a",
+              "placement": "https://rezics.com/id/01a13e7d-86ab-720d-88a2-c5cb5b7936c1",
+              "parent": "https://rezics.com/id/577e3223-7eb6-4b7c-8851-d0183355225f",
               "author": {
-                "id": "https://rezics.com/id/90cf6f94-26f4-4505-a890-b3c95268a55d",
+                "id": "https://rezics.com/id/91743dba-c032-4a6f-9ccc-4f571158faec",
                 "name": "Outcome member",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:22:17.968Z",
+              "time": "2026-10-15T07:36:16.299Z",
               "language": "en",
-              "revisionId": "faa0197f-f3ca-43e4-b6c3-cb5799a7efd0",
+              "revisionId": "032a6713-7886-4f61-b3d2-d747f31aa7cc",
               "title": null,
               "body": "First independent contribution",
               "vote": {
@@ -2024,8 +2181,8 @@
           "displayLanguages": [],
           "complete": true,
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "82"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "175"
           }
         },
         "headers": {
@@ -2037,16 +2194,16 @@
         "label": "private-canonical-discussion-thread",
         "operationId": "getV1RealmsByRealmThreadsByReply",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f/threads/0393823b-ee6f-4daa-8a42-6898a07acd6c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F90cf6f94-26f4-4505-a890-b3c95268a55d",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95/threads/392188ec-9e84-40d9-a506-a0e93bd51281?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F91743dba-c032-4a6f-9ccc-4f571158faec",
         "status": 200,
         "answer": {
           "profile": "realm-thread-v1",
-          "realm": "https://rezics.com/id/01a13aff-b2a8-715f-b9cf-4959c814587f",
-          "thread": "https://rezics.com/id/0393823b-ee6f-4daa-8a42-6898a07acd6c",
-          "focus": "https://rezics.com/id/0393823b-ee6f-4daa-8a42-6898a07acd6c",
+          "realm": "https://rezics.com/id/01a13e7c-812b-730d-9c4d-90fa000d6f95",
+          "thread": "https://rezics.com/id/392188ec-9e84-40d9-a506-a0e93bd51281",
+          "focus": "https://rezics.com/id/392188ec-9e84-40d9-a506-a0e93bd51281",
           "sort": "best",
           "work": {
-            "id": "https://rezics.com/id/01a13aff-d808-76b3-9aa9-5cdcdd426514",
+            "id": "https://rezics.com/id/01a13e7c-9dc7-74af-bcbc-5be059f9ccf9",
             "title": {
               "value": "Original discussion fixture read-private-discussion",
               "language": "en",
@@ -2057,25 +2214,25 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "ba45700583abf2c03b4c3760bff00d68"
+              "key": "a532b85178d1c25f979312172a7a650f"
             }
           },
-          "rootRevision": "https://rezics.com/id/01a13aff-d808-76b5-8e91-38449078a039",
+          "rootRevision": "https://rezics.com/id/01a13e7c-9dc7-74b1-ba24-4b2a13329ba6",
           "ancestors": [],
           "items": [
             {
-              "reply": "https://rezics.com/id/0393823b-ee6f-4daa-8a42-6898a07acd6c",
-              "placement": "https://rezics.com/id/01a13b01-2030-7482-8e7c-d55d6e94c4e1",
+              "reply": "https://rezics.com/id/392188ec-9e84-40d9-a506-a0e93bd51281",
+              "placement": "https://rezics.com/id/01a13e7d-31c8-7010-a9a2-ce6febaed679",
               "parent": null,
               "author": {
-                "id": "https://rezics.com/id/486e4026-1b16-4be8-b0fe-276ced04fee8",
+                "id": "https://rezics.com/id/74834a13-735c-4994-b133-47b076d91eac",
                 "name": "Outcome owner",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:21:31.952Z",
+              "time": "2026-10-15T07:35:54.568Z",
               "language": "en",
-              "revisionId": "17816d71-61f4-4576-9d97-9c547a88455b",
+              "revisionId": "685d4dd0-4b93-442a-b829-872f74faa891",
               "title": "Original private discussion body and author credit.",
               "body": "",
               "vote": {
@@ -2090,8 +2247,8 @@
           "displayLanguages": [],
           "complete": true,
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "82"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "175"
           }
         },
         "headers": {
@@ -2105,14 +2262,14 @@
         "label": "private-about-thread",
         "operationId": "getV1RealmsByRealmAbout-thread",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13b00-21c7-7756-ad1f-8fbf9c48060c&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F486e4026-1b16-4be8-b0fe-276ced04fee8",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13e7c-c1ff-705a-90b7-b02851c8ed91&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F74834a13-735c-4994-b133-47b076d91eac",
         "status": 200,
         "answer": {
-          "realm": "https://rezics.com/id/01a13aff-b2a8-715f-b9cf-4959c814587f",
-          "about": "https://rezics.com/id/01a13b00-21c7-7756-ad1f-8fbf9c48060c",
+          "realm": "https://rezics.com/id/01a13e7c-812b-730d-9c4d-90fa000d6f95",
+          "about": "https://rezics.com/id/01a13e7c-c1ff-705a-90b7-b02851c8ed91",
           "thread": {
-            "reply": "https://rezics.com/id/3ba40177-5172-4043-b259-331dfb9a3430",
-            "rootRevision": "https://rezics.com/id/01a13b00-21c7-7758-8ea8-a5e12cd35def"
+            "reply": "https://rezics.com/id/577e3223-7eb6-4b7c-8851-d0183355225f",
+            "rootRevision": "https://rezics.com/id/01a13e7c-c1ff-705c-ace8-06c0e33268f1"
           }
         },
         "headers": {
@@ -2124,14 +2281,14 @@
         "label": "canonical-about-thread",
         "operationId": "getV1RealmsByRealmAbout-thread",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13b00-4a08-762d-bcdb-f7b2ae1a86cf&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F24a18976-1ce8-42a8-bbf3-2390fecc62bd",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13e7c-d47a-732a-9780-419c293b3528&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3aabd94a-25a1-4387-869d-9c2f5071ca7d",
         "status": 200,
         "answer": {
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "about": "https://rezics.com/id/01a13b00-4a08-762d-bcdb-f7b2ae1a86cf",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "about": "https://rezics.com/id/01a13e7c-d47a-732a-9780-419c293b3528",
           "thread": {
-            "reply": "https://rezics.com/id/d0585111-aa90-4edf-979d-372c44ec47b5",
-            "rootRevision": "https://rezics.com/id/01a13b00-4a09-7655-82fa-6fd8d0234d29"
+            "reply": "https://rezics.com/id/d1b4c1cc-5b0d-463e-8242-c94ff30f29c7",
+            "rootRevision": "https://rezics.com/id/01a13e7c-d47a-732c-8832-92fd536811b9"
           }
         },
         "headers": {
@@ -2143,16 +2300,16 @@
         "label": "canonical-about-thread-body",
         "operationId": "getV1RealmsByRealmThreadsByReply",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/threads/d0585111-aa90-4edf-979d-372c44ec47b5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F24a18976-1ce8-42a8-bbf3-2390fecc62bd",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/threads/d1b4c1cc-5b0d-463e-8242-c94ff30f29c7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3aabd94a-25a1-4387-869d-9c2f5071ca7d",
         "status": 200,
         "answer": {
           "profile": "realm-thread-v1",
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "thread": "https://rezics.com/id/d0585111-aa90-4edf-979d-372c44ec47b5",
-          "focus": "https://rezics.com/id/d0585111-aa90-4edf-979d-372c44ec47b5",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "thread": "https://rezics.com/id/d1b4c1cc-5b0d-463e-8242-c94ff30f29c7",
+          "focus": "https://rezics.com/id/d1b4c1cc-5b0d-463e-8242-c94ff30f29c7",
           "sort": "best",
           "work": {
-            "id": "https://rezics.com/id/01a13b00-4a08-762d-bcdb-f7b2ae1a86cf",
+            "id": "https://rezics.com/id/01a13e7c-d47a-732a-9780-419c293b3528",
             "title": {
               "value": "Original discussion fixture owner",
               "language": "en",
@@ -2163,25 +2320,25 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "e4b4abeebe9f4e2abd6f245ce7569b3c"
+              "key": "8a2ec841339e6f8975b8bfad45af2d1f"
             }
           },
-          "rootRevision": "https://rezics.com/id/01a13b00-4a09-7655-82fa-6fd8d0234d29",
+          "rootRevision": "https://rezics.com/id/01a13e7c-d47a-732c-8832-92fd536811b9",
           "ancestors": [],
           "items": [
             {
-              "reply": "https://rezics.com/id/d0585111-aa90-4edf-979d-372c44ec47b5",
-              "placement": "https://rezics.com/id/01a13b02-18ae-73d8-a1e3-65be1c07f62c",
+              "reply": "https://rezics.com/id/d1b4c1cc-5b0d-463e-8242-c94ff30f29c7",
+              "placement": "https://rezics.com/id/01a13e7d-a72b-71fc-a151-b0422c50da03",
               "parent": null,
               "author": {
-                "id": "https://rezics.com/id/24a18976-1ce8-42a8-bbf3-2390fecc62bd",
+                "id": "https://rezics.com/id/3aabd94a-25a1-4387-869d-9c2f5071ca7d",
                 "name": "Outcome owner",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:22:35.566Z",
+              "time": "2026-10-15T07:36:24.619Z",
               "language": "en",
-              "revisionId": "69d6d301-cf16-4862-b339-b4819c224e3f",
+              "revisionId": "f8c8644e-d0ea-4a8c-84e7-2674749e6039",
               "title": "Canonical original contribution",
               "body": "",
               "vote": {
@@ -2192,18 +2349,18 @@
               }
             },
             {
-              "reply": "https://rezics.com/id/a6af8bfc-5e75-46a6-a3f6-8d835747b213",
-              "placement": "https://rezics.com/id/01a13b02-315c-7102-b623-0901a2ef9b4c",
-              "parent": "https://rezics.com/id/d0585111-aa90-4edf-979d-372c44ec47b5",
+              "reply": "https://rezics.com/id/137fc303-2f81-43af-abb0-8b8ba9de9ba5",
+              "placement": "https://rezics.com/id/01a13e7d-b4f4-7242-85ec-5499ea387a86",
+              "parent": "https://rezics.com/id/d1b4c1cc-5b0d-463e-8242-c94ff30f29c7",
               "author": {
-                "id": "https://rezics.com/id/24a18976-1ce8-42a8-bbf3-2390fecc62bd",
+                "id": "https://rezics.com/id/3aabd94a-25a1-4387-869d-9c2f5071ca7d",
                 "name": "Outcome owner",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:22:41.884Z",
+              "time": "2026-10-15T07:36:28.148Z",
               "language": "en",
-              "revisionId": "bc55bc44-186a-4c72-84a1-cf33577800d3",
+              "revisionId": "07d16522-865e-470b-9784-48cd33a22428",
               "title": null,
               "body": "First independent contribution",
               "vote": {
@@ -2214,18 +2371,18 @@
               }
             },
             {
-              "reply": "https://rezics.com/id/c0ef9444-97ca-45bc-996e-133fc8a9f502",
-              "placement": "https://rezics.com/id/01a13b02-3156-779b-8fdf-400ba80e92cd",
-              "parent": "https://rezics.com/id/d0585111-aa90-4edf-979d-372c44ec47b5",
+              "reply": "https://rezics.com/id/8dbffb7d-43af-4b05-8914-8e4d4f9d8208",
+              "placement": "https://rezics.com/id/01a13e7d-b4f0-7104-b180-6c088c4a2e28",
+              "parent": "https://rezics.com/id/d1b4c1cc-5b0d-463e-8242-c94ff30f29c7",
               "author": {
-                "id": "https://rezics.com/id/38e503b0-6d34-4bfe-b456-b1493cf36c79",
+                "id": "https://rezics.com/id/6e566505-3acb-4b5e-9418-0db53b3f46aa",
                 "name": "Outcome member",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:22:41.878Z",
+              "time": "2026-10-15T07:36:28.144Z",
               "language": "en",
-              "revisionId": "c3e5c432-a3e7-4de4-b778-cfeb27f8b910",
+              "revisionId": "22865fbd-fdab-4124-bcbc-76eeb47f07b9",
               "title": null,
               "body": "Second independent contribution",
               "vote": {
@@ -2240,8 +2397,8 @@
           "displayLanguages": [],
           "complete": true,
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "88"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "181"
           }
         },
         "headers": {
@@ -2253,16 +2410,16 @@
         "label": "private-canonical-discussion-thread",
         "operationId": "getV1RealmsByRealmThreadsByReply",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f/threads/0393823b-ee6f-4daa-8a42-6898a07acd6c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F486e4026-1b16-4be8-b0fe-276ced04fee8",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95/threads/392188ec-9e84-40d9-a506-a0e93bd51281?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F74834a13-735c-4994-b133-47b076d91eac",
         "status": 200,
         "answer": {
           "profile": "realm-thread-v1",
-          "realm": "https://rezics.com/id/01a13aff-b2a8-715f-b9cf-4959c814587f",
-          "thread": "https://rezics.com/id/0393823b-ee6f-4daa-8a42-6898a07acd6c",
-          "focus": "https://rezics.com/id/0393823b-ee6f-4daa-8a42-6898a07acd6c",
+          "realm": "https://rezics.com/id/01a13e7c-812b-730d-9c4d-90fa000d6f95",
+          "thread": "https://rezics.com/id/392188ec-9e84-40d9-a506-a0e93bd51281",
+          "focus": "https://rezics.com/id/392188ec-9e84-40d9-a506-a0e93bd51281",
           "sort": "best",
           "work": {
-            "id": "https://rezics.com/id/01a13aff-d808-76b3-9aa9-5cdcdd426514",
+            "id": "https://rezics.com/id/01a13e7c-9dc7-74af-bcbc-5be059f9ccf9",
             "title": {
               "value": "Original discussion fixture read-private-discussion",
               "language": "en",
@@ -2273,25 +2430,25 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "ba45700583abf2c03b4c3760bff00d68"
+              "key": "a532b85178d1c25f979312172a7a650f"
             }
           },
-          "rootRevision": "https://rezics.com/id/01a13aff-d808-76b5-8e91-38449078a039",
+          "rootRevision": "https://rezics.com/id/01a13e7c-9dc7-74b1-ba24-4b2a13329ba6",
           "ancestors": [],
           "items": [
             {
-              "reply": "https://rezics.com/id/0393823b-ee6f-4daa-8a42-6898a07acd6c",
-              "placement": "https://rezics.com/id/01a13b01-2030-7482-8e7c-d55d6e94c4e1",
+              "reply": "https://rezics.com/id/392188ec-9e84-40d9-a506-a0e93bd51281",
+              "placement": "https://rezics.com/id/01a13e7d-31c8-7010-a9a2-ce6febaed679",
               "parent": null,
               "author": {
-                "id": "https://rezics.com/id/486e4026-1b16-4be8-b0fe-276ced04fee8",
+                "id": "https://rezics.com/id/74834a13-735c-4994-b133-47b076d91eac",
                 "name": "Outcome owner",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:21:31.952Z",
+              "time": "2026-10-15T07:35:54.568Z",
               "language": "en",
-              "revisionId": "17816d71-61f4-4576-9d97-9c547a88455b",
+              "revisionId": "685d4dd0-4b93-442a-b829-872f74faa891",
               "title": "Original private discussion body and author credit.",
               "body": "",
               "vote": {
@@ -2306,8 +2463,8 @@
           "displayLanguages": [],
           "complete": true,
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "88"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "181"
           }
         },
         "headers": {
@@ -2319,15 +2476,15 @@
         "label": "withdrawn-attachment-post-refused",
         "operationId": "postV1RealmsByRealmAbout-posts",
         "method": "POST",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/about-posts",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/about-posts",
         "body": {
           "profile": "realm-about-post-v1",
-          "zone": "https://rezics.com/id/e5ceb646-0eea-8334-bd79-3a3d68632748",
-          "about": "https://rezics.com/id/01a13b00-4a08-762d-bcdb-f7b2ae1a86cf",
-          "targetRevision": "https://rezics.com/id/01a13b00-4a09-7655-82fa-6fd8d0234d29",
-          "routeRevision": "https://rezics.com/id/01a13b00-b159-7778-b178-3ccbfafc83ef",
+          "zone": "https://rezics.com/id/30e168bc-5e38-82b6-a63c-8470549d4f21",
+          "about": "https://rezics.com/id/01a13e7c-d47a-732a-9780-419c293b3528",
+          "targetRevision": "https://rezics.com/id/01a13e7c-d47a-732c-8832-92fd536811b9",
+          "routeRevision": "https://rezics.com/id/01a13e7d-0b29-72d0-a925-c2f9d7ce7cc6",
           "path": "/owner",
-          "actingSubject": "https://rezics.com/id/24a18976-1ce8-42a8-bbf3-2390fecc62bd",
+          "actingSubject": "https://rezics.com/id/3aabd94a-25a1-4387-869d-9c2f5071ca7d",
           "language": "en",
           "direction": "ltr",
           "body": "After withdrawal"
@@ -2350,14 +2507,14 @@
         "label": "private-about-thread",
         "operationId": "getV1RealmsByRealmAbout-thread",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13b00-21c7-7756-ad1f-8fbf9c48060c&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff00dc802-63d1-432e-b561-edc3490a0b8e",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13e7c-c1ff-705a-90b7-b02851c8ed91&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F169111b2-85a2-4f9c-9a5a-a5b6fcfda114",
         "status": 200,
         "answer": {
-          "realm": "https://rezics.com/id/01a13aff-b2a8-715f-b9cf-4959c814587f",
-          "about": "https://rezics.com/id/01a13b00-21c7-7756-ad1f-8fbf9c48060c",
+          "realm": "https://rezics.com/id/01a13e7c-812b-730d-9c4d-90fa000d6f95",
+          "about": "https://rezics.com/id/01a13e7c-c1ff-705a-90b7-b02851c8ed91",
           "thread": {
-            "reply": "https://rezics.com/id/3ba40177-5172-4043-b259-331dfb9a3430",
-            "rootRevision": "https://rezics.com/id/01a13b00-21c7-7758-8ea8-a5e12cd35def"
+            "reply": "https://rezics.com/id/577e3223-7eb6-4b7c-8851-d0183355225f",
+            "rootRevision": "https://rezics.com/id/01a13e7c-c1ff-705c-ace8-06c0e33268f1"
           }
         },
         "headers": {
@@ -2369,16 +2526,16 @@
         "label": "canonical-discussion-thread",
         "operationId": "getV1RealmsByRealmThreadsByReply",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/threads/79bdccaf-2ed5-4988-ac82-fcccd3da4936?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F708c6277-a20a-4677-a526-a82162e1cadd",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/threads/a83753d0-3d12-48b7-a73c-593eb413b791?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F76932216-6a79-4d7c-ac1b-ab70828db4e3",
         "status": 200,
         "answer": {
           "profile": "realm-thread-v1",
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "thread": "https://rezics.com/id/79bdccaf-2ed5-4988-ac82-fcccd3da4936",
-          "focus": "https://rezics.com/id/79bdccaf-2ed5-4988-ac82-fcccd3da4936",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "thread": "https://rezics.com/id/a83753d0-3d12-48b7-a73c-593eb413b791",
+          "focus": "https://rezics.com/id/a83753d0-3d12-48b7-a73c-593eb413b791",
           "sort": "best",
           "work": {
-            "id": "https://rezics.com/id/01a13aff-b970-744d-856b-84b90fa221c6",
+            "id": "https://rezics.com/id/01a13e7c-8c1b-7584-b525-a24b3c183f96",
             "title": {
               "value": "Original discussion fixture read-discussion",
               "language": "en",
@@ -2389,25 +2546,25 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "5f0e0d440d7e3509d2c7c3bda2496c92"
+              "key": "3a337009a0a72c0fbf6f2cba231f1d57"
             }
           },
-          "rootRevision": "https://rezics.com/id/01a13aff-b970-744f-86d0-8164dc0844f6",
+          "rootRevision": "https://rezics.com/id/01a13e7c-8c1b-7586-9748-76c3e953be03",
           "ancestors": [],
           "items": [
             {
-              "reply": "https://rezics.com/id/79bdccaf-2ed5-4988-ac82-fcccd3da4936",
-              "placement": "https://rezics.com/id/01a13b01-0207-7402-94d5-cc35c30e5828",
+              "reply": "https://rezics.com/id/a83753d0-3d12-48b7-a73c-593eb413b791",
+              "placement": "https://rezics.com/id/01a13e7d-259a-7341-a5b0-d1a03b1355c1",
               "parent": null,
               "author": {
-                "id": "https://rezics.com/id/24a18976-1ce8-42a8-bbf3-2390fecc62bd",
+                "id": "https://rezics.com/id/3aabd94a-25a1-4387-869d-9c2f5071ca7d",
                 "name": "Outcome owner",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:21:24.231Z",
+              "time": "2026-10-15T07:35:51.450Z",
               "language": "en",
-              "revisionId": "f2d1a779-99d8-4fe2-b999-e3b2de17d634",
+              "revisionId": "f9524de7-12f2-4a74-865f-04d7c49f2fe0",
               "title": "Original public discussion body and author credit.",
               "body": "",
               "vote": {
@@ -2422,8 +2579,8 @@
           "displayLanguages": [],
           "complete": true,
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "90"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "183"
           }
         },
         "headers": {
@@ -2435,16 +2592,16 @@
         "label": "private-canonical-discussion-thread",
         "operationId": "getV1RealmsByRealmThreadsByReply",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f/threads/0393823b-ee6f-4daa-8a42-6898a07acd6c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff00dc802-63d1-432e-b561-edc3490a0b8e",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95/threads/392188ec-9e84-40d9-a506-a0e93bd51281?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F169111b2-85a2-4f9c-9a5a-a5b6fcfda114",
         "status": 200,
         "answer": {
           "profile": "realm-thread-v1",
-          "realm": "https://rezics.com/id/01a13aff-b2a8-715f-b9cf-4959c814587f",
-          "thread": "https://rezics.com/id/0393823b-ee6f-4daa-8a42-6898a07acd6c",
-          "focus": "https://rezics.com/id/0393823b-ee6f-4daa-8a42-6898a07acd6c",
+          "realm": "https://rezics.com/id/01a13e7c-812b-730d-9c4d-90fa000d6f95",
+          "thread": "https://rezics.com/id/392188ec-9e84-40d9-a506-a0e93bd51281",
+          "focus": "https://rezics.com/id/392188ec-9e84-40d9-a506-a0e93bd51281",
           "sort": "best",
           "work": {
-            "id": "https://rezics.com/id/01a13aff-d808-76b3-9aa9-5cdcdd426514",
+            "id": "https://rezics.com/id/01a13e7c-9dc7-74af-bcbc-5be059f9ccf9",
             "title": {
               "value": "Original discussion fixture read-private-discussion",
               "language": "en",
@@ -2455,25 +2612,25 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "ba45700583abf2c03b4c3760bff00d68"
+              "key": "a532b85178d1c25f979312172a7a650f"
             }
           },
-          "rootRevision": "https://rezics.com/id/01a13aff-d808-76b5-8e91-38449078a039",
+          "rootRevision": "https://rezics.com/id/01a13e7c-9dc7-74b1-ba24-4b2a13329ba6",
           "ancestors": [],
           "items": [
             {
-              "reply": "https://rezics.com/id/0393823b-ee6f-4daa-8a42-6898a07acd6c",
-              "placement": "https://rezics.com/id/01a13b01-2030-7482-8e7c-d55d6e94c4e1",
+              "reply": "https://rezics.com/id/392188ec-9e84-40d9-a506-a0e93bd51281",
+              "placement": "https://rezics.com/id/01a13e7d-31c8-7010-a9a2-ce6febaed679",
               "parent": null,
               "author": {
-                "id": "https://rezics.com/id/486e4026-1b16-4be8-b0fe-276ced04fee8",
+                "id": "https://rezics.com/id/74834a13-735c-4994-b133-47b076d91eac",
                 "name": "Outcome owner",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:21:31.952Z",
+              "time": "2026-10-15T07:35:54.568Z",
               "language": "en",
-              "revisionId": "17816d71-61f4-4576-9d97-9c547a88455b",
+              "revisionId": "685d4dd0-4b93-442a-b829-872f74faa891",
               "title": "Original private discussion body and author credit.",
               "body": "",
               "vote": {
@@ -2488,8 +2645,8 @@
           "displayLanguages": [],
           "complete": true,
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "90"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "183"
           }
         },
         "headers": {
@@ -2501,15 +2658,15 @@
         "label": "review-required-post-refused",
         "operationId": "postV1RealmsByRealmAbout-posts",
         "method": "POST",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/about-posts",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/about-posts",
         "body": {
           "profile": "realm-about-post-v1",
-          "zone": "https://rezics.com/id/e5ceb646-0eea-8334-bd79-3a3d68632748",
-          "about": "https://rezics.com/id/01a13b00-6cb7-719b-ace9-3094267f3575",
-          "targetRevision": "https://rezics.com/id/01a13b00-6cb7-719d-a8c8-f4640e783b8c",
-          "routeRevision": "https://rezics.com/id/01a13b00-b159-7778-b178-3ccbfafc83ef",
+          "zone": "https://rezics.com/id/30e168bc-5e38-82b6-a63c-8470549d4f21",
+          "about": "https://rezics.com/id/01a13e7c-ebec-7364-95db-974d71e31fba",
+          "targetRevision": "https://rezics.com/id/01a13e7c-ebec-7366-9b20-85118fbc6524",
+          "routeRevision": "https://rezics.com/id/01a13e7d-0b29-72d0-a925-c2f9d7ce7cc6",
           "path": "/moderation",
-          "actingSubject": "https://rezics.com/id/708c6277-a20a-4677-a526-a82162e1cadd",
+          "actingSubject": "https://rezics.com/id/76932216-6a79-4d7c-ac1b-ab70828db4e3",
           "language": "en",
           "direction": "ltr",
           "body": "Requires review"
@@ -2530,11 +2687,11 @@
         "label": "reviewed-empty-about-thread",
         "operationId": "getV1RealmsByRealmAbout-thread",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13b00-6cb7-719b-ace9-3094267f3575&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F708c6277-a20a-4677-a526-a82162e1cadd",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13e7c-ebec-7364-95db-974d71e31fba&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F76932216-6a79-4d7c-ac1b-ab70828db4e3",
         "status": 200,
         "answer": {
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "about": "https://rezics.com/id/01a13b00-6cb7-719b-ace9-3094267f3575",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "about": "https://rezics.com/id/01a13e7c-ebec-7364-95db-974d71e31fba",
           "thread": null
         },
         "headers": {
@@ -2548,7 +2705,7 @@
         "label": "private-about-thread",
         "operationId": "getV1RealmsByRealmAbout-thread",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13b00-21c7-7756-ad1f-8fbf9c48060c&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd5c1677b-3605-4598-82e0-05edf1271e79",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13e7c-c1ff-705a-90b7-b02851c8ed91&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F6e2d3a38-485e-462b-96c2-2616e5b59a1f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/work_unavailable",
@@ -2565,7 +2722,7 @@
         "label": "private-canonical-discussion-thread",
         "operationId": "getV1RealmsByRealmThreadsByReply",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-b2a8-715f-b9cf-4959c814587f/threads/0393823b-ee6f-4daa-8a42-6898a07acd6c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd5c1677b-3605-4598-82e0-05edf1271e79",
+        "path": "/v1/realms/01a13e7c-812b-730d-9c4d-90fa000d6f95/threads/392188ec-9e84-40d9-a506-a0e93bd51281?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F6e2d3a38-485e-462b-96c2-2616e5b59a1f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/work_unavailable",
@@ -2582,15 +2739,15 @@
         "label": "operator-own-post",
         "operationId": "postV1RealmsByRealmAbout-posts",
         "method": "POST",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/about-posts",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/about-posts",
         "body": {
           "profile": "realm-about-post-v1",
-          "zone": "https://rezics.com/id/e5ceb646-0eea-8334-bd79-3a3d68632748",
-          "about": "https://rezics.com/id/01a13b00-9511-71ba-92af-f5034861aac3",
-          "targetRevision": "https://rezics.com/id/01a13b00-9511-71bc-94aa-a7397caa1f1c",
-          "routeRevision": "https://rezics.com/id/01a13b00-b159-7778-b178-3ccbfafc83ef",
+          "zone": "https://rezics.com/id/30e168bc-5e38-82b6-a63c-8470549d4f21",
+          "about": "https://rezics.com/id/01a13e7d-003c-716d-92d2-255af97e4d87",
+          "targetRevision": "https://rezics.com/id/01a13e7d-003c-716f-a75f-0526434359ca",
+          "routeRevision": "https://rezics.com/id/01a13e7d-0b29-72d0-a925-c2f9d7ce7cc6",
           "path": "/operator",
-          "actingSubject": "https://rezics.com/id/d5c1677b-3605-4598-82e0-05edf1271e79",
+          "actingSubject": "https://rezics.com/id/6e2d3a38-485e-462b-96c2-2616e5b59a1f",
           "language": "en",
           "direction": "ltr",
           "body": "Operator as its own Person"
@@ -2598,12 +2755,12 @@
         "status": 201,
         "answer": {
           "profile": "realm-about-post-v1",
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "about": "https://rezics.com/id/01a13b00-9511-71ba-92af-f5034861aac3",
-          "author": "https://rezics.com/id/d5c1677b-3605-4598-82e0-05edf1271e79",
-          "reply": "https://rezics.com/id/7902c396-82a3-463d-986a-5dd5ad2fd486",
-          "revisionId": "f1b4bfa2-8c23-4516-85ff-23f1d166153d",
-          "placement": "https://rezics.com/id/01a13b02-792a-74f7-b634-36a9d4982935"
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "about": "https://rezics.com/id/01a13e7d-003c-716d-92d2-255af97e4d87",
+          "author": "https://rezics.com/id/6e2d3a38-485e-462b-96c2-2616e5b59a1f",
+          "reply": "https://rezics.com/id/8409873c-e84a-4589-975e-b1e972d9a1ae",
+          "revisionId": "80b8ab87-cae3-4f6e-9575-2310410df1e7",
+          "placement": "https://rezics.com/id/01a13e7d-e122-7327-ae38-00b765060f52"
         },
         "headers": {
           "cache-control": "no-store",
@@ -2614,15 +2771,15 @@
         "label": "impersonation-refused",
         "operationId": "postV1RealmsByRealmAbout-posts",
         "method": "POST",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/about-posts",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/about-posts",
         "body": {
           "profile": "realm-about-post-v1",
-          "about": "https://rezics.com/id/01a13b00-9511-71ba-92af-f5034861aac3",
-          "zone": "https://rezics.com/id/e5ceb646-0eea-8334-bd79-3a3d68632748",
-          "targetRevision": "https://rezics.com/id/01a13b00-9511-71bc-94aa-a7397caa1f1c",
-          "routeRevision": "https://rezics.com/id/01a13b00-b159-7778-b178-3ccbfafc83ef",
+          "about": "https://rezics.com/id/01a13e7d-003c-716d-92d2-255af97e4d87",
+          "zone": "https://rezics.com/id/30e168bc-5e38-82b6-a63c-8470549d4f21",
+          "targetRevision": "https://rezics.com/id/01a13e7d-003c-716f-a75f-0526434359ca",
+          "routeRevision": "https://rezics.com/id/01a13e7d-0b29-72d0-a925-c2f9d7ce7cc6",
           "path": "/operator",
-          "actingSubject": "https://rezics.com/id/24a18976-1ce8-42a8-bbf3-2390fecc62bd",
+          "actingSubject": "https://rezics.com/id/3aabd94a-25a1-4387-869d-9c2f5071ca7d",
           "language": "en",
           "direction": "ltr",
           "body": "Impersonation attempt"
@@ -2643,14 +2800,14 @@
         "label": "canonical-about-thread",
         "operationId": "getV1RealmsByRealmAbout-thread",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13b00-9511-71ba-92af-f5034861aac3&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd5c1677b-3605-4598-82e0-05edf1271e79",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13e7d-003c-716d-92d2-255af97e4d87&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F6e2d3a38-485e-462b-96c2-2616e5b59a1f",
         "status": 200,
         "answer": {
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "about": "https://rezics.com/id/01a13b00-9511-71ba-92af-f5034861aac3",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "about": "https://rezics.com/id/01a13e7d-003c-716d-92d2-255af97e4d87",
           "thread": {
-            "reply": "https://rezics.com/id/7902c396-82a3-463d-986a-5dd5ad2fd486",
-            "rootRevision": "https://rezics.com/id/01a13b00-9511-71bc-94aa-a7397caa1f1c"
+            "reply": "https://rezics.com/id/8409873c-e84a-4589-975e-b1e972d9a1ae",
+            "rootRevision": "https://rezics.com/id/01a13e7d-003c-716f-a75f-0526434359ca"
           }
         },
         "headers": {
@@ -2662,16 +2819,16 @@
         "label": "canonical-discussion-thread",
         "operationId": "getV1RealmsByRealmThreadsByReply",
         "method": "GET",
-        "path": "/v1/realms/01a13aff-9c30-769a-a2aa-6e215b9d11d8/threads/7902c396-82a3-463d-986a-5dd5ad2fd486?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd5c1677b-3605-4598-82e0-05edf1271e79",
+        "path": "/v1/realms/01a13e7c-72ea-734a-9233-9151059c6a68/threads/8409873c-e84a-4589-975e-b1e972d9a1ae?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F6e2d3a38-485e-462b-96c2-2616e5b59a1f",
         "status": 200,
         "answer": {
           "profile": "realm-thread-v1",
-          "realm": "https://rezics.com/id/01a13aff-9c30-769a-a2aa-6e215b9d11d8",
-          "thread": "https://rezics.com/id/7902c396-82a3-463d-986a-5dd5ad2fd486",
-          "focus": "https://rezics.com/id/7902c396-82a3-463d-986a-5dd5ad2fd486",
+          "realm": "https://rezics.com/id/01a13e7c-72ea-734a-9233-9151059c6a68",
+          "thread": "https://rezics.com/id/8409873c-e84a-4589-975e-b1e972d9a1ae",
+          "focus": "https://rezics.com/id/8409873c-e84a-4589-975e-b1e972d9a1ae",
           "sort": "best",
           "work": {
-            "id": "https://rezics.com/id/01a13b00-9511-71ba-92af-f5034861aac3",
+            "id": "https://rezics.com/id/01a13e7d-003c-716d-92d2-255af97e4d87",
             "title": {
               "value": "Original discussion fixture operator",
               "language": "en",
@@ -2682,25 +2839,25 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "work",
-              "key": "dcb0da34a93f27f4464c0c231c557214"
+              "key": "49286c1acb5d458c4c74844be0bb3360"
             }
           },
-          "rootRevision": "https://rezics.com/id/01a13b00-9511-71bc-94aa-a7397caa1f1c",
+          "rootRevision": "https://rezics.com/id/01a13e7d-003c-716f-a75f-0526434359ca",
           "ancestors": [],
           "items": [
             {
-              "reply": "https://rezics.com/id/7902c396-82a3-463d-986a-5dd5ad2fd486",
-              "placement": "https://rezics.com/id/01a13b02-792a-74f7-b634-36a9d4982935",
+              "reply": "https://rezics.com/id/8409873c-e84a-4589-975e-b1e972d9a1ae",
+              "placement": "https://rezics.com/id/01a13e7d-e122-7327-ae38-00b765060f52",
               "parent": null,
               "author": {
-                "id": "https://rezics.com/id/d5c1677b-3605-4598-82e0-05edf1271e79",
+                "id": "https://rezics.com/id/6e2d3a38-485e-462b-96c2-2616e5b59a1f",
                 "name": "Outcome operator",
                 "handle": null
               },
               "blocked": false,
-              "time": "2026-10-14T15:23:00.266Z",
+              "time": "2026-10-15T07:36:39.458Z",
               "language": "en",
-              "revisionId": "f1b4bfa2-8c23-4516-85ff-23f1d166153d",
+              "revisionId": "80b8ab87-cae3-4f6e-9575-2310410df1e7",
               "title": "Operator as its own Person",
               "body": "",
               "vote": {
@@ -2715,8 +2872,8 @@
           "displayLanguages": [],
           "complete": true,
           "sourcePosition": {
-            "dataEpoch": "29b90675-cfff-4903-895f-07884c0772bb",
-            "sequence": "94"
+            "dataEpoch": "8a5d5de8-6b08-4df9-923a-b1e8781abf0a",
+            "sequence": "187"
           }
         },
         "headers": {

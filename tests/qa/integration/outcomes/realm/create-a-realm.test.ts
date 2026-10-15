@@ -10,6 +10,7 @@ import { loadRealmView } from '../../../../../apps/web/features/realm/realm-page
 import { realmDiscussionReads } from '../../../../../apps/web/features/realm/discussion-read.ts';
 import creation from '../../../../../scripts/qa/cases/outcomes/realm/create-a-realm.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordJapaneseReads } from '../../../support/recorded-locale-visit.ts';
 import { recordedMainClient } from '../../../support/recorded-main-client.ts';
 import {
   personaSessions,
@@ -24,7 +25,7 @@ let sessions: PersonaSessions;
 let founder: { person: PersonaSession; realm: string };
 let handleOwner: { person: PersonaSession; realm: string };
 let quotaPerson: PersonaSession;
-const recording = new OutcomeRecorder(creation);
+const recording = recordJapaneseReads(new OutcomeRecorder(creation));
 type CreatedRealm = { space: string; realm: string; owner: string; replayed: boolean };
 const root = (id: string) => `/v1/realms/${id.slice(-36)}`;
 const acting = (person: PersonaSession) =>

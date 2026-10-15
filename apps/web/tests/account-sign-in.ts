@@ -37,6 +37,12 @@ export async function signInAtAccounts(
   onboard = false,
 ): Promise<void> {
   const finished = (url: URL) => signInDestinationMatches(url, next, onboard);
+  const destinationReady = async () => {
+    // The callback can commit its destination while that document is still a
+    // streaming route skeleton. Return after the destination has mounted.
+    await page.waitForLoadState('domcontentloaded', { timeout: 60_000 });
+    await page.locator('main > [role="status"][aria-busy="true"]').waitFor({ state: 'hidden', timeout: 60_000 });
+  };
   // Dispose an auth/start document reached by an expired-session navigation
   // before its mount effect can compete with this sign-in.
   await page.goto('about:blank');
@@ -58,7 +64,7 @@ export async function signInAtAccounts(
   );
   if (new URL(page.url()).pathname.endsWith('/identity/failed'))
     throw new Error('Account sign-in failed');
-  if (finished(new URL(page.url()))) return;
+  if (finished(new URL(page.url()))) { await destinationReady(); return; }
   await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
   const locale =
     matchUiLocaleTag((await page.locator('html').getAttribute('lang')) ?? undefined) ?? 'en';
@@ -87,4 +93,5 @@ export async function signInAtAccounts(
   // Playwright's predicate URL matcher also waits for document load. Assert
   // the committed redirect directly; later feature checks own UI readiness.
   await expect.poll(() => finished(new URL(page.url())), { timeout: 60_000 }).toBe(true);
+  await destinationReady();
 }

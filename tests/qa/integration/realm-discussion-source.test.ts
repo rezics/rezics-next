@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { realmDiscussionSource, realmSourcePopulation, type RealmSourceCandidate } from '../support/realm-discussion-source.ts';
+import { realmDiscussionSource, realmSourceBuildDeadlineMs, realmSourcePopulation, type RealmSourceCandidate } from '../support/realm-discussion-source.ts';
 
 let source: Awaited<ReturnType<typeof realmDiscussionSource>>;
 const opened: { candidate: RealmSourceCandidate; dispose(): Promise<void> }[] = [];
@@ -28,8 +28,8 @@ test('complete keyed source retains all inventories, sequence starts, measured b
   expect(metadata.discussion.nested).toHaveLength(34);
   expect(Object.keys(metadata.sequenceStarts.ranking)).toHaveLength(6);
   expect(Object.keys(metadata.sequenceStarts.discussion)).toHaveLength(6);
-  expect(manifest.provenance.producerBuild?.deadlineMs).toBe(1_800_000);
-  expect(manifest.provenance.producerBuild!.elapsedMs).toBeLessThan(1_800_000);
+  expect(manifest.provenance.producerBuild?.deadlineMs).toBe(realmSourceBuildDeadlineMs);
+  expect(manifest.provenance.producerBuild!.elapsedMs).toBeLessThan(realmSourceBuildDeadlineMs);
   expect(manifest.provenance.elapsedMs).toBeLessThan(600_000);
   expect(metadata.measurements.requests).toBeGreaterThanOrEqual(552 * 3);
   expect(metadata.measurements.classes['Main POST /v1/realm-replies']!.count).toBeGreaterThanOrEqual(552);

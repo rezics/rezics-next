@@ -1,3 +1,4 @@
+import { materializeData } from 'native-i18n';
 import { localizedPath } from '../../i18n/locale.ts';
 import { spaceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
@@ -132,7 +133,7 @@ function TabPage({ tab, locale, roster = 'listed' }: {
         locale={locale}
         messages={messages}
         only={tab === 'rules' || tab === 'members' ? tab : undefined}
-        members={locale === 'zh-Hans' ? '12,408 位成员' : '12,408 members'}
+        members={materializeData(realmMessagesFor(locale), { locale }).members(12408)}
         moderators={moderators}
         listed={rosterPage}
         others={[
@@ -171,7 +172,7 @@ function TabPage({ tab, locale, roster = 'listed' }: {
       zone={zone}
       locale={locale}
       site={tab === 'browse' || tab === 'browse-moved' || tab === 'browse-failed' || tab === 'browse-offline'}
-      members={locale === 'zh-Hans' ? '12,408 位成员' : '12,408 members'}
+      members={materializeData(realmMessagesFor(locale), { locale }).members(12408)}
     >
       {content}
     </RealmPageStory>

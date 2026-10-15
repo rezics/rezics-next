@@ -37,7 +37,7 @@ function owner(rows = [candidate(first), candidate(second)], signedIn = true) {
       if (body.includes('ASK')) return { boolean: true };
       const zone = [first, second].find(id => body.includes(`<${id}>`))!;
       visibility.push(zone);
-      return { results: { bindings: [{ kind: term('space'), space: term(zoneSpace(zone)),
+      return { results: { bindings: [{ target: term(zone), kind: term('space'), space: term(zoneSpace(zone)),
         disclosure: term(`${RV}Private`), zoneDisclosure: term(`${RV}Private`) }] } };
     } },
   } as unknown as WorkActivationEnvironment;

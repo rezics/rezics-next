@@ -1,5 +1,17 @@
 import { expect, test } from 'bun:test';
 import { composeLine, parseLine, partsOf, partsProblem, qualifierOf, readingLine } from './ingredient-line.ts';
+import { scaleIngredients } from '../../../../services/main/src/modules/recipe/operations.ts';
+import { checkOccurrenceQualifier, type OccurrenceRecord } from '../../../../services/main/src/modules/structure/format.ts';
+
+test('editor ingredients retain the source spans Main needs for unit conversion with preparation notes', () => {
+  const id = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+  const qualifier = qualifierOf(parseLine('200 g butter, softened'), 'en');
+  const occurrence: OccurrenceRecord = { occurrence: id, state: 'active', parent: id, role: 'ingredient',
+    labels: [], introducedBy: id, qualifier: checkOccurrenceQualifier(qualifier) };
+  expect(scaleIngredients([occurrence], { numerator: 1n, denominator: 1n })).toMatchObject([
+    { line: '200 g butter, softened', alternateLine: '7 ⅛ ounces butter, softened', alternateSystem: 'us' },
+  ]);
+});
 
 test('one typed line splits into quantity, unit, name and note', () => {
   expect(parseLine('1½ cups all-purpose flour, sifted')).toEqual({ quantity: '1½', unit: 'cups', name: 'all-purpose flour', note: 'sifted' });

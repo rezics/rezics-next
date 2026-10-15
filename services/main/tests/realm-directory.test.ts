@@ -63,7 +63,7 @@ test('Realm directory first pages retain their published snapshot while continua
   };
   const index = new RealmDirectoryIndex({ query, connect: async () => ({ query, release() {} }) } as unknown as Pool);
   const session = { options: {} as { cursor?: string }, position: { dataEpoch: 'epoch', sequence: '23' },
-    disclosure: async () => [],
+    disclosure: async (targets: readonly unknown[]) => { expect(targets).toEqual([]); return []; },
     summaries: async () => { published = '18'; if (changeMembership) revision = '5'; return []; },
     deps: { environment: {}, access: { realmDirectory: index } } } as unknown as WorkReadSession;
   expect((await readRealmDirectory(session, { sort: 'members' })).sourcePosition).toEqual(sourcePosition);

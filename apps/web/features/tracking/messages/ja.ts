@@ -53,7 +53,7 @@ export default {
   conflictStarted: '開始', conflictFinished: '終了日', conflictPosition: '位置',
   conflictEdition: insert('{{edition}}を追加', { edition: String }),
 
-  workProgress: '作品の進み具合', notStarted: '未読',
+  workProgress: '作品の進捗', notStarted: '未読',
   seriesProgress: 'シリーズの進み具合', seriesUnavailable: 'シリーズの進み具合を読み込めませんでした。',
   stateCaughtUp: '公開済みの分に追いついている', stateFinishedParts: '刊行済みの巻をすべて読了',
   stateConcluded: 'シリーズは完結', stateCorrespondence: '対応関係が未確定',

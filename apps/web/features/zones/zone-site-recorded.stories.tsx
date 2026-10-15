@@ -1,3 +1,5 @@
+import { creditText } from '../zones/credit-messages.ts';
+import { profileHref } from '../profile/route.ts';
 import { documentText } from '@rezics/document';
 import type { CanonicalAddress } from '@rezics/model/address';
 import type { Meta, StoryObj } from '@storybook/react-vite';
@@ -94,8 +96,8 @@ async function publishedPlay({ canvasElement }: { canvasElement: HTMLElement }) 
   const credit = recordedCredit('published-presentation');
   await expect(canvas.findByRole('heading', { level: 1, name: recordedName('published-presentation') })).resolves.toBeVisible();
   await expect(canvas.getByText(text)).toBeVisible();
-  await expect(canvas.getByText(credit.rightsBasis)).toBeVisible();
-  await expect(canvas.getByText(credit.author)).toBeVisible();
+  await expect(canvas.getByText(creditText.en.original)).toBeVisible();
+  await expect(canvas.getByRole('link', { name: creditText.en.contributor })).toHaveAttribute('href', localizedPath(profileHref({ handle: null, id: credit.author }), 'en'));
   await expect(canvas.getByRole('link', { name: realmMessages.home })).toBeVisible();
 }
 

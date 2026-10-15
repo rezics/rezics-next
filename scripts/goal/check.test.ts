@@ -7,6 +7,8 @@ import { checkChangedFiles, checkFailureLines, parseCheckArgs, runCheckCommand, 
 import { tierBunTestArgs } from '../qa/core.ts';
 import { withSlot } from './qa-slots.ts';
 import { type SlowTestRecord } from './unit-gate.ts';
+import { inferenceGateCommand } from '../api/inference-cost.ts';
+import { runSurfaceGate } from './surface-gate.ts';
 
 const scratch = join(import.meta.dir, '../../.temp/worker-check-tests');
 const fixtures: string[] = [];
@@ -66,6 +68,90 @@ test('a failing type check prints its diagnostic and returns failure without pas
   expect(f.lines.join('\n')).not.toContain('compiler startup noise');
   expect(f.lines.join('\n')).not.toContain('passing case');
   expect(result.checks.filter(check => check.code !== 0).map(check => check.name)).toEqual(['types']);
+});
+
+test('API changes run the inference gate in the types lane and propagate a planted regression', async () => {
+  const f = fixture();
+  const changed = ['services/main/src/app.ts', 'tests/qa/client/main-contract.ts'];
+  const runner: CheckRunner = async (command, cwd, log) => command.includes('scripts/api/inference-cost.ts')
+    ? { code: 1, output: 'error: Inference cost regression:\neden.instantiations: 1100 exceeds 1050 (baseline 1000, +5%)' }
+    : f.runner(command, cwd, log);
+  const result = await workerCheck({ ...f, changed, only: ['types'], runner });
+  expect(result.code).toBe(1);
+  expect(result.checks.find(check => check.name === 'inference')?.code).toBe(1);
+  expect(f.lines.join('\n')).toContain('eden.instantiations: 1100 exceeds 1050');
+  const passing = await workerCheck({ ...f, changed, only: ['types'] });
+  expect(passing.code).toBe(0);
+  expect(f.commands).toContainEqual(inferenceGateCommand);
+});
+
+test('merge evidence covers only its completed types and files while newly selected checks still run', async () => {
+  const f = fixture();
+  const result = await workerCheck({ ...f, changed: ['services/main/src/app.ts'],
+    tests: ['scripts/example.test.ts', 'scripts/another.test.ts'],
+    completed: { typeWorkspaces: ['main'], testFiles: ['scripts/example.test.ts'] } });
+  expect(result.code).toBe(0);
+  expect(f.commands.some(command => command[1] === 'main:typecheck')).toBe(false);
+  expect(f.commands).toContainEqual(inferenceGateCommand);
+  expect(f.commands.find(command => command[1] === 'scripts/qa/test.ts')?.slice(2, 3))
+    .toEqual(['scripts/another.test.ts']);
+  expect(f.commands.flat()).not.toContain('scripts/example.test.ts');
+});
+
+test('successful checks reuse the same clean tree and selection, but never dirty trees or failures', async () => {
+  const f = fixture();
+  const git = (...args: string[]) => {
+    const result = spawnSync('git', args, { cwd: f.cwd, encoding: 'utf8' });
+    expect(result.status).toBe(0);
+    return result.stdout.trim();
+  };
+  git('init', '-qb', 'main');
+  git('config', 'user.name', 'Check fixture');
+  git('config', 'user.email', 'check@example.invalid');
+  writeFileSync(join(f.cwd, '.gitignore'), '.temp/\n');
+  git('add', '.'); git('commit', '-qm', 'Initial tree');
+  const options = { ...f, treePrepared: true, cache: true, only: ['lint'] as const };
+  expect((await workerCheck(options)).code).toBe(0);
+  const count = f.commands.length;
+  git('commit', '--allow-empty', '-qm', 'Same tree under a new commit');
+  expect((await workerCheck(options)).code).toBe(0);
+  expect(f.commands).toHaveLength(count);
+  expect(f.lines.join('\n')).toContain('reused successful check for tree');
+
+  writeFileSync(join(f.cwd, 'scripts/example.ts'), 'export const changed = true;\n');
+  await workerCheck(options);
+  expect(f.commands).toHaveLength(count * 2);
+  git('add', '.'); git('commit', '-qm', 'Changed tree');
+  await workerCheck(options);
+  expect(f.commands).toHaveLength(count * 3);
+  await workerCheck({ ...options, changed: ['scripts/example.test.ts'] });
+  expect(f.commands).toHaveLength(count * 4);
+
+  git('commit', '--allow-empty', '-qm', 'Still the same tree');
+  writeFileSync(join(f.cwd, 'scripts/example.ts'), 'export const fail = true;\n');
+  git('add', '.'); git('commit', '-qm', 'Failing tree');
+  let attempts = 0;
+  const runner: CheckRunner = async () => { attempts++; return { code: 1, output: 'error: planted failure' }; };
+  expect((await workerCheck({ ...options, runner })).code).toBe(1);
+  expect((await workerCheck({ ...options, runner })).code).toBe(1);
+  expect(attempts).toBe(count * 2);
+});
+
+test('surface check and landing also refuse an inference regression before QA', async () => {
+  const f = fixture();
+  const selection = { main: 'main', rows: [], changed: ['tests/qa/client/main-contract.ts'], units: [], stories: [], guards: [], proofs: [] };
+  for (const workerStatic of [true, false]) {
+    let qaStarted = false;
+    const runner: CheckRunner = async (command, cwd, log) => {
+      if (command[1] === 'scripts/qa/test.ts') qaStarted = true;
+      return command.includes('scripts/api/inference-cost.ts') ? { code: 1, output: 'error: Inference cost regression' } : f.runner(command, cwd, log);
+    };
+    const result = await runSurfaceGate(f.cwd, selection, { ...f, runner, workerStatic, only: ['types'],
+      gateLaneOptions: { directory: join(f.cwd, '.temp/gate-lanes'), announce: () => {} } });
+    expect(result.code).toBe(1);
+    expect(result.checks.find(check => check.name === 'types')?.code).toBe(1);
+    expect(qaStarted).toBe(false);
+  }
 });
 
 test('worker guards use changed inputs and report empty changes without acquiring a QA slot', async () => {

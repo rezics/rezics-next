@@ -1,4 +1,5 @@
-import { type UsageSample, type UsageSnapshot, type UsageReport, type AccountUsage, CODEX_HOME, CODEX_1_HOME, type CodexResetStatus, type CodexResetLoad } from './types.ts';
+import { type UsageSample, type UsageSnapshot, type UsageReport, type AccountUsage, type CodexResetStatus, type CodexResetLoad } from './types.ts';
+import { configuredAccounts } from './config.ts';
 import { readFileSync, mkdirSync, writeFileSync, readdirSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import { usagePath, usageHistoryPath, stateDir, codexResetCachePath, CODEX_RESET_CACHE_MS, CODEX_RESET_URL } from './ledger.ts';
 import { join, dirname } from 'node:path';
@@ -184,11 +185,11 @@ function tail(file: string, bytes: number): string {
 }
 
 export function codexAccounts(): AccountUsage[] {
-  const accounts: AccountUsage[] = [
-    { account: 'codex', home: CODEX_HOME, engines: ['codex', 'luna'] },
-    { account: 'codex-1', home: CODEX_1_HOME, engines: ['codex-1'] },
-  ];
+  const accounts: AccountUsage[] = configuredAccounts().map((account, index) => ({ account: account.engine,
+    home: account.home ?? '', engines: [account.engine, ...(index === 0 ? ['luna'] : [])],
+    weight: account.weight, pastAllowance: account.pastAllowance }));
   return accounts.map(account => {
+    if (!account.home) return account;
     for (const file of recentRollouts(account.home)) {
       const usage = parseCodexUsage(tail(file, 512 * 1024), Date.now());
       if (usage.used !== undefined) return { ...account, ...usage };

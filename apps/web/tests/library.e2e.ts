@@ -79,7 +79,7 @@ test('a reader starts with an empty library, shelves a Work and manages it from 
 }, info) => {
   test.setTimeout(300_000);
   await signInAtAccounts(page, '/en/library', member());
-  await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible({ timeout: 30_000 });
   if (await page.getByRole('heading', { name: 'This identity has no library' }).isVisible()) {
     await expect(page.getByRole('link', { name: 'Choose identity' })).toHaveAttribute(
       'href',

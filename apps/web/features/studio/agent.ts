@@ -87,7 +87,9 @@ export function editingHref(agent: Pick<AgentOption, 'iri' | 'handle'>, work: st
 
 /** Where Studio opens a Work it has just created. */
 export function createdWorkPath(agent: Pick<AgentOption, 'iri' | 'handle'>, work: string, presentation: string,
-  language: string): string {
+  language: string, sessionAgent: string | null = null): string {
+  // This is already the editor's canonical session address; avoid a second navigation after creation.
+  if (presentation === 'recipe' && sessionAgent === agent.iri) return recipeEditHref(work);
   return editingHref(agent, work, presentation, { language });
 }
 

@@ -167,11 +167,12 @@ export async function recipeRegion({ host, id, work, href, locale, messages }: {
   ]);
   if (!recipe.ok) return <RegionFailure title={messages.recipeMethod} failure={recipe.failure} messages={messages} />;
   const allowed = authority?.ok ? allowedActionsOf(authority.data) : [];
+  // Only data crosses this server/client boundary. RecipeExperience creates its continuation
+  // reader in the browser; a reader closure here cannot be serialized by React Server Components.
   return <RecipeExperience initial={recipe.data} href={href} actingSubject={host.actingSubject}
     recordingFetch={host.recordingFetch}
     edit={mayEdit(allowed) ? { href: recipeEditHref(id), label: recipeEditorCopy(locale).editRecipe } : null}
     text={text.ok ? text.data.body : null}
-    readPage={host.recipeReadPage?.(href)}
     locale={locale} messages={messages} />;
 }
 

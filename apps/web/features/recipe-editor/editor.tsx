@@ -54,7 +54,12 @@ export interface RecipeEditorProps {
   saveExport?: (exported: RecipeExport, contentLanguage?: string, recipeName?: string) => void;
 }
 
-export function RecipeEditor({ work, mainVersion, language, actingSubject, workHref, initial, locale, messages: catalog, main, recordingFetch,
+export function RecipeEditor(props: RecipeEditorProps) {
+  // Client navigation can retain this component while every save now belongs to a different Recipe or Agent.
+  return <RecipeEditorLifetime key={JSON.stringify([props.work, props.mainVersion, props.actingSubject, props.language])} {...props} />;
+}
+
+function RecipeEditorLifetime({ work, mainVersion, language, actingSubject, workHref, initial, locale, messages: catalog, main, recordingFetch,
   importApi, newImportId, saveExport }: RecipeEditorProps) {
   const t = useMemo(() => materializeData(catalog, { locale }), [catalog, locale]);
   const client = main ?? browserMain;

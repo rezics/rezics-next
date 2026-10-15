@@ -4,7 +4,7 @@ import { realmMemberProof } from '../realm-reply/member-policy.ts';
 import { realmPolicyDeliveryHead, type RealmReviewMode, type RealmVisibility } from '../space/policy.ts';
 import { spaceCreationReceiptIri } from '../space/create.ts';
 import type { RealmHistoryFloor } from '../realm-admin/history.ts';
-import { controlTransaction } from './topology-control.ts';
+import { controlTransaction, ControlUnavailable } from './topology-control.ts';
 import { representedGrantProof } from './represented-work-proof.ts';
 
 export interface RealmPermit { visibility: RealmVisibility; reviewMode: RealmReviewMode;
@@ -75,8 +75,17 @@ export async function realmPermit(client: PoolClient, principal: VerifiedPrincip
 
 export async function withRealmPermit<T>(pool: Pool, principal: VerifiedPrincipal, actor: string, realm: string,
   purpose: 'read' | 'reply' | 'submission', operation: (permit: RealmPermit, client?: PoolClient) => Promise<T>): Promise<T> {
-  return controlTransaction(pool, async client => {
-    const permit = await realmPermit(client, principal, actor, realm, purpose);
-    return operation(permit, client);
-  });
+  try {
+    return await controlTransaction(pool, async client => {
+      const permit = await realmPermit(client, principal, actor, realm, purpose);
+      return operation(permit, client);
+    });
+  } catch (error) {
+    // Sharing the topology transaction must retain the Realm admission's
+    // unavailable boundary when recovery refuses its checkout.
+    if (error instanceof ControlUnavailable) {
+      throw new AdmissionUnavailable('Access recovery is in progress', { cause: error });
+    }
+    throw error;
+  }
 }

@@ -7,6 +7,7 @@ import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import type { MainClient } from '../discover/types.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
+import shellJa from '../shell/messages/ja.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { bffAdminApi, type AdminApi } from './admin-api.ts';
 import { saveSettings } from './commands.ts';
@@ -67,7 +68,7 @@ export function RealmRulesRecordedPage({ record, persona, selections, locale, re
   }
   useEffect(() => {
     let mounted = true;
-    const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
+    const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX, locale });
     const client = browserMainApi(window.location.origin, { anonymous: false, fetcher: replay.fetcher });
     void Promise.all([
       readRealmHeader(client, realm, locale, actingSubject),
@@ -98,7 +99,7 @@ export function RealmRulesRecordedPage({ record, persona, selections, locale, re
     });
     return () => { mounted = false; replay.dispose(); };
   }, [record, persona, selections, locale, realm, actingSubject]);
-  if (!load) return <p role="status" aria-busy="true">{shellMessages.loading}</p>;
+  if (!load) return <p role="status" aria-busy="true">{locale === 'ja' ? shellJa.loading : shellMessages.loading}</p>;
   if ('error' in load) return <p role="alert">{load.error}</p>;
   const messages = { ...manageMessages, ...manageOverlays.get(locale) };
   return <RealmFrame realm={realm} header={load.header} agent={load.agent} locale={locale} messages={messages} settingsAllowed>

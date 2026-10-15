@@ -125,3 +125,6 @@ export const Owner: Story = { args: { persona: 'owner' }, play: credited };
 export const Moderator: Story = { args: { persona: 'moderator' }, play: credited };
 export const Operator: Story = { args: { persona: 'operator' }, play: credited };
 export const ChinesePhone: Story = { args: { locale: 'zh-Hans' }, globals: { locale: 'zh-Hans', viewport: { value: 'phone' } }, play: credited };
+export const EnglishWide: Story = { ...Visitor, globals: { locale: 'en', viewport: { value: 'desktop1440' } } };
+export const JapanesePhone: Story = { args: { locale: 'ja' }, globals: { locale: 'ja', viewport: { value: 'phone' } }, play: credited };
+export const JapaneseWide: Story = { ...JapanesePhone, globals: { locale: 'ja', viewport: { value: 'desktop1440' } } };

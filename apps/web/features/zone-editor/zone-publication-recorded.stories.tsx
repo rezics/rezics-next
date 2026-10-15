@@ -1,3 +1,5 @@
+import { creditText } from '../zones/credit-messages.ts';
+import { profileHref } from '../profile/route.ts';
 import { documentText } from '@rezics/document';
 import type { CanonicalAddress } from '@rezics/model/address';
 import type { Meta, StoryObj } from '@storybook/react-vite';
@@ -201,9 +203,9 @@ function showFrame(persona: AnswerPersona, label: string, locale: UiLocale = 'en
         await expect(canvas.queryByText(block.fallback)).toBeNull();
       }
     }
-    await expect(canvas.getByText(credit.rightsBasis)).toBeVisible();
-    await expect(canvas.getAllByText(credit.author).length).toBeGreaterThan(0);
-    await expect(canvas.getAllByText(ownerAuthor).length).toBeGreaterThan(0);
+    await expect(canvas.getByText(creditText[locale].original)).toBeVisible();
+    await expect(canvas.getByRole('link', { name: creditText[locale].contributor })).toHaveAttribute('href', localizedPath(profileHref({ handle: null, id: credit.author }), locale));
+    await expect(canvas.getByRole('link', { name: creditText[locale].contributor })).toHaveAttribute('title', ownerAuthor);
     await expect(canvas.getByRole('navigation', { name: surfaceText.site[locale] })).toBeVisible();
     await expect(canvas.getByRole('link', { name: homeLabel(locale) })).toBeVisible();
     const counts = new Map<string, number>();

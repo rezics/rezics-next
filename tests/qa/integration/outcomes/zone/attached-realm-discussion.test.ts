@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordJapaneseReads } from '../../../support/recorded-locale-visit.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -26,7 +27,7 @@ afterAll(async () => {
 });
 
 import discussion from '../../../../../scripts/qa/cases/outcomes/zone/attached-realm-discussion.ts';
-const recording = new OutcomeRecorder(discussion);
+const recording = recordJapaneseReads(new OutcomeRecorder(discussion));
 let bodyPage: Page, privateBodyPage: Page;
 let bodyOpener: Posted, privateBodyOpener: Posted;
 type Page = {

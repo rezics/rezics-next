@@ -161,8 +161,8 @@ export function RealmAttachmentEditor({ zoneId, actingSubject, copy, zoneHead, a
     {state.notice === 'pending' ? <p role="status" className="text-sm">{copy.commandPending}</p> : null}
     {state.notice === 'saved' ? <p className="text-sm" role="status">{copy.realmSaved}</p> : null}
     {state.notice === 'removed' ? <p className="text-sm" role="status">{copy.realmRemoved}</p> : null}
-    {state.notice === 'unavailable' ? <p className="text-pretty text-destructive text-sm" role="alert">{copy.realmUnavailable}</p> : null}
-    {state.notice === 'limit' ? <p className="text-pretty text-destructive text-sm" role="alert">{copy.realmAttachmentLimit}</p> : null}
+    {state.notice === 'unavailable' ? <p className="text-pretty text-destructive-foreground text-sm" role="alert">{copy.realmUnavailable}</p> : null}
+    {state.notice === 'limit' ? <p className="text-pretty text-destructive-foreground text-sm" role="alert">{copy.realmAttachmentLimit}</p> : null}
     {state.notice === 'failed' ? <p className="text-pretty text-sm" role="alert">{copy.realmFailedBody}</p> : null}
     {state.notice === 'denied' ? <p className="text-pretty text-sm" role="alert">{copy.realmDenied}</p> : null}
     {state.notice === 'sign-in' ? <p className="text-sm" role="alert"><LocalizedLink href={signInHref}

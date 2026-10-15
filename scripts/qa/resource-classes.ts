@@ -9,6 +9,16 @@ export const qaResourceClasses = {
     jvmArgs: '-Xms64m -Xmx512m -XX:MaxDirectMemorySize=128m',
     budgetMs: 480_000,
   },
+  // Six complete reader traversals include four 261-thread public rankings,
+  // private admission histories, chart continuations and cursor refusals. The
+  // measured visitor/stranger/member cases took 55/70/88s; bound each at 120s.
+  // Restore keeps its independent 600s active-work bound and the ordinary heap.
+  'realm-ranking': {
+    storage: 'test',
+    memory: '2g',
+    jvmArgs: '-Xms64m -Xmx512m -XX:MaxDirectMemorySize=128m',
+    budgetMs: 6 * 120_000,
+  },
   'large-tmpfs': {
     storage: 'test',
     memory: '7g',
@@ -52,6 +62,7 @@ export function qaResourceHeapBytes(name: QaResourceClass): number {
 export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = new Map([
   // Restart proofs retain both PostgreSQL checkpoints and Fuseki's model volume.
   ['tests/qa/integration/restart-resilience.test.ts', 'catalogue-disk'],
+  ['tests/qa/integration/outcomes/realm/ranking.test.ts', 'realm-ranking'],
   ['services/main/tests/also-enjoyed-read-cost.integration.test.ts', 'catalogue-disk'],
   // The thousand-entry outcome owns its projection build and six complete traversals.
   ['tests/qa/integration/outcomes/anime/navigate-a-thousand-episode-inventory-thousand-chapters.test.ts', 'large-tmpfs'],
