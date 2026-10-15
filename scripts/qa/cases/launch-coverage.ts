@@ -23,7 +23,6 @@ export interface LaunchCoverage {
 const api = (file: string, test: string, evidence?: string): ApiProof => ({ file, test, evidence });
 const browser = api;
 const journeyBrowser = (file: string, journey: string, test: string, evidence?: string): JourneyProof => ({ file, journey, test, evidence });
-const missing = (item: string, reason?: string): MissingProof => ({ missing: item, reason });
 
 export const launchCoverage: readonly LaunchCoverage[] = [
   {
@@ -163,7 +162,10 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/recipes/instructions-in-any-form.test.ts',
       'recipes/instructions-in-any-form / visitor: reads exact published Post, recording, procedure and ordered instructions while drafts stay concealed',
       'All six personas read exact published Post, recording and structured procedure dependencies, ordered adoptions and transformation credit while private successors stay concealed. Passed in QA 20261015t015605-ab33e2.'),
-    browser: missing('content-adoption', 'API acceptance precedes instruction surfaces.'),
+    browser: journeyBrowser('apps/web/tests/recipe-instructions.e2e.ts',
+      'apps/web/tests/journeys/recipe-instructions.ts',
+      'recipe-instructions / en: a reader opens procedure, Post and audio instructions by keyboard and reloads each form',
+      'A signed-out reader opens three published Recipes, reads the structured procedure and Post by keyboard, opens and plays the exact audio recording by keyboard with a byte-digest check, then reloads every form in English and Japanese. Passed in QA 20261015t024728-f19030.'),
   },
   {
     kind: 'visual-novels',
