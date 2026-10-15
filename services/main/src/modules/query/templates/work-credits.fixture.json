@@ -68,7 +68,11 @@
         "key",
         "ordinal",
         "_work_iri",
-        "_source_confirmed"
+        "_source_confirmed",
+        "_source_role",
+        "_source_provider",
+        "_source_agent",
+        "_source_name"
       ],
       "rows": [
         [
@@ -93,6 +97,22 @@
             "type": "literal",
             "value": "false",
             "datatype": "http://www.w3.org/2001/XMLSchema#boolean"
+          },
+          {
+            "type": "literal",
+            "value": "author"
+          },
+          {
+            "type": "literal",
+            "value": "open-library"
+          },
+          {
+            "type": "literal",
+            "value": ""
+          },
+          {
+            "type": "literal",
+            "value": ""
           }
         ],
         [
@@ -117,6 +137,22 @@
             "type": "literal",
             "value": "true",
             "datatype": "http://www.w3.org/2001/XMLSchema#boolean"
+          },
+          {
+            "type": "literal",
+            "value": "author"
+          },
+          {
+            "type": "literal",
+            "value": "open-library"
+          },
+          {
+            "type": "literal",
+            "value": ""
+          },
+          {
+            "type": "literal",
+            "value": ""
           }
         ]
       ]

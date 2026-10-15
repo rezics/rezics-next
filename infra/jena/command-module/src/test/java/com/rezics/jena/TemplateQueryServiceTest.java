@@ -122,7 +122,8 @@ public class TemplateQueryServiceTest {
             }
             request.put("candidates",qualifications);
             JsonObject source=new JsonObject();JsonArray sourceNames=new JsonArray();
-            for(String name:new String[]{"id","key","ordinal","_work_iri","_source_confirmed"}) sourceNames.add(name);
+            for(String name:new String[]{"id","key","ordinal","_work_iri","_source_confirmed",
+                "_source_role","_source_provider","_source_agent","_source_name"}) sourceNames.add(name);
             source.put("columns",sourceNames);source.put("rows",new JsonArray());tables.add(source);
             data.begin(ReadWrite.WRITE);
             try {
