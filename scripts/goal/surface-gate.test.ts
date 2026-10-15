@@ -9,9 +9,12 @@ import { selectSurface, runSurfaceGate, type SurfaceSelection, type SurfaceExcus
 
 const roots: string[] = [];
 const previousPlan = process.env.GOAL_TEST_PLAN;
+const previousBudget = process.env.GOAL_UNIT_GATE_BUDGET_MS;
 afterEach(() => {
   if (previousPlan === undefined) delete process.env.GOAL_TEST_PLAN;
   else process.env.GOAL_TEST_PLAN = previousPlan;
+  if (previousBudget === undefined) delete process.env.GOAL_UNIT_GATE_BUDGET_MS;
+  else process.env.GOAL_UNIT_GATE_BUDGET_MS = previousBudget;
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
@@ -219,6 +222,103 @@ function report(file: string, state: 'pass' | 'timeout' | 'assertion', name = 'b
       state === 'pass' ? '' : `<failure type="${state === 'timeout' ? 'TimeoutError' : 'AssertionError'}" message="${state === 'timeout' ? 'test timed out after 5000ms' : 'expected 2'}"/>`
     }</testcase></testsuite></testsuites>` };
 }
+
+test.each(['tests', 'guards'] as const)('%s selection exceeding one budget receives a verdict for every measured file', async part => {
+  const f = gateFixture(part);
+  process.env.GOAL_UNIT_GATE_BUDGET_MS = '180000';
+  const files = Array.from({ length: 12 }, (_, index) => `apps/web/budget-${index}.test.ts`);
+  for (const file of files) f.write(file, 'export {};');
+  f.selection[part === 'tests' ? 'units' : 'guards'] = files;
+  f.write('.temp/goal-orchestration/unit-file-durations.json', JSON.stringify(Object.fromEntries(files.map(file => [file, 50_000]))));
+  const observed: string[] = [];
+  const result = await f.run((_root, command) => {
+    const selected = files.filter(file => command.includes(file));
+    if (!selected.length) return { code: 0, output: '' };
+    observed.push(...selected);
+    // Six hundred seconds of passing work cannot fit one 180-second process.
+    return { code: selected.length * 50_000 > 180_000 ? 1 : 0, output: '' };
+  });
+  expect(result.code).toBe(0);
+  expect(observed.sort()).toEqual([...files].sort());
+  expect(f.attempts.filter(attempt => attempt.command.some(arg => files.includes(arg)))).toHaveLength(6);
+});
+
+test('declared long-running files receive their own shard beside capped unknown files', async () => {
+  const f = gateFixture();
+  process.env.GOAL_UNIT_GATE_BUDGET_MS = '180000';
+  const files = Array.from({ length: 18 }, (_, index) => `apps/web/unmeasured-${index}.test.ts`);
+  for (const file of files) f.write(file, 'export {};');
+  f.write(f.file, "test('long operation', async () => {}, 180_000);");
+  f.selection.units.push(...files);
+  const result = await f.run(() => ({ code: 0, output: '' }));
+  expect(result.code).toBe(0);
+  const shards = f.attempts.filter(attempt => attempt.command.includes('scripts/qa/test.ts') && !attempt.command.includes(f.story));
+  expect(shards).toHaveLength(4);
+  expect(shards.find(attempt => attempt.command.includes(f.file))!.command.filter(arg => f.selection.units.includes(arg))).toEqual([f.file]);
+  expect(shards.every(attempt => attempt.command.filter(arg => files.includes(arg)).length <= 8)).toBe(true);
+});
+
+test('a persistent timeout is retried alone, named and never excused against main', async () => {
+  const f = gateFixture();
+  const result = await f.run((_root, command) => command.includes(f.file) ? report(f.file, 'timeout') : { code: 0, output: '' });
+  expect(result.code).toBe(1);
+  const attempts = f.attempts.filter(attempt => attempt.command.includes(f.file));
+  expect(attempts).toHaveLength(2);
+  expect(attempts[1]!.command).toContain('--timeout=30000');
+  expect(attempts.every(attempt => attempt.cwd === f.cwd)).toBe(true);
+  expect(f.lines.join('\n')).toContain(`Surface gate unfinished files: ${f.file}`);
+  expect(result.excused).toEqual([]);
+});
+
+test('expected child startup failures cannot contaminate the invocation verdict', async () => {
+  const f = gateFixture();
+  const sibling = 'apps/web/features/zones/assertion.test.ts';
+  f.write(sibling, 'export {};');
+  f.selection.units.push(sibling);
+  f.selection.changed.push(sibling);
+  const result = await f.run((_root, command, env) => {
+    if (!command.includes(f.file)) return { code: 0, output: '' };
+    const artifacts = env!.REZICS_QA_ARTIFACT_ROOT!;
+    // qa-harness.test.ts uses the inherited root for intentionally failed child runs.
+    const child = join(artifacts, 'child-run');
+    mkdirSync(join(child, 'logs'), { recursive: true });
+    writeFileSync(join(child, 'logs/integration.log'), 'error: Intentional stack startup stub failure');
+    writeFileSync(join(child, 'integration.xml'), `<testsuite><testcase file="${f.file}" name="child startup"><failure message="Shard stack failed before tests ran"/></testcase></testsuite>`);
+    const own = report(sibling, 'assertion', 'real assertion');
+    writeFileSync(join(artifacts, 'unit.xml'), own.output.slice(UNIT_JUNIT_MARKER.length));
+    return { code: 1, output: 'one real assertion failed' };
+  });
+  expect(result.code).toBe(1);
+  expect(f.attempts.every(attempt => attempt.cwd === f.cwd)).toBe(true);
+  const output = readFileSync(join(result.evidence, '../output.log'), 'utf8');
+  expect(output).toContain('real assertion');
+  expect(output).not.toContain('Intentional stack startup stub failure');
+  expect(output).not.toContain('Shard stack failed before tests ran');
+  expect(result.excused).toEqual([]);
+});
+
+test('the real surface runner passes harness files that create intentionally failed startup artifacts', async () => {
+  const f = gateFixture();
+  f.selection.stories = [];
+  f.write('Taskfile.yml', 'version: "3"\ntasks:\n  goal:unit-files:\n    cmds:\n      - bun test {{.CLI_ARGS}}\n');
+  f.write(f.file, `import { test, expect } from 'bun:test';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+test('startup refusal is expected', () => {
+  const child = join(process.env.REZICS_QA_ARTIFACT_ROOT!, 'child');
+  mkdirSync(join(child, 'logs'), { recursive: true });
+  writeFileSync(join(child, 'logs/model.log'), 'error: Intentional stack startup stub failure');
+  writeFileSync(join(child, 'model.xml'), '<testsuite><testcase file="${f.file}" name="child"><failure message="Shard stack failed before tests ran"/></testcase></testsuite>');
+  expect(process.env.REZICS_REAP_SCOPE).toBeTruthy();
+});`);
+  const result = await runSurfaceGate(f.cwd, f.selection, { ...f, runner: undefined,
+    only: ['tests'], generate: async () => undefined });
+  expect(result.code).toBe(0);
+  const output = readFileSync(result.log, 'utf8');
+  expect(output).toContain('startup refusal is expected');
+  expect(output).not.toContain('Shard stack failed before tests ran');
+  expect(output).not.toContain('Intentional stack startup stub failure');
+}, 30_000);
 
 test.each(['tests', 'guards'] as const)('%s timeout reruns only its file with the longer limit and records both durations', async part => {
   const f = gateFixture(part);

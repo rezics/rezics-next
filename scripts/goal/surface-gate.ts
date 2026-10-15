@@ -9,7 +9,7 @@ import { affectedSelection } from './merge.ts';
 import {
   mergeUnitFiles, unitFilesFromPlan, completedUnitShard, timeoutOnlyTestFiles, retryTimedOutFiles,
   introducedUnitFailures, prepareUnitBaseline, removeUnitBaseline, reportCases, slowTestLine,
-  ownerArtifactFiles, unitArtifactReport, timeoutRetryArg, unitGateBudgetMs, type UnitShardRunner,
+  ownerArtifactFiles, unitArtifactReport, timeoutRetryArg, runUnitGate, gateShardRunner, type UnitShardRunner,
 } from './unit-gate.ts';
 import { repositoryGuardSelectionLine } from '../qa/repository-guards.ts';
 import * as repositoryGuardRunner from '../qa/repository-guards.ts';
@@ -174,8 +174,15 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
     let invocation = 0;
     const notes: string[] = [];
     const note = (line: string) => { print(line); notes.push(line); };
-    const runShard: UnitShardRunner = async (root, selected, _deadline, retryOptions) => {
+    const runShard: UnitShardRunner = async (root, selected, deadline, retryOptions) => {
       const label = `${name}-${invocation++}`;
+      if (!options.runner) {
+        const owners = new Set(name === 'guards' ? [] : selected.filter(isQaOwnerPath));
+        const result = await gateShardRunner(owners, env)(root, selected, deadline, retryOptions);
+        writeFileSync(join(directory, `${label}.log`), result.output);
+        output += `\n${root}: ${selected.join(', ')}\n${result.output}\n`;
+        return result;
+      }
       const artifacts = join(directory, `${label}-artifacts`);
       mkdirSync(artifacts, { recursive: true });
       const report = join(artifacts, 'unit.xml');
@@ -187,18 +194,21 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
         ...retryOptions?.testTimeoutMultiplier ? [timeoutRetryArg(direct ? 'unit' : 'owner')] : [],
         ...direct ? ['--reporter=junit', `--reporter-outfile=${report}`] : []], root, join(directory, `${label}.log`),
       { ...env, REZICS_QA_ARTIFACT_ROOT: artifacts });
-      const diagnostics = ownerArtifactFiles(artifacts, ['**/*.log']).map(path => readFileSync(path, 'utf8')).join('\n');
-      result.output += `\n${diagnostics}\n${unitArtifactReport(root, ownerArtifactFiles(artifacts, ['**/*.xml']))}`;
+      // Harness tests deliberately fail child stacks. Only this invocation's reports are verdicts.
+      const diagnostics = ownerArtifactFiles(artifacts, ['*/logs/owner.log']).map(path => readFileSync(path, 'utf8')).join('\n');
+      result.output += `\n${diagnostics}\n${unitArtifactReport(root, ownerArtifactFiles(artifacts,
+        direct ? ['unit.xml'] : ['owner.xml', '*/owner.xml']))}`;
       output += `\n${root}: ${selected.join(', ')}\n${result.output}\n`;
       return completedUnitShard(root, selected, result.code, result.output, now() - started);
     };
-    const branch = await runShard(cwd, files, now() + unitGateBudgetMs());
-    if (!branch.failing.length || branch.runnerErrors.length) return { code: branch.exitCode ?? 1, output };
-    const timeouts = timeoutOnlyTestFiles(branch.output, branch.failing, cwd);
+    // One surface holds one QA slot; reuse merge planning without multiplying that admission.
+    const branch = await runUnitGate(cwd, files, 1, runShard, { now });
+    if (branch.runnerErrors.length) return { code: 1, output };
+    const timeouts = branch.done ? timeoutOnlyTestFiles(branch.output, branch.timedOut, cwd) : branch.timedOut;
     const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).stdout.trim();
     const recovered = new Map<string, number>();
     const retry = await retryTimedOutFiles(cwd, timeouts, 'affected', runShard, undefined, {
-      historyDirectory: join(directory, 'timeout-history'),
+      now, historyDirectory: join(directory, 'timeout-history'),
       timeoutRetryPassed: test => {
         recovered.set(`${test.file}\0${test.test}`, test.seconds);
         const original = reportCases(branch.output, cwd)?.find(item => item.file === test.file && item.name === test.test);
@@ -214,8 +224,10 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
           retrySeconds: recovered.get(`${file}\0${failure.test}`) });
       }
     }
-    if (retry.runnerErrors.length) return { code: 1, output: `${output}\n${notes.join('\n')}` };
-    const failing = branch.failing.filter(file => !retry.passing.includes(file));
+    const unresolved = [...new Set([...branch.unfinished.filter(file => !timeouts.includes(file)), ...retry.inconclusive])];
+    if (unresolved.length) note(`Surface gate unfinished files: ${unresolved.join(', ')}`);
+    if (retry.runnerErrors.length || unresolved.length) return { code: 1, output: `${output}\n${notes.join('\n')}` };
+    const failing = [...new Set([...branch.failing, ...retry.failing])].filter(file => !retry.passing.includes(file));
     const failures = failing.flatMap(file => (retry.failing.includes(file) ? retry.failures : branch.failures)
       .filter(item => item.file === file));
     const errors = failing.flatMap(file => (retry.failing.includes(file) ? retry.fileErrors : branch.fileErrors)
@@ -234,8 +246,8 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
         const existing = candidates.filter(file => existsSync(join(baseline, file)));
         for (const file of candidates.filter(file => !existing.includes(file))) blocking.add(file);
         if (existing.length) {
-          const main = await runShard(baseline, existing, now() + unitGateBudgetMs());
-          if (main.runnerErrors.length) for (const file of existing) blocking.add(file);
+          const main = await runUnitGate(baseline, existing, 1, runShard, { now });
+          if (!main.done || main.runnerErrors.length) for (const file of existing) blocking.add(file);
           else {
             const introduced = introducedUnitFailures(existing, failures, main.failures, errors, main.fileErrors);
             for (const file of existing) {

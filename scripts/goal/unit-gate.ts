@@ -1432,7 +1432,7 @@ export function introducedUnitFailureFiles(branchFiles: readonly string[], branc
   return introducedUnitFailures(branchFiles, branch, main, branchErrors, mainErrors).map(item => item.file);
 }
 
-interface ShardInvocation { args: string[]; label: string; env: NodeJS.ProcessEnv; progressFile?: string; artifactDirectory?: string }
+interface ShardInvocation { args?: string[]; label?: string; env: NodeJS.ProcessEnv; progressFile?: string; artifactDirectory?: string }
 
 /** Paths supplied to this runner own its reports; a test printing another artifact URL grants no attribution. */
 export function ownerArtifactFiles(directory: string | undefined, patterns: readonly string[]): string[] {
@@ -1506,7 +1506,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   delete env.FORCE_COLOR;
   // Tests that mkdtemp under `.temp` need the directory. A git worktree does not check it out.
   mkdirSync(join(cwd, '.temp'), { recursive: true });
-  const junitFile = invocation ? undefined : join(cwd, '.temp', 'unit-gate-junit', `${process.pid}-${randomUUID()}.xml`);
+  const junitFile = invocation?.args ? undefined : join(cwd, '.temp', 'unit-gate-junit', `${process.pid}-${randomUUID()}.xml`);
   if (junitFile) mkdirSync(dirname(junitFile), { recursive: true });
   const child = spawn('task', invocation?.args ?? ['goal:unit-files', '--',
     ...tierBunTestArgs('unit', [
@@ -1584,7 +1584,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
     }
     // The CLI stopped at its own budget and exited. That is an unfinished shard:
     // the file that was running is retried alone, and files with no header run again.
-    if (invocation && harnessBudgetExpired(stderr.join(''))) {
+    if (invocation?.args && harnessBudgetExpired(stderr.join(''))) {
       const timedOut = shardTimeoutFiles(text, files, cwd);
       rememberUnitDurations(durationsFromOutput(text, files, new Set(timedOut)));
       return { ...unfinished(text, timedOut), budgetExpired: true };
@@ -1607,11 +1607,11 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
 
 /** Owner files go through `task test`, the same command as the owner tier, so their environment matches.
  * The CLI's budget is this shard's remaining deadline; without it the tier stops at its own 600s ceiling. */
-export function runOwnerShard(cwd: string, files: readonly string[], deadline: number, now: () => number = Date.now, options: TimeoutRetryOptions = {}): Promise<UnitShardResult> {
+export function runOwnerShard(cwd: string, files: readonly string[], deadline: number, now: () => number = Date.now, options: TimeoutRetryOptions = {}, environment: NodeJS.ProcessEnv = process.env): Promise<UnitShardResult> {
   const budgetMs = Math.max(1, deadline - now());
   const progressFile = join(cwd, '.temp', 'owner-shard-progress', `${process.pid}-${now()}-${Math.random().toString(16).slice(2)}`);
   mkdirSync(dirname(progressFile), { recursive: true });
-  const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !['AGENT', 'CLAUDECODE', 'REPL_ID'].includes(key)));
+  const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(environment).filter(([key]) => !['AGENT', 'CLAUDECODE', 'REPL_ID'].includes(key)));
   env.REZICS_QA_OWNER_BUDGET_MS = String(budgetMs);
   env.REZICS_QA_PROGRESS_FILE = progressFile;
   const artifactDirectory = join(cwd, '.temp', 'owner-shard-artifacts', randomUUID());
@@ -1624,14 +1624,15 @@ export function runOwnerShard(cwd: string, files: readonly string[], deadline: n
   });
 }
 
-function gateShardRunner(owner: ReadonlySet<string>): UnitShardRunner {
+export function gateShardRunner(owner: ReadonlySet<string>, env: NodeJS.ProcessEnv = process.env): UnitShardRunner {
+  const unitEnv = { ...env, AGENT: '1', REZICS_REAP_PRELOAD: '1' };
   return (cwd, group, deadline, options) => {
     const owners = group.filter(file => owner.has(file));
     const units = group.filter(file => !owner.has(file));
     if (owners.length && units.length) return Promise.all([
-      runUnitShard(cwd, units, deadline, options), runOwnerShard(cwd, owners, deadline, Date.now, options),
+      runUnitShard(cwd, units, deadline, options, { env: unitEnv }), runOwnerShard(cwd, owners, deadline, Date.now, options, env),
     ]).then(mergeShardResults);
-    return owners.length ? runOwnerShard(cwd, owners, deadline, Date.now, options) : runUnitShard(cwd, units, deadline, options);
+    return owners.length ? runOwnerShard(cwd, owners, deadline, Date.now, options, env) : runUnitShard(cwd, units, deadline, options, { env: unitEnv });
   };
 }
 
