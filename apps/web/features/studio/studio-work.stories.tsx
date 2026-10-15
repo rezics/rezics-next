@@ -85,7 +85,7 @@ async function choose(name: string | RegExp) {
 
 /** Opens a chapter's or volume's handle and picks one of its moves, or a volume under its "Move to" heading. */
 async function moveBy(canvasElement: HTMLElement, title: string, move: RegExp | string, into?: string) {
-  await userEvent.click(within(canvasElement).getByRole('button', { name: `Move “${title}”` }));
+  await userEvent.click(await within(canvasElement).findByRole('button', { name: `Move “${title}”` }));
   if (!into) return choose(move);
   const heading = await screen.findByText(/^(Move to|移到)$/);
   await expect(heading.closest('[role=group]')).toContainElement(await screen.findByRole('menuitem', { name: into }));
@@ -230,6 +230,19 @@ export const FirstChapter: Story = {
     await waitFor(() => expect(canvas.getByRole('link', { name: 'Write “第一章 雨夜”' })).toBeInTheDocument());
     await expect((args as unknown as { main: ReturnType<typeof storyMain> }).main.calls)
       .toEqual(['composition', 'post']);
+  },
+};
+
+/** The committed Post is writable before a slow outline read finishes. */
+export const CreatedChapterWhileOutlineLoads: Story = {
+  args: (() => { const setup = chapters({ delayMs: 1500 }); return { content: setup.content, main: setup.main }; })() as never,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('textbox', { name: 'New chapter' }), 'Fourth chapter');
+    await userEvent.click(canvas.getByRole('button', { name: 'Add chapter' }));
+    const write = await canvas.findByRole('link', { name: 'Write “Fourth chapter”' }, { timeout: 5000 });
+    await expect(write).toHaveAttribute('href', expect.stringContaining('/chapters/'));
+    await expect(canvas.getByRole('button', { name: 'Adding…' })).toBeDisabled();
   },
 };
 

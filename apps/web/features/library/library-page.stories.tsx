@@ -404,6 +404,19 @@ export const FirstUse: Story = {
   },
 };
 
+/** Empty reading shelves still offer a next step when imported custom shelves remain. */
+export const EmptyReadingWithCustomShelves: Story = {
+  args: { overview: { ok: true, data: storyOverview([]) },
+    view: { ok: true, data: storyView(all, []) }, reading: [] },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 2, name: 'Your library starts here' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Discover works' })).toHaveAttribute('href', '/en/discover');
+    await expect(canvas.getByRole('navigation', { name: 'Shelves' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Comfort reads Only you can see this shelf' })).toBeVisible();
+  },
+};
+
 /** An empty status shelf, with the rest of the library still there. */
 export const EmptyShelf: Story = {
   args: { state: libraryState({ shelf: 'reading' }), reading: [],

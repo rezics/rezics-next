@@ -159,6 +159,7 @@ test('library-import-progress-export: import, progress on two devices and the do
     const edition = start.getByRole('combobox', { name: 'Edition', exact: true });
     await keyboardReach(a, edition, found, 'Edition');
     await a.keyboard.press('Enter');
+    await expect(sheetA.getByRole('listbox', { name: 'Edition', exact: true })).toBeFocused();
     const options = sheetA.getByRole('option');
     const names = await options.allTextContents();
     const index = names.indexOf('Sword Art Online 1: Aincrad · paperback');
