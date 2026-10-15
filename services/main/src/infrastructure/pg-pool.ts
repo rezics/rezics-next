@@ -296,8 +296,11 @@ function trackNestedCheckout(pool: Pool): void {
     }
     if (typeof callback === 'function') {
       // pool.query checks a client out and releases it before resolving, so
-      // the caller is not holding a connection across the await.
-      return original(callback);
+      // the caller is not holding a connection across the await. A queued
+      // checkout may be delivered by an unrelated request or worker's release;
+      // its SQL and callbacks must keep the requesting caller's whole context.
+      const resume = AsyncLocalStorage.snapshot();
+      return original((...args) => resume(() => callback(...args)));
     }
     const hold = adoptHold(pool);
     const clear = () => {

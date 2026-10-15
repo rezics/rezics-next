@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { context, ROOT_CONTEXT, trace } from '@opentelemetry/api';
@@ -80,6 +81,42 @@ test('the bounds are startup options applied before the caller options', () => {
     + ` -c transaction_timeout=${CONNECTION_BOUNDS.transactionTimeout}`);
   expect(connectionBoundOptions('-c default_transaction_read_only=on'))
     .toEndWith(' -c default_transaction_read_only=on');
+});
+
+test('queued pool callbacks preserve the requester context across an unrelated release', async () => {
+  const callers = new AsyncLocalStorage<string>();
+  type Callback = (error: Error | undefined, client: PoolClient | undefined, release: () => void) => void;
+  let pending: Callback | undefined;
+  const connect = spyOn(Pool.prototype, 'connect').mockImplementation(((callback: Callback) => {
+    pending = callback;
+  }) as Pool['connect']);
+  const pool = boundedPool({ max: 1 });
+  try {
+    for (const error of [undefined, new Error('checkout refused')]) {
+      let observed: string | undefined, tick: string | undefined;
+      const client = idleClient();
+      const release = () => {};
+      await runWorkerTick('main.requesting-worker', async () => callers.run('requester', () => {
+        expect(pool.connect((received, held, done) => {
+          observed = callers.getStore();
+          tick = currentWorkerTick();
+          expect(received).toBe(error);
+          expect(held).toBe(error ? undefined : client);
+          expect(done).toBe(release);
+        })).toBeUndefined();
+      }));
+      await runWorkerTick('main.releasing-worker', async () => callers.run('releaser', () => {
+        pending!(error, error ? undefined : client, release);
+        expect(callers.getStore()).toBe('releaser');
+        expect(currentWorkerTick()).toBe('main.releasing-worker');
+      }));
+      expect(observed).toBe('requester');
+      expect(tick).toBe('main.requesting-worker');
+    }
+  } finally {
+    connect.mockRestore();
+    await pool.end();
+  }
 });
 
 test('a bounded pool keeps the caller settings and its own client error listener', async () => {

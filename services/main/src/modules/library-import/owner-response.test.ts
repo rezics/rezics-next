@@ -92,6 +92,7 @@ test('file and reviewed batches share one checkout across owner reads and per-ro
   const { MediaStore, DEFAULT_MEDIA_CONTEXT } = await import('../media/store.ts');
   const { withImportJobProgress } = await import('./job-context.ts');
   const { contentConnection } = await import('../../../../content/src/connection.ts');
+  const { ReadingPositionStore } = await import('../reading-position/store.ts');
   const agent = 'https://rezics.com/id/0194f314-9280-767f-89a6-000000000099';
   const work = 'https://rezics.com/id/0194f314-9280-767f-89a6-000000000001';
   const digest = 'a'.repeat(64);
@@ -105,6 +106,7 @@ test('file and reviewed batches share one checkout across owner reads and per-ro
       if (sql.includes('SELECT request_digest, row_count')) return { rows: [{ request_digest: digest, row_count: 1 }] };
       if (sql.includes('SELECT plan, completed')) return { rows: [{ plan: {}, completed: false }] };
       if (sql.includes('FROM owner o LEFT JOIN chosen')) return { rows: [{ owner_epoch: 'epoch', owner_sequence: '1' }] };
+      if (sql.includes('reading_position.current_generation')) return { rows: [{ version: '1' }] };
       return { rows: [], rowCount: 1 };
     }, release: () => { releases++; } };
   } } as unknown as Pool;
@@ -112,6 +114,8 @@ test('file and reviewed batches share one checkout across owner reads and per-ro
   const files = new LibraryFileStore(pool);
   const status = new ReaderLibraryStatusStore(pool);
   const media = new MediaStore(pool, {} as never);
+  const positions = new ReadingPositionStore(pool);
+  const principal = { issuer: 'https://account.test', subject: 'reader', emailVerified: true };
   await imports.withBatch(agent, 'file-agent-apply', async () => {
     await files.pending(agent, 'file');
     await imports.beginBatch(agent, 'row', digest, 1);
@@ -124,6 +128,17 @@ test('file and reviewed batches share one checkout across owner reads and per-ro
       await status.batch(agent, [work]);
       await status.fence(agent, 'added');
       await media.avatarRows([agent], DEFAULT_MEDIA_CONTEXT);
+      expect(await positions.generation()).toBe('1');
+      expect(await positions.privateSnapshot(principal, agent)).toBe('0');
+      await positions.lookup([work]);
+      await positions.required([work]);
+      await positions.completedPage(principal, [work]);
+      await positions.finishedWorks(agent, [work]);
+      const revelation = { record: work, recordKind: 'entity' as const, continuityWork: work,
+        occurrence: work, receipt: 'import-revelation' };
+      await positions.register(revelation);
+      await positions.publish(revelation);
+      await positions.abandon(revelation.receipt);
       // Each completed row still owns a real transaction and commits before
       // the next owner command, while the outer session lock stays held.
       await files.complete(agent, 'file', 0, { applied: [], issues: [] });
