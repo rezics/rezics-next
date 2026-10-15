@@ -54,7 +54,7 @@ export const OpensCreatedRecipe: Story = {
     await expect(accepted).toHaveBeenCalledTimes(1);
     await expect(navigate).toHaveBeenCalledWith(destination);
     await expect(canvas.getByRole('textbox', { name: 'Title' })).toHaveValue('Tomato soup');
-    await expect(canvas.getByRole('radio', { name: /^Recipe/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(canvas.getByRole('radio', { name: /^Recipe/ })).toBeChecked();
     await expect(canvas.getByRole('combobox', { name: 'Language you’ll write in' })).toHaveTextContent('English');
     await expect(canvas.getByRole('button', { name: 'Creating…' })).toBeDisabled();
   },

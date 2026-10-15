@@ -2,9 +2,8 @@ import { formatQuantity, leadingAmount, type Rational, sameRational } from './qu
 
 // An ingredient is written as one line and kept as parts. The line is what a cook types and what
 // Main shows back (`originalText`); the parts are what scaling and unit conversion read.
-// Main derives an ingredient's name by removing the written quantity and unit from the line's
-// start (`services/main/src/modules/recipe/display.ts`), so the line always starts with exactly
-// the quantity and unit text stored beside it.
+// Main reads ingredient names from retained source spans. Record those spans while the editor
+// still has the separate quantity, unit and name, including the preparation note in the name span.
 
 /** The units Main converts between systems and counts it recognises; others stay as written. */
 export const knownUnits = ['cup', 'cups', 'tablespoon', 'tablespoons', 'tbsp', 'teaspoon', 'teaspoons', 'tsp',
@@ -78,6 +77,7 @@ export function composeLine(parts: IngredientParts): string {
 export interface IngredientQualifier {
   type: 'ingredient-line';
   originalText: { value: string; language: string };
+  textParts?: { amount: TextSpan; unit?: TextSpan; name: TextSpan };
   amountLexical?: string;
   amount?: Rational;
   amountUpper?: Rational;
@@ -90,6 +90,8 @@ export interface IngredientQualifier {
   parseStatus: 'parsed' | 'partial' | 'unparsed';
   residual?: string;
 }
+
+interface TextSpan { start: number; end: number }
 
 const MAX_LINE = 1000;
 
@@ -111,11 +113,16 @@ export function qualifierOf(parts: IngredientParts, language: string, previous?:
   const typed = amount && !amount.rest ? amount : null;
   const unitText = parts.unit.trim();
   const note = parts.note.trim();
+  const quantityEnd = parts.quantity.trim().length;
+  const prefixEnd = quantityEnd + (unitText ? 1 + unitText.length : 0);
   const status = typed ? (parts.name.trim() ? 'parsed' : 'partial') : 'unparsed';
   const keepsUnit = previous?.unit !== undefined && previous.unitText === (unitText || undefined);
   return {
     type: 'ingredient-line',
     originalText: { value: written, language: previous?.originalText.language ?? language },
+    ...(typed && parts.name.trim() ? { textParts: { amount: { start: 0, end: quantityEnd },
+      ...(unitText ? { unit: { start: quantityEnd + 1, end: prefixEnd } } : {}),
+      name: { start: prefixEnd + 1, end: written.length } } } : {}),
     ...(typed ? { amountLexical: typed.lexical, amount: typed.amount, ...(typed.amountUpper ? { amountUpper: typed.amountUpper } : {}) } : {}),
     ...(keepsUnit ? { unit: previous!.unit } : {}),
     ...(unitText ? { unitText } : {}),
@@ -168,7 +175,13 @@ export function sameQualifier(a: IngredientQualifier, b: IngredientQualifier): b
   return a.originalText.value === b.originalText.value && a.originalText.language === b.originalText.language
     && a.amountLexical === b.amountLexical && sameRational(a.amount, b.amount) && sameRational(a.amountUpper, b.amountUpper)
     && a.unit === b.unit && a.unitText === b.unitText && a.preparation?.value === b.preparation?.value
+    && sameSpan(a.textParts?.amount, b.textParts?.amount) && sameSpan(a.textParts?.unit, b.textParts?.unit)
+    && sameSpan(a.textParts?.name, b.textParts?.name)
     && a.optional === b.optional && a.scaling === b.scaling && a.parseStatus === b.parseStatus
     && a.residual === b.residual && a.substituteFor.length === b.substituteFor.length
     && a.substituteFor.every((id, index) => id === b.substituteFor[index]);
+}
+
+function sameSpan(a: TextSpan | undefined, b: TextSpan | undefined): boolean {
+  return a?.start === b?.start && a?.end === b?.end;
 }
