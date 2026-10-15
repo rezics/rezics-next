@@ -65,6 +65,7 @@ test('ranking workers log the provider class and code without the message', asyn
         'rezics.worker.name': 'main.ranking.build',
         'error.class': 'RecommendationUnavailable',
         'error.code': '08006',
+        'error.sqlstate': '08006',
         'error.chain.classes': ['RecommendationUnavailable', 'Error'],
         'error.chain.codes': ['08006'],
       });

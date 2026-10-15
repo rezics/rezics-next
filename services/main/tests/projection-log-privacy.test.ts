@@ -61,7 +61,7 @@ test('Content scheduled poll logs only bounded fault metadata and retries', asyn
   expect(faults(lines, 'main.content.projection')).toEqual([{
     time: expect.any(String),
     level: 'error', event: 'worker_fault', 'rezics.worker.name': 'main.content.projection',
-    'error.class': 'DatabaseError', 'error.code': '23505',
+    'error.class': 'DatabaseError', 'error.code': '23505', 'error.sqlstate': '23505',
   }]);
 });
 
@@ -98,7 +98,7 @@ test('Ranking scheduled tick logs bounded fault metadata, drops private codes an
   expect(faults(lines, 'main.read-ranking.projection')).toEqual([
     { time: expect.any(String),
       level: 'error', event: 'worker_fault', 'rezics.worker.name': 'main.read-ranking.projection',
-      'error.class': 'DatabaseError', 'error.code': '23505' },
+      'error.class': 'DatabaseError', 'error.code': '23505', 'error.sqlstate': '23505' },
     { time: expect.any(String),
       level: 'error', event: 'worker_fault', 'rezics.worker.name': 'main.read-ranking.projection',
       'error.class': 'DatabaseError' },

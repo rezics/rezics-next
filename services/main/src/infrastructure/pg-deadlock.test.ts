@@ -33,6 +33,7 @@ test('the deadlock observer selects only the direct SQLSTATE and runs before que
         'rezics.worker.name': 'main.database.deadlock',
         'error.class': 'DatabaseError',
         'error.code': '40P01',
+        'error.sqlstate': '40P01',
       },
     ]);
     expect(lines.join('\n')).not.toContain('private');

@@ -36,7 +36,7 @@ function expectFault(line: string | undefined, worker: string, code?: string) {
     time: expect.any(String),
     level: 'error', event: 'worker_fault', 'rezics.worker.name': worker,
     'error.class': code ? 'DatabaseError' : 'NestedPoolCheckoutError',
-    ...(code ? { 'error.code': code } : {}),
+    ...(code ? { 'error.code': code, 'error.sqlstate': code } : {}),
   });
   expect(logLineCarriesPersonalData(line!)).toBe(false);
   for (const privateValue of [email, agent, sql, 'private-value', 'private-title', 'database failure']) {
