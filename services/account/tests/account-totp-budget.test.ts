@@ -250,12 +250,13 @@ for (const state of ['missing', 'unverified', 'verified'] as const) {
         resume();
         expect((await pending).status).toBe(state === 'missing' ? 400 : 200);
         const changed = await mutation;
-        expect(changed.status).toBe(state === 'unverified' ? 400 : 200);
-        if (state === 'unverified') expect(await changed.json()).toMatchObject({ code: 'TOTP_ALREADY_ENABLED' });
+        // Once verification finishes, both existing-factor paths require a
+        // fresh proof of that factor on the mutating session.
+        expect(changed.status).toBe(state === 'missing' ? 200 : 403);
+        if (state !== 'missing') expect(await changed.json()).toMatchObject({ code: 'STEP_UP_REQUIRED' });
       } finally { provider.mockRestore(); }
       const factor = await f.pool.query('SELECT verified FROM "twoFactor" WHERE "userId" = $1', [member.id]);
-      if (state === 'verified') expect(factor.rowCount).toBe(0);
-      else expect(factor.rows[0].verified).toBe(state === 'unverified');
+      expect(factor.rows[0].verified).toBe(state !== 'missing');
       expect((await f.pool.query('SELECT count FROM rezics_account_rate_limit WHERE key = $1',
         [userBudgetKey(f.secret, member.id)])).rows[0].count).toBe(1);
     } finally { resume(); interception?.mockRestore(); await f.close(); }
