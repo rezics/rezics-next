@@ -61,7 +61,7 @@ writeFileSync('.temp/launched.json', JSON.stringify({ brief: readFileSync('.temp
   chmodSync(launcher, 0o755);
   const run = (...args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd: dir, encoding: 'utf8',
     env: { PATH: `${bin}:${process.env.PATH}`, GOAL_ID: '', GOAL_TASK_ID: '', GOAL_MAX_WORKERS: '25',
-      GOAL_MEMORY_FLOOR_GIB: '0', GOAL_CODEX_HOME: join(local, 'codex'), GOAL_CODEX_1_HOME: join(local, 'codex-1'),
+      GOAL_MEMORY_FLOOR_GIB: '0', GOAL_CODEX_HOME: join(local, 'codex'),
       GOAL_USAGE_FILE: join(local, 'usage.json') } });
   const ledger = (): Ledger => JSON.parse(readFileSync(ledgerPath, 'utf8')) as Ledger;
   const launchedPath = join(worktree, '.temp/launched.json');

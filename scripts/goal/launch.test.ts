@@ -2,12 +2,16 @@ import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { testAccountSettings } from './fixtures/accounts.ts';
 
 function commands(configs: [string | undefined, string | undefined]) {
   const parent = join(import.meta.dir, '../../.temp/launch');
   mkdirSync(parent, { recursive: true });
   const dir = mkdtempSync(join(parent, 'c-'));
-  const homes = [join(dir, 'codex'), join(dir, 'codex-1')];
+  const homes = [join(dir, 'codex'), join(dir, 'sample-b')];
+  const settingsDirectory = testAccountSettings(dir, [
+    { engine: 'codex', home: homes[0] }, { engine: 'sample-b', home: homes[1] },
+  ]);
   const socket = join(dir, 'tmux.sock');
   try {
     const tmux = spawnSync('tmux', ['-S', socket, 'new-session', '-d', '-s', 'fixture'], { encoding: 'utf8' });
@@ -20,7 +24,7 @@ function commands(configs: [string | undefined, string | undefined]) {
     const child = spawnSync(process.execPath, ['--eval', `
       import { launchCommand } from './scripts/goal/launch.ts';
       import { coordinatorStartDescriptor, coordinatorStartOptions } from './scripts/goal/manager-commands.ts';
-      console.log(JSON.stringify(['codex', 'codex-1', 'luna'].map(engine => {
+      console.log(JSON.stringify(['codex', 'sample-b', 'luna'].map(engine => {
         const worker = resume => launchCommand({ id: 'worker', engine, effort: 'high', session: 'session',
           prompt: '--- brief', resume, worktree: ${JSON.stringify(dir)} });
         const manager = engine === 'luna' ? null : coordinatorStartDescriptor(
@@ -29,7 +33,7 @@ function commands(configs: [string | undefined, string | undefined]) {
         return { engine, fresh: worker(false), resume: worker(true), manager };
       })));
     `], { cwd: join(import.meta.dir, '../..'), encoding: 'utf8', env: {
-      ...process.env, GOAL_CODEX_HOME: homes[0], GOAL_CODEX_1_HOME: homes[1], GOAL_CODEX_SERVICE_TIER: 'fast',
+      ...process.env, GOAL_SETTINGS_DIRECTORY: settingsDirectory, GOAL_CODEX_SERVICE_TIER: 'fast',
     } });
     expect(child.stderr).toBe('');
     expect(child.status).toBe(0);
@@ -37,7 +41,7 @@ function commands(configs: [string | undefined, string | undefined]) {
       if (configs[index] !== undefined) expect(readFileSync(join(home, 'config.toml'), 'utf8')).toBe(configs[index]);
     }
     return JSON.parse(child.stdout) as Array<{ engine: string; fresh: [string, string[]]; resume: [string, string[]];
-      manager: { args: string[]; startArgs: string[]; env: { CODEX_HOME: string } } | null }>;
+      manager: { args: string[]; startArgs: string[]; env: { CODEX_HOME: string; GOAL_SETTINGS_DIRECTORY: string } } | null }>;
   } finally {
     spawnSync('tmux', ['-S', socket, 'kill-server']);
     rmSync(dir, { recursive: true, force: true });
@@ -56,7 +60,7 @@ function overrides(args: string[]) {
 }
 
 for (const command of configured) {
-  const names = command.engine === 'codex-1' ? ['browseros', 'second_account']
+  const names = command.engine === 'sample-b' ? ['browseros', 'second_account']
     : ['playwright', 'outline', 'node_repl', 'browseros', 'named.server'];
   const expected = [`mcp_servers={${names.map(name => `"${name}"={enabled=false}`).join(',')}}`];
   for (const mode of ['fresh', 'resume'] as const) {
@@ -73,6 +77,7 @@ for (const command of configured) {
       expect(overrides(command.manager!.startArgs)).toEqual(expected);
       expect(overrides(command.manager!.args)).toEqual(expected);
       expect(command.manager!.env.CODEX_HOME.endsWith(`/${command.engine}`)).toBe(true);
+      expect(command.manager!.env.GOAL_SETTINGS_DIRECTORY.endsWith('/.goalctl')).toBe(true);
     });
   }
 }

@@ -5,6 +5,7 @@ import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
 import type { QueueLedger } from './queue.ts';
 import type { Task } from './types.ts';
 import { GoalMailStore } from './mail.ts';
+import { testAccountSettings } from './fixtures/accounts.ts';
 
 const spawnSync = fixtureSpawns(60_000);
 const fixtures: { directory: string }[] = [];
@@ -19,7 +20,7 @@ function repository() {
     return result.stdout.trim();
   };
   git('init', '-qb', 'main'); git('config', 'user.email', 'queue@example.invalid'); git('config', 'user.name', 'Queue fixture');
-  writeFileSync(join(directory, '.gitignore'), '.temp/\n');
+  writeFileSync(join(directory, '.gitignore'), '.temp/\n.goalctl/*.user.json\n');
   writeFileSync(join(directory, 'claimed.ts'), 'export {};\n');
   git('add', '.'); git('commit', '-qm', 'Fixture');
   const local = join(directory, '.temp');
@@ -38,7 +39,10 @@ function repository() {
   writeFileSync(meminfo, 'MemAvailable: 67108864 kB\n');
   const env = { ...process.env, GOAL_ID: 'program', PATH: `${bin}:${process.env.PATH}`, GOAL_MEMORY_FLOOR_GIB: '12',
     GOAL_MAX_WORKERS: '25', GOAL_MEMINFO_FILE: meminfo, GOAL_USAGE_FILE: join(local, 'usage.json'),
-    GOAL_CODEX_HOME: join(local, 'codex'), GOAL_CODEX_1_HOME: join(local, 'codex-1') };
+    GOAL_CODEX_HOME: join(local, 'codex'), GOAL_TEST_SECOND_HOME: join(local, 'sample-b') };
+  Object.assign(env, { GOAL_SETTINGS_DIRECTORY: testAccountSettings(directory, [
+    { engine: 'codex', home: env.GOAL_CODEX_HOME }, { engine: 'sample-b', home: env.GOAL_TEST_SECOND_HOME },
+  ]) });
   const ledgerPath = join(state, 'ledger.json');
   const save = (ledger: QueueLedger) => writeFileSync(ledgerPath, JSON.stringify(ledger));
   const ledger = (): QueueLedger => JSON.parse(readFileSync(ledgerPath, 'utf8')) as QueueLedger;
@@ -354,7 +358,7 @@ async function endedWorker(f: ReturnType<typeof repository>) {
 
 test.each(['memory', 'cap', 'account'])('a resume waits for %s admission and preserves its message and options', async gate => {
   const f = repository(); const task = await endedWorker(f);
-  const usageDirectory = join(f.env.GOAL_CODEX_1_HOME, 'sessions/2026/10/13');
+  const usageDirectory = join(f.env.GOAL_TEST_SECOND_HOME, 'sessions/2026/10/13');
   const usage = join(usageDirectory, 'usage.jsonl');
   if (gate === 'memory') writeFileSync(f.meminfo, 'MemAvailable: 1024 kB\n');
   if (gate === 'cap') f.env.GOAL_MAX_WORKERS = '0';
@@ -365,10 +369,10 @@ test.each(['memory', 'cap', 'account'])('a resume waits for %s admission and pre
     } } }));
   }
   const note = join(f.local, 'resume-note'); writeFileSync(note, 'Continue with the retained note.');
-  const output = ok(f.run('resume', task.id, '--file', note, '--engine', 'codex-1', '--effort', 'medium', '--fresh'));
+  const output = ok(f.run('resume', task.id, '--file', note, '--engine', 'sample-b', '--effort', 'medium', '--fresh'));
   expect(output).toContain('resume waiting:');
   expect(f.ledger().tasks[task.id]!.waitingResume).toMatchObject({ message: 'Continue with the retained note.',
-    engine: 'codex-1', effort: 'medium', fresh: true, forceUsage: false });
+    engine: 'sample-b', effort: 'medium', fresh: true, forceUsage: false });
   expect(f.ledger().tasks[task.id]!.attempts).toHaveLength(1);
   rmSync(note);
   const status = ok(f.run('status'));

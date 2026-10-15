@@ -11,6 +11,7 @@ import { sweepOrphanContainers, reapSettleMs } from '../qa/container-reaper.ts';
 import { parseAffectedArgs, testCommands } from '../qa/test.ts';
 import { qaArtifactDirectory } from '../qa/core.ts';
 import { assertWideRunAllowed, isWideRun, liveWorkerGoals, qaGoal, slotHolderLines, slotHolders, tryAcquireQaSlot, type SlotShareOptions } from './admission.ts';
+import { loadSettings } from './config.ts';
 
 /** QA stacks are named `rezics-qa-<UTC yyyymmddThhmmss>-<id>-<n>`. A run killed with SIGKILL never tears
  * its stack down, and leaked stacks filled the Docker VM (four left running for nine hours). No QA run
@@ -217,24 +218,18 @@ export function qaSlotAdmission(directory: string, total: number, options: SlotS
   };
 }
 
-/** Ordinary QA runs share this many slots. Program sets the count for every Goal in `qa-slot-count`
- * beside the slots; `GOAL_QA_SLOTS` overrides it for one process. Memory admission still decides each start. */
+/** Ordinary QA runs share the configured slots; the environment overrides one process.
+ * Memory admission still decides each start. */
 export function qaSlotCount(directory: string, env: NodeJS.ProcessEnv = process.env): number {
   if (env.GOAL_QA_SLOTS !== undefined) return Number(env.GOAL_QA_SLOTS);
-  const file = join(dirname(directory), 'qa-slot-count');
-  const stored = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
-  return /^[1-9]\d*$/.test(stored) && Number.isSafeInteger(Number(stored)) ? Number(stored) : 3;
+  return loadSettings({ stateDirectory: dirname(directory), env }).settings.qaSlots;
 }
 
 /** Concurrent type-check and unit gates share this many process-identity leases.
  * A killed gate's lease is stale, so the next gate takes its lane. */
 function gateLaneCount(directory: string = gateLanesDir): number {
   if (process.env.GOAL_GATE_LANES) return positiveInteger('GOAL_GATE_LANES', 2);
-  // Program sets the count for every Goal by writing this file beside the lanes; the environment
-  // variable overrides it for one process.
-  const file = join(dirname(directory), 'gate-lane-count');
-  const stored = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
-  return /^[1-9]\d*$/.test(stored) && Number.isSafeInteger(Number(stored)) ? Number(stored) : 2;
+  return loadSettings({ stateDirectory: dirname(directory) }).settings.gateLanes;
 }
 
 const gateLanesDir = join(stateDir, 'gate-lanes');

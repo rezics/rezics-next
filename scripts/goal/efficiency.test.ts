@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { delimiter, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { efficiencyCommand, type EfficiencyRecord } from './efficiency.ts';
 
 const FIXTURES = join(import.meta.dir, 'fixtures', 'efficiency');
@@ -10,8 +10,8 @@ const TEST_ROOT = join(import.meta.dir, '../../.temp/efficiency-tests');
 function fixture() {
   mkdirSync(TEST_ROOT, { recursive: true });
   const root = mkdtempSync(join(TEST_ROOT, 'case-'));
-  const codex = join(root, '.codex');
-  const codex1 = join(root, '.codex-1');
+  const codex = join(root, 'sample-a');
+  const codex1 = join(root, 'sample-b');
   const files = [
     [join(codex, 'sessions/2026/10/13/session-a.jsonl'), 'session-a.jsonl'],
     [join(codex1, 'sessions/2026/10/13/session-b.jsonl'), 'session-b.jsonl'],
@@ -20,9 +20,14 @@ function fixture() {
     mkdirSync(dirname(destination), { recursive: true });
     copyFileSync(join(FIXTURES, source), destination);
   }
+  mkdirSync(join(root, '.goalctl'));
+  writeFileSync(join(root, '.goalctl/settings.user.json'), JSON.stringify({ version: 1, accounts: [
+    { engine: 'sample-a', home: codex, weight: 1 }, { engine: 'sample-b', home: codex1, weight: 1 },
+    { engine: 'sample-c', launcher: 'unused-launcher', weight: 1 },
+  ] }));
   return {
     root,
-    stateDirectory: join(root, 'state'),
+    stateDirectory: join(root, '.temp/goal-orchestration'),
     homes: [codex, codex1],
     cleanup: () => rmSync(root, { recursive: true, force: true }),
   };
@@ -35,7 +40,7 @@ async function run(f: ReturnType<typeof fixture>, args: string[], at = '2026-10-
   const status = await efficiencyCommand(args, {
     stateDirectory: f.stateDirectory,
     nowMs: Date.parse(at),
-    env: { ...process.env, GOAL_CODEX_HOMES: f.homes.join(delimiter) },
+    env: {},
     print: line => output.push(line),
     reportError: line => errors.push(line),
     reportDiagnostic: line => diagnostics.push(line),
@@ -128,8 +133,9 @@ describe('Goal efficiency command', () => {
       expect(measured.noDecisionShare).toBe(48);
       expect(measured.byEngine).toEqual({ sol: { sessions: 2, turns: 3, steps: 64, inputTokens: 3_481_562 } });
       expect(measured.byAccount).toEqual({
-        codex: { sessions: 1, inputTokens: 1_331_035 },
-        'codex-1': { sessions: 1, inputTokens: 2_150_527 },
+        'sample-a': { sessions: 1, inputTokens: 1_331_035 },
+        'sample-b': { sessions: 1, inputTokens: 2_150_527 },
+        'sample-c': { sessions: 0, inputTokens: 0 },
       });
       expect(measured.taskStats).toEqual({ tasks: 2, oneTurnTasks: 1, oneTurnMedianInput: 1_331_035,
         thirteenTurnTasks: 0, thirteenTurnInputShare: 0 });

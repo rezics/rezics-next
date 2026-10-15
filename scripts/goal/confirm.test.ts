@@ -48,6 +48,20 @@ function fixture() {
   return { directory, stateDir, commit, options, git, write, cleanup: () => rmSync(directory, { recursive: true, force: true }) };
 }
 
+test('user settings can disable scheduled confirmation without changing runtime state', () => {
+  mkdirSync('.temp', { recursive: true });
+  const directory = mkdtempSync(join(import.meta.dir, '../../.temp/confirm-settings-'));
+  const stateDir = join(directory, '.temp/goal-orchestration');
+  try {
+    mkdirSync(join(directory, '.goalctl'), { recursive: true });
+    writeFileSync(join(directory, '.goalctl/settings.user.json'), JSON.stringify({ version: 1, confirmIntervalMinutes: 0 }));
+    let spawned = false;
+    expect(scheduleConfirmation({ repo: directory, stateDir, spawn: () => { spawned = true; return process.pid; } })).toBe(false);
+    expect(spawned).toBe(false);
+    expect(existsSync(join(stateDir, 'confirm-last-start'))).toBe(false);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('confirmation pins Main declarations, runs actual failing tests under slots, and records the five readings', async () => {
   const f = fixture();
   let active = 0;

@@ -1,8 +1,7 @@
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { configuredAccounts } from './config.ts';
 
 export type State = 'starting' | 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
-export type Engine = 'claude' | 'sonnet' | 'haiku' | 'fable' | 'sol' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
+export type Engine = string;
 export const BRIEF_KINDS = ['outcome', 'implementation', 'surface', 'mechanism', 'tooling'] as const;
 export type BriefKind = typeof BRIEF_KINDS[number];
 export interface Brief {
@@ -88,6 +87,7 @@ export interface UsageReport {
 }
 export interface AccountUsage {
   account: string; home: string; engines: Engine[]; used?: number; windowMinutes?: number;
+  weight?: number; pastAllowance?: string[];
   weekUsed?: number;
   resetInHours?: number; windowResetsAt?: number; sampledAt?: number; plan?: string; reached?: boolean; ageSeconds?: number;
 }
@@ -124,13 +124,13 @@ const ENGINE_EFFORTS: Record<Engine, string[]> = {
   fable: ['low', 'medium', 'high', 'xhigh', 'max'],
   codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   sol: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
-  'codex-1': ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   luna: ['low', 'medium', 'high', 'xhigh', 'max'],
   grok: ['low', 'medium', 'high'],
   // Cursor Agent selects Grok 4.7 through per-effort model IDs (grok-4.7-<effort>).
   cursor: ['low', 'medium', 'high', 'xhigh'],
 };
 export const ENGINES = Object.keys(ENGINE_EFFORTS) as Engine[];
+export const engineNames = (): string[] => [...ENGINES.filter(engine => engine !== 'codex'), ...configuredAccounts().map(account => account.engine)];
 // The last line of an engine's error output that means the session's connection dropped. Cursor names
 // every such exit RetriableError ("Connection stalled repeatedly", "HTTP/2 keepalive ping timed out").
 // Quota, limit and authentication failures stay off this list, so those exits are left as they are.
@@ -141,24 +141,25 @@ export const MAX_TRANSPORT_CONTINUATIONS = 2;
 export const MAX_CAPACITY_CONTINUATIONS = 4;
 export const CAPACITY_WAIT_MS = 30_000;
 export const DEFAULT_ENGINE: Engine = (process.env.GOAL_ENGINE as Engine | undefined) ?? 'sol';
-// `codex` (Sol) and `luna` use the default Codex account; `codex-1` runs Sol on the second account in a
-// separate CODEX_HOME (the `codex-1` wrapper sets the same directory), so Sol work can continue on
-// whichever account still has usage.
-export const CODEX_HOME = process.env.GOAL_CODEX_HOME ?? join(homedir(), '.codex');
-export const CODEX_1_HOME = process.env.GOAL_CODEX_1_HOME ?? join(homedir(), '.codex-1');
 export const engineOf = (item: { engine?: Engine }): Engine => item.engine ?? 'claude';
-export const MODELS: Record<Engine, string> = { claude: MODEL, sonnet: SONNET_MODEL, haiku: HAIKU_MODEL, fable: FABLE_MODEL, sol: CODEX_MODEL, codex: CODEX_MODEL, 'codex-1': CODEX_MODEL, luna: LUNA_MODEL,
+export const MODELS: Record<Engine, string> = { claude: MODEL, sonnet: SONNET_MODEL, haiku: HAIKU_MODEL, fable: FABLE_MODEL, sol: CODEX_MODEL, codex: CODEX_MODEL, luna: LUNA_MODEL,
   grok: GROK_MODEL, cursor: `${process.env.GOAL_CURSOR_MODEL ?? GROK_MODEL} (Cursor)` };
-export const modelOf = (engine: Engine): string => MODELS[engine];
-export const effortsOf = (engine: Engine): string[] => ENGINE_EFFORTS[engine] ?? [];
+export const modelOf = (engine: Engine): string => MODELS[engine] ?? (isCodex(engine) ? CODEX_MODEL : engine);
+export const effortsOf = (engine: Engine): string[] => ENGINE_EFFORTS[engine] ?? (isCodex(engine) ? ENGINE_EFFORTS.codex! : []);
 export const isCodex = (engine: Engine): boolean =>
-  engine === 'codex' || engine === 'codex-1' || engine === 'luna';
+  engine === 'luna' || configuredAccounts().some(account => account.engine === engine);
+export const codexAccount = (engine: Engine) => configuredAccounts().find(account => account.engine === engine)
+  ?? (engine === 'luna' ? configuredAccounts()[0] : undefined);
 export const isClaudeCode = (engine: Engine): boolean => engine === 'claude' || engine === 'sonnet' || engine === 'haiku' || engine === 'fable';
 // Process name that /proc/<pid>/cmdline carries for a live worker of each engine.
 export const programOf = (engine: Engine): string =>
   isCodex(engine) ? 'codex' : engine === 'cursor' ? 'cursor-agent' : isClaudeCode(engine) ? 'claude' : engine;
-export const engineEnv = (engine: Engine): Record<string, string> =>
-  engine === 'codex-1' ? { CODEX_HOME: CODEX_1_HOME } : isCodex(engine) ? { CODEX_HOME } : {};
+export const launcherOf = (engine: Engine): string => codexAccount(engine)?.launcher ?? programOf(engine);
+export const engineEnv = (engine: Engine): Record<string, string> => {
+  const account = codexAccount(engine);
+  return account ? { ...(account.home ? { CODEX_HOME: account.home } : {}),
+    GOAL_CODEX_PAST_ALLOWANCE: JSON.stringify(account.pastAllowance ?? []) } : {};
+};
 export const HOLDING: State[] = ['starting', 'running', 'exited', 'conflict', 'merged', 'stopped'];
 // Preparations have no commits yet. Landed (`merged`) and closed tasks no longer
 // have to land; the remaining holders do, including their out-of-claim commits.

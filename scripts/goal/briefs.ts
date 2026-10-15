@@ -1,4 +1,4 @@
-import { type Brief, type BriefKind, type Engine, DEFAULT_ENGINE, BRIEF_KINDS, ENGINES, effortsOf, type Task, HOLDING } from './types.ts';
+import { type Brief, type BriefKind, type Engine, DEFAULT_ENGINE, BRIEF_KINDS, engineNames, effortsOf, type Task, HOLDING } from './types.ts';
 import { isAbsolute, posix, win32 } from 'node:path';
 import { mechanisms } from '../static/mechanisms.ts';
 
@@ -60,7 +60,7 @@ export function validateBrief(brief: Brief): string[] {
   for (const row of brief.rows ?? []) if (!/^[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/.test(row)) errors.push(`bad outcome row: ${row}`);
   if (brief.land !== undefined && brief.land !== 'auto') errors.push(`land must be auto: ${brief.land}`);
   const engine = brief.engine ?? DEFAULT_ENGINE;
-  if (!ENGINES.includes(engine)) errors.push(`engine must be one of ${ENGINES.join(', ')}: ${engine}`);
+  if (!engineNames().includes(engine)) errors.push(`engine must be one of ${engineNames().join(', ')}: ${engine}`);
   else if (!effortsOf(engine).includes(brief.effort)) {
     errors.push(`${engine} effort must be one of ${effortsOf(engine).join(', ')}: ${brief.effort}`);
   }

@@ -1,6 +1,6 @@
 import { appendFileSync, createReadStream, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { basename, delimiter, join, resolve } from 'node:path';
+import { join } from 'node:path';
+import { configuredAccounts } from './config.ts';
 import { createInterface } from 'node:readline';
 import { stateDir as goalStateDir } from './ledger.ts';
 
@@ -190,14 +190,8 @@ async function readSession(file: string, account: string, since: number, until: 
   return session;
 }
 
-function sessionHomes(env: NodeJS.ProcessEnv): Array<{ path: string; account: string }> {
-  const configured = env.GOAL_CODEX_HOMES;
-  const paths = configured === undefined
-    ? [join(homedir(), '.codex'), join(homedir(), '.codex-1')]
-    : configured.split(delimiter).filter(Boolean);
-  return paths.map((path, index) => ({ path: resolve(path),
-    account: basename(path).includes('codex-1') ? 'codex-1'
-      : basename(path).includes('codex') ? 'codex' : index === 0 ? 'codex' : `codex-${index}` }));
+function sessionHomes(env: NodeJS.ProcessEnv, stateDirectory: string): Array<{ path: string; account: string }> {
+  return configuredAccounts({ env, stateDirectory }).map(account => ({ path: account.home ?? '', account: account.engine }));
 }
 
 async function collectSessions(homes: Array<{ path: string; account: string }>, since: number, until: number): Promise<{ sessions: Session[]; opened: number }> {
@@ -457,7 +451,7 @@ function formatComparison(previous: EfficiencyRecord | undefined, current: Effic
     lines.push(`Engine ${engine}: sessions ${changed(oldValue?.sessions, value?.sessions ?? 0)}; turns ${changed(oldValue?.turns, value?.turns ?? 0)};`
       + ` steps ${changed(oldValue?.steps, value?.steps ?? 0)}; tokens ${changed(oldValue?.inputTokens, value?.inputTokens ?? 0)}`);
   }
-  for (const account of ['codex', 'codex-1']) {
+  for (const account of new Set([...Object.keys(previous?.byAccount ?? {}), ...Object.keys(current.byAccount)])) {
     const oldValue = previous?.byAccount[account];
     const value = current.byAccount[account];
     lines.push(`Account ${account}: sessions ${changed(oldValue?.sessions, value?.sessions ?? 0)}; tokens ${changed(oldValue?.inputTokens, value?.inputTokens ?? 0)}`);
@@ -522,7 +516,8 @@ export async function efficiencyCommand(args: string[], options: EfficiencyOptio
     reportError('--since must be no later than --until');
     return 2;
   }
-  const { sessions, opened } = await collectSessions(sessionHomes(env), since === undefined ? -Infinity : Date.parse(since), Date.parse(until));
+  const homes = sessionHomes(env, stateDirectory);
+  const { sessions, opened } = await collectSessions(homes.filter(home => home.path), since === undefined ? -Infinity : Date.parse(since), Date.parse(until));
   if (since === undefined) (options.reportDiagnostic ?? console.error)(`Opened ${quantity(opened, 'session log')} (no lower time bound).`);
   const selected = sessions.filter(session => {
     const started = Date.parse(session.firstAt);
@@ -530,6 +525,7 @@ export async function efficiencyCommand(args: string[], options: EfficiencyOptio
       && (since === undefined || started >= Date.parse(since));
   });
   const record = makeRecord(selected, new Date(now).toISOString(), since ?? null, until);
+  for (const home of homes) record.byAccount[home.account] ??= { sessions: 0, inputTokens: 0 };
   if (parsed.record) {
     mkdirSync(stateDirectory, { recursive: true });
     appendFileSync(join(stateDirectory, 'efficiency.jsonl'), `${JSON.stringify(record)}\n`);

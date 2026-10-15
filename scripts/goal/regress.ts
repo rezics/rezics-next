@@ -19,6 +19,7 @@ import { physicalPath, POSTGRES_SOCKET_LIMIT, postgresSocketByteLength, postgres
 import { verticalJourneyFilter, type VerticalJourney } from '../qa/cases/vertical-journeys.ts';
 import { recordConfirmation } from './confirmed.ts';
 import type { RowOutcomes } from '../qa/cases/outcome-cells.ts';
+import { loadSettings } from './config.ts';
 
 export type RegressionTier = 'unit' | 'owner' | 'model' | 'integration' | 'fault/recovery' | 'e2e' | 'accounts:storybook' | 'jena:check';
 export type Classification = 'infrastructure' | 'resource' | 'deadline' | 'order-dependent' | 'flaky' | 'deterministic';
@@ -144,13 +145,12 @@ export async function waitForRegressionTurn(lockDir?: string, interrupted: () =>
     await sleep(Math.min(10_000, remaining));
   }
 }
-/** Batches in flight. Two never starves worker QA and is the default; the program widens it from
- * `regress-lane-count` beside the run reports when the host has room. Each batch still takes QA slots
+/** Batches in flight. The configured count can widen the caller's default when the host has room.
+ * Each batch still takes QA slots
  * through the host's slot leases, so the slot count stays the bound on stacks. */
 export function regressionLaneLimit(stateDir: string, fallback: number): number {
-  const file = join(stateDir, 'regress-lane-count');
-  const stored = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
-  return /^[1-9]\d*$/.test(stored) && Number.isSafeInteger(Number(stored)) ? Number(stored) : fallback;
+  const { settings, sources } = loadSettings({ stateDirectory: stateDir });
+  return sources.regressLaneCount === 'built-in' ? fallback : settings.regressLaneCount;
 }
 
 export function regressionLaneCount(stateDir: string, slots: number, workersLive: boolean): number {
