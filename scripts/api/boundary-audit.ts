@@ -226,19 +226,29 @@ export async function auditBoundary(root: string) {
 
 /** Sequential runs avoid competing compilers. Logs retain failures and full native
  * extendedDiagnostics; declaration emit is a serialization-size experiment. */
-async function diagnostics(root: string) {
+async function diagnostics(root: string, baselineOnly = false) {
   const output = join(root, '.temp/api-boundary');
   mkdirSync(output, { recursive: true });
   const runs: Record<string, { exit: number; wallSeconds: number }> = {};
   writeFileSync(join(output, 'tsconfig-literals.json'), JSON.stringify({
     extends: '../../services/main/tsconfig.json', files: ['../../scripts/api/boundary-contract.types.ts'], include: [], exclude: [],
   }));
-  for (const [name, project] of [['main', 'services/main/tsconfig.json'], ['web', 'apps/web/tsconfig.json'], ['eden', 'tests/qa/client/tsconfig.json'],
-    ['literals', '.temp/api-boundary/tsconfig-literals.json']] as const) {
+  writeFileSync(join(output, 'tsconfig-app.json'), JSON.stringify({
+    extends: '../../services/main/tsconfig.json', files: ['../../scripts/api/boundary-app.types.ts'], include: [], exclude: [],
+  }));
+  const projects = baselineOnly ? [['app', '.temp/api-boundary/tsconfig-app.json']] :
+    [['main', 'services/main/tsconfig.json'], ['web', 'apps/web/tsconfig.json'], ['eden', 'tests/qa/client/tsconfig.json'],
+      ['literals', '.temp/api-boundary/tsconfig-literals.json'], ['app', '.temp/api-boundary/tsconfig-app.json']];
+  for (const [name, project] of projects) {
     const start = performance.now();
     const child = Bun.spawn(['bun', 'node_modules/typescript/bin/tsc', '-p', project, '--extendedDiagnostics', '--pretty', 'false'],
       { cwd: root, stdout: Bun.file(join(output, `${name}-tsc.log`)), stderr: 'inherit' });
     runs[name] = { exit: await child.exited, wallSeconds: (performance.now() - start) / 1000 };
+  }
+  if (baselineOnly) {
+    writeFileSync(join(output, 'app-diagnostics.json'), JSON.stringify(runs, null, 2) + '\n');
+    console.log(JSON.stringify(runs, null, 2));
+    return;
   }
   writeFileSync(join(output, 'tsconfig-declaration.json'), JSON.stringify({
     extends: '../../services/main/tsconfig.json',
@@ -287,6 +297,7 @@ async function typeSize(root: string) {
 if (import.meta.main) {
   const root = resolve(import.meta.dir, '../..');
   if (Bun.argv.includes('--diagnostics')) await diagnostics(root);
+  else if (Bun.argv.includes('--eden-baseline')) await diagnostics(root, true);
   else if (Bun.argv.includes('--type-size')) await typeSize(root);
   else console.log(JSON.stringify(await auditBoundary(root), null, 2));
 }
