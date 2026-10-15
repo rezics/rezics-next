@@ -436,7 +436,7 @@ export async function landTask(id: string, step = false, gateLane: GateLaneOptio
           || current.branch !== snapshot.task.branch || current.worktree !== snapshot.task.worktree) {
           throw new Error(`${current.id}: task or brief changed during review; review again`);
         }
-      }, permittedFiles, false, gateLane), close: () => closeTasks([id], 'verified') });
+      }, permittedFiles, false, gateLane, landingLease), close: () => closeTasks([id], 'verified') });
   } finally {
     landingLease.release();
   }
