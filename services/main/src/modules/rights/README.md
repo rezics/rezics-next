@@ -28,7 +28,7 @@ reuse. Service terms and data rights remain separate families.
 | `assess` | One Access preflight and one locked dispatch proof (plus one selected membership lock when applicable), one indexed material lookup, one head lock and at most 16 obligation inserts. |
 | `evaluate` | One Access grant lookup, one indexed material/head lookup and at most 16 obligation rows. |
 | `exportScope` | One Content query over at most 256 exact material/head keys and their at most 16 obligations each, plus one Access query over at most 256 exact export targets. |
-| `currentWikiDisplayObligations` | One Content query over at most 32 exact material keys and their display obligations, then one Access query for disclosure fences on keys that have a current `wiki_display` head. No graph call. The result is part of the Work header or statement page and uses that response's cache headers. |
+| `currentWikiDisplayObligations` | One Content query over at most 64 exact material keys and their display obligations, then one Access query for disclosure fences on keys that have a current `wiki_display` head. No graph call. The result is part of the Work header or statement page and uses that response's cache headers. |
 | `rawRetentionPermitted` | One provider/material lookup and one current service-terms head lookup; absent terms do not create a copyright conclusion, while an explicit `not_supported` result blocks raw retention. |
 | `createAdmittedOffering` / `changeAdmittedOffering` | One Access admission and claim; one graph state read, one guarded graph command, one terminal receipt read. |
 | `readOffering` | One bounded graph query returning at most two rows for one offering identity. |

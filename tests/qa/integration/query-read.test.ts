@@ -7,8 +7,6 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, type RegisteredAdmission }
   from '../../../services/main/src/modules/access/admission.ts';
-import { classificationDecisionDigest, classificationDecisionScope, setClassificationDecision }
-  from '../../../services/main/src/modules/classification/decision.ts';
 import { classificationPropositionDigest, createClassificationProposition }
   from '../../../services/main/src/modules/classification/proposition.ts';
 import { activateTextContribution, textContributionDigest }
@@ -27,6 +25,7 @@ import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-br
 import { callerEvidence } from './realm-browse-caller-evidence.ts';
 import { configureDisclosure, DisclosureStore } from '../../../services/main/src/modules/disclosure/read.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
+import { contextFixture, type ContextFixture } from './context-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const book = 'https://schema.org/Book';
@@ -64,6 +63,7 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
   const send = (path: string, body: unknown) => handle(new Request(`http://main.local${path}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   }));
+  let classification: ContextFixture | undefined;
   try {
     const token = `query421${randomUUID().replaceAll('-', '')}`;
     const title = `Query Work ${token}`;
@@ -161,9 +161,10 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     expect(zoneResult.result.items.map(item => item.id)).toEqual(
       (await zoneLegacy.json() as { items: Array<{ id: string }> }).items.map(item => item.id));
 
+    classification = await contextFixture(Bun.env as Record<string, string>);
     const define = async (label: string) => {
-      const input = { label, actingSubject: actor };
-      const result = await createClassificationProposition(env, admission('classification:define:global',
+      const input = { label, actingSubject: classification!.actorA };
+      const result = await createClassificationProposition(classification!.env, classification!.admission('classification:define:global',
         'classification.proposition.define', classificationPropositionDigest(input)), input);
       if (result.outcome !== 'succeeded' || !result.definitions || !result.revision) {
         throw new Error('Query Concept definition failed');
@@ -172,16 +173,16 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     };
     const included = await define(`Query included ${randomUUID()}`);
     const excluded = await define(`Query excluded ${randomUUID()}`);
-    const accept = async (sense: string) => {
-      const input = { context: { kind: 'global' as const }, work: created.work,
-        mainVersion: created.mainVersion, sense, expectedDecisionHead: null,
-        outcome: 'accepted' as const, actingSubject: actor };
-      const decision = await evidence.phase('classification.decision', input, () => setClassificationDecision(env,
-        admission(classificationDecisionScope(input.context), 'classification.decision.set',
-          classificationDecisionDigest(input)), input));
-      expect(decision.outcome).toBe('succeeded');
+    const accept = async (definition: Awaited<ReturnType<typeof define>>) => {
+      const input = { mainVersion: created.mainVersion, sense: definition.definitions!.sense,
+        senseRevision: definition.revision!, concept: definition.definitions!.concept,
+        acceptance: { kind: 'global' as const }, expectedDecisionHead: null,
+        outcome: 'accepted' as const };
+      const decision = await evidence.phase('classification.decision', input,
+        () => classification!.decideClassification(input));
+      expect(decision.decision).toBeTruthy();
     };
-    await accept(included.definitions!.sense);
+    await accept(included);
     const conceptQuery = { ...query, filter: { all: [
       { facet: 'concept', any: [included.definitions!.concept],
         interpretation: { definition: included.revision } },
@@ -216,7 +217,7 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     expect(legacyIncluded.status).toBe(200);
     expect(positive.result.results.map(row => row.work)).toEqual(
       (await legacyIncluded.json() as { results: Array<{ work: string }> }).results.map(row => row.work));
-    await accept(excluded.definitions!.sense);
+    await accept(excluded);
     const excludedResponse = await send('/v1/query', conceptQuery);
     expect(excludedResponse.status).toBe(200);
     const negative = await excludedResponse.json() as { result: { results: Array<{ work: string }> } };
@@ -232,6 +233,7 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     expect(refused.status).toBe(422);
     expect(await refused.json()).toMatchObject({ status: 422, code: 'unsupported_query_shape' });
   } finally {
+    await classification?.close();
     evidence.mark('case.finished');
     await relayPool.end();
     await accessPool.end();

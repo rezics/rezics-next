@@ -113,7 +113,7 @@ export async function assertRetainedAuthorityCoverage(relay: Pool | PoolClient, 
       throw new ErasureAuthorityCoverageConflict('a release binding needs the opened Access fence');
     }
     try {
-      const post = await verifyReleasedRestore({ relay, fuseki: release.fuseki, key: evidence.hmacKey,
+      const post = await verifyReleasedRestore({ relay, accessClient: accessClient!, fuseki: release.fuseki, key: evidence.hmacKey,
         outerId: release.binding.outerReconciliationId,
         ...(release.binding.erasuresReconciliationId === undefined ? {}
           : { erasuresReconciliationId: release.binding.erasuresReconciliationId }),

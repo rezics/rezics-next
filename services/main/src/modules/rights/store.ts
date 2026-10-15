@@ -484,7 +484,7 @@ export class RightsStore {
    * unassessed shape and does not carry the instrument or notice.
    */
   async currentWikiDisplayObligations(materials: readonly MaterialScope[]): Promise<WikiDisplayObligations[]> {
-    if (materials.length > 32 || materials.some(material => !validMaterial(material))) {
+    if (materials.length > 64 || materials.some(material => !validMaterial(material))) {
       throw new RightsInvalid('wiki display obligation batch is invalid');
     }
     if (!materials.length) return [];

@@ -7,8 +7,8 @@ import { hash } from '../work/activate.ts';
 export async function readFactObligations(session: WorkReadSession, works: readonly string[]) {
   const result = new Map<string, WikiDisplayObligations>();
   const store = session.deps.rights?.store;
-  for (let start = 0; start < works.length; start += 32) {
-    const ids = works.slice(start, start + 32);
+  for (let start = 0; start < works.length; start += 64) {
+    const ids = works.slice(start, start + 64);
     if (!store) {
       for (const work of ids) result.set(work, { status: 'unassessed' });
       continue;

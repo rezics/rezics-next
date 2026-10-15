@@ -508,6 +508,7 @@ export async function recordRelease(
  */
 export async function verifyReleasedRestore(input: {
   relay: Pool | PoolClient;
+  accessClient: PoolClient;
   fuseki: FusekiClient;
   key: string;
   outerId: string;
@@ -586,6 +587,20 @@ export async function verifyReleasedRestore(input: {
     ) !== bound.release
   ) {
     throw new RestoreLineageConflict('restore completion differs from its durable release binding');
+  }
+  // Relay can commit before Access. The signed finding alone cannot prove
+  // that Access committed the two CAS invalidations, especially for historical
+  // coverage profiles that exclude these derived source-change tables.
+  for (const name of INVALIDATIONS) {
+    const row = (await input.accessClient.query<Record<string, unknown>>(
+      `SELECT * FROM ${name} WHERE id = $1`, [release.identities[name]],
+    )).rows[0];
+    const defaults = row && (name === INVALIDATIONS[0]
+      ? row.context_key === '' && row.statement === ''
+      : row.privacy === true);
+    if (!defaults) {
+      throw new RestoreLineageConflict('Access release invalidations did not commit');
+    }
   }
   return release.post;
 }
