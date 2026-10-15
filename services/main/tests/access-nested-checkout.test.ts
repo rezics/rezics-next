@@ -142,17 +142,6 @@ test('a semantic admission graph callback joins topology reads on its one held c
         calls++;
       });
 
-test('authority probes reuse the held transaction and roll back only their own work', async () => {
-  await controlTransaction(pool, async client => {
-    const before = (await client.query('SELECT txid_current()::text AS id')).rows[0]!.id;
-    const admissions = (await client.query('SELECT count(*)::text AS count FROM access.admission')).rows;
-    await admission.assertAuthority(ownerRequest);
-    await expect(admission.assertAuthority({ ...ownerRequest, principal: absent })).rejects.toBeInstanceOf(AdmissionDenied);
-    expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(before);
-    expect((await client.query('SELECT count(*)::text AS count FROM access.admission')).rows).toEqual(admissions);
-    expect(await admission.activePrincipalId(principal)).toBe(principalId);
-  });
-});
     }
     return { results: { bindings: [] } };
   } });
@@ -165,6 +154,18 @@ test('authority probes reuse the held transaction and roll back only their own w
   }
   expect(calls).toBe(1);
 }, 30_000);
+
+test('authority probes reuse the held transaction and roll back only their own work', async () => {
+  await controlTransaction(pool, async client => {
+    const before = (await client.query('SELECT txid_current()::text AS id')).rows[0]!.id;
+    const admissions = (await client.query('SELECT count(*)::text AS count FROM access.admission')).rows;
+    await admission.assertAuthority(ownerRequest);
+    await expect(admission.assertAuthority({ ...ownerRequest, principal: absent })).rejects.toBeInstanceOf(AdmissionDenied);
+    expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(before);
+    expect((await client.query('SELECT count(*)::text AS count FROM access.admission')).rows).toEqual(admissions);
+    expect(await admission.activePrincipalId(principal)).toBe(principalId);
+  });
+});
 
 test('topology reentry and admission reentry keep caller transaction and allow/deny decisions', async () => {
   const ordinary = await Promise.all([principal, absent].map(identity => admission.canReadWork(identity, actor, work)));
