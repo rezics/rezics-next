@@ -61,7 +61,7 @@ export class RankingBuildWorker {
 
   private logDeferred(error: unknown): void {
     if (error instanceof RecommendationUnavailable || error instanceof RecommendationStale && error.cause !== undefined)
-      logWorkerFault('main.ranking.build', error);
+      logWorkerFault('main.ranking.build', error, { messages: false });
   }
 
   start(): void {
@@ -69,7 +69,7 @@ export class RankingBuildWorker {
     this.timer = setInterval(() => {
       if (this.running) return;
       this.running = runWorkerTick('main.ranking.build', () => withWorkerTelemetry('main.ranking.build', () => this.tick())).catch(error => {
-        logWorkerFault('main.ranking.build', error);
+        logWorkerFault('main.ranking.build', error, { messages: false });
       }).finally(() => { this.running = undefined; });
     }, this.intervalMs);
   }

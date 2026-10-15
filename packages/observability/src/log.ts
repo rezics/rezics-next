@@ -236,16 +236,19 @@ function boundedMessage(value: unknown): string | undefined {
 }
 
 /** Bounded diagnostic messages and causes, never stacks, rows or query text. */
-export function logWorkerFault(worker: string, error: unknown): void {
+export function logWorkerFault(worker: string, error: unknown,
+  options: { messages?: boolean } = {}): void {
   const chain = boundedErrorChain(error);
-  const messages = chain.map(item => item instanceof Error ? boundedMessage(item.message) : undefined);
+  const messages = options.messages === false ? []
+    : chain.map(item => item instanceof Error ? boundedMessage(item.message) : undefined);
   const codes = chain.flatMap(item => boundedCode(item) ?? []);
   const code = codes[0];
   const sqlstate = codes.find(value => sqlstateToken.test(value));
   telemetryLog('worker_fault', 'error', {
     ...(workerName.test(worker) && !logLineCarriesPersonalData(worker) ? { 'rezics.worker.name': worker } : {}),
     'error.class': boundedClass(error),
-    ...(error instanceof Error && boundedMessage(error.message) ? { 'error.message': error.message } : {}),
+    ...(options.messages !== false && error instanceof Error && boundedMessage(error.message)
+      ? { 'error.message': error.message } : {}),
     ...(code ? { 'error.code': code } : {}),
     ...(sqlstate ? { 'error.sqlstate': sqlstate } : {}),
     ...(chain.length > 1 ? { 'error.chain.classes': chain.map(boundedClass),
