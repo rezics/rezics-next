@@ -313,8 +313,10 @@ test('franchise connections retain the selected volumes and parts level', async 
   await expect(franchises.getByRole('list', { name: 'Series' }).getByRole('listitem')).toHaveCount(
     4,
   );
-  await franchises.getByRole('link', { name: 'Volumes and parts' }).click();
-  await expect(page).toHaveURL(/grain=parts#franchises$/);
+  await franchises.getByRole('link', { name: 'Volumes and parts' }).press('Enter');
+  await expect.poll(() => page.url()).toMatch(/grain=parts#franchises$/);
+  // The grain switch starts a streamed document; URL commit precedes its DOM.
+  await page.waitForLoadState('domcontentloaded', { timeout: 60_000 });
   await expect(franchises.getByRole('link', { name: 'Volumes and parts' })).toHaveAttribute(
     'aria-current',
     'true',
@@ -322,15 +324,8 @@ test('franchise connections retain the selected volumes and parts level', async 
   await expect(franchises.getByText('Sword Art Online Progressive, Vol. 2')).toBeVisible();
 });
 
-test.fixme(
-  'franchise member parts render after changing grain through client navigation',
-  {
-    annotation: {
-      type: 'cause',
-      description:
-        'Franchise member parts remain pending during RSC client navigation. The active grain-switch test verifies the URL and selected state separately.',
-    },
-  },
+test(
+  'franchise member parts render after changing grain by keyboard',
   async ({ page }) => {
     const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
     if (!path) throw new Error('The isolated QA web-auth fixture is required');
@@ -346,7 +341,9 @@ test.fixme(
     await expect(
       franchises.getByRole('list', { name: 'Series' }).getByRole('listitem'),
     ).toHaveCount(4);
-    await franchises.getByRole('link', { name: 'Volumes and parts' }).click();
+    await franchises.getByRole('link', { name: 'Volumes and parts' }).press('Enter');
+    await expect.poll(() => page.url()).toMatch(/grain=parts#franchises$/);
+    await page.waitForLoadState('domcontentloaded', { timeout: 60_000 });
     await expect(franchises.getByText('Sword Art Online, Vol. 1')).toBeVisible();
     await expect(franchises.getByText('Sword Art Online Progressive, Vol. 2')).toBeVisible();
   },
