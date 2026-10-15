@@ -11,9 +11,8 @@ export const test = base.extend<{ journeyRoutes: void }>({
     await Promise.all([context, ...browser.contexts().filter(item => item !== context)]
       .map(stopJourneyRoutes));
   }, { auto: true }],
-  browser: [async ({ browser, browserName }, use) => {
-    const origin = process.env.REZICS_WEB_E2E_BASE_URL ?? 'http://127.0.0.1:3003';
-    const restore = browserName === 'chromium' ? protectJourneyBrowser(browser, new URL(origin).origin) : () => {};
+  browser: [async ({ browser }, use) => {
+    const restore = protectJourneyBrowser(browser);
     try { await use(browser); }
     finally {
       await Promise.all(browser.contexts().map(stopJourneyRoutes));

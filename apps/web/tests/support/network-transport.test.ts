@@ -5,51 +5,29 @@ import { resolve } from 'node:path';
 import { createServer } from 'node:http';
 import { protectJourneyBrowser } from './network-transport.ts';
 
-test('journey contexts load real resources through transport loss and preserve API and server failures', async () => {
-  const requests: string[] = [];
-  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(request) {
-    const path = new URL(request.url).pathname;
-    requests.push(`${request.method} ${path}`);
-    if (path === '/') return new Response('<title>Journey transport</title>', { headers: { 'content-type': 'text/html' } });
-    if (path === '/redirect') return new Response(null, { status: 302, headers: { location: '/destination', 'set-cookie': 'journey=redirected; Path=/' } });
-    if (path === '/destination') return new Response('<title>Destination</title>', { headers: { 'content-type': 'text/html' } });
-    if (path === '/unavailable') return new Response('<title>Unavailable</title>', { status: 503, headers: { 'content-type': 'text/html' } });
-    if (path === '/redirect.js') return new Response(null, { status: 302, headers: { location: '/module.js' } });
-    if (path === '/broken.js') return new Response('transform failed', { status: 503 });
-    return new Response('export const value = 42;', { headers: { 'content-type': 'text/javascript' } });
-  } });
+test('closing a journey cancels and drains page and context route reads before returning', async () => {
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch() { return new Response('<title>Journey</title>'); } });
   const browser = await chromium.launch();
-  const restore = protectJourneyBrowser(browser, server.url.origin);
+  const restore = protectJourneyBrowser(browser);
   try {
-    // Both the default-page path and journeys' manually created second contexts are covered.
-    const first = await browser.newPage();
-    const second = await browser.newContext();
-    for (const page of [first, await second.newPage()]) {
-      await page.goto(`${server.url.origin}/redirect`);
-      expect(new URL(page.url()).pathname).toBe('/destination');
-      expect((await page.context().cookies()).find(cookie => cookie.name === 'journey')?.value).toBe('redirected');
-      await page.goto(server.url.origin);
-      await page.context().setOffline(true);
-      expect((await page.reload())?.status()).toBe(200);
-      expect(await page.title()).toBe('Journey transport');
-      expect(await page.evaluate(async () => { const path = '/redirect.js'; return (await import(path)).value; })).toBe(42);
-      const failed = page.waitForResponse(`${server.url.origin}/broken.js`);
-      expect(await page.evaluate(async () => {
-        try { const path = '/broken.js'; await import(path); return 'loaded'; } catch { return 'failed'; }
-      })).toBe('failed');
-      const response = await failed;
-      expect(response.status()).toBe(503);
-      expect(await response.text()).toBe('transform failed');
-      for (const [path, method] of [['/api/read', 'GET'], ['/api/write', 'POST'], ['/module.js', 'POST']]) {
-        expect(await page.evaluate(async ({ path, method }) => {
-          try { await fetch(path!, { method }); return 'loaded'; } catch { return 'failed'; }
-        }, { path, method })).toBe('failed');
-      }
-      expect((await page.goto(`${server.url.origin}/unavailable`))?.status()).toBe(503);
-      expect(await page.title()).toBe('Unavailable');
+    for (const scope of ['context', 'page']) {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      let entered!: () => void;
+      const started = new Promise<void>(done => { entered = done; });
+      let finished = false;
+      const owner = scope === 'context' ? context : page;
+      await owner.route('**/*', async route => {
+        entered();
+        try { await route.fetch(); }
+        finally { await new Promise(done => setTimeout(done, 100)); finished = true; }
+      });
+      const navigation = page.goto(server.url.origin).catch(() => {});
+      await started;
+      await context.close();
+      expect(finished).toBe(true);
+      await navigation;
     }
-    expect(requests.filter(request => request === 'GET /broken.js')).toHaveLength(2);
-    expect(requests.some(request => request.includes('/api/') || request.startsWith('POST'))).toBe(false);
   } finally {
     restore();
     await browser.close();
@@ -92,9 +70,9 @@ test('navigation and teardown', async ({ page, browser }) => {
 test('a second fixture context uses the configured transport', async ({ page, context }) => {
   await page.goto('/');
   await context.setOffline(true);
-  expect(await page.evaluate(async () => { const path = '/offline.js'; return (await import(path)).value; })).toBe(42);
-  await page.reload();
-  await expect(page).toHaveTitle('Journey');
+  expect(await page.evaluate(async () => {
+    try { const path = '/offline.js'; await import(path); return 'loaded'; } catch { return 'offline'; }
+  })).toBe('offline');
 });
 test('a socket hang-up fails the resource inside its own test', async ({ page }) => {
   await page.goto('/');
