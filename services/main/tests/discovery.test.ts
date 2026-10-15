@@ -42,7 +42,7 @@ test('Discovery GET and generation APIs expose concrete types to a web-style tre
     const popularCount: number | undefined = popular.data?.items[0]?.workCount;
     const contexts = await client.v1['rating-contexts'].get({ query: { scope: 'realm', realm: id } });
     const question: string | undefined = contexts.data?.items[0]?.question;
-    const scale: 5 | 10 | undefined = contexts.data?.items[0]?.scale.max;
+    const scale: number | undefined = contexts.data?.items[0]?.scale.max;
     const build = await client.v1.discovery['generation-builds'].post({ profile: 'discovery-generation-build-v1',
       actingSubject: id, basis: { scope: 'global', context: null, realm: null } });
     const generation: string | undefined = build.data?.generation;

@@ -62,9 +62,9 @@ export const discoveryTag = t.Object({ ...classificationReason.properties, name:
 export const discoveryRating = t.Object({
   context: readId,
   count: t.Integer({ minimum: 1, maximum: 100 }),
-  sum: t.Integer(),
+  sum: t.Number(),
   mean: t.Number(),
-  scale: t.Object({ min: t.Literal(1), max: t.Union([t.Literal(5), t.Literal(10)]) }),
+  scale: t.Object({ min: t.Number(), max: t.Number(), step: t.Optional(t.Number()) }),
 });
 export const discoveryCredit = t.Union([
   creditItem,

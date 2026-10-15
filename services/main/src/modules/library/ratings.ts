@@ -1,12 +1,13 @@
+import { readStandingRatingState } from '../rating/manifest.ts';
+import { judgmentScale, onJudgmentScale, exactRating, type JudgmentScale } from '../rating/scale.ts';
 import type { Pool } from 'pg';
 import { GLOBAL_OBSERVATION_PROFILE, GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { RATING_STANDING_CADENCE } from '../rating/context.ts';
 import { STANDING_RATING_OBSERVATION_PROFILE } from '../rating/observation.ts';
-import { readComponentState } from '../work/history.ts';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 
-export interface OwnRating { context: string; value: number | null;
+export interface OwnRating { context: string; value: number | null; scale: JudgmentScale; exactValue: ReturnType<typeof exactRating> | null;
   availability: 'available' | 'withdrawn'; revision: string; stale: boolean;
   /** Immutable commit position of this revision, not the read's snapshot position. */
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string } }
@@ -34,11 +35,12 @@ export class ReaderLibraryRatings {
     return rows.rows;
   }
 
-  async read(session: WorkReadSession, works: { work: string; main: string }[], realm?: string) {
+  async read(session: WorkReadSession, works: { work: string; main: string }[], realm?: string, selectedContext?: string) {
     const contexts = await session.query(`SELECT ?kind ?context WHERE {
       GRAPH ${iri(GRAPHS.current)} {
         { ?context a rv:GlobalRatingContext ; rv:contextState rv:Active ;
             rv:ratingPopulationOwner ${iri(GLOBAL_RATING_POPULATION_OWNER)} .
+          ${selectedContext ? `VALUES ?context { ${iri(selectedContext)} }` : ''}
           BIND("global" AS ?kind) }
         ${realm ? `UNION { ${iri(realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ?space ;
             rv:ratingContext ?context .
@@ -77,8 +79,10 @@ export class ReaderLibraryRatings {
       if (head.main_version !== currentMain.get(head.work)) continue;
       const kind = head.context === global ? 'global' : head.context === selectedRealm ? 'realm' : null;
       if (!kind) throw new WorkReadUnavailable('Rating inventory context changed');
-      const rows = await session.query(`SELECT ?availability ?value ?manifest ?currentHead ?dataEpoch ?sequence WHERE {
+      const rows = await session.query(`SELECT ?availability ?value ?manifest ?currentHead ?dataEpoch ?sequence ?scaleMin ?scaleMax ?scaleStep WHERE {
         GRAPH ${iri(GRAPHS.current)} {
+          ${iri(head.context)} rv:ratingScaleMin ?scaleMin ; rv:ratingScaleMax ?scaleMax .
+          OPTIONAL { ${iri(head.context)} rv:ratingScaleStep ?scaleStep }
           ${iri(head.observation)} a rv:${kind === 'global' ? 'GlobalRatingObservation' : 'RatingObservation'} ;
             rv:ratingContext ${iri(head.context)} ; rv:targetMainVersion ${iri(head.main_version)} ;
             rv:ratingSlot ${iri(head.slot)} ; rv:observationHead ?currentHead .
@@ -105,13 +109,13 @@ export class ReaderLibraryRatings {
       const availability = row.availability?.value === `${RV}Available` ? 'available'
         : row.availability?.value === `${RV}Withdrawn` ? 'withdrawn' : null;
       const value = row.value ? Number(row.value.value) : null;
-      if (!availability || (availability === 'available' && (!Number.isInteger(value) || value! < 1
-        || value! > (kind === 'global' ? 5 : 10)))
+      const scale = judgmentScale({ min: Number(row.scaleMin!.value), max: Number(row.scaleMax!.value), step: Number(row.scaleStep?.value ?? 1) });
+      if (!availability || (availability === 'available' && (!onJudgmentScale(value, scale)))
         || (availability === 'withdrawn' && value !== null)) {
         throw new WorkReadUnavailable('Rating value is invalid');
       }
       try {
-        const state = readComponentState(session.deps.environment.objectDirectory,
+        const state = readStandingRatingState(session.deps.environment.objectDirectory,
           row.manifest!.value, head.observation,
           kind === 'global' ? GLOBAL_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE,
           budget);
@@ -126,7 +130,7 @@ export class ReaderLibraryRatings {
       // The sealed Access inventory can lag the graph until the relay drains.
       // Its immutable revision and receipt remain a consistent owned value;
       // require live authority and erasure checks, and report that it is stale.
-      owned[kind] = { context: head.context, value, availability, revision: head.revision,
+      owned[kind] = { context: head.context, value, scale, exactValue: value === null ? null : exactRating(value), availability, revision: head.revision,
         sourcePosition: { datasetId: 'product', dataEpoch: row.dataEpoch.value, sequence: row.sequence!.value },
         stale: row.currentHead?.value !== head.revision };
       result.set(head.work, owned);

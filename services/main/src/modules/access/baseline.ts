@@ -267,7 +267,7 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   else if (target.kind === 'rating') pattern = `GRAPH ${current} {
     { ${globalContextPattern(target.id)} } UNION {
       ${resource} a rv:RatingContext ; rv:contextState rv:Active ; rv:realm ?ratingRealm ;
-        rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
+        rv:targetGrain rv:MainVersion ; rv:ratingScaleMin ?scaleMin ; rv:ratingScaleMax ?scaleMax ;
         rv:ratingPopulationPolicy <https://rezics.com/definition/rating-account-principal-population-v1> .
       ?ratingRealm a rv:Realm ; rv:realmState rv:Active ; rv:ratingContext ${resource} ; rv:space ?ratingSpace .
       ?ratingSpace a rv:Space ; rv:realmCapability ?ratingRealm ; rv:disclosure rv:Public .

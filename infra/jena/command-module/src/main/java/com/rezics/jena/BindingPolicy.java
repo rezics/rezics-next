@@ -68,10 +68,26 @@ final class BindingPolicy {
             case "classification-proposition-v1" -> classificationProposition();
             case "classification-direct-decision-v1" -> classificationDecision();
             case "realm-standing-rating-context-v1" -> ratingContext(false);
+            case "realm-standing-rating-context-v2" -> { ratingContext(false); judgmentScale(); }
+            case "global-rating-standing-context-v2" -> {
+                has("context", RV + "question", NodeFactory.createLiteralLang(arg("question"), "en"));
+                judgmentScale();
+            }
+            case "global-rating-standing-observation-v2" -> {
+                judgmentValue();
+                has("observation", RV + "ratingContext", iri(role("context")));
+                has("observation", RV + "targetMainVersion", iri(role("main")));
+                has("observation", RV + "ratingSlot", iri(arg("slot")));
+                has("observation", RV + "observationHead", iri(role("revision")));
+                has("revision", RV + "observation", iri(role("observation")));
+                has("work", RV + "mainVersion", iri(role("main")));
+                has("main", RV + "work", iri(role("work")));
+            }
             case "realm-daily-rating-context-v1" -> ratingContext(true);
             case "realm-experience-rating-context-v1" -> ratingContext(false);
             case "rating-aggregate-default-policy-v1" -> ratingDefaultPolicy();
             case "realm-standing-rating-observation-v1" -> ratingObservation(false, false);
+            case "realm-standing-rating-observation-v2" -> ratingObservation(false, false);
             case "realm-daily-rating-observation-v1" -> ratingObservation(true, false);
             case "realm-experience-rating-observation-v1" -> ratingObservation(false, true);
             case "translation-link-v1" -> translationLink();
@@ -185,16 +201,57 @@ final class BindingPolicy {
         has("revision", RV + "ratingAvailability", iri(RV + (arg("availability").equals("available") ? "Available" : "Withdrawn")));
         if (arg("predecessor") == null) absent("revision", RV + "predecessor");
         else has("revision", RV + "predecessor", iri(arg("predecessor")));
-        if (arg("value") == null) absent("revision", RV + "ratingValue");
+        if (!daily && !experience && data.contains(iri(role("context")), iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), iri(RV + "ScaledRatingContext"))) judgmentValue();
+        else if (arg("value") == null) absent("revision", RV + "ratingValue");
         else {
-            int value;
-            try { value = Integer.parseInt(arg("value")); }
-            catch (NumberFormatException ex) { throw new IllegalArgumentException("invalid rating value binding"); }
+            int value = Integer.parseInt(arg("value"));
             if (value < 1 || value > 10) throw new IllegalArgumentException("invalid rating value binding");
             has("revision", RV + "ratingValue", NodeFactory.createLiteralByValue(value, org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
         }
         if (daily) dailyPeriod();
         if (experience) experienceOccasion();
+    }
+    private java.math.BigDecimal judgmentDecimal(String predicate, boolean optional) {
+        var found = data.find(iri(role("context")), iri(RV + predicate), Node.ANY);
+        if (!found.hasNext()) {
+            if (optional) return java.math.BigDecimal.ONE;
+            throw new IllegalArgumentException("judgment scale is absent");
+        }
+        Node node = found.next().getObject();
+        if (found.hasNext() || !node.isLiteral()
+            || !Set.of("http://www.w3.org/2001/XMLSchema#integer", "http://www.w3.org/2001/XMLSchema#decimal").contains(node.getLiteralDatatypeURI()))
+            throw new IllegalArgumentException("invalid judgment scale scalar");
+        return new java.math.BigDecimal(node.getLiteralLexicalForm());
+    }
+    private java.math.BigDecimal[] judgmentScale() {
+        var min = judgmentDecimal("ratingScaleMin", false);
+        var max = judgmentDecimal("ratingScaleMax", false);
+        var step = judgmentDecimal("ratingScaleStep", false);
+        var span = max.subtract(min);
+        if (min.signum() < 0 || span.signum() <= 0 || step.signum() <= 0
+            || max.compareTo(java.math.BigDecimal.valueOf(1_000_000)) > 0
+            || java.util.stream.Stream.of(min, max, step).anyMatch(n -> n.stripTrailingZeros().scale() > 6)
+            || span.remainder(step).signum() != 0
+            || span.divide(step).compareTo(java.math.BigDecimal.valueOf(1000)) > 0)
+            throw new IllegalArgumentException("invalid judgment scale");
+        return new java.math.BigDecimal[] { min, max, step };
+    }
+    private void judgmentValue() {
+        var scale = judgmentScale();
+        if (!Set.of("available", "withdrawn").contains(arg("availability"))
+            || arg("availability").equals("available") != (arg("value") != null))
+            throw new IllegalArgumentException("rating availability differs");
+        has("revision", RV + "ratingAvailability", iri(RV + (arg("value") == null ? "Withdrawn" : "Available")));
+        if (arg("predecessor") == null) absent("revision", RV + "predecessor");
+        else has("revision", RV + "predecessor", iri(arg("predecessor")));
+        if (arg("value") == null) { absent("revision", RV + "ratingValue"); return; }
+        var value = new java.math.BigDecimal(arg("value"));
+        if (value.compareTo(scale[0]) < 0 || value.compareTo(scale[1]) > 0
+            || value.subtract(scale[0]).remainder(scale[2]).signum() != 0)
+            throw new IllegalArgumentException("rating lies outside its judgment scale");
+        var datatype = arg("value").contains(".")
+            ? org.apache.jena.datatypes.xsd.XSDDatatype.XSDdecimal : org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger;
+        has("revision", RV + "ratingValue", NodeFactory.createLiteralDT(arg("value"), datatype));
     }
     private void experienceOccasion() {
         String occasion = arg("occasion");

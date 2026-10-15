@@ -1,3 +1,4 @@
+import { judgmentScale, onJudgmentScale, type JudgmentScale } from '../rating/scale.ts';
 import { contentConnection } from '../../../../content/src/connection.ts';
 import { ImportCommands, importReviewedBatch, resolvePortableShelf, type ReviewedImportBatch } from './batch.ts';
 import { LibraryFileStore, importDigest, type ApplyIntent, type StoredSourceRow } from './file-store.ts';
@@ -8,12 +9,11 @@ import type { CanonicalRow, LibraryFileFormat } from './formats/contract.ts';
 import type { SessionState } from '../session/contract.ts';
 import { bindImportSession, findImportSession, importSessionMatches, ImportSessionFailed, readSessionImportState } from './session-import.ts';
 
-/** Only identical scales (including quantization) enter the standing rating
- * Context. StoryGraph quarter stars and VNDB tenths remain source evidence. */
-export function globalImportRating(row: CanonicalRow): number | null {
+/** Imports use the configured native Context only when its grid preserves the source. */
+export function globalImportRating(row: CanonicalRow, scale: JudgmentScale = { min: 1, max: 5, step: 1 }): number | null {
   const score = row.score;
-  return score && score.min === 1 && score.max === 5 && score.step === 1
-    && Number.isInteger(score.value) && score.value >= 1 && score.value <= 5 ? score.value : null;
+  return score && score.min === scale.min && score.max === scale.max && score.step === scale.step
+    && onJudgmentScale(score.value, scale) ? score.value : null;
 }
 const day = (value: string | null) => value?.length === 10 ? value : null;
 const uuid = (iri: string) => iri.slice(-36);
@@ -58,14 +58,30 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
   }
   if (!work) return { applied: ['private-source'], issues: ['unresolved-work'] };
   const target = choice?.target ?? item.match?.target ?? row.target ?? work;
-  const rating = globalImportRating(row);
   const context = row.kind === 'entry' && typeof row.raw.ratingContext === 'string' ? row.raw.ratingContext : intent.context;
+  let rating: number | null = null;
+  let ratingIssue: string | undefined;
+  let realmRating = false;
+  if (row.score && context) {
+    let response = await mainCall(store,request,'GET',`/v1/global-rating-contexts/${uuid(context)}`);
+    if (response.status === 404 && row.kind === 'entry' && typeof row.raw.ratingContext === 'string') {
+      response = await mainCall(store,request,'GET',`/v1/rating-contexts/${uuid(context)}`);
+      realmRating = response.ok;
+    }
+    requireImportOwnerAvailable(response);
+    if (!response.ok) ratingIssue = 'rating-context-unavailable';
+    else {
+      const configured = await response.json() as { scale: JudgmentScale };
+      rating = globalImportRating(row, judgmentScale(configured.scale));
+      if (rating === null) ratingIssue = 'rating-scale-mismatch';
+    }
+  }
   const batch: ReviewedImportBatch = { actingSubject: agent, context,
     language: intent.language, existingShelves: [], rows: [{ work,
       status: row.status === 'paused' ? 'reading' : row.status === 'dnf' ? null : row.status,
       applyStatus: row.kind === 'entry' && 'sessionProjection' in row.raw,
       startedOn: day(row.startedOn), finishedOn: day(row.finishedOn), rating,
-      hasRating: rating !== null && context !== null, review: row.review?.text ?? null,
+      hasRating: !realmRating && rating !== null && context !== null, review: row.review?.text ?? null,
       reviewVisibility: 'private', reviewLanguage: row.review?.language === 'und' ? intent.language : row.review?.language,
       reviewSpoiler: row.review?.spoiler, shelves: row.shelves, conflictChoice: choice?.conflictChoice }] };
   // Sessions export first, potentially in a different uploaded page. An explicit
@@ -92,7 +108,7 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
   // Ordinary reviewed rows already do one state read. Only session orchestration
   // needs this earlier read, before creating an attempt or preserving a legacy read.
   const state = inferred || legacyRead || row.session ? await readSessionImportState<{ status: { status: string | null; startedOn: string | null;
-    finishedOn: string | null; version: number } }>(store,request,`/v1/works/${uuid(work)}/reader-state?actingSubject=${encodeURIComponent(agent)}`)
+    finishedOn: string | null; version: number } }>(store,request,`/v1/works/${uuid(work)}/reader-state?actingSubject=${encodeURIComponent(agent)}${context && !realmRating ? `&ratingContext=${encodeURIComponent(context)}` : ''}`)
     : { status: { status: null,startedOn: null,finishedOn: null,version: 0 } };
   if (!state) return null;
   const desired = batch.rows[0]!.status;
@@ -158,13 +174,12 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
     batch.rows[0]!.applyStatus = false;
   }
   if (row.kind === 'session') return { applied, issues: [] };
-  if (row.kind === 'entry' && typeof row.raw.ratingContext === 'string'
-    && row.score?.max === 10) {
+  if (realmRating && rating !== null) {
     const header = await commands.read<{ mainVersion: string }>(`/v1/works/${uuid(work)}?actingSubject=${encodeURIComponent(agent)}`);
     if (!header) return null;
     const step = await commands.step(item.index,'portable-rating','POST','/v1/rating-observations', {
       profile: 'realm-standing-rating-observation-v1',
-      context: row.raw.ratingContext,work,mainVersion: header.mainVersion,expectedRevisionHead: null,
+      context,work,mainVersion: header.mainVersion,expectedRevisionHead: null,
       value: row.score?.value ?? null,actingSubject: agent });
     if (step === 'retry') return null;
     if (step !== 'complete') return { applied,issues: ['rating-failed'] };
@@ -173,7 +188,7 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
   const result = await importReviewedBatch(store,request,batch,commandKey(agent,fileKey,item.index,'reviewed'));
   if (result.pending) return null;
   const outcome = result.items[0]?.result;
-  return outcome ? { applied: [...applied,...outcome.applied,'private-source'],issues: outcome.issues } : null;
+  return outcome ? { applied: [...applied,...outcome.applied,'private-source'],issues: [...outcome.issues,...(ratingIssue ? [ratingIssue] : [])] } : null;
 }
 
 export async function applyLibraryFile(files: LibraryFileStore, store: ReaderLibraryImportStore,

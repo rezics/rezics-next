@@ -51,7 +51,7 @@ export const authorWorksPage = t.Object({ items: t.Array(authorWork, { maxItems:
  */
 export const authorTotals = t.Object({ works: count,
   ratings: t.Nullable(t.Object({ context: readId, count, mean: t.Number(),
-    scale: t.Object({ min: t.Literal(1), max: t.Union([t.Literal(5), t.Literal(10)]) }) })),
+    scale: t.Object({ min: t.Number(), max: t.Number(), step: t.Optional(t.Number()) }) })),
   readers: t.Nullable(count) });
 
 /**

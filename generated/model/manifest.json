@@ -333,9 +333,51 @@
       }
     },
     {
+      "id": "global-rating-standing-context-v2",
+      "sha256": "575ee908617954e9eb1a6bf0a3dd1ba5dba55144d330e3cb5685b0a5199bba81",
+      "file": "shapes/global-rating-standing-context-v2.ttl",
+      "binding": {
+        "required": [
+          "context",
+          "question"
+        ],
+        "optional": [],
+        "roles": [
+          "context"
+        ]
+      }
+    },
+    {
       "id": "global-rating-standing-observation-v1",
       "sha256": "dc2ad4e4ec21a66a78d1c416a4e8299e17a84e4530daccf330dbe3d3156ec9c9",
       "file": "shapes/global-rating-standing-observation-v1.ttl",
+      "binding": {
+        "required": [
+          "context",
+          "work",
+          "main",
+          "slot",
+          "observation",
+          "revision",
+          "availability"
+        ],
+        "optional": [
+          "value",
+          "predecessor"
+        ],
+        "roles": [
+          "context",
+          "work",
+          "main",
+          "observation",
+          "revision"
+        ]
+      }
+    },
+    {
+      "id": "global-rating-standing-observation-v2",
+      "sha256": "609f214424a1bad7ea1b9cabcf8770e53adbc41bb3c4a81874f3c3d62360c091",
+      "file": "shapes/global-rating-standing-observation-v2.ttl",
       "binding": {
         "required": [
           "context",
@@ -727,9 +769,55 @@
       }
     },
     {
+      "id": "realm-standing-rating-context-v2",
+      "sha256": "ef2d3deda3dd2546bad926535fb88479c5d9efb772be48448d7f49486f5d31f8",
+      "file": "shapes/realm-standing-rating-context-v2.ttl",
+      "binding": {
+        "required": [
+          "realm",
+          "context",
+          "question"
+        ],
+        "optional": [],
+        "roles": [
+          "realm",
+          "context"
+        ]
+      }
+    },
+    {
       "id": "realm-standing-rating-observation-v1",
       "sha256": "d824ac73cde5f8a3a67f83339c4a3db9b982a8223b04f2277981d6adba33caa4",
       "file": "shapes/realm-standing-rating-observation-v1.ttl",
+      "binding": {
+        "required": [
+          "realm",
+          "context",
+          "work",
+          "main",
+          "slot",
+          "observation",
+          "revision",
+          "availability"
+        ],
+        "optional": [
+          "value",
+          "predecessor"
+        ],
+        "roles": [
+          "realm",
+          "context",
+          "work",
+          "main",
+          "observation",
+          "revision"
+        ]
+      }
+    },
+    {
+      "id": "realm-standing-rating-observation-v2",
+      "sha256": "a95a965774dec4df358fe6cbf3edeac60dca35311bb0e74a53ee07dd8fd762d9",
+      "file": "shapes/realm-standing-rating-observation-v2.ttl",
       "binding": {
         "required": [
           "realm",
@@ -1612,6 +1700,66 @@
         {
           "profile": "realm-daily-rating-observation-v1",
           "shape": "https://rezics.com/definition/realm-daily-rating-observation-v1/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ScaledRatingContext",
+      "routes": [
+        {
+          "profile": "realm-standing-rating-context-v2",
+          "shape": "https://rezics.com/definition/realm-standing-rating-context-v2/context-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ScaledRatingObservation",
+      "routes": [
+        {
+          "profile": "realm-standing-rating-observation-v2",
+          "shape": "https://rezics.com/definition/realm-standing-rating-observation-v2/observation-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ScaledRatingObservationRevision",
+      "routes": [
+        {
+          "profile": "realm-standing-rating-observation-v2",
+          "shape": "https://rezics.com/definition/realm-standing-rating-observation-v2/revision-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ScaledGlobalRatingContext",
+      "routes": [
+        {
+          "profile": "global-rating-standing-context-v2",
+          "shape": "https://rezics.com/definition/global-rating-standing-context-v2/context-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ScaledGlobalRatingObservation",
+      "routes": [
+        {
+          "profile": "global-rating-standing-observation-v2",
+          "shape": "https://rezics.com/definition/global-rating-standing-observation-v2/observation-shape",
+          "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://rezics.com/vocab/ScaledGlobalRatingObservationRevision",
+      "routes": [
+        {
+          "profile": "global-rating-standing-observation-v2",
+          "shape": "https://rezics.com/definition/global-rating-standing-observation-v2/revision-shape",
           "when": []
         }
       ]
@@ -3909,6 +4057,30 @@
       "profile": "realm-daily-rating-context-v1"
     },
     {
+      "type": "https://rezics.com/vocab/ScaledRatingContext",
+      "profile": "realm-standing-rating-context-v2"
+    },
+    {
+      "type": "https://rezics.com/vocab/ScaledRatingObservation",
+      "profile": "realm-standing-rating-observation-v2"
+    },
+    {
+      "type": "https://rezics.com/vocab/ScaledRatingObservationRevision",
+      "profile": "realm-standing-rating-observation-v2"
+    },
+    {
+      "type": "https://rezics.com/vocab/ScaledGlobalRatingContext",
+      "profile": "global-rating-standing-context-v2"
+    },
+    {
+      "type": "https://rezics.com/vocab/ScaledGlobalRatingObservation",
+      "profile": "global-rating-standing-observation-v2"
+    },
+    {
+      "type": "https://rezics.com/vocab/ScaledGlobalRatingObservationRevision",
+      "profile": "global-rating-standing-observation-v2"
+    },
+    {
       "type": "https://rezics.com/vocab/RatingObservation",
       "profile": "realm-standing-rating-observation-v1"
     },
@@ -4125,7 +4297,9 @@
     "contexts/first-party-bundle-v1.jsonld": "3af86ce39c84bb8a940a071ec62fd05df66cf1e015507255762b0a7042de7b2d",
     "contexts/fixed-native-text-release-v1.jsonld": "8618b6653b4f599da8de0b8c167c4687c4ed7c24c6acbe01bd74e4f1f1241e6f",
     "contexts/global-rating-standing-context-v1.jsonld": "7c04894a0e066437ee222af5924efc3018741ee8f1cc30476cc7032d0cdec753",
+    "contexts/global-rating-standing-context-v2.jsonld": "4ea6b3da26f406ba9a5dbac39b876cb952632923c30bdd3ec0c269909fc0ab32",
     "contexts/global-rating-standing-observation-v1.jsonld": "1ed4ac5edbb647f436dd58cd965a65e2a254161f2e0e8ba2e97c08feb146060c",
+    "contexts/global-rating-standing-observation-v2.jsonld": "78aef24014f3c240419d09d6eb8cf743f04508eca0c445850b5c14624f220c20",
     "contexts/hub-item-v1.jsonld": "8f223f595f3dd58294b50e1e0d6d8e5b96977efa634b9ab0d8ce7d4f7f1c9205",
     "contexts/main-default-selection-v1.jsonld": "f08bbc6a41d97eef45c81812c1938ede21b1a8a4a5a34abbbfa07c9d04ec3cd3",
     "contexts/main-package-release-recommendation-v1.jsonld": "583eb256a54cade90585067b0cbb9659a6d2fb42052c0772f830de5c5f1a944a",
@@ -4155,7 +4329,9 @@
     "contexts/realm-release-rating-observation-v1.jsonld": "c03e3bc35348820ed7412098ab7e84624e9144c2c2987b2b1f6b624093e6ef60",
     "contexts/realm-reply-placement-v1.jsonld": "1d3b43568b5e2f4a5b13a50acd66ee6f8e7ea719b4921dbd43fcea8119a6c43d",
     "contexts/realm-standing-rating-context-v1.jsonld": "b21ab6bd59692cb3ccc2fa388c55297e26aed4bba274d252c0f7075afa4bdd43",
+    "contexts/realm-standing-rating-context-v2.jsonld": "60a0a21d69331a768f319b762a7daa6ebf5183d73929a097c7439d8ac90d3c40",
     "contexts/realm-standing-rating-observation-v1.jsonld": "3b2e7d8c9a284496a933a3fdebd5194837000cce795e08b315489472a0cf356d",
+    "contexts/realm-standing-rating-observation-v2.jsonld": "b2d285b57ad7ad129dfc6f44674e5617810cf8323adfcf2299368786ddf82c93",
     "contexts/realm-submission-selection-v1.jsonld": "20a61304008389e68dd9f15d1644144a248104a9fe4ec1abe2fbf841524a09a1",
     "contexts/realm-target-rating-context-v1.jsonld": "b21ab6bd59692cb3ccc2fa388c55297e26aed4bba274d252c0f7075afa4bdd43",
     "contexts/realm-target-rating-context-v2.jsonld": "b21ab6bd59692cb3ccc2fa388c55297e26aed4bba274d252c0f7075afa4bdd43",
@@ -4263,7 +4439,9 @@
     "shapes/first-party-bundle-v1.ttl": "a41754111c9fd3150ef4f1666b9fce2221f5e58b7aa463022d85e87b6e7bf00e",
     "shapes/fixed-native-text-release-v1.ttl": "0f1b6ac3b4891b845fe67b9cfc8ed8296dfa146ba44668645cf8d74a8a91ea22",
     "shapes/global-rating-standing-context-v1.ttl": "fffed312c16e43a3e6d8fdda5f3947cb2d1a97b36778b128b6ce4667a78db76a",
+    "shapes/global-rating-standing-context-v2.ttl": "575ee908617954e9eb1a6bf0a3dd1ba5dba55144d330e3cb5685b0a5199bba81",
     "shapes/global-rating-standing-observation-v1.ttl": "dc2ad4e4ec21a66a78d1c416a4e8299e17a84e4530daccf330dbe3d3156ec9c9",
+    "shapes/global-rating-standing-observation-v2.ttl": "609f214424a1bad7ea1b9cabcf8770e53adbc41bb3c4a81874f3c3d62360c091",
     "shapes/hub-item-v1.ttl": "d5a9c3598792cac47e1301ef9704551df121e50988643d0c1274583436bb0da8",
     "shapes/main-default-selection-v1.ttl": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
     "shapes/main-package-release-recommendation-v1.ttl": "2560da59cda40c7ac9fd0fb38b39e2d63666e6fdb06dccf250728d7d28faab60",
@@ -4293,7 +4471,9 @@
     "shapes/realm-release-rating-observation-v1.ttl": "e1926bc5e8371333a5d32adf9ec4f9f03bc3e1cdb89e458e22006fa60775fecb",
     "shapes/realm-reply-placement-v1.ttl": "cefcd70e719ad3cbe6abf6b161ff6e58c63c66ba3fd8f8bb26e9e150cf97b0b8",
     "shapes/realm-standing-rating-context-v1.ttl": "7bec3a7793417ef4138e54a6220ceaec7aa76e446df3a9fdadc9d1ba5cc35fab",
+    "shapes/realm-standing-rating-context-v2.ttl": "ef2d3deda3dd2546bad926535fb88479c5d9efb772be48448d7f49486f5d31f8",
     "shapes/realm-standing-rating-observation-v1.ttl": "d824ac73cde5f8a3a67f83339c4a3db9b982a8223b04f2277981d6adba33caa4",
+    "shapes/realm-standing-rating-observation-v2.ttl": "a95a965774dec4df358fe6cbf3edeac60dca35311bb0e74a53ee07dd8fd762d9",
     "shapes/realm-submission-selection-v1.ttl": "9bfc405a024d6db800620c6080cfc98cbae49cf027f57e41ca007337943c8996",
     "shapes/realm-target-rating-context-v1.ttl": "30f3b40be8bee4466305813e8487ad5baee5a8e0caf4ed1753df6c42b7cc1cf2",
     "shapes/realm-target-rating-context-v2.ttl": "29a8fe741508eb591b0348ecb88f76f9693ea15256783298d78cb75d5ff8f936",
@@ -4362,8 +4542,8 @@
     "shapes/zone-capability-v1.ttl": "a7296e09f052999c0578caa2894ebdbd272cedd04357e4f291e2506e73eed611",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "4bbf5b815ff66ff04c07f02c4d59ed97dc73db726b89c2b15e57c5c6110ae3d2",
-    "packages/model/src/generated/schemas.ts": "509dec005b498424e58431c5680c7051d27f98de7950d1a005c5817369042e78",
-    "packages/model/src/generated/vocabulary.ts": "bc155aa13c398472e537ad1efeb0b5cb3fc90a85dfff83fe8c57e5d59fcfaec8"
+    "packages/model/src/generated/profiles.ts": "5048ba205c2ea651c70ec751b5e3356aedd4d829cf2c8676426b541e5e9eca67",
+    "packages/model/src/generated/schemas.ts": "d55fa62b917d13708f295636a4786778544aac3db3bf4aef7fd3e78de39d9cce",
+    "packages/model/src/generated/vocabulary.ts": "847173cac2e97a241247a40eaff2b23a94895b1d3a09ca972a3f4abe2e772546"
   }
 }

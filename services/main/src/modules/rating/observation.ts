@@ -1,3 +1,4 @@
+import { scaledProfile, exactRating, judgmentScale, onJudgmentScale, ratingTerm, ratingUnits, type JudgmentScale } from './scale.ts';
 import { DAILY_CADENCE, DAILY_OBSERVATION_ID, DAILY_OBSERVATION_PROFILE,
   dailyRatingSlotIri, periodBinding, periodTriples, type RatingPeriod } from './calendar.ts';
 import { resolveDailyPeriod, readDailyRevisionPeriod } from './daily-period.ts';
@@ -64,16 +65,18 @@ export interface RatingObservationReceipt {
   /** Present only for an exact FixedRelease target; never on a MainVersion receipt. */
   release?: string;
   availability?: 'available' | 'withdrawn';
+  modelProfile?: string;
 }
 
 export function standingRatingDigest(input: SetStandingRatingInput, daily = false): string {
   if (![input.context, input.work, input.mainVersion, input.actingSubject].every(value => nativeId.test(value))
     || (input.expectedRevisionHead !== null && !nativeId.test(input.expectedRevisionHead))
-    || (input.value !== null && (!Number.isInteger(input.value) || input.value < 1 || input.value > 10))
+    || (input.value !== null && (!Number.isFinite(input.value) || input.value < 0 || input.value > 1_000_000))
     || (input.value === null && input.expectedRevisionHead === null)
     || (input.occasion !== undefined && (daily || !validOccasion(input.occasion)))) {
     throw new InvalidRatingObservationInput('invalid standing rating request');
   }
+  if (input.value !== null) ratingUnits(input.value);
   return hash(JSON.stringify({ family: input.occasion !== undefined ? EXPERIENCE_OBSERVATION_ID : daily ? DAILY_OBSERVATION_ID : 'realm-standing-rating-observation-v1',
     context: input.context, work: input.work, mainVersion: input.mainVersion,
     expectedRevisionHead: input.expectedRevisionHead, value: input.value,
@@ -101,12 +104,13 @@ export async function readStandingRatingReceipt(env: WorkActivationEnvironment,
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?outcome ?reason ?digest ?id ?epoch ?scope ?dataEpoch ?sequence ?operation
     ?realm ?context ?contextRevision ?work ?main ?slot ?observation ?revision
-    ?predecessor ?value ?availability ?release WHERE {
+    ?predecessor ?value ?availability ?release ?modelProfile WHERE {
     GRAPH ${iri(GRAPHS.receipts)} {
       ${iri(receipt)} a rv:OperationReceipt ; rv:outcome ?outcome ;
         rv:requestDigest ?digest ; rv:admissionId ?id ; rv:authorityEpoch ?epoch ;
         rv:admittedScope ?scope ; rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence .
       OPTIONAL { ${iri(receipt)} rv:reason ?reason }
+      OPTIONAL { ${iri(receipt)} rv:ratingObservationProfile ?modelProfile }
       OPTIONAL { ${iri(receipt)} rv:operation ?operation ; rv:realm ?realm ;
         rv:ratingContext ?context ; rv:contextRevision ?contextRevision ;
         rv:work ?work ; rv:mainVersion ?main ; rv:ratingSlot ?slot ;
@@ -133,7 +137,7 @@ export async function readStandingRatingReceipt(env: WorkActivationEnvironment,
     || !get('scope') || !get('dataEpoch') || !/^[0-9]+$/.test(get('sequence') ?? '')
     || (get('reason') && !reason)
     || (outcome === 'succeeded' && (success.some(name => !get(name)) || reason
-      || !availability || (availability === 'available' && !/^(?:[1-9]|10)$/.test(get('value') ?? ''))
+      || !availability || (availability === 'available' && !Number.isFinite(Number(get('value') ?? 'NaN')))
       || (availability === 'withdrawn' && get('value'))))
     || (outcome === 'cancelled' && (success.some(name => get(name)) || get('predecessor')
       || get('value') || get('availability') || get('release')))) {
@@ -148,6 +152,7 @@ export async function readStandingRatingReceipt(env: WorkActivationEnvironment,
       slot: get('slot'), observation: get('observation'), revision: get('revision'),
       predecessor: get('predecessor') ?? null, availability,
       value: availability === 'available' ? Number(get('value')) : null,
+      ...(get('modelProfile') ? { modelProfile: get('modelProfile') } : {}),
       ...(get('release') ? { release: get('release') } : {}),
     } : {}) };
 }
@@ -200,6 +205,8 @@ export async function checkedRatingReceipt(env: WorkActivationEnvironment,
 }
 
 interface Dependencies {
+  scale: JudgmentScale;
+  scaled: boolean;
   realm: string;
   contextRevision: string;
   observation?: string;
@@ -212,17 +219,18 @@ async function readDependencies(env: WorkActivationEnvironment, input: SetStandi
   slot: string, daily = false): Promise<Dependencies> {
   const experience = input.occasion !== undefined;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    SELECT ?realm ?contextRevision ?observation ?prior ?contextManifest ?question WHERE {
+    SELECT ?realm ?contextRevision ?observation ?prior ?contextManifest ?question ?contextModel ?scaleMin ?scaleMax ?scaleStep WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
       ?realm a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
         rv:ratingContext ${iri(input.context)} .
       ${iri(input.context)} a rv:RatingContext ; rv:contextState rv:Active ;
-        rv:realm ?realm ; rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ;
-        rv:ratingScaleMax 10 ; rv:ratingCadence ${iri(input.occasion !== undefined ? EXPERIENCE_CADENCE : daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)} ;
+        rv:realm ?realm ; rv:targetGrain rv:MainVersion ; rv:ratingScaleMin ?scaleMin ;
+        rv:ratingScaleMax ?scaleMax ; rv:ratingCadence ${iri(input.occasion !== undefined ? EXPERIENCE_CADENCE : daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)} ;
         rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
         rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ; rv:head ?contextRevision
         ${experience ? '; rv:question ?question' : ''} .
+      OPTIONAL { ${iri(input.context)} rv:ratingScaleStep ?scaleStep }
       ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.mainVersion)} .
       ${iri(input.mainVersion)} a rv:MainVersion ; rv:work ${iri(input.work)} .
       OPTIONAL { ?observation a rv:RatingObservation ; rv:ratingSlot ${iri(slot)} ;
@@ -231,7 +239,7 @@ async function readDependencies(env: WorkActivationEnvironment, input: SetStandi
     }
     GRAPH ${iri(GRAPHS.revisions)} {
       ?contextRevision a rv:RevisionAnchor ; rv:component ${iri(input.context)}
-        ${experience ? `; rv:modelRevision ${iri(EXPERIENCE_CONTEXT_PROFILE)} ; rv:manifest ?contextManifest` : ''} . }
+        ; rv:modelRevision ?contextModel ; rv:manifest ?contextManifest . }
   } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (rows.length !== 1 || !rows[0]?.realm || !rows[0]?.contextRevision
@@ -239,6 +247,8 @@ async function readDependencies(env: WorkActivationEnvironment, input: SetStandi
     throw new RatingCurrentVisibility('rating Context, target or slot is unavailable');
   }
   const row = rows[0]!;
+  const scale = judgmentScale({ min: Number(row.scaleMin!.value), max: Number(row.scaleMax!.value), step: Number(row.scaleStep?.value ?? 1) });
+  if (input.value !== null && !onJudgmentScale(input.value, scale)) throw new InvalidRatingObservationInput('rating value lies outside its Context scale');
   if (experience) {
     try {
       const state = readComponentState(env.objectDirectory, row.contextManifest!.value,
@@ -269,7 +279,8 @@ async function readDependencies(env: WorkActivationEnvironment, input: SetStandi
       originalSubmissionAt: canonicalRatingInstant(
         priorRows[0].originalSubmissionAt.value) };
   }
-  return { realm: row.realm!.value, contextRevision: row.contextRevision!.value,
+  const scaled = row.contextModel?.value === scaledProfile(STANDING_RATING_OBSERVATION_PROFILE.replace('observation', 'context'));
+  return { scale, scaled, realm: row.realm!.value, contextRevision: row.contextRevision!.value,
     ...(row.observation ? { observation: row.observation.value, prior: row.prior!.value,
       ...times } : {}) };
 }
@@ -284,9 +295,9 @@ async function validateCandidate(env: WorkActivationEnvironment, input: SetStand
   for (const value of [evaluatedAt, submittedAt, originalSubmissionAt]) {
     if (!Number.isFinite(Date.parse(value))) throw new InvalidRatingObservationInput('invalid rating timestamp');
   }
-  const profile = occasionKey ? EXPERIENCE_OBSERVATION_PROFILE : period ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
+  const profile = occasionKey ? EXPERIENCE_OBSERVATION_PROFILE : period ? DAILY_OBSERVATION_PROFILE : deps.scaled ? scaledProfile(STANDING_RATING_OBSERVATION_PROFILE) : STANDING_RATING_OBSERVATION_PROFILE;
   const graphs = [GRAPHS.current, GRAPHS.revisions];
-  return profileValidations(env.fuseki, occasionKey ? EXPERIENCE_OBSERVATION_ID : period ? DAILY_OBSERVATION_ID : 'realm-standing-rating-observation-v1', [
+  return profileValidations(env.fuseki, occasionKey ? EXPERIENCE_OBSERVATION_ID : period ? DAILY_OBSERVATION_ID : deps.scaled ? 'realm-standing-rating-observation-v2' : 'realm-standing-rating-observation-v1', [
     { shape: `${profile}/realm-shape`, focus: [deps.realm], graphs },
     { shape: `${profile}/context-shape`, focus: [input.context], graphs },
     { shape: `${profile}/work-shape`, focus: [input.work], graphs },
@@ -394,8 +405,8 @@ export async function setStandingRating(env: WorkActivationEnvironment,
   const slot = experience ? experience.slot : period
     ? dailyRatingSlotIri(admission.principalId, input.context, input.mainVersion, period.day)
     : standingRatingSlotIri(admission.principalId, input.context, input.mainVersion);
-  const profile = experience ? EXPERIENCE_OBSERVATION_PROFILE : daily ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
   const deps = await readDependencies(env, input, slot, daily);
+  const profile = experience ? EXPERIENCE_OBSERVATION_PROFILE : daily ? DAILY_OBSERVATION_PROFILE : deps.scaled ? scaledProfile(STANDING_RATING_OBSERVATION_PROFILE) : STANDING_RATING_OBSERVATION_PROFILE;
   if ((deps.prior ?? null) !== input.expectedRevisionHead) {
     const stale = await sealRatingObservationTerminal(env, admission, 'stale-head', slot,
       input.expectedRevisionHead);
@@ -415,7 +426,7 @@ export async function setStandingRating(env: WorkActivationEnvironment,
     { observation, slot, context: input.context, contextRevision: deps.contextRevision,
       realm: deps.realm, work: input.work, mainVersion: input.mainVersion,
       revision, predecessor: input.expectedRevisionHead,
-      availability: input.value === null ? 'withdrawn' : 'available', value: input.value,
+      availability: input.value === null ? 'withdrawn' : 'available', value: input.value, exactValue: input.value === null ? null : exactRating(input.value), ...(deps.scaled ? { exactScale: true } : {}),
       evaluatedAt, submittedAt: now, originalSubmissionAt, revisedAt: now,
       ...(period ?? {}),
       ...(experience ? { occasion: input.occasion, occasionKey: experience.occasionKey } : {}) }, profile);
@@ -448,7 +459,7 @@ export async function setStandingRating(env: WorkActivationEnvironment,
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(observation)} a rv:RatingObservation ${experience ? ', rv:ExperienceRatingObservation' : daily ? ', rv:DailyRatingObservation' : ''} ;
+        ${iri(observation)} a rv:RatingObservation ${experience ? ', rv:ExperienceRatingObservation' : daily ? ', rv:DailyRatingObservation' : deps.scaled ? ', rv:ScaledRatingObservation' : ''} ;
           ${experience ? `rv:ratingOccasion ${iri(experience.occasionKey)} ;` : ''}
           ${period ? periodTriples(period) : ''}
           rv:ratingContext ${iri(input.context)} ;
@@ -456,13 +467,13 @@ export async function setStandingRating(env: WorkActivationEnvironment,
           rv:observationHead ${iri(revision)} .
       }
       GRAPH ${iri(GRAPHS.revisions)} {
-        ${iri(revision)} a rv:RatingObservationRevision, rv:RevisionAnchor ${experience ? ', rv:ExperienceRatingObservationRevision' : daily ? ', rv:DailyRatingObservationRevision' : ''} ;
+        ${iri(revision)} a rv:RatingObservationRevision, rv:RevisionAnchor ${experience ? ', rv:ExperienceRatingObservationRevision' : daily ? ', rv:DailyRatingObservationRevision' : deps.scaled ? ', rv:ScaledRatingObservationRevision' : ''} ;
           ${experience ? `rv:ratingOccasion ${iri(experience.occasionKey)} ;` : ''}
           ${period ? periodTriples(period) : ''}
           rv:component ${iri(observation)} ; rv:observation ${iri(observation)} ;
           rv:operation ${iri(operation)} ;
           rv:ratingAvailability rv:${input.value === null ? 'Withdrawn' : 'Available'} ;
-          ${input.value === null ? '' : `rv:ratingValue ${input.value} ;`}
+          ${input.value === null ? '' : `rv:ratingValue ${ratingTerm(input.value)} ;`}
           ${prior ? `rv:predecessor ${iri(prior)} ;` : ''}
           rv:evaluatedAt ${lit(evaluatedAt)}^^xsd:dateTime ;
           rv:submittedAt ${lit(now)}^^xsd:dateTime ;
@@ -483,9 +494,9 @@ export async function setStandingRating(env: WorkActivationEnvironment,
           rv:contextRevision ${iri(deps.contextRevision)} ;
           rv:work ${iri(input.work)} ; rv:mainVersion ${iri(input.mainVersion)} ;
           rv:ratingSlot ${iri(slot)} ; rv:ratingObservation ${iri(observation)} ;
-          rv:observationRevision ${iri(revision)} ;
+          rv:observationRevision ${iri(revision)} ; rv:ratingObservationProfile ${iri(profile)} ;
           rv:ratingAvailability rv:${input.value === null ? 'Withdrawn' : 'Available'} ;
-          ${input.value === null ? '' : `rv:ratingValue ${input.value} ;`}
+          ${input.value === null ? '' : `rv:ratingValue ${ratingTerm(input.value)} ;`}
           ${prior ? `rv:expectedHead ${iri(prior)} ;` : ''}
           rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
           rv:sequence ?next .
@@ -508,12 +519,13 @@ export async function setStandingRating(env: WorkActivationEnvironment,
           rv:ratingContext ${iri(input.context)} .
         ${iri(input.context)} a rv:RatingContext ; rv:contextState rv:Active ;
           rv:realm ${iri(deps.realm)} ; rv:targetGrain rv:MainVersion ;
-          rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
+          rv:ratingScaleMin ${ratingTerm(deps.scale.min)} ; rv:ratingScaleMax ${ratingTerm(deps.scale.max)} ;
           rv:ratingCadence ${iri(experience ? EXPERIENCE_CADENCE : daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)} ;
           rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
           rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ;
           rv:head ${iri(deps.contextRevision)} .
-        ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.mainVersion)} .
+        OPTIONAL { ${iri(input.context)} rv:ratingScaleStep ?scaleStep }
+      ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.mainVersion)} .
         ${iri(input.mainVersion)} a rv:MainVersion ; rv:work ${iri(input.work)} .
       }
       ${headGuard}

@@ -309,10 +309,11 @@ export class LibraryBundleExporter {
       const reader = await session.deps.account.verify(session.request,['rating:read']);
       if (reader.issuer !== principal.issuer || reader.subject !== principal.subject) throw new WorkReadUnavailable('Rating export principal changed');
     }
-    const values = result.rows.length ? await session.query(`SELECT ?observation ?value ?availability ?min ?max WHERE {
+    const values = result.rows.length ? await session.query(`SELECT ?observation ?value ?availability ?min ?max ?step WHERE {
       VALUES (?observation ?revision ?context) { ${result.rows.map(h => `(${iri(h.observation)} ${iri(h.revision)} ${iri(h.context)})`).join(' ')} }
       GRAPH ${iri(GRAPHS.current)} { ?observation rv:observationHead ?revision ; rv:ratingContext ?context .
         OPTIONAL { ?context rv:contextState rv:Active ; rv:ratingScaleMin ?min ; rv:ratingScaleMax ?max .
+          OPTIONAL { ?context rv:ratingScaleStep ?step }
           FILTER NOT EXISTS { ?context rv:protectionHead ?protection } } }
       GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:ratingAvailability ?availability .
         OPTIONAL { ?revision rv:ratingValue ?value }
@@ -330,7 +331,7 @@ export class LibraryBundleExporter {
         ratingScaleMax: max,ratingAvailability: v.availability!.value === `${RV}Available` ? 'available' : 'withdrawn',
         ...(!contextAvailable ? { observationRevision: h.revision, ratingValue: v.value ? Number(v.value.value) : null,
           residuals: [{ kind: 'context_unavailable', path: '/score', detail: { reason: 'RatingContext is unavailable' } }] } : {}) }),
-        score: v.value && min !== null && max !== null ? { value: Number(v.value.value),min,max,step: 1 } : null } });
+        score: v.value && min !== null && max !== null ? { value: Number(v.value.value),min,max,step: Number(v.step?.value ?? 1) } : null } });
     }
     return rows;
   }

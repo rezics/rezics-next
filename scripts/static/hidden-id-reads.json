@@ -1186,6 +1186,7 @@
     "operation": "GET /v1/me/work-states",
     "ids": [
       "query:actingSubject",
+      "query:ratingContext",
       "query:realm"
     ],
     "status": "unregistered"
@@ -2661,6 +2662,7 @@
     "ids": [
       "path:id",
       "query:actingSubject",
+      "query:ratingContext",
       "query:realm"
     ],
     "status": "unregistered"

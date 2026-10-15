@@ -1,3 +1,4 @@
+import { isRatingValue } from '../rating/scale.ts';
 import { isOwnerTransientFailure as isRelayTransientFailure } from '../../infrastructure/owner-failure.ts';
 import { hash } from '../work/activate.ts';
 import { readTitleControlReceipt } from '../work/title-control.ts';
@@ -1730,7 +1731,7 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
         || scope !== `rating:observe:${ratingContext}` || reason
         || ![`${RV}Available`, `${RV}Withdrawn`].includes(ratingAvailability ?? '')
         || (ratingAvailability === `${RV}Available`
-          && !/^(?:[1-9]|10)$/.test(ratingValue ?? ''))
+          && !isRatingValue(ratingValue === undefined ? undefined : Number(ratingValue)))
         || (ratingAvailability === `${RV}Withdrawn` && ratingValue)
         || value('eventOperation') !== operation
         || value('eventRatingContext') !== ratingContext

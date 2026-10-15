@@ -1,3 +1,4 @@
+import { InvalidJudgmentScale } from '../modules/rating/scale.ts';
 import { logWorkerFault } from '@rezics/observability/log';
 import type { SessionChanges, SessionState } from '../modules/session/contract.ts';
 import type { EditionPreference } from '../modules/session/preference-contract.ts';
@@ -430,6 +431,7 @@ function mapTypedRefusal(error: unknown): Response | undefined {
     || error instanceof InvalidClassificationDecisionInput
     || error instanceof InvalidClassificationResolution
     || error instanceof InvalidRatingCalendar
+    || error instanceof InvalidJudgmentScale
     || error instanceof InvalidRatingContextInput
     || error instanceof InvalidRatingObservationInput
     || error instanceof InvalidRatingAggregateQuery) {

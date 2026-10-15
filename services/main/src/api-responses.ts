@@ -1,3 +1,4 @@
+import { judgmentScaleSchema, exactRatingSchema, SCALED_REALM_OBSERVATION, SCALED_REALM_CONTEXT } from './modules/rating/scale.ts';
 import { t } from 'elysia';
 import { pendingOperation, problemResult, sourcePosition } from './api-contract.ts';
 import { documentSnapshotSchema } from './api-document.ts';
@@ -5,12 +6,12 @@ import { documentSnapshotSchema } from './api-document.ts';
 const ref = t.String();
 const nullableRef = t.Nullable(ref);
 const replay = { sourcePosition, replayed: t.Boolean() };
-const scale = t.Object({ min: t.Literal(1), max: t.Literal(10), step: t.Literal(1) });
+const scale = judgmentScaleSchema;
 const ratingPolicy = {
   targetGrain: t.Literal('mainVersion'), scale, cadence: t.Literal('standing'),
   population: t.Literal('account-principal'),
   aggregation: t.Literal('latest-per-rater-mean'),
-  profile: t.Literal('realm-standing-rating-context-v1'),
+  profile: t.Union([t.Literal('realm-standing-rating-context-v1'), t.Literal(SCALED_REALM_CONTEXT)]),
 };
 const classificationDefinitions = {
   scheme: ref, concept: ref, path: ref, expression: ref, sense: ref,
@@ -141,29 +142,28 @@ export const ratingAggregateResult = t.Object({
   cadence: t.Literal('standing'), populationPolicy: t.Literal('account-principal'),
   aggregationPolicy: t.Literal('latest-per-rater-mean'),
   population: t.Integer(), count: t.Integer(), withdrawnCount: t.Integer(),
-  histogram: t.Tuple([t.Integer(), t.Integer(), t.Integer(), t.Integer(), t.Integer(),
-    t.Integer(), t.Integer(), t.Integer(), t.Integer(), t.Integer()]),
-  sum: t.Integer(), mean: t.Nullable(t.Number()),
+  histogram: t.Array(t.Integer(), { maxItems: 1001 }),
+  sum: t.Number(), mean: t.Nullable(t.Number()),
   precision: t.Union([t.Object({ kind: t.Literal('no-data') }),
-    t.Object({ kind: t.Literal('exact-rational'), numerator: t.Integer(),
-      denominator: t.Integer() })]),
+    t.Object({ kind: t.Literal('exact-rational'), numerator: t.Union([t.Integer(), t.String()]),
+      denominator: t.Union([t.Integer(), t.String()]) })]),
   sourcePosition,
 });
 
 export const ratingObservationWriteResult = t.Object({
   observation: ref, observationRevision: ref, predecessor: nullableRef,
   context: ref, work: ref, mainVersion: ref,
-  value: t.Nullable(t.Integer()),
+  value: t.Nullable(t.Number()),
   availability: t.Union([t.Literal('available'), t.Literal('withdrawn')]),
-  profile: t.Literal('realm-standing-rating-observation-v1'), ...replay,
+  profile: t.Union([t.Literal('realm-standing-rating-observation-v1'), t.Literal(SCALED_REALM_OBSERVATION)]), ...replay,
 });
 export const ratingObservationReadResult = t.Object({
   observation: ref, observationRevision: ref, context: ref, work: ref,
   mainVersion: ref, predecessor: nullableRef,
   availability: t.Union([t.Literal('available'), t.Literal('withdrawn')]),
-  value: t.Nullable(t.Integer()), evaluatedAt: t.String(), submittedAt: t.String(),
+  value: t.Nullable(t.Number()), exactValue: t.Optional(t.Nullable(exactRatingSchema)), scale: t.Optional(judgmentScaleSchema), evaluatedAt: t.String(), submittedAt: t.String(),
   originalSubmissionAt: t.String(), revisedAt: t.String(),
-  profile: t.Literal('realm-standing-rating-observation-v1'),
+  profile: t.Union([t.Literal('realm-standing-rating-observation-v1'), t.Literal(SCALED_REALM_OBSERVATION)]),
 });
 export const ratingContextWriteResult = t.Object({
   context: ref, realm: ref, question: t.String(), contextRevision: ref,

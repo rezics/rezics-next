@@ -1,9 +1,12 @@
+import { readStandingRatingState } from './manifest.ts';
+import { scaledProfile } from './scale.ts';
+import { contextScale, onJudgmentScale } from './scale.ts';
 import { fusekiReadBudget, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded,
   type SparqlResult } from '../../infrastructure/fuseki.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import { MAX_RATING_AGGREGATE_SLOTS, type RatingAggregateInventory } from './aggregate-inventory.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
-import { readComponentState, RevisionReadBudgetExceeded, type RevisionReadBudget } from '../work/history.ts';
+import { RevisionReadBudgetExceeded, type RevisionReadBudget } from '../work/history.ts';
 import { InvalidRatingAggregateQuery, RatingAggregateBudgetExceeded, RatingAggregateUnavailable } from './aggregate.ts';
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE,
   REALM_STANDING_RATING_CONTEXT_PROFILE } from './context.ts';
@@ -41,7 +44,7 @@ function contextPattern(kind: Kind, context: string): string {
     : `?space a rv:Space ; rv:realmCapability ?owner ; rv:disclosure rv:Public .
       ?owner a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ; rv:ratingContext ${iri(context)} .
       ${iri(context)} a rv:RatingContext ; rv:contextState rv:Active ; rv:realm ?owner ;
-        rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
+        rv:targetGrain rv:MainVersion ; rv:ratingScaleMin ?scaleMin ; rv:ratingScaleMax ?scaleMax ;
         rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ; rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
         rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ; rv:head ?contextRevision ; rv:question ?question .`;
 }
@@ -57,12 +60,13 @@ function standingComponentsSelect(env: WorkActivationEnvironment,
       BIND("context" AS ?kind) BIND("${kind}" AS ?component)
       GRAPH ${iri(GRAPHS.current)} {
         ${contextPattern(kind, context)}
+        OPTIONAL { ${iri(context)} rv:ratingScaleStep ?scaleStep }
         ${iri(target.work)} a schema:CreativeWork ; rv:mainVersion ${iri(target.mainVersion)} .
         ${iri(target.mainVersion)} a rv:MainVersion ; rv:work ${iri(target.work)} .
       }
       GRAPH ${iri(GRAPHS.revisions)} { ?contextRevision a rv:RevisionAnchor ; rv:component ${iri(context)} ;
-        rv:modelRevision ${iri(spec.contextProfile)} ; rv:manifest ?contextManifest ; rv:operation ?contextOperation ;
-        rv:dataEpoch ?contextEpoch ; rv:sequence ?contextSequence . }
+        rv:modelRevision ?contextModel ; rv:manifest ?contextManifest ; rv:operation ?contextOperation ;
+        rv:dataEpoch ?contextEpoch ; rv:sequence ?contextSequence . VALUES ?contextModel { ${iri(spec.contextProfile)} ${iri(scaledProfile(spec.contextProfile))} } }
       GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:ratingContext ${iri(context)} ;
         rv:ratingContextRevision ?contextRevision ; rv:operation ?contextOperation ; rv:outcome rv:Succeeded . }
     }`, `{
@@ -77,10 +81,11 @@ function standingComponentsSelect(env: WorkActivationEnvironment,
           rv:ratingSlot ?slot ; rv:observationHead ?head . }
         GRAPH ${iri(GRAPHS.revisions)} {
           ?head a ${spec.revisionType}, rv:RevisionAnchor ; rv:component ?observation ; rv:observation ?observation ;
-            rv:modelRevision ${iri(spec.observationProfile)} ; rv:ratingAvailability ?availability ;
+            rv:modelRevision ?observationModel ; rv:ratingAvailability ?availability ;
             rv:manifest ?manifest ; rv:evaluatedAt ?evaluatedAt ; rv:submittedAt ?submittedAt ;
             rv:originalSubmissionAt ?originalSubmissionAt ; rv:revisedAt ?revisedAt ;
             rv:dataEpoch ?revisionEpoch ; rv:sequence ?revisionSequence .
+          VALUES ?observationModel { ${iri(spec.observationProfile)} ${iri(scaledProfile(spec.observationProfile))} }
           OPTIONAL { ?head rv:ratingValue ?value }
           OPTIONAL { ?head rv:predecessor ?predecessor }
         }
@@ -89,7 +94,7 @@ function standingComponentsSelect(env: WorkActivationEnvironment,
       }
     }`];
   });
-  return `SELECT ?kind ?component ?epoch ?sequence ?owner ?contextRevision ?contextManifest ?question
+  return `SELECT ?kind ?component ?epoch ?sequence ?scaleMin ?scaleMax ?scaleStep ?owner ?contextRevision ?contextManifest ?question
     ?contextEpoch ?contextSequence ?observation ?slot ?head ?availability ?value ?manifest ?evaluatedAt
     ?submittedAt ?originalSubmissionAt ?revisedAt ?revisionEpoch ?revisionSequence ?receipt ?digest
     ?predecessor WHERE {
@@ -119,15 +124,18 @@ function verifyComponent(env: WorkActivationEnvironment, kind: Kind, context: st
     || root.receipt?.value !== inventory.contextReceipt || !root.contextManifest || root.question?.['xml:lang'] !== 'en'
     || later(inventory.contextDataEpoch, inventory.contextSequence)) unavailable();
   const contextKey = `${context}\0${root.contextManifest.value}\0${spec.contextProfile}`;
-  const contextState = contexts?.get(contextKey) ?? readComponentState(env.objectDirectory,
+  const contextState = contexts?.get(contextKey) ?? readStandingRatingState(env.objectDirectory,
     root.contextManifest.value, context, spec.contextProfile, budget);
   contexts?.set(contextKey, contextState);
   if (kind === 'global' ? !isGlobalContextState(contextState, context, root.question!.value)
     : contextState.context !== context || contextState.realm !== inventory.realm
       || contextState.question !== root.question!.value || contextState.state !== 'active'
-      || contextState.targetGrain !== 'MainVersion' || contextState.scaleMin !== 1 || contextState.scaleMax !== 10
+      || contextState.targetGrain !== 'MainVersion'
       || contextState.cadence !== RATING_STANDING_CADENCE || contextState.populationPolicy !== RATING_ACCOUNT_POPULATION
       || contextState.aggregationPolicy !== RATING_LATEST_MEAN_POLICY) unavailable();
+  const scale = contextScale(contextState);
+  if (scale.min !== Number(root.scaleMin?.value) || scale.max !== Number(root.scaleMax?.value)
+    || scale.step !== Number(root.scaleStep?.value ?? 1)) unavailable();
   if (rows.length !== inventory.heads.length) unavailable();
   const byObservation = new Map<string, Row>();
   for (const row of rows) {
@@ -149,10 +157,9 @@ function verifyComponent(env: WorkActivationEnvironment, kind: Kind, context: st
     const availability = row.availability?.value === `${RV}Available` ? 'available'
       : row.availability?.value === `${RV}Withdrawn` ? 'withdrawn' : null;
     const value = row.value ? Number(row.value.value) : null;
-    if (!availability || (availability === 'available' && (!Number.isInteger(value)
-      || value! < spec.scale.min || value! > spec.scale.max))
+    if (!availability || (availability === 'available' && (!onJudgmentScale(value, scale)))
       || (availability === 'withdrawn' && value !== null)) unavailable();
-    const state = readComponentState(env.objectDirectory, row.manifest.value, head.observation,
+    const state = readStandingRatingState(env.objectDirectory, row.manifest.value, head.observation,
       spec.observationProfile, budget);
     if (state.observation !== head.observation || state.revision !== head.revision || state.slot !== head.slot
       || state.context !== context || state.contextRevision !== inventory.contextRevision
@@ -169,10 +176,10 @@ function verifyComponent(env: WorkActivationEnvironment, kind: Kind, context: st
     if ((kind === 'global' ? globalRatingDigest(intent) : standingRatingDigest(intent)) !== head.requestDigest) unavailable();
     if (onlySlot === undefined || (head.effectiveSlot ?? head.slot) === onlySlot) values.push(value);
   }
-  return { context, populationOwner: inventory.realm, contextProfile: spec.contextProfile.split('/').at(-1)!,
+  return { context, populationOwner: inventory.realm, contextProfile: (contextState.exactScale === true ? scaledProfile(spec.contextProfile) : spec.contextProfile).split('/').at(-1)!,
     populationPolicy: spec.populationPolicy, cadence: 'standing' as const,
     aggregationPolicy: 'latest-per-rater-mean' as const, contextRevision: inventory.contextRevision,
-    ...reduceStandingComponent(values, spec.scale) };
+    ...reduceStandingComponent(values, scale) };
 }
 
 async function snapshot(env: WorkActivationEnvironment, access: InventoryAccess,
@@ -269,7 +276,7 @@ export async function queryRealmStandingAggregate(env: WorkActivationEnvironment
     populationPolicy: 'account-principal' as const,aggregationPolicy: 'latest-per-rater-mean' as const,
     population: result.population,count: result.count,withdrawnCount: result.withdrawnCount,
     histogram: result.histogram,sum: result.sum,mean: result.mean,
-    precision: result.count ? { kind: 'exact-rational' as const,numerator: result.sum,denominator: result.count }
+    precision: result.count ? Number.isInteger(result.sum) ? { kind: 'exact-rational' as const,numerator: result.sum,denominator: result.count } : result.precision
       : { kind: 'no-data' as const },sourcePosition: result.sourcePosition };
 }
 

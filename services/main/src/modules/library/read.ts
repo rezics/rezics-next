@@ -9,7 +9,7 @@ export const READER_LIBRARY_COST = { batchWorks: 24, graphCalls: 64, graphRows: 
   sqlReads: 16, responseBytes: 256 * 1024 } as const;
 
 export async function readReaderStates(session: WorkReadSession, agent: string, works: string[],
-  status: ReaderLibraryStatusStore, realm?: string) {
+  status: ReaderLibraryStatusStore, realm?: string, ratingContext?: string) {
   if (!session.principal || works.length > READER_LIBRARY_COST.batchWorks
     || new Set(works).size !== works.length || works.some(work => !id.test(work))) {
     throw new WorkReadInvalid('Invalid reader state batch');
@@ -84,7 +84,7 @@ export async function readReaderStates(session: WorkReadSession, agent: string, 
   }
   const progress = await status.progress(session.options.actingSubject!, [...structures.values()]);
   if (!session.deps.libraryRatings) throw new WorkReadUnavailable('Reader rating inventory is unavailable');
-  const ratings = await session.deps.libraryRatings.read(session, currentMains, realm);
+  const ratings = await session.deps.libraryRatings.read(session, currentMains, realm, ratingContext);
   if (await status.fence(agent) !== statusFence
     || await session.deps.profiles?.agentFence(agent) !== before
     || !await session.deps.access.canReadAsBaselineMember?.(session.principal, agent)) {

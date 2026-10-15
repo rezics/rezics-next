@@ -1,3 +1,4 @@
+import { judgmentScale, SCALED_GLOBAL_CONTEXT } from '../modules/rating/scale.ts';
 import { Elysia, t } from 'elysia';
 import { readerLanguages } from '../modules/display-language/select.ts';
 import { questionLanguagesQuery, questionReadFields } from '../modules/rating/question-presentation-schema.ts';
@@ -49,9 +50,9 @@ export function globalRatingRoutes(work: MainWorkDependencies) {
       if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       try {
         const receipt = await createAdmittedGlobalRatingContext(work.environment, work.account, work.access,
-          request, { question: body.question, actingSubject: body.actingSubject, idempotencyKey: key });
+          request, { question: body.question, actingSubject: body.actingSubject, scale: body.scale ?? (body.profile === SCALED_GLOBAL_CONTEXT ? policy.scale : undefined), idempotencyKey: key });
         return Response.json({ context: receipt.context, populationOwner: GLOBAL_RATING_POPULATION_OWNER,
-          question: body.question, contextRevision: receipt.revision, ...policy,
+          question: body.question, contextRevision: receipt.revision, ...policy, scale: judgmentScale(body.scale ?? policy.scale), profile: body.scale || body.profile === SCALED_GLOBAL_CONTEXT ? SCALED_GLOBAL_CONTEXT : policy.profile,
           sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence },
           replayed: receipt.replayed }, { status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
@@ -65,7 +66,7 @@ export function globalRatingRoutes(work: MainWorkDependencies) {
         await assertGraphAdmissionOpen(work.environment.fuseki, work.environment.lineage);
         const context = await readGlobalRatingContext(work.environment, `https://rezics.com/id/${params.id}`);
         if (!context) return problem(404, 'rating_context_unavailable', 'Rating context is unavailable');
-        return Response.json(await presentRatingContext(work.environment, { ...context, populationOwner: GLOBAL_RATING_POPULATION_OWNER, ...policy },
+        return Response.json(await presentRatingContext(work.environment, { ...context, populationOwner: GLOBAL_RATING_POPULATION_OWNER, ...policy, scale: context.scale, profile: context.profile },
           readerLanguages(query.languages, request.headers.get('accept-language'))),
           { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
@@ -86,7 +87,7 @@ export function globalRatingRoutes(work: MainWorkDependencies) {
         return Response.json({ observation: receipt.observation, observationRevision: receipt.revision,
           predecessor: receipt.predecessor, context: receipt.context, work: receipt.work,
           mainVersion: receipt.mainVersion, value: receipt.value, availability: receipt.availability,
-          profile: GLOBAL_OBSERVATION_ID,
+          profile: receipt.modelProfile?.split('/').at(-1) ?? GLOBAL_OBSERVATION_ID,
           sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence },
           replayed: receipt.replayed }, { status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
       } catch (error) {

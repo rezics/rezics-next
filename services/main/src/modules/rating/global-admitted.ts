@@ -1,3 +1,4 @@
+import { InvalidRatingObservationInput } from './observation.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AdmissionDenied, AdmissionExpired, AdmissionLockBusy, type AccessAdmissionRegistry,
   type RegisteredAdmission, type VerifiedPrincipal } from '../access/admission.ts';
@@ -47,7 +48,7 @@ export async function createAdmittedGlobalRatingContext(env: WorkActivationEnvir
     await access.recordGraphOutcome(registered.id, terminal);
     return { ...checkedGlobalContextReceipt(terminal, registered, digest), replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof AdmissionLockBusy || error instanceof IdempotencyConflict
+    if (error instanceof InvalidRatingObservationInput || error instanceof AdmissionLockBusy || error instanceof IdempotencyConflict
       || error instanceof CancelledActivation) throw error;
     throw new PendingAdmittedWork(registered.id, 'rating-context');
   }
@@ -68,7 +69,7 @@ export async function setAdmittedGlobalRating(env: WorkActivationEnvironment,
     await dispatch(access, registered, digest, principal, async admission => {
       try { await setGlobalRating(env, admission, input); }
       catch (error) {
-        if (error instanceof IdempotencyConflict || error instanceof RatingCurrentVisibility) throw error;
+        if (error instanceof IdempotencyConflict || error instanceof InvalidRatingObservationInput || error instanceof RatingCurrentVisibility) throw error;
         if (error instanceof RatingObservationUnavailable) await sealStandingRatingAdmission(env, admission);
       }
     }, admission => sealStandingRatingAdmission(env, admission));
@@ -77,7 +78,7 @@ export async function setAdmittedGlobalRating(env: WorkActivationEnvironment,
     await access.recordGraphOutcome(registered.id, terminal);
     return { ...checkedGlobalRatingReceipt(terminal, registered, input, digest), replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof AdmissionLockBusy || error instanceof IdempotencyConflict || error instanceof StaleRatingObservation
+    if (error instanceof InvalidRatingObservationInput || error instanceof AdmissionLockBusy || error instanceof IdempotencyConflict || error instanceof StaleRatingObservation
       || error instanceof RatingObservationUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'rating-observation');
   }

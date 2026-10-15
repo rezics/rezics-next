@@ -58,7 +58,7 @@ function validate(batch: ReviewedImportBatch): void {
   for (const row of batch.rows) {
     if (!ID.test(row.work) || !date(row.startedOn) || !date(row.finishedOn)
       || row.startedOn && row.finishedOn && row.startedOn > row.finishedOn
-      || row.rating !== null && (!Number.isInteger(row.rating) || row.rating < 1 || row.rating > 5)
+      || row.rating !== null && (!Number.isFinite(row.rating) || row.rating < 0 || row.rating > 1_000_000)
       || row.review !== null && (!row.review.trim() || row.review.length > READER_IMPORT_COST.reviewCharacters)
       || row.shelves.length > READER_IMPORT_COST.shelvesPerRow
       || row.shelves.some(name => !name.trim() || name.length > 300)) {
@@ -154,7 +154,7 @@ export class ImportCommands {
     existing: Map<string, string>): Promise<ReviewedImportResult | null> {
     const agent = this.batch.actingSubject, work = row.work;
     const result: ReviewedImportResult = { work, applied: [], issues: [] };
-    const state = await this.read<State>(`/v1/works/${uuid(work)}/reader-state?actingSubject=${encodeURIComponent(agent)}`);
+    const state = await this.read<State>(`/v1/works/${uuid(work)}/reader-state?actingSubject=${encodeURIComponent(agent)}${this.batch.context ? `&ratingContext=${encodeURIComponent(this.batch.context)}` : ''}`);
     if (!state) return null;
     const desiredDates = { startedOn: row.startedOn, finishedOn: row.finishedOn };
     const statusSame = row.status === state.status.status

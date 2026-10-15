@@ -1,8 +1,10 @@
+import { readStandingRatingState } from './manifest.ts';
+import { scaledProfile, SCALED_GLOBAL_CONTEXT, SCALED_GLOBAL_OBSERVATION } from './scale.ts';
+import { contextScale, exactRating, judgmentScale, onJudgmentScale, ratingTerm, ratingUnits, scalePattern, type JudgmentScale } from './scale.ts';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
-import { readComponentState } from '../work/history.ts';
 import { CancelledActivation, DATASET, GRAPHS, ID, IdempotencyConflict, PendingActivation, RV,
   hash, iri, lit, prepareComponent, type WorkActivationEnvironment } from '../work/activate.ts';
 import { InvalidRatingContextInput, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE,
@@ -22,10 +24,10 @@ export const GLOBAL_CONTEXT_PROFILE = `https://rezics.com/definition/${GLOBAL_CO
 export const GLOBAL_OBSERVATION_PROFILE = `https://rezics.com/definition/${GLOBAL_OBSERVATION_ID}`;
 export const GLOBAL_RATING_POPULATION =
   'https://rezics.com/definition/rating-global-account-principal-population-v1';
-export const GLOBAL_RATING_SCALE = { min: 1, max: 5 } as const;
+export const GLOBAL_RATING_SCALE = { min: 1, max: 5, step: 1 } as const;
 export const GLOBAL_CONTEXT_SCOPE = `rating:context:${GLOBAL_RATING_POPULATION_OWNER}`;
 
-export interface CreateGlobalRatingContextInput { question: string; actingSubject: string }
+export interface CreateGlobalRatingContextInput { question: string; actingSubject: string; scale?: JudgmentScale }
 
 export interface SetGlobalRatingInput {
   context: string; work: string; mainVersion: string;
@@ -33,10 +35,10 @@ export interface SetGlobalRatingInput {
 }
 
 /** Fixed Context triples; reads and command guards share them so no Realm pattern can match. */
-export function globalContextPattern(context: string): string {
+export function globalContextPattern(context: string, scale?: JudgmentScale): string {
   return `${iri(context)} a rv:GlobalRatingContext ; rv:contextState rv:Active ;
     rv:ratingPopulationOwner ${iri(GLOBAL_RATING_POPULATION_OWNER)} ; rv:targetGrain rv:MainVersion ;
-    rv:ratingScaleMin ${GLOBAL_RATING_SCALE.min} ; rv:ratingScaleMax ${GLOBAL_RATING_SCALE.max} ;
+    ${scalePattern(scale)} ;
     rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
     rv:ratingPopulationPolicy ${iri(GLOBAL_RATING_POPULATION)} ;
     rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)}`;
@@ -44,9 +46,9 @@ export function globalContextPattern(context: string): string {
 
 /** The immutable Context manifest must restate every fixed Global policy. */
 export function isGlobalContextState(state: Record<string, unknown>, context: string, question: string): boolean {
+  try { contextScale(state); } catch { return false; }
   return state.context === context && state.populationOwner === GLOBAL_RATING_POPULATION_OWNER
     && state.question === question && state.state === 'active' && state.targetGrain === 'MainVersion'
-    && state.scaleMin === GLOBAL_RATING_SCALE.min && state.scaleMax === GLOBAL_RATING_SCALE.max
     && state.cadence === RATING_STANDING_CADENCE && state.populationPolicy === GLOBAL_RATING_POPULATION
     && state.aggregationPolicy === RATING_LATEST_MEAN_POLICY && !('realm' in state);
 }
@@ -58,9 +60,10 @@ export function globalRatingContextDigest(input: CreateGlobalRatingContextInput)
     || /[\u0000-\u001f\u007f]/u.test(input.question)) {
     throw new InvalidRatingContextInput('invalid Global rating context request');
   }
+  const scale = judgmentScale(input.scale ?? GLOBAL_RATING_SCALE);
   return hash(JSON.stringify({ family: GLOBAL_CONTEXT_ID, populationOwner: GLOBAL_RATING_POPULATION_OWNER,
     question: input.question, actingSubject: input.actingSubject, targetGrain: 'MainVersion',
-    scale: [GLOBAL_RATING_SCALE.min, GLOBAL_RATING_SCALE.max], cadence: RATING_STANDING_CADENCE,
+    scale: input.scale ? [scale.min, scale.max, scale.step] : [GLOBAL_RATING_SCALE.min, GLOBAL_RATING_SCALE.max], cadence: RATING_STANDING_CADENCE,
     population: GLOBAL_RATING_POPULATION, aggregation: RATING_LATEST_MEAN_POLICY }));
 }
 
@@ -79,6 +82,9 @@ export function checkedGlobalContextReceipt(receipt: RatingContextReceipt, admis
 export async function createGlobalRatingContext(env: WorkActivationEnvironment,
   admission: RegisteredAdmission, input: CreateGlobalRatingContextInput): Promise<RatingContextReceipt> {
   const digest = globalRatingContextDigest(input);
+  const scale = judgmentScale(input.scale ?? GLOBAL_RATING_SCALE);
+  const scaled = input.scale !== undefined;
+  const contextProfile = scaled ? scaledProfile(GLOBAL_CONTEXT_PROFILE) : GLOBAL_CONTEXT_PROFILE;
   if (admission.action !== 'rating.context.create' || admission.scope !== GLOBAL_CONTEXT_SCOPE
     || admission.actingSubject !== input.actingSubject || admission.requestDigest !== digest) {
     throw new IdempotencyConflict('Global rating context admission differs from intent');
@@ -90,14 +96,14 @@ export async function createGlobalRatingContext(env: WorkActivationEnvironment,
   const context = ID + Bun.randomUUIDv7();
   const revision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  const validations = await profileValidations(env.fuseki, GLOBAL_CONTEXT_ID, [
-    { shape: `${GLOBAL_CONTEXT_PROFILE}/context-shape`, focus: [context], graphs: [GRAPHS.current] },
+  const validations = await profileValidations(env.fuseki, scaled ? SCALED_GLOBAL_CONTEXT : GLOBAL_CONTEXT_ID, [
+    { shape: `${contextProfile}/context-shape`, focus: [context], graphs: [GRAPHS.current] },
   ], { context, question: input.question });
   const manifest = prepareComponent(env.objectDirectory, context,
     { context, populationOwner: GLOBAL_RATING_POPULATION_OWNER, question: input.question, state: 'active',
-      targetGrain: 'MainVersion', scaleMin: GLOBAL_RATING_SCALE.min, scaleMax: GLOBAL_RATING_SCALE.max,
+      targetGrain: 'MainVersion', scaleMin: scale.min, scaleMax: scale.max, scaleStep: scale.step, ...(scaled ? { exactScale: true } : {}),
       cadence: RATING_STANDING_CADENCE, populationPolicy: GLOBAL_RATING_POPULATION,
-      aggregationPolicy: RATING_LATEST_MEAN_POLICY }, GLOBAL_CONTEXT_PROFILE);
+      aggregationPolicy: RATING_LATEST_MEAN_POLICY }, contextProfile);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Global rating context admission expired');
   const receipt = ratingContextReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
@@ -110,13 +116,14 @@ export async function createGlobalRatingContext(env: WorkActivationEnvironment,
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} {
-        ${globalContextPattern(context)} ;
+        ${globalContextPattern(context, scale)} ;
+          ${scaled ? 'a rv:ScaledGlobalRatingContext ;' : ''}
           rv:question ${lit(input.question)}@en ; rv:head ${iri(revision)} .
       }
       GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(context)} ;
           rv:operation ${iri(operation)} ; rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
-          rv:modelRevision ${iri(GLOBAL_CONTEXT_PROFILE)} ; rv:shapeRevision ${iri(GLOBAL_CONTEXT_PROFILE)} ;
+          rv:modelRevision ${iri(contextProfile)} ; rv:shapeRevision ${iri(contextProfile)} ;
           rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
       }
       GRAPH ${iri(GRAPHS.receipts)} {
@@ -158,31 +165,86 @@ export async function createGlobalRatingContext(env: WorkActivationEnvironment,
 
 export async function readGlobalRatingContext(env: WorkActivationEnvironment, context: string) {
   if (!nativeId.test(context)) throw new RatingObservationUnavailable('Global rating context is unavailable');
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?question ?revision ?manifest WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ${globalContextPattern(context)} ; rv:question ?question ; rv:head ?revision . }
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?question ?revision ?manifest ?scaleMin ?scaleMax ?scaleStep WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${globalContextPattern(context)} ; rv:question ?question ; rv:head ?revision . OPTIONAL { ${iri(context)} rv:ratingScaleStep ?scaleStep } }
     GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:RevisionAnchor ; rv:component ${iri(context)} ;
-      rv:modelRevision ${iri(GLOBAL_CONTEXT_PROFILE)} ; rv:manifest ?manifest . }
+      rv:modelRevision ?contextModel ; rv:manifest ?manifest . VALUES ?contextModel { ${iri(GLOBAL_CONTEXT_PROFILE)} ${iri(scaledProfile(GLOBAL_CONTEXT_PROFILE))} } }
   } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   const row = rows[0];
   if (rows.length !== 1 || !row?.question || row.question['xml:lang'] !== 'en' || !row.revision || !row.manifest) {
     return null;
   }
-  const state = readComponentState(env.objectDirectory, row.manifest.value, context, GLOBAL_CONTEXT_PROFILE);
-  if (!isGlobalContextState(state, context, row.question.value)) {
+  const state = readStandingRatingState(env.objectDirectory, row.manifest.value, context, GLOBAL_CONTEXT_PROFILE);
+  const scale = contextScale(state);
+  if (!isGlobalContextState(state, context, row.question.value) || scale.min !== Number(row.scaleMin!.value)
+    || scale.max !== Number(row.scaleMax!.value) || scale.step !== Number(row.scaleStep?.value ?? 1)) {
     throw new RatingObservationUnavailable('Global rating context bytes differ');
   }
-  return { context, question: row.question.value, contextRevision: row.revision.value };
+  return { context, question: row.question.value, contextRevision: row.revision.value, scale: contextScale(state), profile: state.exactScale === true ? 'global-rating-standing-context-v2' : GLOBAL_CONTEXT_ID };
+}
+
+/** Revision disclosure is bound to the authenticated principal's opaque slot. */
+export async function readGlobalRatingRevision(env: WorkActivationEnvironment, principalId: string,
+  input: { context: string; mainVersion: string; observation: string; revision: string }) {
+  const slot = standingRatingSlotIri(principalId, input.context, input.mainVersion);
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?work ?availability ?value
+    ?predecessor ?evaluatedAt ?submittedAt ?originalSubmissionAt ?revisedAt WHERE {
+    GRAPH ${iri(GRAPHS.current)} {
+      ${globalContextPattern(input.context)} .
+      ?work a <https://schema.org/CreativeWork> ; rv:mainVersion ${iri(input.mainVersion)} .
+      ${iri(input.mainVersion)} a rv:MainVersion ; rv:work ?work .
+      ${iri(input.observation)} a rv:GlobalRatingObservation ; rv:ratingSlot ${iri(slot)} ;
+        rv:ratingContext ${iri(input.context)} ; rv:targetMainVersion ${iri(input.mainVersion)} ; rv:observationHead ?head .
+    }
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(input.revision)} a rv:GlobalRatingObservationRevision, rv:RevisionAnchor ;
+        rv:component ${iri(input.observation)} ; rv:observation ${iri(input.observation)} ;
+        rv:modelRevision ?observationModel ; rv:manifest ?manifest ;
+        rv:ratingAvailability ?availability ; rv:evaluatedAt ?evaluatedAt ; rv:submittedAt ?submittedAt ;
+        rv:originalSubmissionAt ?originalSubmissionAt ; rv:revisedAt ?revisedAt .
+      VALUES ?observationModel { ${iri(GLOBAL_OBSERVATION_PROFILE)} ${iri(scaledProfile(GLOBAL_OBSERVATION_PROFILE))} }
+      OPTIONAL { ${iri(input.revision)} rv:ratingValue ?value }
+      OPTIONAL { ${iri(input.revision)} rv:predecessor ?predecessor }
+      FILTER NOT EXISTS { ${iri(input.revision)} a rv:ErasedRevision }
+      FILTER NOT EXISTS { ?head a rv:ErasedRevision }
+    }
+  } LIMIT 2`);
+  const rows = result.results?.bindings ?? [];
+  if (!rows.length) return null;
+  const row = rows[0]!;
+  if (rows.length !== 1 || !row.manifest || !row.work) throw new RatingObservationUnavailable('Global revision is ambiguous');
+  const state = readStandingRatingState(env.objectDirectory, row.manifest.value, input.observation, GLOBAL_OBSERVATION_PROFILE);
+  const context = await readGlobalRatingContext(env, input.context);
+  const value = row.value ? Number(row.value.value) : null;
+  const availability = row.availability?.value === `${RV}Available` ? 'available'
+    : row.availability?.value === `${RV}Withdrawn` ? 'withdrawn' : null;
+  if (!context || !availability || state.observation !== input.observation || state.revision !== input.revision
+    || state.slot !== slot || state.context !== input.context || state.mainVersion !== input.mainVersion
+    || state.work !== row.work.value || state.populationOwner !== GLOBAL_RATING_POPULATION_OWNER
+    || state.availability !== availability || state.value !== value
+    || state.predecessor !== (row.predecessor?.value ?? null)
+    || (availability === 'available' && !onJudgmentScale(value, context.scale))
+    || (availability === 'withdrawn' && value !== null)
+    || !['evaluatedAt', 'submittedAt', 'originalSubmissionAt', 'revisedAt'].every(key =>
+      typeof state[key] === 'string' && Date.parse(state[key] as string) === Date.parse(row[key]?.value ?? ''))) {
+    throw new RatingObservationUnavailable('Global revision differs from its manifest');
+  }
+  return { observation: input.observation, observationRevision: input.revision, context: input.context,
+    work: row.work.value, mainVersion: input.mainVersion, predecessor: state.predecessor,
+    value, exactValue: value === null ? null : exactRating(value), scale: context.scale, availability,
+    evaluatedAt: state.evaluatedAt, submittedAt: state.submittedAt,
+    originalSubmissionAt: state.originalSubmissionAt, revisedAt: state.revisedAt, profile: context.profile.endsWith('-v2') ? 'global-rating-standing-observation-v2' : GLOBAL_OBSERVATION_ID };
 }
 
 export function globalRatingDigest(input: SetGlobalRatingInput): string {
   if (![input.context, input.work, input.mainVersion, input.actingSubject].every(value => nativeId.test(value))
     || (input.expectedRevisionHead !== null && !nativeId.test(input.expectedRevisionHead))
-    || (input.value !== null && (!Number.isInteger(input.value)
-      || input.value < GLOBAL_RATING_SCALE.min || input.value > GLOBAL_RATING_SCALE.max))
+    || (input.value !== null && (!Number.isFinite(input.value) || input.value < 0 || input.value > 1_000_000))
     || (input.value === null && input.expectedRevisionHead === null)) {
     throw new InvalidRatingObservationInput('invalid Global rating request');
   }
+  if (input.value !== null) ratingUnits(input.value);
   return hash(JSON.stringify({ family: GLOBAL_OBSERVATION_ID, context: input.context, work: input.work,
     mainVersion: input.mainVersion, expectedRevisionHead: input.expectedRevisionHead,
     value: input.value, actingSubject: input.actingSubject }));
@@ -210,6 +272,7 @@ export function checkedGlobalRatingReceipt(receipt: RatingObservationReceipt, ad
 }
 
 interface Dependencies {
+  scaled: boolean;
   contextRevision: string; observation?: string; prior?: string;
   evaluatedAt?: string; originalSubmissionAt?: string;
 }
@@ -217,14 +280,15 @@ interface Dependencies {
 async function readDependencies(env: WorkActivationEnvironment, input: SetGlobalRatingInput,
   slot: string): Promise<Dependencies> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    SELECT ?contextRevision ?contextManifest ?question ?observation ?prior ?evaluatedAt ?originalSubmissionAt WHERE {
+    SELECT ?scaleMin ?scaleMax ?scaleStep ?contextRevision ?contextManifest ?question ?observation ?prior ?evaluatedAt ?originalSubmissionAt WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ${globalContextPattern(input.context)} ; rv:question ?question ; rv:head ?contextRevision .
+      OPTIONAL { ${iri(input.context)} rv:ratingScaleStep ?scaleStep }
       ${iri(input.work)} a schema:CreativeWork ; rv:mainVersion ${iri(input.mainVersion)} .
       ${iri(input.mainVersion)} a rv:MainVersion ; rv:work ${iri(input.work)} .
     }
     GRAPH ${iri(GRAPHS.revisions)} { ?contextRevision a rv:RevisionAnchor ; rv:component ${iri(input.context)} ;
-      rv:modelRevision ${iri(GLOBAL_CONTEXT_PROFILE)} ; rv:manifest ?contextManifest . }
+      rv:modelRevision ?contextModel ; rv:manifest ?contextManifest . VALUES ?contextModel { ${iri(GLOBAL_CONTEXT_PROFILE)} ${iri(scaledProfile(GLOBAL_CONTEXT_PROFILE))} } }
     OPTIONAL {
       GRAPH ${iri(GRAPHS.current)} { ?observation a rv:GlobalRatingObservation ; rv:ratingSlot ${iri(slot)} ;
         rv:ratingContext ${iri(input.context)} ; rv:targetMainVersion ${iri(input.mainVersion)} ;
@@ -239,11 +303,16 @@ async function readDependencies(env: WorkActivationEnvironment, input: SetGlobal
     || (row.observation && (!row.prior || !row.evaluatedAt || !row.originalSubmissionAt))) {
     throw new RatingCurrentVisibility('Global rating Context, target or slot is unavailable');
   }
+  let scaled = false;
   try {
-    const state = readComponentState(env.objectDirectory, row.contextManifest.value, input.context, GLOBAL_CONTEXT_PROFILE);
+    const state = readStandingRatingState(env.objectDirectory, row.contextManifest.value, input.context, GLOBAL_CONTEXT_PROFILE);
+    scaled = state.exactScale === true;
+    if (input.value !== null && !onJudgmentScale(input.value, contextScale(state))) throw new InvalidRatingObservationInput('rating value lies outside its Context scale');
+    const scale = contextScale(state);
+    if (scale.min !== Number(row.scaleMin!.value) || scale.max !== Number(row.scaleMax!.value) || scale.step !== Number(row.scaleStep?.value ?? 1)) throw new Error('Global scale differs');
     if (!isGlobalContextState(state, input.context, row.question.value)) throw new Error('Global Context manifest differs');
-  } catch { throw new RatingObservationUnavailable('Global Context manifest is unavailable'); }
-  return { contextRevision: row.contextRevision.value, ...(row.observation ? {
+  } catch (error) { if (error instanceof InvalidRatingObservationInput) throw error; throw new RatingObservationUnavailable('Global Context manifest is unavailable'); }
+  return { scaled, contextRevision: row.contextRevision.value, ...(row.observation ? {
     observation: row.observation.value, prior: row.prior!.value,
     evaluatedAt: canonicalRatingInstant(row.evaluatedAt!.value),
     originalSubmissionAt: canonicalRatingInstant(row.originalSubmissionAt!.value) } : {}) };
@@ -317,10 +386,11 @@ export async function setGlobalRating(env: WorkActivationEnvironment, admission:
   const originalSubmissionAt = deps.originalSubmissionAt ?? now;
   const prior = input.expectedRevisionHead;
   const availability = input.value === null ? 'Withdrawn' : 'Available';
+  const observationProfile = deps.scaled ? scaledProfile(GLOBAL_OBSERVATION_PROFILE) : GLOBAL_OBSERVATION_PROFILE;
   const graphs = [GRAPHS.current, GRAPHS.revisions];
-  const validations = await profileValidations(env.fuseki, GLOBAL_OBSERVATION_ID,
+  const validations = await profileValidations(env.fuseki, deps.scaled ? SCALED_GLOBAL_OBSERVATION : GLOBAL_OBSERVATION_ID,
     (['context', 'work', 'main', 'observation', 'revision'] as const).map(role => ({
-      shape: `${GLOBAL_OBSERVATION_PROFILE}/${role}-shape`, graphs,
+      shape: `${observationProfile}/${role}-shape`, graphs,
       focus: [{ context: input.context, work: input.work, main: input.mainVersion, observation, revision }[role]],
     })), { context: input.context, work: input.work, main: input.mainVersion, slot, observation, revision,
       availability: availability.toLowerCase(), ...(input.value === null ? {} : { value: String(input.value) }),
@@ -328,14 +398,14 @@ export async function setGlobalRating(env: WorkActivationEnvironment, admission:
   const manifest = prepareComponent(env.objectDirectory, observation,
     { observation, slot, context: input.context, contextRevision: deps.contextRevision,
       populationOwner: GLOBAL_RATING_POPULATION_OWNER, work: input.work, mainVersion: input.mainVersion,
-      revision, predecessor: prior, availability: availability.toLowerCase(), value: input.value,
-      evaluatedAt, submittedAt: now, originalSubmissionAt, revisedAt: now }, GLOBAL_OBSERVATION_PROFILE);
+      revision, predecessor: prior, availability: availability.toLowerCase(), value: input.value, exactValue: input.value === null ? null : exactRating(input.value),
+      evaluatedAt, submittedAt: now, originalSubmissionAt, revisedAt: now }, observationProfile);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Global rating admission expired');
   const receipt = standingRatingReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(operation)}`;
   const headGuard = prior ? `GRAPH ${iri(GRAPHS.current)} {
-      ${iri(observation)} a rv:GlobalRatingObservation ; rv:ratingSlot ${iri(slot)} ;
+      ${iri(observation)} a rv:GlobalRatingObservation ${deps.scaled ? ', rv:ScaledGlobalRatingObservation' : ''} ; rv:ratingSlot ${iri(slot)} ;
         rv:ratingContext ${iri(input.context)} ; rv:targetMainVersion ${iri(input.mainVersion)} ;
         rv:observationHead ${iri(prior)} . }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(prior)} a rv:GlobalRatingObservationRevision,
@@ -354,21 +424,21 @@ export async function setGlobalRating(env: WorkActivationEnvironment, admission:
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(observation)} a rv:GlobalRatingObservation ; rv:ratingContext ${iri(input.context)} ;
+        ${iri(observation)} a rv:GlobalRatingObservation ${deps.scaled ? ', rv:ScaledGlobalRatingObservation' : ''} ; rv:ratingContext ${iri(input.context)} ;
           rv:targetMainVersion ${iri(input.mainVersion)} ; rv:ratingSlot ${iri(slot)} ;
           rv:observationHead ${iri(revision)} .
       }
       GRAPH ${iri(GRAPHS.revisions)} {
-        ${iri(revision)} a rv:GlobalRatingObservationRevision, rv:RevisionAnchor ;
+        ${iri(revision)} a rv:GlobalRatingObservationRevision, rv:RevisionAnchor ${deps.scaled ? ', rv:ScaledGlobalRatingObservationRevision' : ''} ;
           rv:component ${iri(observation)} ; rv:observation ${iri(observation)} ;
           rv:operation ${iri(operation)} ; rv:ratingAvailability rv:${availability} ;
-          ${input.value === null ? '' : `rv:ratingValue ${input.value} ;`}
+          ${input.value === null ? '' : `rv:ratingValue ${ratingTerm(input.value)} ;`}
           ${prior ? `rv:predecessor ${iri(prior)} ;` : ''}
           rv:evaluatedAt ${lit(evaluatedAt)}^^xsd:dateTime ; rv:submittedAt ${lit(now)}^^xsd:dateTime ;
           rv:originalSubmissionAt ${lit(originalSubmissionAt)}^^xsd:dateTime ;
           rv:revisedAt ${lit(now)}^^xsd:dateTime ;
           rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
-          rv:modelRevision ${iri(GLOBAL_OBSERVATION_PROFILE)} ; rv:shapeRevision ${iri(GLOBAL_OBSERVATION_PROFILE)} ;
+          rv:modelRevision ${iri(observationProfile)} ; rv:shapeRevision ${iri(observationProfile)} ;
           rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
       }
       GRAPH ${iri(GRAPHS.receipts)} {
@@ -380,8 +450,8 @@ export async function setGlobalRating(env: WorkActivationEnvironment, admission:
           rv:contextRevision ${iri(deps.contextRevision)} ;
           rv:work ${iri(input.work)} ; rv:mainVersion ${iri(input.mainVersion)} ;
           rv:ratingSlot ${iri(slot)} ; rv:ratingObservation ${iri(observation)} ;
-          rv:observationRevision ${iri(revision)} ; rv:ratingAvailability rv:${availability} ;
-          ${input.value === null ? '' : `rv:ratingValue ${input.value} ;`}
+          rv:observationRevision ${iri(revision)} ; rv:ratingObservationProfile ${iri(observationProfile)} ; rv:ratingAvailability rv:${availability} ;
+          ${input.value === null ? '' : `rv:ratingValue ${ratingTerm(input.value)} ;`}
           ${prior ? `rv:expectedHead ${iri(prior)} ;` : ''}
           rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
       }

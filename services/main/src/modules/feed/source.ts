@@ -44,12 +44,12 @@ export async function feedReviewSources(session: WorkReadSession, ids: readonly 
     GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?main . ?main a rv:MainVersion ; rv:work ?work . }
     ${publicWork('?work','?main')}
     { GRAPH ${iri(GRAPHS.current)} { ?context a rv:GlobalRatingContext ; rv:contextState rv:Active ;
-        rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 5 ;
+        rv:targetGrain rv:MainVersion ; rv:ratingScaleMin ?scaleMin ; rv:ratingScaleMax ?scaleMax ;
         rv:ratingPopulationOwner ${iri(GLOBAL_RATING_POPULATION_OWNER)} ; rv:ratingPopulationPolicy ${iri(GLOBAL_RATING_POPULATION)} ;
         rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ; rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} . } }
     UNION { GRAPH ${iri(GRAPHS.current)} { ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space ; rv:ratingContext ?context .
       ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
-      ?context a rv:RatingContext ; rv:contextState rv:Active ; rv:realm ?realm ; rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
+      ?context a rv:RatingContext ; rv:contextState rv:Active ; rv:realm ?realm ; rv:targetGrain rv:MainVersion ; rv:ratingScaleMin ?scaleMin ; rv:ratingScaleMax ?scaleMax ;
         rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ; rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
         rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} .
       FILTER NOT EXISTS { ?space rv:disclosure rv:Private } FILTER NOT EXISTS { ?realm rv:protectionHead ?protection }

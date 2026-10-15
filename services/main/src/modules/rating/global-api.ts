@@ -1,3 +1,4 @@
+import { judgmentScaleSchema, exactRatingSchema, SCALED_GLOBAL_CONTEXT, SCALED_GLOBAL_OBSERVATION } from './scale.ts';
 import { t } from 'elysia';
 import { sourcePosition } from '../../api-contract.ts';
 import { GLOBAL_AGGREGATE_PROFILE } from './global-aggregate.ts';
@@ -10,45 +11,50 @@ const positiveText = t.String({ pattern: '^[1-9][0-9]*$', maxLength: 128 });
 const fraction = t.Object({ numerator: integerText, denominator: positiveText });
 const count = t.Integer({ minimum: 0, maximum: 100 });
 const replay = { sourcePosition, replayed: t.Boolean() };
-const globalScale = t.Object({ min: t.Literal(1), max: t.Literal(5), step: t.Literal(1) });
+const globalScale = judgmentScaleSchema;
 const owner = t.Literal(GLOBAL_RATING_POPULATION_OWNER);
 
 export const globalContextInput = t.Object({
-  profile: t.Literal(GLOBAL_CONTEXT_ID), question: t.String({ minLength: 3, maxLength: 120 }),
-  actingSubject: target,
+  profile: t.Union([t.Literal(GLOBAL_CONTEXT_ID), t.Literal(SCALED_GLOBAL_CONTEXT)]), question: t.String({ minLength: 3, maxLength: 120 }),
+  actingSubject: target, scale: t.Optional(judgmentScaleSchema),
 }, { additionalProperties: false });
 
 const globalContext = {
   context: target, populationOwner: owner, question: t.String(), contextRevision: target,
   targetGrain: t.Literal('mainVersion'), scale: globalScale, cadence: t.Literal('standing'),
   population: t.Literal('global-account-principal'), aggregation: t.Literal('latest-per-rater-mean'),
-  profile: t.Literal(GLOBAL_CONTEXT_ID),
+  profile: t.Union([t.Literal(GLOBAL_CONTEXT_ID), t.Literal(SCALED_GLOBAL_CONTEXT)]),
 };
 export const globalContextRead = t.Object(globalContext);
 export const globalContextWrite = t.Object({ ...globalContext, ...replay });
 
 export const globalObservationInput = t.Object({
-  profile: t.Literal(GLOBAL_OBSERVATION_ID), context: target, work: target, mainVersion: target,
-  expectedRevisionHead: t.Nullable(target), value: t.Nullable(t.Integer({ minimum: 1, maximum: 5 })),
+  profile: t.Union([t.Literal(GLOBAL_OBSERVATION_ID), t.Literal(SCALED_GLOBAL_OBSERVATION)]), context: target, work: target, mainVersion: target,
+  expectedRevisionHead: t.Nullable(target), value: t.Nullable(t.Number({ minimum: 0, maximum: 1_000_000 })),
   actingSubject: target,
 }, { additionalProperties: false });
 
 export const globalObservationWrite = t.Object({
   observation: target, observationRevision: target, predecessor: t.Nullable(target),
-  context: target, work: target, mainVersion: target, value: t.Nullable(t.Integer({ minimum: 1, maximum: 5 })),
+  context: target, work: target, mainVersion: target, value: t.Nullable(t.Number({ minimum: 0, maximum: 1_000_000 })),
+  exactValue: t.Optional(t.Nullable(exactRatingSchema)),
   availability: t.Union([t.Literal('available'), t.Literal('withdrawn')]),
-  profile: t.Literal(GLOBAL_OBSERVATION_ID), ...replay,
+  profile: t.Union([t.Literal(GLOBAL_OBSERVATION_ID), t.Literal(SCALED_GLOBAL_OBSERVATION)]), ...replay,
 });
+
+export const globalObservationRead = t.Object({ ...globalObservationWrite.properties,
+  sourcePosition: t.Optional(sourcePosition), replayed: t.Optional(t.Boolean()),
+  scale: judgmentScaleSchema, evaluatedAt: t.String(), submittedAt: t.String(), originalSubmissionAt: t.String(), revisedAt: t.String() });
 
 const component = (kind: 'realm' | 'global') => ({
   context: target, populationOwner: kind === 'global' ? owner : target, contextRevision: target,
-  contextProfile: t.Literal(kind === 'global' ? GLOBAL_CONTEXT_ID : 'realm-standing-rating-context-v1'),
+  contextProfile: t.Union([t.Literal(kind === 'global' ? GLOBAL_CONTEXT_ID : 'realm-standing-rating-context-v1'), t.Literal(kind === 'global' ? SCALED_GLOBAL_CONTEXT : 'realm-standing-rating-context-v2')]),
   populationPolicy: t.Literal(kind === 'global' ? 'global-account-principal' : 'account-principal'),
   cadence: t.Literal('standing'), aggregationPolicy: t.Literal('latest-per-rater-mean'),
-  scale: kind === 'global' ? globalScale : t.Object({ min: t.Literal(1), max: t.Literal(10), step: t.Literal(1) }),
+  scale: globalScale,
   population: count, count, withdrawnCount: count,
-  histogram: t.Array(count, { minItems: kind === 'global' ? 5 : 10, maxItems: kind === 'global' ? 5 : 10 }),
-  sum: t.Integer({ minimum: 0, maximum: 1000 }), mean: t.Nullable(t.Number()),
+  histogram: t.Array(count, { maxItems: 1001 }),
+  sum: t.Number({ minimum: 0 }), mean: t.Nullable(t.Number()),
   precision: t.Union([t.Object({ kind: t.Literal('no-data') }),
     t.Object({ kind: t.Literal('exact-rational'), numerator: integerText, denominator: positiveText })]),
   unitMean: t.Nullable(fraction),

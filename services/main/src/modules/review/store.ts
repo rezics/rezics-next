@@ -37,7 +37,7 @@ export function validateReviewIntent(input: ReviewIntent, key: string) {
   if (![input.actingSubject, input.context, input.work].every(value => ID.test(value))
     || !KEY.test(key) || input.expectedRevision !== null && !UUID.test(input.expectedRevision)
     || !LANGUAGE.test(input.language) || input.language.length > 35
-    || input.rating != null && (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 10)
+    || input.rating != null && (!Number.isFinite(input.rating) || input.rating < 0 || input.rating > 1_000_000)
     || input.text.length < 1 || input.text.length > REVIEW_COST.textChars
     || input.text.trim().length === 0 || input.text !== input.text.normalize('NFC')
     || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(input.text)) {
@@ -45,7 +45,7 @@ export function validateReviewIntent(input: ReviewIntent, key: string) {
   }
 }
 
-const rowColumns = `r.*, r.started_on::text AS started_on, r.finished_on::text AS finished_on`;
+const rowColumns = `r.*, r.rating::double precision AS rating, r.started_on::text AS started_on, r.finished_on::text AS finished_on`;
 /** A component fence covers every revision. An exact fence covers only its
  * named revision; writers cannot edit a fenced current head to escape it. */
 export const reviewVisibleSql = `NOT EXISTS (SELECT 1 FROM access.governance_enforcement e
@@ -123,9 +123,9 @@ export class ReaderReviews {
         if (head.length) linked = await proveRating({ mainVersion: head[0]!.main_version,
           observation: head[0]!.observation, revision: head[0]!.revision }, owner);
         if (linked && (linked.mainVersion !== head[0]!.main_version || linked.observation !== head[0]!.observation
-          || linked.revision !== head[0]!.revision || !Number.isInteger(linked.value)
+          || linked.revision !== head[0]!.revision || !Number.isFinite(linked.value)
           || input.rating !== undefined && linked.value !== input.rating || linked.realm !== target.realm
-          || linked.value < 1 || linked.value > 10)) throw new ControlDenied('Rating link changed');
+          || linked.value < 0 || linked.value > 1_000_000)) throw new ControlDenied('Rating link changed');
       }
       const revision = randomUUID();
       let id: string;
@@ -255,7 +255,7 @@ export class ReaderReviews {
   async page(query: ReviewPageQuery): Promise<ReviewRow[]> {
     if (!ID.test(query.context) || !ID.test(query.work) || query.limit < 1 || query.limit > REVIEW_COST.pageSize
       || query.language && (!LANGUAGE.test(query.language) || query.language.length > 35)
-      || query.rating && (!Number.isInteger(query.rating) || query.rating < 1 || query.rating > 10)) {
+      || query.rating && (!Number.isFinite(query.rating) || query.rating < 0 || query.rating > 1_000_000)) {
       throw new ControlInvalid('Invalid review page');
     }
     const helpful = query.sort === 'helpful';
@@ -278,7 +278,7 @@ export class ReaderReviews {
         ON v.review_id = r.id AND v.principal_id = $6
       WHERE r.context = $1 AND r.work = $2 AND NOT r.deleted AND ${reviewVisibleSql}
         AND ($3::text IS NULL OR r.language = $3)
-        AND ($4::integer IS NULL OR r.rating = $4)
+        AND ($4::numeric IS NULL OR r.rating = $4)
         AND ($6::uuid IS NULL OR r.principal_id <> $6)
         ${seek} ORDER BY ${order} LIMIT $5`,
     values));
@@ -292,7 +292,7 @@ export class ReaderReviews {
       WHERE r.principal_id = $1 AND r.context = $2 AND r.work = $3 AND NOT r.deleted
         AND ${reviewVisibleSql}
         AND ($4::text IS NULL OR r.language = $4)
-        AND ($5::integer IS NULL OR r.rating = $5)`,
+        AND ($5::numeric IS NULL OR r.rating = $5)`,
     [principalId, context, work, filters.language ?? null, filters.rating ?? null]))).rows[0];
     return row ?? null;
   }

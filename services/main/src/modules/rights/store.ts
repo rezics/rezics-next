@@ -457,7 +457,7 @@ export class RightsStore {
     let rows: Array<{ ordinal: number; assessment_id: string | null; license_instrument: string | null;
       obligations: Array<{ kind: string; instrument: string; applies_to: string; notice: string | null }> | null }>;
     try {
-      rows = (await this.content.query<{ ordinal: number; assessment_id: string | null;
+      rows = (await contentConnection(this.content).query<{ ordinal: number; assessment_id: string | null;
         license_instrument: string | null;
         obligations: Array<{ kind: string; instrument: string; applies_to: string; notice: string | null }> | null
       }>(`WITH requested AS ( -- wiki-display obligations
@@ -535,7 +535,7 @@ export class RightsStore {
     const scope = rightsExportUseScope(useScope);
     const useKind = useScope === 'excerpt' || useScope === 'quotation' ? 'quotation' : 'export';
     const [materialRows, restrictionRows] = await Promise.all([
-      valid.length ? this.content.query<{ ordinal: number; id: string; expression_kind: string;
+      valid.length ? contentConnection(this.content).query<{ ordinal: number; id: string; expression_kind: string;
         assessment_id: string | null; basis: string | null; outcome: string | null;
         license_instrument: string | null; exception_kind: string | null; rationale: string | null;
         extent: Record<string, unknown> | null; obligations: Array<{ kind: string; instrument: string;

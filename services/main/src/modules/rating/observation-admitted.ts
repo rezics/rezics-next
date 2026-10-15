@@ -1,3 +1,4 @@
+import { InvalidRatingObservationInput } from './observation.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AdmissionDenied, AdmissionExpired, AdmissionLockBusy, type AccessAdmissionRegistry } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
@@ -36,7 +37,7 @@ export async function setAdmittedStandingRating(
       } else {
         try { await setStandingRating(env, admission, input, daily); }
         catch (error) {
-          if (error instanceof IdempotencyConflict || error instanceof RatingCurrentVisibility) throw error;
+          if (error instanceof IdempotencyConflict || error instanceof InvalidRatingObservationInput || error instanceof RatingCurrentVisibility) throw error;
           if (error instanceof RatingObservationUnavailable) {
             await sealStandingRatingAdmission(env, admission);
           }
@@ -49,7 +50,7 @@ export async function setAdmittedStandingRating(
     return { ...await checkedRatingReceipt(env, terminal, registered, input, digest, daily),
       replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof AdmissionLockBusy || error instanceof IdempotencyConflict || error instanceof StaleRatingObservation
+    if (error instanceof InvalidRatingObservationInput || error instanceof AdmissionLockBusy || error instanceof IdempotencyConflict || error instanceof StaleRatingObservation
       || error instanceof RatingObservationUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'rating-observation');
   }

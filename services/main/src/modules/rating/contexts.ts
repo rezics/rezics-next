@@ -1,3 +1,4 @@
+import { judgmentScaleSchema } from './scale.ts';
 import { t } from 'elysia';
 import { pageFields, pageQuery, readId } from '../work/read-contract.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
@@ -18,7 +19,7 @@ export const ratingContextsQuery = t.Object({ limit: pageQuery.limit, cursor: pa
 export const standingContextItem = t.Object({ context: readId, revision: readId,
   question: t.String({ minLength: 3, maxLength: 120 }), ...questionReadFields,
   targetGrain: t.Literal('main-version'), cadence: t.Literal('standing'),
-  scale: t.Object({ min: t.Literal(1), max: t.Union([t.Literal(5), t.Literal(10)]), step: t.Literal(1) }) });
+  scale: judgmentScaleSchema });
 export const ratingContextsPage = t.Object({ profile: t.Literal('standing-rating-contexts-v1'),
   scope: t.Object({ kind: t.Union([t.Literal('global'), t.Literal('realm')]), realm: t.Nullable(readId) }),
   items: t.Array(standingContextItem, { maxItems: RATING_CONTEXTS_COST.pageSize }), ...pageFields });
@@ -27,17 +28,17 @@ export const ratingContextsPage = t.Object({ profile: t.Literal('standing-rating
  * a ranking generation without an operator or a read-side write. */
 export function standingContextPattern(): string {
   return `?context rv:contextState rv:Active ; rv:targetGrain rv:MainVersion ;
-    rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ; rv:ratingScaleMin 1 ;
+    rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ; rv:ratingScaleMin ?min ; rv:ratingScaleMax ?max ;
     rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} .
     { ?context a rv:GlobalRatingContext ; rv:ratingPopulationOwner ${iri(GLOBAL_RATING_POPULATION_OWNER)} ;
-        rv:ratingScaleMax 5 ; rv:ratingPopulationPolicy ${iri(GLOBAL_RATING_POPULATION)} .
-      BIND("global" AS ?scope) BIND(5 AS ?max)
+        rv:ratingPopulationPolicy ${iri(GLOBAL_RATING_POPULATION)} .
+      BIND("global" AS ?scope)
     } UNION {
       ?realm a rv:Realm ; rv:realmState rv:Active ; rv:ratingContext ?context ; rv:space ?space .
       ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
-      ?context a rv:RatingContext ; rv:realm ?realm ; rv:ratingScaleMax 10 ;
+      ?context a rv:RatingContext ; rv:realm ?realm ;
         rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} .
-      BIND("realm" AS ?scope) BIND(10 AS ?max)
+      BIND("realm" AS ?scope)
     }`;
 }
 
@@ -46,8 +47,9 @@ export async function readStandingRatingContexts(session: WorkReadSession) {
   const binding = ['standing-rating-contexts-v1', scope];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const limit = session.options.limit ?? RATING_CONTEXTS_COST.pageSize;
-  const rows = await session.query(`SELECT ?context ?revision ?question ?max WHERE {
+  const rows = await session.query(`SELECT ?context ?revision ?question ?min ?max ?step WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${standingContextPattern()}
+      OPTIONAL { ?context rv:ratingScaleStep ?step }
       ?context rv:head ?revision ; rv:question ?question . FILTER(LANG(?question) = "en")
       FILTER(?scope = ${lit(scope.kind)}) ${scope.realm ? `FILTER(?realm = ${iri(scope.realm)})` : ''} }
     ${cursor ? `FILTER(STR(?context) > ${lit(cursor.after)})` : ''}
@@ -59,7 +61,7 @@ export async function readStandingRatingContexts(session: WorkReadSession) {
   const page = rows.slice(0, limit);
   const items = await presentRatingQuestions(session.deps.environment, page.map(row => ({ context: row.context!.value, revision: row.revision!.value,
     question: row.question!.value, language: row.question!['xml:lang']!, targetGrain: 'main-version' as const,
-    cadence: 'standing' as const, scale: { min: 1 as const, max: Number(row.max!.value) as 5 | 10, step: 1 as const } })), session.displayLanguages);
+    cadence: 'standing' as const, scale: { min: Number(row.min!.value), max: Number(row.max!.value), step: Number(row.step?.value ?? 1) } })), session.displayLanguages);
   return { profile: 'standing-rating-contexts-v1' as const,
     scope: { kind: scope.kind as 'global' | 'realm', realm: scope.realm },
     ...pageResult(session, items,

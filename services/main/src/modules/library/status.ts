@@ -346,7 +346,7 @@ export class ReaderLibraryStatusStore {
     // aliases, and ORDER BY would otherwise sort those aliases across the shelf.
     // https://www.postgresql.org/docs/18/queries-order.html
     const keys = { added: ['shelf.changed_at', 'timestamptz'], title: ['shelf.title_key COLLATE "C"', 'text'],
-      rating: ['shelf.own_rating', 'integer'], 'last-read': ['shelf.last_read_at', 'timestamptz'],
+      rating: ['shelf.own_rating', 'numeric'], 'last-read': ['shelf.last_read_at', 'timestamptz'],
       finished: ['shelf.finished_on', 'date'] } as const;
     if (!ID.test(agent) || !['want-to-read', 'reading', 'read'].includes(status)
       || !Number.isInteger(limit) || limit < 1 || limit > STATUS_SHELF_COST.countBatch || !Object.hasOwn(keys, sort)
@@ -390,7 +390,7 @@ export class ReaderLibraryStatusStore {
   }
 
   async projectRating(agent: string, work: string, value: number | null) {
-    if (!ID.test(agent) || !ID.test(work) || value !== null && (!Number.isInteger(value) || value < 1 || value > 5)) {
+    if (!ID.test(agent) || !ID.test(work) || value !== null && (!Number.isFinite(value) || value < 0 || value > 1_000_000)) {
       throw new InvalidLibraryStatus('invalid shelf rating');
     }
     const borrowed = contentSessionClient(this.pool);

@@ -1,3 +1,4 @@
+import { contextScale, isRatingValue, scaledProfile, scalePattern, SCALED_REALM_CONTEXT, SCALED_REALM_OBSERVATION } from '../rating/scale.ts';
 import { CATALOGUE_IMPORT_SCOPE, catalogueImportInput, catalogueImportDigest, catalogueImportIdentity, prepareCatalogueImport, type CatalogueImportInput } from './catalogue-import.ts';
 export { reconcileRetainedSlimMetadata, SlimMetadataRestoreConflict } from './reconcile-slim-metadata.ts';
 import { prepareRetainedClassification, retainedClassificationConcept, statementUpgradeMarker,
@@ -1033,7 +1034,9 @@ export async function reconcileRetainedRatingContext(
   }
   const { state, daily, experience } = readRatingManifest(env.objectDirectory, receipt.ratingContextManifest,
     context, 'context');
-  const profile = experience ? EXPERIENCE_CONTEXT_PROFILE : daily ? DAILY_CONTEXT_PROFILE : REALM_STANDING_RATING_CONTEXT_PROFILE;
+  const scaled = state.exactScale === true;
+  const scale = contextScale(state);
+  const profile = experience ? EXPERIENCE_CONTEXT_PROFILE : daily ? DAILY_CONTEXT_PROFILE : scaled ? scaledProfile(REALM_STANDING_RATING_CONTEXT_PROFILE) : REALM_STANDING_RATING_CONTEXT_PROFILE;
   const cadence = experience ? EXPERIENCE_CADENCE : daily ? DAILY_CADENCE : RATING_STANDING_CADENCE;
   const timeZone = daily && typeof state.timeZone === 'string' ? canonicalRatingTimeZone(state.timeZone) : undefined;
   if (daily && (!timeZone || state.timeZone !== timeZone || state.calendar !== 'iso8601')) {
@@ -1042,7 +1045,7 @@ export async function reconcileRetainedRatingContext(
   const question = state.question;
   if (state.context !== context || state.realm !== realm || state.state !== 'active'
     || typeof question !== 'string' || state.targetGrain !== 'MainVersion'
-    || state.scaleMin !== 1 || state.scaleMax !== 10
+    || (!scaled && (state.scaleMin !== 1 || state.scaleMax !== 10))
     || state.cadence !== cadence
     || state.populationPolicy !== RATING_ACCOUNT_POPULATION
     || state.aggregationPolicy !== RATING_LATEST_MEAN_POLICY) {
@@ -1066,6 +1069,7 @@ export async function reconcileRetainedRatingContext(
       || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
       || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence
       || ratingContextDigest({ realm, question, actingSubject: admitted.acting_subject,
+        ...(scaled ? { scale } : {}),
         ...(experience ? { cadence: 'experience' as const } : {}),
         ...(timeZone ? { timeZone } : {}) })
         !== receipt.requestDigest) {
@@ -1080,11 +1084,11 @@ export async function reconcileRetainedRatingContext(
         GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(realm)} rv:ratingContext ${iri(context)} .
-          ${iri(context)} a rv:RatingContext ${experience ? ', rv:ExperienceRatingContext' : daily ? ', rv:DailyRatingContext' : ''} ;
+          ${iri(context)} a rv:RatingContext ${experience ? ', rv:ExperienceRatingContext' : daily ? ', rv:DailyRatingContext' : scaled ? ', rv:ScaledRatingContext' : ''} ;
             ${timeZone ? `rv:ratingTimeZone ${lit(timeZone)} ; rv:ratingCalendar ${iri(ISO_CALENDAR)} ;` : ''}
             rv:contextState rv:Active ;
             rv:realm ${iri(realm)} ; rv:question ${lit(question)}@en ;
-            rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
+            rv:targetGrain rv:MainVersion ; ${scalePattern(scale)} ;
             rv:ratingCadence ${iri(cadence)} ;
             rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
             rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ;
@@ -1138,7 +1142,7 @@ export async function reconcileRetainedRatingContext(
     const existing = await readRatingContextReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await retainedCommand(env, update, receipt, experience ? EXPERIENCE_CONTEXT_ID : daily ? DAILY_CONTEXT_ID : 'realm-standing-rating-context-v1', [
+      try { await retainedCommand(env, update, receipt, experience ? EXPERIENCE_CONTEXT_ID : daily ? DAILY_CONTEXT_ID : scaled ? SCALED_REALM_CONTEXT : 'realm-standing-rating-context-v1', [
         { shape: `${profile}/realm-shape`, focus: realm },
         { shape: `${profile}/context-shape`, focus: context },
       ], { realm, context, question, ...(timeZone ? { timeZone } : {}) }); }
@@ -1372,8 +1376,7 @@ export async function reconcileRetainedStandingRating(
     || !receipt.observationManifest
     || !['available', 'withdrawn'].includes(receipt.ratingAvailability ?? '')
     || (receipt.ratingAvailability === 'available'
-      && (receipt.ratingValue === undefined || !Number.isInteger(receipt.ratingValue)
-        || receipt.ratingValue < 1 || receipt.ratingValue > 10))
+      && (!isRatingValue(receipt.ratingValue)))
     || (receipt.ratingAvailability === 'withdrawn' && receipt.ratingValue !== undefined)
     || receipt.scope !== `rating:observe:${receipt.ratingContext}`
     || receipt.id !== standingRatingReceiptIri(receipt.admissionId)
@@ -1401,7 +1404,8 @@ export async function reconcileRetainedStandingRating(
   }
   const { state, daily, experience } = readRatingManifest(env.objectDirectory, receipt.observationManifest,
     observation, 'observation');
-  const profile = experience ? EXPERIENCE_OBSERVATION_PROFILE : daily ? DAILY_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE;
+  const scaled = state.exactScale === true;
+  const profile = experience ? EXPERIENCE_OBSERVATION_PROFILE : daily ? DAILY_OBSERVATION_PROFILE : scaled ? scaledProfile(STANDING_RATING_OBSERVATION_PROFILE) : STANDING_RATING_OBSERVATION_PROFILE;
   const occasion = experience && validOccasion(state.occasion) ? state.occasion : undefined;
   if (experience && (!occasion || typeof state.occasionKey !== 'string')) {
     throw new RetainedEffectConflict('retained experience occasion is incomplete');
@@ -1482,14 +1486,14 @@ export async function reconcileRetainedStandingRating(
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         GRAPH ${iri(GRAPHS.current)} {
-          ${iri(observation)} a rv:RatingObservation ${experience ? ', rv:ExperienceRatingObservation' : daily ? ', rv:DailyRatingObservation' : ''} ;
+          ${iri(observation)} a rv:RatingObservation ${experience ? ', rv:ExperienceRatingObservation' : daily ? ', rv:DailyRatingObservation' : scaled ? ', rv:ScaledRatingObservation' : ''} ;
             ${identity ? `rv:ratingOccasion ${iri(identity.occasionKey)} ;` : ''}
             ${period ? periodTriples(period) : ''}
             rv:ratingContext ${iri(context)} ;
             rv:targetMainVersion ${iri(receipt.mainVersion)} ;
             rv:ratingSlot ${iri(receipt.ratingSlot)} ; rv:observationHead ${iri(revision)} . }
         GRAPH ${iri(GRAPHS.revisions)} {
-          ${iri(revision)} a rv:RatingObservationRevision, rv:RevisionAnchor ${experience ? ', rv:ExperienceRatingObservationRevision' : daily ? ', rv:DailyRatingObservationRevision' : ''} ;
+          ${iri(revision)} a rv:RatingObservationRevision, rv:RevisionAnchor ${experience ? ', rv:ExperienceRatingObservationRevision' : daily ? ', rv:DailyRatingObservationRevision' : scaled ? ', rv:ScaledRatingObservationRevision' : ''} ;
             ${identity ? `rv:ratingOccasion ${iri(identity.occasionKey)} ;` : ''}
             ${period ? periodTriples(period) : ''}
             rv:component ${iri(observation)} ; rv:observation ${iri(observation)} ;
@@ -1551,7 +1555,7 @@ export async function reconcileRetainedStandingRating(
             rv:ratingContext ${iri(context)} .
           ${iri(context)} a rv:RatingContext ; rv:contextState rv:Active ;
             rv:realm ${iri(receipt.realm)} ; rv:targetGrain rv:MainVersion ;
-            rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
+            rv:ratingScaleMin ?scaleMin ; rv:ratingScaleMax ?scaleMax ;
             rv:ratingCadence ${iri(experience ? EXPERIENCE_CADENCE : daily ? DAILY_CADENCE : RATING_STANDING_CADENCE)} ;
             rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
             rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ;
@@ -1569,7 +1573,7 @@ export async function reconcileRetainedStandingRating(
     const existing = await readStandingRatingReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await retainedCommand(env, update, receipt, experience ? EXPERIENCE_OBSERVATION_ID : daily ? DAILY_OBSERVATION_ID : 'realm-standing-rating-observation-v1', [
+      try { await retainedCommand(env, update, receipt, experience ? EXPERIENCE_OBSERVATION_ID : daily ? DAILY_OBSERVATION_ID : scaled ? SCALED_REALM_OBSERVATION : 'realm-standing-rating-observation-v1', [
         { shape: `${profile}/realm-shape`, focus: receipt.realm },
         { shape: `${profile}/context-shape`, focus: context },
         { shape: `${profile}/work-shape`, focus: receipt.work },

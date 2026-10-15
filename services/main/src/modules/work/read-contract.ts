@@ -148,9 +148,9 @@ export const ratingRead = t.Object({ profile: t.Literal('work-rating-read-v1'), 
   aggregationScope: t.Nullable(t.Object({ question: t.String({ minLength: 3, maxLength: 120 }),
     grain: t.Literal('main-version'), population: t.Union([t.Literal('account-principal'),
       t.Literal('global-account-principal'), t.Literal('reader-account-principal')]), countedTarget: readId })),
-  scale: t.Nullable(t.Object({ min: t.Integer(), max: t.Integer(), step: t.Literal(1) })),
+  scale: t.Nullable(t.Object({ min: t.Number(), max: t.Number(), step: t.Number() })),
   count: t.Integer({ minimum: 0 }), mean: t.Nullable(t.Number()),
-  distribution: t.Array(t.Object({ value: t.Integer(), count: t.Integer({ minimum: 0 }) }), { maxItems: 10 }),
+  distribution: t.Array(t.Object({ value: t.Number(), count: t.Integer({ minimum: 0 }) }), { maxItems: 1001 }),
   sourcePosition: readPosition });
 
 /** Logical ceilings, not a claim about native Jena query-plan complexity. */

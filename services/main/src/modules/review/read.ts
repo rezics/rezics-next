@@ -1,3 +1,4 @@
+import { judgmentScale, onJudgmentScale } from '../rating/scale.ts';
 import type { WorkReadSession } from '../work/read-session.ts';
 import type { TargetReadSession } from '../target/resolve.ts';
 import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
@@ -36,7 +37,7 @@ export async function reviewTarget(session: TargetReadSession, context: string, 
       { ${iri(context)} a rv:GlobalRatingContext ; rv:contextState rv:Active ;
           rv:ratingPopulationOwner ${iri(GLOBAL_RATING_POPULATION_OWNER)} ;
           rv:ratingPopulationPolicy ${iri(GLOBAL_RATING_POPULATION)} ;
-          rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 5 ;
+          rv:targetGrain rv:MainVersion ; rv:ratingScaleMin ?scaleMin ; rv:ratingScaleMax ?scaleMax ;
           rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
           rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} . }
       UNION {
@@ -46,7 +47,7 @@ export async function reviewTarget(session: TargetReadSession, context: string, 
         FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
         FILTER NOT EXISTS { ?realm rv:protectionHead ?realmProtection }
         ${iri(context)} a rv:RatingContext ; rv:contextState rv:Active ; rv:realm ?realm ;
-          rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
+          rv:targetGrain rv:MainVersion ; rv:ratingScaleMin ?scaleMin ; rv:ratingScaleMax ?scaleMax ;
           rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
           rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
           rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} .
@@ -75,8 +76,10 @@ export async function proveReviewRating(session: WorkReadSession, principalId: s
   const type = target.generic ? 'TargetRatingObservation' : target.realm ? 'RatingObservation' : 'GlobalRatingObservation';
   const revisionType = target.generic ? 'TargetRatingObservationRevision'
     : target.realm ? 'RatingObservationRevision' : 'GlobalRatingObservationRevision';
-  const rows = await session.query(`SELECT ?availability ?value WHERE {
+  const rows = await session.query(`SELECT ?availability ?value ?min ?max ?step WHERE {
     GRAPH ${iri(GRAPHS.current)} {
+      ${iri(context)} rv:ratingScaleMin ?min ; rv:ratingScaleMax ?max .
+      OPTIONAL { ${iri(context)} rv:ratingScaleStep ?step }
       ${iri(head.observation)} a rv:${type} ; rv:ratingSlot ${iri(slot)} ;
         rv:ratingContext ${iri(context)} ; ${target.generic ? `rv:target ${iri(work)}` : `rv:targetMainVersion ${iri(head.mainVersion!)}`} ;
         rv:observationHead ${iri(head.revision)} . }
@@ -91,7 +94,7 @@ export async function proveReviewRating(session: WorkReadSession, principalId: s
     && !rows[0].value) return null;
   const value = Number(rows[0]?.value?.value);
   if (rows.length !== 1 || rows[0]?.availability?.value !== 'https://rezics.com/vocab/Available'
-    || !Number.isInteger(value) || value < 1 || value > (target.realm ? 10 : 5)) {
+    || !onJudgmentScale(value, judgmentScale({ min: Number(rows[0]?.min?.value), max: Number(rows[0]?.max?.value), step: Number(rows[0]?.step?.value ?? 1) }))) {
     throw new WorkReadMissing('Available rating is required for a review');
   }
   return { mainVersion: head.mainVersion, observation: head.observation,

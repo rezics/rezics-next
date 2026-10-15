@@ -74,7 +74,7 @@ function fixture(realmValues: (number | null)[], globalValues: (number | null)[]
     rows[kind].push({ kind: text('context'), component: text(kind), epoch: text('epoch-1'), sequence: text('50'),
       owner: uri(owner), contextRevision: uri(contextRevision), contextManifest: uri(`urn:rezics:sha256:${contextManifest}`),
       question: { type: 'literal', value: question, 'xml:lang': 'en' }, contextEpoch: text('epoch-1'),
-      contextSequence: text('1'), receipt: uri(inventory.contextReceipt) });
+      scaleMin: text('1'), scaleMax: text(kind === 'realm' ? '10' : '5'), contextSequence: text('1'), receipt: uri(inventory.contextReceipt) });
     for (const [index, value] of (kind === 'realm' ? realmValues : globalValues).entries()) {
       const observation = id(next++), revision = id(next++), slot = `urn:rezics:rating-slot:${String(next).padStart(64, '0')}`;
       const time = `2026-09-27T00:00:0${index}.000Z`;
@@ -183,8 +183,8 @@ test('RATE06: a missing component makes the synthesis partial without falling ba
 
 test('RATE06: Global requests keep their own scale, question and digest family', () => {
   const intent = { context: GLOBAL_CONTEXT, work: WORK, mainVersion: MAIN, expectedRevisionHead: null, actingSubject: ACTOR };
-  expect(() => globalRatingDigest({ ...intent, value: 6 })).toThrow(InvalidRatingObservationInput);
-  expect(() => globalRatingDigest({ ...intent, value: 0 })).toThrow(InvalidRatingObservationInput);
+  expect(() => globalRatingDigest({ ...intent, value: 1_000_001 })).toThrow(InvalidRatingObservationInput);
+  expect(() => globalRatingDigest({ ...intent, value: -1 })).toThrow(InvalidRatingObservationInput);
   expect(() => globalRatingDigest({ ...intent, value: null })).toThrow(InvalidRatingObservationInput);
   // The same intent on the Realm family is another request, never an alias.
   expect(globalRatingDigest({ ...intent, value: 5 })).not.toBe(standingRatingDigest({ ...intent, value: 5 }));
@@ -246,8 +246,8 @@ test('RATE06: one bounded graph query covers both Contexts regardless of unrelat
   // The Realm branch cannot read Global subjects and vice versa.
   expect(both).toContain('a rv:GlobalRatingObservation ;');
   expect(both).toContain('a rv:RatingObservation ;');
-  expect(both).toContain(`rv:modelRevision <${GLOBAL_OBSERVATION_PROFILE}>`);
-  expect(both).toContain(`rv:modelRevision <${STANDING_RATING_OBSERVATION_PROFILE}>`);
+  expect(both).toContain(`VALUES ?observationModel { <${GLOBAL_OBSERVATION_PROFILE}>`);
+  expect(both).toContain(`VALUES ?observationModel { <${STANDING_RATING_OBSERVATION_PROFILE}>`);
   expect(both).toContain('FILTER NOT EXISTS { <urn:rezics:dataset:product> rv:restoreHold true }');
   const global = standingComponentsQuery(env, [{ kind: 'global', context: GLOBAL_CONTEXT }], { work: WORK, mainVersion: MAIN });
   expect(global).not.toContain('rv:Realm ;');

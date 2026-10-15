@@ -1,3 +1,4 @@
+import { judgmentScaleSchema, exactRatingSchema } from '../modules/rating/scale.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult, sourcePosition } from '../api-contract.ts';
 import { readMyShelves, readReaderStates, readStatusShelf, READER_LIBRARY_COST }
@@ -33,7 +34,7 @@ const statusState = t.Object({ work: readId, status,
 const customShelf = t.Object({ id: readId, name: t.String(),
   disclosure: t.Union([t.Literal('public'), t.Literal('private')]) });
 const ownRating = t.Nullable(t.Object({ context: readId,
-  value: t.Nullable(t.Integer({ minimum: 1, maximum: 10 })),
+  value: t.Nullable(t.Number({ minimum: 0, maximum: 1_000_000 })), scale: judgmentScaleSchema, exactValue: t.Nullable(exactRatingSchema),
   availability: t.Union([t.Literal('available'), t.Literal('withdrawn')]), revision: readId,
   sourcePosition, stale: t.Boolean() }));
 const item = t.Object({ work: readId, status: statusState,
@@ -173,7 +174,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
   };
   return new Elysia()
     .get('/v1/works/:id/reader-state', { params: t.Object({ id: readUuid }),
-      query: t.Object({ actingSubject: t.Optional(readId), realm: t.Optional(readId) }, { additionalProperties: false }),
+      query: t.Object({ actingSubject: t.Optional(readId), realm: t.Optional(readId), ratingContext: t.Optional(readId) }, { additionalProperties: false }),
       response: { 200: single, ...workReadProblems },
     }, async ({ request, params, query }) => {
       const workId = `https://rezics.com/id/${params.id}`;
@@ -183,13 +184,13 @@ export function libraryRoutes(work: MainWorkDependencies) {
       try {
         if (!await reader(request, query.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library is unavailable');
         const result = await workRead(work, request, query,
-          session => readReaderStates(session, query.actingSubject!, [workId], work.libraryStatus!, query.realm));
+          session => readReaderStates(session, query.actingSubject!, [workId], work.libraryStatus!, query.realm, query.ratingContext));
         return Response.json({ profile: 'reader-work-state-v1', ...result.items[0],
           sourcePosition: result.sourcePosition }, { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
     .get('/v1/me/work-states', { query: t.Object({ works: t.String({ minLength: 1, maxLength: 1600 }),
-      actingSubject: t.Optional(readId), realm: t.Optional(readId) }, { additionalProperties: false }),
+      actingSubject: t.Optional(readId), realm: t.Optional(readId), ratingContext: t.Optional(readId) }, { additionalProperties: false }),
       response: { 200: batch, ...workReadProblems },
     }, async ({ request, query }) => {
       let works: string[];
@@ -200,7 +201,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
       try {
         if (!await reader(request, query.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library is unavailable');
         return Response.json(await workRead(work, request, query,
-          session => readReaderStates(session, query.actingSubject!, works, work.libraryStatus!, query.realm)),
+          session => readReaderStates(session, query.actingSubject!, works, work.libraryStatus!, query.realm, query.ratingContext)),
         { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })

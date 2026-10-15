@@ -1,3 +1,4 @@
+import { judgmentScale, onJudgmentScale, ratingUnits, unitsNumber, RATING_UNITS } from './scale.ts';
 /** Named cross-context synthesis. Components stay separate: raters are never pooled,
  * counts are never summed, and a missing side never falls back to the other. */
 export const REALM_GLOBAL_SYNTHESIS_PROFILE = 'realm-global-standing-synthesis-v1';
@@ -14,26 +15,29 @@ function fraction(n: bigint, d = 1n): Fraction {
 }
 const encoded = (value: Fraction) => ({ numerator: String(value.n), denominator: String(value.d) });
 
-export interface RatingScale { min: number; max: number }
+export interface RatingScale { min: number; max: number; step?: number }
 
 /** Latest effective values of one standing Context: one per slot, null when withdrawn. */
 export function reduceStandingComponent(values: readonly (number | null)[], scale: RatingScale) {
-  const histogram = Array.from({ length: scale.max - scale.min + 1 }, () => 0);
-  let sum = 0, count = 0;
+  const grid = judgmentScale({ ...scale, step: scale.step ?? 1 });
+  const min = ratingUnits(grid.min), max = ratingUnits(grid.max), step = ratingUnits(grid.step);
+  const histogram = Array.from({ length: Number((max - min) / step) + 1 }, () => 0);
+  let exactSum = 0n, count = 0;
   for (const value of values) {
     if (value === null) continue;
-    if (!Number.isInteger(value) || value < scale.min || value > scale.max) {
+    if (!onJudgmentScale(value, grid)) {
       throw new RangeError('rating value lies outside its own scale');
     }
-    histogram[value - scale.min] = histogram[value - scale.min]! + 1;
-    sum += value; count++;
+    const index = Number((ratingUnits(value) - min) / step);
+    histogram[index] = histogram[index]! + 1;
+    exactSum += ratingUnits(value); count++;
   }
-  const mean = count ? fraction(BigInt(sum), BigInt(count)) : null;
+  const mean = count ? fraction(exactSum, BigInt(count) * RATING_UNITS) : null;
   // (mean − min) / (max − min), computed on the exact sum.
-  const unit = count ? fraction(BigInt(sum - scale.min * count), BigInt(count * (scale.max - scale.min))) : null;
+  const unit = count ? fraction(exactSum - min * BigInt(count), BigInt(count) * (max - min)) : null;
   return {
-    scale: { min: scale.min, max: scale.max, step: 1 as const },
-    population: values.length, count, withdrawnCount: values.length - count, histogram, sum,
+    scale: grid,
+    population: values.length, count, withdrawnCount: values.length - count, histogram, sum: unitsNumber(exactSum),
     mean: mean ? Number(mean.n) / Number(mean.d) : null,
     precision: mean ? { kind: 'exact-rational' as const, ...encoded(mean) } : { kind: 'no-data' as const },
     unitMean: unit ? encoded(unit) : null,

@@ -39,9 +39,10 @@ export async function readWorkRatingContexts(session: WorkReadSession, work: str
   const limit = session.options.limit ?? 20;
   const binding = ['rating-contexts', work, scope];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  const rows = await session.query(`SELECT ?context ?question ?min ?max WHERE {
+  const rows = await session.query(`SELECT ?context ?question ?min ?max ?step WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${contextPattern(scope)}
       ?context rv:question ?question ; rv:ratingScaleMin ?min ; rv:ratingScaleMax ?max .
+      OPTIONAL { ?context rv:ratingScaleStep ?step }
       FILTER(LANG(?question) = "en") }
     ${cursor ? `FILTER(STR(?context) > ${lit(cursor.after)})` : ''}
   } ORDER BY STR(?context) LIMIT ${limit + 1}`, limit + 1);
@@ -52,7 +53,7 @@ export async function readWorkRatingContexts(session: WorkReadSession, work: str
   const page = rows.slice(0, limit);
   await fenceRatingTarget(session, work, basis.revision);
   return { ...pageResult(session, page.map(row => ({ context: row.context!.value, question: row.question!.value,
-    language: 'en' as const, scale: { min: Number(row.min!.value), max: Number(row.max!.value), step: 1 as const } })),
+    language: 'en' as const, scale: { min: Number(row.min!.value), max: Number(row.max!.value), step: Number(row.step?.value ?? 1) } })),
   rows.length > limit ? encodeReadCursor(binding, session.position, page.at(-1)!.context!.value) : null), scope };
 }
 
@@ -97,10 +98,10 @@ export async function readWorkRating(session: WorkReadSession, work: string, sel
     selected(result), async () => selected(await readAggregate()));
   await fenceRatingTarget(session, work, basis.revision);
   return { profile: 'work-rating-read-v1' as const, work, mainVersion: basis.mainVersion, scope,
-    context, status: 'available' as const, scale: { ...result.scale, step: 1 as const },
+    context, status: 'available' as const, scale: result.scale,
     aggregationScope: { question: contextRows[0]!.question!.value, grain: 'main-version' as const,
       population: scope.kind === 'mine' ? 'reader-account-principal' as const : result.populationPolicy,
       countedTarget: basis.mainVersion },
     count: result.count, mean: result.mean, distribution: result.histogram.map((count, i) =>
-      ({ value: result.scale.min + i, count })), sourcePosition: session.position };
+      ({ value: Number((result.scale.min + i * result.scale.step).toFixed(6)), count })), sourcePosition: session.position };
 }

@@ -156,13 +156,13 @@ function totals(session: WorkReadSession, listed: Awaited<ReturnType<typeof list
   const rated = listed.works.flatMap(work => work.rating ? [work.rating] : []);
   const count = rated.reduce((total, rating) => total + rating.count, 0);
   const scale = rated[0]?.scale;
-  if (rated.some(rating => rating.context !== rated[0]!.context || rating.scale.max !== scale!.max)) {
+  if (rated.some(rating => rating.context !== rated[0]!.context || rating.scale.min !== scale!.min || rating.scale.max !== scale!.max || rating.scale.step !== scale!.step)) {
     throw new WorkReadUnavailable('Author ratings answer different questions');
   }
   session.checkDeadline();
   return { works: { value: listed.works.length, kind },
     ratings: count && scale ? { context: rated[0]!.context, count: { value: count, kind },
-      mean: rated.reduce((total, rating) => total + rating.sum, 0) / count, scale: { min: 1, max: scale.max } } : null,
+      mean: rated.reduce((total, rating) => total + rating.sum, 0) / count, scale } : null,
     readers: readers && !listed.complete ? { ...readers, kind: 'lower-bound' } : readers };
 }
 

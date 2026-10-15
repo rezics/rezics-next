@@ -353,9 +353,9 @@ export async function admitDiscoveryBasis(session: WorkReadSession, basis: Disco
     ${
       basis.scope === 'realm'
         ? `${iri(basis.realm!)} rv:ratingContext ?context .
-      ?context a rv:RatingContext ; rv:realm ${iri(basis.realm!)} ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 .`
+      ?context a rv:RatingContext ; rv:realm ${iri(basis.realm!)} ; rv:ratingScaleMin ?scaleMin ; rv:ratingScaleMax ?scaleMax .`
         : `?context a rv:GlobalRatingContext ; rv:ratingPopulationOwner ${iri(GLOBAL_RATING_POPULATION_OWNER)} ;
-      rv:ratingScaleMin 1 ; rv:ratingScaleMax 5 .`
+      rv:ratingScaleMin ?scaleMin ; rv:ratingScaleMax ?scaleMax .`
     }
   } } LIMIT 2`,
     1,
@@ -555,7 +555,7 @@ export async function projectDiscoveryBatch(
       throw new WorkReadUnavailable('Rating basis moved');
     if (basis.scope === 'mine' && !rating?.count) continue;
     const sum =
-      rating?.histogram.reduce((total, count, index) => total + (index + 1) * count, 0) ?? 0;
+      rating?.sum ?? 0;
     const item: ProjectedWork = {
       work,
       revision: first.head!.value,
@@ -569,7 +569,7 @@ export async function projectDiscoveryBatch(
             count: rating.count,
             sum,
             mean: sum / rating.count,
-            scale: { min: 1, max: basis.scope === 'realm' ? 10 : 5 },
+            scale: rating.scale,
           }
         : null,
       classifications:

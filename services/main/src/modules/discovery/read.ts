@@ -116,7 +116,7 @@ export async function discoveryCards(session: WorkReadSession, page: readonly Di
     if (terms && !classification) return [];
     const cardCredits = credits.get(row.work);
     const ratingAvailable = Value.Check(discoveryRating, payload.rating)
-      && payload.rating.sum >= payload.rating.count && payload.rating.sum <= payload.rating.count * payload.rating.scale.max
+      && payload.rating.sum >= payload.rating.count * payload.rating.scale.min && payload.rating.sum <= payload.rating.count * payload.rating.scale.max
       && payload.rating.mean === payload.rating.sum / payload.rating.count;
     const serialValue = serial?.get(row.work);
     const unavailablePreviews: NonNullable<Static<typeof discoveryItem>['unavailablePreviews']> = [...(!serialValue ? ['serial' as const] : serialValue.unavailablePreviews ?? []),

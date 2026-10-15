@@ -1,3 +1,4 @@
+import { isRatingValue, ratingUnits, ratingUnitsFromText, ratingUnitsText } from '../rating/scale.ts';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
@@ -501,8 +502,7 @@ export class RankingGenerations {
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(admissionId)
         && typeof requestDigest === 'string' && /^[0-9a-f]{64}$/.test(requestDigest)
         && typeof authorityEpoch === 'string' && /^\d+$/.test(authorityEpoch)
-        && ((ratingAvailability === 'available' && Number.isInteger(ratingValue)
-          && (ratingValue as number) >= 1 && (ratingValue as number) <= 10)
+        && ((ratingAvailability === 'available' && isRatingValue(ratingValue))
           || (ratingAvailability === 'withdrawn' && ratingValue === undefined));
       if (!valid) {
         await this.fail(generation, leaseEpoch, `source-invalid at ${event.sequence}`);
@@ -514,7 +514,7 @@ export class RankingGenerations {
       signals.push({ slot: ratingSlot as string, candidate: (targetForm ? target : work) as string, sequence: event.sequence,
         event: event.event_id, admission: admissionId as string, requestDigest: requestDigest as string,
         authorityEpoch: authorityEpoch as string,
-        weight: ratingAvailability === 'available' ? BigInt(ratingValue as number) : 0n });
+        weight: ratingAvailability === 'available' ? ratingUnits(ratingValue) : 0n });
     }
     if (targets.size) {
       if (!this.options.zeroCandidates || basis.zero_snapshot === null) {
@@ -600,7 +600,7 @@ export class RankingGenerations {
     };
     for (const slot of slots) {
       const old = previous.get(slot.slot);
-      if (old) bump(old.candidate, -BigInt(old.weight), BigInt(old.weight) > 0n ? -1n : 0n);
+      if (old) bump(old.candidate, -ratingUnitsFromText(old.weight), ratingUnitsFromText(old.weight) > 0n ? -1n : 0n);
       bump(slot.candidate, slot.weight, slot.weight > 0n ? 1n : 0n);
     }
     await client.query(`INSERT INTO access.ranking_signal_slot
@@ -610,13 +610,13 @@ export class RankingGenerations {
         weight = EXCLUDED.weight, source_sequence = EXCLUDED.source_sequence,
         source_event = EXCLUDED.source_event, contributor_principal_id = EXCLUDED.contributor_principal_id`,
     [generation, slots.map(slot => slot.slot), slots.map(slot => slot.candidate),
-      slots.map(slot => slot.weight.toString()), slots.map(slot => slot.sequence), slots.map(slot => slot.event),
+      slots.map(slot => ratingUnitsText(slot.weight)), slots.map(slot => slot.sequence), slots.map(slot => slot.event),
       slots.map(slot => slot.contributor)]);
     const candidates = [...delta.keys()];
     const current = new Map((await client.query<{ candidate: string; score: string; signal_count: string }>(
       `SELECT candidate, score::text, signal_count::text FROM access.ranking_score
        WHERE generation_id = $1 AND candidate = ANY($2::text[])`, [generation, candidates])).rows
-      .map(row => [row.candidate, { score: BigInt(row.score), signals: BigInt(row.signal_count) }]));
+      .map(row => [row.candidate, { score: ratingUnitsFromText(row.score), signals: BigInt(row.signal_count) }]));
     const upsert: { partition: number; candidate: string; score: bigint; signals: bigint }[] = [];
     const removed: string[] = [];
     const partitions = new Map<number, { candidates: bigint; signals: bigint; score: bigint }>();
@@ -641,7 +641,7 @@ export class RankingGenerations {
         ON CONFLICT (generation_id, candidate) DO UPDATE SET score = EXCLUDED.score,
           signal_count = EXCLUDED.signal_count`,
       [generation, upsert.map(row => row.partition), upsert.map(row => row.candidate),
-        upsert.map(row => row.score.toString()), upsert.map(row => row.signals.toString())]);
+        upsert.map(row => ratingUnitsText(row.score)), upsert.map(row => row.signals.toString())]);
     }
     if (removed.length) {
       await client.query('DELETE FROM access.ranking_score WHERE generation_id = $1 AND candidate = ANY($2::text[])',
@@ -653,7 +653,7 @@ export class RankingGenerations {
       FROM unnest($2::smallint[], $3::bigint[], $4::bigint[], $5::numeric[]) d(partition, candidates, signals, score)
       WHERE p.generation_id = $1 AND p.partition = d.partition`,
     [generation, touched.map(([partition]) => partition), touched.map(([, total]) => total.candidates.toString()),
-      touched.map(([, total]) => total.signals.toString()), touched.map(([, total]) => total.score.toString())]);
+      touched.map(([, total]) => total.signals.toString()), touched.map(([, total]) => ratingUnitsText(total.score))]);
   }
 
   /** Ready only after catch-up to the current relay head and a partition-total validation. */

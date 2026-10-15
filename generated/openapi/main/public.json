@@ -60229,14 +60229,12 @@
                               "scale": {
                                 "properties": {
                                   "max": {
-                                    "enum": [
-                                      5,
-                                      10
-                                    ],
                                     "type": "number"
                                   },
                                   "min": {
-                                    "const": 1,
+                                    "type": "number"
+                                  },
+                                  "step": {
                                     "type": "number"
                                   }
                                 },
@@ -60247,7 +60245,7 @@
                                 "type": "object"
                               },
                               "sum": {
-                                "type": "integer"
+                                "type": "number"
                               }
                             },
                             "required": [
@@ -69325,14 +69323,12 @@
                             "scale": {
                               "properties": {
                                 "max": {
-                                  "enum": [
-                                    5,
-                                    10
-                                  ],
                                   "type": "number"
                                 },
                                 "min": {
-                                  "const": 1,
+                                  "type": "number"
+                                },
+                                "step": {
                                   "type": "number"
                                 }
                               },
@@ -69679,14 +69675,12 @@
                                   "scale": {
                                     "properties": {
                                       "max": {
-                                        "enum": [
-                                          5,
-                                          10
-                                        ],
                                         "type": "number"
                                       },
                                       "min": {
-                                        "const": 1,
+                                        "type": "number"
+                                      },
+                                      "step": {
                                         "type": "number"
                                       }
                                     },
@@ -69697,7 +69691,7 @@
                                     "type": "object"
                                   },
                                   "sum": {
-                                    "type": "integer"
+                                    "type": "number"
                                   }
                                 },
                                 "required": [
@@ -71718,14 +71712,12 @@
                               "scale": {
                                 "properties": {
                                   "max": {
-                                    "enum": [
-                                      5,
-                                      10
-                                    ],
                                     "type": "number"
                                   },
                                   "min": {
-                                    "const": 1,
+                                    "type": "number"
+                                  },
+                                  "step": {
                                     "type": "number"
                                   }
                                 },
@@ -71736,7 +71728,7 @@
                                 "type": "object"
                               },
                               "sum": {
-                                "type": "integer"
+                                "type": "number"
                               }
                             },
                             "required": [
@@ -128228,14 +128220,12 @@
                               "scale": {
                                 "properties": {
                                   "max": {
-                                    "enum": [
-                                      5,
-                                      10
-                                    ],
                                     "type": "number"
                                   },
                                   "min": {
-                                    "const": 1,
+                                    "type": "number"
+                                  },
+                                  "step": {
                                     "type": "number"
                                   }
                                 },
@@ -128246,7 +128236,7 @@
                                 "type": "object"
                               },
                               "sum": {
-                                "type": "integer"
+                                "type": "number"
                               }
                             },
                             "required": [
@@ -174226,14 +174216,12 @@
                                             "scale": {
                                               "properties": {
                                                 "max": {
-                                                  "enum": [
-                                                    5,
-                                                    10
-                                                  ],
                                                   "type": "number"
                                                 },
                                                 "min": {
-                                                  "const": 1,
+                                                  "type": "number"
+                                                },
+                                                "step": {
                                                   "type": "number"
                                                 }
                                               },
@@ -174244,7 +174232,7 @@
                                               "type": "object"
                                             },
                                             "sum": {
-                                              "type": "integer"
+                                              "type": "number"
                                             }
                                           },
                                           "required": [
@@ -206201,11 +206189,11 @@
                                   },
                                   "rating": {
                                     "~elyTyp": 7,
-                                    "maximum": 10,
-                                    "minimum": 1,
+                                    "maximum": 1000000,
+                                    "minimum": 0,
                                     "nullable": true,
                                     "type": [
-                                      "integer",
+                                      "number",
                                       "null"
                                     ]
                                   },
@@ -213515,7 +213503,10 @@
                       "type": "string"
                     },
                     "contextProfile": {
-                      "const": "global-rating-standing-context-v1",
+                      "enum": [
+                        "global-rating-standing-context-v1",
+                        "global-rating-standing-context-v2"
+                      ],
                       "type": "string"
                     },
                     "contextRevision": {
@@ -213533,8 +213524,7 @@
                         "minimum": 0,
                         "type": "integer"
                       },
-                      "maxItems": 5,
-                      "minItems": 5,
+                      "maxItems": 1001,
                       "type": "array"
                     },
                     "mainVersion": {
@@ -213607,17 +213597,21 @@
                       "type": "string"
                     },
                     "scale": {
+                      "additionalProperties": false,
                       "properties": {
                         "max": {
-                          "const": 5,
+                          "maximum": 1000000,
+                          "minimum": 0,
                           "type": "number"
                         },
                         "min": {
-                          "const": 1,
+                          "maximum": 1000000,
+                          "minimum": 0,
                           "type": "number"
                         },
                         "step": {
-                          "const": 1,
+                          "maximum": 1000000,
+                          "minimum": 0.000001,
                           "type": "number"
                         }
                       },
@@ -213650,9 +213644,8 @@
                       "type": "object"
                     },
                     "sum": {
-                      "maximum": 1000,
                       "minimum": 0,
-                      "type": "integer"
+                      "type": "number"
                     },
                     "targetGrain": {
                       "const": "mainVersion",
@@ -214100,13 +214093,42 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "global-rating-standing-context-v1",
+                    "enum": [
+                      "global-rating-standing-context-v1",
+                      "global-rating-standing-context-v2"
+                    ],
                     "type": "string"
                   },
                   "question": {
                     "maxLength": 120,
                     "minLength": 3,
                     "type": "string"
+                  },
+                  "scale": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "max": {
+                        "maximum": 1000000,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "min": {
+                        "maximum": 1000000,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "step": {
+                        "maximum": 1000000,
+                        "minimum": 0.000001,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "min",
+                      "max",
+                      "step"
+                    ],
+                    "type": "object"
                   }
                 },
                 "required": [
@@ -214126,13 +214148,42 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "global-rating-standing-context-v1",
+                    "enum": [
+                      "global-rating-standing-context-v1",
+                      "global-rating-standing-context-v2"
+                    ],
                     "type": "string"
                   },
                   "question": {
                     "maxLength": 120,
                     "minLength": 3,
                     "type": "string"
+                  },
+                  "scale": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "max": {
+                        "maximum": 1000000,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "min": {
+                        "maximum": 1000000,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "step": {
+                        "maximum": 1000000,
+                        "minimum": 0.000001,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "min",
+                      "max",
+                      "step"
+                    ],
+                    "type": "object"
                   }
                 },
                 "required": [
@@ -214152,13 +214203,42 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "global-rating-standing-context-v1",
+                    "enum": [
+                      "global-rating-standing-context-v1",
+                      "global-rating-standing-context-v2"
+                    ],
                     "type": "string"
                   },
                   "question": {
                     "maxLength": 120,
                     "minLength": 3,
                     "type": "string"
+                  },
+                  "scale": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "max": {
+                        "maximum": 1000000,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "min": {
+                        "maximum": 1000000,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "step": {
+                        "maximum": 1000000,
+                        "minimum": 0.000001,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "min",
+                      "max",
+                      "step"
+                    ],
+                    "type": "object"
                   }
                 },
                 "required": [
@@ -214203,7 +214283,10 @@
                       "type": "string"
                     },
                     "profile": {
-                      "const": "global-rating-standing-context-v1",
+                      "enum": [
+                        "global-rating-standing-context-v1",
+                        "global-rating-standing-context-v2"
+                      ],
                       "type": "string"
                     },
                     "question": {
@@ -214213,17 +214296,21 @@
                       "type": "boolean"
                     },
                     "scale": {
+                      "additionalProperties": false,
                       "properties": {
                         "max": {
-                          "const": 5,
+                          "maximum": 1000000,
+                          "minimum": 0,
                           "type": "number"
                         },
                         "min": {
-                          "const": 1,
+                          "maximum": 1000000,
+                          "minimum": 0,
                           "type": "number"
                         },
                         "step": {
-                          "const": 1,
+                          "maximum": 1000000,
+                          "minimum": 0.000001,
                           "type": "number"
                         }
                       },
@@ -214310,7 +214397,10 @@
                       "type": "string"
                     },
                     "profile": {
-                      "const": "global-rating-standing-context-v1",
+                      "enum": [
+                        "global-rating-standing-context-v1",
+                        "global-rating-standing-context-v2"
+                      ],
                       "type": "string"
                     },
                     "question": {
@@ -214320,17 +214410,21 @@
                       "type": "boolean"
                     },
                     "scale": {
+                      "additionalProperties": false,
                       "properties": {
                         "max": {
-                          "const": 5,
+                          "maximum": 1000000,
+                          "minimum": 0,
                           "type": "number"
                         },
                         "min": {
-                          "const": 1,
+                          "maximum": 1000000,
+                          "minimum": 0,
                           "type": "number"
                         },
                         "step": {
-                          "const": 1,
+                          "maximum": 1000000,
+                          "minimum": 0.000001,
                           "type": "number"
                         }
                       },
@@ -215079,24 +215173,31 @@
                       "type": "string"
                     },
                     "profile": {
-                      "const": "global-rating-standing-context-v1",
+                      "enum": [
+                        "global-rating-standing-context-v1",
+                        "global-rating-standing-context-v2"
+                      ],
                       "type": "string"
                     },
                     "question": {
                       "type": "string"
                     },
                     "scale": {
+                      "additionalProperties": false,
                       "properties": {
                         "max": {
-                          "const": 5,
+                          "maximum": 1000000,
+                          "minimum": 0,
                           "type": "number"
                         },
                         "min": {
-                          "const": 1,
+                          "maximum": 1000000,
+                          "minimum": 0,
                           "type": "number"
                         },
                         "step": {
-                          "const": 1,
+                          "maximum": 1000000,
+                          "minimum": 0.000001,
                           "type": "number"
                         }
                       },
@@ -215455,16 +215556,19 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "global-rating-standing-observation-v1",
+                    "enum": [
+                      "global-rating-standing-observation-v1",
+                      "global-rating-standing-observation-v2"
+                    ],
                     "type": "string"
                   },
                   "value": {
                     "~elyTyp": 7,
-                    "maximum": 5,
-                    "minimum": 1,
+                    "maximum": 1000000,
+                    "minimum": 0,
                     "nullable": true,
                     "type": [
-                      "integer",
+                      "number",
                       "null"
                     ]
                   },
@@ -215511,16 +215615,19 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "global-rating-standing-observation-v1",
+                    "enum": [
+                      "global-rating-standing-observation-v1",
+                      "global-rating-standing-observation-v2"
+                    ],
                     "type": "string"
                   },
                   "value": {
                     "~elyTyp": 7,
-                    "maximum": 5,
-                    "minimum": 1,
+                    "maximum": 1000000,
+                    "minimum": 0,
                     "nullable": true,
                     "type": [
-                      "integer",
+                      "number",
                       "null"
                     ]
                   },
@@ -215567,16 +215674,19 @@
                     "type": "string"
                   },
                   "profile": {
-                    "const": "global-rating-standing-observation-v1",
+                    "enum": [
+                      "global-rating-standing-observation-v1",
+                      "global-rating-standing-observation-v2"
+                    ],
                     "type": "string"
                   },
                   "value": {
                     "~elyTyp": 7,
-                    "maximum": 5,
-                    "minimum": 1,
+                    "maximum": 1000000,
+                    "minimum": 0,
                     "nullable": true,
                     "type": [
-                      "integer",
+                      "number",
                       "null"
                     ]
                   },
@@ -215617,6 +215727,31 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "exactValue": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "integer",
+                            "decimal"
+                          ],
+                          "type": "string"
+                        },
+                        "lexical": {
+                          "maxLength": 32,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "lexical"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "mainVersion": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
@@ -215639,7 +215774,10 @@
                       ]
                     },
                     "profile": {
-                      "const": "global-rating-standing-observation-v1",
+                      "enum": [
+                        "global-rating-standing-observation-v1",
+                        "global-rating-standing-observation-v2"
+                      ],
                       "type": "string"
                     },
                     "replayed": {
@@ -215668,11 +215806,11 @@
                     },
                     "value": {
                       "~elyTyp": 7,
-                      "maximum": 5,
-                      "minimum": 1,
+                      "maximum": 1000000,
+                      "minimum": 0,
                       "nullable": true,
                       "type": [
-                        "integer",
+                        "number",
                         "null"
                       ]
                     },
@@ -215716,6 +215854,31 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "exactValue": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "integer",
+                            "decimal"
+                          ],
+                          "type": "string"
+                        },
+                        "lexical": {
+                          "maxLength": 32,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "lexical"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "mainVersion": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
@@ -215738,7 +215901,10 @@
                       ]
                     },
                     "profile": {
-                      "const": "global-rating-standing-observation-v1",
+                      "enum": [
+                        "global-rating-standing-observation-v1",
+                        "global-rating-standing-observation-v2"
+                      ],
                       "type": "string"
                     },
                     "replayed": {
@@ -215767,11 +215933,11 @@
                     },
                     "value": {
                       "~elyTyp": 7,
-                      "maximum": 5,
-                      "minimum": 1,
+                      "maximum": 1000000,
+                      "minimum": 0,
                       "nullable": true,
                       "type": [
-                        "integer",
+                        "number",
                         "null"
                       ]
                     },
@@ -316966,6 +317132,15 @@
               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "ratingContext",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -317073,9 +317248,60 @@
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                     "type": "string"
                                   },
+                                  "exactValue": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "kind": {
+                                        "enum": [
+                                          "integer",
+                                          "decimal"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "lexical": {
+                                        "maxLength": 32,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "lexical"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
                                   "revision": {
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                     "type": "string"
+                                  },
+                                  "scale": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "max": {
+                                        "maximum": 1000000,
+                                        "minimum": 0,
+                                        "type": "number"
+                                      },
+                                      "min": {
+                                        "maximum": 1000000,
+                                        "minimum": 0,
+                                        "type": "number"
+                                      },
+                                      "step": {
+                                        "maximum": 1000000,
+                                        "minimum": 0.000001,
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "min",
+                                      "max",
+                                      "step"
+                                    ],
+                                    "type": "object"
                                   },
                                   "sourcePosition": {
                                     "properties": {
@@ -317103,11 +317329,11 @@
                                   },
                                   "value": {
                                     "~elyTyp": 7,
-                                    "maximum": 10,
-                                    "minimum": 1,
+                                    "maximum": 1000000,
+                                    "minimum": 0,
                                     "nullable": true,
                                     "type": [
-                                      "integer",
+                                      "number",
                                       "null"
                                     ]
                                   }
@@ -317115,6 +317341,8 @@
                                 "required": [
                                   "context",
                                   "value",
+                                  "scale",
+                                  "exactValue",
                                   "availability",
                                   "revision",
                                   "sourcePosition",
@@ -317140,9 +317368,60 @@
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                     "type": "string"
                                   },
+                                  "exactValue": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "kind": {
+                                        "enum": [
+                                          "integer",
+                                          "decimal"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "lexical": {
+                                        "maxLength": 32,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "lexical"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
                                   "revision": {
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                     "type": "string"
+                                  },
+                                  "scale": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "max": {
+                                        "maximum": 1000000,
+                                        "minimum": 0,
+                                        "type": "number"
+                                      },
+                                      "min": {
+                                        "maximum": 1000000,
+                                        "minimum": 0,
+                                        "type": "number"
+                                      },
+                                      "step": {
+                                        "maximum": 1000000,
+                                        "minimum": 0.000001,
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "min",
+                                      "max",
+                                      "step"
+                                    ],
+                                    "type": "object"
                                   },
                                   "sourcePosition": {
                                     "properties": {
@@ -317170,11 +317449,11 @@
                                   },
                                   "value": {
                                     "~elyTyp": 7,
-                                    "maximum": 10,
-                                    "minimum": 1,
+                                    "maximum": 1000000,
+                                    "minimum": 0,
                                     "nullable": true,
                                     "type": [
-                                      "integer",
+                                      "number",
                                       "null"
                                     ]
                                   }
@@ -317182,6 +317461,8 @@
                                 "required": [
                                   "context",
                                   "value",
+                                  "scale",
+                                  "exactValue",
                                   "availability",
                                   "revision",
                                   "sourcePosition",
@@ -460898,14 +461179,12 @@
                                   "scale": {
                                     "properties": {
                                       "max": {
-                                        "enum": [
-                                          5,
-                                          10
-                                        ],
                                         "type": "number"
                                       },
                                       "min": {
-                                        "const": 1,
+                                        "type": "number"
+                                      },
+                                      "step": {
                                         "type": "number"
                                       }
                                     },
@@ -460916,7 +461195,7 @@
                                     "type": "object"
                                   },
                                   "sum": {
-                                    "type": "integer"
+                                    "type": "number"
                                   }
                                 },
                                 "required": [
@@ -463070,14 +463349,12 @@
                                   "scale": {
                                     "properties": {
                                       "max": {
-                                        "enum": [
-                                          5,
-                                          10
-                                        ],
                                         "type": "number"
                                       },
                                       "min": {
-                                        "const": 1,
+                                        "type": "number"
+                                      },
+                                      "step": {
                                         "type": "number"
                                       }
                                     },
@@ -463088,7 +463365,7 @@
                                     "type": "object"
                                   },
                                   "sum": {
-                                    "type": "integer"
+                                    "type": "number"
                                   }
                                 },
                                 "required": [
@@ -465251,14 +465528,12 @@
                                   "scale": {
                                     "properties": {
                                       "max": {
-                                        "enum": [
-                                          5,
-                                          10
-                                        ],
                                         "type": "number"
                                       },
                                       "min": {
-                                        "const": 1,
+                                        "type": "number"
+                                      },
+                                      "step": {
                                         "type": "number"
                                       }
                                     },
@@ -465269,7 +465544,7 @@
                                     "type": "object"
                                   },
                                   "sum": {
-                                    "type": "integer"
+                                    "type": "number"
                                   }
                                 },
                                 "required": [
@@ -467583,14 +467858,12 @@
                                   "scale": {
                                     "properties": {
                                       "max": {
-                                        "enum": [
-                                          5,
-                                          10
-                                        ],
                                         "type": "number"
                                       },
                                       "min": {
-                                        "const": 1,
+                                        "type": "number"
+                                      },
+                                      "step": {
                                         "type": "number"
                                       }
                                     },
@@ -467601,7 +467874,7 @@
                                     "type": "object"
                                   },
                                   "sum": {
-                                    "type": "integer"
+                                    "type": "number"
                                   }
                                 },
                                 "required": [
@@ -469926,14 +470199,12 @@
                                   "scale": {
                                     "properties": {
                                       "max": {
-                                        "enum": [
-                                          5,
-                                          10
-                                        ],
                                         "type": "number"
                                       },
                                       "min": {
-                                        "const": 1,
+                                        "type": "number"
+                                      },
+                                      "step": {
                                         "type": "number"
                                       }
                                     },
@@ -469944,7 +470215,7 @@
                                     "type": "object"
                                   },
                                   "sum": {
-                                    "type": "integer"
+                                    "type": "number"
                                   }
                                 },
                                 "required": [
@@ -477656,14 +477927,12 @@
                                   "scale": {
                                     "properties": {
                                       "max": {
-                                        "enum": [
-                                          5,
-                                          10
-                                        ],
                                         "type": "number"
                                       },
                                       "min": {
-                                        "const": 1,
+                                        "type": "number"
+                                      },
+                                      "step": {
                                         "type": "number"
                                       }
                                     },
@@ -477674,7 +477943,7 @@
                                     "type": "object"
                                   },
                                   "sum": {
-                                    "type": "integer"
+                                    "type": "number"
                                   }
                                 },
                                 "required": [
@@ -478639,14 +478908,12 @@
                                   "scale": {
                                     "properties": {
                                       "max": {
-                                        "enum": [
-                                          5,
-                                          10
-                                        ],
                                         "type": "number"
                                       },
                                       "min": {
-                                        "const": 1,
+                                        "type": "number"
+                                      },
+                                      "step": {
                                         "type": "number"
                                       }
                                     },
@@ -478657,7 +478924,7 @@
                                     "type": "object"
                                   },
                                   "sum": {
-                                    "type": "integer"
+                                    "type": "number"
                                   }
                                 },
                                 "required": [
@@ -479634,14 +479901,12 @@
                                   "scale": {
                                     "properties": {
                                       "max": {
-                                        "enum": [
-                                          5,
-                                          10
-                                        ],
                                         "type": "number"
                                       },
                                       "min": {
-                                        "const": 1,
+                                        "type": "number"
+                                      },
+                                      "step": {
                                         "type": "number"
                                       }
                                     },
@@ -479652,7 +479917,7 @@
                                     "type": "object"
                                   },
                                   "sum": {
-                                    "type": "integer"
+                                    "type": "number"
                                   }
                                 },
                                 "required": [
@@ -480777,14 +481042,12 @@
                                   "scale": {
                                     "properties": {
                                       "max": {
-                                        "enum": [
-                                          5,
-                                          10
-                                        ],
                                         "type": "number"
                                       },
                                       "min": {
-                                        "const": 1,
+                                        "type": "number"
+                                      },
+                                      "step": {
                                         "type": "number"
                                       }
                                     },
@@ -480795,7 +481058,7 @@
                                     "type": "object"
                                   },
                                   "sum": {
-                                    "type": "integer"
+                                    "type": "number"
                                   }
                                 },
                                 "required": [
@@ -481930,14 +482193,12 @@
                                   "scale": {
                                     "properties": {
                                       "max": {
-                                        "enum": [
-                                          5,
-                                          10
-                                        ],
                                         "type": "number"
                                       },
                                       "min": {
-                                        "const": 1,
+                                        "type": "number"
+                                      },
+                                      "step": {
                                         "type": "number"
                                       }
                                     },
@@ -481948,7 +482209,7 @@
                                     "type": "object"
                                   },
                                   "sum": {
-                                    "type": "integer"
+                                    "type": "number"
                                   }
                                 },
                                 "required": [
@@ -487206,14 +487467,12 @@
                                           "scale": {
                                             "properties": {
                                               "max": {
-                                                "enum": [
-                                                  5,
-                                                  10
-                                                ],
                                                 "type": "number"
                                               },
                                               "min": {
-                                                "const": 1,
+                                                "type": "number"
+                                              },
+                                              "step": {
                                                 "type": "number"
                                               }
                                             },
@@ -487224,7 +487483,7 @@
                                             "type": "object"
                                           },
                                           "sum": {
-                                            "type": "integer"
+                                            "type": "number"
                                           }
                                         },
                                         "required": [
@@ -488189,14 +488448,12 @@
                                           "scale": {
                                             "properties": {
                                               "max": {
-                                                "enum": [
-                                                  5,
-                                                  10
-                                                ],
                                                 "type": "number"
                                               },
                                               "min": {
-                                                "const": 1,
+                                                "type": "number"
+                                              },
+                                              "step": {
                                                 "type": "number"
                                               }
                                             },
@@ -488207,7 +488464,7 @@
                                             "type": "object"
                                           },
                                           "sum": {
-                                            "type": "integer"
+                                            "type": "number"
                                           }
                                         },
                                         "required": [
@@ -489184,14 +489441,12 @@
                                           "scale": {
                                             "properties": {
                                               "max": {
-                                                "enum": [
-                                                  5,
-                                                  10
-                                                ],
                                                 "type": "number"
                                               },
                                               "min": {
-                                                "const": 1,
+                                                "type": "number"
+                                              },
+                                              "step": {
                                                 "type": "number"
                                               }
                                             },
@@ -489202,7 +489457,7 @@
                                             "type": "object"
                                           },
                                           "sum": {
-                                            "type": "integer"
+                                            "type": "number"
                                           }
                                         },
                                         "required": [
@@ -490327,14 +490582,12 @@
                                           "scale": {
                                             "properties": {
                                               "max": {
-                                                "enum": [
-                                                  5,
-                                                  10
-                                                ],
                                                 "type": "number"
                                               },
                                               "min": {
-                                                "const": 1,
+                                                "type": "number"
+                                              },
+                                              "step": {
                                                 "type": "number"
                                               }
                                             },
@@ -490345,7 +490598,7 @@
                                             "type": "object"
                                           },
                                           "sum": {
-                                            "type": "integer"
+                                            "type": "number"
                                           }
                                         },
                                         "required": [
@@ -491480,14 +491733,12 @@
                                           "scale": {
                                             "properties": {
                                               "max": {
-                                                "enum": [
-                                                  5,
-                                                  10
-                                                ],
                                                 "type": "number"
                                               },
                                               "min": {
-                                                "const": 1,
+                                                "type": "number"
+                                              },
+                                              "step": {
                                                 "type": "number"
                                               }
                                             },
@@ -491498,7 +491749,7 @@
                                             "type": "object"
                                           },
                                           "sum": {
-                                            "type": "integer"
+                                            "type": "number"
                                           }
                                         },
                                         "required": [
@@ -494730,14 +494981,12 @@
                                       "scale": {
                                         "properties": {
                                           "max": {
-                                            "enum": [
-                                              5,
-                                              10
-                                            ],
                                             "type": "number"
                                           },
                                           "min": {
-                                            "const": 1,
+                                            "type": "number"
+                                          },
+                                          "step": {
                                             "type": "number"
                                           }
                                         },
@@ -494748,7 +494997,7 @@
                                         "type": "object"
                                       },
                                       "sum": {
-                                        "type": "integer"
+                                        "type": "number"
                                       }
                                     },
                                     "required": [
@@ -495746,14 +495995,12 @@
                                       "scale": {
                                         "properties": {
                                           "max": {
-                                            "enum": [
-                                              5,
-                                              10
-                                            ],
                                             "type": "number"
                                           },
                                           "min": {
-                                            "const": 1,
+                                            "type": "number"
+                                          },
+                                          "step": {
                                             "type": "number"
                                           }
                                         },
@@ -495764,7 +496011,7 @@
                                         "type": "object"
                                       },
                                       "sum": {
-                                        "type": "integer"
+                                        "type": "number"
                                       }
                                     },
                                     "required": [
@@ -496971,14 +497218,12 @@
                                           "scale": {
                                             "properties": {
                                               "max": {
-                                                "enum": [
-                                                  5,
-                                                  10
-                                                ],
                                                 "type": "number"
                                               },
                                               "min": {
-                                                "const": 1,
+                                                "type": "number"
+                                              },
+                                              "step": {
                                                 "type": "number"
                                               }
                                             },
@@ -496989,7 +497234,7 @@
                                             "type": "object"
                                           },
                                           "sum": {
-                                            "type": "integer"
+                                            "type": "number"
                                           }
                                         },
                                         "required": [
@@ -500224,40 +500469,10 @@
                           "type": "integer"
                         },
                         "histogram": {
-                          "items": false,
-                          "minItems": 10,
-                          "prefixItems": [
-                            {
-                              "type": "integer"
-                            },
-                            {
-                              "type": "integer"
-                            },
-                            {
-                              "type": "integer"
-                            },
-                            {
-                              "type": "integer"
-                            },
-                            {
-                              "type": "integer"
-                            },
-                            {
-                              "type": "integer"
-                            },
-                            {
-                              "type": "integer"
-                            },
-                            {
-                              "type": "integer"
-                            },
-                            {
-                              "type": "integer"
-                            },
-                            {
-                              "type": "integer"
-                            }
-                          ],
+                          "items": {
+                            "type": "integer"
+                          },
+                          "maxItems": 1001,
                           "type": "array"
                         },
                         "mainVersion": {
@@ -500295,14 +500510,28 @@
                             {
                               "properties": {
                                 "denominator": {
-                                  "type": "integer"
+                                  "anyOf": [
+                                    {
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "string"
+                                    }
+                                  ]
                                 },
                                 "kind": {
                                   "const": "exact-rational",
                                   "type": "string"
                                 },
                                 "numerator": {
-                                  "type": "integer"
+                                  "anyOf": [
+                                    {
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "string"
+                                    }
+                                  ]
                                 }
                               },
                               "required": [
@@ -500322,17 +500551,21 @@
                           "type": "string"
                         },
                         "scale": {
+                          "additionalProperties": false,
                           "properties": {
                             "max": {
-                              "const": 10,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "min": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "step": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -500365,7 +500598,7 @@
                           "type": "object"
                         },
                         "sum": {
-                          "type": "integer"
+                          "type": "number"
                         },
                         "targetGrain": {
                           "const": "mainVersion",
@@ -503043,20 +503276,21 @@
                             "type": "string"
                           },
                           "scale": {
+                            "additionalProperties": false,
                             "properties": {
                               "max": {
-                                "enum": [
-                                  5,
-                                  10
-                                ],
+                                "maximum": 1000000,
+                                "minimum": 0,
                                 "type": "number"
                               },
                               "min": {
-                                "const": 1,
+                                "maximum": 1000000,
+                                "minimum": 0,
                                 "type": "number"
                               },
                               "step": {
-                                "const": 1,
+                                "maximum": 1000000,
+                                "minimum": 0.000001,
                                 "type": "number"
                               }
                             },
@@ -503767,6 +504001,7 @@
                       "profile": {
                         "enum": [
                           "realm-standing-rating-context-v1",
+                          "realm-standing-rating-context-v2",
                           "realm-experience-rating-context-v1"
                         ],
                         "type": "string"
@@ -503779,6 +504014,32 @@
                       "realm": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "scale": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "max": {
+                            "maximum": 1000000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "min": {
+                            "maximum": 1000000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "step": {
+                            "maximum": 1000000,
+                            "minimum": 0.000001,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "min",
+                          "max",
+                          "step"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -504044,6 +504305,7 @@
                       "profile": {
                         "enum": [
                           "realm-standing-rating-context-v1",
+                          "realm-standing-rating-context-v2",
                           "realm-experience-rating-context-v1"
                         ],
                         "type": "string"
@@ -504056,6 +504318,32 @@
                       "realm": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "scale": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "max": {
+                            "maximum": 1000000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "min": {
+                            "maximum": 1000000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "step": {
+                            "maximum": 1000000,
+                            "minimum": 0.000001,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "min",
+                          "max",
+                          "step"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -504321,6 +504609,7 @@
                       "profile": {
                         "enum": [
                           "realm-standing-rating-context-v1",
+                          "realm-standing-rating-context-v2",
                           "realm-experience-rating-context-v1"
                         ],
                         "type": "string"
@@ -504333,6 +504622,32 @@
                       "realm": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
+                      },
+                      "scale": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "max": {
+                            "maximum": 1000000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "min": {
+                            "maximum": 1000000,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "step": {
+                            "maximum": 1000000,
+                            "minimum": 0.000001,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "min",
+                          "max",
+                          "step"
+                        ],
+                        "type": "object"
                       }
                     },
                     "required": [
@@ -504615,7 +504930,10 @@
                           "type": "string"
                         },
                         "profile": {
-                          "const": "realm-standing-rating-context-v1",
+                          "enum": [
+                            "realm-standing-rating-context-v1",
+                            "realm-standing-rating-context-v2"
+                          ],
                           "type": "string"
                         },
                         "question": {
@@ -504628,17 +504946,21 @@
                           "type": "boolean"
                         },
                         "scale": {
+                          "additionalProperties": false,
                           "properties": {
                             "max": {
-                              "const": 10,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "min": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "step": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -504729,17 +505051,21 @@
                           "type": "boolean"
                         },
                         "scale": {
+                          "additionalProperties": false,
                           "properties": {
                             "max": {
-                              "const": 10,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "min": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "step": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -504834,17 +505160,21 @@
                           "type": "boolean"
                         },
                         "scale": {
+                          "additionalProperties": false,
                           "properties": {
                             "max": {
-                              "const": 10,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "min": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "step": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -505203,7 +505533,10 @@
                           "type": "string"
                         },
                         "profile": {
-                          "const": "realm-standing-rating-context-v1",
+                          "enum": [
+                            "realm-standing-rating-context-v1",
+                            "realm-standing-rating-context-v2"
+                          ],
                           "type": "string"
                         },
                         "question": {
@@ -505216,17 +505549,21 @@
                           "type": "boolean"
                         },
                         "scale": {
+                          "additionalProperties": false,
                           "properties": {
                             "max": {
-                              "const": 10,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "min": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "step": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -505317,17 +505654,21 @@
                           "type": "boolean"
                         },
                         "scale": {
+                          "additionalProperties": false,
                           "properties": {
                             "max": {
-                              "const": 10,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "min": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "step": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -505422,17 +505763,21 @@
                           "type": "boolean"
                         },
                         "scale": {
+                          "additionalProperties": false,
                           "properties": {
                             "max": {
-                              "const": 10,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "min": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "step": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -506530,7 +506875,10 @@
                           "type": "string"
                         },
                         "profile": {
-                          "const": "realm-standing-rating-context-v1",
+                          "enum": [
+                            "realm-standing-rating-context-v1",
+                            "realm-standing-rating-context-v2"
+                          ],
                           "type": "string"
                         },
                         "question": {
@@ -506540,17 +506888,21 @@
                           "type": "string"
                         },
                         "scale": {
+                          "additionalProperties": false,
                           "properties": {
                             "max": {
-                              "const": 10,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "min": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "step": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -506771,17 +507123,21 @@
                           "type": "string"
                         },
                         "scale": {
+                          "additionalProperties": false,
                           "properties": {
                             "max": {
-                              "const": 10,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "min": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "step": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -507010,17 +507366,21 @@
                           "type": "string"
                         },
                         "scale": {
+                          "additionalProperties": false,
                           "properties": {
                             "max": {
-                              "const": 10,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "min": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "step": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -508699,17 +509059,21 @@
                           "type": "string"
                         },
                         "scale": {
+                          "additionalProperties": false,
                           "properties": {
                             "max": {
-                              "const": 10,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "min": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "type": "number"
                             },
                             "step": {
-                              "const": 1,
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
                               "type": "number"
                             }
                           },
@@ -509257,15 +509621,16 @@
                       "profile": {
                         "enum": [
                           "realm-standing-rating-observation-v1",
+                          "realm-standing-rating-observation-v2",
                           "realm-daily-rating-observation-v1"
                         ],
                         "type": "string"
                       },
                       "value": {
-                        "maximum": 10,
-                        "minimum": 1,
+                        "maximum": 1000000,
+                        "minimum": 0,
                         "type": [
-                          "integer",
+                          "number",
                           "null"
                         ]
                       },
@@ -509483,15 +509848,16 @@
                       "profile": {
                         "enum": [
                           "realm-standing-rating-observation-v1",
+                          "realm-standing-rating-observation-v2",
                           "realm-daily-rating-observation-v1"
                         ],
                         "type": "string"
                       },
                       "value": {
-                        "maximum": 10,
-                        "minimum": 1,
+                        "maximum": 1000000,
+                        "minimum": 0,
                         "type": [
-                          "integer",
+                          "number",
                           "null"
                         ]
                       },
@@ -509709,15 +510075,16 @@
                       "profile": {
                         "enum": [
                           "realm-standing-rating-observation-v1",
+                          "realm-standing-rating-observation-v2",
                           "realm-daily-rating-observation-v1"
                         ],
                         "type": "string"
                       },
                       "value": {
-                        "maximum": 10,
-                        "minimum": 1,
+                        "maximum": 1000000,
+                        "minimum": 0,
                         "type": [
-                          "integer",
+                          "number",
                           "null"
                         ]
                       },
@@ -509946,7 +510313,10 @@
                           ]
                         },
                         "profile": {
-                          "const": "realm-standing-rating-observation-v1",
+                          "enum": [
+                            "realm-standing-rating-observation-v1",
+                            "realm-standing-rating-observation-v2"
+                          ],
                           "type": "string"
                         },
                         "replayed": {
@@ -509977,7 +510347,7 @@
                           "~elyTyp": 7,
                           "nullable": true,
                           "type": [
-                            "integer",
+                            "number",
                             "null"
                           ]
                         },
@@ -510078,7 +510448,7 @@
                           "~elyTyp": 7,
                           "nullable": true,
                           "type": [
-                            "integer",
+                            "number",
                             "null"
                           ]
                         },
@@ -510170,7 +510540,7 @@
                           "~elyTyp": 7,
                           "nullable": true,
                           "type": [
-                            "integer",
+                            "number",
                             "null"
                           ]
                         },
@@ -510417,7 +510787,10 @@
                           ]
                         },
                         "profile": {
-                          "const": "realm-standing-rating-observation-v1",
+                          "enum": [
+                            "realm-standing-rating-observation-v1",
+                            "realm-standing-rating-observation-v2"
+                          ],
                           "type": "string"
                         },
                         "replayed": {
@@ -510448,7 +510821,7 @@
                           "~elyTyp": 7,
                           "nullable": true,
                           "type": [
-                            "integer",
+                            "number",
                             "null"
                           ]
                         },
@@ -510549,7 +510922,7 @@
                           "~elyTyp": 7,
                           "nullable": true,
                           "type": [
-                            "integer",
+                            "number",
                             "null"
                           ]
                         },
@@ -510641,7 +511014,7 @@
                           "~elyTyp": 7,
                           "nullable": true,
                           "type": [
-                            "integer",
+                            "number",
                             "null"
                           ]
                         },
@@ -511444,6 +511817,9 @@
               "enum": [
                 "realm-daily-rating-observation-v1",
                 "realm-experience-rating-observation-v1",
+                "global-rating-standing-observation-v1",
+                "global-rating-standing-observation-v2",
+                "realm-standing-rating-observation-v2",
                 "realm-release-rating-observation-v1",
                 "realm-target-rating-observation-v1"
               ],
@@ -511512,10 +511888,196 @@
                           "type": "string"
                         },
                         "context": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
                         "evaluatedAt": {
                           "type": "string"
+                        },
+                        "exactValue": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "integer",
+                                "decimal"
+                              ],
+                              "type": "string"
+                            },
+                            "lexical": {
+                              "maxLength": 32,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "lexical"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "mainVersion": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "observation": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "observationRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "originalSubmissionAt": {
+                          "type": "string"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "enum": [
+                            "global-rating-standing-observation-v1",
+                            "global-rating-standing-observation-v2"
+                          ],
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "revisedAt": {
+                          "type": "string"
+                        },
+                        "scale": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "max": {
+                              "maximum": 1000000,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "min": {
+                              "maximum": 1000000,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "step": {
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "submittedAt": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "~elyTyp": 7,
+                          "maximum": 1000000,
+                          "minimum": 0,
+                          "nullable": true,
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "work": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "observation",
+                        "observationRevision",
+                        "predecessor",
+                        "context",
+                        "work",
+                        "mainVersion",
+                        "value",
+                        "availability",
+                        "profile",
+                        "scale",
+                        "evaluatedAt",
+                        "submittedAt",
+                        "originalSubmissionAt",
+                        "revisedAt"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "availability": {
+                          "enum": [
+                            "available",
+                            "withdrawn"
+                          ],
+                          "type": "string"
+                        },
+                        "context": {
+                          "type": "string"
+                        },
+                        "evaluatedAt": {
+                          "type": "string"
+                        },
+                        "exactValue": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "integer",
+                                "decimal"
+                              ],
+                              "type": "string"
+                            },
+                            "lexical": {
+                              "maxLength": 32,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "lexical"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
                         },
                         "mainVersion": {
                           "type": "string"
@@ -511538,11 +512100,40 @@
                           ]
                         },
                         "profile": {
-                          "const": "realm-standing-rating-observation-v1",
+                          "enum": [
+                            "realm-standing-rating-observation-v1",
+                            "realm-standing-rating-observation-v2"
+                          ],
                           "type": "string"
                         },
                         "revisedAt": {
                           "type": "string"
+                        },
+                        "scale": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "max": {
+                              "maximum": 1000000,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "min": {
+                              "maximum": 1000000,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "step": {
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
                         },
                         "submittedAt": {
                           "type": "string"
@@ -511551,7 +512142,7 @@
                           "~elyTyp": 7,
                           "nullable": true,
                           "type": [
-                            "integer",
+                            "number",
                             "null"
                           ]
                         },
@@ -511599,6 +512190,31 @@
                         "evaluatedAt": {
                           "type": "string"
                         },
+                        "exactValue": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "integer",
+                                "decimal"
+                              ],
+                              "type": "string"
+                            },
+                            "lexical": {
+                              "maxLength": 32,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "lexical"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "mainVersion": {
                           "type": "string"
                         },
@@ -511632,6 +512248,32 @@
                         "revisedAt": {
                           "type": "string"
                         },
+                        "scale": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "max": {
+                              "maximum": 1000000,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "min": {
+                              "maximum": 1000000,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "step": {
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
+                        },
                         "submittedAt": {
                           "type": "string"
                         },
@@ -511642,7 +512284,7 @@
                           "~elyTyp": 7,
                           "nullable": true,
                           "type": [
-                            "integer",
+                            "number",
                             "null"
                           ]
                         },
@@ -511687,6 +512329,31 @@
                         "evaluatedAt": {
                           "type": "string"
                         },
+                        "exactValue": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "integer",
+                                "decimal"
+                              ],
+                              "type": "string"
+                            },
+                            "lexical": {
+                              "maxLength": 32,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "lexical"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "mainVersion": {
                           "type": "string"
                         },
@@ -511717,6 +512384,32 @@
                         "revisedAt": {
                           "type": "string"
                         },
+                        "scale": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "max": {
+                              "maximum": 1000000,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "min": {
+                              "maximum": 1000000,
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "step": {
+                              "maximum": 1000000,
+                              "minimum": 0.000001,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max",
+                            "step"
+                          ],
+                          "type": "object"
+                        },
                         "submittedAt": {
                           "type": "string"
                         },
@@ -511724,7 +512417,7 @@
                           "~elyTyp": 7,
                           "nullable": true,
                           "type": [
-                            "integer",
+                            "number",
                             "null"
                           ]
                         },
@@ -517042,7 +517735,10 @@
                               "type": "string"
                             },
                             "contextProfile": {
-                              "const": "global-rating-standing-context-v1",
+                              "enum": [
+                                "global-rating-standing-context-v1",
+                                "global-rating-standing-context-v2"
+                              ],
                               "type": "string"
                             },
                             "contextRevision": {
@@ -517060,8 +517756,7 @@
                                 "minimum": 0,
                                 "type": "integer"
                               },
-                              "maxItems": 5,
-                              "minItems": 5,
+                              "maxItems": 1001,
                               "type": "array"
                             },
                             "mean": {
@@ -517126,17 +517821,21 @@
                               ]
                             },
                             "scale": {
+                              "additionalProperties": false,
                               "properties": {
                                 "max": {
-                                  "const": 5,
+                                  "maximum": 1000000,
+                                  "minimum": 0,
                                   "type": "number"
                                 },
                                 "min": {
-                                  "const": 1,
+                                  "maximum": 1000000,
+                                  "minimum": 0,
                                   "type": "number"
                                 },
                                 "step": {
-                                  "const": 1,
+                                  "maximum": 1000000,
+                                  "minimum": 0.000001,
                                   "type": "number"
                                 }
                               },
@@ -517148,9 +517847,8 @@
                               "type": "object"
                             },
                             "sum": {
-                              "maximum": 1000,
                               "minimum": 0,
-                              "type": "integer"
+                              "type": "number"
                             },
                             "unitMean": {
                               "~elyTyp": 7,
@@ -517217,7 +517915,10 @@
                               "type": "string"
                             },
                             "contextProfile": {
-                              "const": "realm-standing-rating-context-v1",
+                              "enum": [
+                                "realm-standing-rating-context-v1",
+                                "realm-standing-rating-context-v2"
+                              ],
                               "type": "string"
                             },
                             "contextRevision": {
@@ -517235,8 +517936,7 @@
                                 "minimum": 0,
                                 "type": "integer"
                               },
-                              "maxItems": 10,
-                              "minItems": 10,
+                              "maxItems": 1001,
                               "type": "array"
                             },
                             "mean": {
@@ -517301,17 +518001,21 @@
                               ]
                             },
                             "scale": {
+                              "additionalProperties": false,
                               "properties": {
                                 "max": {
-                                  "const": 10,
+                                  "maximum": 1000000,
+                                  "minimum": 0,
                                   "type": "number"
                                 },
                                 "min": {
-                                  "const": 1,
+                                  "maximum": 1000000,
+                                  "minimum": 0,
                                   "type": "number"
                                 },
                                 "step": {
-                                  "const": 1,
+                                  "maximum": 1000000,
+                                  "minimum": 0.000001,
                                   "type": "number"
                                 }
                               },
@@ -517323,9 +518027,8 @@
                               "type": "object"
                             },
                             "sum": {
-                              "maximum": 1000,
                               "minimum": 0,
-                              "type": "integer"
+                              "type": "number"
                             },
                             "unitMean": {
                               "~elyTyp": 7,
@@ -627269,7 +627972,7 @@
                                 "type": "integer"
                               },
                               "value": {
-                                "type": "integer"
+                                "type": "number"
                               }
                             },
                             "required": [
@@ -627278,7 +627981,7 @@
                             ],
                             "type": "object"
                           },
-                          "maxItems": 10,
+                          "maxItems": 1001,
                           "type": "array"
                         },
                         "mainVersion": {
@@ -627302,13 +628005,12 @@
                           "nullable": true,
                           "properties": {
                             "max": {
-                              "type": "integer"
+                              "type": "number"
                             },
                             "min": {
-                              "type": "integer"
+                              "type": "number"
                             },
                             "step": {
-                              "const": 1,
                               "type": "number"
                             }
                           },
@@ -631025,9 +631727,9 @@
             "name": "rating",
             "required": false,
             "schema": {
-              "maximum": 10,
-              "minimum": 1,
-              "type": "integer"
+              "maximum": 1000000,
+              "minimum": 0,
+              "type": "number"
             }
           },
           {
@@ -631105,11 +631807,11 @@
                           },
                           "rating": {
                             "~elyTyp": 7,
-                            "maximum": 10,
-                            "minimum": 1,
+                            "maximum": 1000000,
+                            "minimum": 0,
                             "nullable": true,
                             "type": [
-                              "integer",
+                              "number",
                               "null"
                             ]
                           },
@@ -639035,11 +639737,11 @@
                           },
                           "rating": {
                             "~elyTyp": 7,
-                            "maximum": 10,
-                            "minimum": 1,
+                            "maximum": 1000000,
+                            "minimum": 0,
                             "nullable": true,
                             "type": [
-                              "integer",
+                              "number",
                               "null"
                             ]
                           },
@@ -639732,11 +640434,11 @@
                   },
                   "rating": {
                     "~elyTyp": 7,
-                    "maximum": 10,
-                    "minimum": 1,
+                    "maximum": 1000000,
+                    "minimum": 0,
                     "nullable": true,
                     "type": [
-                      "integer",
+                      "number",
                       "null"
                     ]
                   },
@@ -639798,11 +640500,11 @@
                   },
                   "rating": {
                     "~elyTyp": 7,
-                    "maximum": 10,
-                    "minimum": 1,
+                    "maximum": 1000000,
+                    "minimum": 0,
                     "nullable": true,
                     "type": [
-                      "integer",
+                      "number",
                       "null"
                     ]
                   },
@@ -639864,11 +640566,11 @@
                   },
                   "rating": {
                     "~elyTyp": 7,
-                    "maximum": 10,
-                    "minimum": 1,
+                    "maximum": 1000000,
+                    "minimum": 0,
                     "nullable": true,
                     "type": [
-                      "integer",
+                      "number",
                       "null"
                     ]
                   },
@@ -641360,11 +642062,11 @@
                     },
                     "rating": {
                       "~elyTyp": 7,
-                      "maximum": 10,
-                      "minimum": 1,
+                      "maximum": 1000000,
+                      "minimum": 0,
                       "nullable": true,
                       "type": [
-                        "integer",
+                        "number",
                         "null"
                       ]
                     },
@@ -658906,14 +659608,12 @@
                               "scale": {
                                 "properties": {
                                   "max": {
-                                    "enum": [
-                                      5,
-                                      10
-                                    ],
                                     "type": "number"
                                   },
                                   "min": {
-                                    "const": 1,
+                                    "type": "number"
+                                  },
+                                  "step": {
                                     "type": "number"
                                   }
                                 },
@@ -658924,7 +659624,7 @@
                                 "type": "object"
                               },
                               "sum": {
-                                "type": "integer"
+                                "type": "number"
                               }
                             },
                             "required": [
@@ -755267,14 +755967,12 @@
                               "scale": {
                                 "properties": {
                                   "max": {
-                                    "enum": [
-                                      5,
-                                      10
-                                    ],
                                     "type": "number"
                                   },
                                   "min": {
-                                    "const": 1,
+                                    "type": "number"
+                                  },
+                                  "step": {
                                     "type": "number"
                                   }
                                 },
@@ -755285,7 +755983,7 @@
                                 "type": "object"
                               },
                               "sum": {
-                                "type": "integer"
+                                "type": "number"
                               }
                             },
                             "required": [
@@ -761595,14 +762293,12 @@
                               "scale": {
                                 "properties": {
                                   "max": {
-                                    "enum": [
-                                      5,
-                                      10
-                                    ],
                                     "type": "number"
                                   },
                                   "min": {
-                                    "const": 1,
+                                    "type": "number"
+                                  },
+                                  "step": {
                                     "type": "number"
                                   }
                                 },
@@ -761613,7 +762309,7 @@
                                 "type": "object"
                               },
                               "sum": {
-                                "type": "integer"
+                                "type": "number"
                               }
                             },
                             "required": [
@@ -782561,6 +783257,15 @@
               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "ratingContext",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -782669,9 +783374,60 @@
                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                               "type": "string"
                             },
+                            "exactValue": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "integer",
+                                    "decimal"
+                                  ],
+                                  "type": "string"
+                                },
+                                "lexical": {
+                                  "maxLength": 32,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "lexical"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
                             "revision": {
                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                               "type": "string"
+                            },
+                            "scale": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "max": {
+                                  "maximum": 1000000,
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                "min": {
+                                  "maximum": 1000000,
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                "step": {
+                                  "maximum": 1000000,
+                                  "minimum": 0.000001,
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max",
+                                "step"
+                              ],
+                              "type": "object"
                             },
                             "sourcePosition": {
                               "properties": {
@@ -782699,11 +783455,11 @@
                             },
                             "value": {
                               "~elyTyp": 7,
-                              "maximum": 10,
-                              "minimum": 1,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "nullable": true,
                               "type": [
-                                "integer",
+                                "number",
                                 "null"
                               ]
                             }
@@ -782711,6 +783467,8 @@
                           "required": [
                             "context",
                             "value",
+                            "scale",
+                            "exactValue",
                             "availability",
                             "revision",
                             "sourcePosition",
@@ -782736,9 +783494,60 @@
                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                               "type": "string"
                             },
+                            "exactValue": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "integer",
+                                    "decimal"
+                                  ],
+                                  "type": "string"
+                                },
+                                "lexical": {
+                                  "maxLength": 32,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "lexical"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
                             "revision": {
                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                               "type": "string"
+                            },
+                            "scale": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "max": {
+                                  "maximum": 1000000,
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                "min": {
+                                  "maximum": 1000000,
+                                  "minimum": 0,
+                                  "type": "number"
+                                },
+                                "step": {
+                                  "maximum": 1000000,
+                                  "minimum": 0.000001,
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max",
+                                "step"
+                              ],
+                              "type": "object"
                             },
                             "sourcePosition": {
                               "properties": {
@@ -782766,11 +783575,11 @@
                             },
                             "value": {
                               "~elyTyp": 7,
-                              "maximum": 10,
-                              "minimum": 1,
+                              "maximum": 1000000,
+                              "minimum": 0,
                               "nullable": true,
                               "type": [
-                                "integer",
+                                "number",
                                 "null"
                               ]
                             }
@@ -782778,6 +783587,8 @@
                           "required": [
                             "context",
                             "value",
+                            "scale",
+                            "exactValue",
                             "availability",
                             "revision",
                             "sourcePosition",
