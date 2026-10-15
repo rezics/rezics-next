@@ -40,11 +40,12 @@ test('a projection page links its real ratings, reviews and discussion through t
       content: stack.content, contentAuthoring: stack.content, media: stack.media, mediaAccess: stack.mediaAccess,
       reviews: new ReaderReviews(stack.accessPool), targetRatingInventory: new TargetRatingInventoryStore(stack.accessPool),
       realmReplies: new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env, stack.accessPool),
-      account: { verify: async () => ({ ...owner.principal, emailVerified: true }) },
+      account: { verify: async () => ({ ...owner.principal, emailVerified: true,
+        currentAssertion: async () => ({ ...owner.principal, emailVerified: true }) }) },
     });
     const call = (method: string, path: string, body?: object) => {
       const url = new URL(path, 'http://main.local');
-      if (method === 'GET') url.searchParams.set('actingSubject', owner.actor);
+      if (method === 'GET' && !url.searchParams.has('actingSubject')) url.searchParams.set('actingSubject', owner.actor);
       return app.handle(new Request(url, {
         method, headers: { authorization: `Bearer ${owner.token}`, 'idempotency-key': randomUUID(),
           ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}),
@@ -68,18 +69,17 @@ test('a projection page links its real ratings, reviews and discussion through t
       actingSubject: person,
     }), 201);
     const reply = `https://rezics.com/id/${randomUUID()}`, variantId = `urn:rezics:variant:${randomUUID()}`;
-    for (const [scope, action] of [[`content:draft:${reply}`, 'content.draft'],
-      [`reply:create:${projection.id}`, 'reply.create'], [`review:decide:${realm}`, 'review.decide'],
+    for (const [scope, action] of [[`review:decide:${realm}`, 'review.decide'],
       [`reply:place:${realm}`, 'reply.place']]) await owner.grant(scope!, action!);
     const draft = await json<{ revisionId: string }>(await call('POST', '/v1/member-reply-drafts', {
       profile: 'member-reply-draft-v1', reply, variantId, rootTarget: projection.id, rootRevision: projection.revision,
-      language: 'en', direction: 'ltr', expectedHead: null, body: 'Discussion of the framed character', actingSubject: owner.actor,
+      language: 'en', direction: 'ltr', expectedHead: null, body: 'Discussion of the framed character', actingSubject: person,
     }), 201);
     await json(await call('POST', '/v1/realm-replies', { profile: 'realm-reply-identity-v1', reply, variantId,
-      revisionId: draft.revisionId, author: owner.actor, rootTarget: projection.id, rootRevision: projection.revision,
+      revisionId: draft.revisionId, author: person, rootTarget: projection.id, rootRevision: projection.revision,
       parentReply: null, parentRevision: null, contextRevision: null }), 201);
     const current = await json<{ revisionDigest: string }>(await call('GET',
-      `/v1/member-replies/${short(reply)}?actingSubject=${encodeURIComponent(owner.actor)}`));
+      `/v1/member-replies/${short(reply)}?actingSubject=${encodeURIComponent(person)}`));
     const approved = await json<{ decisionId: string }>(await call('POST', '/v1/realm-reply-reviews', {
       profile: 'realm-reply-review-v1', realm, reply, revisionId: draft.revisionId, revisionDigest: current.revisionDigest,
       expectedGeneration: '0', supersedes: null, outcome: 'approved', method: 'human', methodRevision: 'realm-manager-v1',

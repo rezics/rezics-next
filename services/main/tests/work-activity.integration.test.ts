@@ -4,7 +4,6 @@ import { startMediaStack } from '../../../tests/qa/integration/media-support.ts'
 import { createMainApp } from '../src/app.ts';
 import { RealmReplyContentStore } from '../src/modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from '../src/modules/realm-reply/store.ts';
-import { contentDraftIntentDigest } from '../../content/src/core.ts';
 
 const short = (id: string) => id.slice(-36);
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -17,7 +16,10 @@ async function json(response: Response, status = 200): Promise<Record<string, an
 test('Work activity: reviewed body, public history, pagination, revocation, erasure and stale cursors', async () => {
   const stack = await startMediaStack('work-activity');
   try {
-    const member = await stack.member('activity-owner');
+    const member = await stack.member('activity-owner', { verified: true });
+    const author = (await json(await member.send('POST', '/v1/agents', {
+      profile: 'agent-provision-v1', kind: 'person', displayName: 'Activity author',
+    }), 201)).agent as string;
     const work = await stack.publicWork(member.actor, ['en'], 'Activity public Work');
     const workHead = await stack.fuseki.query(`SELECT ?head WHERE {
       GRAPH <urn:rezics:graph:current> { <${work.work}> <https://rezics.com/vocab/head> ?head }
@@ -36,7 +38,8 @@ test('Work activity: reviewed body, public history, pagination, revocation, eras
       stack.content, stack.access, stack.env, stack.accessPool);
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
       content: stack.content, media: stack.media, realmReplies: replyStore,
-      account: { verify: async () => member.principal } });
+      account: { verify: async () => ({ ...member.principal, emailVerified: true,
+        currentAssertion: async () => ({ ...member.principal, emailVerified: true }) }) } });
     const read = (path: string, authenticated = false) => app.handle(new Request(`http://main.local${path}`,
       authenticated ? { headers: { authorization: 'Bearer activity' } } : {}));
     const post = (path: string, body: unknown) => app.handle(new Request(`http://main.local${path}`,
@@ -52,24 +55,17 @@ test('Work activity: reviewed body, public history, pagination, revocation, eras
 
     const reply = `https://rezics.com/id/${randomUUID()}`;
     const variantId = `urn:rezics:variant:${randomUUID()}`;
-    const draft = { operationId: randomUUID(), variant: {
-      id: variantId, resourceId: reply,
-      language: { kind: 'tag' as const, tag: 'en', originalTag: 'en' }, direction: 'ltr' as const,
-    }, expectedHead: null, model: 'member-reply-v1', sourceRevision: workRevision,
-    serializedJson: JSON.stringify({ rootTarget: work.work, rootRevision: workRevision,
-      body: 'Reviewed reply body', deleted: false }) };
-    const saved = await stack.content.saveDraft({ ...draft, provenance: {
-      kind: 'admitted-original-contribution-v1', author: member.actor, admissionId: randomUUID(),
-      authorityEpoch: '1', scope: `content:draft:${reply}`, expectedHead: null,
-      rightsBasis: 'original-contribution', requestDigest: contentDraftIntentDigest(draft, member.actor) } });
+    const saved = await json(await member.send('POST', '/v1/member-reply-drafts', {
+      profile: 'member-reply-draft-v1', reply, variantId, rootTarget: work.work, rootRevision: workRevision,
+      language: 'en', direction: 'ltr', expectedHead: null, body: 'Reviewed reply body', actingSubject: author,
+    }), 201);
     const revisionId = saved.revisionId!;
     const digest = (await stack.contentPool.query<{ byte_digest: string }>(
       'SELECT byte_digest FROM content.revision WHERE id = $1', [revisionId])).rows[0]!.byte_digest;
-    await member.grant(`reply:create:${work.work}`, 'reply.create');
     await member.grant(`review:decide:${realmId}`, 'review.decide');
     await member.grant(`reply:place:${realmId}`, 'reply.place');
     await json(await post('/v1/realm-replies', { profile: 'realm-reply-identity-v1',
-      reply, variantId, revisionId, author: member.actor, rootTarget: work.work,
+      reply, variantId, revisionId, author, rootTarget: work.work,
       rootRevision: workRevision, parentReply: null, parentRevision: null,
       contextRevision: null }), 201);
     const reviewInput = { profile: 'realm-reply-review-v1', realm: realmId, reply,

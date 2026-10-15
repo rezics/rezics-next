@@ -162,9 +162,15 @@ async function retrySubmission(stack: MediaStack, member: Member) {
 }
 
 async function retryReply(stack: MediaStack, member: Member) {
+  const personResponse = await member.send('POST', '/v1/agents', {
+    profile: 'agent-provision-v1', kind: 'person', displayName: 'Reply author',
+  });
+  const personText = await personResponse.text();
+  expect(personResponse.status, personText).toBe(201);
+  const person = (JSON.parse(personText) as { agent: string }).agent;
   const missingRoot = native();
   const hiddenBody = { profile: 'realm-reply-identity-v1', reply: native(),
-    variantId: `urn:rezics:variant:${randomUUID()}`, revisionId: randomUUID(), author: member.actor,
+    variantId: `urn:rezics:variant:${randomUUID()}`, revisionId: randomUUID(), author: person,
     rootTarget: missingRoot, rootRevision: native(), parentReply: null, parentRevision: null, contextRevision: null };
   const hiddenKey = randomUUID();
   const hidden = await member.send('POST', '/v1/realm-replies', hiddenBody, hiddenKey);
@@ -176,15 +182,13 @@ async function retryReply(stack: MediaStack, member: Member) {
     GRAPH ${iri(GRAPHS.current)} { ${iri(created.work)} rv:head ?head } }`)).results!.bindings[0]!.head!.value;
   const reply = native();
   const variantId = `urn:rezics:variant:${randomUUID()}`;
-  await member.grant(`reply:create:${created.work}`, 'reply.create');
-  await member.grant(`content:draft:${reply}`, 'content.draft');
   const draft = await member.send('POST', '/v1/member-reply-drafts', { profile: 'member-reply-draft-v1', reply, variantId,
     rootTarget: created.work, rootRevision: revision, expectedHead: null, language: 'en', direction: 'ltr',
-    document: fromPlainText('Reply words', 'blocks'), actingSubject: member.actor });
+    document: fromPlainText('Reply words', 'blocks'), actingSubject: person });
   const draftText = await draft.text();
   expect(draft.status, draftText).toBe(201);
   const revisionId = (JSON.parse(draftText) as { revisionId: string }).revisionId;
-  const body = { profile: 'realm-reply-identity-v1', reply, variantId, revisionId, author: member.actor,
+  const body = { profile: 'realm-reply-identity-v1', reply, variantId, revisionId, author: person,
     rootTarget: created.work, rootRevision: revision, parentReply: null, parentRevision: null, contextRevision: null };
   const key = randomUUID();
   const visible = await member.send('POST', '/v1/realm-replies', body, key);

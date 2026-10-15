@@ -354,7 +354,11 @@ test('G-987: public Realm roles configure 21 rating populations and preserve den
         }),
       );
     };
-    const role = await changeRole('0', {
+    const openedRoles = await json<{ generation: string }>(
+      await call(owner, 'GET', `/v1/realms/${short(realm)}/roles?actingSubject=${encodeURIComponent(ownerAgent)}`),
+      200,
+    );
+    const role = await changeRole(openedRoles.generation, {
       kind: 'role',
       roleId,
       name: 'Rating manager',
@@ -458,7 +462,7 @@ test('G-987: public Realm roles configure 21 rating populations and preserve den
       idempotencyKey: randomUUID(),
       requestDigest: ratingContextDigest(pendingInput),
     });
-    await changeRole(assigned.generation, {
+    const revoked = await changeRole(assigned.generation, {
       kind: 'role',
       roleId,
       name: 'Rating manager',
@@ -479,9 +483,15 @@ test('G-987: public Realm roles configure 21 rating populations and preserve den
         })
       ).status,
     ).toBe(403);
+    // Receipt disclosure requires current authority. Restoring the role admits
+    // the same completed receipt without dispatching its old command again.
+    expect((await call(manager, 'POST', policyPath, policy, policyKey)).status).toBe(403);
+    await changeRole(revoked.generation, {
+      kind: 'role', roleId, name: 'Rating manager', permissions: ['rating.configure'],
+    });
     expect(
       await json(await call(manager, 'POST', policyPath, policy, policyKey), 200),
-    ).toMatchObject({ replayed: true });
+    ).toMatchObject({ ...configured, replayed: true });
     expect(
       (
         await s.accessPool.query(

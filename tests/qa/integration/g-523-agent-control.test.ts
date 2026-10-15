@@ -383,7 +383,7 @@ test('G-523: principal × Agent × action matrix keeps representation, resource 
     const change = await h.call('PUT', `${realmPath}/settings`, c.token, {
       actingSubject: cPerson,
       expectedGeneration: settings.body.generation,
-      expectedRulesRevision: null,
+      expectedRulesRevision: settings.body.ruleBasis.revision,
       reason: 'Manage as myself',
       settings: { visibility: 'public', reviewRequired: true, whoMaySubmit: 'members', rules: [] },
     });

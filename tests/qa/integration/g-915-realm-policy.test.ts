@@ -40,7 +40,7 @@ test('G-915: interrupted v2 policy resumes at startup; acknowledgement loss, con
     const { realm, space } = await created.json() as { realm: string; space: string };
     s.fuseki.commandWithReceipt = graphCommand;
     const admin = new AccessRealmManagement(s.accessPool);
-    await owner.grant(`governance:realm:${realm}`, 'realm.owner');
+    await owner.grant(`governance:realm:${realm}`, 'realm.settings.manage');
     await owner.grant(`governance:realm:${realm}`, 'governance.rule.publish');
     const generation = await openedGeneration(owner, space);
     const initial = await admin.settings(owner.principal, realm, owner.actor, s.env);
@@ -132,7 +132,7 @@ test('G-915: a failing publication remains observable and cannot starve the next
       expect(response.status).toBe(201);
       const { realm, space } = await response.json() as { realm: string; space: string };
       realms.push(realm);
-      await owner.grant(`governance:realm:${realm}`, 'realm.owner');
+      await owner.grant(`governance:realm:${realm}`, 'realm.settings.manage');
       await owner.grant(`governance:realm:${realm}`, 'governance.rule.publish');
       const generation = await openedGeneration(owner, space);
       const opened = await admin.settings(owner.principal, realm, owner.actor, s.env);

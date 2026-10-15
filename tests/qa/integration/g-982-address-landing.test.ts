@@ -26,8 +26,9 @@ test('G982: named request admission resolves through the public API and mounts t
     const { space, realm } = (await created.json()) as { space: string; realm: string };
     const admin = new AccessRealmManagement(s.accessPool);
     await admin.initialize(owner.principal, realm, owner.actor, s.env);
-    await owner.grant(`governance:realm:${realm}`, 'realm.owner');
+    await owner.grant(`governance:realm:${realm}`, 'realm.settings.manage');
     const app = createMainApp(s.fuseki, {
+      ...s.composition.dependencies,
       environment: s.env,
       access: s.access,
       realmAdmin: admin,
