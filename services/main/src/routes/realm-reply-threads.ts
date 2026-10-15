@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { readUuid } from '../modules/work/read-contract.ts';
 import { workRead } from '../modules/work/read-session.ts';
@@ -34,7 +35,7 @@ export function realmReplyThreadRoutes(work: MainWorkDependencies) {
         description: 'Returns the opener identity and retained root revision, or thread: null when no discussion is visible. '
           + 'Load content through the existing thread reads. This lookup creates nothing, returns no collection or cursor, '
           + 'and has a 64 KiB response ceiling. Hidden and absent resources return the same 404; unavailable owners return 503.' },
-      response: { 200: realmAboutThread, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/about-thread"].get, { 200: realmAboutThread, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         return Response.json(await workRead(work, request, query,
@@ -46,7 +47,7 @@ export function realmReplyThreadRoutes(work: MainWorkDependencies) {
         cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })),
         actingSubject: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })) },
       { additionalProperties: false }), detail: { security: [{}, { bearerAuth: [] }] },
-      response: { 200: t.Object({ profile: t.Literal('agent-realm-contributions-v1'),
+      response: transportResponses(openApiOperations["/v1/agents/{id}/realm-contributions"].get, { 200: t.Object({ profile: t.Literal('agent-realm-contributions-v1'),
         kind: t.Union([t.Literal('posts'), t.Literal('comments')]),
         items: t.Array(t.Object({ reply: t.String(), realm: t.String(), parent: t.Nullable(t.String()),
           time: t.String(), title: t.Nullable(t.String()), excerpt: t.String(),
@@ -54,14 +55,14 @@ export function realmReplyThreadRoutes(work: MainWorkDependencies) {
           spoiler: t.Optional(t.Boolean()) }),
         { maxItems: PROFILE_CONTRIBUTION_COST.pageSize }),
         nextCursor: t.Nullable(t.String()), sourcePosition: t.Object({ datasetId: t.String(),
-          dataEpoch: t.String(), sequence: t.String() }) }), ...workReadProblems },
+          dataEpoch: t.String(), sequence: t.String() }) }), ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try { return Response.json(await workRead(work, request, query,
         session => readProfileContributions(session, id(params.id), query.kind, query.cursor)), { headers }); }
       catch (error) { return threadError(error); }
     })
     .get('/v1/realms/:realm/threads', { params: t.Object({ realm: readUuid }), query: realmThreadsQuery,
-      detail: { security: [{}, { bearerAuth: [] }] }, response: { 200: realmThreadsPage, ...workReadProblems },
+      detail: { security: [{}, { bearerAuth: [] }] }, response: transportResponses(openApiOperations["/v1/realms/{realm}/threads"].get, { 200: realmThreadsPage, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         return Response.json(await workRead(work, request, { ...query, localBasis: true, retainedBasis: true }, session => readRealmThreads(session,
@@ -70,7 +71,7 @@ export function realmReplyThreadRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/realms/:realm/threads/:reply', { params: t.Object({ realm: readUuid, reply: readUuid }),
       query: realmThreadQuery, detail: { security: [{}, { bearerAuth: [] }] },
-      response: { 200: realmThread, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/threads/{reply}"].get, { 200: realmThread, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         return Response.json(await workRead(work, request, { ...query, localBasis: true, retainedBasis: true }, session => readRealmThread(session,

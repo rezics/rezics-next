@@ -4,10 +4,6 @@
     "imported": "services/main/src/modules/access/exposure-routes.ts"
   },
   {
-    "importer": "scripts/api/generate.ts",
-    "imported": "services/main/src/modules/access/exposure-routes.ts"
-  },
-  {
     "importer": "scripts/dev/web-auth-bootstrap.ts",
     "imported": "services/main/src/modules/access/join-fixture-consent.ts"
   },

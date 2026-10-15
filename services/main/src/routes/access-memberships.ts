@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { groupChangeIntentDigest } from '../modules/access/scope-gates.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -279,7 +280,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/me/membership-consents', {
       body: membershipConsentBody,
-      response: { 200: membershipConsentResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/membership-consents"].post, { 200: membershipConsentResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:membership-consent']);
@@ -296,7 +297,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/me/membership-consent-revocations', {
       body: membershipConsentRevocationBody,
-      response: { 200: membershipConsentRevocationResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/membership-consent-revocations"].post, { 200: membershipConsentRevocationResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:membership-consent']);
@@ -309,7 +310,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/membership-changes', {
       body: membershipChangeBody,
-      response: { 200: membershipChangeResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/membership-changes"].post, { 200: membershipChangeResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         let principal;
@@ -334,7 +335,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/me/represented-org-membership-requests', {
       body: representedRequestBody,
-      response: { 200: representedRequestResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/represented-org-membership-requests"].post, { 200: representedRequestResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:represent']);
@@ -355,7 +356,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     .get('/v1/access/represented-org-membership-requests/:requestId', {
       params: t.Object({ requestId: groupUuid }),
       query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
-      response: { 200: representedRequestResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/represented-org-membership-requests/{requestId}"].get, { 200: representedRequestResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:representation-manage']);
@@ -370,7 +371,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/represented-org-mandate-changes', {
       body: representedMandateBody,
-      response: { 200: representedAuthorityResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/represented-org-mandate-changes"].post, { 200: representedAuthorityResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:representation-manage']);
@@ -396,7 +397,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/represented-org-grant-changes', {
       body: representedGrantBody,
-      response: { 200: representedAuthorityResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/represented-org-grant-changes"].post, { 200: representedAuthorityResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:grant']);
@@ -422,7 +423,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/represented-org-membership-changes', {
       body: representedMembershipBody,
-      response: { 200: representedMembershipResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/represented-org-membership-changes"].post, { 200: representedMembershipResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -448,7 +449,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/eligible-org-member-set-grant-changes', {
       body: eligibleSetGrantBody,
-      response: { 200: eligibleSetGrantResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/eligible-org-member-set-grant-changes"].post, { 200: eligibleSetGrantResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:grant']);
@@ -475,7 +476,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     .get('/v1/access/eligible-org-member-set-grants/:grantId', {
       params: t.Object({ grantId: groupUuid }),
       query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
-      response: { 200: eligibleSetGrantReadResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/eligible-org-member-set-grants/{grantId}"].get, { 200: eligibleSetGrantReadResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:grant']);
@@ -490,7 +491,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/selected-org-membership-changes', {
       body: selectedOrgMembershipBody,
-      response: { 200: selectedOrgMembershipResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/selected-org-membership-changes"].post, { 200: selectedOrgMembershipResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -518,7 +519,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     .get('/v1/me/selected-org-membership-changes', {
       query: t.Object({ idempotencyKey: t.String({ minLength: 1, maxLength: 128 }) },
         { additionalProperties: false }),
-      response: { 200: selectedOrgMembershipResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/selected-org-membership-changes"].get, { 200: selectedOrgMembershipResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -530,7 +531,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/me/private-membership-consents', {
       body: privateMembershipConsentBody,
-      response: { 200: privateMembershipConsentResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/private-membership-consents"].post, { 200: privateMembershipConsentResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:membership-consent']);
@@ -547,7 +548,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/me/private-membership-consent-revocations', {
       body: privateMembershipRevocationBody,
-      response: { 200: privateMembershipRevocationResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/private-membership-consent-revocations"].post, { 200: privateMembershipRevocationResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:membership-consent']);
@@ -562,7 +563,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
       query: t.Object({ after: t.Optional(groupUuid),
         limit: t.Optional(t.String({ pattern: '^([1-9]|[1-4][0-9]|50)$' })) },
       { additionalProperties: false }),
-      response: { 200: privateMembershipPage, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/private-memberships"].get, { 200: privateMembershipPage, ...writeProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:membership-consent']);
@@ -575,7 +576,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/private-membership-changes', {
       body: privateMembershipChangeBody,
-      response: { 200: privateMembershipChangeResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/private-membership-changes"].post, { 200: privateMembershipChangeResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         let principal;
@@ -599,7 +600,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/private-group-member-changes', {
       body: privateGroupMemberChangeBody,
-      response: { 200: privateRecipientChangeResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/private-group-member-changes"].post, { 200: privateRecipientChangeResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -617,7 +618,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/private-role-binding-changes', {
       body: privateRoleBindingChangeBody,
-      response: { 200: privateRecipientChangeResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/private-role-binding-changes"].post, { 200: privateRecipientChangeResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:role']);

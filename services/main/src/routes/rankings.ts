@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { rankingInterval, rankingMetric, rankingPage } from '../modules/rankings/contract.ts';
 import { RankingProjectionIncomplete, RankingProjectionUnavailable } from '../modules/rankings/projection.ts';
@@ -40,12 +41,12 @@ export function rankingRoutes(work: MainWorkDependencies) {
   };
   return new Elysia()
     .get('/v1/realms/:realm/rankings', { params: t.Object({ realm: readUuid }), query,
-      response: { 200: rankingPage, ...workReadProblems } },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/rankings"].get, { 200: rankingPage, ...workReadProblems }, 'GET') },
     ({ request, params, query: options }) => read(request, options, id(params.realm), 'score'))
     .get('/v1/rankings/trending', { query,
-      response: { 200: rankingPage, ...workReadProblems } },
+      response: transportResponses(openApiOperations["/v1/rankings/trending"].get, { 200: rankingPage, ...workReadProblems }, 'GET') },
     ({ request, query: options }) => read(request, options, null, 'score'))
     .get('/v1/realms/:realm/modules/rising', { params: t.Object({ realm: readUuid }), query,
-      response: { 200: rankingPage, ...workReadProblems } },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/modules/rising"].get, { 200: rankingPage, ...workReadProblems }, 'GET') },
     ({ request, params, query: options }) => read(request, options, id(params.realm), 'growth'));
 }

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { workRead, WorkReadLimit } from '../modules/work/read-session.ts';
 import { pendingOperation } from '../api-contract.ts';
@@ -60,7 +61,7 @@ export const openApiOperations = {
 export function profileRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/agents/:id/listing', { params,
-      response: { 200: listingState, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/agents/{id}/listing"].get, { 200: listingState, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path }) => {
       if (!work.profiles) return problem(503, 'profile_owner_unavailable', 'Profile owner unavailable');
       try {
@@ -70,7 +71,7 @@ export function profileRoutes(work: MainWorkDependencies) {
     })
     .put('/v1/agents/:id/listing', { params,
       body: t.Object({ listing: resourceListing, expectedVersion: t.Integer({ minimum: 0 }) }, { additionalProperties: false }),
-      response: { 200: listingState, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/agents/{id}/listing"].put, { 200: listingState, ...workReadProblems }, 'PUT'),
     }, async ({ request, params: path, body }) => {
       if (!work.profiles) return problem(503, 'profile_owner_unavailable', 'Profile owner unavailable');
       try {
@@ -81,37 +82,37 @@ export function profileRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/agents/:id', { params, detail,
       query: t.Object(readQuery, { additionalProperties: false }),
-      response: { 200: agentProfile, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/agents/{id}"].get, { 200: agentProfile, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try { return response(await workRead(work, request, query, s => readAgent(s, `https://rezics.com/id/${path.id}`))); }
       catch (error) { return readError(error); }
     })
     .get('/v1/handles/:handle', { params: t.Object({ handle: t.String({ minLength: 1, maxLength: 64 }) }), detail,
       query: t.Object(readQuery, { additionalProperties: false }),
-      response: { 200: agentProfile, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/handles/{handle}"].get, { 200: agentProfile, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try { return response(await workRead(work, request, query, s => readHandle(s, path.handle))); }
       catch (error) { return readError(error); }
     })
     .get('/v1/agents/:id/works', { params, detail, query: t.Object({ ...pageQuery,
       context: t.Optional(readId) }, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(creditedWork, { maxItems: 20 }),
-        listing: resourceListing, discovery: pageDiscovery, ...pageFields }), ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/agents/{id}/works"].get, { 200: t.Object({ items: t.Array(creditedWork, { maxItems: 20 }),
+        listing: resourceListing, discovery: pageDiscovery, ...pageFields }), ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try { return response(await workRead(work, request, query,
         s => readAgentWorks(s, `https://rezics.com/id/${path.id}`, query.context))); }
       catch (error) { return readError(error); }
     })
     .get('/v1/agents/:id/collections', { params, detail, query: t.Object(pageQuery, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(shelfCollection, { maxItems: 20 }),
-        listing: resourceListing, discovery: pageDiscovery, ...pageFields }), ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/agents/{id}/collections"].get, { 200: t.Object({ items: t.Array(shelfCollection, { maxItems: 20 }),
+        listing: resourceListing, discovery: pageDiscovery, ...pageFields }), ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try { return response(await workRead(work, request, query,
         s => readAgentCollections(s, `https://rezics.com/id/${path.id}`))); }
       catch (error) { return readError(error); }
     })
     .get('/v1/agents/:id/library-visibility', { params,
-      response: { 200: visibilityState, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/agents/{id}/library-visibility"].get, { 200: visibilityState, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path }) => {
       if (!work.profiles) return problem(503, 'profile_owner_unavailable', 'Profile owner unavailable');
       const agent = `https://rezics.com/id/${path.id}`;
@@ -123,7 +124,7 @@ export function profileRoutes(work: MainWorkDependencies) {
     .put('/v1/agents/:id/library-visibility', { params,
       body: t.Object({ visibility, expectedVersion: t.Integer({ minimum: 0 }) },
         { additionalProperties: false }),
-      response: { 200: visibilityState, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/agents/{id}/library-visibility"].put, { 200: visibilityState, ...workReadProblems }, 'PUT'),
     }, async ({ request, params: path, body }) => {
       if (!work.profiles) return problem(503, 'profile_owner_unavailable', 'Profile owner unavailable');
       try {
@@ -135,24 +136,24 @@ export function profileRoutes(work: MainWorkDependencies) {
       } catch (error) { return visibilityError(error); }
     })
     .get('/v1/me/contributions', { query: t.Object(pageQuery, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(libraryContribution, { maxItems: 20 }),
-        listing: resourceListing, discovery: pageDiscovery, ...pageFields }), ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/contributions"].get, { 200: t.Object({ items: t.Array(libraryContribution, { maxItems: 20 }),
+        listing: resourceListing, discovery: pageDiscovery, ...pageFields }), ...workReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       try { return response(await workRead(work, request, query, readMyContributions)); }
       catch (error) { return readError(error); }
     })
     .get('/v1/me/ratings', { query: t.Object({ ...pageQuery, scope: t.Optional(t.Literal('global')) }, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(libraryRating, { maxItems: 20 }),
-        listing: resourceListing, discovery: pageDiscovery, ...pageFields }), ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/ratings"].get, { 200: t.Object({ items: t.Array(libraryRating, { maxItems: 20 }),
+        listing: resourceListing, discovery: pageDiscovery, ...pageFields }), ...workReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       try { return response(await workRead(work, request, query, readMyRatings)); }
       catch (error) { return readError(error); }
     })
     .get('/v1/works/:id/agent-credits', { params, detail, query: t.Object(pageQuery, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(t.Object({ id: readId, role: creditRole,
+      response: transportResponses(openApiOperations["/v1/works/{id}/agent-credits"].get, { 200: t.Object({ items: t.Array(t.Object({ id: readId, role: creditRole,
         agent: readId, displayName: t.String(), handle: profileHandle,
         identityStatus: t.Union([t.Literal('active'), t.Literal('deleted')]),
-        address: t.Optional(agentProfile.properties.address) }), { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+        address: t.Optional(agentProfile.properties.address) }), { maxItems: 20 }), ...pageFields }), ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try { return response(await workRead(work, request, query, s => readNativeCredits(s, `https://rezics.com/id/${path.id}`))); }
       catch (error) { return readError(error); }
@@ -160,7 +161,7 @@ export function profileRoutes(work: MainWorkDependencies) {
     .post('/v1/works/:id/agent-credits', { params,
       body: t.Object({ profile: t.Literal('native-agent-credit-v1'), credit: readId, agent: readId,
         role: creditRole, expectedWorkHead: readId, actingSubject: readId }, { additionalProperties: false }),
-      response: { 200: creditResult, 201: creditResult, 202: pendingOperation, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/agent-credits"].post, { 200: creditResult, 201: creditResult, 202: pendingOperation, ...workReadProblems }, 'POST'),
     }, async ({ request, params: path, body }) => {
       try {
         const result = await createNativeCredit(work, request, { ...body, work: `https://rezics.com/id/${path.id}` },

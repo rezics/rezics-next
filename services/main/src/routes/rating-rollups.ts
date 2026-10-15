@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { readProblems } from '../api-responses.ts';
@@ -14,7 +15,7 @@ import { commandError, problem } from './problems.ts';
 export function ratingRollupRoutes(work: MainWorkDependencies) {
   return new Elysia().post('/v1/rating-rollups', {
     body: rollupInput,
-    response: { 200: rollupResult, ...readProblems, 422: problemResult(422) },
+    response: transportResponses(openApiOperations["/v1/rating-rollups"].post, { 200: rollupResult, ...readProblems, 422: problemResult(422) }, 'POST'),
   }, async ({ body, request }) => {
     try {
       if (!work.targetRatingInventory) throw new RatingAggregateUnavailable('Target inventory unavailable');

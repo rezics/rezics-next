@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { documentSnapshotSchema } from '../api-document.ts';
 import { readId } from '../modules/work/read-contract.ts';
@@ -17,7 +18,7 @@ export function authoredPostRoutes(deps: MainWorkDependencies) {
     body: t.Object({ profile: t.Literal('authored-post-v1'),
       title: t.Object({ value: t.String({ minLength: 1, maxLength: 200 }), language: languageTagSchema(35) }),
       language: languageTagSchema(35), document: documentSnapshotSchema, actingSubject: readId }, { additionalProperties: false }),
-    response: { 200: result, 201: result, ...writeProblems },
+    response: transportResponses(openApiOperations["/v1/posts"].post, { 200: result, 201: result, ...writeProblems }, 'POST'),
   }, async ({ request, body }) => {
     const key = request.headers.get('idempotency-key');
     if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');

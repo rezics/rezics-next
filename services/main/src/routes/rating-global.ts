@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { judgmentScale, SCALED_GLOBAL_CONTEXT } from '../modules/rating/scale.ts';
 import { Elysia, t } from 'elysia';
 import { readerLanguages } from '../modules/display-language/select.ts';
@@ -44,7 +45,7 @@ export function globalRatingRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/global-rating-contexts', {
       body: globalContextInput,
-      response: { 200: globalContextWrite, 201: globalContextWrite, 202: pendingOperation, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/global-rating-contexts"].post, { 200: globalContextWrite, 201: globalContextWrite, 202: pendingOperation, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
@@ -60,7 +61,7 @@ export function globalRatingRoutes(work: MainWorkDependencies) {
     .get('/v1/global-rating-contexts/:id', {
       params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       query: t.Object(questionLanguagesQuery, { additionalProperties: false }),
-      response: { 200: t.Object({ ...globalContextRead.properties, ...questionReadFields }), ...readProblems },
+      response: transportResponses(openApiOperations["/v1/global-rating-contexts/{id}"].get, { 200: t.Object({ ...globalContextRead.properties, ...questionReadFields }), ...readProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(work.environment.fuseki, work.environment.lineage);
@@ -73,8 +74,8 @@ export function globalRatingRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/global-rating-observations', {
       body: globalObservationInput,
-      response: { 200: globalObservationWrite, 201: globalObservationWrite, 202: pendingOperation,
-        ...writeProblems, 409: t.Union([staleRating, problemResult(409)]) },
+      response: transportResponses(openApiOperations["/v1/global-rating-observations"].post, { 200: globalObservationWrite, 201: globalObservationWrite, 202: pendingOperation,
+        ...writeProblems, 409: t.Union([staleRating, problemResult(409)]) }, 'POST'),
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
@@ -128,7 +129,7 @@ export function globalRatingRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/global-rating-aggregates', {
       body: globalAggregateInput,
-      response: { 200: globalAggregateResult, ...readProblems, 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/global-rating-aggregates"].post, { 200: globalAggregateResult, ...readProblems, 422: problemResult(422) }, 'POST'),
     }, async ({ body }) => {
       try {
         const result = await queryGlobalRatingAggregate(work.environment, inventory(work), body);
@@ -137,7 +138,7 @@ export function globalRatingRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/rating-syntheses', {
       body: synthesisInput,
-      response: { 200: synthesisResult, ...readProblems, 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/rating-syntheses"].post, { 200: synthesisResult, ...readProblems, 422: problemResult(422) }, 'POST'),
     }, async ({ body }) => {
       try {
         const result = await queryRealmGlobalSynthesis(work.environment, inventory(work), body);

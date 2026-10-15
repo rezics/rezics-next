@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -76,8 +77,8 @@ export function packageNixRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/package-resolutions/nix', {
       body: requestSchema,
-      response: { 200: writeSchema, 201: writeSchema, ...writeProblems,
-        422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/package-resolutions/nix"].post, { 200: writeSchema, 201: writeSchema, ...writeProblems,
+        422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.packageNixResolutions) return problem(503, 'nix_resolution_unavailable',
@@ -94,7 +95,7 @@ export function packageNixRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/package-resolutions/nix/:resolution', {
       params: t.Object({ resolution: groupUuid }),
-      response: { 200: resolutionSchema, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/package-resolutions/nix/{resolution}"].get, { 200: resolutionSchema, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.packageNixResolutions) return problem(503, 'nix_resolution_unavailable',

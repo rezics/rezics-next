@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { CONTENT_TEXT_COST } from '../../../content/src/document-body.ts';
 import { Elysia, t } from 'elysia';
 import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
@@ -225,7 +226,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         author: t.Optional(groupedNative), realm: t.Optional(groupedNative),
         limit: t.Optional(t.Integer({ minimum: 1, maximum: RANKED_CATALOGUE_COST.pageSize })),
         cursor: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
-      response: { 200: t.Object({ profile: t.Literal('public-catalogue-ranked-v1'),
+      response: transportResponses(openApiOperations["/v1/search/catalogue"].get, { 200: t.Object({ profile: t.Literal('public-catalogue-ranked-v1'),
         resultGrain: t.Literal('mainVersion'), retrieval: t.Literal('ranked'),
         context: t.Union([t.Literal('main-version-default'), t.Object({ kind: t.Literal('realm-local'), id: groupedNative })]),
         count: t.Object({ value: t.Integer({ minimum: 0 }),
@@ -234,7 +235,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         next: t.Nullable(t.String({ maxLength: 2048 })), indexGeneration: t.String(),
         sourcePosition: t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() }) }),
         400: problemResult(400), 404: problemResult(404), 409: problemResult(409),
-        422: problemResult(422), 503: problemResult(503) },
+        422: problemResult(422), 503: problemResult(503) }, 'GET'),
     }, async ({ query, request }) => {
       try {
         const result = await readerSnapshot(request, () => withSearchGraphSnapshot(work.environment, async () => {
@@ -267,14 +268,14 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
       query: t.Object({ prefix: t.String({ minLength: 1, maxLength: 80 }),
         language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$', maxLength: 35 })) },
       { additionalProperties: false }),
-      response: { 200: t.Object({ profile: t.Literal('public-work-typeahead-v1'),
+      response: transportResponses(openApiOperations["/v1/search/typeahead"].get, { 200: t.Object({ profile: t.Literal('public-work-typeahead-v1'),
         items: t.Array(t.Object({ work: t.String(), mainVersion: t.String(), title: readName,
           cover: readAvatar, types: t.Array(t.String(), { maxItems: 3 }),
           authors: t.Array(discoveryCredit, { maxItems: 3 }),
           matchedField: t.Union([t.Literal('title'), t.Literal('credit')]),
           matchedText: t.String(), matchedLanguage: t.Nullable(t.String()) }), { maxItems: 10 }),
         hasMore: t.Boolean(), sourcePosition: t.Object({ dataEpoch: t.String(), sequence: t.String() }) }),
-        400: problemResult(400), 422: problemResult(422), 503: problemResult(503) },
+        400: problemResult(400), 422: problemResult(422), 503: problemResult(503) }, 'GET'),
     }, async ({ query, request }) => {
       try {
         const prefix = normalizedSearchText(query.prefix);
@@ -297,7 +298,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         phrase: t.String({ minLength: 2, maxLength: 80 }),
       }, { additionalProperties: false }),
-      response: { 400: problemResult(400), 426: problemResult(426), 503: problemResult(503) },
+      response: transportResponses(openApiOperations["/v1/private-queries"].post, { 400: problemResult(400), 426: problemResult(426), 503: problemResult(503) }, 'POST'),
     }, () => work.privateSearch
       // An HTTP response has no per-response receipt or cancellation in this
       // runtime; results travel only over the receipt-fenced socket below.
@@ -429,9 +430,9 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         ratingContext: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         minimumMeanTimes10: t.Integer({ minimum: 10, maximum: 100 }),
       }, { additionalProperties: false })]),
-      response: { 200: publicQueryResult, 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
+      response: transportResponses(openApiOperations["/v1/queries"].post, { 200: publicQueryResult, 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
         404: problemResult(404), 422: problemResult(422),
-        500: problemResult(500), 503: problemResult(503) },
+        500: problemResult(500), 503: problemResult(503) }, 'POST'),
     }, async ({ body, request }) => {
       const diagnostics: SearchAttemptDiagnostic[] | undefined = process.env.REZICS_LOAD_RUN_ID ? [] : undefined;
       try {
@@ -516,9 +517,9 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
     })
     .post('/v1/queries/page', {
       body: publicPhrasePageRequest,
-      response: { 200: publicPhrasePageResult, 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
+      response: transportResponses(openApiOperations["/v1/queries/page"].post, { 200: publicPhrasePageResult, 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
         404: problemResult(404), 409: problemResult(409), 422: problemResult(422),
-        500: problemResult(500), 503: problemResult(503) },
+        500: problemResult(500), 503: problemResult(503) }, 'POST'),
     }, async ({ body, request }) => {
       const diagnostics: SearchAttemptDiagnostic[] | undefined = process.env.REZICS_LOAD_RUN_ID ? [] : undefined;
       try {

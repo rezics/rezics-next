@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { logWorkerFault } from '@rezics/observability/log';
 import { ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
@@ -105,7 +106,7 @@ export function erasureRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/erasures', {
       body: contentErasureBody,
-      response: { 200: erasureResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/erasures"].post, { 200: erasureResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.erasures) return problem(503, 'erasure_unavailable', 'Erasure owner is unavailable');
@@ -121,7 +122,7 @@ export function erasureRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/erasures/:erasureId', {
       params: t.Object({ erasureId: groupUuid }),
-      response: { 200: erasureResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/erasures/{erasureId}"].get, { 200: erasureResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.erasures) return problem(503, 'erasure_unavailable', 'Erasure owner is unavailable');

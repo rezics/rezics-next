@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia } from 'elysia';
 import {
   ratingPopulationsPage,
@@ -14,7 +15,7 @@ export function ratingPopulationRoutes(work: MainWorkDependencies) {
     '/v1/rating-populations',
     {
       query: ratingPopulationsQuery,
-      response: { 200: ratingPopulationsPage, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/rating-populations"].get, { 200: ratingPopulationsPage, ...workReadProblems }, 'GET'),
     },
     async ({ request, query }) => {
       try {

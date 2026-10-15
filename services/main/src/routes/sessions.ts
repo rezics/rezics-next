@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { InvalidSession, SESSION_COST, SessionConflict, SessionDenied, SessionMissing, StaleSession,
@@ -55,8 +56,8 @@ export function sessionsRoutes(work: MainWorkDependencies) {
     .get('/v1/me/sessions', { query: t.Object({ actingSubject: readId,
       target: t.Optional(readId), work: t.Optional(readId), limit: t.Optional(t.Integer({ minimum: 1, maximum: SESSION_COST.page })),
       cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) }, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(sessionState, { maxItems: SESSION_COST.page }),
-        nextCursor: t.Nullable(t.String()) }), ...errors },
+      response: transportResponses(openApiOperations["/v1/me/sessions"].get, { 200: t.Object({ items: t.Array(sessionState, { maxItems: SESSION_COST.page }),
+        nextCursor: t.Nullable(t.String()) }), ...errors }, 'GET'),
     }, async ({ request, query }) => {
       if (!work.sessions) return problem(503, 'session_unavailable', 'Sessions are unavailable');
       try {
@@ -67,7 +68,7 @@ export function sessionsRoutes(work: MainWorkDependencies) {
       } catch (error) { return failure(error); }
     })
     .post('/v1/me/sessions', { body: t.Object({ ...command, target: readId }, { additionalProperties: false }),
-      response: { 201: sessionResult, ...errors },
+      response: transportResponses(openApiOperations["/v1/me/sessions"].post, { 201: sessionResult, ...errors }, 'POST'),
     }, async ({ request, body }) => {
       if (!work.sessions) return problem(503, 'session_unavailable', 'Sessions are unavailable');
       try {
@@ -83,7 +84,7 @@ export function sessionsRoutes(work: MainWorkDependencies) {
       } catch (error) { return failure(error); }
     })
     .patch('/v1/me/sessions/:id', { params: t.Object({ id: readUuid }),
-      body: t.Object(command, { additionalProperties: false }), response: { 200: sessionResult, ...errors },
+      body: t.Object(command, { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/me/sessions/{id}"].patch, { 200: sessionResult, ...errors }, 'PATCH'),
     }, async ({ request, params, body }) => {
       if (!work.sessions) return problem(503, 'session_unavailable', 'Sessions are unavailable');
       try {

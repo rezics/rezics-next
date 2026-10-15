@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -80,7 +81,7 @@ export function recommendationRoutes(work: MainWorkDependencies & Recommendation
       body: t.Object({ profile: t.Literal('ranking-generation-build-v1'), actingSubject: iri,
         basis: rankingBasis, partitionCount: t.Integer({ minimum: 1, maximum: 256 }) },
       { additionalProperties: false }),
-      response: { 200: generationView, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/recommendations/generation-builds"].post, { 200: generationView, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['rating:configure']);
@@ -95,7 +96,7 @@ export function recommendationRoutes(work: MainWorkDependencies & Recommendation
     .get('/v1/recommendations/generations/:generation', {
       params: t.Object({ generation: uuid }),
       query: t.Object({ actingSubject: iri }, { additionalProperties: false }),
-      response: { 200: generationView, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/recommendations/generations/{generation}"].get, { 200: generationView, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['rating:configure']);
@@ -108,8 +109,8 @@ export function recommendationRoutes(work: MainWorkDependencies & Recommendation
     .post('/v1/recommendations/generation-activations', {
       body: t.Object({ profile: t.Literal('ranking-generation-activation-v1'), actingSubject: iri,
         generation: uuid, expectedHeadRevision: t.Nullable(decimal) }, { additionalProperties: false }),
-      response: { 200: t.Object({ profile: t.Literal('ranking-generation-activation-v1'), generation: uuid,
-        headRevision: decimal, predecessor: t.Nullable(uuid), replayed: t.Boolean() }), ...withMissing },
+      response: transportResponses(openApiOperations["/v1/recommendations/generation-activations"].post, { 200: t.Object({ profile: t.Literal('ranking-generation-activation-v1'), generation: uuid,
+        headRevision: decimal, predecessor: t.Nullable(uuid), replayed: t.Boolean() }), ...withMissing }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['rating:configure']);
@@ -127,7 +128,7 @@ export function recommendationRoutes(work: MainWorkDependencies & Recommendation
     .post('/v1/recommendations/queries', {
       body: t.Object({ profile: t.Literal('ranking-page-v1'), actingSubject: iri, basis: rankingBasis,
         pageSize: t.Integer({ minimum: 1, maximum: MAX_RANKING_PAGE }) }, { additionalProperties: false }),
-      response: { 200: rankingPage, ...authorizedReadProblems, 409: problemResult(409) },
+      response: transportResponses(openApiOperations["/v1/recommendations/queries"].post, { 200: rankingPage, ...authorizedReadProblems, 409: problemResult(409) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['rating:read']);
@@ -142,7 +143,7 @@ export function recommendationRoutes(work: MainWorkDependencies & Recommendation
       body: t.Object({ profile: t.Literal('ranking-page-v1'), actingSubject: iri, basis: rankingBasis,
         pageSize: t.Integer({ minimum: 1, maximum: MAX_RANKING_PAGE }),
         continuation: t.String({ minLength: 1, maxLength: 1024 }) }, { additionalProperties: false }),
-      response: { 200: rankingPage, ...authorizedReadProblems, 409: problemResult(409) },
+      response: transportResponses(openApiOperations["/v1/recommendations/pages"].post, { 200: rankingPage, ...authorizedReadProblems, 409: problemResult(409) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['rating:read']);

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { logWorkerFault } from '@rezics/observability/log';
 import { Elysia, t } from 'elysia';
 import { pageQuery, readId, readLanguage, readUuid } from '../modules/work/read-contract.ts';
@@ -83,7 +84,7 @@ export function realmReadRoutes(work: MainWorkDependencies) {
     .get('/v1/realms/:realm/join-page', { params,
       query: t.Object({ actingSubject: t.Optional(readId), language: t.Optional(readLanguage),
         languages: t.Optional(t.String({ maxLength: 720 })) }, { additionalProperties: false }),
-      response: { 200: realmJoinPage, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/join-page"].get, { 200: realmJoinPage, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try { return await read(request, query, id(path.realm), async session => {
         const value = await readRealmLanding(session, id(path.realm));
@@ -94,7 +95,7 @@ export function realmReadRoutes(work: MainWorkDependencies) {
     .get('/v1/realms/:realm', {
       params, query: t.Object({ actingSubject: t.Optional(readId), language: t.Optional(readLanguage),
         languages: t.Optional(t.String({ maxLength: 720 })) }, { additionalProperties: false }),
-      response: { 200: realmHeader, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}"].get, { 200: realmHeader, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try { return await read(request, query, id(path.realm),
         session => readRealmHeader(session, id(path.realm))); }
@@ -105,7 +106,7 @@ export function realmReadRoutes(work: MainWorkDependencies) {
         + 'Selects an eligible official Zone first; otherwise selects the first eligible Zone in the attachment inventory’s ascending Zone IRI order. '
         + 'Returns 404 when no attached Zone is eligible for this reader.' },
       params, query: t.Object({ actingSubject: t.Optional(readId) }, { additionalProperties: false }),
-      response: { 200: realmZoneRead, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/zone"].get, { 200: realmZoneRead, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try { return await read(request, query, id(path.realm),
         session => readRealmZone(session, id(path.realm))); }
@@ -114,14 +115,14 @@ export function realmReadRoutes(work: MainWorkDependencies) {
     .get('/v1/realms/:realm/works', {
       params, query: t.Object({ ...page.properties, language: t.Optional(readLanguage) },
         { additionalProperties: false }),
-      response: { 200: realmWorksPage, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/works"].get, { 200: realmWorksPage, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try { return await read(request, query, id(path.realm),
         session => readRealmWorks(session, id(path.realm))); }
       catch (error) { return realmReadError(error); }
     })
     .get('/v1/realms/:realm/decisions', { params, query: page,
-      response: { 200: realmDecisionsPage, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/decisions"].get, { 200: realmDecisionsPage, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try { return await read(request, query, id(path.realm),
         session => readRealmDecisions(session, id(path.realm))); }
@@ -130,7 +131,7 @@ export function realmReadRoutes(work: MainWorkDependencies) {
     .get('/v1/realms/:realm/decisions/:decision', {
       params: t.Object({ realm: readUuid, decision: readUuid }),
       query: t.Object({ actingSubject: t.Optional(readId) }, { additionalProperties: false }),
-      response: { 200: realmDecisionRead, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/decisions/{decision}"].get, { 200: realmDecisionRead, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try { return await read(request, query, id(path.realm),
         session => readRealmDecision(session, id(path.realm), id(path.decision))); }

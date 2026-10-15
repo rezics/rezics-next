@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { Value } from 'typebox/value';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -48,12 +49,12 @@ export function wikiHistoryRoutes(work: MainWorkDependencies) {
           ]),
         ),
       }),
-      response: {
+      response: transportResponses(openApiOperations["/v1/wiki/{work}/history"].get, {
         200: WikiHistoryResponseSchema,
         ...authorizedReadProblems,
         409: problemResult(409),
         422: problemResult(422),
-      },
+      }, 'GET'),
     },
     async ({ request, params, query }) => {
       try {

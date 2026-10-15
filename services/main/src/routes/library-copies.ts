@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import type { PoolClient } from 'pg';
 import { verifyCommandAccount, type VerifiedAccountAssertion } from '../modules/account/verify-assertion.ts';
 import { Elysia, t } from 'elysia';
@@ -79,8 +80,8 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
   };
   return new Elysia()
     .get('/v1/works/:id/copies', { params: t.Object({ id: readUuid }), query: t.Object(pageQuery, closed),
-      response: { 200: t.Object({ items: t.Array(copyState, { maxItems: LIBRARY_RECORD_COST.page }),
-        nextCursor: t.Nullable(t.String()), complete: t.Boolean() }, closed), ...errors },
+      response: transportResponses(openApiOperations["/v1/works/{id}/copies"].get, { 200: t.Object({ items: t.Array(copyState, { maxItems: LIBRARY_RECORD_COST.page }),
+        nextCursor: t.Nullable(t.String()), complete: t.Boolean() }, closed), ...errors }, 'GET'),
     }, async ({ request, params, query }) => {
       if (!deps.libraryCopies) return unavailable();
       try {
@@ -91,7 +92,7 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
       } catch (error) { return failure(error); }
     })
     .post('/v1/me/library-copies', { body: t.Object({ ...command, release: readId, ...copyChanges }, closed),
-      response: { 201: copyResult, ...errors },
+      response: transportResponses(openApiOperations["/v1/me/library-copies"].post, { 201: copyResult, ...errors }, 'POST'),
     }, async ({ request, body }) => {
       if (!deps.libraryCopies) return unavailable();
       try {
@@ -108,7 +109,7 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
       } catch (error) { return failure(error); }
     })
     .patch('/v1/me/library-copies/:id', { params: t.Object({ id: readUuid }),
-      body: t.Object({ ...command, ...copyChanges }, closed), response: { 200: copyResult, ...errors },
+      body: t.Object({ ...command, ...copyChanges }, closed), response: transportResponses(openApiOperations["/v1/me/library-copies/{id}"].patch, { 200: copyResult, ...errors }, 'PATCH'),
     }, async ({ request, params, body }) => {
       if (!deps.libraryCopies) return unavailable();
       try {
@@ -121,7 +122,7 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
       } catch (error) { return failure(error); }
     })
     .delete('/v1/me/library-copies/:id', { params: t.Object({ id: readUuid }), body: t.Object(command, closed),
-      response: { 200: copyResult, ...errors },
+      response: transportResponses(openApiOperations["/v1/me/library-copies/{id}"].delete, { 200: copyResult, ...errors }, 'DELETE'),
     }, async ({ request, params, body }) => {
       if (!deps.libraryCopies) return unavailable();
       try {
@@ -134,8 +135,8 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     })
     .get('/v1/me/library-loans', { query: t.Object({ ...pageQuery,
       state: t.Optional(t.Union([t.Literal('active'), t.Literal('overdue'), t.Literal('returned')])) }, closed),
-      response: { 200: t.Object({ items: t.Array(loanView, { maxItems: LIBRARY_RECORD_COST.page }),
-        nextCursor: t.Nullable(t.String()), complete: t.Boolean() }, closed), ...errors },
+      response: transportResponses(openApiOperations["/v1/me/library-loans"].get, { 200: t.Object({ items: t.Array(loanView, { maxItems: LIBRARY_RECORD_COST.page }),
+        nextCursor: t.Nullable(t.String()), complete: t.Boolean() }, closed), ...errors }, 'GET'),
     }, async ({ request, query }) => {
       if (!deps.libraryLoans) return unavailable();
       try {
@@ -146,7 +147,7 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
       } catch (error) { return failure(error); }
     })
     .post('/v1/me/library-loans', { body: t.Object({ ...command, copy: readId, direction: loanDirection,
-      counterparty: libraryParty, startedAt: libraryTime, dueAt: libraryTime }, closed), response: { 201: loanResult, ...errors },
+      counterparty: libraryParty, startedAt: libraryTime, dueAt: libraryTime }, closed), response: transportResponses(openApiOperations["/v1/me/library-loans"].post, { 201: loanResult, ...errors }, 'POST'),
     }, async ({ request, body }) => {
       if (!deps.libraryLoans) return unavailable();
       try {
@@ -158,7 +159,7 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
       } catch (error) { return failure(error); }
     })
     .post('/v1/me/library-loans/:id/extend', { params: t.Object({ id: readUuid }),
-      body: t.Object({ ...command, dueAt: libraryTime }, closed), response: { 200: loanResult, ...errors },
+      body: t.Object({ ...command, dueAt: libraryTime }, closed), response: transportResponses(openApiOperations["/v1/me/library-loans/{id}/extend"].post, { 200: loanResult, ...errors }, 'POST'),
     }, async ({ request, params, body }) => {
       if (!deps.libraryLoans) return unavailable();
       try {
@@ -170,7 +171,7 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
       } catch (error) { return failure(error); }
     })
     .post('/v1/me/library-loans/:id/return', { params: t.Object({ id: readUuid }), body: t.Object(command, closed),
-      response: { 200: loanResult, ...errors },
+      response: transportResponses(openApiOperations["/v1/me/library-loans/{id}/return"].post, { 200: loanResult, ...errors }, 'POST'),
     }, async ({ request, params, body }) => {
       if (!deps.libraryLoans) return unavailable();
       try {

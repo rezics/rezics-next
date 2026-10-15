@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { AUTHOR_PAGE_COST, authorWorksPage, externalAuthorRead } from '../modules/author-page/contract.ts';
 import { readExternalAuthor, readExternalAuthorWorks } from '../modules/author-page/read.ts';
@@ -32,7 +33,7 @@ export function authorRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/authors/open-library/:author', { params, detail,
       query: t.Object({ ...readQuery, limit: pageQuery.limit }, { additionalProperties: false }),
-      response: { 200: externalAuthorRead, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/authors/open-library/{author}"].get, { 200: externalAuthorRead, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try {
         return response(await workRead(work, request, query,
@@ -41,7 +42,7 @@ export function authorRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/authors/open-library/:author/works', { params, detail,
       query: t.Object(pageQuery, { additionalProperties: false }),
-      response: { 200: authorWorksPage, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/authors/open-library/{author}/works"].get, { 200: authorWorksPage, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try { return response(await workRead(work, request, query, s => readExternalAuthorWorks(s, `/authors/${path.author}`))); }
       catch (error) { return readError(error); }

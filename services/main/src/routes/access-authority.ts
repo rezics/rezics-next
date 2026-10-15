@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { PlatformGrantDenied, PlatformGrantStale, PlatformGrantConflict, PlatformGrantUnavailable }
   from '../modules/access/platform-grants.ts';
@@ -231,7 +232,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/access/group-scope', {
       query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
-      response: { 200: groupScopeResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/group-scope"].get, { 200: groupScopeResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -244,7 +245,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/group-changes', {
       body: groupChangeBody,
-      response: { 200: groupChangeResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/group-changes"].post, { 200: groupChangeResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -290,7 +291,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/group-impact-proposals', {
       body: groupImpactBody,
-      response: { 200: groupImpactPreviewResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/group-impact-proposals"].post, { 200: groupImpactPreviewResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -311,7 +312,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
     .get('/v1/access/group-impact-proposals/:proposalId', {
       params: t.Object({ proposalId: groupUuid }),
       query: t.Object({ approverSubject: groupAgent }, { additionalProperties: false }),
-      response: { 200: groupImpactPreviewResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/group-impact-proposals/{proposalId}"].get, { 200: groupImpactPreviewResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:approve']);
@@ -324,7 +325,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/group-impact-approvals', {
       body: groupImpactApprovalBody,
-      response: { 200: groupImpactApprovalResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/group-impact-approvals"].post, { 200: groupImpactApprovalResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:approve']);
@@ -343,7 +344,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
     .get('/v1/access/grants', {
       query: t.Object({ issuerSubject: groupAgent, after: t.Optional(groupUuid), profile: t.Optional(t.Literal('platform-grants-v1')) },
         { additionalProperties: false }),
-      response: { 200: t.Union([grantPageResult,platformGrantPage]), ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/grants"].get, { 200: t.Union([grantPageResult,platformGrantPage]), ...authorizedReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:grant']);
@@ -359,7 +360,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
     .get('/v1/access/grants/:grantId', {
       params: t.Object({ grantId: groupUuid }),
       query: t.Object({ issuerSubject: groupAgent, profile: t.Optional(t.Literal('platform-grant-v1')) }, { additionalProperties: false }),
-      response: { 200: t.Union([grantReadResult,platformGrantResult]), ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/grants/{grantId}"].get, { 200: t.Union([grantReadResult,platformGrantResult]), ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:grant']);
@@ -374,7 +375,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/grant-changes', {
       body: grantChangeBody,
-      response: { 200: t.Union([grantChangeResult,platformGrantChangeResult]), ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/grant-changes"].post, { 200: t.Union([grantChangeResult,platformGrantChangeResult]), ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:grant']);
@@ -405,7 +406,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/organization-content-draft-grants', {
       body: orgContentDraftGrantBody,
-      response: { 200: orgContentDraftGrantResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/organization-content-draft-grants"].post, { 200: orgContentDraftGrantResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:grant']);
@@ -426,7 +427,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/access/organization-management', {
       query: managedOrgQuery,
-      response: { 200: managedOrgStateResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/organization-management"].get, { 200: managedOrgStateResult, ...writeProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -438,7 +439,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/access/managed-organization-grants/:grantId', {
       params: t.Object({ grantId: managedOrgUuid }), query: managedOrgReadQuery,
-      response: { 200: managedOrgReadResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/managed-organization-grants/{grantId}"].get, { 200: managedOrgReadResult, ...writeProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -449,7 +450,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
       } catch (error) { return commandError(error); }
     })
     .post('/v1/access/managed-organization-grants', {
-      body: managedOrgChangeBody, response: { 200: managedOrgChangeResult, ...writeProblems },
+      body: managedOrgChangeBody, response: transportResponses(openApiOperations["/v1/access/managed-organization-grants"].post, { 200: managedOrgChangeResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -464,7 +465,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
       } catch (error) { return commandError(error); }
     })
     .post('/v1/access/organization-roster-policy', {
-      body: orgRosterPolicyBody, response: { 200: orgRosterPolicyResult, ...writeProblems },
+      body: orgRosterPolicyBody, response: transportResponses(openApiOperations["/v1/access/organization-roster-policy"].post, { 200: orgRosterPolicyResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -480,7 +481,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/org-realm-proposals', {
       body: orgRealmProposalBody,
-      response: { 200: orgRealmProposalResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/org-realm-proposals"].post, { 200: orgRealmProposalResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -496,7 +497,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/org-realm-changes', {
       body: orgRealmChangeBody,
-      response: { 200: orgRealmChangeResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/org-realm-changes"].post, { 200: orgRealmChangeResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -512,7 +513,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/org-realm-moves', {
       body: orgRealmMoveBody,
-      response: { 200: orgRealmMoveResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/org-realm-moves"].post, { 200: orgRealmMoveResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -529,7 +530,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
     .get('/v1/access/org-realm-participation', {
       query: t.Object({ ...orgRealmTuple,
         side: t.Union([t.Literal('organization'), t.Literal('realm')]) }, { additionalProperties: false }),
-      response: { 200: orgRealmReadResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/org-realm-participation"].get, { 200: orgRealmReadResult, ...writeProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);

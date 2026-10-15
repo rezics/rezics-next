@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { pendingOperation } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
@@ -27,12 +28,12 @@ export function webPublicationRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/works/:id/web-publications/:release/snapshots', {
       params: t.Object({ id: readUuid, release: readUuid }), body: snapshotWrite,
-      response: { 200: t.Object({ id: readId, publication: readId, work: readId,
+      response: transportResponses(openApiOperations["/v1/works/{id}/web-publications/{release}/snapshots"].post, { 200: t.Object({ id: readId, publication: readId, work: readId,
         acquisition: t.Union([t.Literal('fixture'), t.Literal('fetch')]), fetchedAt: t.String(),
         byteDigest: t.String(), byteLength: t.Integer(), mediaType: t.String(),
         coverage: t.Object({ scope: t.String(), complete: t.Boolean() }),
         receipt: t.String(), sourcePosition: readPosition, replayed: t.Boolean() }),
-        202: pendingOperation, ...writeProblems },
+        202: pendingOperation, ...writeProblems }, 'POST'),
     }, async ({ request, params: path, body }) => {
       const key = request.headers.get('idempotency-key');
       if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {

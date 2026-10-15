@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { transportResponses } from '../../transport-responses.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { problem } from '../../routes/problems.ts';
 import { workReadError, workReadProblems } from '../../routes/work-reads.ts';
@@ -22,6 +23,14 @@ import {
 import { discoveryBasis, type DiscoveryBasis } from './contract.ts';
 import { admitDiscoveryBasis, projectDiscoveryBatch } from './source.ts';
 import type { DiscoveryGeneration } from './store.ts';
+
+export const discoveryManagementOperations = {
+  '/v1/discovery/generation-builds': { post: { exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/discovery/generations/{generation}': { get: { exposure: 'platform:platform-admin', rateLimitFamily: 'read', bearer: true } },
+  '/v1/discovery/generations/{generation}/advance': { post: { exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true } },
+  '/v1/discovery/generations/{generation}/cancel': { post: { exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true } },
+  '/v1/discovery/generation-activations': { post: { exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+} as const;
 
 export function discoveryError(error: unknown): Response {
   if (error instanceof RecommendationDenied)
@@ -110,7 +119,7 @@ export function discoveryManagementRoutes(work: MainWorkDependencies) {
           },
           { additionalProperties: false },
         ),
-        response: { 200: viewSchema, ...workReadProblems },
+        response: transportResponses(discoveryManagementOperations["/v1/discovery/generation-builds"].post, { 200: viewSchema, ...workReadProblems }, 'POST'),
       },
       async ({ request, body }) => {
         try {
@@ -132,7 +141,7 @@ export function discoveryManagementRoutes(work: MainWorkDependencies) {
         detail,
         params: t.Object({ generation: readUuid }),
         query: t.Object({ actingSubject: readId }, { additionalProperties: false }),
-        response: { 200: viewSchema, ...workReadProblems },
+        response: transportResponses(discoveryManagementOperations["/v1/discovery/generations/{generation}"].get, { 200: viewSchema, ...workReadProblems }, 'GET'),
       },
       async ({ request, params, query }) => {
         try {
@@ -159,7 +168,7 @@ export function discoveryManagementRoutes(work: MainWorkDependencies) {
           { actingSubject: readId, expectedCheckpoint: t.String({ maxLength: 128 }) },
           { additionalProperties: false },
         ),
-        response: { 200: viewSchema, ...workReadProblems },
+        response: transportResponses(discoveryManagementOperations["/v1/discovery/generations/{generation}/advance"].post, { 200: viewSchema, ...workReadProblems }, 'POST'),
       },
       async ({ request, params, body }) => {
         try {
@@ -206,7 +215,7 @@ export function discoveryManagementRoutes(work: MainWorkDependencies) {
         detail,
         params: t.Object({ generation: readUuid }),
         body: t.Object({ actingSubject: readId }, { additionalProperties: false }),
-        response: { 200: viewSchema, ...workReadProblems },
+        response: transportResponses(discoveryManagementOperations["/v1/discovery/generations/{generation}/cancel"].post, { 200: viewSchema, ...workReadProblems }, 'POST'),
       },
       async ({ request, params, body }) => {
         try {
@@ -237,10 +246,10 @@ export function discoveryManagementRoutes(work: MainWorkDependencies) {
           },
           { additionalProperties: false },
         ),
-        response: {
+        response: transportResponses(discoveryManagementOperations["/v1/discovery/generation-activations"].post, {
           200: t.Object({ generation: readUuid, headRevision: decimal, replayed: t.Boolean() }),
           ...workReadProblems,
-        },
+        }, 'POST'),
       },
       async ({ request, body }) => {
         try {

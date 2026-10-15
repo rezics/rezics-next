@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { readId, readQuery, readUuid } from '../modules/work/read-contract.ts';
 import { workRead, decodeReadCursor, encodeReadCursor, WorkReadInvalid } from '../modules/work/read-session.ts';
@@ -48,7 +49,7 @@ export function readingPositionsRoutes(work: MainWorkDependencies) {
       limit: t.Optional(t.Numeric({ minimum: 1, maximum: READING_POSITION_COST.chooserPage, multipleOf: 1 })),
       around: t.Optional({ ...readId, description: 'Answer the chapters either side of this occurrence, in reading order, instead of a page. Each side is one bounded scan; `bound` means the window ran out, `none` the end of the order. A chapter the reader cannot see answers as one that does not exist. Takes `position` for `reached`, and no paging parameter.' }),
       firstSeen: t.Optional({ ...readId, description: 'Answer the first chapter the reader may see from where this record is revealed in the Work, at the selected position. A record the reader cannot see answers as one that does not exist.' }) }, { additionalProperties: false }),
-    response: { 200: readingPositionPage, ...workReadProblems } }, async ({ request, params, query }: {
+    response: transportResponses(openApiOperations["/v1/reading-positions/{work}"].get, { 200: readingPositionPage, ...workReadProblems }, 'GET') }, async ({ request, params, query }: {
       request: Request; params: { work: string }; query: { actingSubject?: string; language?: string;
         languages?: string; position?: string; cursor?: string; limit?: number; q?: string; around?: string; firstSeen?: string };
     }) => {

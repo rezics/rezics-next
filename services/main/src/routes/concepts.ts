@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { readProblems } from '../api-responses.ts';
 import { conceptPage, conceptWorksPage, conceptWorksQuery } from '../modules/concept-page/contract.ts';
@@ -26,9 +27,9 @@ export function conceptRoutes(work: MainWorkDependencies) {
     realm: t.Optional(readId), limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
     /** Replay lookup: also return isolated propositions the current scheme replaced. */
     isolated: t.Optional(t.Literal('true')),
-  }, { additionalProperties: false }), response: { 200: t.Object({ items: t.Array(t.Object({
+  }, { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/concepts"].get, { 200: t.Object({ items: t.Array(t.Object({
     concept: readId, label: t.String(), language: t.String(), realm: t.Nullable(readId),
-  }), { maxItems: 20 }), hasMore: t.Boolean() }), ...readProblems } }, async ({ query }) => {
+  }), { maxItems: 20 }), hasMore: t.Boolean() }), ...readProblems }, 'GET') }, async ({ query }) => {
     try { return Response.json(await searchConcepts(work.environment, { ...query, isolated: query.isolated === 'true' }),
       { headers: { 'cache-control': 'no-store' } }); }
     catch (error) {
@@ -38,14 +39,14 @@ export function conceptRoutes(work: MainWorkDependencies) {
     }
   }).get('/v1/concepts/:id', { params,
     query: t.Object({ language: t.Optional(readLanguage) }, { additionalProperties: false }),
-    response: { 200: conceptPage, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/concepts/{id}"].get, { 200: conceptPage, ...workReadProblems }, 'GET'),
   }, async ({ request, params: path, query }) => {
     try {
       return Response.json(await publicWorkRead(work, request, { language: query.language },
         session => readConcept(session, `https://rezics.com/id/${path.id}`)), { headers });
     } catch (error) { return workReadError(error); }
   }).get('/v1/concepts/:id/works', { params, query: conceptWorksQuery,
-    response: { 200: conceptWorksPage, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/concepts/{id}/works"].get, { 200: conceptWorksPage, ...workReadProblems }, 'GET'),
   }, async ({ request, params: path, query }) => {
     try {
       if (!work.discovery) throw new WorkReadUnavailable('Discovery owner is unavailable');

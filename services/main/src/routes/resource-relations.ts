@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { fusekiReadBudget, type FusekiClient } from '../infrastructure/fuseki.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
@@ -45,11 +46,11 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
         languages: t.Optional(t.String({ maxLength: 8192 })),
         limit: t.Optional(t.Integer({ minimum: 1, maximum: WORK_CONTINUITIES_COST.pageLimit })),
         cursor: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
-      response: { 200: t.Object({ profile: t.Literal('work-continuities-v1'), work: native,
+      response: transportResponses(openApiOperations["/v1/resources/{resource}/continuities"].get, { 200: t.Object({ profile: t.Literal('work-continuities-v1'), work: native,
         items: t.Array(t.Object({ key: native, iri: native, label: readName }, { additionalProperties: false }),
           { maxItems: WORK_CONTINUITIES_COST.pageLimit }), nextCursor: t.Nullable(t.String()),
         complete: t.Boolean(), sourcePosition: position }),
-      ...authorizedReadProblems, 409: problemResult(409) },
+      ...authorizedReadProblems, 409: problemResult(409) }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -69,8 +70,8 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
         sourceWork: native, sourceMainVersion: t.Nullable(native), sourceMainRevision: t.Nullable(native),
         kind: t.String({ maxLength: 128 }), evidence: t.String({ maxLength: 2048 }), actingSubject: native,
         corrects: t.Optional(native) }, { additionalProperties: false }),
-      response: { 200: receipt, 201: receipt, 202: pendingOperation, ...writeProblems,
-        404: problemResult(404), 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/resources/{resource}/derivations"].post, { 200: receipt, 201: receipt, 202: pendingOperation, ...writeProblems,
+        404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, params, body }) => {
       const key = request.headers.get('idempotency-key');
       if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
@@ -104,9 +105,9 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
       query: t.Object({ actingSubject: t.Optional(native), position: readingPositionQuery, frame: frameQuery, languages: t.Optional(t.String({ maxLength: 8192 })),
         limit: t.Optional(t.Integer({ minimum: 1, maximum: RELATION_PAGE_COST.pageLimit })),
         after: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
-      response: { 200: t.Object({ profile: t.Literal('resource-relations-v1'), resource: native,
+      response: transportResponses(openApiOperations["/v1/resources/{resource}/relations"].get, { 200: t.Object({ profile: t.Literal('resource-relations-v1'), resource: native,
         items: t.Array(entry), next: t.Nullable(t.String()), sourcePosition: position }), ...authorizedReadProblems,
-        409: problemResult(409) },
+        409: problemResult(409) }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);

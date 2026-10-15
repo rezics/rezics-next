@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { SourceIntakeConflict, SourceIntakeInvalid } from '../modules/source/intake.ts';
 import { authorNameProvenance } from '../modules/source/author-name.ts';
@@ -221,7 +222,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/sources/open-library/authors/:author/name', {
       params: t.Object({ author: t.String({ pattern: '^OL[1-9][0-9]{0,11}A$' }) }),
-      response: { 200: sourceAuthorNameResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/sources/open-library/authors/{author}/name"].get, { 200: sourceAuthorNameResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceAuthorNames) return problem(503, 'source_names_unavailable', 'Source names are unavailable');
@@ -239,7 +240,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
         t.Object({ action: t.Literal('remove'), expectedRevision: groupUuid,
           reason: t.String({ minLength: 1, maxLength: 500 }) }, { additionalProperties: false }),
       ]),
-      response: { 200: t.Object({ ...sourceAuthorNameResult.properties, replayed: t.Boolean() }), ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/sources/open-library/authors/{author}/name"].post, { 200: t.Object({ ...sourceAuthorNameResult.properties, replayed: t.Boolean() }), ...writeProblems }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.sourceAuthorNames) return problem(503, 'source_names_unavailable', 'Source names are unavailable');
@@ -258,9 +259,9 @@ export function sourceRoutes(work: MainWorkDependencies) {
         kind: t.Union([t.Literal('aggregate-score'), t.Literal('provider-user-score')]),
         scorePointer: t.String({ minLength: 1, maxLength: 200 }),
         userPointer: t.Nullable(t.String({ minLength: 1, maxLength: 200 })) }, { additionalProperties: false }),
-      response: { 200: t.Object({ statistic: sourceStatistic, replayed: t.Boolean() }),
+      response: transportResponses(openApiOperations["/v1/sources/statistics"].post, { 200: t.Object({ statistic: sourceStatistic, replayed: t.Boolean() }),
         201: t.Object({ statistic: sourceStatistic, replayed: t.Boolean() }),
-        ...writeProblems, 404: problemResult(404) },
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.sourceScores) return problem(503, 'source_statistic_unavailable', 'Source statistic owner is unavailable');
@@ -276,7 +277,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
       } catch (error) { return sourceStatisticError(error); }
     })
     .get('/v1/sources/statistics/:statistic', {
-      params: t.Object({ statistic: groupUuid }), response: { 200: sourceStatistic, ...authorizedReadProblems },
+      params: t.Object({ statistic: groupUuid }), response: transportResponses(openApiOperations["/v1/sources/statistics/{statistic}"].get, { 200: sourceStatistic, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceScores) return problem(503, 'source_statistic_unavailable', 'Source statistic owner is unavailable');
@@ -294,9 +295,9 @@ export function sourceRoutes(work: MainWorkDependencies) {
         fromRecord: groupAgent, toRecord: groupAgent, observation: groupAgent,
         evidencePointer: t.String({ minLength: 1, maxLength: 200 }) },
       { additionalProperties: false }),
-      response: { 200: t.Object({ change: providerIdentityChange, replayed: t.Boolean() }),
+      response: transportResponses(openApiOperations["/v1/sources/identity-changes"].post, { 200: t.Object({ change: providerIdentityChange, replayed: t.Boolean() }),
         201: t.Object({ change: providerIdentityChange, replayed: t.Boolean() }),
-        ...writeProblems, 404: problemResult(404) },
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.sourceProviderIdentity) return problem(503, 'source_identity_unavailable', 'Source identity owner is unavailable');
@@ -311,7 +312,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/sources/identity-changes/:change', {
       params: t.Object({ change: groupUuid }),
-      response: { 200: providerIdentityChange, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/sources/identity-changes/{change}"].get, { 200: providerIdentityChange, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceProviderIdentity) return problem(503, 'source_identity_unavailable', 'Source identity owner is unavailable');
@@ -327,9 +328,9 @@ export function sourceRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('source-identity-correction-proposal-v1'),
         change: groupAgent, fromTarget: groupAgent, toTarget: groupAgent },
       { additionalProperties: false }),
-      response: { 200: t.Object({ proposal: providerIdentityCorrection, replayed: t.Boolean() }),
+      response: transportResponses(openApiOperations["/v1/sources/identity-corrections"].post, { 200: t.Object({ proposal: providerIdentityCorrection, replayed: t.Boolean() }),
         201: t.Object({ proposal: providerIdentityCorrection, replayed: t.Boolean() }),
-        ...writeProblems, 404: problemResult(404) },
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.sourceProviderIdentity) return problem(503, 'source_identity_unavailable', 'Source identity owner is unavailable');
@@ -346,7 +347,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/sources/identity-corrections/:proposal', {
       params: t.Object({ proposal: groupUuid }),
-      response: { 200: providerIdentityCorrection, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/sources/identity-corrections/{proposal}"].get, { 200: providerIdentityCorrection, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceProviderIdentity) return problem(503, 'source_identity_unavailable', 'Source identity owner is unavailable');
@@ -362,8 +363,8 @@ export function sourceRoutes(work: MainWorkDependencies) {
       params: t.Object({ observation: groupUuid }),
       body: t.Object({ profile: t.Literal('open-library-work-map-v1') },
         { additionalProperties: false }),
-      response: { 200: sourceConversionWriteResult, 201: sourceConversionWriteResult,
-        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/sources/observations/{observation}/conversions/open-library-work"].post, { 200: sourceConversionWriteResult, 201: sourceConversionWriteResult,
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceConversions) {
@@ -381,8 +382,8 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/sources/conversions/:conversion', {
       params: t.Object({ conversion: groupUuid }),
-      response: { 200: sourceConversionResult, ...authorizedReadProblems,
-        422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/sources/conversions/{conversion}"].get, { 200: sourceConversionResult, ...authorizedReadProblems,
+        422: problemResult(422) }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceConversions) {
@@ -399,8 +400,8 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/sources/conversions/:base/drift/:candidate', {
       params: t.Object({ base: groupUuid, candidate: groupUuid }),
-      response: { 200: sourceDriftResult, ...authorizedReadProblems,
-        422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/sources/conversions/{base}/drift/{candidate}"].get, { 200: sourceDriftResult, ...authorizedReadProblems,
+        422: problemResult(422) }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceConversions) {
@@ -417,8 +418,8 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/sources/conversions/:base/child-correspondences/:candidate', {
       params: t.Object({ base: groupUuid, candidate: groupUuid }),
-      response: { 200: sourceChildCorrespondenceResult, ...authorizedReadProblems,
-        422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/sources/conversions/{base}/child-correspondences/{candidate}"].get, { 200: sourceChildCorrespondenceResult, ...authorizedReadProblems,
+        422: problemResult(422) }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceConversions) return problem(503, 'source_conversion_unavailable',
@@ -441,9 +442,9 @@ export function sourceRoutes(work: MainWorkDependencies) {
         candidateOccurrence: t.String({ pattern: '^urn:rezics:source-occurrence:[0-9a-f]{64}$' }),
         confirmedSameSourceChild: t.Literal(true),
       }, { additionalProperties: false }),
-      response: { 200: recordedSourceChildCorrespondenceWriteResult,
+      response: transportResponses(openApiOperations["/v1/sources/correspondences"].post, { 200: recordedSourceChildCorrespondenceWriteResult,
         201: recordedSourceChildCorrespondenceWriteResult,
-        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.sourceCorrespondences) return problem(503, 'source_correspondence_unavailable',
@@ -462,8 +463,8 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/sources/correspondences/:correspondence', {
       params: t.Object({ correspondence: groupUuid }),
-      response: { 200: recordedSourceChildCorrespondenceResult,
-        ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/sources/correspondences/{correspondence}"].get, { 200: recordedSourceChildCorrespondenceResult,
+        ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceCorrespondences) return problem(503, 'source_correspondence_unavailable',
@@ -482,8 +483,8 @@ export function sourceRoutes(work: MainWorkDependencies) {
       params: t.Object({ conversion: groupUuid }),
       body: t.Object({ profile: t.Literal('source-open-library-work-v1') },
         { additionalProperties: false }),
-      response: { 200: sourceGraphResult, ...writeProblems,
-        404: problemResult(404), 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/sources/conversions/{conversion}/source-graph"].post, { 200: sourceGraphResult, ...writeProblems,
+        404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceGraph) return problem(503, 'source_graph_unavailable',
@@ -499,8 +500,8 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/sources/conversions/:conversion/source-graph', {
       params: t.Object({ conversion: groupUuid }),
-      response: { 200: sourceGraphResult, ...authorizedReadProblems,
-        422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/sources/conversions/{conversion}/source-graph"].get, { 200: sourceGraphResult, ...authorizedReadProblems,
+        422: problemResult(422) }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceGraph) return problem(503, 'source_graph_unavailable',
@@ -518,9 +519,9 @@ export function sourceRoutes(work: MainWorkDependencies) {
       params: t.Object({ conversion: groupUuid }),
       body: t.Object({ profile: t.Literal('open-library-native-work-proposal-v1') },
         { additionalProperties: false }),
-      response: { 200: sourceProposalWriteResult, 201: sourceProposalWriteResult,
+      response: transportResponses(openApiOperations["/v1/sources/conversions/{conversion}/proposals/native-work"].post, { 200: sourceProposalWriteResult, 201: sourceProposalWriteResult,
         ...writeProblems, 404: problemResult(404), 409: problemResult(409),
-        422: problemResult(422) },
+        422: problemResult(422) }, 'POST'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceProposals) return problem(503, 'source_proposal_unavailable',
@@ -537,8 +538,8 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/sources/proposals/:proposal', {
       params: t.Object({ proposal: groupUuid }),
-      response: { 200: sourceProposalResult, ...authorizedReadProblems,
-        422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/sources/proposals/{proposal}"].get, { 200: sourceProposalResult, ...authorizedReadProblems,
+        422: problemResult(422) }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceProposals) return problem(503, 'source_proposal_unavailable',
@@ -562,8 +563,8 @@ export function sourceRoutes(work: MainWorkDependencies) {
         titleLanguage: t.Optional(t.String({ minLength: 2, maxLength: 35,
           pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' })),
       }, { additionalProperties: false }),
-      response: { 200: sourceAdoptionWriteResult, 201: sourceAdoptionWriteResult,
-        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/sources/proposals/{proposal}/adoption/native-work"].post, { 200: sourceAdoptionWriteResult, 201: sourceAdoptionWriteResult,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable',
@@ -583,7 +584,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/sources/proposals/:proposal/adoption/native-work', {
       params: t.Object({ proposal: groupUuid }),
-      response: { 200: sourceAdoptionResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/sources/proposals/{proposal}/adoption/native-work"].get, { 200: sourceAdoptionResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable',
@@ -599,8 +600,8 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/sources/acquisitions/open-library/works', {
       body: openLibraryWorkAcquisitionBody,
-      response: { 200: sourceIntakeResult, 201: sourceIntakeResult,
-        ...writeProblems, 404: problemResult(404), 429: problemResult(429) },
+      response: transportResponses(openApiOperations["/v1/sources/acquisitions/open-library/works"].post, { 200: sourceIntakeResult, 201: sourceIntakeResult,
+        ...writeProblems, 404: problemResult(404), 429: problemResult(429) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.sourceIntake) {
@@ -634,7 +635,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
     .post('/v1/sources/intakes', {
       body: sourceIntakeBody,
       detail: { description: 'Retained manual sources are limited to 65,536 decoded bytes.' },
-      response: { 200: sourceIntakeResult, 201: sourceIntakeResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/sources/intakes"].post, { 200: sourceIntakeResult, 201: sourceIntakeResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.sourceIntake) {
@@ -662,7 +663,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/sources/observations/:observation', {
       params: t.Object({ observation: groupUuid }),
-      response: { 200: sourceObservationResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/sources/observations/{observation}"].get, { 200: sourceObservationResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceIntake) {

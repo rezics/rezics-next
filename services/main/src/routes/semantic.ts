@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { ProjectionParticipantRefused } from '../modules/relation/change.ts';
 import { discloseInventory } from '../modules/disclosure/read.ts';
@@ -122,8 +123,8 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       body: t.Object({ profile: t.Literal('semantic-change-v1'), target: t.Optional(native),
         expectedHead: t.Nullable(native), state: t.Record(t.String(), t.Unknown()), actingSubject: native },
       { additionalProperties: false }),
-      response: { 200: semanticWrite, 201: semanticWrite, 202: pendingOperation, ...writeProblems,
-        404: problemResult(404), 422: semanticChangeProblem },
+      response: transportResponses(openApiOperations["/v1/semantic/changes"].post, { 200: semanticWrite, 201: semanticWrite, 202: pendingOperation, ...writeProblems,
+        404: problemResult(404), 422: semanticChangeProblem }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -142,8 +143,8 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     .post('/v1/semantic/changes/bulk', {
       body: t.Object({ profile: t.Literal(STAGE_PROFILE), items: t.Array(t.Unknown(),
         { minItems: 1, maxItems: STAGE_LIMITS.items }), actingSubject: native }, { additionalProperties: false }),
-      response: { 200: semanticBulkWrite, 201: semanticBulkWrite, 202: pendingOperation,
-        ...writeProblems, 404: problemResult(404), 413: problemResult(413), 422: semanticChangeProblem },
+      response: transportResponses(openApiOperations["/v1/semantic/changes/bulk"].post, { 200: semanticBulkWrite, 201: semanticBulkWrite, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404), 413: problemResult(413), 422: semanticChangeProblem }, 'POST'),
     }, async ({ request, body }) => {
       if (!work.semanticStages) return problem(503, 'semantic_stage_unavailable', 'Semantic staging is unavailable');
       const idempotencyKey = request.headers.get('idempotency-key');
@@ -162,7 +163,7 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     .get('/v1/semantic/resources/:id', {
       params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: t.Optional(native), position: readingPositionQuery }, { additionalProperties: false }),
-      response: { 200: semanticRead, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/semantic/resources/{id}"].get, { 200: semanticRead, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const target = `https://rezics.com/id/${params.id}`;
@@ -180,7 +181,7 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     .get('/v1/semantic/resources/:id/revisions/:revision', {
       params: t.Object({ id: groupUuid, revision: groupUuid }),
       query: t.Object({ actingSubject: t.Optional(native), position: readingPositionQuery }, { additionalProperties: false }),
-      response: { 200: semanticRead, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/semantic/resources/{id}/revisions/{revision}"].get, { 200: semanticRead, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const target = `https://rezics.com/id/${params.id}`;

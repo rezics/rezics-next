@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { readChapter, readContents } from '../modules/work-contents/read.ts';
 import { chapterQuery, chapterRead, contentsPage, contentsQuery } from '../modules/work-contents/read-contract.ts';
@@ -16,7 +17,7 @@ export const openApiOperations = {
 export function workContentsRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/works/:id/contents', { params: t.Object({ id: readUuid }), detail,
-      query: contentsQuery, response: { 200: contentsPage, ...workReadProblems },
+      query: contentsQuery, response: transportResponses(openApiOperations["/v1/works/{id}/contents"].get, { 200: contentsPage, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         return Response.json(await workRead(work, request, query as ReadOptions,
@@ -24,7 +25,7 @@ export function workContentsRoutes(work: MainWorkDependencies) {
       } catch (error) { return workReadError(error); }
     })
     .get('/v1/chapters/:id', { params: t.Object({ id: readUuid }), detail,
-      query: chapterQuery, response: { 200: chapterRead, ...workReadProblems },
+      query: chapterQuery, response: transportResponses(openApiOperations["/v1/chapters/{id}"].get, { 200: chapterRead, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         return Response.json(await workRead(work, request, query,

@@ -1,4 +1,5 @@
-import { Elysia } from 'elysia';
+import { transportResponses } from '../transport-responses.ts';
+import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
 import { AccountAssertionDenied } from '../modules/account/verify-assertion.ts';
@@ -42,7 +43,7 @@ function typeError(error: unknown): Response {
 export function typeRoutes(work?: Pick<MainWorkDependencies, 'types'>) {
   return new Elysia().get(
     '/v1/types',
-    { response: { 200: typeList, 500: problemResult(500), 503: problemResult(503) } },
+    { response: transportResponses(openApiOperations["/v1/types"].get, { 304: t.Null(), 200: typeList, 500: problemResult(500), 503: problemResult(503) }, 'GET') },
     async ({ request }) => {
       try { await work?.types?.ensureRequest(); }
       catch { /* a public list keeps the last installed snapshot */ }
@@ -75,7 +76,7 @@ export function typeAdministrationRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post(
       '/v1/types',
-      { body: typeAdmission, response: { 200: typeAdmissionResult, ...writeProblems } },
+      { body: typeAdmission, response: transportResponses(openApiOperations["/v1/types"].post, { 200: typeAdmissionResult, ...writeProblems }, 'POST') },
       async ({ request, body }) =>
         write(request, body, async () => {
           const principal = await work!.account.verify(request, ['type:admit']);
@@ -84,7 +85,7 @@ export function typeAdministrationRoutes(work: MainWorkDependencies) {
     )
     .post(
       '/v1/types/retirements',
-      { body: typeRetirement, response: { 200: typeAdmissionResult, ...writeProblems } },
+      { body: typeRetirement, response: transportResponses(openApiOperations["/v1/types/retirements"].post, { 200: typeAdmissionResult, ...writeProblems }, 'POST') },
       async ({ request, body }) =>
         write(request, body, async () => {
           const principal = await work!.account.verify(request, ['type:admit']);

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { readerLanguages } from '../modules/display-language/select.ts';
 import { AccountAssertionInsufficientScope } from '../modules/account/verify-assertion.ts';
@@ -61,7 +62,7 @@ export function actingContextRoutes(work: MainWorkDependencies) {
     .get('/v1/me/agents', {
       query: t.Object({ languages: t.Optional(t.String({ maxLength: 400 })) },
         { additionalProperties: false }),
-      response: { 200: agentDiscovery, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/agents"].get, { 200: agentDiscovery, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
         const principal = await work.account.verify(request, ['agent:create']);
@@ -75,7 +76,7 @@ export function actingContextRoutes(work: MainWorkDependencies) {
     .get('/v1/me/acting-contexts', {
       query: t.Object({ task: t.Literal('work.create') },
         { additionalProperties: false }),
-      response: { 200: actingContextDiscovery, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/acting-contexts"].get, { 200: actingContextDiscovery, ...authorizedReadProblems }, 'GET'),
     }, async ({ request }) => {
       try {
         const principal = await work.account.verify(request, ['work:create']);
@@ -100,7 +101,7 @@ export function actingContextRoutes(work: MainWorkDependencies) {
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         expectedAuthorityEpoch: t.String({ pattern: '^(0|[1-9][0-9]*)$' }),
       }, { additionalProperties: false })]),
-      response: { 200: actingContextCheck, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/acting-context-checks"].post, { 200: actingContextCheck, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request,
@@ -123,7 +124,7 @@ export function actingContextRoutes(work: MainWorkDependencies) {
         expectedRevision: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
         idempotencyKey: t.String({ minLength: 1, maxLength: 128 }),
       }, { additionalProperties: false }),
-      response: { 200: actingContextPreference, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/acting-context-preferences/work.create"].put, { 200: actingContextPreference, ...writeProblems }, 'PUT'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['work:create']);
@@ -138,7 +139,7 @@ export function actingContextRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/me/session-agent', {
       headers: sessionKeyHeader,
-      response: { 200: sessionAgentRead, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/session-agent"].get, { 200: sessionAgentRead, ...authorizedReadProblems }, 'GET'),
     }, async ({ request }) => {
       try {
         const principal = await work.account.verify(request, ['agent:create']);
@@ -151,7 +152,7 @@ export function actingContextRoutes(work: MainWorkDependencies) {
     .put('/v1/me/session-agent', {
       headers: sessionWriteHeaders,
       body: choiceBody,
-      response: { 200: choiceWrite, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/session-agent"].put, { 200: choiceWrite, ...writeProblems }, 'PUT'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['agent:create']);
@@ -164,7 +165,7 @@ export function actingContextRoutes(work: MainWorkDependencies) {
       } catch (error) { return identityError(error); }
     })
     .get('/v1/me/main-agent-preference', {
-      response: { 200: mainAgentRead, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/main-agent-preference"].get, { 200: mainAgentRead, ...authorizedReadProblems }, 'GET'),
     }, async ({ request }) => {
       try {
         const principal = await work.account.verify(request, ['agent:create']);
@@ -176,7 +177,7 @@ export function actingContextRoutes(work: MainWorkDependencies) {
     .put('/v1/me/main-agent-preference', {
       headers: choiceWriteHeaders,
       body: choiceBody,
-      response: { 200: choiceWrite, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/main-agent-preference"].put, { 200: choiceWrite, ...writeProblems }, 'PUT'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['agent:create']);

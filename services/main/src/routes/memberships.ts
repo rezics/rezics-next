@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { readId, readName, readUuid, pageQuery } from '../modules/work/read-contract.ts';
 import {
@@ -43,7 +44,7 @@ export const openApiOperations = { '/v1/me/memberships': { get: { exposure: 'pub
 export function membershipsRoutes(work: MainWorkDependencies) {
   return new Elysia().get(
     '/v1/me/memberships',
-    { query: querySchema, response: { 200: pageSchema, ...workReadProblems } },
+    { query: querySchema, response: transportResponses(openApiOperations["/v1/me/memberships"].get, { 200: pageSchema, ...workReadProblems }, 'GET') },
     async ({ request, query }) => {
       try {
         if (!work.follows) throw new WorkReadUnavailable('Membership list is unavailable');

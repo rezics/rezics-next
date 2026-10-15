@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { writeProblems } from '../api-responses.ts';
 import { problemResult } from '../api-contract.ts';
@@ -51,7 +52,7 @@ export function managedRealmRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/me/managed-realms',{ query: t.Object({ ...page,actingSubject: readId,
       limit: t.Optional(t.Integer({ minimum: 1,maximum: 20 })) },{ additionalProperties: false }),
-    response: { 200: managedPage,...problems } },async ({ request,query }) => {
+    response: transportResponses(openApiOperations["/v1/me/managed-realms"].get, { 200: managedPage,...problems }, 'GET') },async ({ request,query }) => {
       try {
         // An app may be consented to just one family. Counts and permissions for
         // the other family remain undisclosed even when the Agent holds them.
@@ -71,53 +72,53 @@ export function managedRealmRoutes(work: MainWorkDependencies) {
       } catch (error) { return realmOperationError(error); }
     })
     .get('/v1/me/realm-invitations',{ query: t.Object({ actingSubject: readId,after: t.Optional(readUuid),
-      limit: page.limit },{ additionalProperties: false }),response: { 200: invitationPage,...problems } },async ({ request,query }) => {
+      limit: page.limit },{ additionalProperties: false }),response: transportResponses(openApiOperations["/v1/me/realm-invitations"].get, { 200: invitationPage,...problems }, 'GET') },async ({ request,query }) => {
       try { const principal = await work.account.verify(request,['access:membership-consent']);
         return Response.json(await joining().inbox(principal,query.actingSubject,query.after,query.limit),{ headers });
       } catch (error) { return realmOperationError(error); }
     })
-    .get('/v1/realms/:realm/joining',{ params,query: actor,response: { 200: joinPolicy,...problems } },async ({ request,params: path,query }) => {
+    .get('/v1/realms/:realm/joining',{ params,query: actor,response: transportResponses(openApiOperations["/v1/realms/{realm}/joining"].get, { 200: joinPolicy,...problems }, 'GET') },async ({ request,params: path,query }) => {
       try { const principal = await work.account.verify(request,['access:membership-consent']);
         return Response.json(await joining().policyFor(principal,realmId(path.realm),query.actingSubject),{ headers });
       } catch (error) { return realmOperationError(error); }
     })
-    .post('/v1/realms/:realm/join',{ params,body: selfJoinCommand,response: { 200: joinResult,...problems } },async ({ request,params: path,body }) => {
+    .post('/v1/realms/:realm/join',{ params,body: selfJoinCommand,response: transportResponses(openApiOperations["/v1/realms/{realm}/join"].post, { 200: joinResult,...problems }, 'POST') },async ({ request,params: path,body }) => {
       try { const principal = await work.account.verify(request,['access:membership-consent']);
         return Response.json(await joining().selfJoin(principal,realmId(path.realm),body,key(request)),{ headers });
       } catch (error) { return realmOperationError(error); }
     })
-    .post('/v1/realms/:realm/invitations',{ params,body: invitationCommand,response: { 200: invitationResult,...problems } },async ({ request,params: path,body }) => {
+    .post('/v1/realms/:realm/invitations',{ params,body: invitationCommand,response: transportResponses(openApiOperations["/v1/realms/{realm}/invitations"].post, { 200: invitationResult,...problems }, 'POST') },async ({ request,params: path,body }) => {
       try { const principal = await work.account.verify(request,['governance:decide']);
         return Response.json(await joining().invite(principal,realmId(path.realm),body,key(request)),{ headers });
       } catch (error) { return realmOperationError(error); }
     })
     .post('/v1/realms/:realm/invitations/:invitation/response',{ params: t.Object({ realm: readUuid,invitation: readUuid }),
-      body: invitationResponse,response: { 200: invitationResult,...problems } },async ({ request,params: path,body }) => {
+      body: invitationResponse,response: transportResponses(openApiOperations["/v1/realms/{realm}/invitations/{invitation}/response"].post, { 200: invitationResult,...problems }, 'POST') },async ({ request,params: path,body }) => {
       try { const principal = await work.account.verify(request,['access:membership-consent']);
         return Response.json(await joining().respond(principal,realmId(path.realm),path.invitation,body,key(request)),{ headers });
       } catch (error) { return realmOperationError(error); }
     })
     .post('/v1/realms/:realm/invitations/:invitation/revoke',{ params: t.Object({ realm: readUuid,invitation: readUuid }),
-      body: actor,response: { 200: invitationResult,...problems } },async ({ request,params: path,body }) => {
+      body: actor,response: transportResponses(openApiOperations["/v1/realms/{realm}/invitations/{invitation}/revoke"].post, { 200: invitationResult,...problems }, 'POST') },async ({ request,params: path,body }) => {
       try { const principal = await work.account.verify(request,['governance:decide']);
         return Response.json(await joining().revoke(principal,realmId(path.realm),path.invitation,body.actingSubject,key(request)),{ headers });
       } catch (error) { return realmOperationError(error); }
     })
     .get('/v1/realms/:realm/roster',{ params,query: t.Object({ ...page,featured: t.Optional(t.Boolean()) },{ additionalProperties: false }),
-      response: { 200: rosterPage,...problems } },async ({ params: path,query }) => {
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/roster"].get, { 200: rosterPage,...problems }, 'GET') },async ({ params: path,query }) => {
       try { return Response.json(await roster().read(realmId(path.realm),query),{ headers: { 'cache-control': 'no-store' } }); }
       catch (error) { return realmOperationError(error); }
     })
     .put('/v1/realms/:realm/roster/listing',{ params,body: t.Object({ actingSubject: readId,
       expectedMembershipGeneration: generation,listed: t.Boolean() },{ additionalProperties: false }),
-      response: { 200: t.Object({ member: readId,membershipGeneration: generation,listed: t.Boolean() }),...problems } },async ({ request,params: path,body }) => {
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/roster/listing"].put, { 200: t.Object({ member: readId,membershipGeneration: generation,listed: t.Boolean() }),...problems }, 'PUT') },async ({ request,params: path,body }) => {
       try { const principal = await work.account.verify(request,['access:membership-consent']);
         return Response.json(await roster().listing(principal,realmId(path.realm),body.actingSubject,body.expectedMembershipGeneration,body.listed),{ headers });
       } catch (error) { return realmOperationError(error); }
     })
     .put('/v1/realms/:realm/roster/featured',{ params,body: t.Object({ actingSubject: readId,member: readId,
       expectedMembershipGeneration: generation,featured: t.Boolean() },{ additionalProperties: false }),
-      response: { 200: t.Object({ member: readId,membershipGeneration: generation,featured: t.Boolean() }),...problems } },async ({ request,params: path,body }) => {
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/roster/featured"].put, { 200: t.Object({ member: readId,membershipGeneration: generation,featured: t.Boolean() }),...problems }, 'PUT') },async ({ request,params: path,body }) => {
       try { const principal = await work.account.verify(request,['governance:decide']);
         return Response.json(await roster().feature(principal,realmId(path.realm),body.actingSubject,body.member,body.expectedMembershipGeneration,body.featured),{ headers });
       } catch (error) { return realmOperationError(error); }

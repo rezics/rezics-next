@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { readProblems, writeProblems } from '../api-responses.ts';
@@ -18,7 +19,7 @@ export function workMaintainerRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/works/:id/maintainers', {
       params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      response: { 200: view, ...readProblems, 403: problemResult(403) },
+      response: transportResponses(openApiOperations["/v1/works/{id}/maintainers"].get, { 200: view, ...readProblems, 403: problemResult(403) }, 'GET'),
     }, async ({ params }) => {
       try {
         if (!work.maintainers) return problem(503, 'maintainers_unavailable', 'Work maintainers are unavailable');
@@ -30,7 +31,7 @@ export function workMaintainerRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('work-maintainer-change-v1'), work: native,
         actingSubject: native, target: native, action: t.Union([t.Literal('add'), t.Literal('transfer'), t.Literal('remove')]),
         expectedGeneration: generation }, { additionalProperties: false }),
-      response: { 200: result, 201: result, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/work-maintainer-changes"].post, { 200: result, 201: result, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const key = request.headers.get('idempotency-key');

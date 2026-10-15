@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t, ValidationError } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
@@ -59,7 +60,7 @@ export function realmProfileRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('realm-public-profile-v2'),
         expectedHead: t.Nullable(readId), actingSubject: readId,
         publication: publicProfile }, { additionalProperties: false }),
-      response: { 200: write, 201: write, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/profile"].put, { 200: write, 201: write, ...problems }, 'PUT'),
     }, async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -77,7 +78,7 @@ export function realmProfileRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('realm-public-moderator-choice-v1'),
         expectedHead: t.Nullable(readId), public: t.Boolean(), actingSubject: readId },
       { additionalProperties: false }),
-      response: { 200: choiceWrite, 201: choiceWrite, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/moderators/{agent}/public-choice"].put, { 200: choiceWrite, 201: choiceWrite, ...problems }, 'PUT'),
     }, async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');

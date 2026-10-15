@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import {
   entityPage,
@@ -54,7 +55,7 @@ export function entityPageRoutes(work: MainWorkDependencies) {
         params,
         detail,
         query: t.Object({ ...pageQuery, limit: t.Optional(t.Integer({ minimum: 1,maximum: 4 })),position: readingPositionQuery }, { additionalProperties: false }),
-        response: { 200: entityPage, ...workReadProblems },
+        response: transportResponses(openApiOperations["/v1/resources/{resource}/page"].get, { 200: entityPage, ...workReadProblems }, 'GET'),
       },
       async ({ request, params: path, query }) => {
         try {
@@ -77,7 +78,7 @@ export function entityPageRoutes(work: MainWorkDependencies) {
           { ...pageQuery, context: t.Optional(entityPageContext), position: readingPositionQuery, frame: frameQuery },
           { additionalProperties: false },
         ),
-        response: { 200: subjectStatementPage, ...workReadProblems },
+        response: transportResponses(openApiOperations["/v1/resources/{resource}/statements"].get, { 200: subjectStatementPage, ...workReadProblems }, 'GET'),
       },
       async ({ request, params: path, query }) => {
         try {

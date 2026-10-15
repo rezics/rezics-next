@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
@@ -229,7 +230,7 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         cursor: t.Optional(t.String({ maxLength: 2048 })),
         languages: t.Optional(t.String({ maxLength: 8192 })),
       }, { additionalProperties: false }),
-      response: { 200: t.Object({ profile: t.Literal('relation-definition-list-v1'),
+      response: transportResponses(openApiOperations["/v1/lexicon/definitions"].get, { 200: t.Object({ profile: t.Literal('relation-definition-list-v1'),
         items: t.Array(t.Object({ key: t.String(), definition: native, revision: native,
           lifecycle: t.Literal('active'), editorRecordable: t.Boolean(),
           writePath: t.Nullable(t.Union([t.Literal('derivation'), t.Literal('relation')])),
@@ -237,7 +238,7 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           roles: relationRenderingSchema.properties.meaning.properties.roles,
           rendering: relationRenderingSchema })),
         next: t.Nullable(t.String({ description: 'Continue even after a short or empty page; null ends the live catalog.' })),
-      }), ...authorizedReadProblems },
+      }), ...authorizedReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -269,12 +270,12 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         actingSubject: t.Optional(native),
         languages: t.Optional(t.String({ maxLength: 8192 })),
       }, { additionalProperties: false }),
-      response: { 200: t.Object({ profile: t.Literal('relation-definition-key-v1'), key: t.String(),
+      response: transportResponses(openApiOperations["/v1/lexicon/definitions/{key}"].get, { 200: t.Object({ profile: t.Literal('relation-definition-key-v1'), key: t.String(),
         kind: t.Union([t.Literal('relation'), t.Literal('property')]),
         definition: native, revision: native, lifecycle: t.String(), roles: t.Array(t.Unknown()),
         workSubjectRole: t.Nullable(t.String()), star: t.Nullable(relationStar), editorRecordable: t.Boolean(),
         writePath: t.Nullable(t.Union([t.Literal('derivation'), t.Literal('relation')])),
-        rendering: relationRenderingSchema }), ...authorizedReadProblems },
+        rendering: relationRenderingSchema }), ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await authenticate(request, query.actingSubject);
@@ -313,14 +314,14 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           },
           { additionalProperties: false },
         ),
-        response: {
+        response: transportResponses(openApiOperations["/v1/lexicon/presentations"].post, {
           200: write,
           201: write,
           202: pendingOperation,
           ...writeProblems,
           404: problemResult(404),
           422: problemResult(422),
-        },
+        }, 'POST'),
       },
       async ({ request, body }) => {
         const idempotencyKey = request.headers.get('idempotency-key');
@@ -373,7 +374,7 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           },
           { additionalProperties: false },
         ),
-        response: {
+        response: transportResponses(openApiOperations["/v1/lexicon/presentations"].get, {
           200: t.Object({
             profile: t.Literal('relation-rendering-batch-v1'),
             items: t.Array(
@@ -385,7 +386,7 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
             ),
           }),
           ...authorizedReadProblems,
-        },
+        }, 'GET'),
       },
       async ({ request, query }) => {
         const definitions = query.definitions.split(','),
@@ -473,7 +474,7 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       {
         params: t.Object({ id: groupUuid }),
         query: t.Object({ actingSubject: t.Optional(native) }, { additionalProperties: false }),
-        response: { 200: read, ...authorizedReadProblems },
+        response: transportResponses(openApiOperations["/v1/lexicon/presentations/{id}"].get, { 200: read, ...authorizedReadProblems }, 'GET'),
       },
       async ({ request, params, query }) => {
         try {
@@ -499,7 +500,7 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       {
         params: t.Object({ id: groupUuid, revision: groupUuid }),
         query: t.Object({ actingSubject: t.Optional(native) }, { additionalProperties: false }),
-        response: { 200: read, ...authorizedReadProblems },
+        response: transportResponses(openApiOperations["/v1/lexicon/presentations/{id}/revisions/{revision}"].get, { 200: read, ...authorizedReadProblems }, 'GET'),
       },
       async ({ request, params, query }) => {
         try {

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t, type AnySchema, type UnwrapSchema } from 'elysia';
 import { AccountAssertionDenied } from '../modules/account/verify-assertion.ts';
 import type { VerifiedPrincipal } from '../modules/access/admission.ts';
@@ -244,76 +245,76 @@ export function accessTopologyRoutes(work: MainWorkDependencies) {
     .then(value => Response.json(value, noStore), controlError);
   return new Elysia({ name: 'access-topology-routes' })
     .post('/v1/access/representation-edge-changes', {
-      body: edgeChangeBody, response: { 200: result, ...writeProblems },
+      body: edgeChangeBody, response: transportResponses(openApiOperations["/v1/access/representation-edge-changes"].post, { 200: result, ...writeProblems }, 'POST'),
     }, write(edgeChangeBody, 'access:representation-manage', (principal, receipt, body) =>
       owner().topology.changeEdge(principal, receipt, body.action === 'create'
         ? { ...body, validUntil: new Date(body.validUntil) } : body)))
     .get('/v1/access/representation-edges/:edgeId', {
       params: t.Object({ edgeId: groupUuid }),
       query: t.Object({ representedSubject: groupAgent }),
-      response: { 200: result, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/representation-edges/{edgeId}"].get, { 200: result, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => read(work.account
       .verify(request, ['access:representation-manage'])
       .then(principal => owner().topology.readEdge(principal, params.edgeId,
         query.representedSubject))))
     .post('/v1/me/authority-admissions', {
-      body: admissionBody, response: { 200: result, ...writeProblems },
+      body: admissionBody, response: transportResponses(openApiOperations["/v1/me/authority-admissions"].post, { 200: result, ...writeProblems }, 'POST'),
     }, write(admissionBody, 'access:represent', (principal, receipt, body) =>
       owner().topology.registerAdmission(principal, receipt, body)))
     .post('/v1/me/authority-admissions/:admissionId/checks', {
-      params: t.Object({ admissionId: groupUuid }), response: { 200: result, ...writeProblems },
+      params: t.Object({ admissionId: groupUuid }), response: transportResponses(openApiOperations["/v1/me/authority-admissions/{admissionId}/checks"].post, { 200: result, ...writeProblems }, 'POST'),
     }, async ({ request, params }) => read(work.account.verify(request, ['access:represent'])
       .then(principal => owner().topology.recheckAdmission(principal, params.admissionId))))
     .post('/v1/access/representative-policy-changes', {
-      body: policyBody, response: { 200: result, ...writeProblems },
+      body: policyBody, response: transportResponses(openApiOperations["/v1/access/representative-policy-changes"].post, { 200: result, ...writeProblems }, 'POST'),
     }, write(policyBody, 'access:representation-manage', (principal, receipt, body) =>
       body.action === 'create' ? owner().policies.create(principal, receipt, body)
         : owner().policies.revise(principal, receipt, body)))
     .get('/v1/access/representative-policies/:policyId', {
       params: t.Object({ policyId: groupUuid }),
       query: t.Object({ institutionSubject: groupAgent }),
-      response: { 200: result, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/representative-policies/{policyId}"].get, { 200: result, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => read(work.account
       .verify(request, ['access:representation-manage'])
       .then(principal => owner().policies.read(principal, params.policyId,
         query.institutionSubject))))
     .post('/v1/access/representative-roster-changes', {
-      body: rosterBody, response: { 200: result, ...writeProblems },
+      body: rosterBody, response: transportResponses(openApiOperations["/v1/access/representative-roster-changes"].post, { 200: result, ...writeProblems }, 'POST'),
     }, write(rosterBody, 'access:representation-manage', (principal, receipt, body) =>
       owner().policies.acceptRoster(principal, receipt, body)))
     .post('/v1/access/protected-sets', {
-      body: protectBody, response: { 200: result, ...writeProblems },
+      body: protectBody, response: transportResponses(openApiOperations["/v1/access/protected-sets"].post, { 200: result, ...writeProblems }, 'POST'),
     }, write(protectBody, 'access:manage', (principal, receipt, body) =>
       owner().protectedChanges.protect(principal, receipt, body)))
     .post('/v1/access/protected-change-proposals', {
-      body: proposalBody, response: { 200: result, ...writeProblems },
+      body: proposalBody, response: transportResponses(openApiOperations["/v1/access/protected-change-proposals"].post, { 200: result, ...writeProblems }, 'POST'),
     }, write(proposalBody, 'access:manage', (principal, receipt, body) =>
       owner().protectedChanges.propose(principal, receipt, body)))
     .get('/v1/access/protected-change-proposals/:proposalId', {
       params: t.Object({ proposalId: groupUuid }),
-      response: { 200: result, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/protected-change-proposals/{proposalId}"].get, { 200: result, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => read(verifyAny(request,
       ['access:manage', 'access:approve', 'access:represent'])
       .then(principal => owner().protectedChanges.read(principal, params.proposalId))))
     .post('/v1/access/protected-change-approvals', {
-      body: approvalBody, response: { 200: result, ...writeProblems },
+      body: approvalBody, response: transportResponses(openApiOperations["/v1/access/protected-change-approvals"].post, { 200: result, ...writeProblems }, 'POST'),
     }, write(approvalBody, 'access:approve', (principal, receipt, body) =>
       owner().protectedChanges.approve(principal, receipt, body)))
     .post('/v1/access/protected-change-activations', {
-      body: activationBody, response: { 200: result, ...writeProblems },
+      body: activationBody, response: transportResponses(openApiOperations["/v1/access/protected-change-activations"].post, { 200: result, ...writeProblems }, 'POST'),
     }, write(activationBody, 'access:manage', (principal, receipt, body) =>
       owner().protectedChanges.activate(principal, receipt, body.proposalId)))
     .post('/v1/me/automation-enrollments', {
-      body: enrollmentBody, response: { 200: result, ...writeProblems },
+      body: enrollmentBody, response: transportResponses(openApiOperations["/v1/me/automation-enrollments"].post, { 200: result, ...writeProblems }, 'POST'),
     }, write(enrollmentBody, 'access:represent', (principal, receipt, body) =>
       owner().protectedChanges.enroll(principal, receipt,
         { ...body, validUntil: new Date(body.validUntil) })))
     .post('/v1/access/automation-installations', {
-      body: installationBody, response: { 200: result, ...writeProblems },
+      body: installationBody, response: transportResponses(openApiOperations["/v1/access/automation-installations"].post, { 200: result, ...writeProblems }, 'POST'),
     }, write(installationBody, 'access:manage', (principal, receipt, body) =>
       owner().protectedChanges.installAutomation(principal, receipt, body)))
     .post('/v1/access/delegated-grant-changes', {
-      body: delegatedGrantBody, response: { 200: result, ...writeProblems },
+      body: delegatedGrantBody, response: transportResponses(openApiOperations["/v1/access/delegated-grant-changes"].post, { 200: result, ...writeProblems }, 'POST'),
     }, write(delegatedGrantBody, 'access:grant', async (principal, receipt, body) => {
       if (!work.grants) throw new ControlUnavailable('grant owner is unavailable');
       const context = { principal, issuerSubject: body.issuerSubject,
@@ -330,7 +331,7 @@ export function accessTopologyRoutes(work: MainWorkDependencies) {
     }))
     .get('/v1/me/authority-admissions/:admissionId/consumption', {
       params: t.Object({ admissionId: groupUuid }),
-      response: { 200: result, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/authority-admissions/{admissionId}/consumption"].get, { 200: result, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => read(work.account.verify(request, ['access:grant'])
       .then(principal => {
         if (!work.grants) throw new ControlUnavailable('grant owner is unavailable');
@@ -338,34 +339,34 @@ export function accessTopologyRoutes(work: MainWorkDependencies) {
       })))
     .get('/v1/access/grants/:grantId/lineage', {
       params: t.Object({ grantId: groupUuid }), query: t.Object({ issuerSubject: groupAgent }),
-      response: { 200: result, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/grants/{grantId}/lineage"].get, { 200: result, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => read(work.account.verify(request, ['access:grant'])
       .then(principal => {
         if (!work.grants) throw new ControlUnavailable('grant owner is unavailable');
         return work.grants.readLineage(principal, query.issuerSubject, params.grantId);
       })))
     .post('/v1/agents/control', {
-      body: controlBody, response: { 200: result, ...writeProblems },
+      body: controlBody, response: transportResponses(openApiOperations["/v1/agents/control"].post, { 200: result, ...writeProblems }, 'POST'),
     }, write(controlBody, 'access:manage', (principal, receipt, body) =>
       owner().agentControl.configure(principal, receipt, body)))
     .get('/v1/agents/control', {
       query: t.Object({ subjectId: groupAgent }),
-      response: { 200: result, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/agents/control"].get, { 200: result, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, query }) => read(work.account.verify(request, ['access:manage'])
       .then(principal => owner().agentControl.read(principal, query.subjectId))))
     .post('/v1/agents/controller-changes', {
-      body: controllerBody, response: { 200: result, ...writeProblems },
+      body: controllerBody, response: transportResponses(openApiOperations["/v1/agents/controller-changes"].post, { 200: result, ...writeProblems }, 'POST'),
     }, write(controllerBody, 'access:manage', (principal, receipt, body) =>
       owner().agentControl.removeController(principal, receipt, body)))
     .post('/v1/agents/recoveries', {
-      body: recoveryBody, response: { 200: result, ...writeProblems },
+      body: recoveryBody, response: transportResponses(openApiOperations["/v1/agents/recoveries"].post, { 200: result, ...writeProblems }, 'POST'),
     }, write(recoveryBody, 'access:represent', (principal, receipt, body) =>
       owner().agentControl.requestRecovery(principal, receipt, body)))
     .post(
       '/v1/agents/invitations',
       {
         body: invitationBody,
-        response: { 200: result, ...writeProblems },
+        response: transportResponses(openApiOperations["/v1/agents/invitations"].post, { 200: result, ...writeProblems }, 'POST'),
       },
       write(invitationBody, 'access:grant', (principal, receipt, body) =>
       owner().invitations.issue(principal, receipt, {
@@ -379,7 +380,7 @@ export function accessTopologyRoutes(work: MainWorkDependencies) {
       '/v1/agents/invitations/:invitationId',
       {
         params: t.Object({ invitationId: groupUuid }),
-        response: { 200: result, ...authorizedReadProblems },
+        response: transportResponses(openApiOperations["/v1/agents/invitations/{invitationId}"].get, { 200: result, ...authorizedReadProblems }, 'GET'),
       },
       async ({ request, params }) => read(verifyAny(request, ['access:grant', 'access:represent'])
       .then(principal => owner().invitations.read(principal, params.invitationId))),
@@ -388,7 +389,7 @@ export function accessTopologyRoutes(work: MainWorkDependencies) {
       '/v1/agents/invitation-acceptances',
       {
         body: acceptanceBody,
-        response: { 200: result, ...writeProblems, 410: problemResult(410) },
+        response: transportResponses(openApiOperations["/v1/agents/invitation-acceptances"].post, { 200: result, ...writeProblems, 410: problemResult(410) }, 'POST'),
       }, write(acceptanceBody, 'access:represent', (principal, receipt, body) =>
       owner().invitations.accept(principal, receipt, body)),
     )
@@ -396,7 +397,7 @@ export function accessTopologyRoutes(work: MainWorkDependencies) {
       '/v1/agents/invitation-revocations',
       {
         body: invitationRevocationBody,
-        response: { 200: result, ...writeProblems },
+        response: transportResponses(openApiOperations["/v1/agents/invitation-revocations"].post, { 200: result, ...writeProblems }, 'POST'),
       },
       write(invitationRevocationBody, 'access:grant', (principal, receipt, body) =>
       owner().invitations.revoke(
@@ -412,7 +413,7 @@ export function accessTopologyRoutes(work: MainWorkDependencies) {
       {
         params: t.Object({ id: groupUuid }),
         query: t.Object({ after: t.Optional(groupUuid) }),
-        response: { 200: result, ...authorizedReadProblems },
+        response: transportResponses(openApiOperations["/v1/agents/{id}/access"].get, { 200: result, ...authorizedReadProblems }, 'GET'),
       },
       async ({ request, params, query }) =>
         read(work.account.verify(request, ['access:manage'])
@@ -429,7 +430,7 @@ export function accessTopologyRoutes(work: MainWorkDependencies) {
       '/v1/me/agent-invitations',
       {
         query: t.Object({ after: t.Optional(groupUuid) }),
-        response: { 200: result, ...authorizedReadProblems },
+        response: transportResponses(openApiOperations["/v1/me/agent-invitations"].get, { 200: result, ...authorizedReadProblems }, 'GET'),
       },
       async ({ request, query }) =>
         read(work.account.verify(request, ['access:represent'])

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { readingPositionQuery } from './reading-positions.ts';
 import { fusekiReadBudget, FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge,
@@ -313,7 +314,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .get('/v1/zones', { query: t.Object({ official: t.Literal('true'),
       after: t.Optional(t.String({ pattern: '^v2:https://rezics\\.com/id/[0-9a-f-]{36}$', maxLength: 128 })),
       limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50 })) }, { additionalProperties: false }),
-      response: { 200: officialPage, ...errors } }, async ({ query }: { query: {
+      response: transportResponses(openApiOperations["/v1/zones"].get, { 200: officialPage, ...errors }, 'GET') }, async ({ query }: { query: {
         official: 'true'; after?: string; limit?: number } }) => {
       try { return Response.json(await listOfficialZones(work.environment,
         { ...(query.after ? { after: query.after } : {}), limit: query.limit ?? 50 }),
@@ -324,7 +325,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query: t.Object({ actingSubject: t.Optional(ref), after: t.Optional(t.String({ maxLength: 2048 })),
         safeTheme: t.Optional(t.Literal('1')), 'safe-theme': t.Optional(t.Literal('1')),
         viewerOptOut: t.Optional(t.Literal('1')) },
-      { additionalProperties: false }), response: { 200: publicationRead, ...authorizedReadProblems } },
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/zones/{id}/presentation"].get, { 304: t.Null(), 200: publicationRead, ...authorizedReadProblems }, 'GET') },
     async ({ request, params, query }: { request: Request; params: { id: string };
       query: { actingSubject?: string; after?: string; safeTheme?: '1'; 'safe-theme'?: '1'; viewerOptOut?: '1' } }) => {
       try {
@@ -387,7 +388,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .get('/v1/zones/:id/showcase-editor', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref, after: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
-      response: { 200: showcaseEditorRead, ...authorizedReadProblems } },
+      response: transportResponses(openApiOperations["/v1/zones/{id}/showcase-editor"].get, { 200: showcaseEditorRead, ...authorizedReadProblems }, 'GET') },
     async ({ request, params, query }) => {
       try {
         const zone = `https://rezics.com/id/${params.id}`;
@@ -529,7 +530,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .get('/v1/zones/:id/routes', { params: t.Object({ id: groupUuid }),
       query: t.Object({ path: t.String({ maxLength: 1024 }), cursor: t.Optional(t.String({ maxLength: 2048 })),
         actingSubject: t.Optional(ref), position: readingPositionQuery }, { additionalProperties: false }),
-      response: { 200: routeRead, ...errors } }, async ({ request, params, query }) => {
+      response: transportResponses(openApiOperations["/v1/zones/{id}/routes"].get, { 200: routeRead, ...errors }, 'GET') }, async ({ request, params, query }) => {
       try {
         const result = await resolveZoneRoute(work, request, { zone: `https://rezics.com/id/${params.id}`, ...query });
         return Response.json(result, { headers: { 'cache-control': 'no-store', ...pageDiscoveryHeaders(result.discovery) } });
@@ -538,7 +539,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .post('/v1/zones', { body: t.Object({ zone: ref, space: ref, disclosure, actingSubject: ref,
       name: t.Optional(t.String({ minLength: 1, maxLength: 300 })), language: t.Optional(languageTag) },
-      { additionalProperties: false }), response: { 200: write, 201: write, 202: pendingOperation, ...errors } },
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/zones"].post, { 200: write, 201: write, 202: pendingOperation, ...errors }, 'POST') },
     async ({ request, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -566,7 +567,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         disclosure, presentation: t.Optional(t.String({ format: 'uri' })),
         position: t.Optional(t.Union([t.Literal('first'), t.Literal('last'),
           t.Object({ after: ref }, { additionalProperties: false })])), actingSubject: ref },
-      { additionalProperties: false }), response: { 200: write, 202: pendingOperation, ...errors } },
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/zones/{id}/mounts"].post, { 200: write, 202: pendingOperation, ...errors }, 'POST') },
     async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -603,7 +604,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .delete('/v1/zones/:id/mounts/:occurrence', {
       params: t.Object({ id: groupUuid, occurrence: groupUuid }),
       body: t.Object({ expectedHead: ref, actingSubject: ref }, { additionalProperties: false }),
-      response: { 200: write, 202: pendingOperation, ...errors } },
+      response: transportResponses(openApiOperations["/v1/zones/{id}/mounts/{occurrence}"].delete, { 200: write, 202: pendingOperation, ...errors }, 'DELETE') },
     async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -625,7 +626,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .get('/v1/zones/:id', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref, after: t.Optional(t.String({ maxLength: 512 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) },
-      { additionalProperties: false }), response: { 200: read, ...authorizedReadProblems } },
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/zones/{id}"].get, { 200: read, ...authorizedReadProblems }, 'GET') },
     async ({ request, params, query }) => {
       try { return Response.json(await zonePage(fuseki, work, request,
         `https://rezics.com/id/${params.id}`, query), { headers: { 'cache-control': 'no-store' } }); }
@@ -635,7 +636,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       params: t.Object({ id: groupUuid, revision: groupUuid }),
       query: t.Object({ actingSubject: ref, after: t.Optional(t.String({ maxLength: 512 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) },
-      { additionalProperties: false }), response: { 200: read, ...authorizedReadProblems } },
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/zones/{id}/revisions/{revision}"].get, { 200: read, ...authorizedReadProblems }, 'GET') },
     async ({ request, params, query }) => {
       try { return Response.json(await zonePage(fuseki, work, request,
         `https://rezics.com/id/${params.id}`, { ...query,
@@ -645,7 +646,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .get('/v1/zones/:id/configuration', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref }, { additionalProperties: false }),
-      response: { 200: configRead, ...authorizedReadProblems } },
+      response: transportResponses(openApiOperations["/v1/zones/{id}/configuration"].get, { 200: configRead, ...authorizedReadProblems }, 'GET') },
     async ({ request, params, query }) => {
       try {
         const zone = `https://rezics.com/id/${params.id}`;
@@ -658,7 +659,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .get('/v1/zones/:id/query-blocks', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref }, { additionalProperties: false }),
-      response: { 200: t.Any(), ...authorizedReadProblems } },
+      response: transportResponses(openApiOperations["/v1/zones/{id}/query-blocks"].get, { 200: t.Any(), ...authorizedReadProblems }, 'GET') },
     async ({ request, params, query }: { request: Request; params: { id: string };
       query: { actingSubject: string } }) => {
       try {
@@ -693,7 +694,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           rows: t.Integer({ minimum: 1, maximum: 1000 }) }, { additionalProperties: false })),
         queryBlocks: t.Optional(t.Array(queryBlock, { maxItems: 32 })),
         advancedBase64: t.Optional(t.Union([t.String({ maxLength: 349528 }), t.Null()])),
-      }, { additionalProperties: false }), response: { 200: revisionWrite, 202: pendingOperation, ...errors } },
+      }, { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/zones/{id}/configuration"].put, { 200: revisionWrite, 202: pendingOperation, ...errors }, 'PUT') },
     async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -722,8 +723,8 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .post('/v1/zones/:id/site-publications', { params: t.Object({ id: groupUuid }),
       body: t.Object({ ...ZoneSitePublishSelection.properties,
         expectedHead: ref, actingSubject: ref }, { additionalProperties: false }),
-      response: { 200: sitePublicationWrite, 201: sitePublicationWrite,
-        202: pendingOperation, 422: problemResult(422), ...errors } }, async ({ request, params, body }) => {
+      response: transportResponses(openApiOperations["/v1/zones/{id}/site-publications"].post, { 200: sitePublicationWrite, 201: sitePublicationWrite,
+        202: pendingOperation, 422: problemResult(422), ...errors }, 'POST') }, async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       try {
@@ -735,7 +736,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .post('/v1/zones/:id/retirements', { params: t.Object({ id: groupUuid }),
       body: t.Object({ expectedHead: ref, actingSubject: ref }, { additionalProperties: false }),
-      response: { 200: revisionWrite, 202: pendingOperation, ...errors } },
+      response: transportResponses(openApiOperations["/v1/zones/{id}/retirements"].post, { 200: revisionWrite, 202: pendingOperation, ...errors }, 'POST') },
     async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -751,7 +752,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .post('/v1/zones/:id/realm-attachment-withdrawals', { params: t.Object({ id: groupUuid }),
       body: t.Object({ realm: ref, actingSubject: ref }, { additionalProperties: false }),
-      response: { 200: realmAttachmentWithdrawalWrite, 202: pendingOperation, ...errors } },
+      response: transportResponses(openApiOperations["/v1/zones/{id}/realm-attachment-withdrawals"].post, { 200: realmAttachmentWithdrawalWrite, 202: pendingOperation, ...errors }, 'POST') },
     async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -768,7 +769,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query: t.Object({ actingSubject: t.Optional(ref),
         cursor: t.Optional(t.String({ maxLength: 128 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50 })) }, { additionalProperties: false }),
-      response: { 200: zoneAttachmentPage, ...errors } },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/zone-attachments"].get, { 200: zoneAttachmentPage, ...errors }, 'GET') },
     async ({ request, params, query }) => {
       try {
         return Response.json(await listRealmZoneAttachments(work.environment, work.account, work.access,
@@ -784,7 +785,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .post('/v1/zones/:id/recoveries', { params: t.Object({ id: groupUuid }),
       body: t.Object({ expectedHead: ref, actingSubject: ref }, { additionalProperties: false }),
-      response: { 200: revisionWrite, 202: pendingOperation, ...errors } },
+      response: transportResponses(openApiOperations["/v1/zones/{id}/recoveries"].post, { 200: revisionWrite, 202: pendingOperation, ...errors }, 'POST') },
     async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');

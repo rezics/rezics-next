@@ -73,6 +73,11 @@ const repositoryIndexReads = ['tools/repo-index/**', 'scripts/lib/repo-index*.ts
  * inventories; main-wide runs retain the complete registry. */
 export const repositoryGuards = [
   {
+    file: 'scripts/api/response-coverage.guard.test.ts',
+    reads: mainContractReads,
+    reason: 'Handler status branches and applicable transport-policy outcomes must be declared on every REST operation.',
+  },
+  {
     file: 'scripts/qa/cases/outcomes.test.ts',
     reads: ['tests/qa/integration/outcomes/**', 'scripts/qa/cases/outcomes/**',
       'scripts/qa/cases/outcomes.ts', 'scripts/qa/cases/outcome-cells.ts',

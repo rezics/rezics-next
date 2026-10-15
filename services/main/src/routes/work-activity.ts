@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { ContentLimitExceeded } from '../../../content/src/core.ts';
 import { readWorkActivityHistory, readWorkDiscussion } from '../modules/work-activity/read.ts';
@@ -21,7 +22,7 @@ export function workActivityRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/resources/:resource/discussion', { params: t.Object({ resource: readUuid }), detail,
       query: t.Object({ ...pageQuery, realm: t.Optional(readId) }, { additionalProperties: false }),
-      response: { 200: discussionRead, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/resources/{resource}/discussion"].get, { 200: discussionRead, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try {
         const page = await workRead(work, request, query,
@@ -34,7 +35,7 @@ export function workActivityRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/works/:id/history', { params, detail,
       query: t.Object({ ...pageQuery, kind: t.Optional(historyKind) }, { additionalProperties: false }),
-      response: { 200: activityHistoryPage, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/history"].get, { 200: activityHistoryPage, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try {
         return Response.json(await workRead(work, request, query,

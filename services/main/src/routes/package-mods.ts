@@ -1,3 +1,4 @@
+import { transportResponses, transportProblem } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -145,7 +146,7 @@ export function packageModRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/package-resolutions/mods', {
       body: requestSchema,
-      response: { 200: written, 201: written, ...writeProblems, 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/package-resolutions/mods"].post, { 200: written, 201: written, ...writeProblems, 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.packageModResolutions) return problem(503, 'mod_resolution_unavailable',
@@ -162,7 +163,7 @@ export function packageModRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/package-resolutions/mods/:resolution', {
       params: t.Object({ resolution: groupUuid }),
-      response: { 200: receipt, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/package-resolutions/mods/{resolution}"].get, { 200: receipt, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.packageModResolutions) return problem(503, 'mod_resolution_unavailable',
@@ -177,7 +178,7 @@ export function packageModRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/package-resolutions/mods/:resolution/work-binding', {
       params: t.Object({ resolution: groupUuid }), body: binding,
-      response: { 200: publicCard, 201: publicCard, ...writeProblems, 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/package-resolutions/mods/{resolution}/work-binding"].post, { 404: transportProblem(404, 'work_unavailable'), 200: publicCard, 201: publicCard, ...writeProblems, 422: problemResult(422) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         const store = work.packageModResolutions;
@@ -195,7 +196,7 @@ export function packageModRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/mod-compatibility/:work', {
       params: t.Object({ work: groupUuid }),
-      response: { 200: publicCard, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/mod-compatibility/{work}"].get, { 200: publicCard, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         const store = work.packageModResolutions;
@@ -211,7 +212,7 @@ export function packageModRoutes(work: MainWorkDependencies) {
     /** O(R) indexed rows for one Work, R ≤ 128; the store refuses a larger history. */
     .get('/v1/mod-compatibility/:work/exact', {
       params: t.Object({ work: groupUuid }), query: exactQuery,
-      response: { 200: exactResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/mod-compatibility/{work}/exact"].get, { 200: exactResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const store = work.packageModResolutions;
@@ -230,7 +231,7 @@ export function packageModRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/mod-releases/:work', {
       params: t.Object({ work: groupUuid }), query: releaseQuery,
-      response: { 200: releasePage, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/mod-releases/{work}"].get, { 200: releasePage, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const store = work.packageModResolutions;

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems } from '../api-responses.ts';
@@ -47,7 +48,7 @@ export function managementReadRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/realms/:realm/moderation/:caseId', { params: t.Object({ realm: readUuid, caseId: readUuid }), detail,
       query: t.Object({ ...managementQuery, limit: t.Optional(t.Integer({ minimum: 1, maximum: DECISION_BASIS_COST.reports })) },
-        { additionalProperties: false }), response: { 200: decisionBasisPage, ...problems },
+        { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/realms/{realm}/moderation/{caseId}"].get, { 200: decisionBasisPage, ...problems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
@@ -63,7 +64,7 @@ export function managementReadRoutes(work: MainWorkDependencies) {
       query: t.Object({ actingSubject: readId,
         agents: t.Optional(t.String({ maxLength: MODERATION_CONTEXT_COST.agents * 60 })),
         works: t.Optional(t.String({ maxLength: MODERATION_CONTEXT_COST.works * 60 })) }, { additionalProperties: false }),
-      response: { 200: moderationContext, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/moderation/context"].get, { 200: moderationContext, ...problems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try {
         const agents = idList(query.agents, MODERATION_CONTEXT_COST.agents);
@@ -94,7 +95,7 @@ export function managementReadRoutes(work: MainWorkDependencies) {
         state: t.Optional(t.Union([t.Literal('open'), t.Literal('closed')])),
         type: t.Optional(moderationKind), reason: t.Optional(reportReason) },
       { additionalProperties: false }),
-      response: { 200: moderationPage, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/moderation"].get, { 200: moderationPage, ...problems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try {
         const principal = await work.account.verify(request,
@@ -118,7 +119,7 @@ export function managementReadRoutes(work: MainWorkDependencies) {
     .get('/v1/realms/:realm/audit', { params, detail,
       query: t.Object({ ...managementQuery,
         kind: t.Optional(auditKind) }, { additionalProperties: false }),
-      response: { 200: auditPage, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/audit"].get, { 200: auditPage, ...problems }, 'GET'),
     }, async ({ request, params: path, query }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);

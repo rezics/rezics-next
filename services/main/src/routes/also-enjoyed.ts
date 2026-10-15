@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { alsoEnjoyedPage, alsoEnjoyedQuery } from '../modules/also-enjoyed/contract.ts';
@@ -54,7 +55,7 @@ export function alsoEnjoyedRoutes(work: MainWorkDependencies) {
     .get('/v1/works/:id/also-enjoyed', {
       params: uuid, query: alsoEnjoyedQuery,
       detail: { security: [{}, { bearerAuth: [] }] },
-      response: { 200: alsoEnjoyedPage, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/also-enjoyed"].get, { 200: alsoEnjoyedPage, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         if (!work.alsoEnjoyed) throw new WorkReadUnavailable('Co-reader owner is unavailable');
@@ -64,7 +65,7 @@ export function alsoEnjoyedRoutes(work: MainWorkDependencies) {
       } catch (error) { return readError(error); }
     })
     .post('/v1/also-enjoyed/generation-builds', {
-      body: managed, response: { 200: buildView, ...manageProblems },
+      body: managed, response: transportResponses(openApiOperations["/v1/also-enjoyed/generation-builds"].post, { 200: buildView, ...manageProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.alsoEnjoyed) throw new WorkReadUnavailable('Co-reader owner is unavailable');
@@ -76,7 +77,7 @@ export function alsoEnjoyedRoutes(work: MainWorkDependencies) {
       } catch (error) { return readError(error); }
     })
     .get('/v1/also-enjoyed/generations/:generation', {
-      params: generation, query: managed, response: { 200: genView, ...manageProblems },
+      params: generation, query: managed, response: transportResponses(openApiOperations["/v1/also-enjoyed/generations/{generation}"].get, { 200: genView, ...manageProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         if (!work.alsoEnjoyed) throw new WorkReadUnavailable('Co-reader owner is unavailable');
@@ -88,7 +89,7 @@ export function alsoEnjoyedRoutes(work: MainWorkDependencies) {
       } catch (error) { return readError(error); }
     })
     .post('/v1/also-enjoyed/generations/:generation/advance', {
-      params: generation, body: managed, response: { 200: genView, ...manageProblems },
+      params: generation, body: managed, response: transportResponses(openApiOperations["/v1/also-enjoyed/generations/{generation}/advance"].post, { 200: genView, ...manageProblems }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.alsoEnjoyed) throw new WorkReadUnavailable('Co-reader owner is unavailable');
@@ -101,7 +102,7 @@ export function alsoEnjoyedRoutes(work: MainWorkDependencies) {
     .post('/v1/also-enjoyed/generation-activations', {
       body: t.Object({ actingSubject: readId, generation: readUuid,
         expectedHeadRevision: t.Nullable(t.String({ pattern: '^[0-9]+$' })) }),
-      response: { 200: activationView, ...manageProblems },
+      response: transportResponses(openApiOperations["/v1/also-enjoyed/generation-activations"].post, { 200: activationView, ...manageProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.alsoEnjoyed) throw new WorkReadUnavailable('Co-reader owner is unavailable');

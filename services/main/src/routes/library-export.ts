@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { canonicalRow } from '../modules/library-import/formats/contract.ts';
@@ -18,9 +19,9 @@ export function libraryExportRoutes(deps: MainWorkDependencies) {
   return new Elysia().get('/v1/me/library-export', {
     query: t.Object({ actingSubject: readId,limit: t.Optional(t.Integer({ minimum: 1,maximum: LIBRARY_EXPORT_COST.page })),
       cursor: t.Optional(t.String({ maxLength: 2048 })),snapshot: t.Optional(t.String({ maxLength: 2048 })) },{ additionalProperties: false }),
-    response: { 200: t.Object({ profile: t.Literal('rezics-library-export-v1'),rows: t.Array(canonicalRow,{ maxItems: LIBRARY_EXPORT_COST.page }),
+    response: transportResponses(openApiOperations["/v1/me/library-export"].get, { 200: t.Object({ profile: t.Literal('rezics-library-export-v1'),rows: t.Array(canonicalRow,{ maxItems: LIBRARY_EXPORT_COST.page }),
       snapshot: t.String(),nextCursor: t.Nullable(t.String()) }),
-      ...Object.fromEntries([400,401,403,409,503].map(code => [code,problemResult(code)])) },
+      ...Object.fromEntries([400,401,403,409,503].map(code => [code,problemResult(code)])) }, 'GET'),
   },async ({ request,query }) => {
     if (!deps.libraryBundle) return problem(503,'library_export_unavailable','Library export is unavailable');
     try {

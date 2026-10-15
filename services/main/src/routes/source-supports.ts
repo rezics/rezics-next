@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { languageTagSchema } from '../modules/display-language/schema.ts';
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -258,7 +259,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
   return new Elysia()
     .get('/v1/works/:id/fields/synopsis/control', {
       params: t.Object({ id: groupUuid }), query: t.Object({ actingSubject: groupAgent }),
-      response: { 200: synopsisState, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/fields/synopsis/control"].get, { 200: synopsisState, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);
@@ -290,8 +291,8 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         origin: t.Union([t.Literal('human'), t.Literal('source')]),
         source: t.Nullable(synopsisSource), actingSubject: groupAgent },
       { additionalProperties: false }),
-      response: { 200: synopsisReceipt, 201: synopsisReceipt,
-        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/works/{id}/fields/synopsis/control"].post, { 200: synopsisReceipt, 201: synopsisReceipt,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         const key = request.headers.get('idempotency-key');
@@ -354,9 +355,9 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         sourceOccurrence: t.Nullable(t.String({ maxLength: 100 })),
         sourcePointer: t.String({ minLength: 1, maxLength: 200 }),
         expectedHead: groupAgent, actingSubject: groupAgent }, { additionalProperties: false }),
-      response: { 200: t.Object({ support: fieldSupport, replayed: t.Boolean() }),
+      response: transportResponses(openApiOperations["/v1/sources/field-supports"].post, { 200: t.Object({ support: fieldSupport, replayed: t.Boolean() }),
         201: t.Object({ support: fieldSupport, replayed: t.Boolean() }),
-        ...writeProblems, 404: problemResult(404) },
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.sourceFieldAttachments || !work.sourceFieldWithdrawals) {
@@ -379,9 +380,9 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
       body: t.Object({ profile: t.Literal('work-author-credit-retirement-v1'),
         revision: groupAgent, expectedHead: groupAgent, actingSubject: groupAgent,
         reason: t.String({ minLength: 1, maxLength: 500 }) }, { additionalProperties: false }),
-      response: { 200: t.Object({ retirement: creditRetirement, replayed: t.Boolean() }),
+      response: transportResponses(openApiOperations["/v1/works/{id}/author-credits/{credit}/retirements"].post, { 200: t.Object({ retirement: creditRetirement, replayed: t.Boolean() }),
         201: t.Object({ retirement: creditRetirement, replayed: t.Boolean() }),
-        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         const key = request.headers.get('idempotency-key');
@@ -397,7 +398,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     .get('/v1/works/:id/author-credits/:credit/retirement', {
       params: t.Object({ id: groupUuid, credit: groupUuid }),
       query: t.Object({ actingSubject: groupAgent }),
-      response: { 200: creditRetirement, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/author-credits/{credit}/retirement"].get, { 200: creditRetirement, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);
@@ -415,7 +416,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     })
     .get('/v1/sources/supports/:support', {
       params: t.Object({ support: groupUuid }),
-      response: { 200: anySupportResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/sources/supports/{support}"].get, { 200: anySupportResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceFieldWithdrawals) return problem(503, 'source_support_unavailable', 'Source support owner is unavailable');
@@ -429,7 +430,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     })
     .get('/v1/sources/field-supports/:support', {
       params: t.Object({ support: groupUuid }),
-      response: { 200: fieldSupport, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/sources/field-supports/{support}"].get, { 200: fieldSupport, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceFieldWithdrawals) return problem(503, 'source_support_unavailable', 'Source field owner is unavailable');
@@ -446,9 +447,9 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         t.Literal('source-field-withdrawal-v1')]),
         support: groupAgent, expectedSupport: groupAgent,
         reason: t.String({ minLength: 1, maxLength: 500 }) }, { additionalProperties: false }),
-      response: { 200: t.Object({ support: anySupportResult, replayed: t.Boolean() }),
+      response: transportResponses(openApiOperations["/v1/sources/withdrawals"].post, { 200: t.Object({ support: anySupportResult, replayed: t.Boolean() }),
         201: t.Object({ support: anySupportResult, replayed: t.Boolean() }),
-        ...writeProblems, 404: problemResult(404) },
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.sourceFieldWithdrawals) return problem(503, 'source_support_unavailable', 'Source field owner is unavailable');
@@ -491,8 +492,8 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     })
     .post('/v1/works/:id/source-author-credits', {
       params: t.Object({ id: groupUuid }), body: authorCreditBody,
-      response: { 200: authorCreditWriteResult, 201: authorCreditWriteResult,
-        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/works/{id}/source-author-credits"].post, { 200: authorCreditWriteResult, 201: authorCreditWriteResult,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.sourceAuthorCredits) return problem(503, 'author_credit_unavailable', 'Source credit owner is unavailable');
@@ -508,7 +509,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
       } catch (error) { return commandError(error); }
     })
     .get('/v1/sources/author-credit-supports/:support', {
-      params: t.Object({ support: groupUuid }), response: { 200: authorCreditSupportResult, ...authorizedReadProblems },
+      params: t.Object({ support: groupUuid }), response: transportResponses(openApiOperations["/v1/sources/author-credit-supports/{support}"].get, { 200: authorCreditSupportResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceAuthorCredits) return problem(503, 'author_credit_unavailable', 'Source credit owner is unavailable');
@@ -523,7 +524,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     .post('/v1/sources/author-credit-supports/:support/withdrawals', {
       params: t.Object({ support: groupUuid }), body: t.Object({ reason: t.String({ minLength: 1, maxLength: 500 }) },
         { additionalProperties: false }),
-      response: { 200: authorCreditWriteResult, 201: authorCreditWriteResult, ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/sources/author-credit-supports/{support}/withdrawals"].post, { 200: authorCreditWriteResult, 201: authorCreditWriteResult, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.sourceAuthorCredits) return problem(503, 'author_credit_unavailable', 'Source credit owner is unavailable');
@@ -539,8 +540,8 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     })
     .post('/v1/works/:id/source-children', {
       params: t.Object({ id: groupUuid }), body: nativeChildBody,
-      response: { 200: nativeChildWrite, 201: nativeChildWrite, 202: pendingOperation,
-        ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/works/{id}/source-children"].post, { 200: nativeChildWrite, 201: nativeChildWrite, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.sourceNativeChildren) return problem(503, 'native_child_unavailable', 'Native child owner is unavailable');
@@ -558,7 +559,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     })
     .get('/v1/sources/native-child-supports/:support', {
       params: t.Object({ support: groupUuid }),
-      response: { 200: nativeChildSupport, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/sources/native-child-supports/{support}"].get, { 200: nativeChildSupport, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceNativeChildren) return problem(503, 'native_child_unavailable', 'Native child owner is unavailable');
@@ -573,8 +574,8 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     .post('/v1/sources/native-child-supports/:support/withdrawals', {
       params: t.Object({ support: groupUuid }),
       body: t.Object({ reason: t.String({ minLength: 1, maxLength: 500 }) }, { additionalProperties: false }),
-      response: { 200: nativeChildWrite, 201: nativeChildWrite,
-        ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/sources/native-child-supports/{support}/withdrawals"].post, { 200: nativeChildWrite, 201: nativeChildWrite,
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.sourceNativeChildren) return problem(503, 'native_child_unavailable', 'Native child owner is unavailable');
@@ -592,7 +593,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     .get('/v1/works/:id/native-children/:child/revisions/:revision', {
       params: t.Object({ id: groupUuid, child: groupUuid, revision: groupUuid }),
       query: t.Object({ actingSubject: groupAgent }),
-      response: { 200: nativeChildResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/native-children/{child}/revisions/{revision}"].get, { 200: nativeChildResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);
@@ -612,8 +613,8 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         revision: groupAgent, expectedHead: groupAgent,
         actingSubject: groupAgent, reason: t.String({ minLength: 1, maxLength: 500 }) },
       { additionalProperties: false }),
-      response: { 200: nativeChildRetirementWrite, 201: nativeChildRetirementWrite,
-        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/works/{id}/native-children/{child}/retirements"].post, { 200: nativeChildRetirementWrite, 201: nativeChildRetirementWrite,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         const key = request.headers.get('idempotency-key');
@@ -635,7 +636,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     .get('/v1/works/:id/native-children/:child/retirements', {
       params: t.Object({ id: groupUuid, child: groupUuid }),
       query: t.Object({ actingSubject: groupAgent }),
-      response: { 200: nativeChildRetirement, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/native-children/{child}/retirements"].get, { 200: nativeChildRetirement, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);
@@ -652,7 +653,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     .get('/v1/works/:id/author-credits/:credit/revisions/:revision', {
       params: t.Object({ id: groupUuid, credit: groupUuid, revision: groupUuid }),
       query: t.Object({ actingSubject: groupAgent }),
-      response: { 200: nativeAuthorCreditResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/author-credits/{credit}/revisions/{revision}"].get, { 200: nativeAuthorCreditResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);
@@ -672,8 +673,8 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         proposal: groupAgent, expectedHead: groupAgent, actingSubject: groupAgent,
         confirmedTitle: t.String({ minLength: 1, maxLength: 200 }), titleLanguage: languageTagSchema(35),
       }, { additionalProperties: false }),
-      response: { 200: sourceAttachmentWriteResult, 201: sourceAttachmentWriteResult,
-        ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v2/works/{id}/source-supports"].post, { 200: sourceAttachmentWriteResult, 201: sourceAttachmentWriteResult,
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.sourceAttachments) return problem(503, 'source_adoption_unavailable', 'Source owner is unavailable');
@@ -690,7 +691,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     })
     .get('/v2/works/:id/source-supports', {
       params: t.Object({ id: groupUuid }),
-      response: { 200: sourceSupportCollectionResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v2/works/{id}/source-supports"].get, { 200: sourceSupportCollectionResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceAttachments) return problem(503, 'source_adoption_unavailable', 'Source owner is unavailable');
@@ -704,7 +705,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     })
     .get('/v2/works/:id/source-supports/:binding', {
       params: t.Object({ id: groupUuid, binding: groupUuid }),
-      response: { 200: sourceSupportEntryResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v2/works/{id}/source-supports/{binding}"].get, { 200: sourceSupportEntryResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceAttachments) return problem(503, 'source_adoption_unavailable', 'Source owner is unavailable');
@@ -722,8 +723,8 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
       body: t.Object({ profile: t.Literal('native-work-source-support-withdrawal-v2'),
         expectedSupport: groupAgent, reason: t.String({ minLength: 1, maxLength: 500 }),
       }, { additionalProperties: false }),
-      response: { 200: sourcePerBindingWithdrawalResult, 201: sourcePerBindingWithdrawalResult,
-        ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v2/works/{id}/source-supports/{binding}/withdrawal"].post, { 200: sourcePerBindingWithdrawalResult, 201: sourcePerBindingWithdrawalResult,
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.sourceAttachments) return problem(503, 'source_adoption_unavailable', 'Source owner is unavailable');
@@ -740,7 +741,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     })
     .get('/v1/works/:id/source-support', {
       params: t.Object({ id: groupUuid }),
-      response: { 200: sourceSupportResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/source-support"].get, { 200: sourceSupportResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable',
@@ -761,8 +762,8 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         binding: groupAgent, expectedSupport: groupAgent,
         reason: t.String({ minLength: 1, maxLength: 500 }),
       }, { additionalProperties: false }),
-      response: { 200: sourceSupportWithdrawalWriteResult, 201: sourceSupportWithdrawalWriteResult,
-        ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/works/{id}/source-support/withdrawal"].post, { 200: sourceSupportWithdrawalWriteResult, 201: sourceSupportWithdrawalWriteResult,
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable',
@@ -782,8 +783,8 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     })
     .get('/v1/works/:id/source-refresh-assessments/:candidateProposal', {
       params: t.Object({ id: groupUuid, candidateProposal: groupUuid }),
-      response: { 200: sourceRefreshAssessmentResult, ...authorizedReadProblems,
-        409: problemResult(409) },
+      response: transportResponses(openApiOperations["/v1/works/{id}/source-refresh-assessments/{candidateProposal}"].get, { 200: sourceRefreshAssessmentResult, ...authorizedReadProblems,
+        409: problemResult(409) }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable',
@@ -800,7 +801,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     })
     .get('/v1/works/:id/title-control', {
       params: t.Object({ id: groupUuid }), query: t.Object({ actingSubject: groupAgent }),
-      response: { 200: titleControlState, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/title-control"].get, { 200: titleControlState, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);
@@ -814,7 +815,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
       params: t.Object({ id: groupUuid }),
       body: t.Object({ proposal: groupAgent, expectedHead: groupAgent, actingSubject: groupAgent,
         titleControl: titleControlBasis }, { additionalProperties: false }),
-      response: { 200: titleControlReturnResult, 202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/works/{id}/title-control/source-return"].post, { 200: titleControlReturnResult, 202: pendingOperation, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable', 'Source owner is unavailable');
@@ -837,9 +838,9 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         language: t.Optional(languageTagSchema(35)),
         confirmedTitle: t.String({ minLength: 1, maxLength: 200 }),
       }, { additionalProperties: false }),
-      response: { 200: sourceTitleApplicationWriteResult,
+      response: transportResponses(openApiOperations["/v1/works/{id}/source-title-applications/{candidateProposal}"].post, { 200: sourceTitleApplicationWriteResult,
         201: sourceTitleApplicationWriteResult, 202: pendingOperation,
-        ...writeProblems, 404: problemResult(404) },
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable',
@@ -859,7 +860,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
     })
     .get('/v1/works/:id/source-title-applications/:candidateProposal', {
       params: t.Object({ id: groupUuid, candidateProposal: groupUuid }),
-      response: { 200: sourceTitleApplicationResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/source-title-applications/{candidateProposal}"].get, { 200: sourceTitleApplicationResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.sourceAdoptions) return problem(503, 'source_adoption_unavailable',

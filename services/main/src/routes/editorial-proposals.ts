@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -127,40 +128,40 @@ export function editorialProposalRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('editorial-proposal-create-v1'),kind: t.String({ pattern: '^[a-z][a-z0-9-]{0,63}$' }),
         target: t.Object({ resource: native,revision: native,context },{ additionalProperties: false }),
         candidate: t.Unknown(),baseHeads: heads,evidence,actingSubject: native },{ additionalProperties: false }),
-      response: { 200: commandResult,201: commandResult,...problems },
+      response: transportResponses(openApiOperations["/v1/editorial/proposals"].post, { 200: commandResult,201: commandResult,...problems }, 'POST'),
     }, ({ request,body }) => write(request,body.actingSubject,'work:correct',
       (call,key) => owner().create(call,body,key),true))
     .post('/v1/editorial/proposals/:proposal/revisions', {
       params,body: t.Object({ profile: t.Literal('editorial-proposal-revise-v1'),...revisionFields,actingSubject: native },{ additionalProperties: false }),
-      response: { 200: commandResult,...problems },
+      response: transportResponses(openApiOperations["/v1/editorial/proposals/{proposal}/revisions"].post, { 200: commandResult,...problems }, 'POST'),
     }, ({ request,params: path,body }) => write(request,body.actingSubject,'work:correct',
       (call,key) => owner().revise(call,path.proposal,body,key)))
     .post('/v1/editorial/proposals/:proposal/reviews', {
       params,body: t.Object({ profile: t.Literal('editorial-proposal-review-v1'),revision: n,
         outcome: t.Union([t.Literal('approve'),t.Literal('request_changes'),t.Literal('comment')]),message,actingSubject: native },
-      { additionalProperties: false }),response: { 200: commandResult,...problems },
+      { additionalProperties: false }),response: transportResponses(openApiOperations["/v1/editorial/proposals/{proposal}/reviews"].post, { 200: commandResult,...problems }, 'POST'),
     }, ({ request,params: path,body }) => write(request,body.actingSubject,'work:review',
       (call,key) => owner().review(call,path.proposal,body,key)))
     .post('/v1/editorial/proposals/:proposal/decisions', {
       params,body: t.Object({ profile: t.Literal('editorial-proposal-decide-v1'),revision: n,
         outcome: t.Union([t.Literal('applied'),t.Literal('rejected')]),approve: t.Boolean(),message,actingSubject: native },
-      { additionalProperties: false }),response: { 200: commandResult,202: commandResult,...problems },
+      { additionalProperties: false }),response: transportResponses(openApiOperations["/v1/editorial/proposals/{proposal}/decisions"].post, { 200: commandResult,202: commandResult,...problems }, 'POST'),
     }, ({ request,params: path,body }) => write(request,body.actingSubject,'work:review',
       (call,key) => owner().decide(call,path.proposal,body,key)))
     .post('/v1/editorial/proposals/:proposal/withdrawal', {
       params,body: t.Object({ profile: t.Literal('editorial-proposal-withdraw-v1'),revision: n,actingSubject: native },
-        { additionalProperties: false }),response: { 200: commandResult,...problems },
+        { additionalProperties: false }),response: transportResponses(openApiOperations["/v1/editorial/proposals/{proposal}/withdrawal"].post, { 200: commandResult,...problems }, 'POST'),
     }, ({ request,params: path,body }) => write(request,body.actingSubject,'work:correct',
       (call,key) => owner().withdraw(call,path.proposal,body.revision,key)))
     .post('/v1/editorial/proposals/:proposal/reversal', {
       params,body: t.Object({ profile: t.Literal('editorial-proposal-revert-v1'),evidence,actingSubject: native },
-        { additionalProperties: false }),response: { 200: commandResult,201: commandResult,...problems },
+        { additionalProperties: false }),response: transportResponses(openApiOperations["/v1/editorial/proposals/{proposal}/reversal"].post, { 200: commandResult,201: commandResult,...problems }, 'POST'),
     }, ({ request,params: path,body }) => write(request,body.actingSubject,'work:correct',
       (call,key) => owner().revert(call,path.proposal,body.evidence,key),true))
     .get('/v1/editorial/proposals/:proposal', { params,detail: optionalSecurity,
       query: t.Object({ actingSubject: t.Optional(native),limit: t.Optional(t.Numeric({ minimum: 1,maximum: 50 })),
         cursor: t.Optional(t.String({ maxLength: 2048 })) },{ additionalProperties: false }),
-      response: { 200: proposalRead,...problems },
+      response: transportResponses(openApiOperations["/v1/editorial/proposals/{proposal}"].get, { 200: proposalRead,...problems }, 'GET'),
     }, async ({ request,params: path,query }) => {
       try { return Response.json(await owner().get(await read(request,query.actingSubject),path.proposal,query.limit,query.cursor),noStore); }
       catch (error) { return editorialError(error); }
@@ -168,15 +169,15 @@ export function editorialProposalRoutes(work: MainWorkDependencies) {
     .get('/v1/editorial/proposals', { detail: optionalSecurity,
       query: t.Object({ filter: t.Union([t.Literal('mine'),t.Literal('review-requested'),t.Literal('target')]),target: t.Optional(native),
         actingSubject: t.Optional(native),limit: t.Optional(t.Numeric({ minimum: 1,maximum: 50 })),cursor: t.Optional(t.String({ maxLength: 2048 })) },
-      { additionalProperties: false }),response: { 200: t.Object({ items: t.Array(t.Object({ id: uuid,kind: t.String(),target }),
-        { maxItems: 50 }),nextCursor: t.Nullable(t.String()) }),...problems },
+      { additionalProperties: false }),response: transportResponses(openApiOperations["/v1/editorial/proposals"].get, { 200: t.Object({ items: t.Array(t.Object({ id: uuid,kind: t.String(),target }),
+        { maxItems: 50 }),nextCursor: t.Nullable(t.String()) }),...problems }, 'GET'),
     }, async ({ request,query }) => {
       try { return Response.json(await owner().list(await read(request,query.actingSubject),{ ...query,limit: query.limit ?? 50 }),noStore); }
       catch (error) { return editorialError(error); }
     })
     .post('/v1/editorial/proposals/:proposal/recovery', { params,detail: optionalSecurity,
       body: t.Object({ profile: t.Literal('editorial-proposal-recover-v1'),actingSubject: t.Optional(native) },{ additionalProperties: false }),
-      response: { 200: proposalRead,202: proposalRead,...problems },
+      response: transportResponses(openApiOperations["/v1/editorial/proposals/{proposal}/recovery"].post, { 200: proposalRead,202: proposalRead,...problems }, 'POST'),
     }, async ({ request,params: path,body }) => {
       try {
         const result = await owner().get(await read(request,body.actingSubject),path.proposal);

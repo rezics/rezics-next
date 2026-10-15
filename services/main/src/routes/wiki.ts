@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t, ValidationError } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge } from '../infrastructure/fuseki.ts';
@@ -69,7 +70,7 @@ export function wikiSchemaError(error: unknown, request: Request): Response | un
 }
 export function wikiRoutes(_fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
-    .post('/v1/wiki/candidates', { body: candidatesRequest, response: { 200: candidateResult, ...problems } },
+    .post('/v1/wiki/candidates', { body: candidatesRequest, response: transportResponses(openApiOperations["/v1/wiki/candidates"].post, { 200: candidateResult, ...problems }, 'POST') },
       async ({ request, body }) => {
         try {
           const principal = await work.account.verify(request, ['wiki:propose']);
@@ -78,7 +79,7 @@ export function wikiRoutes(_fuseki: FusekiClient, work: MainWorkDependencies) {
             { headers: { 'cache-control': 'no-store' } });
         } catch (error) { return wikiError(error); }
       })
-    .post('/v1/wiki/validations', { body: validationRequest, response: { 200: preview, ...problems } },
+    .post('/v1/wiki/validations', { body: validationRequest, response: transportResponses(openApiOperations["/v1/wiki/validations"].post, { 200: preview, ...problems }, 'POST') },
       async ({ request, body }) => {
         try {
           const principal = await work.account.verify(request, ['wiki:propose']);

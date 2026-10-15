@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { resolveTargets } from '../modules/target/resolve.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
@@ -55,7 +56,7 @@ function optionalReader(request: Request, actingSubject: string | undefined) {
 export function reviewRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/reviews', { body: reviewCommand,
-      response: { 200: reviewResult, 201: reviewResult, ...reviewErrors },
+      response: transportResponses(openApiOperations["/v1/reviews"].post, { 200: reviewResult, 201: reviewResult, ...reviewErrors }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.reviews) throw new WorkReadUnavailable('Review owner is unavailable');
@@ -79,7 +80,7 @@ export function reviewRoutes(work: MainWorkDependencies) {
       } catch (error) { return reviewError(error); }
     })
     .delete('/v1/reviews/:id', { params: param, body: reviewDelete,
-      response: { 200: reviewResult, ...reviewErrors },
+      response: transportResponses(openApiOperations["/v1/reviews/{id}"].delete, { 200: reviewResult, ...reviewErrors }, 'DELETE'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.reviews) throw new WorkReadUnavailable('Review owner is unavailable');
@@ -89,7 +90,7 @@ export function reviewRoutes(work: MainWorkDependencies) {
       } catch (error) { return reviewError(error); }
     })
     .put('/v1/reviews/:id/helpful', { params: param, body: helpfulCommand,
-      response: { 200: helpfulResult, ...reviewErrors },
+      response: transportResponses(openApiOperations["/v1/reviews/{id}/helpful"].put, { 200: helpfulResult, ...reviewErrors }, 'PUT'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.reviews) throw new WorkReadUnavailable('Review owner is unavailable');
@@ -107,7 +108,7 @@ export function reviewRoutes(work: MainWorkDependencies) {
     .get('/v1/reviews/:id', { params: param,
       query: t.Object({ actingSubject: t.Optional(readId), showSpoilers: t.Optional(t.Boolean()) },
         { additionalProperties: false }), detail: optionalBearer,
-      response: { 200: reviewItemSchema, ...reviewErrors },
+      response: transportResponses(openApiOperations["/v1/reviews/{id}"].get, { 200: reviewItemSchema, ...reviewErrors }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         if (!work.reviews) throw new WorkReadUnavailable('Review owner is unavailable');
@@ -126,7 +127,7 @@ export function reviewRoutes(work: MainWorkDependencies) {
       } catch (error) { return reviewError(error); }
     })
     .get('/v1/resources/:resource/reviews', { params: t.Object({ resource: readUuid }), query: reviewQuery,
-      detail: optionalBearer, response: { 200: reviewPage, ...reviewErrors },
+      detail: optionalBearer, response: transportResponses(openApiOperations["/v1/resources/{resource}/reviews"].get, { 200: reviewPage, ...reviewErrors }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         if (!work.reviews) throw new WorkReadUnavailable('Review owner is unavailable');
@@ -170,7 +171,7 @@ export function reviewRoutes(work: MainWorkDependencies) {
     .get('/v1/review-quotes/realms/:id', { params: param,
       query: t.Object({ limit: t.Optional(t.Integer({ minimum: 1, maximum: REVIEW_COST.quoteSize })),
         language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$', maxLength: 35 })) },
-      { additionalProperties: false }), response: { 200: quotePage, ...reviewErrors },
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/review-quotes/realms/{id}"].get, { 200: quotePage, ...reviewErrors }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         if (!work.reviews) throw new WorkReadUnavailable('Review owner is unavailable');

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { writeProblems } from '../api-responses.ts';
 import { problemResult } from '../api-contract.ts';
@@ -22,11 +23,11 @@ export function onboardingRoutes(work: MainWorkDependencies) {
     body: t.Object({ profile: t.Literal('person-onboarding-v1'),
       displayName: t.Optional(t.String({ minLength: 1, maxLength: 200,
         pattern: '^[^\\u0000-\\u001f\\u007f]+$' })) }, { additionalProperties: false }),
-    response: { 200: result, 201: result, 202: result, ...writeProblems,
+    response: transportResponses(openApiOperations["/v1/me/onboarding"].post, { 200: result, 201: result, 202: result, ...writeProblems,
       409: t.Object({ ...problemResult(409).properties, code: t.Union([
         t.Literal('public_name_required'), t.Literal('person_onboarding_compensated'),
         t.Literal('idempotency_conflict'), t.Literal('stale_context'),
-      ]) }) },
+      ]) }) }, 'POST'),
   }, async ({ request, body }) => {
     try {
       const state = await ensurePersonOnboarding(work, request,

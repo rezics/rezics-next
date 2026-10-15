@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { WorkReadMissing } from '../modules/work/read-session.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -72,7 +73,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/realms/:realm/join-requests/:request/withdraw', {
       params: t.Object({ realm: readUuid, request: readUuid }), body: joinRequestWithdraw,
-      response: { 200: joinRequestDecisionReceipt, 201: joinRequestDecisionReceipt, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/join-requests/{request}/withdraw"].post, { 200: joinRequestDecisionReceipt, 201: joinRequestDecisionReceipt, ...problems }, 'POST'),
     }, async ({ request, params: path, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:membership-consent']);
@@ -83,7 +84,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/realms/:realm/join-requests/:request/decisions', {
       params: t.Object({ realm: readUuid, request: readUuid }), body: joinRequestDecision,
-      response: { 200: joinRequestDecisionReceipt, 201: joinRequestDecisionReceipt, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/join-requests/{request}/decisions"].post, { 200: joinRequestDecisionReceipt, 201: joinRequestDecisionReceipt, ...problems }, 'POST'),
     }, async ({ request, params: path, body }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
@@ -93,7 +94,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .get('/v1/realms/:realm/join-requests/basis', { params, query,
-      response: { 200: joinRequestBasis, ...authorizedReadProblems, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/join-requests/basis"].get, { 200: joinRequestBasis, ...authorizedReadProblems, ...problems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try {
         const principal = await work.account.verify(request, ['access:membership-consent']);
@@ -102,7 +103,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .post('/v1/realms/:realm/join-requests', { params, body: joinRequestCommand,
-      response: { 200: joinRequestReceipt, 201: joinRequestReceipt, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/join-requests"].post, { 200: joinRequestReceipt, 201: joinRequestReceipt, ...problems }, 'POST'),
     }, async ({ request, params: path, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:membership-consent']);
@@ -112,7 +113,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .get('/v1/realms/:realm/join-requests/mine', { params, query: ownJoinRequestQuery,
-      response: { 200: ownJoinRequestPage, ...authorizedReadProblems, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/join-requests/mine"].get, { 200: ownJoinRequestPage, ...authorizedReadProblems, ...problems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try {
         const principal = await work.account.verify(request, ['access:membership-consent']);
@@ -121,7 +122,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .get('/v1/realms/:realm/join-requests', { params, query: joinRequestQuery,
-      response: { 200: joinRequestPage, ...authorizedReadProblems, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/join-requests"].get, { 200: joinRequestPage, ...authorizedReadProblems, ...problems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
@@ -131,7 +132,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .get('/v1/spaces/:space/settings', { params: t.Object({ space: readUuid }), query,
-      response: { 200: spaceSettingsView, ...authorizedReadProblems, ...problems },
+      response: transportResponses(openApiOperations["/v1/spaces/{space}/settings"].get, { 200: spaceSettingsView, ...authorizedReadProblems, ...problems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try {
         const principal = await settingsPrincipal(work, request);
@@ -140,7 +141,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .put('/v1/spaces/:space/settings', { params: t.Object({ space: readUuid }), body: spaceSettingsCommand,
-      response: { 200: spaceSettingsReceipt, 201: spaceSettingsReceipt, ...problems },
+      response: transportResponses(openApiOperations["/v1/spaces/{space}/settings"].put, { 200: spaceSettingsReceipt, 201: spaceSettingsReceipt, ...problems }, 'PUT'),
     }, async ({ request, params: path, body }) => {
       try {
         const principal = await settingsPrincipal(work, request);
@@ -150,7 +151,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .post('/v1/realms/:realm/management', { params, body: query,
-      response: { 200: t.Object({ receiptId: readUuid, generation: t.String(), replayed: t.Boolean() }), ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/management"].post, { 200: t.Object({ receiptId: readUuid, generation: t.String(), replayed: t.Boolean() }), ...problems }, 'POST'),
     }, async ({ request, params: path, body }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
@@ -160,7 +161,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .get('/v1/realms/:realm/settings', { params, query,
-      response: { 200: settingsView, ...authorizedReadProblems, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/settings"].get, { 200: settingsView, ...authorizedReadProblems, ...problems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
@@ -168,7 +169,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .put('/v1/realms/:realm/settings', { params, body: settingsCommand,
-      response: { 200: settingsReceipt, 201: settingsReceipt, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/settings"].put, { 200: settingsReceipt, 201: settingsReceipt, ...problems }, 'PUT'),
     }, async ({ request, params: path, body }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
@@ -178,7 +179,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/realms/:realm/members', { params,
       query: t.Object(memberQuery, { additionalProperties: false }),
-      response: { 200: memberPage, ...authorizedReadProblems, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/members"].get, { 200: memberPage, ...authorizedReadProblems, ...problems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
@@ -188,7 +189,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
     .get('/v1/realms/:realm/invitations', { params,
       query: t.Object({ actingSubject: readId, after: t.Optional(readUuid),
         limit: t.Optional(t.Integer({ minimum: 1, maximum: 50 })) }, { additionalProperties: false }),
-      response: { 200: invitationPage, ...authorizedReadProblems, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/invitations"].get, { 200: invitationPage, ...authorizedReadProblems, ...problems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
@@ -198,7 +199,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .post('/v1/realms/:realm/members', { params, body: memberCommand,
-      response: { 200: memberReceipt, 201: memberReceipt, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/members"].post, { 200: memberReceipt, 201: memberReceipt, ...problems }, 'POST'),
     }, async ({ request, params: path, body }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
@@ -207,7 +208,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .get('/v1/realms/:realm/roles', { params, query,
-      response: { 200: roleList, ...authorizedReadProblems, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/roles"].get, { 200: roleList, ...authorizedReadProblems, ...problems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
@@ -215,7 +216,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .post('/v1/realms/:realm/role-impact', { params, body: roleCommand,
-      response: { 200: impact, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/role-impact"].post, { 200: impact, ...problems }, 'POST'),
     }, async ({ request, params: path, body }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
@@ -224,7 +225,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/realms/:realm/role-changes', { params,
       body: t.Object({ ...roleCommand.properties, impactDigest: t.String({ pattern: '^[0-9a-f]{64}$' }) },
-        { additionalProperties: false }), response: { 200: roleReceipt, 201: roleReceipt, ...problems },
+        { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/realms/{realm}/role-changes"].post, { 200: roleReceipt, 201: roleReceipt, ...problems }, 'POST'),
     }, async ({ request, params: path, body }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
@@ -234,7 +235,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .post('/v1/realms/:realm/escalations', { params, body: escalationCommand,
-      response: { 200: escalationReceipt, 201: escalationReceipt, ...problems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/escalations"].post, { 200: escalationReceipt, 201: escalationReceipt, ...problems }, 'POST'),
     }, async ({ request, params: path, body }) => {
       try {
         const principal = await work.account.verify(request, body.itemKind === 'submission'

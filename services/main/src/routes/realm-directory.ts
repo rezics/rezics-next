@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { MediaUnavailable } from '../modules/media/store.ts';
@@ -55,12 +56,12 @@ export function realmDirectoryRoutes(work: MainWorkDependencies) {
     query: t.Object({ language: t.Optional(readLanguage), limit: pageQuery.limit, cursor: pageQuery.cursor,
       context: t.Optional(t.Union([readId, t.Literal(GLOBAL_CLASSIFICATION_CONTEXT)])), scheme: t.Optional(readId),
       q: t.Optional(t.String({ minLength: 1, maxLength: 80 })) }, { additionalProperties: false }),
-    response: { 200: t.Object({ profile: t.Literal('shared-vocabulary-v1'),
+    response: transportResponses(openApiOperations["/v1/classification-vocabulary"].get, { 200: t.Object({ profile: t.Literal('shared-vocabulary-v1'),
       items: t.Array(t.Object({ id: t.String(), label: t.String() }),
         { maxItems: SHARED_VOCABULARY_COST.page }), hasMore: t.Boolean(),
       context: t.Optional(t.String()), scheme: t.Optional(t.Nullable(readId)),
       nextCursor: t.Optional(t.Nullable(t.String())), sourcePosition: t.Optional(readPosition),
-      count: t.Optional(t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Literal('exact-page'), total: t.Null() })) }), ...errors },
+      count: t.Optional(t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Literal('exact-page'), total: t.Null() })) }), ...errors }, 'GET'),
   }, async ({ request, query: options }) => {
     try {
       if (options.context) return Response.json(await publicWorkRead(work, request, options,
@@ -73,7 +74,7 @@ export function realmDirectoryRoutes(work: MainWorkDependencies) {
     catch (error) { return directoryError(error); }
   }).get('/v1/realms', { query,
     detail: { deprecated: true, description: 'Deprecated. Use the resource-list-v1 profile of /v1/query with the type Facet for communities.' },
-    response: { 200: realmDirectoryPage, ...errors },
+    response: transportResponses(openApiOperations["/v1/realms"].get, { 200: realmDirectoryPage, ...errors }, 'GET'),
   }, async ({ request, query: options }) => {
     try {
       // A directory is public even if the caller carries an unrelated bearer token.

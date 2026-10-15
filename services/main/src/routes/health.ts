@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { horizonHealth, latestHorizonHealth } from '../modules/horizon/lag.ts';
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -16,13 +17,13 @@ import { feedProjectionHealth, readFeedProjectionHealth } from '../modules/home/
 export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) {
   return new Elysia()
     .get('/health/live', {
-      response: t.Object({ status: t.Literal('ok') }),
+      response: transportResponses(openApiOperations["/health/live"].get, { 200: t.Object({ status: t.Literal('ok') }) }, 'GET'),
     }, () => ({ status: 'ok' as const }))
     .get('/health/ready', {
-      response: {
+      response: transportResponses(openApiOperations["/health/ready"].get, {
         200: t.Object({ status: t.Literal('ready'), horizons: t.Optional(horizonHealth) }),
         503: t.Object({ status: t.Literal('unavailable') }),
-      },
+      }, 'GET'),
     }, async ({ status }) => {
       try {
         const result = await fuseki.query('ASK {}');
@@ -40,10 +41,10 @@ export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) 
       }
     })
     .get('/health/rating-ready', {
-      response: {
+      response: transportResponses(openApiOperations["/health/rating-ready"].get, {
         200: ratingProjectionHealth,
         503: t.Union([ratingProjectionHealth, t.Object({ status: t.Literal('unavailable') })]),
-      },
+      }, 'GET'),
     }, async ({ status }) => {
       if (!work) return status(503, { status: 'unavailable' as const });
       try {
@@ -54,10 +55,10 @@ export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) 
       }
     })
     .get('/health/discovery-ready', {
-      response: {
+      response: transportResponses(openApiOperations["/health/discovery-ready"].get, {
         200: discoveryRankingHealth,
         503: t.Union([discoveryRankingHealth, t.Object({ status: t.Literal('unavailable') })]),
-      },
+      }, 'GET'),
     }, async ({ status }) => {
       if (!work) return status(503, { status: 'unavailable' as const });
       try {
@@ -68,10 +69,10 @@ export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) 
       }
     })
     .get('/health/feed-ready', {
-      response: {
+      response: transportResponses(openApiOperations["/health/feed-ready"].get, {
         200: feedProjectionHealth,
         503: t.Object({ status: t.Literal('unavailable') }),
-      },
+      }, 'GET'),
     }, async ({ status }) => {
       if (!work) return status(503, { status: 'unavailable' as const });
       try {
@@ -79,13 +80,13 @@ export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) 
       } catch { return status(503, { status: 'unavailable' as const }); }
     })
     .get('/health/search-ready', {
-      response: {
+      response: transportResponses(openApiOperations["/health/search-ready"].get, {
         200: t.Object({ status: t.Union([t.Literal('ready'), t.Literal('indexing')]), dataEpoch: t.String(),
           sequence: t.String(), indexGeneration: t.String(), occurrenceLabels: t.Object({
             status: t.Union([t.Literal('current'), t.Literal('indexing')]),
             pending: t.Object({ value: t.Integer({ minimum: 0, maximum: 1 }), kind: t.Literal('at-least') }) }) }),
         503: t.Object({ status: t.Literal('unavailable') }),
-      },
+      }, 'GET'),
     }, async ({ status }) => {
       if (!work) return status(503, { status: 'unavailable' as const });
       try {

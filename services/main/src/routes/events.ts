@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { AdmissionDenied, AdmissionUnavailable } from '../modules/access/admission.ts';
 import { EventObservationUnavailable, InvalidEventObservation, StaleEventObservation }
@@ -77,8 +78,8 @@ export function eventRoutes(work: MainWorkDependencies & EventRouteDependencies)
         temporalKind: t.Union([t.Literal('instant'), t.Literal('interval')]), start: point,
         end: t.Optional(point), expectedRevisionHead: t.Nullable(iri), actingSubject: iri,
         timeEvidence: t.Optional(contentRevision) }, { additionalProperties: false }),
-      response: { 200: writeView, 201: writeView, 202: t.Any(),
-        ...Object.fromEntries([400, 401, 403, 409, 422, 500, 503].map(status => [status, problemResult(status)])) },
+      response: transportResponses(openApiOperations["/v1/events/observations"].post, { 200: writeView, 201: writeView, 202: t.Any(),
+        ...Object.fromEntries([400, 401, 403, 409, 422, 500, 503].map(status => [status, problemResult(status)])) }, 'POST'),
     }, async ({ request, body }: { request: Request;
       body: EventObservationIntent & { profile: 'event-time-observation-v1' } }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
@@ -109,8 +110,8 @@ export function eventRoutes(work: MainWorkDependencies & EventRouteDependencies)
         acceptance: t.Optional(t.Union([t.Object({ kind: t.Literal('global') }, { additionalProperties: false }),
           t.Object({ kind: t.Literal('realm'), realm: iri }, { additionalProperties: false })])),
         continuation: t.Optional(t.String({ minLength: 1, maxLength: 1024 })) }, { additionalProperties: false }),
-      response: { 200: t.Union([queryView, queryProgressView]), 422: problemResult(422),
-        ...Object.fromEntries([400, 401, 403, 409, 500, 503].map(status => [status, problemResult(status)])) },
+      response: transportResponses(openApiOperations["/v1/events/queries"].post, { 200: t.Union([queryView, queryProgressView]), 422: problemResult(422),
+        ...Object.fromEntries([400, 401, 403, 409, 500, 503].map(status => [status, problemResult(status)])) }, 'POST'),
     }, async ({ request, body }: { request: Request;
       body: EventQueryInput & { profile: 'event-query-v1' } }) => {
       try {

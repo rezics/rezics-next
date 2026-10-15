@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems } from '../api-responses.ts';
 import type { AccessAuthorityRead } from '../modules/access/authority-read.ts';
@@ -31,9 +32,9 @@ export function accessReadRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/access/authority-state', {
       query: t.Object({ scopeId, actingSubject: groupAgent, action }, { additionalProperties: false }),
-      response: { 200: t.Object({ profile: t.Literal('access-authority-state-v1'), scopeId,
+      response: transportResponses(openApiOperations["/v1/access/authority-state"].get, { 200: t.Object({ profile: t.Literal('access-authority-state-v1'), scopeId,
         actingSubject: groupAgent, action, authorityEpoch: groupGeneration, groupGeneration,
-        representation: source, grant: t.Nullable(source) }), ...authorizedReadProblems },
+        representation: source, grant: t.Nullable(source) }), ...authorizedReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
         const principal = await work.account.verify(request,
@@ -46,9 +47,9 @@ export function accessReadRoutes(work: MainWorkDependencies) {
     .get('/v1/access/revocation-sources/:sourceId', {
       params: t.Object({ sourceId: groupUuid }),
       query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
-      response: { 200: t.Object({ profile: t.Literal('access-revocation-source-v1'), scopeId,
+      response: transportResponses(openApiOperations["/v1/access/revocation-sources/{sourceId}"].get, { 200: t.Object({ profile: t.Literal('access-revocation-source-v1'), scopeId,
         authorityEpoch: groupGeneration, source: t.Object({ ...source.properties, action,
-          recipientSubject: groupAgent, active: t.Boolean() }) }), ...authorizedReadProblems },
+          recipientSubject: groupAgent, active: t.Boolean() }) }), ...authorizedReadProblems }, 'GET'),
     }, async ({ request, query, params }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { RealmReplyConflict, RealmReplyDenied, RealmReplyInvalid,
@@ -112,8 +113,8 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
           + 'Person, reply and placement, never canonical parent coordinates or an opener flag. '
           + 'Body content is limited to 8 KiB. '
           + 'This new platform:realm-reply capability stays closed pending trust-ops review.' },
-      response: { 200: aboutPostResult, 201: aboutPostResult, 202: t.Object({ operationId: uuid }, { additionalProperties: false }),
-        429: problemResult(429), ...writeProblems, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/about-posts"].post, { 200: aboutPostResult, 201: aboutPostResult, 202: t.Object({ operationId: uuid }, { additionalProperties: false }),
+        429: problemResult(429), ...writeProblems, ...workReadProblems }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         await verifyMemberReplyDraftPrincipal(work.account, request);
@@ -138,7 +139,7 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
       } catch (error) { return replyError(error); }
     })
     .post('/v1/realm-replies', { body: replyBody,
-      response: { 200: replyResult, 201: replyResult, ...writeProblems, ...workReadProblems } },
+      response: transportResponses(openApiOperations["/v1/realm-replies"].post, { 200: replyResult, 201: replyResult, ...writeProblems, ...workReadProblems }, 'POST') },
     async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['work:edit']);
@@ -162,7 +163,7 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
       } catch (error) { return replyError(error); }
     })
     .post('/v1/realm-reply-reviews', { body: reviewBody,
-      response: { 200: reviewResult, 201: reviewResult, ...writeProblems } },
+      response: transportResponses(openApiOperations["/v1/realm-reply-reviews"].post, { 200: reviewResult, 201: reviewResult, ...writeProblems }, 'POST') },
     async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['realm:adopt']);
@@ -177,7 +178,7 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
       } catch (error) { return replyError(error); }
     })
     .post('/v1/realm-reply-placements', { body: placementBody,
-      response: { 200: placementResult, 201: placementResult, ...writeProblems } },
+      response: transportResponses(openApiOperations["/v1/realm-reply-placements"].post, { 200: placementResult, 201: placementResult, ...writeProblems }, 'POST') },
     async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['realm:adopt']);
@@ -194,7 +195,7 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
     .get('/v1/realms/:realm/replies/:reply', {
       params: t.Object({ realm: native, reply: native }),
       query: t.Object({ actingSubject: native }, { additionalProperties: false }),
-      response: { 200: visibleResult, ...authorizedReadProblems, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/replies/{reply}"].get, { 200: visibleResult, ...authorizedReadProblems, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);
@@ -209,7 +210,7 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
     .get('/v1/realms/:realm/reply-roots/:rootTarget/count', {
       params: t.Object({ realm: native, rootTarget: native }),
       query: t.Object({ actingSubject: native }, { additionalProperties: false }),
-      response: { 200: countResult, ...authorizedReadProblems, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/reply-roots/{rootTarget}/count"].get, { 200: countResult, ...authorizedReadProblems, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);

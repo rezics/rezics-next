@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -42,7 +43,7 @@ export function graphLayoutRoutes(work: MainWorkDependencies & GraphLayoutDepend
       body: t.Object({ profile: t.Literal('graph-layout-change-v1'), actingSubject: iri,
         layout: t.Nullable(iri), expectedHead: t.Nullable(uuid), body: GraphLayoutBody },
       { additionalProperties: false }),
-      response: { 200: layoutRevision, ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/graph-layouts"].post, { 200: layoutRevision, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['work:edit']);
@@ -62,7 +63,7 @@ export function graphLayoutRoutes(work: MainWorkDependencies & GraphLayoutDepend
     .get('/v1/graph-layouts/:layoutId', {
       params: t.Object({ layoutId: uuid }),
       query: t.Object({ actingSubject: iri, revision: t.Optional(uuid) }, { additionalProperties: false }),
-      response: { 200: layoutRevision, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/graph-layouts/{layoutId}"].get, { 200: layoutRevision, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);

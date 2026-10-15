@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import {
@@ -254,7 +255,7 @@ export function graphQueryRoutes(work: GraphQueryRouteDependencies) {
     '/v1/graph/queries',
     {
       body: request,
-      response: {
+      response: transportResponses(openApiOperations["/v1/graph/queries"].post, {
         200: t.Union([response, statementResponse]),
         400: problemResult(400),
         401: problemResult(401),
@@ -263,7 +264,7 @@ export function graphQueryRoutes(work: GraphQueryRouteDependencies) {
         409: problemResult(409),
         422: problemResult(422),
         503: problemResult(503),
-      },
+      }, 'POST'),
     },
     async ({ request: webRequest, body }) => {
       try {

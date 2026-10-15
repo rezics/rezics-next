@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -127,9 +128,9 @@ export function sourceRunRoutes(work: MainWorkDependencies) {
   const inactive = () => problem(403, 'authority_denied', 'Source principal is inactive');
   return new Elysia()
     .post('/v1/sources/acquisitions', {
-      body: t.Union([worksRunBody, goLiveRunBody]), response: { 200: t.Union([
+      body: t.Union([worksRunBody, goLiveRunBody]), response: transportResponses(openApiOperations["/v1/sources/acquisitions"].post, { 200: t.Union([
         t.Object({ run: runResult, replayed: t.Boolean() }), goRunResponse ]),
-        201: t.Union([t.Object({ run: runResult, replayed: t.Boolean() }), goRunResponse]), ...runProblems },
+        201: t.Union([t.Object({ run: runResult, replayed: t.Boolean() }), goRunResponse]), ...runProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const services = work.sourceAcquisitions;
@@ -150,7 +151,7 @@ export function sourceRunRoutes(work: MainWorkDependencies) {
       } catch (error) { return runError(error); }
     })
     .get('/v1/sources/runs/:run', {
-      params: t.Object({ run: groupUuid }), response: { 200: runResult, ...authorizedReadProblems },
+      params: t.Object({ run: groupUuid }), response: transportResponses(openApiOperations["/v1/sources/runs/{run}"].get, { 200: runResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         const services = work.sourceAcquisitions;
@@ -164,7 +165,7 @@ export function sourceRunRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/sources/runs/:base/drift/:candidate', {
       params: t.Object({ base: groupUuid, candidate: groupUuid }),
-      response: { 200: driftResult, ...authorizedReadProblems, 409: problemResult(409) },
+      response: transportResponses(openApiOperations["/v1/sources/runs/{base}/drift/{candidate}"].get, { 200: driftResult, ...authorizedReadProblems, 409: problemResult(409) }, 'GET'),
     }, async ({ request, params }) => {
       try {
         const services = work.sourceAcquisitions;
@@ -179,8 +180,8 @@ export function sourceRunRoutes(work: MainWorkDependencies) {
     .post('/v1/sources/feeds', {
       body: t.Object({ profile: t.Literal('open-library-recent-changes-v1'),
         pageItems: t.Integer({ minimum: 1, maximum: 100 }) }, { additionalProperties: false }),
-      response: { 200: t.Object({ feed: feedResult, created: t.Boolean() }),
-        201: t.Object({ feed: feedResult, created: t.Boolean() }), ...runProblems },
+      response: transportResponses(openApiOperations["/v1/sources/feeds"].post, { 200: t.Object({ feed: feedResult, created: t.Boolean() }),
+        201: t.Object({ feed: feedResult, created: t.Boolean() }), ...runProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const services = work.sourceAcquisitions;
@@ -192,7 +193,7 @@ export function sourceRunRoutes(work: MainWorkDependencies) {
       } catch (error) { return runError(error); }
     })
     .get('/v1/sources/feeds/:feed', {
-      params: t.Object({ feed: groupUuid }), response: { 200: feedResult, ...authorizedReadProblems },
+      params: t.Object({ feed: groupUuid }), response: transportResponses(openApiOperations["/v1/sources/feeds/{feed}"].get, { 200: feedResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         const services = work.sourceAcquisitions;
@@ -208,8 +209,8 @@ export function sourceRunRoutes(work: MainWorkDependencies) {
       params: t.Object({ feed: groupUuid }),
       body: t.Object({ profile: t.Literal('source-feed-baseline-v1'), run: t.String({ maxLength: 100 }) },
         { additionalProperties: false }),
-      response: { 200: t.Object({ feed: feedResult, checkpoint, replayed: t.Boolean() }),
-        201: t.Object({ feed: feedResult, checkpoint, replayed: t.Boolean() }), ...runProblems },
+      response: transportResponses(openApiOperations["/v1/sources/feeds/{feed}/baselines"].post, { 200: t.Object({ feed: feedResult, checkpoint, replayed: t.Boolean() }),
+        201: t.Object({ feed: feedResult, checkpoint, replayed: t.Boolean() }), ...runProblems }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         const services = work.sourceAcquisitions;
@@ -227,8 +228,8 @@ export function sourceRunRoutes(work: MainWorkDependencies) {
       params: t.Object({ feed: groupUuid }),
       body: t.Object({ profile: t.Literal('source-feed-window-v1'), maxPages: t.Integer({ minimum: 1, maximum: 8 }) },
         { additionalProperties: false }),
-      response: { 200: t.Object({ window: windowResult, replayed: t.Boolean() }),
-        201: t.Object({ window: windowResult, replayed: t.Boolean() }), ...runProblems },
+      response: transportResponses(openApiOperations["/v1/sources/feeds/{feed}/windows"].post, { 200: t.Object({ window: windowResult, replayed: t.Boolean() }),
+        201: t.Object({ window: windowResult, replayed: t.Boolean() }), ...runProblems }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         const services = work.sourceAcquisitions;

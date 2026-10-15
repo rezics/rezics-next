@@ -4,8 +4,7 @@ import { openapi } from '@elysia/openapi';
 import type { MainWorkDependencies } from '../../services/main/src/app.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { attachCapabilities, operationTools, type CapabilityDeclarations } from '../../services/main/src/modules/mcp/capabilities.ts';
-import { assertRouteExposures, exposureSdkSource, platformClosedResponse, platformUnauthenticatedResponse } from './exposure.ts';
-import { platformExistenceHidden } from '../../services/main/src/modules/access/exposure-routes.ts';
+import { assertRouteExposures, exposureSdkSource } from './exposure.ts';
 import { type Exposure, validExposure } from '../../services/main/src/modules/access/exposure.ts';
 
 const artifact = 'generated/openapi/main/public.json';
@@ -146,6 +145,33 @@ interface Document {
   openapi?: string;
   components?: Record<string, unknown>;
   paths?: Record<string, Record<string, Operation>>;
+}
+
+/** Error status alone does not make a JSON representation a Problem. */
+export function isProblemSchema(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const schema = value as { properties?: Record<string, unknown>; anyOf?: unknown[]; oneOf?: unknown[] };
+  const variants = schema.anyOf ?? schema.oneOf;
+  if (variants) return variants.length > 0 && variants.every(isProblemSchema);
+  return ['type', 'title', 'status', 'code'].every(key => schema.properties?.[key]);
+}
+
+/** A single status can carry both a domain receipt and a Problem. Partition
+ * alternatives by their body shape rather than relabelling the entire union. */
+export function responseMediaSchemas(value: unknown): { json?: unknown; problem?: unknown } {
+  if (!value || typeof value !== 'object') return { json: value };
+  const schema = value as Record<string, unknown>;
+  const key = Array.isArray(schema.anyOf) ? 'anyOf' : Array.isArray(schema.oneOf) ? 'oneOf' : undefined;
+  if (!key) return isProblemSchema(schema) ? { problem: schema } : { json: schema };
+  const alternatives = (schema[key] as unknown[]).map(responseMediaSchemas);
+  const result: { json?: unknown; problem?: unknown } = {};
+  for (const media of ['json', 'problem'] as const) {
+    const variants = alternatives.flatMap(part => part[media] === undefined ? [] : [part[media]]);
+    if (!variants.length) continue;
+    const { [key]: _variants, ...rest } = schema;
+    result[media] = variants.length === 1 && !Object.keys(rest).length ? variants[0] : { ...rest, [key]: variants };
+  }
+  return result;
 }
 
 /** The plugin currently overwrites standard authored response content with its runtime-schema inference. */
@@ -328,16 +354,6 @@ export async function buildMainOpenApi(): Promise<string> {
         if (!operation) throw new Error(`routes/${file} declares a missing OpenAPI operation: ${method} ${path}`);
         if (!validExposure(declared.exposure)) throw new Error(`routes/${file} lacks exposure: ${method} ${path}`);
         operation['x-rezics-exposure'] = declared.exposure;
-        if (declared.exposure !== 'public') {
-          // Ban and appeal reads stay a single 404, so they do not advertise 401.
-          operation.responses = {
-            ...operation.responses,
-            '403': platformClosedResponse(operation.responses?.['403']),
-            ...(platformExistenceHidden(method, path) ? {} : {
-              '401': platformUnauthenticatedResponse(operation.responses?.['401']),
-            }),
-          };
-        }
         if (declared.exposure !== 'public' || declared.bearer === true) {
           operation.security = [{ bearerAuth: [] }];
         } else if (declared.bearer === 'optional') {
@@ -360,9 +376,12 @@ export async function buildMainOpenApi(): Promise<string> {
     securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } } };
   for (const [, methods] of paths) for (const operation of Object.values(methods)) {
     for (const [status, result] of Object.entries(operation.responses ?? {})) {
-      if (Number(status) < 400 || !result.content?.['application/json']) continue;
-      result.content['application/problem+json'] = result.content['application/json'];
-      delete result.content['application/json'];
+      const json = result.content?.['application/json'] as { schema?: unknown } | undefined;
+      if (Number(status) < 400 || !result.content || !json) continue;
+      const schemas = responseMediaSchemas(json.schema);
+      if (schemas.problem !== undefined) result.content['application/problem+json'] = { ...json, schema: schemas.problem };
+      if (schemas.json !== undefined) result.content['application/json'] = { ...json, schema: schemas.json };
+      else delete result.content['application/json'];
     }
   }
   return `${JSON.stringify(canonical(jsonSchema2020Tuples(document)), null, 2)}\n`;

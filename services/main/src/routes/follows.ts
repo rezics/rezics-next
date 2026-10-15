@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { resolveTargets } from '../modules/target/resolve.ts';
 import { Elysia, t } from 'elysia';
 import { ControlConflict, ControlDenied, ControlInvalid, ControlStale, ControlUnavailable } from '../modules/access/topology-control.ts';
@@ -63,7 +64,7 @@ export function followsRoutes(work: MainWorkDependencies) {
     } catch (error) { return homeError(error); }
   };
   return new Elysia()
-    .get('/v1/me/follows', { query: followsQuery, response: { 200: followsPage, ...workReadProblems } },
+    .get('/v1/me/follows', { query: followsQuery, response: transportResponses(openApiOperations["/v1/me/follows"].get, { 200: followsPage, ...workReadProblems }, 'GET') },
       async ({ request, query }) => {
         try {
           if (!work.follows) throw new WorkReadUnavailable('Follows are unavailable');
@@ -74,7 +75,7 @@ export function followsRoutes(work: MainWorkDependencies) {
         } catch (error) { return homeError(error); }
       })
     .get('/v1/me/follows/authors', { query: followedAuthorsQuery,
-      response: { 200: followedAuthorsPage, ...workReadProblems } },
+      response: transportResponses(openApiOperations["/v1/me/follows/authors"].get, { 200: followedAuthorsPage, ...workReadProblems }, 'GET') },
     async ({ request, query }) => {
       try {
         if (!work.follows) throw new WorkReadUnavailable('Follows are unavailable');
@@ -86,16 +87,16 @@ export function followsRoutes(work: MainWorkDependencies) {
     .get('/v1/follows/:id', { params: t.Object({ id: readUuid }),
       query: t.Object({ kind: t.Optional(followKind),
         ...stateQuery }, { additionalProperties: false }), detail: { security: [{}, { bearerAuth: [] }] },
-      response: { 200: followState, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/follows/{id}"].get, { 200: followState, ...workReadProblems }, 'GET'),
     }, ({ request, params, query }) => state(request, `https://rezics.com/id/${params.id}`, query.kind, query))
     .get('/v1/me/follow-state', { query: followStateQuery,
-    response: { 200: followState, ...workReadProblems } }, ({ request,query }) => state(request,query.target,query.kind,query))
+    response: transportResponses(openApiOperations["/v1/me/follow-state"].get, { 200: followState, ...workReadProblems }, 'GET') }, ({ request,query }) => state(request,query.target,query.kind,query))
     .get('/v1/authors/open-library/:author/follow', {
       params: t.Object({ author: t.String({ pattern: '^OL[1-9][0-9]{0,11}A$' }) }),
       query: t.Object(stateQuery, { additionalProperties: false }), detail: { security: [{}, { bearerAuth: [] }] },
-      response: { 200: followState, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/authors/open-library/{author}/follow"].get, { 200: followState, ...workReadProblems }, 'GET'),
     }, ({ request, params, query }) => state(request, `open-library:${params.author}`, 'external-author', query))
-    .post('/v1/follows', { body: followCommand, response: { 200: followResult, ...workReadProblems } },
+    .post('/v1/follows', { body: followCommand, response: transportResponses(openApiOperations["/v1/follows"].post, { 200: followResult, ...workReadProblems }, 'POST') },
       async ({ request, body }) => {
         try {
           if (!work.follows) throw new WorkReadUnavailable('Follows are unavailable');
@@ -106,7 +107,7 @@ export function followsRoutes(work: MainWorkDependencies) {
         } catch (error) { return homeError(error); }
       })
     .post('/v1/me/follows/batch', { body: batchFollowCommand,
-      response: { 200: batchFollowResult, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/follows/batch"].post, { 200: batchFollowResult, ...workReadProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.follows) throw new WorkReadUnavailable('Follows are unavailable');

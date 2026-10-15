@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -27,9 +28,9 @@ export function fixedSiteRoutes(fuseki: FusekiClient, work: MainWorkDependencies
   return new Elysia()
     .post('/v1/pro-sites/queries', {
       body: siteQueryBody,
-      response: { 200: siteQueryResult, 400: problemResult(400), 401: problemResult(401),
+      response: transportResponses(openApiOperations["/v1/pro-sites/queries"].post, { 200: siteQueryResult, 400: problemResult(400), 401: problemResult(401),
         403: problemResult(403), 404: problemResult(404), 422: problemResult(422),
-        500: problemResult(500), 503: problemResult(503) },
+        500: problemResult(500), 503: problemResult(503) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.sites) return problem(503, 'site_unavailable', 'Site configuration is unavailable');

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
@@ -62,8 +63,8 @@ function agentError(error: unknown): Response {
 export function agentRoutes(work: MainWorkDependencies) {
   return new Elysia().post('/v1/agents', {
     body: bodySchema,
-    response: { 200: resultSchema, 201: resultSchema, 202: resultSchema,
-      ...writeProblems, 422: problemResult(422) },
+    response: transportResponses(openApiOperations["/v1/agents"].post, { 200: resultSchema, 201: resultSchema, 202: resultSchema,
+      ...writeProblems, 422: problemResult(422) }, 'POST'),
   }, async ({ request, body }) => {
     try {
       if (!work.agentProvisioning) {
@@ -86,8 +87,8 @@ export function agentRoutes(work: MainWorkDependencies) {
       params: t.Object({ id: t.String({ pattern:
         '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }) }),
       body: profileChangeBody,
-      response: { 200: profileChangeResult, 201: profileChangeResult, ...writeProblems,
-        422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/agents/{id}/profile"].put, { 200: profileChangeResult, 201: profileChangeResult, ...writeProblems,
+        422: problemResult(422) }, 'PUT'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.agentProfiles) return problem(503, 'agent_profile_unavailable', 'Agent profiles are unavailable');

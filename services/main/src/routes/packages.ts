@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { npmRequestSchema, npmResolutionSchema, npmResolutionWriteSchema }
   from '../modules/package/npm-schema.ts';
@@ -358,8 +359,8 @@ export function packageRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/package-sources/go', {
       body: goProxyCaptureRequest,
-      response: { 200: goProxyCaptureWrite, 201: goProxyCaptureWrite,
-        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/package-sources/go"].post, { 200: goProxyCaptureWrite, 201: goProxyCaptureWrite,
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.packageCaptures) return problem(503, 'go_capture_unavailable',
@@ -376,7 +377,7 @@ export function packageRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/package-sources/go/:capture', {
       params: t.Object({ capture: groupUuid }),
-      response: { 200: goProxyCaptureResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/package-sources/go/{capture}"].get, { 200: goProxyCaptureResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.packageCaptures) return problem(503, 'go_capture_unavailable',
@@ -391,8 +392,8 @@ export function packageRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/package-sources/go/:capture/verify', {
       params: t.Object({ capture: groupUuid }),
-      response: { 200: goSumdbVerificationWrite, 201: goSumdbVerificationWrite,
-        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/package-sources/go/{capture}/verify"].post, { 200: goSumdbVerificationWrite, 201: goSumdbVerificationWrite,
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, params }) => {
       try {
         if (!work.packageVerifications) return problem(503,
@@ -412,7 +413,7 @@ export function packageRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/package-sources/go-verifications/:verification', {
       params: t.Object({ verification: groupUuid }),
-      response: { 200: goSumdbVerificationResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/package-sources/go-verifications/{verification}"].get, { 200: goSumdbVerificationResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.packageVerifications) return problem(503,
@@ -429,8 +430,8 @@ export function packageRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/package-resolutions/from-captures', {
       body: goMvsCapturedRequest,
-      response: { 200: goMvsResolutionWrite, 201: goMvsResolutionWrite,
-        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/package-resolutions/from-captures"].post, { 200: goMvsResolutionWrite, 201: goMvsResolutionWrite,
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.packageResolutions) return problem(503, 'go_resolution_unavailable',
@@ -447,8 +448,8 @@ export function packageRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/package-resolutions', {
       body: goMvsRequest,
-      response: { 200: goMvsResolutionWrite, 201: goMvsResolutionWrite,
-        ...writeProblems, 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/package-resolutions"].post, { 200: goMvsResolutionWrite, 201: goMvsResolutionWrite,
+        ...writeProblems, 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.packageResolutions) return problem(503, 'go_resolution_unavailable',
@@ -465,7 +466,7 @@ export function packageRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/package-resolutions/:resolution', {
       params: t.Object({ resolution: groupUuid }),
-      response: { 200: goMvsResolution, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/package-resolutions/{resolution}"].get, { 200: goMvsResolution, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.packageResolutions) return problem(503, 'go_resolution_unavailable',
@@ -481,8 +482,8 @@ export function packageRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/package-resolutions/cargo', {
       body: cargoRequest,
-      response: { 200: cargoResolutionWrite, 201: cargoResolutionWrite,
-        ...writeProblems, 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/package-resolutions/cargo"].post, { 200: cargoResolutionWrite, 201: cargoResolutionWrite,
+        ...writeProblems, 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.packageCargoResolutions) return problem(503,
@@ -499,7 +500,7 @@ export function packageRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/package-resolutions/cargo/:resolution', {
       params: t.Object({ resolution: groupUuid }),
-      response: { 200: cargoResolution, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/package-resolutions/cargo/{resolution}"].get, { 200: cargoResolution, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.packageCargoResolutions) return problem(503,
@@ -515,8 +516,8 @@ export function packageRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/package-resolutions/npm', {
       body: npmRequestSchema,
-      response: { 200: npmResolutionWriteSchema, 201: npmResolutionWriteSchema,
-        ...writeProblems, 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/package-resolutions/npm"].post, { 200: npmResolutionWriteSchema, 201: npmResolutionWriteSchema,
+        ...writeProblems, 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.packageNpmResolutions) return problem(503,
@@ -533,7 +534,7 @@ export function packageRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/package-resolutions/npm/:resolution', {
       params: t.Object({ resolution: groupUuid }),
-      response: { 200: npmResolutionSchema, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/package-resolutions/npm/{resolution}"].get, { 200: npmResolutionSchema, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!work.packageNpmResolutions) return problem(503,

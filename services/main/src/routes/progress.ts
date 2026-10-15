@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { workRead, decodeReadCursor, encodeReadCursor, WorkReadMissing, publicWork } from '../modules/work/read-session.ts';
 import { readWorkBasis } from '../modules/work/read-header.ts';
 import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
@@ -135,13 +136,13 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         description: 'Continue even an empty page while nextCursor is present. Private progress pages are live, ordered by occurrence and selected revision.' })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: STRUCTURE_PROGRESS_COST.pageRows - 1,
           multipleOf: 1 })) }, { additionalProperties: false }),
-      response: { 200: t.Object({ structure: ref,
+      response: transportResponses(openApiOperations["/v1/compositions/{id}/progress"].get, { 200: t.Object({ structure: ref,
         items: t.Array(t.Object({ ...result.properties, completed: t.Literal(true) }), {
           maxItems: STRUCTURE_PROGRESS_COST.pageRows - 1,
           description: 'This Person\'s completed states whose occurrence and selected revision remain readable. Readable tombstones are included; any completed selection marks its occurrence complete.' }), ...pageFields,
         consistency: t.Literal('live'), complete: t.Boolean(),
         cost: t.Object({ progressRows: t.Integer({ maximum: STRUCTURE_PROGRESS_COST.pageRows }) }) }),
-      ...workReadProblems },
+      ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       if (!work.progress) return problem(503, 'progress_unavailable', 'Progress owner is unavailable');
       try {
@@ -186,7 +187,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       params: t.Object({ id: groupUuid, occurrence: groupUuid }),
       query: t.Object({ actingSubject: ref, selectedRevision: t.Optional(contentRevision) },
         { additionalProperties: false }),
-      response: { 200: result, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/compositions/{id}/occurrences/{occurrence}/progress"].get, { 200: result, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       if (!work.progress) return problem(503, 'progress_unavailable', 'Progress owner is unavailable');
       try {
@@ -205,9 +206,9 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         expectedVersion: t.Integer({ minimum: 0 }), completed: t.Boolean(),
         position: t.Nullable(t.String({ minLength: 1, maxLength: 500 })) },
       { additionalProperties: false }),
-      response: { 200: result, 400: problemResult(400), 401: problemResult(401),
+      response: transportResponses(openApiOperations["/v1/compositions/{id}/occurrences/{occurrence}/progress"].put, { 200: result, 400: problemResult(400), 401: problemResult(401),
         403: problemResult(403), 404: problemResult(404), 409: problemResult(409),
-        500: problemResult(500), 503: problemResult(503) },
+        500: problemResult(500), 503: problemResult(503) }, 'PUT'),
     }, async ({ request, params, body }) => {
       if (!work.progress) return problem(503, 'progress_unavailable', 'Progress owner is unavailable');
       const idempotencyKey = request.headers.get('idempotency-key');
@@ -230,7 +231,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     .get('/v1/works/:id/progress', {
       params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref }, { additionalProperties: false }),
-      response: { 200: workProgressRead, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/progress"].get, { 200: workProgressRead, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       if (!work.progress) return problem(503, 'progress_unavailable', 'Progress owner is unavailable');
       try {
@@ -249,9 +250,9 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       params: t.Object({ id: groupUuid }),
       body: t.Object({ actingSubject: ref, expectedVersion: t.Integer({ minimum: 0 }),
         standing: standingName }, { additionalProperties: false }),
-      response: { 200: workStandingResult, 400: problemResult(400), 401: problemResult(401),
+      response: transportResponses(openApiOperations["/v1/works/{id}/progress"].put, { 200: workStandingResult, 400: problemResult(400), 401: problemResult(401),
         403: problemResult(403), 404: problemResult(404), 409: problemResult(409),
-        500: problemResult(500), 503: problemResult(503) },
+        500: problemResult(500), 503: problemResult(503) }, 'PUT'),
     }, async ({ request, params, body }) => {
       if (!work.progress) return problem(503, 'progress_unavailable', 'Progress owner is unavailable');
       const idempotencyKey = request.headers.get('idempotency-key');

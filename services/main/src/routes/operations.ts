@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { BackpressureSaturated, BackpressureUnavailable,
   type AdmissionLease, type LeaseOutcome } from '../operations/admission-budget.ts';
@@ -102,7 +103,7 @@ export function operationsRoutes(work: MainWorkDependencies,
       lease.settle(outcome(context as unknown as SettledContext));
     })
     .get('/v1/operations/backpressure', {
-      response: { 200: backpressureResult, ...readProblems },
+      response: transportResponses(openApiOperations["/v1/operations/backpressure"].get, { 200: backpressureResult, ...readProblems }, 'GET'),
     }, async () => Response.json(await backpressure.read(),
       { headers: { 'cache-control': 'no-store' } }));
 }

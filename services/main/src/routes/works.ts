@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { documentSnapshotSchema } from '../api-document.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -88,12 +89,12 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           grain: declaredGrain, candidateReceipt: t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }) },
         { additionalProperties: false }),
       ]),
-      response: { 200: t.Union([workResult, t.Object({ outcome: t.Literal('use-owner-api'),
+      response: transportResponses(openApiOperations["/v1/works"].post, { 200: t.Union([workResult, t.Object({ outcome: t.Literal('use-owner-api'),
         grain: declaredGrain, ownerApi: t.Object({ method: t.String(), path: t.String() }) })]),
         201: workResult, 202: pendingOperation,
         400: problemResult(400), 401: problemResult(401),
         403: problemResult(403), 409: problemResult(409),
-        429: problemResult(429), 500: problemResult(500), 503: problemResult(503) },
+        429: problemResult(429), 500: problemResult(500), 503: problemResult(503) }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)
@@ -147,11 +148,11 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .get('/v1/main-versions/:mainVersion/revisions/:revision/translation-links', {
       params: t.Object({ mainVersion: t.String(), revision: t.String() }),
-      response: { 200: t.Object({ profile: t.Literal('translation-links-v1'),
+      response: transportResponses(openApiOperations["/v1/main-versions/{mainVersion}/revisions/{revision}/translation-links"].get, { 200: t.Object({ profile: t.Literal('translation-links-v1'),
         mainVersion: t.String(), revision: t.String(), complete: t.Literal(true),
         links: t.Array(translationLinkRef) }),
       400: problemResult(400), 404: problemResult(404), 409: problemResult(409), 500: problemResult(500),
-      503: problemResult(503) },
+      503: problemResult(503) }, 'GET'),
     }, async ({ params }) => {
       if (!work) return problem(503, 'dependency_unavailable', 'Work service is unavailable');
       try {
@@ -164,11 +165,11 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .get('/v1/main-versions/:mainVersion/revisions/:revision/work-derivations', {
       params: t.Object({ mainVersion: t.String(), revision: t.String() }),
-      response: { 200: t.Object({ profile: t.Literal('work-derivations-v1'),
+      response: transportResponses(openApiOperations["/v1/main-versions/{mainVersion}/revisions/{revision}/work-derivations"].get, { 200: t.Object({ profile: t.Literal('work-derivations-v1'),
         mainVersion: t.String(), revision: t.String(), complete: t.Literal(true),
         derivations: t.Array(workDerivationRef) }),
       400: problemResult(400), 404: problemResult(404), 409: problemResult(409),
-      500: problemResult(500), 503: problemResult(503) },
+      500: problemResult(500), 503: problemResult(503) }, 'GET'),
     }, async ({ params }) => {
       if (!work) return problem(503, 'dependency_unavailable', 'Work service is unavailable');
       try {
@@ -187,8 +188,8 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           sourceClaim: t.String(), expectedPosition: t.Object({
             dataEpoch: t.String(), sequence: t.String() }) }), { maxItems: 16 })),
       }, { additionalProperties: false }),
-      response: { 200: fixedReleaseWrite, 201: fixedReleaseWrite, 202: pendingOperation,
-        ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/fixed-releases"].post, { 200: fixedReleaseWrite, 201: fixedReleaseWrite, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -215,7 +216,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query: t.Object({ actingSubject: t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
       }) }, { additionalProperties: false }),
-      response: { 200: fixedReleaseRead, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/fixed-releases/{release}"].get, { 200: fixedReleaseRead, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       if (!work) return problem(503, 'dependency_unavailable', 'Work service is unavailable');
       try {
@@ -240,8 +241,8 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         scalarValue: t.Optional(workScalarValue),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
-      response: { 200: workScalarWrite, 202: pendingOperation,
-        ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/works/{id}/scalar-value"].post, { 200: workScalarWrite, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -266,7 +267,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query: t.Object({ actingSubject: t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
       }) }, { additionalProperties: false }),
-      response: { 200: workScalarRead, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/scalar-value"].get, { 200: workScalarRead, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const target = `https://rezics.com/id/${params.id}`;
@@ -304,7 +305,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query: t.Object({ actingSubject: t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
       }) }, { additionalProperties: false }),
-      response: { 200: workScalarRead, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/scalar-value/revisions/{revision}"].get, { 200: workScalarRead, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const target = `https://rezics.com/id/${params.id}`;
@@ -333,7 +334,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query: t.Object({ actingSubject: t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
       }) }, { additionalProperties: false }),
-      response: { 200: exactMainRevision, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/main-versions/{mainVersion}/revisions/{revision}"].get, { 200: exactMainRevision, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -350,10 +351,10 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query: t.Object({ actingSubject: t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
       }) }, { additionalProperties: false }),
-      response: { 200: exactWorkRevision, 400: problemResult(400),
+      response: transportResponses(openApiOperations["/v1/revisions/{revision}"].get, { 200: exactWorkRevision, 400: problemResult(400),
         401: problemResult(401), 403: problemResult(403),
         404: problemResult(404), 500: problemResult(500),
-        503: problemResult(503) },
+        503: problemResult(503) }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);

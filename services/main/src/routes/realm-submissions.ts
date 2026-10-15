@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -48,7 +49,7 @@ export function realmSubmissionRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/realms/:realm/submissions', { params: realmParams,
       query: t.Object({ ...submissionQuery, work: readId }, { additionalProperties: false }),
-      detail, response: { 200: submissionPage, ...problems } }, async ({ request, params, query }) => {
+      detail, response: transportResponses(openApiOperations["/v1/realms/{realm}/submissions"].get, { 200: submissionPage, ...problems }, 'GET') }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['realm:adopt']);
         return Response.json(await reads().forWork(principal, `https://rezics.com/id/${params.realm}`, query), { headers });
@@ -58,13 +59,13 @@ export function realmSubmissionRoutes(work: MainWorkDependencies) {
       query: t.Object({ work: readId, actingSubject: t.Optional(readId),
         limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
         cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) }, { additionalProperties: false }),
-      response: { 200: realmPublicationPage, ...problems } }, async ({ request, params, query }) => {
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/submitted-publications"].get, { 200: realmPublicationPage, ...problems }, 'GET') }, async ({ request, params, query }) => {
       try { return Response.json(await workRead(work, request, query,
         session => readRealmPublications(session, `https://rezics.com/id/${params.realm}`, query.work)), { headers }); }
       catch (error) { return errorResponse(error); }
     })
     .post('/v1/realms/:realm/submissions', { params: realmParams, body: submissionInput, detail,
-      response: { 200: submissionResult, 201: submissionResult, ...problems } },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/submissions"].post, { 200: submissionResult, 201: submissionResult, ...problems }, 'POST') },
     async ({ request, params, body }) => {
       try {
         const principal = await work.account.verify(request, ['work:edit']);
@@ -73,7 +74,7 @@ export function realmSubmissionRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .post('/v1/realms/:realm/submissions/:submission/decisions', { params: itemParams,
-      body: decisionInput, detail, response: { 200: submissionResult, ...problems } },
+      body: decisionInput, detail, response: transportResponses(openApiOperations["/v1/realms/{realm}/submissions/{submission}/decisions"].post, { 200: submissionResult, ...problems }, 'POST') },
     async ({ request, params, body }) => {
       try {
         const principal = await work.account.verify(request, ['realm:adopt']);
@@ -82,7 +83,7 @@ export function realmSubmissionRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .post('/v1/realms/:realm/submissions/:submission/withdrawals', { params: itemParams,
-      body: withdrawalInput, detail, response: { 200: submissionResult, ...problems } },
+      body: withdrawalInput, detail, response: transportResponses(openApiOperations["/v1/realms/{realm}/submissions/{submission}/withdrawals"].post, { 200: submissionResult, ...problems }, 'POST') },
     async ({ request, params, body }) => {
       try {
         const principal = await work.account.verify(request, ['work:edit']);
@@ -91,7 +92,7 @@ export function realmSubmissionRoutes(work: MainWorkDependencies) {
       } catch (error) { return errorResponse(error); }
     })
     .get('/v1/my/submissions', { query: t.Object(submissionQuery, { additionalProperties: false }),
-      detail, response: { 200: submissionPage, ...problems } }, async ({ request, query }) => {
+      detail, response: transportResponses(openApiOperations["/v1/my/submissions"].get, { 200: submissionPage, ...problems }, 'GET') }, async ({ request, query }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);
         return Response.json(await reads().mine(principal, query), { headers });
@@ -99,7 +100,7 @@ export function realmSubmissionRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/realms/:realm/submissions/:submission', { params: itemParams,
       query: t.Object({ actingSubject: readId }, { additionalProperties: false }), detail,
-      response: { 200: t.Object({ submission: submissionView, internalNote: t.Nullable(t.String()) }), ...problems } },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/submissions/{submission}"].get, { 200: t.Object({ submission: submissionView, internalNote: t.Nullable(t.String()) }), ...problems }, 'GET') },
     async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['realm:adopt']);

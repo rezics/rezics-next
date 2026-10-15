@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
@@ -47,12 +48,12 @@ export function workMetadataRoutes(work: MainWorkDependencies) {
           types: t.Array(typeIri, { maxItems: MAX_WORK_SEMANTIC_TYPES, uniqueItems: true }),
           actingSubject: readId }, { additionalProperties: false }),
       ]),
-      response: { 200: t.Object({ profile: t.Union([t.Literal('work-type-v2'), t.Literal('work-type-v3')]), work: readId,
+      response: transportResponses(openApiOperations["/v1/works/{id}/type"].put, { 200: t.Object({ profile: t.Union([t.Literal('work-type-v2'), t.Literal('work-type-v3')]), work: readId,
         revision: readId, predecessor: readId,
         types: t.Array(typeIri,
           { maxItems: MAX_WORK_SEMANTIC_TYPES }),
         receipt: t.String(), sourcePosition: readPosition, replayed: t.Boolean() }),
-        202: pendingOperation, ...writeProblems },
+        202: pendingOperation, ...writeProblems }, 'PUT'),
     }, async ({ request, params: path, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -78,9 +79,9 @@ export function workMetadataRoutes(work: MainWorkDependencies) {
       }
     })
     .put('/v1/works/:id/metadata', { params, body: metadataWrite,
-      response: { 200: t.Object({ work: readId, component: t.String(), revision: readId, receipt: t.String(),
+      response: transportResponses(openApiOperations["/v1/works/{id}/metadata"].put, { 200: t.Object({ work: readId, component: t.String(), revision: readId, receipt: t.String(),
         sourcePosition: readPosition, replayed: t.Boolean() }), 202: pendingOperation,
-        ...writeProblems, 422: problemResult(422) },
+        ...writeProblems, 422: problemResult(422) }, 'PUT'),
     }, async ({ request, params: path, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -92,10 +93,10 @@ export function workMetadataRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/works/:id/metadata', { params, detail,
       query: t.Object(readQuery, { additionalProperties: false }),
-      response: { 200: t.Object({ work: readId, revision: t.Nullable(readId),
+      response: transportResponses(openApiOperations["/v1/works/{id}/metadata"].get, { 200: t.Object({ work: readId, revision: t.Nullable(readId),
         originalTitle: metadataHeaderState.properties.originalTitle,
         completionStatus: t.Nullable(metadataHeaderState.properties.completionStatus),
-        localized: metadataHeaderState.properties.localized, sourcePosition: readPosition }), ...workReadProblems },
+        localized: metadataHeaderState.properties.localized, sourcePosition: readPosition }), ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, options,
         session => readWorkMetadata(session, `https://rezics.com/id/${path.id}`)), { headers }); }
@@ -103,9 +104,9 @@ export function workMetadataRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/works/:id/editions/:edition', { params: t.Object({ id: readUuid, edition: readUuid }), detail,
       query: t.Object(readQuery, { additionalProperties: false }),
-      response: { 200: t.Object({ id: readId, revision: readId, status: metadataEditionState.properties.status,
+      response: transportResponses(openApiOperations["/v1/works/{id}/editions/{edition}"].get, { 200: t.Object({ id: readId, revision: readId, status: metadataEditionState.properties.status,
         record: t.Nullable(t.Union([metadataEditionState, metadataEditionStateV2])), sourcePosition: readPosition }),
-        ...workReadProblems },
+        ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, options,
         session => readWorkEdition(session, `https://rezics.com/id/${path.id}`, `https://rezics.com/id/${path.edition}`)), { headers }); }
@@ -113,10 +114,10 @@ export function workMetadataRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/works/:id/editions', { params, detail,
       query: t.Object({ ...pageQuery, contentLanguage: t.Optional(readLanguage) }, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(t.Union([
+      response: transportResponses(openApiOperations["/v1/works/{id}/editions"].get, { 200: t.Object({ items: t.Array(t.Union([
         t.Object({ ...metadataEditionState.properties, revision: readId }),
         t.Object({ ...metadataEditionStateV2.properties, revision: readId })]),
-        { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+        { maxItems: 20 }), ...pageFields }), ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, { ...options, localBasis: true,
         localProfiles: ['work-metadata-details-v1', 'work-metadata-details-v2'] },

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { assertPublicContentSearchReady } from '../modules/content-publication/search.ts';
@@ -46,7 +47,7 @@ export function searchGenerationRoutes(fuseki: FusekiClient, work: MainWorkDepen
   };
   return new Elysia()
     .get('/v1/search/generations/current', {
-      response: { 200: currentGeneration, 503: problemResult(503) },
+      response: transportResponses(openApiOperations["/v1/search/generations/current"].get, { 200: currentGeneration, 503: problemResult(503) }, 'GET'),
     }, async () => {
       try {
         const current = await withStableSearchSnapshot(fuseki,

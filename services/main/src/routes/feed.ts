@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { ControlInvalid } from '../modules/access/topology-control.ts';
 import { FEED_COST, feedPage, feedQuery, feedVoteCommand, feedVoteResult } from '../modules/feed/contract.ts';
@@ -58,7 +59,7 @@ const headResult = t.Object({ profile: t.Literal('home-feed-head-v1'), scope: t.
 
 export function feedRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/feed', { query: homeFeedQuery,
-    detail: { security: [{}, { bearerAuth: [] }] }, response: { 200: feedPage, ...workReadProblems },
+    detail: { security: [{}, { bearerAuth: [] }] }, response: transportResponses(openApiOperations["/v1/feed"].get, { 200: feedPage, ...workReadProblems }, 'GET'),
   }, async ({ request, query: requested }) => {
     try {
       const principal = request.headers.has('authorization') ? await work.account.verify(request, ['work:read', 'follow:read']) : null;
@@ -73,7 +74,7 @@ export function feedRoutes(work: MainWorkDependencies) {
       return new Response(body, { headers: { ...homeHeaders, 'content-type': 'application/json' } });
     } catch (error) { return savedFilterError(error); }
   }).get('/v1/feed/head', { query: headQuery,
-    detail: { security: [{}, { bearerAuth: [] }] }, response: { 200: headResult, ...workReadProblems },
+    detail: { security: [{}, { bearerAuth: [] }] }, response: transportResponses(openApiOperations["/v1/feed/head"].get, { 200: headResult, ...workReadProblems }, 'GET'),
   }, async ({ request, query }) => {
     try {
       const principal = request.headers.has('authorization')
@@ -89,7 +90,7 @@ export function feedRoutes(work: MainWorkDependencies) {
           principal ? { principal, agent: query.actingSubject! } : undefined, query.afterReview)), { headers: homeHeaders });
     } catch (error) { return homeError(error); }
   }).post('/v1/feed/:id/vote', { params: t.Object({ id: readUuid }), body: feedVoteCommand,
-    response: { 200: feedVoteResult, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/feed/{id}/vote"].post, { 200: feedVoteResult, ...workReadProblems }, 'POST'),
   }, async ({ request, params, body }) => {
     try {
       if (!work.feed) throw new WorkReadUnavailable('Feed owner is unavailable');
@@ -101,7 +102,7 @@ export function feedRoutes(work: MainWorkDependencies) {
       return Response.json(result, { headers: homeHeaders });
     } catch (error) { return homeError(error); }
   }).get('/v1/me/feed-preferences', { query: privateQuery,
-    response: { 200: preferencesResult, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/me/feed-preferences"].get, { 200: preferencesResult, ...workReadProblems }, 'GET'),
   }, async ({ request, query }) => {
     try {
       if (!work.homePersonal) throw new WorkReadUnavailable('Home preferences are unavailable');
@@ -111,7 +112,7 @@ export function feedRoutes(work: MainWorkDependencies) {
         preferences: state.preferences }, { headers: homeHeaders });
     } catch (error) { return homeError(error); }
   }).put('/v1/me/feed-preferences', { body: preferencesCommand,
-    response: { 200: preferencesResult, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/me/feed-preferences"].put, { 200: preferencesResult, ...workReadProblems }, 'PUT'),
   }, async ({ request, body }) => {
     try {
       if (!work.homePersonal) throw new WorkReadUnavailable('Home preferences are unavailable');
@@ -120,7 +121,7 @@ export function feedRoutes(work: MainWorkDependencies) {
         request.headers.get('idempotency-key') ?? ''), { headers: homeHeaders });
     } catch (error) { return homeError(error); }
   }).post('/v1/me/feed-feedback', { body: exclusionCommand,
-    response: { 200: exclusionResult, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/me/feed-feedback"].post, { 200: exclusionResult, ...workReadProblems }, 'POST'),
   }, async ({ request, body }) => {
     try {
       if (!work.homePersonal) throw new WorkReadUnavailable('Home feedback is unavailable');
@@ -130,7 +131,7 @@ export function feedRoutes(work: MainWorkDependencies) {
         request.headers.get('idempotency-key') ?? ''), { headers: homeHeaders });
     } catch (error) { return homeError(error); }
   }).get('/v1/me/mutes', { query: privateQuery,
-    response: { 200: mutesResult, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/me/mutes"].get, { 200: mutesResult, ...workReadProblems }, 'GET'),
   }, async ({ request, query }) => {
     try {
       if (!work.homePersonal) throw new WorkReadUnavailable('Home mutes are unavailable');
@@ -140,7 +141,7 @@ export function feedRoutes(work: MainWorkDependencies) {
         items: state.exclusions.filter(item => item.strength === 'mute') }, { headers: homeHeaders });
     } catch (error) { return homeError(error); }
   }).put('/v1/me/mutes', { body: exclusionCommand,
-    response: { 200: exclusionResult, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/me/mutes"].put, { 200: exclusionResult, ...workReadProblems }, 'PUT'),
   }, async ({ request, body }) => {
     try {
       if (!work.homePersonal) throw new WorkReadUnavailable('Home mutes are unavailable');
@@ -152,7 +153,7 @@ export function feedRoutes(work: MainWorkDependencies) {
         request.headers.get('idempotency-key') ?? ''), { headers: homeHeaders });
     } catch (error) { return homeError(error); }
   }).get('/v1/trending', { query: trendingQuery,
-    detail: { security: [{}, { bearerAuth: [] }] }, response: { 200: trendingResult, ...workReadProblems },
+    detail: { security: [{}, { bearerAuth: [] }] }, response: transportResponses(openApiOperations["/v1/trending"].get, { 200: trendingResult, ...workReadProblems }, 'GET'),
   }, async ({ request, query }) => {
     try {
       const principal = request.headers.has('authorization')
@@ -175,7 +176,7 @@ export function feedRoutes(work: MainWorkDependencies) {
       return new Response(body, { headers: { ...homeHeaders, 'content-type': 'application/json' } });
     } catch (error) { return homeError(error); }
   }).get('/v1/me/feed-watermarks', { query: privateQuery,
-    response: { 200: watermarksResult, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/me/feed-watermarks"].get, { 200: watermarksResult, ...workReadProblems }, 'GET'),
   }, async ({ request, query }) => {
     try {
       if (!work.homePersonal) throw new WorkReadUnavailable('Home watermarks are unavailable');
@@ -186,7 +187,7 @@ export function feedRoutes(work: MainWorkDependencies) {
         updatedAt: row.updated_at.toISOString() })) }, { headers: homeHeaders });
     } catch (error) { return homeError(error); }
   }).put('/v1/me/feed-watermarks/:scope', { params: t.Object({ scope: t.String() }),
-    body: watermarkCommand, response: { 200: watermarkResult, ...workReadProblems },
+    body: watermarkCommand, response: transportResponses(openApiOperations["/v1/me/feed-watermarks/{scope}"].put, { 200: watermarkResult, ...workReadProblems }, 'PUT'),
   }, async ({ request, params, body }) => {
     try {
       if (!work.homePersonal) throw new WorkReadUnavailable('Home watermarks are unavailable');

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { identificationEvidence, identificationInput, InvalidPostIdentification,
   PostIdentificationConflict, PostIdentificationUnavailable } from '../modules/post/identification-schema.ts';
@@ -35,8 +36,8 @@ export const openApiOperations = {
 export function postIdentificationRoutes(deps: MainWorkDependencies) {
   return new Elysia().post('/v1/posts/:id/identifications', {
     params: t.Object({ id: readUuid }), body: identificationInput,
-    response: { 200: t.Object({ ...result.properties, replayed: t.Boolean() }),
-      202: pendingOperation, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/posts/{id}/identifications"].post, { 200: t.Object({ ...result.properties, replayed: t.Boolean() }),
+      202: pendingOperation, ...workReadProblems }, 'POST'),
   }, async ({ request, params, body }) => {
     const key = request.headers.get('idempotency-key');
     if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -56,15 +57,15 @@ export function postIdentificationRoutes(deps: MainWorkDependencies) {
       sourceKind: t.Optional(t.String()), source: t.Optional(t.String({ maxLength: 2048 })),
       limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })), cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) },
     { additionalProperties: false }),
-    response: { 200: t.Object({ profile: t.Literal('post-identifications-v1'), post: readId,
-      items: t.Array(link, { maxItems: 20 }), ...pageFields, complete: t.Boolean() }), ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/posts/{id}/identifications"].get, { 200: t.Object({ profile: t.Literal('post-identifications-v1'), post: readId,
+      items: t.Array(link, { maxItems: 20 }), ...pageFields, complete: t.Boolean() }), ...workReadProblems }, 'GET'),
   }, async ({ request, params, query: options }) => {
     try { return Response.json(await workRead(deps, request, options,
       session => readPostIdentifications(session, `https://rezics.com/id/${params.id}`, options.operation)), { headers }); }
     catch (error) { return workReadError(error); }
   }).get('/v1/post-identifications/:id', {
     params: t.Object({ id: readUuid }), query: t.Object(query, { additionalProperties: false }),
-    response: { 200: item, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/post-identifications/{id}"].get, { 200: item, ...workReadProblems }, 'GET'),
   }, async ({ request, params, query: options }) => {
     try { return Response.json(await workRead(deps, request, options,
       session => readPostIdentification(session, params.id)), { headers }); }

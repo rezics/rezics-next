@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { ExactInstructionSelector } from '../modules/structure/selection.ts';
 import { isAdoptedInstruction, readRecipeInstructions } from '../modules/recipe/instructions.ts';
@@ -410,7 +411,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         cursor: t.Optional(t.String({ minLength: 1, maxLength: RECIPE_WORK_PAGE_CURSOR_MAX })) },
       { additionalProperties: false }),
       detail: { security: [{}, { bearerAuth: [] }] },
-      response: { 200: t.Nullable(t.Object({ profile: t.Literal('recipe-work-page-v1'), structure: ref,
+      response: transportResponses(openApiOperations["/v1/recipes/works/{id}"].get, { 200: t.Nullable(t.Object({ profile: t.Literal('recipe-work-page-v1'), structure: ref,
         revision: ref, occurrences: t.Array(OccurrenceRecord),
         measures: t.Array(RecipeMeasure),
         instructions: t.Optional(t.Array(instructionRead)),
@@ -429,7 +430,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         cost: t.Object({ pages: t.Integer(), pagesRead: t.Integer(), occurrences: t.Integer() }) })),
       ...workReadProblems,
       409: t.Union([problemResult(409), t.Object({ profile: t.Literal('recipe-work-page-stale'),
-        structure: ref, revision: ref, cursorRevision: ref }, { additionalProperties: false })]) } },
+        structure: ref, revision: ref, cursorRevision: ref }, { additionalProperties: false })]) }, 'GET') },
     async ({ request, params, query }) => {
       try {
         const body = await workRead(work, request, { actingSubject: query.actingSubject },
@@ -440,7 +441,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       } catch (error) { return workReadError(error); }
     })
     .post('/v1/recipes/:id/measures', { params: t.Object({ id: groupUuid }),
-      body: storedNutritionBody, response: { 200: write, 202: problemResult(202), ...problems } },
+      body: storedNutritionBody, response: transportResponses(openApiOperations["/v1/recipes/{id}/measures"].post, { 200: write, 202: problemResult(202), ...problems }, 'POST') },
     async ({ request, params, body }: { request: Request; params: { id: string };
       body: Static<typeof storedNutritionBody> }) => {
       const idempotencyKey = key(request);
@@ -498,7 +499,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       } catch (error) { return routeError(error); }
     })
     .post('/v1/recipes/:id/timings', { params: t.Object({ id: groupUuid }),
-      body: timingsBody, response: { 200: write, 202: problemResult(202), ...problems } },
+      body: timingsBody, response: transportResponses(openApiOperations["/v1/recipes/{id}/timings"].post, { 200: write, 202: problemResult(202), ...problems }, 'POST') },
     async ({ request, params, body }: { request: Request; params: { id: string };
       body: Static<typeof timingsBody> }) => {
       const idempotencyKey = key(request);
@@ -540,9 +541,9 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .get('/v1/recipes/:id/measures', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref, revision: t.Optional(ref) }, { additionalProperties: false }),
-      response: { 200: t.Object({ structure: ref, owner: ref, revision: ref,
+      response: transportResponses(openApiOperations["/v1/recipes/{id}/measures"].get, { 200: t.Object({ structure: ref, owner: ref, revision: ref,
         predecessor: t.Nullable(ref), measures: t.Array(RecipeMeasure),
-        sourcePosition: t.Any(), cost: t.Any() }), ...authorizedReadProblems } },
+        sourcePosition: t.Any(), cost: t.Any() }), ...authorizedReadProblems }, 'GET') },
     async ({ request, params, query }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
@@ -554,9 +555,9 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .post('/v1/recipes/:id/scalings', { params: t.Object({ id: groupUuid }),
       body: t.Object({ actingSubject: ref, factor: rational }, { additionalProperties: false }),
-      response: { 200: t.Object({ structure: ref, revision: ref, factor: rational,
+      response: transportResponses(openApiOperations["/v1/recipes/{id}/scalings"].post, { 200: t.Object({ structure: ref, revision: ref, factor: rational,
         ingredients: t.Array(t.Any()), sourcePosition: t.Any(),
-        cost: t.Object({ pages: t.Integer(), pagesRead: t.Integer(), occurrences: t.Integer() }) }), ...problems } },
+        cost: t.Object({ pages: t.Integer(), pagesRead: t.Integer(), occurrences: t.Integer() }) }), ...problems }, 'POST') },
     async ({ request, params, body }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
@@ -577,7 +578,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .get('/v1/recipes/:id/exports/schema-org', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref, revision: t.Optional(ref) }, { additionalProperties: false }),
       detail: { description: `Export the selected Recipe revision as Schema.org JSON. Traversal is limited to ${RECIPE_EXPORT_OCCURRENCE_LIMIT.toLocaleString('en-US')} occurrences; larger revisions return 413 recipe_export_too_large.` },
-      response: { 200: recipeExportResponse, 413: problemResult(413), ...problems } },
+      response: transportResponses(openApiOperations["/v1/recipes/{id}/exports/schema-org"].get, { 200: recipeExportResponse, 413: problemResult(413), ...problems }, 'GET') },
     async ({ request, params, query }: { request: Request; params: { id: string };
       query: { actingSubject: string; revision?: string } }) => {
       try {
@@ -597,7 +598,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .get('/v1/recipes/:id/export', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: t.Optional(ref), revision: t.Optional(ref),
         format: t.Optional(t.Union([t.Literal('native'), t.Literal('schema-org')])) }, { additionalProperties: false }),
-      response: { 200: selectedRecipeExport, 413: problemResult(413), ...problems } },
+      response: transportResponses(openApiOperations["/v1/recipes/{id}/export"].get, { 200: selectedRecipeExport, 413: problemResult(413), ...problems }, 'GET') },
     async ({ request, params, query }: { request: Request; params: { id: string };
       query: { actingSubject?: string; revision?: string; format?: 'native' | 'schema-org' } }) => {
       try {
@@ -665,8 +666,8 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             properties: { '@type': { const: 'Recipe' }, '@context': { const: 'https://schema.org' } },
             additionalProperties: true } },
         } } },
-      response: { 200: recipeFileImportResponse, 201: recipeFileImportResponse,
-        ...problems, 413: problemResult(413), 422: problemResult(422) } },
+      response: transportResponses(openApiOperations["/v1/recipes/{id}/file-imports"].post, { 200: recipeFileImportResponse, 201: recipeFileImportResponse,
+        ...problems, 413: problemResult(413), 422: problemResult(422) }, 'POST') },
     async ({ request, params, query }: { request: Request; params: { id: string };
       query: { actingSubject: string; expectedHead: string } }) => {
       try {
@@ -723,7 +724,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       } finally { cancelRecipeFileBody(request); }
     })
     .post('/v1/recipes/:id/imports', { params: t.Object({ id: groupUuid }),
-      body: importBody, response: { 200: t.Any(), 202: problemResult(202), ...problems } },
+      body: importBody, response: transportResponses(openApiOperations["/v1/recipes/{id}/imports"].post, { 200: t.Any(), 202: problemResult(202), ...problems }, 'POST') },
     async ({ request, params, body }: { request: Request; params: { id: string };
       body: Static<typeof importBody> }) => {
       const idempotencyKey = key(request);
@@ -836,7 +837,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       } catch (error) { return routeError(error); }
     })
     .post('/v1/recipes/nutrition', { body: nutritionBody,
-      response: { 200: t.Any(), ...problems } }, async ({ request, body }: {
+      response: transportResponses(openApiOperations["/v1/recipes/nutrition"].post, { 200: t.Any(), ...problems }, 'POST') }, async ({ request, body }: {
         request: Request; body: Static<typeof nutritionBody> }) => {
       try {
         await work.account.verify(request, ['work:read']);

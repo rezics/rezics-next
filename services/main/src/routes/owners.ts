@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { problemResult } from '../api-contract.ts';
@@ -100,7 +101,7 @@ export function ownerRoutes(work: MainWorkDependencies) {
   const missingKey = () => problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
   return new Elysia()
     .post('/v1/owners/reconciliations', { body: reconcileBody,
-      response: { 200: reconcileResult, 201: reconcileResult, ...writeProblems } },
+      response: transportResponses(openApiOperations["/v1/owners/reconciliations"].post, { 200: reconcileResult, 201: reconcileResult, ...writeProblems }, 'POST') },
     async ({ request, body }) => {
       try {
         if (!await authorize(request)) return denied();
@@ -126,7 +127,7 @@ export function ownerRoutes(work: MainWorkDependencies) {
       } catch (error) { return ownerError(error); }
     })
     .get('/v1/owners/reconciliations/:id', { params: t.Object({ id: uuid }),
-      response: { 200: reconcileResult, ...authorizedReadProblems } },
+      response: transportResponses(openApiOperations["/v1/owners/reconciliations/{id}"].get, { 200: reconcileResult, ...authorizedReadProblems }, 'GET') },
     async ({ request, params }) => {
       try {
         if (!await authorize(request)) return denied();
@@ -136,7 +137,7 @@ export function ownerRoutes(work: MainWorkDependencies) {
       } catch (error) { return ownerError(error); }
     })
     .post('/v1/owners/relocations', { body: relocationBody,
-      response: { 200: relocationResult, 201: relocationResult, ...writeProblems } },
+      response: transportResponses(openApiOperations["/v1/owners/relocations"].post, { 200: relocationResult, 201: relocationResult, ...writeProblems }, 'POST') },
     async ({ request, body }) => {
       try {
         if (!await authorize(request)) return denied();
@@ -153,7 +154,7 @@ export function ownerRoutes(work: MainWorkDependencies) {
       } catch (error) { return ownerError(error); }
     })
     .get('/v1/owners/relocations/:id', { params: t.Object({ id: uuid }),
-      response: { 200: relocationResult, ...authorizedReadProblems, 404: problemResult(404) } },
+      response: transportResponses(openApiOperations["/v1/owners/relocations/{id}"].get, { 200: relocationResult, ...authorizedReadProblems, 404: problemResult(404) }, 'GET') },
     async ({ request, params }) => {
       try {
         if (!await authorize(request)) return denied();

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { websocket } from 'elysia/websocket';
 import { problemResult } from '../api-contract.ts';
@@ -25,8 +26,8 @@ export function contentPrivateSearchRoutes(work: MainWorkDependencies) {
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         phrase: t.String({ minLength: 2, maxLength: 80 }),
       }, { additionalProperties: false }),
-      response: { 200: t.Object({ transport: t.Literal('websocket'), path: t.Literal('/v1/private-content-queries') }),
-        400: problemResult(400), 401: problemResult(401), 403: problemResult(403), 503: problemResult(503) },
+      response: transportResponses(openApiOperations["/v1/private-content-queries"].post, { 200: t.Object({ transport: t.Literal('websocket'), path: t.Literal('/v1/private-content-queries') }),
+        400: problemResult(400), 401: problemResult(401), 403: problemResult(403), 503: problemResult(503) }, 'POST'),
     }, async ({ request, body }) => {
       if (!owners) return problem(503, 'private_search_unavailable',
         'Private Content phrase delivery is unavailable');

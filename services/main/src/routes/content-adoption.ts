@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import type { ResourceReference, ContentSelection } from '../../../content/src/adoption.ts';
 import { ContentAdoptionInvalid } from '../../../content/src/adoption.ts';
@@ -41,8 +42,8 @@ export function contentAdoptionRoutes(deps: MainWorkDependencies) {
       inputs: t.Array(resourceReferenceSchema, { minItems: 1, maxItems: 16 }),
       activity: t.Object({ kind }, closed), responsibleAgent: readId,
       expectedOutputHead: readUuid, actingSubject: readId }, closed),
-    response: { 200: t.Object({ ...record, replayed: t.Boolean() }),
-      201: t.Object({ ...record, replayed: t.Boolean() }), ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/content-derivations"].post, { 200: t.Object({ ...record, replayed: t.Boolean() }),
+      201: t.Object({ ...record, replayed: t.Boolean() }), ...workReadProblems }, 'POST'),
   }, async ({ request, body }) => {
     const key = request.headers.get('idempotency-key');
     if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -57,11 +58,11 @@ export function contentAdoptionRoutes(deps: MainWorkDependencies) {
   }).get('/v1/content-revisions/:revision/derivations', {
     params: t.Object({ revision: readUuid }), query: t.Object({ actingSubject: t.Optional(readId),
       limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })), cursor: t.Optional(t.String({ maxLength: 2048 })) }, closed),
-    response: { 200: t.Object({ revision: readUuid, items: t.Array(t.Object({ ...record,
+    response: transportResponses(openApiOperations["/v1/content-revisions/{revision}/derivations"].get, { 200: t.Object({ revision: readUuid, items: t.Array(t.Object({ ...record,
       inputs: t.Array(t.Union([resourceReferenceSchema, unavailable]), { maxItems: 16 }),
       replayed: t.Literal(false),
       responsibleAgent: t.Union([readId, unavailable]), projection: t.Optional(t.Record(t.String(), t.Unknown())) }), { maxItems: 20 }),
-      nextCursor: t.Nullable(t.String()), complete: t.Boolean() }), ...workReadProblems },
+      nextCursor: t.Nullable(t.String()), complete: t.Boolean() }), ...workReadProblems }, 'GET'),
   }, async ({ request, params, query }) => {
     try { return Response.json(await workRead(deps, request, query, session =>
       readContentDerivations(session, params.revision, query.limit, query.cursor)), { headers }); }
@@ -69,10 +70,10 @@ export function contentAdoptionRoutes(deps: MainWorkDependencies) {
   }).post('/v1/resource-reference-resolutions', {
     body: t.Object({ references: t.Array(resourceReferenceSchema, { minItems: 1, maxItems: 16 }),
       actingSubject: t.Optional(readId) }, closed),
-    response: { 200: t.Object({ items: t.Array(t.Union([unavailable, t.Object({ status: t.Literal('available'),
+    response: transportResponses(openApiOperations["/v1/resource-reference-resolutions"].post, { 200: t.Object({ items: t.Array(t.Union([unavailable, t.Object({ status: t.Literal('available'),
       reference: resourceReferenceSchema, projection: t.Record(t.String(), t.Unknown()),
       document: t.Optional(documentSnapshotSchema), text: t.Optional(t.String()) })]), { maxItems: 16 }) }),
-      ...workReadProblems },
+      ...workReadProblems }, 'POST'),
   }, async ({ request, body }) => {
     try { return Response.json(await workRead(deps, request, { actingSubject: body.actingSubject, readOnlyTemplate: true }, async session => {
       const items = []; for (const reference of body.references) items.push(await resolveContentReference(session, reference));

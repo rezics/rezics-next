@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -121,7 +122,7 @@ export function safetyCaseRoutes(work: MainWorkDependencies) {
           cursor: t.Optional(t.String({ maxLength: 4000 })),
           limit: t.Optional(t.Integer({ minimum: 1, maximum: 50 })),
         }),
-        response: { 200: queuePage, ...authorizedReadProblems },
+        response: transportResponses(openApiOperations["/v1/safety-cases"].get, { 200: queuePage, ...authorizedReadProblems }, 'GET'),
       },
       async ({ request, query }) => {
         try {
@@ -137,7 +138,7 @@ export function safetyCaseRoutes(work: MainWorkDependencies) {
       '/v1/safety-cases/due-steps',
       {
         query: t.Object({ actingSubject: agent, cursor: t.Optional(uuid) }),
-        response: { 200: duePage, ...authorizedReadProblems },
+        response: transportResponses(openApiOperations["/v1/safety-cases/due-steps"].get, { 200: duePage, ...authorizedReadProblems }, 'GET'),
       },
       async ({ request, query }) => {
         try {
@@ -161,7 +162,7 @@ export function safetyCaseRoutes(work: MainWorkDependencies) {
           reportCursor: t.Optional(uuid),
           stepCursor: t.Optional(uuid),
         }),
-        response: { 200: caseView, ...authorizedReadProblems },
+        response: transportResponses(openApiOperations["/v1/safety-cases/{caseId}"].get, { 200: caseView, ...authorizedReadProblems }, 'GET'),
       },
       async ({ request, params, query }) => {
         try {
@@ -187,7 +188,7 @@ export function safetyCaseRoutes(work: MainWorkDependencies) {
       {
         params: t.Object({ caseId: uuid }),
         body: t.Object({ actingSubject: agent, idempotencyKey: key }),
-        response: { 200: t.Object({ caseId: uuid, claimedBy: agent }), ...writeProblems },
+        response: transportResponses(openApiOperations["/v1/safety-cases/{caseId}/claim"].post, { 200: t.Object({ caseId: uuid, claimedBy: agent }), ...writeProblems }, 'POST'),
       },
       async ({ request, params, body }) => {
         try {
@@ -213,7 +214,7 @@ export function safetyCaseRoutes(work: MainWorkDependencies) {
           idempotencyKey: key,
           reason: t.String({ minLength: 1, maxLength: 4000 }),
         }),
-        response: { 200: t.Object({ caseId: uuid, holdId: uuid }), ...writeProblems },
+        response: transportResponses(openApiOperations["/v1/safety-cases/{caseId}/preservation-holds"].post, { 200: t.Object({ caseId: uuid, holdId: uuid }), ...writeProblems }, 'POST'),
       },
       async ({ request, params, body }) => {
         try {
@@ -249,7 +250,7 @@ export function safetyCaseRoutes(work: MainWorkDependencies) {
           },
           { additionalProperties: false },
         ),
-        response: { 200: decisionResult, 202: decisionResult, ...writeProblems },
+        response: transportResponses(openApiOperations["/v1/safety-cases/{caseId}/decisions"].post, { 200: decisionResult, 202: decisionResult, ...writeProblems }, 'POST'),
       },
       async ({ request, params, body }) => {
         try {
@@ -274,7 +275,7 @@ export function safetyCaseRoutes(work: MainWorkDependencies) {
       {
         params: t.Object({ decisionId: uuid }),
         body: t.Object({ actingSubject: agent, idempotencyKey: key }),
-        response: { 200: decisionResult, ...writeProblems },
+        response: transportResponses(openApiOperations["/v1/safety-decisions/{decisionId}/cancellation"].post, { 200: decisionResult, ...writeProblems }, 'POST'),
       },
       async ({ request, params, body }) => {
         try {
@@ -298,7 +299,7 @@ export function safetyCaseRoutes(work: MainWorkDependencies) {
       '/v1/safety-notices',
       {
         query: t.Object({ cursor: t.Optional(uuid) }),
-        response: { 200: noticePage, ...authorizedReadProblems },
+        response: transportResponses(openApiOperations["/v1/safety-notices"].get, { 200: noticePage, ...authorizedReadProblems }, 'GET'),
       },
       async ({ request, query }) => {
         try {

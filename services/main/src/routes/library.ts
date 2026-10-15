@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { judgmentScaleSchema, exactRatingSchema } from '../modules/rating/scale.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult, sourcePosition } from '../api-contract.ts';
@@ -175,7 +176,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/works/:id/reader-state', { params: t.Object({ id: readUuid }),
       query: t.Object({ actingSubject: t.Optional(readId), realm: t.Optional(readId), ratingContext: t.Optional(readId) }, { additionalProperties: false }),
-      response: { 200: single, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/reader-state"].get, { 200: single, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       const workId = `https://rezics.com/id/${params.id}`;
       if (!request.headers.has('authorization')) return empty([workId], true);
@@ -191,7 +192,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/me/work-states', { query: t.Object({ works: t.String({ minLength: 1, maxLength: 1600 }),
       actingSubject: t.Optional(readId), realm: t.Optional(readId), ratingContext: t.Optional(readId) }, { additionalProperties: false }),
-      response: { 200: batch, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/work-states"].get, { 200: batch, ...workReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       let works: string[];
       try { works = readWorks(query.works); } catch (error) { return failure(error); }
@@ -209,7 +210,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
       body: t.Object({ actingSubject: readId, expectedVersion: t.Integer({ minimum: 0 }),
         status, startedOn: t.Optional(t.Nullable(t.String({ format: 'date' }))),
         finishedOn: t.Optional(t.Nullable(t.String({ format: 'date' }))) }, { additionalProperties: false }),
-      response: { 200: statusState, ...errors },
+      response: transportResponses(openApiOperations["/v1/works/{id}/reader-status"].put, { 200: statusState, ...errors }, 'PUT'),
     }, async ({ request, params, body }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library is unavailable');
       const idempotencyKey = request.headers.get('idempotency-key') ?? '';
@@ -239,7 +240,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
     .get('/v1/me/shelves', { query: t.Object({ actingSubject: readId,
       limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
       cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) }, { additionalProperties: false }),
-      response: { 200: shelves, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/shelves"].get, { 200: shelves, ...workReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library is unavailable');
       try {
@@ -253,7 +254,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
       query: t.Object({ actingSubject: readId, sort: shelfSort, order: shelfOrder,
         limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
         cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) },
-      { additionalProperties: false }), response: { 200: statusShelf, ...workReadProblems },
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/me/shelves/status/{status}/works"].get, { 200: statusShelf, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library is unavailable');
       try {
@@ -266,7 +267,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/agents/:id/shelves', { params: t.Object({ id: readUuid }),
       query: t.Object(readQuery, { additionalProperties: false }),
-      response: { 200: publicShelves, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/agents/{id}/shelves"].get, { 200: publicShelves, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
       try {
@@ -278,7 +279,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
     .get('/v1/me/import-reviews', {
       query: t.Object({ actingSubject: readId, works: t.String({ minLength: 1, maxLength: 1600 }) },
         { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(privateReview, { maxItems: 24 }) }), ...errors },
+      response: transportResponses(openApiOperations["/v1/me/import-reviews"].get, { 200: t.Object({ items: t.Array(privateReview, { maxItems: 24 }) }), ...errors }, 'GET'),
     }, async ({ request, query }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
       try {
@@ -295,7 +296,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
       body: t.Object({ actingSubject: readId, text: t.String({ minLength: 1, maxLength: 8000 }),
         language: t.String({ minLength: 2, maxLength: 35 }), spoiler: t.Boolean(),
         expectedVersion: t.Integer({ minimum: 0 }) }, { additionalProperties: false }),
-      response: { 200: privateReview, ...errors },
+      response: transportResponses(openApiOperations["/v1/me/import-reviews/{id}"].put, { 200: privateReview, ...errors }, 'PUT'),
     }, async ({ request, params, body }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
       const idempotencyKey = request.headers.get('idempotency-key') ?? '';
@@ -316,7 +317,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/me/reading-stats', {
       query: t.Object({ actingSubject: readId, year: t.Numeric({ minimum: 1900, maximum: 2100 }) },
-        { additionalProperties: false }), response: { 200: readingStats, ...errors },
+        { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/me/reading-stats"].get, { 200: readingStats, ...errors }, 'GET'),
     }, async ({ request, query }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
       try {
@@ -329,7 +330,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/me/reading-goal', {
       query: t.Object({ actingSubject: readId, year: t.Numeric({ minimum: 1900, maximum: 2100 }) },
-        { additionalProperties: false }), response: { 200: yearlyGoal, ...errors },
+        { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/me/reading-goal"].get, { 200: yearlyGoal, ...errors }, 'GET'),
     }, async ({ request, query }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
       try {
@@ -342,7 +343,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
       body: t.Object({ actingSubject: readId, year: t.Integer({ minimum: 1900, maximum: 2100 }),
         target: t.Nullable(t.Integer({ minimum: 1, maximum: 1000 })),
         expectedVersion: t.Integer({ minimum: 0 }) }, { additionalProperties: false }),
-      response: { 200: yearlyGoal, ...errors },
+      response: transportResponses(openApiOperations["/v1/me/reading-goal"].put, { 200: yearlyGoal, ...errors }, 'PUT'),
     }, async ({ request, body }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
       const idempotencyKey = request.headers.get('idempotency-key') ?? '';
@@ -359,7 +360,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
     .get('/v1/agents/:id/shelves/status/:status/works', {
       params: t.Object({ id: readUuid, status: t.Exclude(status, t.Null()) }),
       query: t.Object({ ...pageQuery, sort: publicShelfSort, order: shelfOrder }, { additionalProperties: false }),
-      response: { 200: publicStatusShelf, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/agents/{id}/shelves/status/{status}/works"].get, { 200: publicStatusShelf, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
       try {

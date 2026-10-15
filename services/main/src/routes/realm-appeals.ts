@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { problemResult } from '../api-contract.ts';
@@ -77,7 +78,7 @@ export function realmAppealRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/realms/:realm/member-receipts/:receiptId/appeal', {
       params, body: t.Object({ statement }, { additionalProperties: false }),
-      response: { 200: opened, 201: opened, ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/member-receipts/{receiptId}/appeal"].post, { 200: opened, 201: opened, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params: path, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey))
@@ -91,7 +92,7 @@ export function realmAppealRoutes(work: MainWorkDependencies) {
       } catch (error) { return appealError(error); }
     })
     .get('/v1/realms/:realm/member-receipts/:receiptId/appeal', {
-      params, response: { 200: reading, ...authorizedReadProblems },
+      params, response: transportResponses(openApiOperations["/v1/realms/{realm}/member-receipts/{receiptId}/appeal"].get, { 200: reading, ...authorizedReadProblems }, 'GET', true),
     }, async ({ request, params: path }) => {
       try {
         const principal = await work.account.verify(request, []);
@@ -103,7 +104,7 @@ export function realmAppealRoutes(work: MainWorkDependencies) {
     .get('/v1/realms/:realm/member-ban', {
       params: t.Object({ realm: readUuid }),
       query: t.Object({ actingSubject: readId }, { additionalProperties: false }),
-      response: { 200: memberBanReading, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/member-ban"].get, { 200: memberBanReading, ...authorizedReadProblems }, 'GET', true),
     }, async ({ request, params: path, query }) => {
       try {
         const principal = await work.account.verify(request, []);

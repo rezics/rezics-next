@@ -1,3 +1,4 @@
+import { transportResponses, transportProblem } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { writeProblems } from '../api-responses.ts';
 import { RightsConflict, RightsDenied, RightsInvalid, RightsStale, RightsUnavailable,
@@ -97,7 +98,7 @@ export function rightsRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('rights-offering-create-v1'), target: agent,
         instrument, actingSubject: agent, idempotencyKey: t.String({ pattern: '^[A-Za-z0-9:_./-]{1,128}$' }) },
       { additionalProperties: false }),
-      response: { 200: offeringResult, 201: offeringResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/rights/offerings"].post, { 200: offeringResult, 201: offeringResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const keyError = requireGovernanceKey(request, body.idempotencyKey);
@@ -116,7 +117,7 @@ export function rightsRoutes(work: MainWorkDependencies) {
         action: literals(['end', 'recognize', 'invalidate']), actingSubject: agent,
         expectedOfferingHead: agent, expectedRecognitionHead: t.Nullable(agent),
         idempotencyKey: t.String({ pattern: '^[A-Za-z0-9:_./-]{1,128}$' }) }, { additionalProperties: false }),
-      response: { 200: offeringResult, 201: offeringResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/rights/offerings/{offering}/changes"].post, { 200: offeringResult, 201: offeringResult, ...writeProblems }, 'POST'),
     }, async ({ request, body, params }) => {
       try {
         const keyError = requireGovernanceKey(request, body.idempotencyKey);
@@ -133,7 +134,7 @@ export function rightsRoutes(work: MainWorkDependencies) {
     .get('/v1/rights/offerings/:offering', {
       params: t.Object({ offering: uuid }),
       query: t.Object({ actingSubject: agent }, { additionalProperties: false }),
-      response: { 200: offeringView, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/rights/offerings/{offering}"].get, { 404: transportProblem(404, 'not_found'), 200: offeringView, ...writeProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, [RIGHTS_OFFER_SCOPE]);
@@ -147,7 +148,7 @@ export function rightsRoutes(work: MainWorkDependencies) {
     .get('/v1/rights/offerings/:offering/revisions/:revision', {
       params: t.Object({ offering: uuid, revision: uuid }),
       query: t.Object({ actingSubject: agent }, { additionalProperties: false }),
-      response: { 200: offeringRevisionView, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/rights/offerings/{offering}/revisions/{revision}"].get, { 404: transportProblem(404, 'not_found'), 200: offeringRevisionView, ...writeProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, [RIGHTS_OFFER_SCOPE]);
@@ -176,7 +177,7 @@ export function rightsRoutes(work: MainWorkDependencies) {
         { additionalProperties: false }), { maxItems: 16 }),
         expectedAssessment: t.Nullable(uuid),
         idempotencyKey: t.String({ pattern: '^[A-Za-z0-9:_./-]{1,128}$' }) }, { additionalProperties: false }),
-      response: { 200: assessmentResult, 201: assessmentResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/rights/use-assessments"].post, { 200: assessmentResult, 201: assessmentResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [RIGHTS_SCOPE]);
@@ -193,7 +194,7 @@ export function rightsRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('rights-use-evaluation-v1'), actingSubject: agent,
         material, ...useKey },
         { additionalProperties: false }),
-      response: { 200: evaluationResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/rights/use-evaluations"].post, { 200: evaluationResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [RIGHTS_SCOPE]);
@@ -212,7 +213,7 @@ export function rightsRoutes(work: MainWorkDependencies) {
           claimedRight: literals(['copyright', 'trademark', 'privacy', 'other']),
           noticeDigest: t.String({ pattern: '^[0-9a-f]{64}$' }), noticeReceivedAt: t.String({ format: 'date-time' }) },
         { additionalProperties: false }) }, { additionalProperties: false }),
-      response: { 200: complaintResult, 201: complaintResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/rights/complaints"].post, { 200: complaintResult, 201: complaintResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [REPORT_SCOPE]);
@@ -230,7 +231,7 @@ export function rightsRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('rights-restriction-v1'),
         outcome: literals(['interim_restrict', 'final_restrict', 'dismiss', 'restore', 'reverse']), ...decisionFields },
       { additionalProperties: false }),
-      response: { 200: decisionResult, 202: decisionResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/rights/restrictions"].post, { 200: decisionResult, 202: decisionResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [RIGHTS_DECIDE_SCOPE]);

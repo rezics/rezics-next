@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { groupChangeIntentDigest } from '../modules/access/scope-gates.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -99,7 +100,7 @@ export function accessRoleRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/me/representation-requests', {
       body: representationRequestBody,
-      response: { 200: representationRequestResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/representation-requests"].post, { 200: representationRequestResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:represent']);
@@ -120,7 +121,7 @@ export function accessRoleRoutes(work: MainWorkDependencies) {
     .get('/v1/access/representation-requests/:requestId', {
       params: t.Object({ requestId: groupUuid }),
       query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
-      response: { 200: representationRequestResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/representation-requests/{requestId}"].get, { 200: representationRequestResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:representation-manage']);
@@ -136,7 +137,7 @@ export function accessRoleRoutes(work: MainWorkDependencies) {
     .get('/v1/access/representations/:representationId', {
       params: t.Object({ representationId: groupUuid }),
       query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
-      response: { 200: representationReadResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/representations/{representationId}"].get, { 200: representationReadResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:representation-manage']);
@@ -151,7 +152,7 @@ export function accessRoleRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/representation-changes', {
       body: representationChangeBody,
-      response: { 200: representationChangeResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/representation-changes"].post, { 200: representationChangeResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:representation-manage']);
@@ -176,7 +177,7 @@ export function accessRoleRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/roles', {
       body: roleFamilyBody,
-      response: { 200: roleRevisionResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/roles"].post, { 200: roleRevisionResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:role']);
@@ -196,7 +197,7 @@ export function accessRoleRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/role-revisions', {
       body: roleRevisionBody,
-      response: { 200: roleRevisionResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/role-revisions"].post, { 200: roleRevisionResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:role']);
@@ -217,7 +218,7 @@ export function accessRoleRoutes(work: MainWorkDependencies) {
     .get('/v1/access/roles/:familyId', {
       params: t.Object({ familyId: groupUuid }),
       query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
-      response: { 200: roleFamilyResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/roles/{familyId}"].get, { 200: roleFamilyResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:role']);
@@ -230,7 +231,7 @@ export function accessRoleRoutes(work: MainWorkDependencies) {
     .get('/v1/access/role-bindings', {
       query: t.Object({ issuerSubject: groupAgent, after: t.Optional(groupUuid) },
         { additionalProperties: false }),
-      response: { 200: roleBindingPageResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/role-bindings"].get, { 200: roleBindingPageResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:role']);
@@ -244,7 +245,7 @@ export function accessRoleRoutes(work: MainWorkDependencies) {
     .get('/v1/access/role-bindings/:bindingId', {
       params: t.Object({ bindingId: groupUuid }),
       query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
-      response: { 200: roleBindingReadResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/role-bindings/{bindingId}"].get, { 200: roleBindingReadResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:role']);
@@ -257,7 +258,7 @@ export function accessRoleRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/access/role-bindings', {
       body: roleBindingChangeBody,
-      response: { 200: roleBindingChangeResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/access/role-bindings"].post, { 200: roleBindingChangeResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:role']);

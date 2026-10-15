@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { relationStar } from './lexicon.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -123,8 +124,8 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         applicability: t.Optional(t.Array(native, { maxItems: 8 })),
         lifecycle: t.Optional(t.Union([t.Literal('active'), t.Literal('retired')])), actingSubject: native },
       { additionalProperties: false }),
-      response: { 200: relationWrite, 201: relationWrite, 202: pendingOperation, ...writeProblems,
-        404: problemResult(404), 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/relations/changes"].post, { 200: relationWrite, 201: relationWrite, 202: pendingOperation, ...writeProblems,
+        404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -155,7 +156,7 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     .get('/v1/relations/:id', {
       params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: native, position: readingPositionQuery }, { additionalProperties: false }),
-      response: { 200: relationRead, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/relations/{id}"].get, { 200: relationRead, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const read = await exact(request, query.actingSubject, `https://rezics.com/id/${params.id}`);
@@ -166,7 +167,7 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     .get('/v1/relations/:id/revisions/:revision', {
       params: t.Object({ id: groupUuid, revision: groupUuid }),
       query: t.Object({ actingSubject: native, position: readingPositionQuery }, { additionalProperties: false }),
-      response: { 200: relationRead, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/relations/{id}/revisions/{revision}"].get, { 200: relationRead, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const read = await exact(request, query.actingSubject, `https://rezics.com/id/${params.id}`,

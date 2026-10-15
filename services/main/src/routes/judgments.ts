@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { problemResult } from '../api-contract.ts';
@@ -93,7 +94,7 @@ export function judgmentRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('concept-spoiler-hint-v1'), context,
         hint: t.Union([t.Literal('not-spoiler'), t.Literal('minor'), t.Literal('major')]),
         expectedGeneration: revision, actingSubject: native }, { additionalProperties: false }),
-      response: { 200: hintResult, 201: hintResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/concepts/{id}/spoiler-hints"].post, { 200: hintResult, 201: hintResult, ...writeProblems }, 'POST'),
     }, async ({ request, params, body }) => {
       if (!work.judgments) return problem(503, 'judgment_owner_unavailable', 'Judgment owner is unavailable');
       const key = request.headers.get('idempotency-key');
@@ -116,7 +117,7 @@ export function judgmentRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('statement-judgment-v1'), context, dimension,
         value: t.Nullable(t.Integer({ minimum: -1, maximum: 2 })), expectedRevision: revision },
       { additionalProperties: false }),
-      response: { 200: writeResult, 201: writeResult, ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/statements/{id}/judgments"].post, { 200: writeResult, 201: writeResult, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       if (!work.judgments) return problem(503, 'judgment_owner_unavailable', 'Judgment owner is unavailable');
       const key = request.headers.get('idempotency-key');
@@ -142,7 +143,7 @@ export function judgmentRoutes(work: MainWorkDependencies) {
     .get('/v1/statements/:id/judgments', {
       params: t.Object({ id: uuid }),
       query: t.Object({ realm: t.Optional(native) }),
-      response: { 200: readResult, ...authorizedReadProblems, 409: problemResult(409) },
+      response: transportResponses(openApiOperations["/v1/statements/{id}/judgments"].get, { 200: readResult, ...authorizedReadProblems, 409: problemResult(409) }, 'GET'),
     }, async ({ request, params, query }) => {
       if (!work.judgments) return problem(503, 'judgment_owner_unavailable', 'Judgment owner is unavailable');
       const statement = ID + params.id;

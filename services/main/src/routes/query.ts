@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { createHash } from 'node:crypto';
 import { phraseMatch, problemResult, publicPhrasePageResult, sourcePosition } from '../api-contract.ts';
@@ -95,13 +96,13 @@ async function presentationDigest(work: MainWorkDependencies, request: Request):
 /** One Query input; each successful result carries the bounded template's existing result contract. */
 export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const search = searchRoutes(fuseki, work);
-  return new Elysia().post('/v1/query', { body, response: {
+  return new Elysia().post('/v1/query', { body, response: transportResponses(openApiOperations["/v1/query"].post, {
     304:t.Null(),
     200: t.Object({ profile: t.Literal('query-v1'), template: t.String(), selection: querySelection,
       result: t.Union([publicPhrasePageResult, zoneBrowsePage, conceptSetResult, conceptWorksPage, releaseWorksPage, resourceListPage,templateResponses]) }),
     400: problemResult(400), 401: problemResult(401), 403: problemResult(403), 404: problemResult(404), 409: problemResult(409),
     422: problemResult(422), 500: problemResult(500), 503: problemResult(503),
-  } }, async ({ body: input, request }) => {
+  }, 'POST') }, async ({ body: input, request }) => {
     try {
       if ('profile' in input && input.profile==='template-query-v1') {
         try { return await executeTemplate(work,request,input as TemplateInput); }

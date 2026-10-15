@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, readProblems, writeProblems } from '../api-responses.ts';
 import { AccountAssertionDenied } from '../modules/account/verify-assertion.ts';
@@ -53,7 +54,7 @@ export function publicReportRoutes(work: MainWorkDependencies) {
   const unavailable = () => problem(503, 'governance_unavailable', 'Governance is unavailable');
   return new Elysia()
     .post('/v1/public-reports', { body: publicReportInput,
-      response: { 200: publicReportReceipt, 201: publicReportReceipt, ...writeProblems, ...readProblems } }, async ({ request, body }) => {
+      response: transportResponses(openApiOperations["/v1/public-reports"].post, { 200: publicReportReceipt, 201: publicReportReceipt, ...writeProblems, ...readProblems }, 'POST') }, async ({ request, body }) => {
       try {
         if (!work.publicReports) return unavailable();
         const reporter = await optionalReporter(work, request);
@@ -63,7 +64,7 @@ export function publicReportRoutes(work: MainWorkDependencies) {
       } catch (error) { return privateError(error); }
     })
     .get('/v1/public-reports/mine', { query: cursorQuery,
-      response: { 200: publicReportList, ...authorizedReadProblems } }, async ({ request, query }) => {
+      response: transportResponses(openApiOperations["/v1/public-reports/mine"].get, { 200: publicReportList, ...authorizedReadProblems }, 'GET') }, async ({ request, query }) => {
       try {
         if (!work.publicReports) return unavailable();
         const reporter = await work.account.verify(request, []);
@@ -73,7 +74,7 @@ export function publicReportRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/public-reports/:caseId', { params: caseParams, query: caseQuery,
       headers: t.Object({ 'x-rezics-case-credential': t.Optional(t.String()) }),
-      response: { 200: publicReportStatus, ...readProblems } }, async ({ request, params, query }) => {
+      response: transportResponses(openApiOperations["/v1/public-reports/{caseId}"].get, { 200: publicReportStatus, ...readProblems }, 'GET') }, async ({ request, params, query }) => {
       try {
         if (!work.publicReports) return unavailable();
         return Response.json({ profile: CATEGORY_VERSION,
@@ -82,7 +83,7 @@ export function publicReportRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/public-reports/:caseId/correspondence', { params: caseParams, body: correspondenceInput,
       headers: t.Object({ 'x-rezics-case-credential': t.Optional(t.String()) }),
-      response: { 200: correspondenceReceipt, ...writeProblems, ...readProblems } },
+      response: transportResponses(openApiOperations["/v1/public-reports/{caseId}/correspondence"].post, { 200: correspondenceReceipt, ...writeProblems, ...readProblems }, 'POST') },
       async ({ request, params, body }) => {
         try {
           if (!work.publicReports) return unavailable();

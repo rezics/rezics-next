@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { CONTINUE_COST, continueQuery, continueResult, hiddenCommand, hiddenResult,
   workResumeQuery, workResumeResult, WORK_RESUME_COST }
@@ -17,7 +18,7 @@ export const openApiOperations = {
 
 export function continueRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/me/continue', { query: continueQuery,
-    response: { 200: continueResult, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/me/continue"].get, { 200: continueResult, ...workReadProblems }, 'GET'),
   }, async ({ request, query }) => {
     try {
       const principal = await work.account.verify(request, ['work:read', 'follow:read']);
@@ -28,7 +29,7 @@ export function continueRoutes(work: MainWorkDependencies) {
       return new Response(body, { headers: { ...homeHeaders, 'content-type': 'application/json' } });
     } catch (error) { return homeError(error); }
   }).get('/v1/me/continue/:work', { params: t.Object({ work: readUuid }),
-    query: workResumeQuery, response: { 200: workResumeResult, ...workReadProblems },
+    query: workResumeQuery, response: transportResponses(openApiOperations["/v1/me/continue/{work}"].get, { 200: workResumeResult, ...workReadProblems }, 'GET'),
   }, async ({ request, params, query }) => {
     try {
       const principal = await work.account.verify(request, ['work:read']);
@@ -40,7 +41,7 @@ export function continueRoutes(work: MainWorkDependencies) {
       return new Response(body, { headers: { ...homeHeaders, 'content-type': 'application/json' } });
     } catch (error) { return homeError(error); }
   }).put('/v1/me/continue/:work/hidden', { params: t.Object({ work: readUuid }),
-    body: hiddenCommand, response: { 200: hiddenResult, ...workReadProblems },
+    body: hiddenCommand, response: transportResponses(openApiOperations["/v1/me/continue/{work}/hidden"].put, { 200: hiddenResult, ...workReadProblems }, 'PUT'),
   }, async ({ request, params, body }) => {
     try {
       if (!work.homePersonal) throw new WorkReadUnavailable('Continue is unavailable');

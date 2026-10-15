@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { pendingOperation, problemResult, sourcePosition } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -349,8 +350,8 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       body: t.Object({ profile: t.Literal('context-rule-v1'), context: contextId,
         semanticRevision: native, realm: native, expectedHead: t.Nullable(native),
         rule: finiteRule, actingSubject: native }, { additionalProperties: false }),
-      response: { 200: ruleWriteResponse, 201: ruleWriteResponse, ...graphWriteResponses,
-        422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/context-rules"].post, { 200: ruleWriteResponse, 201: ruleWriteResponse, ...graphWriteResponses,
+        422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -370,7 +371,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     .get('/v1/context-rules', {
       query: t.Object({ slot: ref, revision: t.Optional(native), actingSubject: native },
         { additionalProperties: false }),
-      response: { 200: ruleReadResponse, ...graphReadResponses },
+      response: transportResponses(openApiOperations["/v1/context-rules"].get, { 200: ruleReadResponse, ...graphReadResponses }, 'GET'),
     }, async ({ request, query }) => {
       try {
         await work.account.verify(request, ['context:read']);
@@ -386,7 +387,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         selections: t.Array(ruleSelection, { minItems: 1, maxItems: 16 }),
         facts: t.Array(ruleFact, { maxItems: 10_000 }), actingSubject: native },
       { additionalProperties: false }),
-      response: { 200: rulePlanResponse, ...graphReadResponses, 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/context-rule-plans"].post, { 200: rulePlanResponse, ...graphReadResponses, 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['context:read']);
@@ -401,8 +402,8 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       body: t.Object({ profile: t.Literal('context-rule-dependency-v1'), slot: ref,
         expectedGeneration: ref, targets: t.Array(native, { minItems: 1, maxItems: 64 }),
         actingSubject: native }, { additionalProperties: false }),
-      response: { 200: dependencyWriteResponse, 201: dependencyWriteResponse,
-        ...graphWriteResponses },
+      response: transportResponses(openApiOperations["/v1/context-rule-dependencies"].post, { 200: dependencyWriteResponse, 201: dependencyWriteResponse,
+        ...graphWriteResponses }, 'POST'),
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -422,7 +423,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     .get('/v1/context-rule-dependencies', {
       query: t.Object({ slot: ref, expectedGeneration: ref, after: t.Optional(ref), limit: t.Optional(t.Integer()),
         actingSubject: native }, { additionalProperties: false }),
-      response: { 200: invalidationResponse, ...graphReadResponses },
+      response: transportResponses(openApiOperations["/v1/context-rule-dependencies"].get, { 200: invalidationResponse, ...graphReadResponses }, 'GET'),
     }, async ({ request, query }) => {
       try {
         await work.account.verify(request, ['context:read']);
@@ -437,7 +438,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       body: t.Object({ profile: t.Literal('context-v1'), role: t.Union([t.Literal('global'), t.Literal('shared')]),
         disclosure: t.Union([t.Literal('public'), t.Literal('private')]), base: t.Nullable(native),
         entries: t.Array(entry, { maxItems: 256 }), actingSubject: native }, { additionalProperties: false }),
-      response: { 200: contextWriteResponse, 201: contextWriteResponse, ...graphWriteResponses },
+      response: transportResponses(openApiOperations["/v1/contexts"].post, { 200: contextWriteResponse, 201: contextWriteResponse, ...graphWriteResponses }, 'POST'),
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -456,7 +457,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       params: t.Object({ id: t.String({ pattern: '^([0-9a-f-]{36}|global)$' }) }),
       body: t.Object({ profile: t.Literal('context-v1'), expectedSemanticHead: native, base: t.Nullable(native),
         entries: t.Array(entry, { maxItems: 256 }), actingSubject: native }, { additionalProperties: false }),
-      response: { 200: contextWriteResponse, 201: contextWriteResponse, ...graphWriteResponses },
+      response: transportResponses(openApiOperations["/v1/contexts/{id}/semantic-revisions"].post, { 200: contextWriteResponse, 201: contextWriteResponse, ...graphWriteResponses }, 'POST'),
     }, async ({ request, params, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -477,7 +478,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       body: t.Object({ profile: t.Literal('context-v1'), expectedSemanticHead: native,
         state: t.Union([t.Literal('active'), t.Literal('retired')]), actingSubject: native },
       { additionalProperties: false }),
-      response: { 200: contextWriteResponse, 201: contextWriteResponse, ...graphWriteResponses },
+      response: transportResponses(openApiOperations["/v1/contexts/{id}/state-transitions"].post, { 200: contextWriteResponse, 201: contextWriteResponse, ...graphWriteResponses }, 'POST'),
     }, async ({ request, params, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -499,7 +500,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       body: t.Object({ profile: t.Literal('context-preference-v1'),
         expectedPreferenceHead: t.Nullable(native), labels: t.Array(labelPreference, { maxItems: 256 }),
         actingSubject: native }, { additionalProperties: false }),
-      response: { 200: preferenceWriteResponse, 201: preferenceWriteResponse, ...graphWriteResponses },
+      response: transportResponses(openApiOperations["/v1/contexts/{id}/preferences"].post, { 200: preferenceWriteResponse, 201: preferenceWriteResponse, ...graphWriteResponses }, 'POST'),
     }, async ({ request, params, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -519,7 +520,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     .get('/v1/contexts/:id/preferences', {
       params: t.Object({ id: t.String({ pattern: '^([0-9a-f-]{36}|global)$' }) }),
       query: t.Object({ actingSubject: t.Optional(native), revision: t.Optional(native) }),
-      response: { 200: preferenceReadResponse, ...graphReadResponses },
+      response: transportResponses(openApiOperations["/v1/contexts/{id}/preferences"].get, { 200: preferenceReadResponse, ...graphReadResponses }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const context = params.id === 'global' ? 'urn:rezics:semantic-context:global'
@@ -532,7 +533,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       params: t.Object({ id: t.String({ pattern: '^([0-9a-f-]{36}|global)$' }) }),
       query: t.Object({ actingSubject: t.Optional(native), semanticRevision: t.Optional(native),
         preferenceRevision: t.Optional(native) }),
-      response: { 200: skosReadResponse, ...graphReadResponses },
+      response: transportResponses(openApiOperations["/v1/contexts/{id}/skos"].get, { 200: skosReadResponse, ...graphReadResponses }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const context = params.id === 'global' ? 'urn:rezics:semantic-context:global'
@@ -545,7 +546,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       body: t.Object({ profile: t.Literal('context-definition-equivalence-v1'), context: contextId,
         semanticRevision: native, relation: reference, left: equivalenceUse, right: equivalenceUse,
         actingSubject: native }, { additionalProperties: false }),
-      response: { 200: equivalenceWriteResponse, 201: equivalenceWriteResponse, ...graphWriteResponses },
+      response: transportResponses(openApiOperations["/v1/context-definition-equivalences"].post, { 200: equivalenceWriteResponse, 201: equivalenceWriteResponse, ...graphWriteResponses }, 'POST'),
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -563,7 +564,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     .get('/v1/context-definition-equivalences', {
       query: t.Object({ mapping: t.String({ pattern: '^urn:rezics:context-equivalence:[0-9a-f]{64}$' }),
         actingSubject: t.Optional(native) }),
-      response: { 200: equivalenceReadResponse, ...graphReadResponses },
+      response: transportResponses(openApiOperations["/v1/context-definition-equivalences"].get, { 200: equivalenceReadResponse, ...graphReadResponses }, 'GET'),
     }, async ({ request, query }) => {
       try {
         return Response.json(await readDefinitionEquivalence(env, query.mapping,
@@ -575,7 +576,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         left: native, right: native,
         mapping: t.Nullable(t.String({ pattern: '^urn:rezics:context-equivalence:[0-9a-f]{64}$' })),
         actingSubject: t.Optional(native) }, { additionalProperties: false }),
-      response: { 200: meaningComparisonResponse, ...graphReadResponses },
+      response: transportResponses(openApiOperations["/v1/context-meaning-comparisons"].post, { 200: meaningComparisonResponse, ...graphReadResponses }, 'POST'),
     }, async ({ request, body }) => {
       try {
         return Response.json(await compareStatementMeanings(env, body.left, body.right,
@@ -586,7 +587,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       body: t.Object({ profile: t.Literal('context-definition-state-v1'), definition: reference,
         expectedHead: t.Nullable(native), state: t.Union([t.Literal('active'), t.Literal('retired')]),
         actingSubject: native }, { additionalProperties: false }),
-      response: { 200: definitionStateWriteResponse, 201: definitionStateWriteResponse, ...graphWriteResponses },
+      response: transportResponses(openApiOperations["/v1/context-definition-states"].post, { 200: definitionStateWriteResponse, 201: definitionStateWriteResponse, ...graphWriteResponses }, 'POST'),
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -604,7 +605,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     })
     .get('/v1/context-definition-states', {
       query: t.Object({ definition: reference, revision: t.Optional(native) }),
-      response: { 200: definitionStateReadResponse, ...graphReadResponses },
+      response: transportResponses(openApiOperations["/v1/context-definition-states"].get, { 200: definitionStateReadResponse, ...graphReadResponses }, 'GET'),
     }, async ({ request, query }) => {
       try {
         await work.account.verify(request, ['context:read']);
@@ -615,7 +616,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     .get('/v1/contexts/:id', {
       params: t.Object({ id: t.String({ pattern: '^([0-9a-f-]{36}|global)$' }) }),
       query: t.Object({ actingSubject: t.Optional(native), revision: t.Optional(native) }),
-      response: { 200: contextReadResponse, ...graphReadResponses },
+      response: transportResponses(openApiOperations["/v1/contexts/{id}"].get, { 200: contextReadResponse, ...graphReadResponses }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const context = params.id === 'global' ? 'urn:rezics:semantic-context:global' : `https://rezics.com/id/${params.id}`;
@@ -633,7 +634,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       body: t.Object({ profile: t.Literal('context-selection-v1'), scope,
         selection: t.Nullable(t.Object({ context: contextId, semanticRevision: native }, { additionalProperties: false })),
         expectedHead: t.Nullable(native), actingSubject: native }, { additionalProperties: false }),
-      response: { 200: selectionWriteResponse, 201: selectionWriteResponse, ...graphWriteResponses },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/context-selections"].post, { 200: selectionWriteResponse, 201: selectionWriteResponse, ...graphWriteResponses }, 'POST'),
     }, async ({ request, params, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -654,7 +655,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         selection: t.Nullable(t.Object({ context: contextId, semanticRevision: native }, { additionalProperties: false })),
         expectedRevision: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
         actingSubject: t.Optional(native) }, { additionalProperties: false }),
-      response: { 200: privateSelectionWriteResponse, 201: privateSelectionWriteResponse, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/context-selections"].put, { 200: privateSelectionWriteResponse, 201: privateSelectionWriteResponse, ...writeProblems }, 'PUT'),
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -688,7 +689,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       query: t.Object({ kind: t.Union([t.Literal('default'), t.Literal('object'), t.Literal('object-relation')]),
         object: t.Optional(native), relation: t.Optional(reference),
         }),
-      response: { 200: privateSelectionReadResponse, ...graphReadResponses },
+      response: transportResponses(openApiOperations["/v1/me/context-selections"].get, { 200: privateSelectionReadResponse, ...graphReadResponses }, 'GET'),
     }, async ({ request, query }) => {
       if (!selections) return problem(503, 'selection_unavailable', 'Private selection store is not configured');
       try {
@@ -715,7 +716,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         actingSubject: native,
           }, { additionalProperties: false },
         ),
-      response: { 200: interpretationResponse, ...graphReadResponses },
+      response: transportResponses(openApiOperations["/v1/context-interpretations"].post, { 200: interpretationResponse, ...graphReadResponses }, 'POST'),
     }, async ({ request, body }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, env.lineage);
@@ -758,9 +759,9 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         evidence: t.Array(reference, { maxItems: 16 }), actingSubject: native,
           }, { additionalProperties: false },
         ),
-      response: { 200: statementWriteResponse, 201: statementWriteResponse, ...graphWriteResponses,
+      response: transportResponses(openApiOperations["/v1/statements"].post, { 200: statementWriteResponse, 201: statementWriteResponse, ...graphWriteResponses,
         409: t.Union([problemResult(409), interpretationProblem]),
-        },
+        }, 'POST'),
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -821,7 +822,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           revision: t.Optional(native),
           position: readingPositionQuery,
         }),
-      response: { 200: statementReadResponse, ...graphReadResponses },
+      response: transportResponses(openApiOperations["/v1/statements/{id}"].get, { 200: statementReadResponse, ...graphReadResponses }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = request.headers.get('authorization') && query.actingSubject
@@ -891,8 +892,8 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       ]), expectedHead: native, actingSubject: native,
           }, { additionalProperties: false },
         ),
-      response: { 200: statementWithdrawalResponse, 201: statementWithdrawalResponse, ...graphWriteResponses,
-        },
+      response: transportResponses(openApiOperations["/v1/statements/{id}/withdrawals"].post, { 200: statementWithdrawalResponse, 201: statementWithdrawalResponse, ...graphWriteResponses,
+        }, 'POST'),
     }, async ({ request, params, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -920,8 +921,8 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         actingSubject: native,
           }, { additionalProperties: false },
         ),
-      response: { 200: decisionWriteResponse, 201: decisionWriteResponse, ...graphWriteResponses,
-        },
+      response: transportResponses(openApiOperations["/v1/statement-decisions"].post, { 200: decisionWriteResponse, 201: decisionWriteResponse, ...graphWriteResponses,
+        }, 'POST'),
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (key instanceof Response) return key;
@@ -952,7 +953,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
             ]), acceptance,
           }, { additionalProperties: false },
         ),
-      response: { 200: statementResolutionResponse, ...graphReadResponses },
+      response: transportResponses(openApiOperations["/v1/statement-resolutions"].post, { 200: statementResolutionResponse, ...graphReadResponses }, 'POST'),
     }, async ({ body }) => {
       try {
         return Response.json(await resolveStatementAcceptance(env, body.target, body.acceptance), { headers: noStore },

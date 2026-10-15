@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { readId, readLanguage, readUuid } from '../modules/work/read-contract.ts';
@@ -49,7 +50,7 @@ export function progressSummariesRoutes(work: MainWorkDependencies) {
       query: t.Object({ actingSubject: readId, language: t.Optional(readLanguage), parent: t.Optional(readId),
         after: t.Optional(t.String({ maxLength: 2048 })), sessionCursor: t.Optional(t.String({ maxLength: 2048 })),
         releaseCursor: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
-      response: { 200: progressSummary, ...workReadProblems } }, async ({ request, params, query }) => {
+      response: transportResponses(openApiOperations["/v1/me/progress-summaries/{resource}"].get, { 200: progressSummary, ...workReadProblems }, 'GET') }, async ({ request, params, query }) => {
       try {
         const owner = await own(request, query.actingSubject);
         const result = await workRead(work, request, query,
@@ -60,7 +61,7 @@ export function progressSummariesRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/me/edition-preferences/:work', { params: t.Object({ work: readUuid }),
       query: t.Object({ actingSubject: readId }, { additionalProperties: false }),
-      response: { 200: t.Nullable(editionPreference), ...workReadProblems } }, async ({ request, params, query }) => {
+      response: transportResponses(openApiOperations["/v1/me/edition-preferences/{work}"].get, { 200: t.Nullable(editionPreference), ...workReadProblems }, 'GET') }, async ({ request, params, query }) => {
       try {
         if (!work.editionPreferences) throw new WorkReadUnavailable('Edition preferences are unavailable');
         const owner = await own(request, query.actingSubject);
@@ -78,9 +79,9 @@ export function progressSummariesRoutes(work: MainWorkDependencies) {
     .put('/v1/me/edition-preferences/:work', { params: t.Object({ work: readUuid }),
       body: t.Object({ actingSubject: readId, expectedVersion: t.Integer({ minimum: 0,
         maximum: Number.MAX_SAFE_INTEGER - 1 }), ...editionChoice.properties }, { additionalProperties: false }),
-      response: { 200: t.Object({ ...editionPreference.properties, replayed: t.Boolean() }),
+      response: transportResponses(openApiOperations["/v1/me/edition-preferences/{work}"].put, { 200: t.Object({ ...editionPreference.properties, replayed: t.Boolean() }),
         ...workReadProblems, 409: t.Object({ ...problemResult(409).properties,
-          current: t.Optional(t.Nullable(editionPreference)) }, { additionalProperties: false }) } },
+          current: t.Optional(t.Nullable(editionPreference)) }, { additionalProperties: false }) }, 'PUT') },
     async ({ request, params, body }) => {
       try {
         if (!work.editionPreferences) throw new WorkReadUnavailable('Edition preferences are unavailable');

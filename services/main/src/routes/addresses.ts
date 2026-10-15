@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { readProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -159,10 +160,10 @@ export function addressRoutes(work: MainWorkDependencies) {
       '/v1/addresses/current',
       {
         query: t.Object({ scope, holder, actingSubject: holder }, { additionalProperties: false }),
-        response: {
+        response: transportResponses(openApiOperations["/v1/addresses/current"].get, {
           200: t.Union([t.Null(), t.Object({ scope, holder, key: t.String(), revision })]),
           ...readProblems,
-        },
+        }, 'GET'),
       },
       async ({ request, query }) => {
         try {
@@ -190,22 +191,22 @@ export function addressRoutes(work: MainWorkDependencies) {
     )
     .post(
       '/v1/addresses/claims',
-      { body: writeBody.anyOf[0], response: responses },
+      { body: writeBody.anyOf[0], response: transportResponses(openApiOperations["/v1/addresses/claims"].post, responses, 'POST') },
       ({ request, body }) => write(request, body as Omit<AliasWrite, 'idempotencyKey'>),
     )
     .post(
       '/v1/addresses/renames',
-      { body: writeBody.anyOf[1], response: responses },
+      { body: writeBody.anyOf[1], response: transportResponses(openApiOperations["/v1/addresses/renames"].post, responses, 'POST') },
       ({ request, body }) => write(request, body as Omit<AliasWrite, 'idempotencyKey'>),
     )
     .post(
       '/v1/addresses/dispositions',
-      { body: t.Union([writeBody.anyOf[2], writeBody.anyOf[3]]), response: responses },
+      { body: t.Union([writeBody.anyOf[2], writeBody.anyOf[3]]), response: transportResponses(openApiOperations["/v1/addresses/dispositions"].post, responses, 'POST') },
       ({ request, body }) => write(request, body as Omit<AliasWrite, 'idempotencyKey'>),
     )
     .get(
       '/v1/addresses/resolve',
-      { query: viewerLookup, response: { 200: resolved, 410: resolved, ...readProblems } },
+      { query: viewerLookup, response: transportResponses(openApiOperations["/v1/addresses/resolve"].get, { 304: t.Null(), 200: resolved, 410: resolved, ...readProblems }, 'GET') },
       async ({ request, query }) => {
         try {
           const result = (
@@ -264,7 +265,7 @@ export function addressRoutes(work: MainWorkDependencies) {
           },
           { additionalProperties: false },
         ),
-        response: { 200: t.Object({ results: t.Array(resolved) }), ...readProblems },
+        response: transportResponses(openApiOperations["/v1/addresses/resolutions"].post, { 200: t.Object({ results: t.Array(resolved) }), ...readProblems }, 'POST'),
       },
       async ({ request, body }) => {
         try {
@@ -288,10 +289,10 @@ export function addressRoutes(work: MainWorkDependencies) {
       '/v1/addresses/availability',
       {
         query: t.Object({ scope, alias, actingSubject: t.Optional(holder) }),
-        response: {
+        response: transportResponses(openApiOperations["/v1/addresses/availability"].get, {
           200: t.Object({ available: t.Boolean(), reason: t.String() }),
           ...readProblems,
-        },
+        }, 'GET'),
       },
       async ({ request, query }) => {
         try {
@@ -321,7 +322,7 @@ export function addressRoutes(work: MainWorkDependencies) {
       {
         params: t.Object({ revision }),
         query: viewerLookup,
-        response: { 200: t.Object({}, { additionalProperties: true }), ...readProblems },
+        response: transportResponses(openApiOperations["/v1/addresses/revisions/{revision}"].get, { 200: t.Object({}, { additionalProperties: true }), ...readProblems }, 'GET'),
       },
       async ({ request, query, params }) => {
         try {

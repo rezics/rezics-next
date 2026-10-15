@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { contentDraftWriteResult, readProblems, writeProblems } from '../api-responses.ts';
@@ -33,12 +34,12 @@ export function memberReplyRoutes(work: MainWorkDependencies) {
         t.Object({ ...draftFields, body: t.Nullable(t.String({ minLength: 1, maxLength: 8192 })) }, { additionalProperties: false }),
         t.Object({ ...draftFields, document: documentSnapshotSchema }, { additionalProperties: false }),
       ]),
-      response: { 200: t.Object({ reply: native, variantId: t.String(), revisionId: uuid, revisionDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+      response: transportResponses(openApiOperations["/v1/member-reply-drafts"].post, { 200: t.Object({ reply: native, variantId: t.String(), revisionId: uuid, revisionDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
         predecessor: t.Nullable(uuid), deleted: t.Boolean(), sourcePosition: contentDraftWriteResult.properties.sourcePosition,
         replayed: t.Boolean() }),
       201: t.Object({ reply: native, variantId: t.String(), revisionId: uuid, revisionDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
         predecessor: t.Nullable(uuid), deleted: t.Boolean(), sourcePosition: contentDraftWriteResult.properties.sourcePosition,
-        replayed: t.Boolean() }), ...writeProblems, ...workReadProblems, 413: problemResult(413) },
+        replayed: t.Boolean() }), ...writeProblems, ...workReadProblems, 413: problemResult(413) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const key = request.headers.get('idempotency-key');
@@ -52,7 +53,7 @@ export function memberReplyRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/member-replies/:reply', { params: t.Object({ reply: uuid }),
       query: t.Object({ actingSubject: t.Optional(native) }),
-      response: { 200: reply, ...readProblems } }, async ({ params, request, query }) => {
+      response: transportResponses(openApiOperations["/v1/member-replies/{reply}"].get, { 200: reply, ...readProblems }, 'GET') }, async ({ params, request, query }) => {
       try {
         if (!work.realmReplies) return problem(503, 'reply_unavailable', 'Replies are unavailable');
         const principal = request.headers.has('authorization') ? await work.account.verify(request, ['work:read']) : undefined;
@@ -64,7 +65,7 @@ export function memberReplyRoutes(work: MainWorkDependencies) {
     .get('/v1/member-replies', {
       query: t.Object({ rootTarget: native, rootRevision: native, after: t.Optional(native),
         realm: t.Optional(native), actingSubject: t.Optional(native) }, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(reply, { maxItems: 32 }), next: t.Nullable(native) }), ...readProblems },
+      response: transportResponses(openApiOperations["/v1/member-replies"].get, { 200: t.Object({ items: t.Array(reply, { maxItems: 32 }), next: t.Nullable(native) }), ...readProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
         if (!work.realmReplies) return problem(503, 'reply_unavailable', 'Replies are unavailable');

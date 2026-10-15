@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { catalogueImportInput, importCatalogueWorks, InvalidCatalogueImport } from '../modules/work/catalogue-import.ts';
@@ -17,7 +18,7 @@ export function catalogueImportRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/work-imports', {
       body: t.Object({ actingSubject: native, input: catalogueImportInput }, closed),
-      response: { 200: outcome, 201: outcome, 202: outcome, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/work-imports"].post, { 200: outcome, 201: outcome, 202: outcome, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey))
@@ -38,7 +39,7 @@ export function catalogueImportRoutes(work: MainWorkDependencies) {
     .post('/v1/work-imports/bulk', {
       body: t.Object({ actingSubject: native, items: t.Array(t.Object({ key, input: catalogueImportInput }, closed),
         { minItems: 1, maxItems: 128 }) }, closed),
-      response: { 200: t.Object({ items: t.Array(outcome), complete: t.Boolean(), partial: t.Boolean() }), ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/work-imports/bulk"].post, { 200: t.Object({ items: t.Array(outcome), complete: t.Boolean(), partial: t.Boolean() }), ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const items = await importCatalogueWorks(work, request, body.actingSubject, body.items);

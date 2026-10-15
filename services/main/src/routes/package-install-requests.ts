@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -107,8 +108,8 @@ export function packageInstallRequestRoutes(work: MainWorkDependencies) {
         work: nativeId('Work'), expectedRevision: t.Nullable(nativeId('expected revision')),
         recommendations: t.Array(recommendation, { maxItems: 16 }), actingSubject: groupAgent },
       { additionalProperties: false }),
-      response: { 200: recommendationWrite, 201: recommendationWrite, 202: problemResult(202),
-        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/main-versions/{mainVersion}/package-release-recommendations"].post, { 200: recommendationWrite, 201: recommendationWrite, 202: problemResult(202),
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, params, body }) => {
       const key = idempotencyKey(request);
       if (!key) return missingKey();
@@ -125,7 +126,7 @@ export function packageInstallRequestRoutes(work: MainWorkDependencies) {
     })
     .get(recommendationPath, {
       params: t.Object({ mainVersion: groupUuid }), query,
-      response: { 200: recommendationSet, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/main-versions/{mainVersion}/package-release-recommendations"].get, { 200: recommendationSet, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query: filter }) => {
       try {
         const state = await readableRecommendations(request, resource(params.mainVersion), undefined, filter.actingSubject);
@@ -134,7 +135,7 @@ export function packageInstallRequestRoutes(work: MainWorkDependencies) {
     })
     .get(`${recommendationPath}/:revision`, {
       params: t.Object({ mainVersion: groupUuid, revision: groupUuid }), query,
-      response: { 200: recommendationSet, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/main-versions/{mainVersion}/package-release-recommendations/{revision}"].get, { 200: recommendationSet, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query: filter }) => {
       try {
         const state = await readableRecommendations(request, resource(params.mainVersion),
@@ -144,8 +145,8 @@ export function packageInstallRequestRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/package-install-requests', {
       body: installRequest,
-      response: { 200: installResult, 201: installResult, 202: problemResult(202),
-        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/package-install-requests"].post, { 200: installResult, 201: installResult, 202: problemResult(202),
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (!key) return missingKey();

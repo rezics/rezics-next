@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { chooseMainLanguage, readMainLanguageHeads } from '../modules/work/selection-heads.ts';
 import { discloseInventory } from '../modules/disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
@@ -135,8 +136,8 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           expectedPublicationHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         }, { additionalProperties: false }),
       ]),
-      response: { 200: workStructurePublicationWriteResult, 201: workStructurePublicationWriteResult,
-        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/work-publications"].post, { 200: workStructurePublicationWriteResult, 201: workStructurePublicationWriteResult,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -194,8 +195,8 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         selectionBasis: t.Literal('realm-manager-review'),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false })]),
-      response: { 200: publicationSelectionWriteResult, 201: publicationSelectionWriteResult,
-        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/publication-selections"].post, { 200: publicationSelectionWriteResult, 201: publicationSelectionWriteResult,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -243,8 +244,8 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
     })
     .post('/v1/organization-publication-rejections', {
       body: organizationRejectionBody,
-      response: { 200: organizationRejectionResult, 201: organizationRejectionResult,
-        202: pendingOperation, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/organization-publication-rejections"].post, { 200: organizationRejectionResult, 201: organizationRejectionResult,
+        202: pendingOperation, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       const key = request.headers.get('idempotency-key');
       if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {
@@ -282,8 +283,8 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         reasonCode: t.Literal('not-approved'),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
-      response: { 200: publicationRejectionWriteResult, 201: publicationRejectionWriteResult,
-        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/publication-rejections"].post, { 200: publicationRejectionWriteResult, 201: publicationRejectionWriteResult,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -308,7 +309,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       query: t.Object({ language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$' })) }),
       params: t.Object({ realm: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      response: { 200: realmSelectionReadResult, ...readProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/main-versions/{mainVersion}/selection"].get, { 200: realmSelectionReadResult, ...readProblems }, 'GET'),
     }, async ({ params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -435,7 +436,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         selection: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         use: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      response: { 200: t.Any(), ...readProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/main-versions/{mainVersion}/selections/{selection}/media/{use}"].get, { 200: t.Any(), ...readProblems }, 'GET'),
     }, async ({ params }: { params: { realm: string; mainVersion: string;
       selection: string; use: string } }) => {
       if (!work.content || !work.media) {
@@ -512,9 +513,9 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       params: t.Object({ mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       query: t.Object({ language: t.Optional(t.String({ minLength: 2, maxLength: 35 })) },
         { additionalProperties: false }),
-      response: { 200: t.Object({ work: t.String(), mainVersion: t.String(),
+      response: transportResponses(openApiOperations["/v1/main-versions/{mainVersion}/native-variants"].get, { 200: t.Object({ work: t.String(), mainVersion: t.String(),
         complete: t.Literal(true), variants: t.Array(nativeVariantRef) }),
-      ...readProblems, 422: problemResult(422) },
+      ...readProblems, 422: problemResult(422) }, 'GET'),
     }, async ({ params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -530,10 +531,10 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         contribution: t.Nullable(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
         expectedRevision: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
       }, { additionalProperties: false }),
-      response: { 200: t.Object({ mainVersion: t.String(), preference: readerPreferenceRef,
+      response: transportResponses(openApiOperations["/v1/me/main-versions/{mainVersion}/variant-preference"].put, { 200: t.Object({ mainVersion: t.String(), preference: readerPreferenceRef,
         replayed: t.Boolean() }), 201: t.Object({ mainVersion: t.String(),
         preference: readerPreferenceRef, replayed: t.Boolean() }),
-      ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+      ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'PUT'),
     }, async ({ params, body, request }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -566,8 +567,8 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
     .get('/v1/me/main-versions/:mainVersion/selection', {
       query: t.Object({ language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$' })) }),
       params: t.Object({ mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      response: { 200: nativeVariantSelection, ...authorizedReadProblems,
-        422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/me/main-versions/{mainVersion}/selection"].get, { 200: nativeVariantSelection, ...authorizedReadProblems,
+        422: problemResult(422) }, 'GET'),
     }, async ({ params, request, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -606,11 +607,11 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         expectedRevision: t.Nullable(t.String({ pattern: '^[0-9a-f-]{36}$' })),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
-      response: { 200: t.Object({ realm: t.String(), mainVersion: t.String(),
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/main-versions/{mainVersion}/variant-recommendation"].put, { 200: t.Object({ realm: t.String(), mainVersion: t.String(),
         recommendation: realmRecommendationRef, replayed: t.Boolean() }),
       201: t.Object({ realm: t.String(), mainVersion: t.String(),
         recommendation: realmRecommendationRef, replayed: t.Boolean() }),
-      ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+      ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'PUT'),
     }, async ({ params, body, request }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -645,8 +646,8 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       query: t.Object({ language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$' })) }),
       params: t.Object({ realm: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      response: { 200: realmNativeVariantSelection, ...authorizedReadProblems,
-        422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/me/realms/{realm}/main-versions/{mainVersion}/selection"].get, { 200: realmNativeVariantSelection, ...authorizedReadProblems,
+        422: problemResult(422) }, 'GET'),
     }, async ({ params, request, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -724,7 +725,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
     .get('/v1/main-versions/:mainVersion/selection', {
       query: t.Object({ language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$' })) }),
       params: t.Object({ mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      response: { 200: mainSelectionReadResult, ...readProblems },
+      response: transportResponses(openApiOperations["/v1/main-versions/{mainVersion}/selection"].get, { 200: mainSelectionReadResult, ...readProblems }, 'GET'),
     }, async ({ params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);

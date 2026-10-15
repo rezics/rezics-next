@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Value } from 'typebox/value';
+import { isProblemSchema } from '../../../scripts/api/generate.ts';
 import type { MainApp } from '@rezics/main/app';
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
 import { exactMainRevision, exactWorkRevision, pendingOperation, publicPhrasePageResult, publicQueryResult,
@@ -322,8 +323,13 @@ describe('Main typed route contracts', () => {
           for (const media of Object.values(result.content)) expect(media.schema).toEqual({ type: 'string', format: 'binary' });
           continue;
         }
-        const mediaType = Number(status) >= 400 ? 'application/problem+json' : 'application/json';
-        expect(result.content[mediaType]?.schema).toBeDefined();
+        expect(Object.keys(result.content).length).toBeGreaterThan(0);
+        for (const [mediaType, body] of Object.entries(result.content)) {
+          expect(body.schema).toBeDefined();
+          if (Number(status) >= 400) {
+            expect(mediaType).toBe(isProblemSchema(body.schema) ? 'application/problem+json' : 'application/json');
+          } else expect(mediaType).toBe('application/json');
+        }
       }
     }
     const create = spec.paths['/v1/works']!.post!;

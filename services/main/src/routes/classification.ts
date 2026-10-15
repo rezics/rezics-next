@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { readComponentState } from '../modules/work/history.ts';
@@ -68,8 +69,8 @@ const vocabularyResult = t.Object({ scheme: vocabularyRef, schemeHead: vocabular
 export function classificationRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/classification-vocabulary', { body: vocabularyDefinition,
-      response: { 200: vocabularyResult, 201: vocabularyResult, 202: pendingOperation,
-        ...writeProblems } }, async ({ request, body }) => {
+      response: transportResponses(openApiOperations["/v1/classification-vocabulary"].post, { 200: vocabularyResult, 201: vocabularyResult, 202: pendingOperation,
+        ...writeProblems }, 'POST') }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
@@ -90,7 +91,7 @@ export function classificationRoutes(fuseki: FusekiClient, work: MainWorkDepende
       }
     })
     .post('/v1/tag-proposals', { body: tagProposalInput,
-      response: { 200: tagProposalResult, 201: tagProposalResult, 202: pendingOperation, ...writeProblems } },
+      response: transportResponses(openApiOperations["/v1/tag-proposals"].post, { 200: tagProposalResult, 201: tagProposalResult, 202: pendingOperation, ...writeProblems }, 'POST') },
     async ({ request, body }) => {
       const key = request.headers.get('idempotency-key');
       if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {
@@ -134,7 +135,7 @@ export function classificationRoutes(fuseki: FusekiClient, work: MainWorkDepende
         mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
-      response: { 200: classificationResolutionResult, ...readProblems },
+      response: transportResponses(openApiOperations["/v1/classification-resolutions"].post, { 200: classificationResolutionResult, ...readProblems }, 'POST'),
     }, async ({ body }) => {
       try {
         const result = await resolveClassification(work.environment,
@@ -148,8 +149,8 @@ export function classificationRoutes(fuseki: FusekiClient, work: MainWorkDepende
         label: t.String({ minLength: 1, maxLength: 120 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
-      response: { 200: classificationPropositionWriteResult,
-        201: classificationPropositionWriteResult, 202: pendingOperation, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/classification-propositions"].post, { 200: classificationPropositionWriteResult,
+        201: classificationPropositionWriteResult, 202: pendingOperation, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -170,7 +171,7 @@ export function classificationRoutes(fuseki: FusekiClient, work: MainWorkDepende
     })
     .get('/v1/classification-propositions/:sense', {
       params: t.Object({ sense: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      response: { 200: classificationPropositionReadResult, ...readProblems },
+      response: transportResponses(openApiOperations["/v1/classification-propositions/{sense}"].get, { 200: classificationPropositionReadResult, ...readProblems }, 'GET'),
     }, async ({ params }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -229,9 +230,9 @@ export function classificationRoutes(fuseki: FusekiClient, work: MainWorkDepende
           scheme: t.Nullable(t.Object({ id: vocabularyRef, expectedHead: vocabularyRef },
             { additionalProperties: false })) }, { additionalProperties: false }),
       ]),
-      response: { 200: t.Object({ ...classificationContextWriteResult.properties, scheme: t.Nullable(vocabularyRef) }),
+      response: transportResponses(openApiOperations["/v1/classification-contexts"].post, { 200: t.Object({ ...classificationContextWriteResult.properties, scheme: t.Nullable(vocabularyRef) }),
         201: t.Object({ ...classificationContextWriteResult.properties, scheme: t.Nullable(vocabularyRef) }),
-        202: pendingOperation, ...writeProblems, 404: readProblems[404] },
+        202: pendingOperation, ...writeProblems, 404: readProblems[404] }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -260,7 +261,7 @@ export function classificationRoutes(fuseki: FusekiClient, work: MainWorkDepende
     })
     .get('/v1/realms/:realm/classification-context', {
       params: t.Object({ realm: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      response: { 200: t.Object({ ...classificationContextReadResult.properties, scheme: t.Nullable(vocabularyRef) }), ...readProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/classification-context"].get, { 200: t.Object({ ...classificationContextReadResult.properties, scheme: t.Nullable(vocabularyRef) }), ...readProblems }, 'GET'),
     }, async ({ params }) => {
       try {
         const realm = `https://rezics.com/id/${params.realm}`;

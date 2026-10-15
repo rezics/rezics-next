@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { readPublicInstructionAdoptions } from '../modules/work/instruction-adoption.ts';
 import { mediaContextInput } from '../modules/media/context-input.ts';
@@ -369,7 +370,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const fieldResponses={200:fieldResult,201:fieldResult,...writeProblems,404:problemResult(404)};
   return new Elysia()
     .post('/v1/zones/:id/campaign-art', { params: t.Object({ id: uuid }), body: campaignArtCommand,
-      response: { 200: commandResult, 201: commandResult, ...writeProblems, 404: problemResult(404), 422: problemResult(422) } },
+      response: transportResponses(openApiOperations["/v1/zones/{id}/campaign-art"].post, { 200: commandResult, 201: commandResult, ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'POST') },
     async ({ request, params, body }) => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       const key = idempotencyKey(request);
@@ -382,7 +383,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         return Response.json(result, { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
       } catch (error) { return mediaError(error); }
     })
-    .post('/v1/media/metadata',{body:metadataRead,detail:{security:[{}, {bearerAuth:[]}]},response:{200:metadataResult,...authorizedReadProblems}},
+    .post('/v1/media/metadata',{body:metadataRead,detail:{security:[{}, {bearerAuth:[]}]},response:transportResponses(openApiOperations["/v1/media/metadata"].post, {200:metadataResult,...authorizedReadProblems}, 'POST')},
       async ({request,body})=>{
         try {
           const items=await metadataFor(request,body.items,body.actingSubject);
@@ -392,7 +393,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       })
     .get('/v1/media/representations/:representation',{params:t.Object({representation:uuid}),
       query:t.Object({actingSubject:t.Optional(nativeId),use:t.Optional(uuid)},{additionalProperties:false}),
-      response:{200:mediaDescriptor,...authorizedReadProblems}},async ({request,params,query})=>{
+      response:transportResponses(openApiOperations["/v1/media/representations/{representation}"].get, {200:mediaDescriptor,...authorizedReadProblems}, 'GET')},async ({request,params,query})=>{
       try {
         const basis=(await metadataFor(request,[{representation:params.representation,...(query.use?{use:query.use}:{})}],query.actingSubject))[0];
         return basis ? Response.json(basis.metadata,{headers:{'cache-control':'private, no-store'}}) : unavailable();
@@ -402,7 +403,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query:t.Object({actingSubject:t.Optional(nativeId),use:t.Optional(uuid),
         zoneVariant:t.Optional(t.String({maxLength:80})),zone:t.Optional(t.String({maxLength:80}))},{additionalProperties:false}),
       // The handler returns a raw buffered/streamed Response, not a File object. Its wire formats are declared below.
-      response:{200:t.Any(),...authorizedReadProblems},
+      response:transportResponses(openApiOperations["/v1/media/representations/{representation}/bytes"].get, {200:t.Any(),...authorizedReadProblems}, 'GET'),
       detail:{responses:{200:{description:'Exact retained representation bytes',content:Object.fromEntries(MEDIA_TYPES.map(type=>[
         type,{schema:{type:'string',format:'binary'}}]))}}}},async ({request,params,query}: {request:Request;
         params:{representation:string};query:{actingSubject?:string;use?:string;zoneVariant?:string;zone?:string}})=>publicFirst(request,query.actingSubject,async request=>{
@@ -433,7 +434,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         return mediaError(error);
       }
     }))
-    .post('/v1/media/representations/:representation/labels',{params:t.Object({representation:uuid}),body:imageLabelCommand,response:fieldResponses},
+    .post('/v1/media/representations/:representation/labels',{params:t.Object({representation:uuid}),body:imageLabelCommand,response:transportResponses(openApiOperations["/v1/media/representations/{representation}/labels"].post, fieldResponses, 'POST')},
       async ({request,params,body})=>{
         if (!work.media) return problem(503,'media_unavailable','Media owner is unavailable');
         const key=idempotencyKey(request);if (!key) return problem(400,'invalid_idempotency_key','A valid Idempotency-Key header is required');
@@ -443,7 +444,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           return Response.json(result,{status:result.replayed?200:201,headers:{'cache-control':'no-store'}});
         } catch(error){return mediaError(error);}
       })
-    .post('/v1/media/uses/:use/conceal',{params:t.Object({use:uuid}),body:concealCommand,response:fieldResponses},
+    .post('/v1/media/uses/:use/conceal',{params:t.Object({use:uuid}),body:concealCommand,response:transportResponses(openApiOperations["/v1/media/uses/{use}/conceal"].post, fieldResponses, 'POST')},
       async ({request,params,body})=>{
         if (!work.media) return problem(503,'media_unavailable','Media owner is unavailable');
         const key=idempotencyKey(request);if (!key) return problem(400,'invalid_idempotency_key','A valid Idempotency-Key header is required');
@@ -454,7 +455,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         } catch(error){return mediaError(error);}
       })
     .post('/v1/media/representations/:representation/inferences',{params:t.Object({representation:uuid}),body:inferenceCommand,
-      response:{200:t.Object({},{additionalProperties:true}),201:t.Object({},{additionalProperties:true}),...writeProblems,404:problemResult(404)}},
+      response:transportResponses(openApiOperations["/v1/media/representations/{representation}/inferences"].post, {200:t.Object({},{additionalProperties:true}),201:t.Object({},{additionalProperties:true}),...writeProblems,404:problemResult(404)}, 'POST')},
       async ({request,params,body})=>{
         if (!work.media) return problem(503,'media_unavailable','Media owner is unavailable');
         const key=idempotencyKey(request);if (!key) return problem(400,'invalid_idempotency_key','A valid Idempotency-Key header is required');
@@ -464,7 +465,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           return Response.json(result,{status:result.replayed?200:201,headers:{'cache-control':'no-store'}});
         } catch(error){return mediaError(error);}
       })
-    .post('/v1/media/uses',{body:documentUseCommand,response:{200:t.Object({},{additionalProperties:true}),201:t.Object({},{additionalProperties:true}),...writeProblems,404:problemResult(404)}},
+    .post('/v1/media/uses',{body:documentUseCommand,response:transportResponses(openApiOperations["/v1/media/uses"].post, {200:t.Object({},{additionalProperties:true}),201:t.Object({},{additionalProperties:true}),...writeProblems,404:problemResult(404)}, 'POST')},
       async ({request,body})=>{
         if (!work.media) return problem(503,'media_unavailable','Media owner is unavailable');
         const key=idempotencyKey(request);if (!key) return problem(400,'invalid_idempotency_key','A valid Idempotency-Key header is required');
@@ -486,7 +487,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         mediaType: t.Union([t.Literal('audio/wav'), t.Literal('video/mp4')]),
         byteLength: t.Integer({ minimum: 1, maximum: MAX_UPLOAD_BYTES }), sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
         disclosure: t.Literal('private'), actingSubject: nativeId }, { additionalProperties: false })]),
-      response: { 200: t.Object({}, { additionalProperties: true }), 201: t.Object({}, { additionalProperties: true }), ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/media/uploads"].post, { 200: t.Object({}, { additionalProperties: true }), 201: t.Object({}, { additionalProperties: true }), ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       const key = idempotencyKey(request);
@@ -501,7 +502,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .get('/v1/media/uploads/:upload', {
       params: t.Object({ upload: uuid }),
-      response: { 200: uploadStatus, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/media/uploads/{upload}"].get, { 200: uploadStatus, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       try {
@@ -519,8 +520,8 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .put('/v1/media/uploads/:upload/bytes', {
       params: t.Object({ upload: uuid }),
       parse: 'none',
-      response: { 200: uploadResult, 201: uploadResult, ...writeProblems, 404: problemResult(404),
-        408: problemResult(408), 413: problemResult(413), 422: uploadResult },
+      response: transportResponses(openApiOperations["/v1/media/uploads/{upload}/bytes"].put, { 200: uploadResult, 201: uploadResult, ...writeProblems, 404: problemResult(404),
+        408: problemResult(408), 413: problemResult(413), 422: uploadResult }, 'PUT'),
     }, async ({ request, params }) => {
       try {
         if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
@@ -543,7 +544,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         disclosure: t.Union([t.Literal('private'), t.Literal('public')]),
         lifecycle: t.Union([t.Literal('active'), t.Literal('deleted'), t.Literal('erased')]),
         actingSubject: nativeId }, { additionalProperties: false }),
-      response: { 200: commandResult, 201: commandResult, ...writeProblems, 409: selectionConflictProblem, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/media/assets/{asset}/state"].post, { 200: commandResult, 201: commandResult, ...writeProblems, 409: selectionConflictProblem, 404: problemResult(404) }, 'POST'),
     }, async ({ request, params, body }) => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       const key = idempotencyKey(request);
@@ -565,7 +566,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
         expectedHead: t.Nullable(uuid), assets: t.Array(uuid, { minItems: 1, maxItems: 16 }),
         actingSubject: nativeId }, { additionalProperties: false }),
-      response: { 200: t.Object({}, { additionalProperties: true }), 201: t.Object({}, { additionalProperties: true }), ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/media/publications"].post, { 200: t.Object({}, { additionalProperties: true }), 201: t.Object({}, { additionalProperties: true }), ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       const key = idempotencyKey(request);
@@ -581,7 +582,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .get('/v1/media/avatars/:selection', {
       params: t.Object({ selection: uuid }),
       query: t.Object({ actingSubject: t.Optional(nativeId) }, { additionalProperties: false }),
-      response: { 200: t.Object({}, { additionalProperties: true }), ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/media/avatars/{selection}"].get, { 200: t.Object({}, { additionalProperties: true }), ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => publicFirst(request, query.actingSubject, async request => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       try {
@@ -632,7 +633,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       params: t.Object({ use: uuid }),
       query: t.Object({ actingSubject: t.Optional(nativeId),
         zoneVariant: t.Optional(t.String({ maxLength: 80 })), zone: t.Optional(t.String({ maxLength: 80 })) }, { additionalProperties: false }),
-      response: { 200: t.Object({}, { additionalProperties: true }), ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/media/uses/{use}"].get, { 200: t.Object({}, { additionalProperties: true }), ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => publicFirst(request, query.actingSubject, async request => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       try {
@@ -659,7 +660,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query: t.Object({ target: nativeId, actingSubject: nativeId,
         context: t.Optional(mediaContextInput) },
       { additionalProperties: false }),
-      response: { 200: t.Any(), ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/media/assets/{asset}/bytes"].get, { 200: t.Any(), ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }: { request: Request; params: { asset: string };
       query: { target: string; actingSubject: string; context?: string } }) => {
       if (!work.media || !work.downloadLeases) {

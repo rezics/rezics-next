@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import {
   ControlConflict,
@@ -44,7 +45,7 @@ export function suitabilityRoutes(work: MainWorkDependencies) {
       {
         params: t.Object({ target: readUuid }),
         body: command,
-        response: { 200: commandResult, ...workReadProblems },
+        response: transportResponses(openApiOperations["/v1/suitability/{target}"].put, { 200: commandResult, ...workReadProblems }, 'PUT'),
       },
       async ({ request, params, body }) => {
         try {
@@ -72,7 +73,7 @@ export function suitabilityRoutes(work: MainWorkDependencies) {
       {
         body: reads,
         detail: { security: [{}, { bearerAuth: [] }] },
-        response: { 200: readsResult, ...workReadProblems },
+        response: transportResponses(openApiOperations["/v1/suitability/reads"].post, { 200: readsResult, ...workReadProblems }, 'POST'),
       },
       async ({ request, body }) => {
         try {

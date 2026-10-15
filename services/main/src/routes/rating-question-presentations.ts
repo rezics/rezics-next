@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { pendingOperation, sourcePosition, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -151,7 +152,7 @@ export function ratingQuestionPresentationRoutes(work: MainWorkDependencies) {
           { context: readId, language: languageTagSchema(255), actingSubject: t.Optional(readId) },
           { additionalProperties: false },
         ),
-        response: { 200: t.Object({ presentation: t.Nullable(read) }), ...authorizedReadProblems },
+        response: transportResponses(openApiOperations["/v1/rating-question-presentations"].get, { 200: t.Object({ presentation: t.Nullable(read) }), ...authorizedReadProblems }, 'GET'),
       },
       async ({ request, query }) => {
         try {
@@ -229,14 +230,14 @@ export function ratingQuestionPresentationRoutes(work: MainWorkDependencies) {
           },
           { additionalProperties: false },
         ),
-        response: {
+        response: transportResponses(openApiOperations["/v1/rating-question-presentations"].post, {
           200: write,
           201: write,
           202: pendingOperation,
           ...writeProblems,
           404: problemResult(404),
           422: problemResult(422),
-        },
+        }, 'POST'),
       },
       async ({ request, body }) => {
         const key = request.headers.get('idempotency-key');
@@ -276,7 +277,7 @@ export function ratingQuestionPresentationRoutes(work: MainWorkDependencies) {
       {
         params: t.Object({ id: groupUuid }),
         query: t.Object({ actingSubject: t.Optional(readId) }, { additionalProperties: false }),
-        response: { 200: read, ...authorizedReadProblems },
+        response: transportResponses(openApiOperations["/v1/rating-question-presentations/{id}"].get, { 200: read, ...authorizedReadProblems }, 'GET'),
       },
       async ({ request, params, query }) => {
         try {
@@ -295,7 +296,7 @@ export function ratingQuestionPresentationRoutes(work: MainWorkDependencies) {
       {
         params: t.Object({ id: groupUuid, revision: groupUuid }),
         query: t.Object({ actingSubject: t.Optional(readId) }, { additionalProperties: false }),
-        response: { 200: read, ...authorizedReadProblems },
+        response: transportResponses(openApiOperations["/v1/rating-question-presentations/{id}/revisions/{revision}"].get, { 200: read, ...authorizedReadProblems }, 'GET'),
       },
       async ({ request, params, query }) => {
         try {

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { problemResult } from '../api-contract.ts';
@@ -107,7 +108,7 @@ const unavailable = () => problem(503, 'commerce_unavailable', 'Commerce owner i
 export function commerceRoutes(fuseki: FusekiClient, work: MainWorkDependencies & CommerceRouteDependencies) {
   return new Elysia()
     .post('/v1/subscriptions/quotes', {
-      body: quoteBody, response: { 200: quoteResult, ...writeProblems },
+      body: quoteBody, response: transportResponses(openApiOperations["/v1/subscriptions/quotes"].post, { 200: quoteResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [COMMERCE_SCOPE]);
@@ -121,7 +122,7 @@ export function commerceRoutes(fuseki: FusekiClient, work: MainWorkDependencies 
       } catch (error) { return commerceError(error); }
     })
     .post('/v1/subscriptions/changes', {
-      body: changeBody, response: { 200: changeResult, ...writeProblems },
+      body: changeBody, response: transportResponses(openApiOperations["/v1/subscriptions/changes"].post, { 200: changeResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [COMMERCE_SCOPE]);
@@ -136,8 +137,8 @@ export function commerceRoutes(fuseki: FusekiClient, work: MainWorkDependencies 
     // Provider-to-Main callback: authenticated by its body signature, not an Account token.
     .post('/v1/subscriptions/settlements', {
       parse: 'text', body: t.String({ minLength: 2, maxLength: 8192 }),
-      response: { 200: callbackResult, 400: problemResult(400), 401: problemResult(401),
-        409: problemResult(409), 500: problemResult(500), 503: problemResult(503) },
+      response: transportResponses(openApiOperations["/v1/subscriptions/settlements"].post, { 200: callbackResult, 400: problemResult(400), 401: problemResult(401),
+        409: problemResult(409), 500: problemResult(500), 503: problemResult(503) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!work.commerce) return unavailable();
@@ -147,7 +148,7 @@ export function commerceRoutes(fuseki: FusekiClient, work: MainWorkDependencies 
       } catch (error) { return commerceError(error); }
     })
     .post('/v1/subscriptions/reconciliations', {
-      body: reconcileBody, response: { 200: reconcileResult, ...writeProblems },
+      body: reconcileBody, response: transportResponses(openApiOperations["/v1/subscriptions/reconciliations"].post, { 200: reconcileResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [COMMERCE_SCOPE]);
@@ -160,7 +161,7 @@ export function commerceRoutes(fuseki: FusekiClient, work: MainWorkDependencies 
       } catch (error) { return commerceError(error); }
     })
     .post('/v1/subscriptions/gifts', {
-      body: giftBody, response: { 200: giftResult, ...writeProblems },
+      body: giftBody, response: transportResponses(openApiOperations["/v1/subscriptions/gifts"].post, { 200: giftResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [COMMERCE_SCOPE]);
@@ -175,7 +176,7 @@ export function commerceRoutes(fuseki: FusekiClient, work: MainWorkDependencies 
     })
     .get('/v1/subscriptions/benefits', {
       query: t.Object({ beneficiary: agent }, { additionalProperties: false }),
-      response: { 200: benefitResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/subscriptions/benefits"].get, { 200: benefitResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
         const principal = await work.account.verify(request, [COMMERCE_SCOPE]);
@@ -186,7 +187,7 @@ export function commerceRoutes(fuseki: FusekiClient, work: MainWorkDependencies 
     })
     .get('/v1/subscriptions/:subscriptionId', {
       params: t.Object({ subscriptionId: uuid }),
-      response: { 200: subscriptionResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/subscriptions/{subscriptionId}"].get, { 200: subscriptionResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         const principal = await work.account.verify(request, [COMMERCE_SCOPE]);

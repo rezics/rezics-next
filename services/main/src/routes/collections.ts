@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { bootstrapAdmittedStructureOwner } from '../modules/structure/bootstrap.ts';
@@ -180,7 +181,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
         context: t.Optional(t.Object({ kind: t.Literal('realm-local'), id: ref },
           { additionalProperties: false })) }, { additionalProperties: false }),
       resultBudget: t.Integer({ minimum: 1, maximum: 16 }) }, { additionalProperties: false }),
-      response: { 200: t.Any(), 201: t.Any(), 202: pendingOperation, ...errors } },
+      response: transportResponses(openApiOperations["/v1/collection-definitions"].post, { 200: t.Any(), 201: t.Any(), 202: pendingOperation, ...errors }, 'POST') },
     async ({ request, body }: { request: Request; body: DynamicDefinitionBody }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -198,7 +199,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
     })
     .get('/v1/collection-definitions/:id', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref, revision: t.Optional(ref) },
-        { additionalProperties: false }), response: { 200: t.Any(), ...authorizedReadProblems, ...workReadProblems } },
+        { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/collection-definitions/{id}"].get, { 200: t.Any(), ...authorizedReadProblems, ...workReadProblems }, 'GET') },
     async ({ request, params, query }: { request: Request; params: { id: string };
       query: { actingSubject: string; revision?: string } }) => {
       try {
@@ -218,7 +219,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
           context: t.Optional(t.Object({ kind: t.Literal('realm-local'), id: ref },
             { additionalProperties: false })) }, { additionalProperties: false }),
         resultBudget: t.Integer({ minimum: 1, maximum: 16 }) },
-      { additionalProperties: false }), response: { 200: t.Any(), 202: pendingOperation, ...errors } },
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/collection-definitions/{id}/revisions"].post, { 200: t.Any(), 202: pendingOperation, ...errors }, 'POST') },
     async ({ request, params, body }: { request: Request; params: { id: string };
       body: { expectedHead: string; actingSubject: string; query: DynamicDefinitionBody['query'];
         resultBudget: number } }) => {
@@ -234,7 +235,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
     })
     .post('/v1/collection-definitions/:id/queries', { params: t.Object({ id: groupUuid }),
       body: t.Object({ actingSubject: ref, revision: t.Optional(ref) },
-        { additionalProperties: false }), response: { 200: t.Any(), ...errors } },
+        { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/collection-definitions/{id}/queries"].post, { 200: t.Any(), ...errors }, 'POST') },
     async ({ request, params, body }: { request: Request; params: { id: string };
       body: { actingSubject: string; revision?: string } }) => {
       try {
@@ -253,8 +254,8 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
         name: t.String({ minLength: 1, maxLength: 300 }),
         language: t.Optional(t.String({ minLength: 2, maxLength: 35 })),
         disclosure: t.Union([t.Literal('public'), t.Literal('private')]), actingSubject: ref },
-      { additionalProperties: false }), response: { 200: t.Any(), 201: t.Any(),
-        202: pendingOperation, ...errors } },
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/collection-definitions/{id}/captures"].post, { 200: t.Any(), 201: t.Any(),
+        202: pendingOperation, ...errors }, 'POST') },
     async ({ request, params, body }: { request: Request; params: { id: string };
       body: CaptureBody }) => {
       const idempotencyKey = key(request);
@@ -310,7 +311,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
     .post('/v1/collections', { body: t.Object({ collection: ref, name: t.String({ minLength: 1, maxLength: 300 }),
       language: t.Optional(t.String({ minLength: 2, maxLength: 35 })),
       disclosure: t.Union([t.Literal('public'), t.Literal('private')]), actingSubject: ref },
-    { additionalProperties: false }), response: { 200: write, 201: write, 202: pendingOperation, ...errors } },
+    { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/collections"].post, { 200: write, 201: write, 202: pendingOperation, ...errors }, 'POST') },
     async ({ request, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -332,7 +333,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
       } catch (error) { return routeError(error); }
     })
     .get('/v1/collections/:id/name', { params: t.Object({ id: groupUuid }),
-      response: { 200: t.Any(), ...errors } }, async ({ params }: { params: { id: string } }) => {
+      response: transportResponses(openApiOperations["/v1/collections/{id}/name"].get, { 200: t.Any(), ...errors }, 'GET') }, async ({ params }: { params: { id: string } }) => {
       try { return Response.json(await readCollectionName(work.environment,
         `https://rezics.com/id/${params.id}`), { headers: { 'cache-control': 'no-store' } }); }
       catch (error) { return routeError(error); }
@@ -343,7 +344,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
         name: t.Object({ original: t.String({ minLength: 2, maxLength: 35 }),
           labels: t.Record(t.String(), t.String({ minLength: 1, maxLength: 300 })) },
         { additionalProperties: false }) }, { additionalProperties: false }),
-      response: { 200: t.Any(), 201: t.Any(), 202: pendingOperation, ...errors } },
+      response: transportResponses(openApiOperations["/v1/collections/{id}/name"].put, { 200: t.Any(), 201: t.Any(), 202: pendingOperation, ...errors }, 'PUT') },
     async ({ request, params, body }: { request: Request; params: { id: string };
       body: { profile: 'collection-public-name-v1'; expectedHead: string | null;
         actingSubject: string; name: LocalizedText } }) => {
@@ -361,7 +362,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
     .post('/v1/collections/:id/changes', { params: t.Object({ id: groupUuid }),
       body: t.Object({ expectedHead: ref, actingSubject: ref,
         operations: t.Array(operation, { minItems: 1, maxItems: 16 }) },
-      { additionalProperties: false }), response: { 200: write, 202: pendingOperation, ...errors } },
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/collections/{id}/changes"].post, { 200: write, 202: pendingOperation, ...errors }, 'POST') },
     async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -386,7 +387,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
         placement: t.Object({ x: t.Number({ minimum: -1_000_000, maximum: 1_000_000 }),
           y: t.Number({ minimum: -1_000_000, maximum: 1_000_000 }),
           collapsed: t.Boolean() }, { additionalProperties: false }) },
-      { additionalProperties: false }), response: { 200: t.Any(), 202: pendingOperation, ...errors } },
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/collections/{id}/display-groups/{group}/moves"].post, { 200: t.Any(), 202: pendingOperation, ...errors }, 'POST') },
     async ({ request, params, body }: { request: Request; params: { id: string; group: string };
       body: { layout: string; expectedHead: string; actingSubject: string;
         placement: { x: number; y: number; collapsed: boolean } } }) => {
@@ -408,7 +409,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
       query: t.Object({ actingSubject: t.Optional(ref), position: readingPositionQuery, parent: t.Optional(ref),
         after: t.Optional(t.String({ maxLength: 2048 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) },
-      { additionalProperties: false }), response: { 200: read, ...authorizedReadProblems, ...workReadProblems } },
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/collections/{id}"].get, { 200: read, ...authorizedReadProblems, ...workReadProblems }, 'GET') },
     async ({ request, params, query }) => {
       try { return Response.json(await page(fuseki, work, request,
         `https://rezics.com/id/${params.id}`, query), { headers: { 'cache-control': 'no-store' } }); }
@@ -419,7 +420,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
       query: t.Object({ actingSubject: t.Optional(ref), position: readingPositionQuery, parent: t.Optional(ref),
         after: t.Optional(t.String({ maxLength: 2048 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) },
-      { additionalProperties: false }), response: { 200: read, ...authorizedReadProblems, ...workReadProblems } },
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/collections/{id}/revisions/{revision}"].get, { 200: read, ...authorizedReadProblems, ...workReadProblems }, 'GET') },
     async ({ request, params, query }) => {
       try { return Response.json(await page(fuseki, work, request,
         `https://rezics.com/id/${params.id}`, { ...query,

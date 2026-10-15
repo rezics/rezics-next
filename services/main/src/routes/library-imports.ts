@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { AccountAssertionDenied, type VerifiedAccountAssertion } from '../modules/account/verify-assertion.ts';
 import { problemResult } from '../api-contract.ts';
@@ -168,7 +169,7 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
       finally { cancelImportBody(request); }
     })
     .delete(`${base}/:id`, { params: t.Object({ id: readUuid }),
-      query: t.Object({ actingSubject: readId },closed),response: { 200: t.Object({ deleted: t.Literal(true) }),...errors },
+      query: t.Object({ actingSubject: readId },closed),response: transportResponses(openApiOperations["/v1/me/library-imports/{id}"].delete, { 200: t.Object({ deleted: t.Literal(true) }),...errors }, 'DELETE'),
     },async ({ request,params,query }) => {
       try {
         const admission = await own(request,query.actingSubject,true); if (admission instanceof Response) return admission;
@@ -183,9 +184,9 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
       // The bounded intake runs in the request phase (see above), so the body
       // reaches validation already read and Account-verified.
       transform: context => { context.body = intakes.get(context.request) as typeof context.body; },
-      response: { 201: t.Object({ id: readUuid,total: t.Integer({ minimum: 1,maximum: 5000 }) }),
+      response: transportResponses(openApiOperations["/v1/me/library-imports"].post, { 201: t.Object({ id: readUuid,total: t.Integer({ minimum: 1,maximum: 5000 }) }),
         200: t.Object({ headers: t.Array(t.String(),{ maxItems: 64 }),distinctValues: t.Record(t.String(),t.Array(t.String(),{ maxItems: 50 })) }),
-        ...errors,408: problemResult(408),413: problemResult(413),429: problemResult(429) },
+        ...errors,408: problemResult(408),413: problemResult(413),429: problemResult(429) }, 'POST'),
     }, async ({ request,body }) => {
       try {
         const admission = await own(request,body.actingSubject,true,intakePrincipals.get(request)); if (admission instanceof Response) return admission;
@@ -198,7 +199,7 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
     })
     .get(`${base}/:id/rows`, { params: t.Object({ id: readUuid }),
       query: t.Object({ actingSubject: readId,cursor: t.Optional(t.Integer({ minimum: -1,maximum: 4999 })) },closed),
-      response: { 200: t.Object({ rows: t.Array(rowView,{ maxItems: FILE_IMPORT_COST.page }),nextCursor: t.Nullable(t.Integer()) }),...errors },
+      response: transportResponses(openApiOperations["/v1/me/library-imports/{id}/rows"].get, { 200: t.Object({ rows: t.Array(rowView,{ maxItems: FILE_IMPORT_COST.page }),nextCursor: t.Nullable(t.Integer()) }),...errors }, 'GET'),
     }, async ({ request,params,query }) => {
       try {
         const admission = await own(request,query.actingSubject); if (admission instanceof Response) return admission;
@@ -228,7 +229,7 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
     })
     .put(`${base}/:id/rows/:row`, { params: t.Object({ id: readUuid,row: t.Integer({ minimum: 0,maximum: 4999 }) }),
       body: t.Object({ actingSubject: readId,expectedVersion: t.Integer({ minimum: 1 }),...resolution.properties },closed),
-      response: { 200: t.Object({ resolved: t.Literal(true) }),...errors },
+      response: transportResponses(openApiOperations["/v1/me/library-imports/{id}/rows/{row}"].put, { 200: t.Object({ resolved: t.Literal(true) }),...errors }, 'PUT'),
     }, async ({ request,params,body }) => {
       try {
         const admission = await own(request,body.actingSubject,true); if (admission instanceof Response) return admission;
@@ -247,7 +248,7 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
       } catch (error) { return failure(error); }
     })
     .get(`${base}/:id/apply`, { params: t.Object({ id: readUuid }),query: t.Object({ actingSubject: readId },closed),
-      response: { 200: applyProgress,...errors },
+      response: transportResponses(openApiOperations["/v1/me/library-imports/{id}/apply"].get, { 200: applyProgress,...errors }, 'GET'),
     },async ({ request,params,query }) => {
       try {
         const admission=await own(request,query.actingSubject);if (admission instanceof Response) return admission;
@@ -256,7 +257,7 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
     })
     .post(`${base}/:id/apply`, { params: t.Object({ id: readUuid }),
       body: t.Object({ actingSubject: readId,context: t.Nullable(readId),language: readLanguage,resume: t.Optional(t.Boolean()) },closed),
-      response: { 200: applyProgress,202: applyProgress,...errors },
+      response: transportResponses(openApiOperations["/v1/me/library-imports/{id}/apply"].post, { 200: applyProgress,202: applyProgress,...errors }, 'POST'),
     }, async ({ request,params,body }) => {
       try {
         const admission = await own(request,body.actingSubject,true); if (admission instanceof Response) return admission;
@@ -270,7 +271,7 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
     })
     .post(`${base}/:id/rows/:row/adoptions`, { params: t.Object({ id: readUuid,row: t.Integer({ minimum: 0,maximum: 4999 }) }),
       body: t.Object({ actingSubject: readId,workId: t.String({ pattern: '^OL[1-9][0-9]{0,11}W$' }),titleLanguage: t.Optional(readLanguage) },closed),
-      response: { 200: t.Object({ work: readId,replayed: t.Boolean() }),202: t.Unknown(),...errors,429: problemResult(429) },
+      response: transportResponses(openApiOperations["/v1/me/library-imports/{id}/rows/{row}/adoptions"].post, { 200: t.Object({ work: readId,replayed: t.Boolean() }),202: t.Unknown(),...errors,429: problemResult(429) }, 'POST'),
     }, async ({ request,params,body }: { request: Request; params: { id: string; row: number };
       body: { actingSubject: string; workId: string; titleLanguage?: string } }) => {
       try {

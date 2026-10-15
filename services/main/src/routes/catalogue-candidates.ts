@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { candidateInput, checkedCandidates, CatalogueInvalid, CatalogueStale, CatalogueUnavailable } from '../modules/catalogue-intake/schema.ts';
 import { searchCatalogue } from '../modules/catalogue-intake/search.ts';
@@ -27,9 +28,9 @@ function catalogueError(error: unknown) {
 export function catalogueCandidateRoutes(deps: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/catalogue/candidates', { body: candidateInput,
-      response: { 200: t.Object({ profile: t.Literal('catalogue-candidates-v1'), candidateReceipt: t.String(),
+      response: transportResponses(openApiOperations["/v1/catalogue/candidates"].post, { 200: t.Object({ profile: t.Literal('catalogue-candidates-v1'), candidateReceipt: t.String(),
         complete: t.Literal(false), candidates: t.Array(candidate, { maxItems: 128 }), sourcePosition: readPosition }),
-      ...writeProblems, 429: problemResult(429) },
+      ...writeProblems, 429: problemResult(429) }, 'POST'),
     }, async ({ request, body }) => {
       if (!deps.catalogueIntake) return problem(503, 'catalogue_unavailable', 'Catalogue intake is unavailable');
       try {
@@ -46,8 +47,8 @@ export function catalogueCandidateRoutes(deps: MainWorkDependencies) {
     .post('/v1/works/:id/catalogue-verifications', { params: t.Object({ id: readUuid }),
       body: t.Object({ expectedHead: readId, evidence: t.String({ minLength: 1, maxLength: 2000 }), actingSubject: readId },
         { additionalProperties: false }),
-      response: { 200: t.Object({ work: readId, verification: t.Literal('verified'), receipt: t.String(),
-        sourcePosition: readPosition, replayed: t.Boolean() }), 202: pendingOperation, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/catalogue-verifications"].post, { 200: t.Object({ work: readId, verification: t.Literal('verified'), receipt: t.String(),
+        sourcePosition: readPosition, replayed: t.Boolean() }), 202: pendingOperation, ...writeProblems }, 'POST'),
     }, async ({ request, params, body }) => {
       const key = request.headers.get('idempotency-key');
       if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');

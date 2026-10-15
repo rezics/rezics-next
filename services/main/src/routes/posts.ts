@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { POST_READ_COST, readPost } from '../modules/post/read.ts';
 import { readId, readUuid, readPosition } from '../modules/work/read-contract.ts';
@@ -14,12 +15,12 @@ export function postRoutes(work: MainWorkDependencies) {
     params: t.Object({ id: readUuid }),
     query: t.Object({ language: t.Optional(t.String({ minLength: 2, maxLength: 35 })),
       actingSubject: t.Optional(readId) }, { additionalProperties: false }),
-    response: { 200: t.Object({ profile: t.Literal('post-read-v2'), id: readId,
+    response: transportResponses(openApiOperations["/v1/posts/{id}"].get, { 200: t.Object({ profile: t.Literal('post-read-v2'), id: readId,
       spoiler: t.Optional(t.Boolean()),
       revision: readId, publisher: readId, title: label, labels: t.Array(label, { maxItems: 24 }),
       placements: t.Array(placement, { maxItems: POST_READ_COST.placements }), placementsTruncated: t.Boolean(),
       disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]), sourcePosition: readPosition }),
-      ...workReadProblems },
+      ...workReadProblems }, 'GET'),
   }, async ({ request, params, query }) => {
     try {
       return Response.json(await workRead(work, request, query,

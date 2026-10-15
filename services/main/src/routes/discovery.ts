@@ -1,6 +1,7 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia } from 'elysia';
 import { discoveryPage, discoveryQuery, popularTermsPage, popularTermsQuery } from '../modules/discovery/contract.ts';
-import { discoveryError, discoveryManagementRoutes } from '../modules/discovery/management.ts';
+import { discoveryError, discoveryManagementRoutes, discoveryManagementOperations } from '../modules/discovery/management.ts';
 import { readDiscovery, readPopularTerms } from '../modules/discovery/read.ts';
 import { workRead, publicWorkRead } from '../modules/work/read-session.ts';
 import { WorkReadUnavailable } from '../modules/work/read-session.ts';
@@ -17,22 +18,18 @@ export const openApiOperations = {
   '/v1/discovery/sections': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
   '/v1/works': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
   '/v1/discovery/popular-terms': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
-  '/v1/discovery/generation-builds': { post: { exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
-  '/v1/discovery/generations/{generation}': { get: { exposure: 'platform:platform-admin', rateLimitFamily: 'read', bearer: true } },
-  '/v1/discovery/generations/{generation}/advance': { post: { exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true } },
-  '/v1/discovery/generations/{generation}/cancel': { post: { exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true } },
-  '/v1/discovery/generation-activations': { post: { exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  ...discoveryManagementOperations,
 } as const;
 
 /** Phrase-free discovery over a separately built, admitted population. */
 export function discoveryRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/discovery/concepts', { query: conceptSearchQuery,
-    response: { 200: conceptSearchPage, ...workReadProblems } }, async ({ request, query }) => {
+    response: transportResponses(openApiOperations["/v1/discovery/concepts"].get, { 200: conceptSearchPage, ...workReadProblems }, 'GET') }, async ({ request, query }) => {
     try { return Response.json(await publicWorkRead(work, request, { limit: query.limit, cursor: query.cursor },
       session => readConceptSearch(session, query, request)), { headers: { 'cache-control': 'private, no-store' } }); }
     catch (error) { return workReadError(error); }
   }).get('/v1/discovery/sections', { query: discoverySectionsQuery,
-    response: { 200: discoverySectionsPage, ...workReadProblems } }, async ({ request, query }) => {
+    response: transportResponses(openApiOperations["/v1/discovery/sections"].get, { 200: discoverySectionsPage, ...workReadProblems }, 'GET') }, async ({ request, query }) => {
     try { return Response.json(await publicWorkRead(work, request, { limit: query.limit, cursor: query.cursor },
       session => readDiscoverySections(session, query, request)), { headers: { 'cache-control': 'private, no-store' } }); }
     catch (error) {
@@ -45,7 +42,7 @@ export function discoveryRoutes(work: MainWorkDependencies) {
   }).get('/v1/works', {
     query: discoveryQuery,
     detail: { security: [{}, { bearerAuth: [] }] },
-    response: { 200: discoveryPage, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/works"].get, { 200: discoveryPage, ...workReadProblems }, 'GET'),
   }, async ({ request, query }) => {
     try {
       // A public list never turns into a private inventory merely because a browser sent a token.
@@ -58,7 +55,7 @@ export function discoveryRoutes(work: MainWorkDependencies) {
         { headers: { 'cache-control': 'no-store' } });
     } catch (error) { return discoveryError(error); }
   }).get('/v1/discovery/popular-terms', {
-    query: popularTermsQuery, response: { 200: popularTermsPage, ...workReadProblems },
+    query: popularTermsQuery, response: transportResponses(openApiOperations["/v1/discovery/popular-terms"].get, { 200: popularTermsPage, ...workReadProblems }, 'GET'),
   }, async ({ request, query }) => {
     try {
       if (!work.discovery) throw new WorkReadUnavailable('Discovery owner is unavailable');

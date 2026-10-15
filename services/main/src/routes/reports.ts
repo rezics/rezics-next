@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { operationResult } from '../modules/operation/contract.ts';
 import { reasons } from '../modules/safety-queue/contract.ts';
 import { Elysia, t } from 'elysia';
@@ -137,7 +138,7 @@ export function reportRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('governance-rule-v1'), ref: bounded(512), scopeId: bounded(256),
         actingSubject: agent, expectedRevision: t.Nullable(t.String({ pattern: '^[1-9][0-9]{0,18}$' })),
         document: t.Record(t.String(), t.Unknown()), idempotencyKey: key }, { additionalProperties: false }),
-      response: { 200: ruleResult, 201: ruleResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/governance/rules"].post, { 200: ruleResult, 201: ruleResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [MODERATION_SCOPE]);
@@ -153,7 +154,7 @@ export function reportRoutes(work: MainWorkDependencies) {
     .post('/v1/governance/rule-queries', {
       body: t.Object({ profile: t.Literal('governance-rule-query-v1'), ref: bounded(512),
         scopeId: bounded(256), actingSubject: agent }, { additionalProperties: false }),
-      response: { 200: ruleResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/governance/rule-queries"].post, { 200: ruleResult, ...authorizedReadProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [MODERATION_SCOPE]);
@@ -164,7 +165,7 @@ export function reportRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/reports', {
       body: t.Object({ profile: t.Literal('content-report-v1'), ...reportFields }, { additionalProperties: false }),
-      response: { 200: reportResult, 201: reportResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/reports"].post, { 200: reportResult, 201: reportResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [REPORT_SCOPE]);
@@ -180,7 +181,7 @@ export function reportRoutes(work: MainWorkDependencies) {
     .get('/v1/reports/:report', {
       params: t.Object({ report: uuid }),
       query: t.Object({ actingSubject: t.Optional(agent) }, { additionalProperties: false }),
-      response: { 200: reportReadResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/reports/{report}"].get, { 200: reportReadResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, [REPORT_SCOPE]);
@@ -197,7 +198,7 @@ export function reportRoutes(work: MainWorkDependencies) {
         outcome: t.Union([t.Literal('restrict'), t.Literal('interim_restrict'),
           t.Literal('final_restrict'), t.Literal('dismiss'), t.Literal('restore'), t.Literal('reverse')]),
         ...decisionFields }, { additionalProperties: false }),
-      response: { 200: decisionResult, 202: decisionResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/moderation/decisions"].post, { 200: decisionResult, 202: decisionResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [MODERATION_SCOPE]);
@@ -213,7 +214,7 @@ export function reportRoutes(work: MainWorkDependencies) {
     .post('/v1/governance/process-steps', {
       body: t.Object({ profile: t.Literal('governance-process-step-v1'), ...stepFields },
         { additionalProperties: false }),
-      response: { 200: stepResult, 201: stepResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/governance/process-steps"].post, { 200: stepResult, 201: stepResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [REPORT_SCOPE]);

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems } from '../api-responses.ts';
 import { problemResult } from '../api-contract.ts';
@@ -42,7 +43,7 @@ export const openApiOperations = {
 
 export function compositionReadRoutes(work: MainWorkDependencies) {
   return new Elysia()
-    .get('/v1/resources/:resource/parts', { params, query, response: { 200: parts, ...errors } }, async ({ request, params, query }) => {
+    .get('/v1/resources/:resource/parts', { params, query, response: transportResponses(openApiOperations["/v1/resources/{resource}/parts"].get, { 200: parts, ...errors }, 'GET') }, async ({ request, params, query }) => {
       try { return Response.json(await workRead(work, request, { actingSubject: query.actingSubject },
         session => readWorkParts(session, `https://rezics.com/id/${params.resource}`, { ...query, limit: query.limit ?? 50 })),
       { headers: { 'cache-control': 'private, no-store' } }); }
@@ -50,7 +51,7 @@ export function compositionReadRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/resources/:resource/wholes', { params, query: t.Object({ actingSubject: t.Optional(ref),
       after: query.properties.after, limit: query.properties.limit }, { additionalProperties: false }),
-    response: { 200: wholes, ...errors } }, async ({ request, params, query }) => {
+    response: transportResponses(openApiOperations["/v1/resources/{resource}/wholes"].get, { 200: wholes, ...errors }, 'GET') }, async ({ request, params, query }) => {
       try { return Response.json(await workRead(work, request, { actingSubject: query.actingSubject },
         session => readWorkWholes(session, `https://rezics.com/id/${params.resource}`, { ...query, limit: query.limit ?? 50 })),
       { headers: { 'cache-control': 'private, no-store' } }); }

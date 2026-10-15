@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { logWorkerFault } from '@rezics/observability/log';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
@@ -59,7 +60,7 @@ export const openApiOperations = {
 export function workReadRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/works/:id', { params, detail, query: t.Object(readQuery, { additionalProperties: false }),
-      response: { 200: workHeader, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}"].get, { 200: workHeader, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, { ...options, localBasis: true },
         session => readWorkHeader(session, `https://rezics.com/id/${path.id}`)), { headers }); }
@@ -67,7 +68,7 @@ export function workReadRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/works/:id/credits', { params, detail,
       query: t.Object(pageQuery, { additionalProperties: false }),
-      response: { 200: workCredits.response, 304: t.Null(), ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/credits"].get, { 200: workCredits.response, 304: t.Null(), ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try {
         const response = await executeTemplate(work, request, {
@@ -83,7 +84,7 @@ export function workReadRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/works/:id/classifications', { params, detail,
       query: t.Object({ ...pageQuery, ...scopeQuery }, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(classificationItem), scope: readScope, ...pageFields }), ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/classifications"].get, { 200: t.Object({ items: t.Array(classificationItem), scope: readScope, ...pageFields }), ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, options,
         session => readWorkClassifications(session, `https://rezics.com/id/${path.id}`)), { headers }); }
@@ -91,14 +92,14 @@ export function workReadRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/resources/:resource/rating-contexts', { params: resourceParams, detail,
       query: t.Object({ ...pageQuery, ...scopeQuery, forProjection: t.Optional(t.Literal('true')), language: t.Optional(questionReadFields.language), ...questionLanguagesQuery }, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(t.Object({ context: readId, question: t.String(),
+      response: transportResponses(openApiOperations["/v1/resources/{resource}/rating-contexts"].get, { 200: t.Object({ items: t.Array(t.Object({ context: readId, question: t.String(),
         ...questionReadFields, owner: t.Optional(ratingContextOwner),
         acceptedFrameDimensions: t.Optional(t.Nullable(t.Array(t.Union([
           t.Literal('position'), t.Literal('event'), t.Literal('continuity'),
           t.Literal('work'), t.Literal('release'), t.Literal('realization'),
         ])))),
         scale: t.Object({ min: t.Integer(), max: t.Integer(), step: t.Literal(1) }) })),
-        scope: readScope, ...pageFields }), ...workReadProblems },
+        scope: readScope, ...pageFields }), ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, options,
         session => readResourceRatingContexts(session, `https://rezics.com/id/${path.resource}`, options.forProjection === 'true')), { headers }); }
@@ -106,7 +107,7 @@ export function workReadRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/resources/:resource/ratings', { params: resourceParams, detail,
       query: t.Object({ ...readQuery, ...scopeQuery, context: t.Optional(readId) }, { additionalProperties: false }),
-      response: { 200: resourceRatingRead, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/resources/{resource}/ratings"].get, { 200: resourceRatingRead, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, options,
         session => readResourceRating(session, `https://rezics.com/id/${path.resource}`, options.context)), { headers }); }

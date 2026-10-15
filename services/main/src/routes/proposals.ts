@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable } from '../modules/access/admission.ts';
 import { ManagedOrgStale } from '../modules/access/managed-org-authority.ts';
@@ -27,8 +28,8 @@ export const openApiOperations = {
 
 export function proposalRoutes(work: MainWorkDependencies) {
   return new Elysia().post('/v1/proposals/executions', {
-    body, response: { 200: result, 201: result, 202: pendingOperation,
-      ...writeProblems, 404: problemResult(404) },
+    body, response: transportResponses(openApiOperations["/v1/proposals/executions"].post, { 200: result, 201: result, 202: pendingOperation,
+      ...writeProblems, 404: problemResult(404) }, 'POST'),
   }, async ({ request, body: input }) => {
     try {
       if (!work.proposalExecutions || !work.managedOrganizations) {

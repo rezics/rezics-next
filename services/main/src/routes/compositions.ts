@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { logWorkerFault } from '@rezics/observability/log';
 import { Elysia, t } from 'elysia';
 import type { Static } from 'typebox';
@@ -299,7 +300,7 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
     .post('/v1/compositions/:id/stages', {
       params: t.Object({ id: groupUuid }),
       body: t.Object({ expectedHead: ref, actingSubject: ref }, { additionalProperties: false }),
-      response: stageResponses,
+      response: transportResponses(openApiOperations["/v1/compositions/{id}/stages"].post, stageResponses, 'POST'),
     }, async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -314,7 +315,7 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
     })
     .get('/v1/compositions/:id/stages/:stage', {
       params: stageParams, query: t.Object({ actingSubject: ref }, { additionalProperties: false }),
-      response: stageResponses,
+      response: transportResponses(openApiOperations["/v1/compositions/{id}/stages/{stage}"].get, stageResponses, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
@@ -324,7 +325,7 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
       } catch (error) { return compositionError(error); }
     })
     .post('/v1/compositions/:id/stages/:stage/lease', {
-      params: stageParams, body: writeBody, response: stageResponses,
+      params: stageParams, body: writeBody, response: transportResponses(openApiOperations["/v1/compositions/{id}/stages/{stage}/lease"].post, stageResponses, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
@@ -338,7 +339,7 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
         ordinal: t.Numeric({ minimum: 0, maximum: 16383 }) }),
       body: t.Object({ actingSubject: ref, holder: groupUuid, fence: t.String(),
         entries: t.Array(t.Unknown(), { minItems: 1, maxItems: 256 }) },
-      { additionalProperties: false }), response: stageResponses,
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/compositions/{id}/stages/{stage}/pages/{ordinal}"].put, stageResponses, 'PUT'),
     }, async ({ request, params, body }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
@@ -353,7 +354,7 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
     .post('/v1/compositions/:id/stages/:stage/seal', {
       params: stageParams,
       body: t.Object({ actingSubject: ref, holder: groupUuid, fence: t.String() },
-        { additionalProperties: false }), response: stageResponses,
+        { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/compositions/{id}/stages/{stage}/seal"].post, stageResponses, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
@@ -368,7 +369,7 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
       } catch (error) { return compositionError(error); }
     })
     .post('/v1/compositions/:id/stages/:stage/activate', {
-      params: stageParams, body: writeBody, response: { ...stageResponses, 202: pendingOperation },
+      params: stageParams, body: writeBody, response: transportResponses(openApiOperations["/v1/compositions/{id}/stages/{stage}/activate"].post, { ...stageResponses, 202: pendingOperation }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
@@ -408,7 +409,7 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
       params: t.Object({ id: groupUuid }),
       body: t.Object({ expectedHead: ref, sourceStructure: ref, sourceRevision: ref,
         actingSubject: ref }, { additionalProperties: false }),
-      response: { ...refreshResponses, 202: pendingOperation },
+      response: transportResponses(openApiOperations["/v1/compositions/{id}/refreshes"].post, { ...refreshResponses, 202: pendingOperation }, 'POST'),
     }, async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -495,7 +496,7 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
       } catch (error) { return compositionError(error); }
     })
     .delete('/v1/compositions/:id/stages/:stage', {
-      params: stageParams, body: writeBody, response: stageResponses,
+      params: stageParams, body: writeBody, response: transportResponses(openApiOperations["/v1/compositions/{id}/stages/{stage}"].delete, stageResponses, 'DELETE'),
     }, async ({ request, params, body }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
@@ -524,7 +525,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
     .post('/v1/compositions', {
       body: t.Object({ profile, work: ref,
         mainVersion: ref, ...writeBody.properties }, { additionalProperties: false }),
-      response: writeResponses,
+      response: transportResponses(openApiOperations["/v1/compositions"].post, writeResponses, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -544,7 +545,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       body: t.Object({ profile, expectedHead: ref,
         operations: t.Array(operation, { minItems: 1, maxItems: 16 }),
         ...writeBody.properties }, { additionalProperties: false }),
-      response: writeResponses,
+      response: transportResponses(openApiOperations["/v1/compositions/{id}/changes"].post, writeResponses, 'POST'),
     }, async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -566,7 +567,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
     .post('/v1/compositions/:id/seals', {
       params: t.Object({ id: groupUuid }),
       body: t.Object({ expectedHead: ref, ...writeBody.properties },
-        { additionalProperties: false }), response: writeResponses,
+        { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/compositions/{id}/seals"].post, writeResponses, 'POST'),
     }, async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -584,7 +585,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
     .post('/v1/compositions/:id/restorations', {
       params: t.Object({ id: groupUuid }),
       body: t.Object({ expectedHead: ref, restoredFrom: ref, ...writeBody.properties },
-        { additionalProperties: false }), response: writeResponses,
+        { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/compositions/{id}/restorations"].post, writeResponses, 'POST'),
     }, async ({ request, params, body }) => {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
@@ -605,7 +606,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       query: t.Object({ actingSubject: t.Optional(ref), parent: t.Optional(ref),
         after: t.Optional(t.String({ maxLength: 2048 })), limit: t.Optional(t.Numeric({
           minimum: 1, maximum: 100 })) }, { additionalProperties: false }),
-      response: readResponses,
+      response: transportResponses(openApiOperations["/v1/compositions/{id}"].get, readResponses, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
@@ -624,7 +625,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       query: t.Object({ actingSubject: t.Optional(ref), parent: t.Optional(ref),
         after: t.Optional(t.String({ maxLength: 2048 })), limit: t.Optional(t.Numeric({
           minimum: 1, maximum: 100 })) }, { additionalProperties: false }),
-      response: readResponses,
+      response: transportResponses(openApiOperations["/v1/compositions/{id}/revisions/{revision}"].get, readResponses, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
@@ -644,7 +645,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       query: t.Object({ actingSubject: t.Optional(ref), after: t.Optional(t.String({ maxLength: 2048 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) },
       { additionalProperties: false }),
-      response: { 200: sealPageResult, ...authorizedReadProblems, ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/compositions/{id}/seals/{seal}"].get, { 200: sealPageResult, ...authorizedReadProblems, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
@@ -661,7 +662,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
     .get('/v1/compositions/:id/occurrences/:occurrence', {
       params: t.Object({ id: groupUuid, occurrence: groupUuid }),
       query: t.Object({ actingSubject: t.Optional(ref), revision: t.Optional(ref) },
-        { additionalProperties: false }), response: readResponses,
+        { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/compositions/{id}/occurrences/{occurrence}"].get, readResponses, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;

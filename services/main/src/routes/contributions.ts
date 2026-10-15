@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
@@ -27,9 +28,9 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
     .get('/v1/works/:id/contributions', {
       params: t.Object({ id: readUuid }),
       query: t.Object({ ...pageQuery, actingSubject: readId }, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(t.Object({ contribution: readId, work: readId,
+      response: transportResponses(openApiOperations["/v1/works/{id}/contributions"].get, { 200: t.Object({ items: t.Array(t.Object({ contribution: readId, work: readId,
         language: t.String(), author: readId, draftHead: readId, publicationHead: t.Nullable(readId) }),
-      { maxItems: 20 }), ...pageFields, complete: t.Boolean() }), ...workReadProblems },
+      { maxItems: 20 }), ...pageFields, complete: t.Boolean() }), ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         return Response.json(await workRead(work, request, { ...query, localBasis: true },
@@ -42,9 +43,9 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
       query: t.Object({ actingSubject: t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
       }) }, { additionalProperties: false }),
-      response: { 200: t.Object({ contribution: t.String(), work: t.String(),
+      response: transportResponses(openApiOperations["/v1/contributions/{contribution}"].get, { 200: t.Object({ contribution: t.String(), work: t.String(),
         language: t.String(), author: t.String(), draftHead: t.String(),
-        publicationHead: t.Nullable(t.String()) }), ...authorizedReadProblems },
+        publicationHead: t.Nullable(t.String()) }), ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -70,9 +71,9 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
         disclosure: t.Literal('public'),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
-      response: { 200: contributionPublicationWriteResult,
+      response: transportResponses(openApiOperations["/v1/contribution-publications"].post, { 200: contributionPublicationWriteResult,
         201: contributionPublicationWriteResult, 202: pendingOperation,
-        ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -104,8 +105,8 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
         expectedHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }),
-      response: { 200: contributionEditWriteResult, 202: pendingOperation,
-        ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/contribution-edits"].post, { 200: contributionEditWriteResult, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -139,8 +140,8 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
           pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }),
-      response: { 200: contributionWriteResult, 201: contributionWriteResult,
-        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/contributions"].post, { 200: contributionWriteResult, 201: contributionWriteResult,
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -166,7 +167,7 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
       query: t.Object({ actingSubject: t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
       }) }, { additionalProperties: false }),
-      response: { 200: contributionDraftReadResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/contributions/{contribution}/drafts/{revision}"].get, { 200: contributionDraftReadResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);

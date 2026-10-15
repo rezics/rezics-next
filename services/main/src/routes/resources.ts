@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { mediaContextInput } from '../modules/media/context-input.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
@@ -135,19 +136,19 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
   return new Elysia()
     .use(mediaRoutes(fuseki, work))
     .put('/v1/resources/:resource/showcase/art',{ params:t.Object({ resource:uuid }),body:showcaseSelectionCommand,
-      response:{ 200:showcaseSelectionResult,201:showcaseSelectionResult,...writeProblems,409:selectionConflictProblem,404:problemResult(404),422:problemResult(422) } },
+      response:transportResponses(openApiOperations["/v1/resources/{resource}/showcase/art"].put, { 200:showcaseSelectionResult,201:showcaseSelectionResult,...writeProblems,409:selectionConflictProblem,404:problemResult(404),422:problemResult(422) }, 'PUT') },
     ({request,params,body}) => {
       const { profile:_profile,...input } = body;
       return showcaseWrite(request,{ ...input,target:`${ID}${params.resource}`,context:input.context??DEFAULT_MEDIA_CONTEXT,
         crop:input.crop??null,focalArea:input.focalArea??null });
     })
     .put('/v1/resources/:resource/showcase/trailer',{ params:t.Object({ resource:uuid }),body:showcaseTrailerCommand,
-      response:{ 200:showcaseSelectionResult,201:showcaseSelectionResult,...writeProblems,409:selectionConflictProblem,404:problemResult(404),422:problemResult(422) } },
+      response:transportResponses(openApiOperations["/v1/resources/{resource}/showcase/trailer"].put, { 200:showcaseSelectionResult,201:showcaseSelectionResult,...writeProblems,409:selectionConflictProblem,404:problemResult(404),422:problemResult(422) }, 'PUT') },
     ({request,params,body}) => {
       const { profile:_profile,...input } = body;
       return showcaseWrite(request,{ ...input,target:`${ID}${params.resource}`,context:input.context??DEFAULT_MEDIA_CONTEXT });
     })
-    .post('/v1/resources/showcase',{ body:showcaseBatchCommand,response:{ 200:showcaseBatchResult,...authorizedReadProblems } },
+    .post('/v1/resources/showcase',{ body:showcaseBatchCommand,response:transportResponses(openApiOperations["/v1/resources/showcase"].post, { 200:showcaseBatchResult,...authorizedReadProblems }, 'POST') },
     async ({request,body}) => {
       if (!work.media) return problem(503,'media_unavailable','Media owner is unavailable');
       try {
@@ -187,7 +188,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       params: t.Object({ resource: uuid }),
       query: t.Object({ actingSubject: t.Optional(nativeId), context: t.Optional(mediaContextInput),
         language: t.Optional(language),position: readingPositionQuery }, { additionalProperties: false }),
-      response: { 200: t.Object({}, { additionalProperties: true }), ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/resources/{resource}"].get, { 200: t.Object({}, { additionalProperties: true }), ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const batch = await summarize(request, { resources: [`${ID}${params.resource}`], ...query });
@@ -210,7 +211,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
           { minItems: 1, maxItems: MAX_SUMMARY_BATCH }),
         actingSubject: t.Optional(nativeId), context: t.Optional(mediaContextInput), language: t.Optional(language),position: readingPositionQuery },
       { additionalProperties: false }),
-      response: { 200: resourceSummaryBatch, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/resources/summaries"].post, { 200: resourceSummaryBatch, ...authorizedReadProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const { profile: _profile, ...input } = body;
@@ -224,7 +225,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     .get('/v1/public-previews/:resource', {
       params: t.Object({ resource: uuid }),
       query: t.Object({ language: t.Optional(language) }, { additionalProperties: false }),
-      response: { 200: t.Object({}, { additionalProperties: true }), ...readProblems },
+      response: transportResponses(openApiOperations["/v1/public-previews/{resource}"].get, { 200: t.Object({}, { additionalProperties: true }), ...readProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -240,7 +241,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     })
     .get('/v1/sitemap', {
       query: t.Object({ after: t.Optional(nativeId) }, { additionalProperties: false }),
-      response: { 200: t.Object({}, { additionalProperties: true }), ...readProblems },
+      response: transportResponses(openApiOperations["/v1/sitemap"].get, { 200: t.Object({}, { additionalProperties: true }), ...readProblems }, 'GET'),
     }, async ({ query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -254,7 +255,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         expectedSelection: t.Nullable(uuid), asset: t.Nullable(uuid),
         crop: t.Optional(t.Nullable(t.String({ maxLength: 64 }))), actingSubject: nativeId },
       { additionalProperties: false }),
-      response: { 200: t.Object({}, { additionalProperties: true }), 201: t.Object({}, { additionalProperties: true }), ...writeProblems, 409: selectionConflictProblem, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/resources/{resource}/avatar"].put, { 200: t.Object({}, { additionalProperties: true }), 201: t.Object({}, { additionalProperties: true }), ...writeProblems, 409: selectionConflictProblem, 404: problemResult(404) }, 'PUT'),
     }, async ({ request, params, body }) => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       const key = request.headers.get('idempotency-key');

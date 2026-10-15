@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { InvalidReadingSettings, ReadingSettingsConflict, StaleReadingSettings }
@@ -43,7 +44,7 @@ export function readingSettingsRoutes(work: MainWorkDependencies) {
   };
   return new Elysia()
     .get('/v1/reader/settings', { query: t.Object({ actingSubject: id }, { additionalProperties: false }),
-      response: { 200: response, ...errors },
+      response: transportResponses(openApiOperations["/v1/reader/settings"].get, { 200: response, ...errors }, 'GET'),
     }, async ({ request, query }) => {
       if (!work.readingSettings) return problem(503, 'reader_settings_unavailable', 'Reader settings are unavailable');
       try {
@@ -54,7 +55,7 @@ export function readingSettingsRoutes(work: MainWorkDependencies) {
     })
     .put('/v1/reader/settings', { body: t.Object({ actingSubject: id,
       expectedVersion: t.Integer({ minimum: 0 }), ...settings }, { additionalProperties: false }),
-    response: { 200: response, ...errors },
+    response: transportResponses(openApiOperations["/v1/reader/settings"].put, { 200: response, ...errors }, 'PUT'),
     }, async ({ request, body }) => {
       if (!work.readingSettings) return problem(503, 'reader_settings_unavailable', 'Reader settings are unavailable');
       const key = request.headers.get('idempotency-key') ?? '';

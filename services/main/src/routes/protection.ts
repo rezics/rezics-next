@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { languageTagSchema } from '../modules/display-language/schema.ts';
 import { Elysia, t } from 'elysia';
 import { authoredBodySchema } from '../api-document.ts';
@@ -166,7 +167,7 @@ export function protectionRoutes(work: ProtectionDependencies) {
         resourceId: t.String({ pattern: NATIVE }), variantId: t.String({ pattern: VARIANT }),
         action: t.Union([t.Literal('tighten'), t.Literal('confirm'), t.Literal('relax')]), ...basis,
       }, { additionalProperties: false }),
-      response: writeResponses,
+      response: transportResponses(openApiOperations["/v1/editorial-protections"].post, writeResponses, 'POST'),
     }, async ({ request, body }) => {
       const store = work.editorialProtection;
       if (!store) return unavailable();
@@ -182,7 +183,7 @@ export function protectionRoutes(work: ProtectionDependencies) {
         resourceId: t.String({ pattern: NATIVE }), variantId: t.String({ pattern: VARIANT }),
         predecessor: t.Union([t.String({ pattern: UUID }), t.Null()]),
         ...basis }, 65_536, 1),
-      response: writeResponses,
+      response: transportResponses(openApiOperations["/v1/corrections"].post, writeResponses, 'POST'),
     }, async ({ request, body }) => {
       const store = work.editorialProtection;
       if (!store) return unavailable();
@@ -200,7 +201,7 @@ export function protectionRoutes(work: ProtectionDependencies) {
         expectedCandidateDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
         // The first profile has one terminal decision per proposal revision.
         expectedDecisionHead: t.Null(), ...basis }, { additionalProperties: false }),
-      response: writeResponses,
+      response: transportResponses(openApiOperations["/v1/corrections/{proposalRevision}/decisions"].post, writeResponses, 'POST'),
     }, async ({ request, body, params }) => {
       const store = work.editorialProtection;
       if (!store) return unavailable();
@@ -214,8 +215,8 @@ export function protectionRoutes(work: ProtectionDependencies) {
     .get('/v1/corrections/:proposalRevision', {
       params: t.Object({ proposalRevision: t.String({ pattern: UUID }) }),
       query: t.Object({ actingSubject: t.String({ pattern: NATIVE }) }),
-      response: { 200: t.Object({ proposal, decision: t.Union([decision, t.Null()]),
-        candidateAvailable: t.Boolean() }), ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/corrections/{proposalRevision}"].get, { 200: t.Object({ proposal, decision: t.Union([decision, t.Null()]),
+        candidateAvailable: t.Boolean() }), ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       const store = work.editorialProtection;
       if (!store) return unavailable();
@@ -231,8 +232,8 @@ export function protectionRoutes(work: ProtectionDependencies) {
     .get('/v1/corrections', {
       query: t.Object({ target: t.String({ pattern: VARIANT }), resourceId: t.String({ pattern: NATIVE }),
         actingSubject: t.String({ pattern: NATIVE }), cursor: t.Optional(t.String({ maxLength: 200 })) }),
-      response: { 200: t.Object({ items: t.Array(proposal, { maxItems: MAX_EDITORIAL_TARGETS }), next: nullableRef }),
-        ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/corrections"].get, { 200: t.Object({ items: t.Array(proposal, { maxItems: MAX_EDITORIAL_TARGETS }), next: nullableRef }),
+        ...authorizedReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       const store = work.editorialProtection;
       if (!store) return unavailable();
@@ -266,10 +267,10 @@ export function protectionRoutes(work: ProtectionDependencies) {
         targets: t.Array(t.Object({ resourceId: t.String({ pattern: NATIVE }), variantId: t.String({ pattern: VARIANT }) },
           { additionalProperties: false }), { minItems: 1, maxItems: MAX_EDITORIAL_TARGETS }) },
       { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(t.Union([
+      response: transportResponses(openApiOperations["/v1/editorial-state-queries"].post, { 200: t.Object({ items: t.Array(t.Union([
         t.Object({ resourceId: t.String(), variantId: t.String(), availability: t.Literal('available'), state: editorialState }),
         t.Object({ resourceId: t.String(), variantId: t.String(), availability: t.Literal('unavailable') }),
-      ]), { maxItems: MAX_EDITORIAL_TARGETS }) }), ...authorizedReadProblems },
+      ]), { maxItems: MAX_EDITORIAL_TARGETS }) }), ...authorizedReadProblems }, 'POST'),
     }, async ({ request, body }) => {
       const store = work.editorialProtection;
       if (!store) return unavailable();
@@ -290,7 +291,7 @@ export function protectionRoutes(work: ProtectionDependencies) {
     .post('/v1/work-title-protections', {
       body: t.Object({ profile: t.Literal('work-title-protection-v1'),
         action: t.Union([t.Literal('tighten'), t.Literal('confirm'), t.Literal('relax')]), ...workBasis },
-      { additionalProperties: false }), response: graphWriteResponses,
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/work-title-protections"].post, graphWriteResponses, 'POST'),
     }, async ({ request, body }) => {
       if (!work.protectionSigner) return unavailable();
       const key = idempotencyKey(request);
@@ -304,7 +305,7 @@ export function protectionRoutes(work: ProtectionDependencies) {
         title: t.String({ minLength: 1, maxLength: 200 }),
         language: t.Optional(languageTagSchema(35)),
         predecessor: t.Null(), ...workBasis },
-      { additionalProperties: false }), response: graphWriteResponses,
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/work-title-corrections"].post, graphWriteResponses, 'POST'),
     }, async ({ request, body }) => {
       if (!work.protectionSigner) return unavailable();
       const key = idempotencyKey(request);
@@ -318,7 +319,7 @@ export function protectionRoutes(work: ProtectionDependencies) {
       body: t.Object({ profile: t.Literal('work-title-correction-review-v1'),
         outcome: t.Union([t.Literal('approved'), t.Literal('rejected')]),
         candidateDigest: t.String({ pattern: '^[0-9a-f]{64}$' }), expectedDecisionHead: t.Null(), ...workBasis },
-      { additionalProperties: false }), response: graphWriteResponses,
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/work-title-corrections/{proposalRevision}/decisions"].post, graphWriteResponses, 'POST'),
     }, async ({ request, params, body }) => {
       if (!work.protectionSigner) return unavailable();
       const key = idempotencyKey(request);
@@ -331,7 +332,7 @@ export function protectionRoutes(work: ProtectionDependencies) {
     .get('/v1/work-title-corrections/:proposalRevision', {
       params: t.Object({ proposalRevision: t.String({ pattern: UUID }) }),
       query: t.Object({ actingSubject: t.String({ pattern: NATIVE }) }),
-      response: { 200: workCorrectionRecord, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/work-title-corrections/{proposalRevision}"].get, { 200: workCorrectionRecord, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const record = await readWorkCorrectionRecord(work.environment, `https://rezics.com/id/${params.proposalRevision}`);
@@ -344,7 +345,7 @@ export function protectionRoutes(work: ProtectionDependencies) {
     .get('/v1/works/:id/editorial-state', {
       params: t.Object({ id: t.String({ pattern: UUID }) }),
       query: t.Object({ actingSubject: t.String({ pattern: NATIVE }) }),
-      response: { 200: workEditorialState, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/editorial-state"].get, { 200: workEditorialState, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const resource = `https://rezics.com/id/${params.id}`;

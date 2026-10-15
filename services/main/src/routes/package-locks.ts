@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -99,7 +100,7 @@ export function packageLockRoutes(work: MainWorkDependencies) {
   const inactive = () => problem(403, 'authority_denied', 'Package principal is inactive');
   const missingKey = () => problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
   return new Elysia()
-    .post('/v1/package-locks', { body: lockRequest, response: write(lockView) }, async ({ request, body }) => {
+    .post('/v1/package-locks', { body: lockRequest, response: transportResponses(openApiOperations["/v1/package-locks"].post, write(lockView), 'POST') }, async ({ request, body }) => {
       try {
         const store = locks();
         if (!store) return unavailable();
@@ -112,7 +113,7 @@ export function packageLockRoutes(work: MainWorkDependencies) {
       } catch (error) { return packageError(error); }
     })
     .get('/v1/package-locks/:lock', { params: t.Object({ lock: groupUuid }),
-      response: { 200: lockView, ...authorizedReadProblems } }, async ({ request, params }) => {
+      response: transportResponses(openApiOperations["/v1/package-locks/{lock}"].get, { 200: lockView, ...authorizedReadProblems }, 'GET') }, async ({ request, params }) => {
       try {
         const store = locks();
         if (!store) return unavailable();
@@ -123,7 +124,7 @@ export function packageLockRoutes(work: MainWorkDependencies) {
       } catch (error) { return packageError(error); }
     })
     .post('/v1/package-locks/:lock/replays', { params: t.Object({ lock: groupUuid }),
-      response: write(replayView) }, async ({ request, params }) => {
+      response: transportResponses(openApiOperations["/v1/package-locks/{lock}/replays"].post, write(replayView), 'POST') }, async ({ request, params }) => {
       try {
         const store = locks();
         if (!store) return unavailable();
@@ -136,7 +137,7 @@ export function packageLockRoutes(work: MainWorkDependencies) {
       } catch (error) { return packageError(error); }
     })
     .get('/v1/package-lock-replays/:replay', { params: t.Object({ replay: groupUuid }),
-      response: { 200: replayView, ...authorizedReadProblems } }, async ({ request, params }) => {
+      response: transportResponses(openApiOperations["/v1/package-lock-replays/{replay}"].get, { 200: replayView, ...authorizedReadProblems }, 'GET') }, async ({ request, params }) => {
       try {
         const store = locks();
         if (!store) return unavailable();
@@ -150,8 +151,8 @@ export function packageLockRoutes(work: MainWorkDependencies) {
       body: t.Object({ sha256, reason: t.Union(['malicious', 'integrity', 'rights', 'provider-withdrawn',
         'policy'].map(value => t.Literal(value))) as never,
       basis: t.Record(t.String(), t.Unknown()) }, { additionalProperties: false }),
-      response: write(t.Object({ revocation: t.String(), sha256, reason: t.String(),
-        basis: t.Record(t.String(), t.Unknown()), createdAt: t.String() })),
+      response: transportResponses(openApiOperations["/v1/package-artifacts/revocations"].post, write(t.Object({ revocation: t.String(), sha256, reason: t.String(),
+        basis: t.Record(t.String(), t.Unknown()), createdAt: t.String() })), 'POST'),
     }, async ({ request, body }) => {
       try {
         const store = locks();
@@ -169,7 +170,7 @@ export function packageLockRoutes(work: MainWorkDependencies) {
         target: t.String({ pattern: '^[A-Za-z0-9:_./-]{1,256}$' }),
         environment: t.Object({ os: t.Literal('linux'), cpu: t.Union([t.Literal('x64'), t.Literal('arm64')]) },
           { additionalProperties: false }) }, { additionalProperties: false }),
-      response: write(installationView),
+      response: transportResponses(openApiOperations["/v1/package-installations"].post, write(installationView), 'POST'),
     }, async ({ request, body }) => {
       try {
         const store = installs();
@@ -183,7 +184,7 @@ export function packageLockRoutes(work: MainWorkDependencies) {
       } catch (error) { return packageError(error); }
     })
     .get('/v1/package-installations/:installation', { params: t.Object({ installation: groupUuid }),
-      response: { 200: installationView, ...authorizedReadProblems } }, async ({ request, params }) => {
+      response: transportResponses(openApiOperations["/v1/package-installations/{installation}"].get, { 200: installationView, ...authorizedReadProblems }, 'GET') }, async ({ request, params }) => {
       try {
         const store = installs();
         if (!store) return unavailable();
@@ -202,8 +203,8 @@ export function packageLockRoutes(work: MainWorkDependencies) {
         { additionalProperties: false }), { maxItems: 64 }),
       approveHooks: t.Array(t.String({ minLength: 1, maxLength: 1024 }), { maxItems: 256 }) },
       { additionalProperties: false }),
-      response: write(t.Object({ generation: generationView, violations: t.Array(t.Record(t.String(),
-        t.Unknown())) })),
+      response: transportResponses(openApiOperations["/v1/package-installations/{installation}/generations"].post, write(t.Object({ generation: generationView, violations: t.Array(t.Record(t.String(),
+        t.Unknown())) })), 'POST'),
     }, async ({ request, params, body }) => {
       try {
         const store = installs();
@@ -219,7 +220,7 @@ export function packageLockRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/package-installations/:installation/generations/:generation', {
       params: t.Object({ installation: groupUuid, generation: groupUuid }),
-      response: { 200: generationView, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/package-installations/{installation}/generations/{generation}"].get, { 200: generationView, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         const store = installs();
@@ -232,7 +233,7 @@ export function packageLockRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/package-installations/:installation/generations/:generation/apply', {
       params: t.Object({ installation: groupUuid, generation: groupUuid }),
-      response: { 200: generationView, ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/package-installations/{installation}/generations/{generation}/apply"].post, { 200: generationView, ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, params }) => {
       try {
         const store = installs();

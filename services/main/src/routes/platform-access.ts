@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { anonymousPlatformAccess } from '../modules/access/exposure.ts';
@@ -13,7 +14,7 @@ export function platformAccessRoutes(work: MainWorkDependencies) {
   return new Elysia().get(
     '/v1/me/platform-access',
     {
-      response: {
+      response: transportResponses(openApiOperations["/v1/me/platform-access"].get, {
         200: t.Object({
           groups: t.Array(t.String(), { maxItems: 128 }),
           operations: t.Array(t.String(), { maxItems: 64 }),
@@ -21,7 +22,7 @@ export function platformAccessRoutes(work: MainWorkDependencies) {
         }),
         401: problemResult(401),
         503: problemResult(503),
-      },
+      }, 'GET'),
     },
     async ({ request }) => {
       try {

@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems } from '../api-responses.ts';
 import { problemResult } from '../api-contract.ts';
@@ -22,11 +23,11 @@ export function wikiEvidenceRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/wiki/evidence/:id', {
     params: t.Object({ id: t.String({ format: 'uuid' }) }),
     query: t.Object({ actingSubject: t.Optional(t.String({ maxLength: 128 })),position: readingPositionQuery }),
-    response: { 200: t.Object({ profile: t.Literal('wiki-evidence-v1'),id: t.String(),representationSha256: t.String(),
+    response: transportResponses(openApiOperations["/v1/wiki/evidence/{id}"].get, { 200: t.Object({ profile: t.Literal('wiki-evidence-v1'),id: t.String(),representationSha256: t.String(),
       sourceWork: t.String(),
       locator: t.Unknown(),quote: t.Nullable(t.String()),method: t.Unknown(),modality: t.String(),submitter: t.String(),rightsBasis: t.String(),
       claim: t.String(),claimKind: t.Union([t.Literal('statement'),t.Literal('relation')]),quoteWithheld: t.Boolean() }),
-    ...authorizedReadProblems,422: problemResult(422) },
+    ...authorizedReadProblems,422: problemResult(422) }, 'GET'),
   },async ({ request,params,query }) => {
     try {
       const store = work.wikiEvidence;

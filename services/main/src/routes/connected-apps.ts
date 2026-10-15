@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { writeProblems, authorizedReadProblems } from '../api-responses.ts';
@@ -99,9 +100,9 @@ export function connectedAppRoutes(work: MainWorkDependencies) {
     .post('/v1/connected-apps/observations', {
       body: t.Object({ profile: t.Literal('connected-app-observation-v1'), endpoint: t.String({ minLength: 1, maxLength: 2048 }) },
         { additionalProperties: false }),
-      response: { 200: t.Object({ ...observationView.properties, replayed: t.Boolean() }),
+      response: transportResponses(openApiOperations["/v1/connected-apps/observations"].post, { 200: t.Object({ ...observationView.properties, replayed: t.Boolean() }),
         201: t.Object({ ...observationView.properties, replayed: t.Boolean() }), ...writeProblems,
-        404: problemResult(404), 422: problemResult(422), 502: problemResult(502) },
+        404: problemResult(404), 422: problemResult(422), 502: problemResult(502) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!store) return unavailable();
@@ -119,9 +120,9 @@ export function connectedAppRoutes(work: MainWorkDependencies) {
         resource: t.String({ minLength: 1, maxLength: 2048 }),
         tools: t.Array(t.String({ minLength: 1, maxLength: 128 }), { minItems: 1, maxItems: 1024 }) },
       { additionalProperties: false }),
-      response: { 200: t.Object({ ...ceilingView.properties, replayed: t.Boolean() }),
+      response: transportResponses(openApiOperations["/v1/connected-apps/consent-ceilings"].post, { 200: t.Object({ ...ceilingView.properties, replayed: t.Boolean() }),
         201: t.Object({ ...ceilingView.properties, replayed: t.Boolean() }), ...writeProblems,
-        404: problemResult(404), 422: problemResult(422) },
+        404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!store) return unavailable();
@@ -137,9 +138,9 @@ export function connectedAppRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('connected-app-invocation-v1'), ceiling: groupUuid,
         toolName: t.String({ pattern: '^[A-Za-z0-9_.-]{1,128}$' }), arguments: jsonObject },
       { additionalProperties: false }),
-      response: { 200: invocationView, 201: invocationView, 202: invocationView,
+      response: transportResponses(openApiOperations["/v1/connected-apps/invocations"].post, { 200: invocationView, 201: invocationView, 202: invocationView,
         502: t.Union([invocationView, problemResult(502)]), ...writeProblems,
-        404: problemResult(404), 422: problemResult(422) },
+        404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       try {
         if (!store) return unavailable();
@@ -212,7 +213,7 @@ export function connectedAppRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/connected-apps/invocations/:invocation', {
       params: t.Object({ invocation: groupUuid }),
-      response: { 200: invocationView, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/connected-apps/invocations/{invocation}"].get, { 200: invocationView, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         if (!store) return unavailable();

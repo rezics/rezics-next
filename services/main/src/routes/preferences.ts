@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import type { Static } from 'typebox';
 import { problemResult } from '../api-contract.ts';
@@ -44,7 +45,7 @@ function failure(error: unknown): Response {
 export function preferencesRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/me/person-preferences', { query: t.Object({ actingSubject: readId }, { additionalProperties: false }),
-      response: { 200: result, ...errors } }, async ({ request, query }: { request: Request;
+      response: transportResponses(openApiOperations["/v1/me/person-preferences"].get, { 200: result, ...errors }, 'GET') }, async ({ request, query }: { request: Request;
         query: { actingSubject: string } }) => {
       if (!work.personPreferences) return problem(503, 'person_preferences_unavailable', 'Preferences are unavailable');
       try {
@@ -54,7 +55,7 @@ export function preferencesRoutes(work: MainWorkDependencies) {
     })
     .put('/v1/me/person-preferences', { body: t.Object({ actingSubject: readId,
       expectedVersion: t.Integer({ minimum: 0 }), ...settings.properties }, { additionalProperties: false }),
-      response: { 200: result, ...errors } }, async ({ request, body }: { request: Request; body: Command }) => {
+      response: transportResponses(openApiOperations["/v1/me/person-preferences"].put, { 200: result, ...errors }, 'PUT') }, async ({ request, body }: { request: Request; body: Command }) => {
       if (!work.personPreferences) return problem(503, 'person_preferences_unavailable', 'Preferences are unavailable');
       try {
         const principal = await work.account.verify(request, ['follow:write']);
@@ -66,7 +67,7 @@ export function preferencesRoutes(work: MainWorkDependencies) {
     })
     .put('/v1/me/blocked-people', { body: t.Object({ actingSubject: readId, target: blockTarget,
       blocked: t.Boolean() }, { additionalProperties: false }),
-      response: { 200: blockResult, ...errors } }, async ({ request, body }: { request: Request;
+      response: transportResponses(openApiOperations["/v1/me/blocked-people"].put, { 200: blockResult, ...errors }, 'PUT') }, async ({ request, body }: { request: Request;
         body: BlockCommand }) => {
       if (!work.personPreferences) return problem(503, 'person_preferences_unavailable', 'Preferences are unavailable');
       try {

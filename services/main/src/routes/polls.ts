@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { ID } from '../modules/work/activate.ts';
 import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable } from '../modules/access/admission.ts';
@@ -155,7 +156,7 @@ export function pollRoutes(work: MainWorkDependencies) {
           effectCapability: t.String({ pattern: '^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$' }),
           expectedTargetState: digest }, { additionalProperties: false })),
       }, { additionalProperties: false }),
-      response: commandResponses,
+      response: transportResponses(openApiOperations["/v1/polls"].post, commandResponses, 'POST'),
     }, async ({ request, body }) => {
       const key = idempotencyKey(request);
       if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
@@ -166,7 +167,7 @@ export function pollRoutes(work: MainWorkDependencies) {
       catch (error) { return voteError(error); }
     })
     .get('/v1/polls/:poll', { params: t.Object({ poll: uuid }),
-      response: { 200: pollResult, ...authorizedReadProblems } }, async ({ request, params }) => {
+      response: transportResponses(openApiOperations["/v1/polls/{poll}"].get, { 200: pollResult, ...authorizedReadProblems }, 'GET') }, async ({ request, params }) => {
       try {
         await work.account.verify(request, ['vote:read']);
         return Response.json({ profile: 'poll-snapshot-v1',
@@ -174,7 +175,7 @@ export function pollRoutes(work: MainWorkDependencies) {
       } catch (error) { return voteError(error); }
     })
     .get('/v1/polls/:poll/tallies', { params: t.Object({ poll: uuid }),
-      response: { 200: tallyResult, ...authorizedReadProblems } }, async ({ request, params }) => {
+      response: transportResponses(openApiOperations["/v1/polls/{poll}/tallies"].get, { 200: tallyResult, ...authorizedReadProblems }, 'GET') }, async ({ request, params }) => {
       try {
         await work.account.verify(request, ['vote:read']);
         return Response.json({ profile: 'poll-tally-v1',
@@ -184,7 +185,7 @@ export function pollRoutes(work: MainWorkDependencies) {
     .post('/v1/polls/:poll/openings', { params: t.Object({ poll: uuid }),
       body: t.Object({ profile: t.Literal('poll-opening-v1'), actingSubject: native,
         representationId: uuid, grantId: uuid, closesAt: t.Optional(t.String({ format: 'date-time' })) },
-      { additionalProperties: false }), response: commandResponses }, async ({ request, params, body }) => {
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/polls/{poll}/openings"].post, commandResponses, 'POST') }, async ({ request, params, body }) => {
       const key = idempotencyKey(request), vote = deps(work);
       if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       if (!vote) return problem(503, 'vote_owner_unavailable', 'Vote owner is unavailable');
@@ -197,7 +198,7 @@ export function pollRoutes(work: MainWorkDependencies) {
     .post('/v1/polls/:poll/closures', { params: t.Object({ poll: uuid }),
       body: t.Object({ profile: t.Literal('poll-closure-v1'), actingSubject: native,
         representationId: uuid, grantId: uuid }, { additionalProperties: false }),
-      response: commandResponses }, async ({ request, params, body }) => {
+      response: transportResponses(openApiOperations["/v1/polls/{poll}/closures"].post, commandResponses, 'POST') }, async ({ request, params, body }) => {
       const key = idempotencyKey(request), vote = deps(work);
       if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       if (!vote) return problem(503, 'vote_owner_unavailable', 'Vote owner is unavailable');
@@ -210,7 +211,7 @@ export function pollRoutes(work: MainWorkDependencies) {
     .post('/v1/polls/:poll/resolutions', { params: t.Object({ poll: uuid }),
       body: t.Object({ profile: t.Literal('poll-resolution-v1'), actingSubject: native,
         representationId: uuid, grantId: uuid }, { additionalProperties: false }),
-      response: commandResponses }, async ({ request, params, body }) => {
+      response: transportResponses(openApiOperations["/v1/polls/{poll}/resolutions"].post, commandResponses, 'POST') }, async ({ request, params, body }) => {
       const key = idempotencyKey(request), vote = deps(work);
       if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       if (!vote) return problem(503, 'vote_owner_unavailable', 'Vote owner is unavailable');
@@ -222,7 +223,7 @@ export function pollRoutes(work: MainWorkDependencies) {
       catch (error) { return voteError(error); }
     })
     .get('/v1/polls/:poll/resolutions', { params: t.Object({ poll: uuid }),
-      response: { 200: resolutionResult, ...authorizedReadProblems } }, async ({ request, params }) => {
+      response: transportResponses(openApiOperations["/v1/polls/{poll}/resolutions"].get, { 200: resolutionResult, ...authorizedReadProblems }, 'GET') }, async ({ request, params }) => {
       try {
         await work.account.verify(request, ['vote:read']);
         const result = await readResolution(work.environment, pollIri(params.poll));
@@ -236,7 +237,7 @@ export function pollRoutes(work: MainWorkDependencies) {
         leaves: t.Array(t.Object({ holder: native, seatClass,
           units: t.Integer({ minimum: 1, maximum: 1_000_000 }) },
         { additionalProperties: false }), { minItems: 1, maxItems: 1024 }) },
-      { additionalProperties: false }), response: commandResponses }, async ({ request, params, body }) => {
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/polls/{poll}/allocations"].post, commandResponses, 'POST') }, async ({ request, params, body }) => {
       const key = idempotencyKey(request), vote = deps(work);
       if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       if (!vote) return problem(503, 'vote_owner_unavailable', 'Vote owner is unavailable');
@@ -255,7 +256,7 @@ export function pollRoutes(work: MainWorkDependencies) {
         threshold: t.Nullable(t.Integer({ minimum: 1, maximum: 64 })),
         aggregation: t.Union([t.Literal('whole'), t.Literal('proportional')]),
         representationId: uuid }, { additionalProperties: false }),
-      response: commandResponses }, async ({ request, params, body }) => {
+      response: transportResponses(openApiOperations["/v1/polls/{poll}/holder-charters"].post, commandResponses, 'POST') }, async ({ request, params, body }) => {
       const key = idempotencyKey(request), vote = deps(work);
       if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       if (!vote) return problem(503, 'vote_owner_unavailable', 'Vote owner is unavailable');
@@ -269,7 +270,7 @@ export function pollRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/polls/:poll/holder-charters/:entitlement',
       { params: t.Object({ poll: uuid, entitlement: uuid }),
-        response: { 200: holderCharterResult, ...authorizedReadProblems } },
+        response: transportResponses(openApiOperations["/v1/polls/{poll}/holder-charters/{entitlement}"].get, { 200: holderCharterResult, ...authorizedReadProblems }, 'GET') },
       async ({ request, params }) => {
         try {
           await work.account.verify(request, ['vote:read']);
@@ -288,8 +289,8 @@ export function pollRoutes(work: MainWorkDependencies) {
           t.Literal('backup'), t.Literal('approver')]), representationId: uuid },
         { additionalProperties: false }), { minItems: 1, maxItems: 256 }) },
       { additionalProperties: false }),
-      response: { 200: representativePolicyResult, 201: representativePolicyResult,
-        ...writeProblems, 404: problemResult(404) } }, async ({ request, params, body }) => {
+      response: transportResponses(openApiOperations["/v1/polls/{poll}/representative-policies"].post, { 200: representativePolicyResult, 201: representativePolicyResult,
+        ...writeProblems, 404: problemResult(404) }, 'POST') }, async ({ request, params, body }) => {
       const key = idempotencyKey(request);
       if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       if (!work.votes) return problem(503, 'vote_owner_unavailable', 'Vote owner is unavailable');
@@ -319,7 +320,7 @@ export function pollRoutes(work: MainWorkDependencies) {
         proxySubject: t.Optional(native), proxyRoute: t.Optional(native),
         representationId: uuid, approvals: t.Array(native, { maxItems: 64 }),
         ...ballotCandidate.properties }, { additionalProperties: false }),
-      response: commandResponses }, async ({ request, params, body }) => {
+      response: transportResponses(openApiOperations["/v1/polls/{poll}/ballots"].post, commandResponses, 'POST') }, async ({ request, params, body }) => {
       const key = idempotencyKey(request), vote = deps(work);
       if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       if (!vote) return problem(503, 'vote_owner_unavailable', 'Vote owner is unavailable');
@@ -333,7 +334,7 @@ export function pollRoutes(work: MainWorkDependencies) {
       catch (error) { return voteError(error); }
     })
     .get('/v1/polls/:poll/ballots/:seat', { params: t.Object({ poll: uuid, seat: uuid }),
-      response: { 200: ballotResult, ...authorizedReadProblems } }, async ({ request, params }) => {
+      response: transportResponses(openApiOperations["/v1/polls/{poll}/ballots/{seat}"].get, { 200: ballotResult, ...authorizedReadProblems }, 'GET') }, async ({ request, params }) => {
       try {
         await work.account.verify(request, ['vote:read']);
         const ballot = await readBallot(work.environment, pollIri(params.poll), pollIri(params.seat));
@@ -345,7 +346,7 @@ export function pollRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('ballot-invalidation-v1'), seat: native,
         holder: native, expectedHead: native, ruleRevision: native, evidenceDigest: digest,
         actingSubject: native, representationId: uuid, grantId: uuid },
-      { additionalProperties: false }), response: commandResponses }, async ({ request, params, body }) => {
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/polls/{poll}/ballot-invalidations"].post, commandResponses, 'POST') }, async ({ request, params, body }) => {
       const key = idempotencyKey(request), vote = deps(work);
       if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       if (!vote) return problem(503, 'vote_owner_unavailable', 'Vote owner is unavailable');
@@ -361,7 +362,7 @@ export function pollRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('ballot-proxy-v1'), action: t.Union([
         t.Literal('designate'), t.Literal('revoke')]), seat: native, holder: native,
         proxy: native, expectedHead: t.Nullable(native), representationId: uuid },
-      { additionalProperties: false }), response: commandResponses }, async ({ request, params, body }) => {
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/polls/{poll}/proxies"].post, commandResponses, 'POST') }, async ({ request, params, body }) => {
       const key = idempotencyKey(request), vote = deps(work);
       if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       if (!vote) return problem(503, 'vote_owner_unavailable', 'Vote owner is unavailable');
@@ -373,10 +374,10 @@ export function pollRoutes(work: MainWorkDependencies) {
       catch (error) { return voteError(error); }
     })
     .get('/v1/polls/:poll/proxies/:seat', { params: t.Object({ poll: uuid, seat: uuid }),
-      response: { 200: t.Object({ profile: t.Literal('ballot-proxy-v1'), route: native,
+      response: transportResponses(openApiOperations["/v1/polls/{poll}/proxies/{seat}"].get, { 200: t.Object({ profile: t.Literal('ballot-proxy-v1'), route: native,
         revision: native, holder: native, proxy: native,
         sourceEntitlement: native, state: t.Union([t.Literal('active'), t.Literal('revoked')]) }),
-        ...authorizedReadProblems } }, async ({ request, params }) => {
+        ...authorizedReadProblems }, 'GET') }, async ({ request, params }) => {
       try {
         await work.account.verify(request, ['vote:read']);
         const route = await readProxyRoute(work.environment, pollIri(params.poll), pollIri(params.seat));
@@ -387,7 +388,7 @@ export function pollRoutes(work: MainWorkDependencies) {
     .post('/v1/polls/:poll/mandate-approvals', { params: t.Object({ poll: uuid }),
       body: t.Object({ profile: t.Literal('mandate-approval-v1'), seat: native,
         holder: native, representationId: uuid, candidate: ballotCandidate },
-      { additionalProperties: false }), response: commandResponses }, async ({ request, params, body }) => {
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/polls/{poll}/mandate-approvals"].post, commandResponses, 'POST') }, async ({ request, params, body }) => {
       const key = idempotencyKey(request), vote = deps(work);
       if (!key) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       if (!vote) return problem(503, 'vote_owner_unavailable', 'Vote owner is unavailable');

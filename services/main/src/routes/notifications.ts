@@ -1,3 +1,4 @@
+import { transportResponses, transportProblem } from '../transport-responses.ts';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Elysia, t } from 'elysia';
 import { websocket } from 'elysia/websocket';
@@ -168,7 +169,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .use(websocket({ sendPings: false }))
     .get('/v1/me/watches', { query: t.Object({ target: watchTarget, kind: watchKind, actingSubject: readId }, { additionalProperties: false }),
-      response: { 200: t.Object({ watch: t.Nullable(watchState) }), ...authorizedReadProblems } },async ({ request,query }) => {
+      response: transportResponses(openApiOperations["/v1/me/watches"].get, { 200: t.Object({ watch: t.Nullable(watchState) }), ...authorizedReadProblems }, 'GET') },async ({ request,query }) => {
       try {
         const principal = await work.account.verify(request,[NOTIFICATION_SCOPE]);
         if (!work.follows) return unavailable();
@@ -177,7 +178,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
         return Response.json({ watch },noStore);
       } catch (error) { return homeError(error); }
     })
-    .post('/v1/me/watches', { body: watchCommand, response: { 200: watchReceipt, ...writeProblems, ...authorizedReadProblems } },async ({ request,body }) => {
+    .post('/v1/me/watches', { body: watchCommand, response: transportResponses(openApiOperations["/v1/me/watches"].post, { 200: watchReceipt, ...writeProblems, ...authorizedReadProblems }, 'POST') },async ({ request,body }) => {
       try {
         const principal = await work.account.verify(request,[NOTIFICATION_SCOPE]);
         if (!work.follows) return unavailable();
@@ -200,7 +201,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
                   t.Literal('manual'),
                 ])),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50 })) }, { additionalProperties: false }),
-      response: { 200: streamPage, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/notifications"].get, { 200: streamPage, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
         const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
@@ -231,7 +232,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
             },
             { additionalProperties: false },
           ),
-          response: {
+          response: transportResponses(openApiOperations["/v1/me/notifications/{item}/triage"].put, {
             200: t.Object({
               profile: t.Literal('notification-item-triage-v1'),
               id: t.String(),
@@ -241,7 +242,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
             }),
             ...writeProblems,
             ...authorizedReadProblems,
-          },
+          }, 'PUT'),
         },
         async ({ request, params, body }) => {
           try {
@@ -263,7 +264,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
         '/v1/me/proposal-subscriptions/:proposal',
         {
           params: t.Object({ proposal: t.String({ pattern: uuid }) }),
-          response: {
+          response: transportResponses(openApiOperations["/v1/me/proposal-subscriptions/{proposal}"].get, {
             200: t.Object({
               profile: t.Literal('proposal-subscription-read-v1'),
               proposal: t.String(),
@@ -272,7 +273,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
               ),
             }),
             ...authorizedReadProblems,
-          },
+          }, 'GET'),
         },
         async ({ request, params }) => {
           try {
@@ -302,7 +303,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
             },
             { additionalProperties: false },
           ),
-          response: {
+          response: transportResponses(openApiOperations["/v1/me/proposal-subscriptions/{proposal}"].put, {
             200: t.Object({
               profile: t.Literal('proposal-subscription-v1'),
               proposal: t.String(),
@@ -312,7 +313,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
             }),
             ...writeProblems,
             ...authorizedReadProblems,
-          },
+          }, 'PUT'),
         },
         async ({ request, params, body }) => {
           try {
@@ -326,7 +327,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
       } catch (error) { return notificationError(error); }
     })
     .get('/v1/me/notifications/unread-count', {
-      response: { 200: unreadCount, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/notifications/unread-count"].get, { 200: unreadCount, ...authorizedReadProblems }, 'GET'),
     }, async ({ request }) => {
       try {
         const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
@@ -337,7 +338,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
     })
     .put('/v1/me/notifications/:item/read', {
       params: t.Object({ item: t.String({ pattern: uuid }) }),
-      response: { 200: itemRead, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/notifications/{item}/read"].put, { 200: itemRead, ...writeProblems }, 'PUT'),
     }, async ({ request, params }) => {
       try {
         const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
@@ -347,7 +348,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
       } catch (error) { return notificationError(error); }
     })
     .get('/v1/me/notifications/hint', {
-      response: { 200: hint, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/notifications/hint"].get, { 200: hint, ...authorizedReadProblems }, 'GET'),
       detail: { description: 'Returns a cursor snapshot; a WebSocket upgrade on this path receives live cursor hints.' },
     }, async ({ request }) => {
       try {
@@ -401,7 +402,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
     .put('/v1/me/notification-read-watermarks/inbox', {
       body: t.Object({ profile: t.Literal('notification-read-watermark-v1'), generation, readThrough: counter },
         { additionalProperties: false }),
-      response: { 200: watermark, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/notification-read-watermarks/inbox"].put, { 200: watermark, ...writeProblems }, 'PUT'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
@@ -414,7 +415,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
     .post('/v1/me/notification-streams/inbox/resets', {
       body: t.Object({ profile: t.Literal('notification-stream-reset-v1'), expectedGeneration: generation },
         { additionalProperties: false }),
-      response: { 200: hint, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/notification-streams/inbox/resets"].post, { 200: hint, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
@@ -425,7 +426,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
       } catch (error) { return notificationError(error); }
     })
     .get('/v1/me/notification-preferences', {
-      response: { 200: settingsPreferences, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/notification-preferences"].get, { 200: settingsPreferences, ...authorizedReadProblems }, 'GET'),
     }, async ({ request }) => {
       try {
         const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
@@ -443,7 +444,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
         state: t.Union([t.Literal('enabled'), t.Literal('disabled')]),
         expectedRevision: t.Nullable(t.String({ pattern: '^[1-9][0-9]{0,18}$' })),
         idempotencyKey: t.String({ pattern: '^[A-Za-z0-9:_./-]{1,128}$' }) }, { additionalProperties: false }),
-      response: { 200: preference, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/notification-preferences"].put, { 200: preference, ...writeProblems }, 'PUT'),
     }, async ({ request, body }) => {
       try {
         if (!matchesIdempotencyHeader(request, body.idempotencyKey)) {
@@ -460,7 +461,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
         deviceId: t.String({ pattern: '^[A-Za-z0-9:_./-]{1,128}$' }),
         address: t.String({ minLength: 1, maxLength: 2048 }), lockScreenDisclosure: t.Boolean() },
       { additionalProperties: false }),
-      response: { 200: endpoint, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/me/notification-endpoints/push"].put, { 200: endpoint, ...writeProblems }, 'PUT'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
@@ -474,7 +475,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/deliveries/:delivery', {
       params: t.Object({ delivery: t.String({ pattern: uuid }) }),
-      response: { 200: delivery, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/deliveries/{delivery}"].get, { 200: delivery, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params }) => {
       try {
         const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
@@ -487,7 +488,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
       params: t.Object({ provider: t.String({ pattern: '^[a-z][a-z0-9_.-]{0,63}$' }) }),
       parse: 'text',
       body: t.String({ maxLength: 16_384 }),
-      response: { 200: providerEventResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/notification-providers/{provider}/events"].post, { 404: transportProblem(404, 'not_found'), 200: providerEventResult, ...writeProblems }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         const secret = owner?.providerSecrets?.[params.provider];

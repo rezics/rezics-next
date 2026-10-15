@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { pendingOperation } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
@@ -38,8 +39,8 @@ export function realizationRoutes(deps: MainWorkDependencies) {
   return new Elysia()
     .put('/v1/works/:id/realizations/:realization', {
       params: t.Object({ id: readUuid, realization: readUuid }), body: realizationWrite,
-      response: { 200: t.Object({ work: readId, realization: readId, revision: readId, receipt: t.String(),
-        sourcePosition: readPosition, replayed: t.Boolean() }), 202: pendingOperation, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/realizations/{realization}"].put, { 200: t.Object({ work: readId, realization: readId, revision: readId, receipt: t.String(),
+        sourcePosition: readPosition, replayed: t.Boolean() }), 202: pendingOperation, ...writeProblems }, 'PUT'),
     }, async ({ request, params, body }) => {
       const key = request.headers.get('idempotency-key');
       if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
@@ -51,14 +52,14 @@ export function realizationRoutes(deps: MainWorkDependencies) {
       params: t.Object({ id: readUuid, realization: readUuid }),
       query: t.Object({ language: t.Optional(readLanguage), actingSubject: t.Optional(readId), revision: t.Optional(readId) },
         { additionalProperties: false }),
-      response: { 200: t.Object({ ...view.properties, sourcePosition: readPosition }), ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/realizations/{realization}"].get, { 200: t.Object({ ...view.properties, sourcePosition: readPosition }), ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try { return Response.json(await workRead(deps, request, query, session => readWorkRealization(session,
         native + params.id, native + params.realization, query.revision)), { headers }); }
       catch (error) { return realizationError(error); }
     })
     .get('/v1/works/:id/realizations', { params: t.Object({ id: readUuid }), query: t.Object(pageQuery, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(view, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/works/{id}/realizations"].get, { 200: t.Object({ items: t.Array(view, { maxItems: 20 }), ...pageFields }), ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try { return Response.json(await workRead(deps, request, query, session => readWorkRealizations(session,
         native + params.id)), { headers }); }

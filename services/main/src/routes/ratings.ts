@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { scaledProfile, SCALED_GLOBAL_OBSERVATION, SCALED_REALM_CONTEXT, SCALED_REALM_OBSERVATION } from '../modules/rating/scale.ts';
 import { readStandingRatingState } from '../modules/rating/manifest.ts';
 import { GLOBAL_OBSERVATION_ID, readGlobalRatingRevision } from '../modules/rating/global.ts';
@@ -86,8 +87,8 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }), experienceAggregateInput, experienceContextDefaultInput,
       releaseAggregateInput, targetAggregateInput]),
-      response: { 200: t.Union([ratingAggregateResult, experienceAggregateResult,
-        experienceContextDefaultResult, releaseAggregateResult, targetAggregateResult]), ...readProblems, 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/rating-aggregates"].post, { 200: t.Union([ratingAggregateResult, experienceAggregateResult,
+        experienceContextDefaultResult, releaseAggregateResult, targetAggregateResult]), ...readProblems, 422: problemResult(422) }, 'POST'),
     }, async ({ body, request }) => {
       try {
         if (body.profile === TARGET_AGGREGATE_PROFILE) {
@@ -148,11 +149,11 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         occasion: t.String({ pattern: OCCASION_PATTERN }),
       }, { additionalProperties: false }), releaseRatingObservationInput, targetRatingObservationInput]),
-      response: { 200: t.Union([ratingObservationWriteResult, dailyRatingObservationWriteResult, experienceRatingObservationWriteResult,
+      response: transportResponses(openApiOperations["/v1/rating-observations"].post, { 200: t.Union([ratingObservationWriteResult, dailyRatingObservationWriteResult, experienceRatingObservationWriteResult,
         releaseRatingObservationWriteResult, targetRatingObservationWriteResult]),
         201: t.Union([ratingObservationWriteResult, dailyRatingObservationWriteResult, experienceRatingObservationWriteResult,
           releaseRatingObservationWriteResult, targetRatingObservationWriteResult]),
-        202: pendingOperation, ...writeProblems, 422: problemResult(422) },
+        202: pendingOperation, ...writeProblems, 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -238,9 +239,9 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         release: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
         target: t.Optional(readId),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) }),
-      response: { 200: t.Union([globalObservationRead, ratingObservationReadResult, dailyRatingObservationReadResult,
+      response: transportResponses(openApiOperations["/v1/rating-observations/{observation}/revisions/{revision}"].get, { 200: t.Union([globalObservationRead, ratingObservationReadResult, dailyRatingObservationReadResult,
         experienceRatingObservationReadResult, releaseRatingObservationReadResult, targetRatingObservationReadResult]), ...authorizedReadProblems,
-        422: problemResult(422) },
+        422: problemResult(422) }, 'GET'),
     }, async ({ params, query, request }) => {
       if (query.profile === TARGET_OBSERVATION_ID) {
         if (!query.target || query.mainVersion || query.release) return problem(400, 'invalid_request', 'Exact target required');
@@ -390,11 +391,11 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         question: t.String({ minLength: 3, maxLength: 120 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }), releaseRatingContextInput, targetRatingContextInput, scopedTargetRatingContextInput, acceptedTargetRatingContextInput]),
-      response: { 200: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult, experienceRatingContextWriteResult,
+      response: transportResponses(openApiOperations["/v1/rating-contexts"].post, { 200: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult, experienceRatingContextWriteResult,
         releaseRatingContextWriteResult, targetRatingContextWriteResult]),
         201: t.Union([ratingContextWriteResult, dailyRatingContextWriteResult, experienceRatingContextWriteResult,
           releaseRatingContextWriteResult, targetRatingContextWriteResult]),
-        202: pendingOperation, ...writeProblems, 404: problemResult(404) },
+        202: pendingOperation, ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -463,8 +464,8 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           t.Literal('mean-per-rater'), t.Literal('pooled-observation-mean')]),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
-      response: { 200: ratingPolicyWriteResult, 201: ratingPolicyWriteResult,
-        202: pendingOperation, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/rating-contexts/{id}/policy-revisions"].post, { 200: ratingPolicyWriteResult, 201: ratingPolicyWriteResult,
+        202: pendingOperation, ...writeProblems }, 'POST'),
     }, async ({ request, params, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -491,7 +492,7 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }),
         revision: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       query: t.Object({ actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }) }),
-      response: { 200: ratingPolicyReadResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/rating-contexts/{id}/policy-revisions/{revision}"].get, { 200: ratingPolicyReadResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -515,13 +516,13 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .get('/v1/rating-contexts/:id', {
       params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       query: t.Object(questionLanguagesQuery, { additionalProperties: false }),
-      response: { 200: t.Union([
+      response: transportResponses(openApiOperations["/v1/rating-contexts/{id}"].get, { 200: t.Union([
         t.Object({ ...ratingContextReadResult.properties, ...questionReadFields }),
         t.Object({ ...dailyRatingContextReadResult.properties, ...questionReadFields }),
         t.Object({ ...experienceRatingContextReadResult.properties, ...questionReadFields }),
         t.Object({ ...releaseRatingContextReadResult.properties, ...questionReadFields }),
         t.Object({ ...targetRatingContextReadResult.properties, ...questionReadFields }),
-      ]), ...readProblems },
+      ]), ...readProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);

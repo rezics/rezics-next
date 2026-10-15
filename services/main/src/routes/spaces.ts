@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { languageTagSchema } from '../modules/display-language/schema.ts';
 import { direction } from '../modules/display-language/select.ts';
 import { Elysia, t } from 'elysia';
@@ -66,8 +67,8 @@ export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         initialSettings: t.Optional(realmSettings),
         }, { additionalProperties: false }),
       ]),
-      response: { 200: t.Union([spaceWriteResult, zoneSpaceWrite]),
-        201: t.Union([spaceWriteResult, zoneSpaceWrite]), 202: pendingOperation, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/spaces"].post, { 200: t.Union([spaceWriteResult, zoneSpaceWrite]),
+        201: t.Union([spaceWriteResult, zoneSpaceWrite]), 202: pendingOperation, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -104,7 +105,7 @@ export function spaceRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .get('/v1/spaces/:space', {
       params: t.Object({ space: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      response: { 200: t.Union([spaceReadResult, zoneSpaceRead]), ...readProblems },
+      response: transportResponses(openApiOperations["/v1/spaces/{space}"].get, { 200: t.Union([spaceReadResult, zoneSpaceRead]), ...readProblems }, 'GET'),
     }, async ({ params }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);

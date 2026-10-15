@@ -3,6 +3,10 @@ import type { MainApp } from '@rezics/main/app';
 
 type Assert<Condition extends true> = Condition;
 type Routes = MainApp['~Routes']['v1'];
+type _BudgetResponse = Assert<Routes['contributions']['post']['response'][429]['code'] extends 'rate_limited' ? true : false>;
+type _BudgetCodeIsLiteral = Assert<string extends Routes['contributions']['post']['response'][429]['code'] ? false : true>;
+type _ReadPostExemption = Assert<429 extends keyof Routes['resources']['summaries']['post']['response'] ? false : true>;
+type _OfferingNotFound = Assert<Routes['rights']['offerings'][':offering']['get']['response'][404]['code'] extends 'not_found' ? true : false>;
 type _Works = Assert<'post' extends keyof Routes['works'] ? true : false>;
 type _ContributionDraft = Assert<'get' extends keyof Routes['contributions'][':contribution']['drafts'][':revision'] ? true : false>;
 type _MainSelection = Assert<'get' extends keyof Routes['main-versions'][':mainVersion']['selection'] ? true : false>;

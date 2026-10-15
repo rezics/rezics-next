@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { ControlDenied, ControlUnavailable } from '../modules/access/topology-control.ts';
 import { readStudioWork, readStudioWorks } from '../modules/studio/works.ts';
@@ -60,7 +61,7 @@ export function studioRoutes(work: MainWorkDependencies) {
     limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
     cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) },
     { additionalProperties: false }),
-    response: { 200: page, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/me/agents/{agent}/works"].get, { 200: page, ...workReadProblems }, 'GET'),
   }, async ({ request, params, query }) => {
     const agent = `https://rezics.com/id/${params.agent}`;
     try {
@@ -76,8 +77,8 @@ export function studioRoutes(work: MainWorkDependencies) {
     }
   }).get('/v1/me/agents/:agent/works/:id', {
     params: t.Object({ agent: readUuid, id: readUuid }),
-    response: { 200: t.Object({ item, sourcePosition: t.Object({ dataEpoch: t.String(),
-      sequence: t.String() }) }), ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/me/agents/{agent}/works/{id}"].get, { 200: t.Object({ item, sourcePosition: t.Object({ dataEpoch: t.String(),
+      sequence: t.String() }) }), ...workReadProblems }, 'GET'),
   }, async ({ request, params }) => {
     const agent = `https://rezics.com/id/${params.agent}`;
     const id = `https://rezics.com/id/${params.id}`;
@@ -96,11 +97,11 @@ export function studioRoutes(work: MainWorkDependencies) {
       language: t.Optional(t.String({ minLength: 2, maxLength: 35 })),
       /** One volume, part or extras group; the Book's top level by default. */
       parent: t.Optional(readId) }, { additionalProperties: false }),
-    response: { 200: t.Object({ profile: t.Literal('studio-chapters-v1'),
+    response: transportResponses(openApiOperations["/v1/me/agents/{agent}/works/{id}/chapters"].get, { 200: t.Object({ profile: t.Literal('studio-chapters-v1'),
       page: t.Object({ profile: t.Literal('work-contents-v1'), work: readId, version: readId,
         composition: readId, compositionRevision: readId, language: t.Nullable(t.String()),
         items: t.Array(contentsItem, { maxItems: 20 }), ...pageFields }),
-      facts: t.Array(chapterFacts, { maxItems: 20 }) }), ...workReadProblems },
+      facts: t.Array(chapterFacts, { maxItems: 20 }) }), ...workReadProblems }, 'GET'),
   }, async ({ request, params, query }) => {
     const agent = `https://rezics.com/id/${params.agent}`;
     const book = `https://rezics.com/id/${params.id}`;
@@ -119,7 +120,7 @@ export function studioRoutes(work: MainWorkDependencies) {
       limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
       cursor: t.Optional(t.String({ minLength: 1, maxLength: 300 })) },
     { additionalProperties: false }),
-    response: { 200: t.Object({ work: readId,
+    response: transportResponses(openApiOperations["/v1/works/{id}/content-variants"].get, { 200: t.Object({ work: readId,
       authoringSubject: t.Nullable(readId),
       items: t.Array(t.Object({ variantId: t.String(),
         language: t.Object({ kind: t.String(), tag: t.Nullable(t.String()),
@@ -128,7 +129,7 @@ export function studioRoutes(work: MainWorkDependencies) {
         eligibilityHead: t.Nullable(t.String()) }), { maxItems: 20 }),
       nextCursor: t.Nullable(t.String()), sourcePosition: t.Object({
         owner: t.Literal('content'), dataEpoch: t.String(), sequence: t.String() }) }),
-      ...workReadProblems },
+      ...workReadProblems }, 'GET'),
   }, async ({ request, params, query }) => {
     const resource = `https://rezics.com/id/${params.id}`;
     try {
@@ -185,7 +186,7 @@ export function studioRoutes(work: MainWorkDependencies) {
         t.Object({ after: readId }, { additionalProperties: false })]),
       expectedCompositionHead: readId, actingSubject: readId,
     }, { additionalProperties: false }),
-    response: { 200: t.Object({ post: readId, revision: readId, occurrence: readId,
+    response: transportResponses(openApiOperations["/v1/works/{id}/chapters"].post, { 200: t.Object({ post: readId, revision: readId, occurrence: readId,
       structure: readId, compositionRevision: readId, variantId: t.String(),
       language: t.String(), direction: t.String(), receipt: t.String(),
       replayed: t.Boolean(), sourcePosition: t.Object({ datasetId: t.Literal('product'),
@@ -193,7 +194,7 @@ export function studioRoutes(work: MainWorkDependencies) {
     400: workReadProblems[400], 401: workReadProblems[401],
     403: workReadProblems[403], 404: workReadProblems[404],
     409: workReadProblems[409], 500: workReadProblems[500],
-    503: workReadProblems[503] },
+    503: workReadProblems[503] }, 'POST'),
   }, async ({ request, params, body }) => {
     const key = request.headers.get('idempotency-key');
     if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {

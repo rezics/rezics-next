@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia } from 'elysia';
 import { ControlInvalid } from '../modules/access/topology-control.ts';
 import { readChoices } from '../modules/onboarding/choices.ts';
@@ -20,14 +21,14 @@ export const openApiOperations = {
  */
 export function onboardingInterestsRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/onboarding/choices', { query: choicesQuery,
-    response: { 200: onboardingChoices, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/onboarding/choices"].get, { 200: onboardingChoices, ...workReadProblems }, 'GET'),
   }, async ({ request, query }) => {
     try {
       return Response.json(await workRead(work, new Request(request.url), { language: query.locale }, readChoices),
         { headers: homeHeaders });
     } catch (error) { return homeError(error); }
   }).get('/v1/onboarding/suggested-follows', { query: suggestionsQuery,
-    response: { 200: suggestionsResult, ...workReadProblems },
+    response: transportResponses(openApiOperations["/v1/onboarding/suggested-follows"].get, { 200: suggestionsResult, ...workReadProblems }, 'GET'),
   }, async ({ request, query }) => {
     try {
       const principal = request.headers.has('authorization') ? await work.account.verify(request, ['follow:read']) : null;

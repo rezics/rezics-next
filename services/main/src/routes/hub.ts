@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -66,13 +67,13 @@ export function hubRoutes(work: MainWorkDependencies) {
     .get('/v1/hub/works/:id', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: t.Optional(native) }, { additionalProperties: false }),
       detail: { security: [{}, { bearerAuth: [] }] },
-      response: { 200: t.Nullable(t.Object({ profile: t.Literal('hub-work-page-v1'),
+      response: transportResponses(openApiOperations["/v1/hub/works/{id}"].get, { 200: t.Nullable(t.Object({ profile: t.Literal('hub-work-page-v1'),
         kind: t.Union([t.Literal('prompt'), t.Literal('skill')]), revision: groupUuid,
         content: t.String({ maxLength: 65_536 }), parameterSchema: t.Record(t.String(), t.Unknown()),
         examples: t.Array(t.Object({ parameters: t.Record(t.String(), t.Unknown()), output: t.String() })),
         declaredModels: t.Array(t.String()), testedModels: t.Array(t.String()),
         versions: t.Array(t.Object({ revision: groupUuid, createdAt: t.Nullable(t.String()) })),
-        moreVersions: t.Boolean(), createdAt: t.String() })), ...workReadProblems } },
+        moreVersions: t.Boolean(), createdAt: t.String() })), ...workReadProblems }, 'GET') },
     async ({ request, params, query }) => {
       try {
         return Response.json(await workRead(work, request, { actingSubject: query.actingSubject },
@@ -89,7 +90,7 @@ export function hubRoutes(work: MainWorkDependencies) {
         bytesBase64: t.String({ maxLength: 1_398_104 }), executable: t.Boolean() },
       { additionalProperties: false }), { minItems: 1, maxItems: 128 }),
     }, { additionalProperties: false }),
-    response: { 200: importView, 201: importView, ...writeProblems, 422: problemResult(422) } },
+    response: transportResponses(openApiOperations["/v1/hub/imports"].post, { 200: importView, 201: importView, ...writeProblems, 422: problemResult(422) }, 'POST') },
     async ({ request, body }) => {
       try {
         const store = owner();
@@ -105,7 +106,7 @@ export function hubRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/hub/imports/:import', { params: t.Object({ import: groupUuid }),
       query: t.Object({ actingSubject: native }, { additionalProperties: false }),
-      response: { 200: importView, ...authorizedReadProblems } }, async ({ request, params, query }) => {
+      response: transportResponses(openApiOperations["/v1/hub/imports/{import}"].get, { 200: importView, ...authorizedReadProblems }, 'GET') }, async ({ request, params, query }) => {
       try {
         const store = owner();
         if (!store) return unavailable();
@@ -130,7 +131,7 @@ export function hubRoutes(work: MainWorkDependencies) {
         { maxItems: 64 }), tools: t.Array(t.String({ minLength: 1, maxLength: 200 }), { maxItems: 64 }) },
       { additionalProperties: false }),
     }, { additionalProperties: false }),
-    response: { 200: promptView, 201: promptView, ...writeProblems, 422: problemResult(422) } },
+    response: transportResponses(openApiOperations["/v1/prompts/revisions"].post, { 200: promptView, 201: promptView, ...writeProblems, 422: problemResult(422) }, 'POST') },
     async ({ request, body }) => {
       try {
         const store = owner();
@@ -147,7 +148,7 @@ export function hubRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/prompts/revisions/:revision', { params: t.Object({ revision: groupUuid }),
       query: t.Object({ actingSubject: native }, { additionalProperties: false }),
-      response: { 200: promptView, ...authorizedReadProblems } }, async ({ request, params, query }) => {
+      response: transportResponses(openApiOperations["/v1/prompts/revisions/{revision}"].get, { 200: promptView, ...authorizedReadProblems }, 'GET') }, async ({ request, params, query }) => {
       try {
         const store = owner();
         if (!store) return unavailable();

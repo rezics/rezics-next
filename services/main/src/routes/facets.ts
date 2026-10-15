@@ -1,4 +1,5 @@
-import { Elysia } from 'elysia';
+import { transportResponses } from '../transport-responses.ts';
+import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { facetList } from '../modules/facets/contract.ts';
 import { facetListBody, facetListTag } from '../modules/facets/registry.ts';
@@ -15,7 +16,7 @@ function fresh(request: Request): boolean {
 
 /** The admitted Facets (`modules/facets`), so clients keep no tables of filter names. */
 export function facetRoutes() {
-  return new Elysia().get('/v1/facets', { response: { 200: facetList, 500: problemResult(500) } },
+  return new Elysia().get('/v1/facets', { response: transportResponses(openApiOperations["/v1/facets"].get, { 304: t.Null(), 200: facetList, 500: problemResult(500) }, 'GET') },
     ({ request }) => fresh(request) ? new Response(null, { status: 304, headers })
       : new Response(facetListBody, { headers: { ...headers, 'content-type': 'application/json' } }));
 }

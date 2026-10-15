@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
@@ -34,8 +35,8 @@ export function projectionRoutes(deps: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/projections', {
       body: projectionRequest,
-      response: { 200: projectionWriteResponse, 201: projectionWriteResponse, 202: pendingOperation,
-        ...writeProblems, 404: problemResult(404), 422: problemResult(422), 429: problemResult(429) },
+      response: transportResponses(openApiOperations["/v1/projections"].post, { 200: projectionWriteResponse, 201: projectionWriteResponse, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404), 422: problemResult(422), 429: problemResult(429) }, 'POST'),
     }, async ({ request, body }) => {
       const key = request.headers.get('idempotency-key');
       if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {
@@ -48,8 +49,8 @@ export function projectionRoutes(deps: MainWorkDependencies) {
     })
     .get('/v1/projections', {
       query: projectionQuery,
-      response: { 200: t.Object({ ...projectionPage.properties, complete: t.Boolean() },
-        { additionalProperties: false }), ...workReadProblems },
+      response: transportResponses(openApiOperations["/v1/projections"].get, { 200: t.Object({ ...projectionPage.properties, complete: t.Boolean() },
+        { additionalProperties: false }), ...workReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
         const store = deps.projections;

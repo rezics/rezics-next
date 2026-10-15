@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { contentDraftWriteResult, writeProblems } from '../api-responses.ts';
 import { problemResult } from '../api-contract.ts';
@@ -26,8 +27,8 @@ export function catalogRoutes(work: MainWorkDependencies) {
         pattern: '^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]+$' }),
       actingSubject: nativeId,
     }, { additionalProperties: false }),
-    response: { 200: contentDraftWriteResult, 201: contentDraftWriteResult,
-      413: problemResult(413), ...writeProblems },
+    response: transportResponses(openApiOperations["/v1/catalog/resources/{resource}/descriptions"].patch, { 200: contentDraftWriteResult, 201: contentDraftWriteResult,
+      413: problemResult(413), ...writeProblems }, 'PATCH'),
   }, async ({ request, params, body }) => {
     if (!work.contentAuthoring) return problem(503, 'content_unavailable', 'Content owner is unavailable');
     const idempotencyKey = request.headers.get('idempotency-key');

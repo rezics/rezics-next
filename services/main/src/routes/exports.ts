@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -93,7 +94,7 @@ export function exportRoutes(work: MainWorkDependencies) {
   const send = (value: unknown, status = 200) => Response.json(value,
     { status, headers: { 'cache-control': 'no-store' } });
   return new Elysia()
-    .post('/v1/exports', { body, response: write }, async ({ request, body: input }) => {
+    .post('/v1/exports', { body, response: transportResponses(openApiOperations["/v1/exports"].post, write, 'POST') }, async ({ request, body: input }) => {
       const key = request.headers.get('idempotency-key');
       if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {
         return problem(400, 'invalid_idempotency_key', 'A bounded Idempotency-Key is required');
@@ -106,8 +107,8 @@ export function exportRoutes(work: MainWorkDependencies) {
       } catch (error) { return exportError(error); }
     })
     .get('/v1/exports/:export', {
-      params: t.Object({ export: groupUuid }), response: { 200: result, ...authorizedReadProblems,
-        409: problemResult(409) },
+      params: t.Object({ export: groupUuid }), response: transportResponses(openApiOperations["/v1/exports/{export}"].get, { 200: result, ...authorizedReadProblems,
+        409: problemResult(409) }, 'GET'),
     }, async ({ request, params }) => {
       try { return send({ profile: 'export-manifest-v1',
         ...await readAuthorizedExport(dependencies(), request, params.export) }); }

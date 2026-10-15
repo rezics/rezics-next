@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import type { FilterDocument } from '../../../../model/definitions/filter-document-v1.ts';
 import { SAVED_FILTER_COST, savedFilterCreate, savedFilterDelete, savedFilterOrder, savedFilterReceipt,
@@ -47,7 +48,7 @@ export function savedFilterRoutes(work: MainWorkDependencies) {
     return work.savedFilters;
   };
   return new Elysia()
-    .get('/v1/me/saved-filters', { query: savedFiltersQuery, response: { 200: savedFiltersPage, ...workReadProblems } },
+    .get('/v1/me/saved-filters', { query: savedFiltersQuery, response: transportResponses(openApiOperations["/v1/me/saved-filters"].get, { 200: savedFiltersPage, ...workReadProblems }, 'GET') },
       async ({ request, query }) => {
         try {
           const principal = await work.account.verify(request, ['follow:read']);
@@ -73,27 +74,27 @@ export function savedFilterRoutes(work: MainWorkDependencies) {
           { headers: homeHeaders });
         } catch (error) { return savedFilterError(error); }
       })
-    .post('/v1/me/saved-filters', { body: savedFilterCreate, response: receipt }, async ({ request, body }) => {
+    .post('/v1/me/saved-filters', { body: savedFilterCreate, response: transportResponses(openApiOperations["/v1/me/saved-filters"].post, receipt, 'POST') }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['follow:write']);
         const result = await store().create(principal, body, key(request));
         return Response.json(result, { status: result.replayed ? 200 : 201, headers: homeHeaders });
       } catch (error) { return savedFilterError(error); }
     })
-    .put('/v1/me/saved-filters/order', { body: savedFilterOrder, response: receipt }, async ({ request, body }) => {
+    .put('/v1/me/saved-filters/order', { body: savedFilterOrder, response: transportResponses(openApiOperations["/v1/me/saved-filters/order"].put, receipt, 'PUT') }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['follow:write']);
         return Response.json(await store().reorder(principal, body, key(request)), { headers: homeHeaders });
       } catch (error) { return savedFilterError(error); }
     })
-    .patch('/v1/me/saved-filters/:id', { params, body: savedFilterUpdate, response: receipt },
+    .patch('/v1/me/saved-filters/:id', { params, body: savedFilterUpdate, response: transportResponses(openApiOperations["/v1/me/saved-filters/{id}"].patch, receipt, 'PATCH') },
       async ({ request, params: path, body }) => {
         try {
           const principal = await work.account.verify(request, ['follow:write']);
           return Response.json(await store().update(principal, path.id, body, key(request)), { headers: homeHeaders });
         } catch (error) { return savedFilterError(error); }
       })
-    .delete('/v1/me/saved-filters/:id', { params, query: savedFilterDelete, response: receipt },
+    .delete('/v1/me/saved-filters/:id', { params, query: savedFilterDelete, response: transportResponses(openApiOperations["/v1/me/saved-filters/{id}"].delete, receipt, 'DELETE') },
       async ({ request, params: path, query }) => {
         try {
           const principal = await work.account.verify(request, ['follow:write']);

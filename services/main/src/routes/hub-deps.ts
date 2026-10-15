@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
@@ -42,7 +43,7 @@ const json = (value: unknown, status = 200) => Response.json(value,
 export function hubDependencyRoutes(work: MainWorkDependencies) {
   return new Elysia().post('/v1/hub/revisions/:revision/dependencies', {
     params: t.Object({ revision: groupUuid }), body: bodySchema,
-    response: { 200: lockView, 201: lockView, ...writeProblems, 404: problemResult(404), 422: problemResult(422) },
+    response: transportResponses(openApiOperations["/v1/hub/revisions/{revision}/dependencies"].post, { 200: lockView, 201: lockView, ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'POST'),
   }, async ({ request, params, body }) => {
     try {
       if (!work.hub || !work.packageLocks) {

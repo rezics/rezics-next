@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { commerceIntentDigest } from '../modules/commerce/store.ts';
@@ -42,7 +43,7 @@ export function quotaRoutes(work: MainWorkDependencies & { quota?: QuotaStore })
   return new Elysia()
     .post('/v1/realms/:realm/quota-reservations', {
       params: t.Object({ realm: agent }), body: reservationBody,
-      response: { 200: reservationResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/quota-reservations"].post, { 200: reservationResult, ...writeProblems }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         const principal = await work.account.verify(request, [QUOTA_SCOPE]);
@@ -61,7 +62,7 @@ export function quotaRoutes(work: MainWorkDependencies & { quota?: QuotaStore })
       params: t.Object({ realm: agent }),
       query: t.Object({ unit, beneficiary: agent, operationId: t.String({ minLength: 1, maxLength: 128 }),
         stage: t.Optional(t.Numeric({ minimum: 0, maximum: 10000 })) }, { additionalProperties: false }),
-      response: { 200: reservationResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/realms/{realm}/quota-reservations"].get, { 200: reservationResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, [QUOTA_SCOPE]);

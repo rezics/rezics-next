@@ -1,3 +1,4 @@
+import { transportResponses, transportProblem } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { logWorkerFault } from '@rezics/observability/log';
 import { AdmissionConflict, AdmissionDenied, AdmissionExpired } from '../modules/access/admission.ts';
@@ -92,14 +93,14 @@ export function themeRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/themes', { body: t.Object({ theme: uuid, owner: agent, hostZone: agent,
       actingSubject: agent, idempotencyKey: requestKey }, { additionalProperties: false }),
-      response: firstPartyResponse }, async ({ request, body }: { request: Request;
+      response: transportResponses(openApiOperations["/v1/themes"].post, firstPartyResponse, 'POST') }, async ({ request, body }: { request: Request;
         body: { theme: string; owner: string; hostZone: string; actingSubject: string;
           idempotencyKey: string } }) => writeFirstParty(request,
       { action: 'create', ...body }))
     .post('/v1/themes/:theme/revisions', { params: t.Object({ theme: uuid }),
       body: t.Object({ expectedRevision: t.Nullable(agent), bundle: t.Any(),
         actingSubject: agent, idempotencyKey: requestKey }, { additionalProperties: false }),
-      response: firstPartyResponse }, async ({ request, params, body }: { request: Request;
+      response: transportResponses(openApiOperations["/v1/themes/{theme}/revisions"].post, firstPartyResponse, 'POST') }, async ({ request, params, body }: { request: Request;
         params: { theme: string }; body: { expectedRevision: string | null; bundle: unknown;
           actingSubject: string; idempotencyKey: string } }) => writeFirstParty(request,
       { action: 'revise', theme: params.theme, ...body,
@@ -109,7 +110,7 @@ export function themeRoutes(work: MainWorkDependencies) {
       body: t.Object({ decision: t.Union([t.Literal('approved'), t.Literal('rejected')]),
         reviewEvidenceDigest: digest,
         actingSubject: agent, idempotencyKey: requestKey }, { additionalProperties: false }),
-      response: firstPartyResponse }, async ({ request, params, body }: { request: Request;
+      response: transportResponses(openApiOperations["/v1/themes/{theme}/revisions/{revision}/reviews"].post, firstPartyResponse, 'POST') }, async ({ request, params, body }: { request: Request;
         params: { theme: string; revision: string }; body: { decision: 'approved' | 'rejected';
           reviewEvidenceDigest: string; actingSubject: string; idempotencyKey: string } }) => writeFirstParty(request,
       { action: 'review', theme: params.theme, revision: `${'https://rezics.com/id/'}${params.revision}`,
@@ -118,24 +119,24 @@ export function themeRoutes(work: MainWorkDependencies) {
       body: t.Object({ revision: agent, expectedActivation: t.Nullable(agent),
         approvalExpiresAt: t.String({ format: 'date-time' }), actingSubject: agent,
         idempotencyKey: requestKey }, { additionalProperties: false }),
-      response: firstPartyResponse }, async ({ request, params, body }: { request: Request;
+      response: transportResponses(openApiOperations["/v1/themes/{theme}/first-party-activations"].post, firstPartyResponse, 'POST') }, async ({ request, params, body }: { request: Request;
         params: { theme: string }; body: { revision: string; expectedActivation: string | null;
           approvalExpiresAt: string; actingSubject: string; idempotencyKey: string } }) => writeFirstParty(request,
       { action: 'activate', theme: params.theme, ...body }))
     .post('/v1/themes/:theme/revocations', { params: t.Object({ theme: uuid }),
       body: t.Object({ expectedActivation: agent, actingSubject: agent,
         idempotencyKey: requestKey }, { additionalProperties: false }),
-      response: firstPartyResponse }, async ({ request, params, body }: { request: Request;
+      response: transportResponses(openApiOperations["/v1/themes/{theme}/revocations"].post, firstPartyResponse, 'POST') }, async ({ request, params, body }: { request: Request;
         params: { theme: string }; body: { expectedActivation: string; actingSubject: string;
           idempotencyKey: string } }) => writeFirstParty(request,
       { action: 'revoke', theme: params.theme, ...body }))
     .put('/v1/themes/execution-control', { body: t.Object({ disabled: t.Boolean(),
       expectedControl: t.Nullable(agent), actingSubject: agent, idempotencyKey: requestKey },
-    { additionalProperties: false }), response: firstPartyResponse },
+    { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/themes/execution-control"].put, firstPartyResponse, 'PUT') },
     async ({ request, body }: { request: Request; body: { disabled: boolean;
       expectedControl: string | null; actingSubject: string; idempotencyKey: string } }) =>
       writeFirstParty(request, { action: 'control', ...body }))
-    .get('/v1/themes/execution-control', { response: { 200: t.Any(), ...writeProblems } },
+    .get('/v1/themes/execution-control', { response: transportResponses(openApiOperations["/v1/themes/execution-control"].get, { 200: t.Any(), ...writeProblems }, 'GET') },
     async ({ request }: { request: Request }) => {
       if (!work.account) return unavailable();
       try {
@@ -144,7 +145,7 @@ export function themeRoutes(work: MainWorkDependencies) {
       } catch (error) { return themeError(error); }
     })
     .get('/v1/themes/:theme/first-party', { params: t.Object({ theme: uuid }),
-      response: { 200: t.Any(), ...writeProblems } }, async ({ request, params }: {
+      response: transportResponses(openApiOperations["/v1/themes/{theme}/first-party"].get, { 404: transportProblem(404, 'not_found'), 200: t.Any(), ...writeProblems }, 'GET') }, async ({ request, params }: {
         request: Request; params: { theme: string } }) => {
       if (!work.account) return unavailable();
       try {
@@ -162,7 +163,7 @@ export function themeRoutes(work: MainWorkDependencies) {
         expectedRevision: t.Nullable(uuid), dependencyDigest: digest, origin, capabilities,
         approvalExpiresAt: t.String({ format: 'date-time' }), actingSubject: agent,
         idempotencyKey: t.String({ pattern: '^[A-Za-z0-9:_./-]{1,128}$' }) }, { additionalProperties: false }),
-      response: { 200: activationResult, 201: activationResult, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/themes/{theme}/activations"].post, { 200: activationResult, 201: activationResult, ...writeProblems }, 'POST'),
     }, async ({ request, params, body }) => {
       if (!store || !work.account || !work.access) return unavailable();
       const keyError = headerKey(request, body.idempotencyKey);
@@ -183,7 +184,7 @@ export function themeRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/themes/:theme', {
       params: t.Object({ theme: uuid }),
-      response: { 200: themeView, ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/themes/{theme}"].get, { 404: transportProblem(404, 'not_found'), 200: themeView, ...writeProblems }, 'GET'),
     }, async ({ request, params }) => {
       if (!store || !work.account) return unavailable();
       try {

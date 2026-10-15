@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { readUuid } from '../modules/work/read-contract.ts';
 import { WorkReadUnavailable, workRead } from '../modules/work/read-session.ts';
@@ -14,7 +15,7 @@ export const openApiOperations = {
 export function workStatsRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/works/:id/reader-stats', { params: t.Object({ id: readUuid }), query: workStatsQuery,
-      detail: { security: [{}, { bearerAuth: [] }] }, response: { 200: workStats, ...workReadProblems },
+      detail: { security: [{}, { bearerAuth: [] }] }, response: transportResponses(openApiOperations["/v1/works/{id}/reader-stats"].get, { 200: workStats, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         if (!work.workStats) throw new WorkReadUnavailable('Reader statistics owner is unavailable');

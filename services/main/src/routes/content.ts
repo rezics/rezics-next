@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { languageTagSchema } from '../modules/display-language/schema.ts';
 import { Elysia, t } from 'elysia';
 import { commentTargetHasSource, ContentCommentInvalid, resolveParagraphSelector }
@@ -80,8 +81,8 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         authoredBodySchema({ profile: t.Literal('content-public-domain-text-v1'), ...textDraftFields,
           assessmentId: t.String({ pattern: '^[0-9a-f-]{36}$' }), source: publicDomainSource }),
       ]),
-      response: { 200: contentDraftWriteResult, 201: contentDraftWriteResult,
-        ...writeProblems, 413: problemResult(413) },
+      response: transportResponses(openApiOperations["/v1/content-drafts"].post, { 200: contentDraftWriteResult, 201: contentDraftWriteResult,
+        ...writeProblems, 413: problemResult(413) }, 'POST'),
     }, async ({ request, body }) => {
       if (!work.contentAuthoring || body.profile === 'content-public-domain-text-v1' && !work.rights?.store) {
         return problem(503, 'content_unavailable', 'Content authoring or rights owner is unavailable');
@@ -124,8 +125,8 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         body: t.String({ minLength: 1, maxLength: 8192 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
-      response: { 200: contentCommentResult, 201: contentCommentResult,
-        ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/content-comments"].post, { 200: contentCommentResult, 201: contentCommentResult,
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       if (!work.comments) return problem(503, 'content_unavailable', 'Comment owner is unavailable');
       const idempotencyKey = request.headers.get('idempotency-key');
@@ -147,7 +148,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       query: t.Object({ actingSubject: t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
       }) }, { additionalProperties: false }),
-      response: { 200: contentCommentResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/content-comments/{comment}"].get, { 200: contentCommentResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -220,8 +221,8 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       }), pageSize: t.Optional(t.String({ pattern: '^(?:[1-9]|[1-9][0-9]|100)$' })),
       cursor: t.Optional(t.String({ pattern: '^[A-Za-z0-9_-]{1,512}$' })),
       }, { additionalProperties: false }),
-      response: { 200: contentCommentPageResult,
-        ...authorizedReadProblems, 409: problemResult(409), 422: problemResult(422) },
+      response: transportResponses(openApiOperations["/v1/content-revisions/{revision}/comments"].get, { 200: contentCommentPageResult,
+        ...authorizedReadProblems, 409: problemResult(409), 422: problemResult(422) }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
@@ -332,9 +333,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         expectedPublicationHead: t.Nullable(t.String()),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
-      response: { 200: contentPublicationWriteResult, 201: contentPublicationWriteResult,
+      response: transportResponses(openApiOperations["/v1/content-publications"].post, { 200: contentPublicationWriteResult, 201: contentPublicationWriteResult,
         202: contentPublicationWriteResult, ...writeProblems,
-        404: problemResult(404), 422: problemResult(422) },
+        404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, body }) => {
       if (!work.contentAuthoring) return problem(503, 'content_unavailable', 'Content owner is unavailable');
       const idempotencyKey = request.headers.get('idempotency-key');
@@ -362,8 +363,8 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           rightsBasis: t.Literal('public-domain'),
           assessmentId: t.String({ pattern: '^[0-9a-f-]{36}$' }) }, { additionalProperties: false }),
       ]),
-      response: { 200: contentEligibilityWriteResult, 201: contentEligibilityWriteResult,
-        ...writeProblems },
+      response: transportResponses(openApiOperations["/v1/content-search-eligibility"].post, { 200: contentEligibilityWriteResult, 201: contentEligibilityWriteResult,
+        ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       if (!work.contentAuthoring || !work.access.verifyContentDraftProof
         || body.profile === 'content-search-eligibility-v2' && !work.rights?.store) {
@@ -392,8 +393,8 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         language: t.Optional(languageTagSchema(35)),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
-      response: { 200: contentEditWriteResult, 202: pendingOperation,
-        ...writeProblems, 404: problemResult(404) },
+      response: transportResponses(openApiOperations["/v1/content-edits"].post, { 200: contentEditWriteResult, 202: pendingOperation,
+        ...writeProblems, 404: problemResult(404) }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -424,7 +425,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       query: t.Object({ actingSubject: t.Optional(t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
       })) }, { additionalProperties: false }),
-      response: { 200: exactContentRevision, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/content-revisions/{revision}"].get, { 200: exactContentRevision, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);

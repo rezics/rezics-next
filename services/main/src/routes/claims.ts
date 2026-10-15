@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -141,7 +142,7 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
         valueQualifiers: t.Array(t.Union([t.Literal('disputed-attribution'), t.Literal('inferred')]), { maxItems: 2 }),
         validFrom: t.Nullable(instant), validUntil: t.Nullable(instant), editionScope: t.Nullable(reference),
         actingSubject: nativeRef }, { additionalProperties: false }),
-      response: written,
+      response: transportResponses(openApiOperations["/v1/claims"].post, written, 'POST'),
     }, ({ request, body }) => keyed(request, async key => {
       const { profile: _profile, ...input } = body;
       return respond(await createAdmittedClaim(deps(), request, { ...input, idempotencyKey: key }));
@@ -149,7 +150,7 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
     .get('/v1/claims/:claim', {
       params: t.Object({ claim: uuid }),
       query: t.Object({ context: t.Optional(reference), actingSubject: t.Optional(nativeRef) }),
-      response: read,
+      response: transportResponses(openApiOperations["/v1/claims/{claim}"].get, read, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const verified = await work.account.verify(request, ['claim:read']);
@@ -174,7 +175,7 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
         limitations: note, rationale: t.Nullable(t.String({ minLength: 1, maxLength: 4000 })),
         assessorKind: t.Union([t.Literal('human'), t.Literal('automated')]), actingSubject: nativeRef,
       }, { additionalProperties: false }),
-      response: written,
+      response: transportResponses(openApiOperations["/v1/source-reliability-assessments"].post, written, 'POST'),
     }, ({ request, body }) => keyed(request, async key => {
       const { profile: _profile, ...input } = body;
       return respond(await recordAdmittedReliability(deps(), request, { ...input, idempotencyKey: key }));
@@ -192,14 +193,14 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
         limitations: note, expectedSummary: t.Nullable(nativeRef),
         resolvesChallenges: t.Array(uuid, { maxItems: 8 }), actingSubject: nativeRef,
       }, { additionalProperties: false }),
-      response: assessmentWritten,
+      response: transportResponses(openApiOperations["/v1/claims/{claim}/assessments"].post, assessmentWritten, 'POST'),
     }, ({ request, params, body }) => keyed(request, async key => {
       const { profile: _profile, ...input } = body;
       return respond(await assessAdmittedClaim(deps(), request, nativeId(params.claim),
         { ...input, idempotencyKey: key }));
     }))
     .get('/v1/claims/:claim/assessments/:assessment', {
-      params: t.Object({ claim: uuid, assessment: uuid }), response: read,
+      params: t.Object({ claim: uuid, assessment: uuid }), response: transportResponses(openApiOperations["/v1/claims/{claim}/assessments/{assessment}"].get, read, 'GET'),
     }, async ({ request, params }) => {
       try {
         const reader = await principal(request, 'claim:read');
@@ -217,14 +218,14 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
       body: t.Object({ profile: t.Literal('claim-evidence-v1'), claimRevision: nativeRef,
         expectedHead: t.Nullable(uuid), items: t.Array(evidenceItem, { maxItems: 64 }) },
       { additionalProperties: false }),
-      response: written,
+      response: transportResponses(openApiOperations["/v1/claims/{claim}/evidence"].post, written, 'POST'),
     }, ({ request, params, body }) => keyed(request, async key => {
       const id = await principal(request, 'claim:evidence');
       await claimRevisionOf(params.claim, body.claimRevision);
       return respond(await deps().store.recordEvidence(id, key, nativeId(params.claim), body));
     }))
     .get('/v1/claims/:claim/evidence/:revision', {
-      params: t.Object({ claim: uuid, revision: uuid }), response: read,
+      params: t.Object({ claim: uuid, revision: uuid }), response: transportResponses(openApiOperations["/v1/claims/{claim}/evidence/{revision}"].get, read, 'GET'),
     }, async ({ request, params }) => {
       try {
         const reader = await principal(request, 'claim:read');
@@ -239,7 +240,7 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
         adoptedRevision: t.Nullable(reference), context: reference, reason: note,
         counterevidence: t.Array(evidenceItem, { maxItems: 64 }), actingSubject: nativeRef },
       { additionalProperties: false }),
-      response: written,
+      response: transportResponses(openApiOperations["/v1/claims/{claim}/challenges"].post, written, 'POST'),
     }, ({ request, params, body }) => keyed(request, async key => {
       const id = await principal(request, 'claim:challenge');
       await claimRevisionOf(params.claim, body.claimRevision);
@@ -247,7 +248,7 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
       return respond(await deps().store.submitChallenge(id, key, nativeId(params.claim), input));
     }))
     .get('/v1/claims/:claim/challenges', {
-      params: t.Object({ claim: uuid }), response: read,
+      params: t.Object({ claim: uuid }), response: transportResponses(openApiOperations["/v1/claims/{claim}/challenges"].get, read, 'GET'),
     }, async ({ request, params }) => {
       try {
         await principal(request, 'claim:read');
@@ -258,14 +259,14 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
       params: t.Object({ claim: uuid, challenge: uuid }),
       body: t.Object({ profile: t.Literal('claim-challenge-withdrawal-v1'), reason: note, actingSubject: nativeRef },
         { additionalProperties: false }),
-      response: written,
+      response: transportResponses(openApiOperations["/v1/claims/{claim}/challenges/{challenge}/withdrawal"].post, written, 'POST'),
     }, ({ request, params, body }) => keyed(request, async key => {
       const id = await principal(request, 'claim:challenge');
       return respond(await deps().store.withdrawChallenge(id, key, nativeId(params.claim), params.challenge,
         { reason: body.reason, actingSubject: body.actingSubject }));
     }))
     .get('/v1/claims/:claim/corrections', {
-      params: t.Object({ claim: uuid }), query: t.Object({ context: reference }), response: read,
+      params: t.Object({ claim: uuid }), query: t.Object({ context: reference }), response: transportResponses(openApiOperations["/v1/claims/{claim}/corrections"].get, read, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         await principal(request, 'claim:read');
@@ -277,7 +278,7 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
       body: t.Object({ profile: t.Literal('verification-correction-subscription-v1'),
         context: reference, expectedHead: t.Nullable(uuid),
         state: t.Union([t.Literal('subscribed'), t.Literal('unsubscribed')]) },
-      { additionalProperties: false }), response: written,
+      { additionalProperties: false }), response: transportResponses(openApiOperations["/v1/claims/{claim}/correction-subscriptions"].post, written, 'POST'),
     }, ({ request, params, body }) => keyed(request, async key => {
       const reader = await principal(request, 'claim:read');
       const claim = nativeId(params.claim);
@@ -290,7 +291,7 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
       body: t.Object({ profile: t.Literal('verification-origin-v1'),
         kind: t.Union([t.Literal('publication'), t.Literal('dataset'), t.Literal('statement'), t.Literal('native')]),
         locator: t.String({ minLength: 1, maxLength: 1000 }) }, { additionalProperties: false }),
-      response: written,
+      response: transportResponses(openApiOperations["/v1/verification/origins"].post, written, 'POST'),
     }, ({ request, body }) => keyed(request, async key => respond(await deps().store.recordOrigin(
       await principal(request, 'claim:lineage'), key, { kind: body.kind, locator: body.locator }))))
     .post('/v1/sources/observations/:observation/lineage', {
@@ -300,7 +301,7 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
           t.Literal('publishes-origin')]), target: lineageTarget,
         basis: t.Union([t.Literal('declared-by-source'), t.Literal('detected'), t.Literal('reviewer-asserted')]),
         method: t.Nullable(reference) }, { additionalProperties: false }),
-      response: written,
+      response: transportResponses(openApiOperations["/v1/sources/observations/{observation}/lineage"].post, written, 'POST'),
     }, ({ request, params, body }) => keyed(request, async key => respond(await deps().store.recordLineage(
       await principal(request, 'claim:lineage'), key, params.observation,
       { relation: body.relation, target: body.target, basis: body.basis, method: body.method }))))
@@ -310,7 +311,7 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
         expectedHead: t.Nullable(uuid),
         state: t.Union([t.Literal('available'), t.Literal('inaccessible'), t.Literal('withdrawn')]),
         reason: note }, { additionalProperties: false }),
-      response: written,
+      response: transportResponses(openApiOperations["/v1/sources/observations/{observation}/disposition"].post, written, 'POST'),
     }, ({ request, params, body }) => keyed(request, async key => respond(
       await deps().store.recordObservationDisposition(await principal(request, 'claim:lineage'),
         key, params.observation, body))))
@@ -318,7 +319,7 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
       params: t.Object({ edge: uuid }),
       body: t.Object({ profile: t.Literal('verification-lineage-retraction-v1'), reason: note },
         { additionalProperties: false }),
-      response: written,
+      response: transportResponses(openApiOperations["/v1/verification/lineage/{edge}/retraction"].post, written, 'POST'),
     }, ({ request, params, body }) => keyed(request, async key => respond(await deps().store.retractLineage(
       await principal(request, 'claim:lineage'), key, params.edge, body.reason))))
     .post('/v1/sources/observations/:observation/derivation', {
@@ -330,7 +331,7 @@ export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptio
         toolVersion: t.Nullable(t.String({ minLength: 1, maxLength: 200 })), profileRevision: t.Nullable(reference),
         limitations: note, inputs: t.Array(lineageTarget, { minItems: 1, maxItems: 32 }) },
       { additionalProperties: false }),
-      response: written,
+      response: transportResponses(openApiOperations["/v1/sources/observations/{observation}/derivation"].post, written, 'POST'),
     }, ({ request, params, body }) => keyed(request, async key => {
       const { profile: _profile, ...input } = body;
       return respond(await deps().store.recordDerivation(await principal(request, 'claim:lineage'), key,

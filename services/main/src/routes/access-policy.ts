@@ -1,3 +1,4 @@
+import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { groupChangeIntentDigest } from '../modules/access/scope-gates.ts';
@@ -153,7 +154,7 @@ function owner(work: MainWorkDependencies): AccessPolicyOwner {
 export function accessPolicyRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/access/policy-changes', {
-      body: policyChangeBody, response: { 200: policyChangeResult, ...writeProblems },
+      body: policyChangeBody, response: transportResponses(openApiOperations["/v1/access/policy-changes"].post, { 200: policyChangeResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -179,7 +180,7 @@ export function accessPolicyRoutes(work: MainWorkDependencies) {
     .get('/v1/access/policies/:policyId/revisions/:revision', {
       params: t.Object({ policyId: groupUuid, revision: groupGeneration }),
       query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
-      response: { 200: policyRevisionResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/policies/{policyId}/revisions/{revision}"].get, { 200: policyRevisionResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -189,7 +190,7 @@ export function accessPolicyRoutes(work: MainWorkDependencies) {
       } catch (error) { return policyError(error); }
     })
     .post('/v1/access/policy-decisions', {
-      body: decisionBody, response: { 200: decisionResult, ...writeProblems, 404: authorizedReadProblems[404] },
+      body: decisionBody, response: transportResponses(openApiOperations["/v1/access/policy-decisions"].post, { 200: decisionResult, ...writeProblems, 404: authorizedReadProblems[404] }, 'POST'),
     }, async ({ request, body }) => {
       try {
         // The credential scope for the action is a hard guard before any policy input.
@@ -201,7 +202,7 @@ export function accessPolicyRoutes(work: MainWorkDependencies) {
       } catch (error) { return policyError(error); }
     })
     .post('/v1/access/policy-decision-revalidations', {
-      body: revalidationBody, response: { 200: decisionResult, ...writeProblems },
+      body: revalidationBody, response: transportResponses(openApiOperations["/v1/access/policy-decision-revalidations"].post, { 200: decisionResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [POLICY_DECISION_ACTIONS[body.action]]);
@@ -211,7 +212,7 @@ export function accessPolicyRoutes(work: MainWorkDependencies) {
       } catch (error) { return policyError(error); }
     })
     .put('/v1/me/interaction-mutes', {
-      body: muteBody, response: { 200: muteResult, ...writeProblems },
+      body: muteBody, response: transportResponses(openApiOperations["/v1/me/interaction-mutes"].put, { 200: muteResult, ...writeProblems }, 'PUT'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);
@@ -223,7 +224,7 @@ export function accessPolicyRoutes(work: MainWorkDependencies) {
       } catch (error) { return policyError(error); }
     })
     .get('/v1/me/interaction-mutes', {
-      response: { 200: muteList, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/me/interaction-mutes"].get, { 200: muteList, ...authorizedReadProblems }, 'GET'),
     }, async ({ request }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);
@@ -234,7 +235,7 @@ export function accessPolicyRoutes(work: MainWorkDependencies) {
       } catch (error) { return policyError(error); }
     })
     .post('/v1/access/interaction-blocks', {
-      body: blockBody, response: { 200: blockResult, ...writeProblems },
+      body: blockBody, response: transportResponses(openApiOperations["/v1/access/interaction-blocks"].post, { 200: blockResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:manage']);
@@ -247,7 +248,7 @@ export function accessPolicyRoutes(work: MainWorkDependencies) {
       } catch (error) { return policyError(error); }
     })
     .post('/v1/access/interaction-decisions', {
-      body: interactionBody, response: { 200: interactionResult, ...writeProblems },
+      body: interactionBody, response: transportResponses(openApiOperations["/v1/access/interaction-decisions"].post, { 200: interactionResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['comment:create']);
@@ -257,7 +258,7 @@ export function accessPolicyRoutes(work: MainWorkDependencies) {
       } catch (error) { return policyError(error); }
     })
     .post('/v1/access/revocations', {
-      body: revocationBody, response: { 200: revocationResult, ...writeProblems },
+      body: revocationBody, response: transportResponses(openApiOperations["/v1/access/revocations"].post, { 200: revocationResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['access:grant']);
@@ -271,7 +272,7 @@ export function accessPolicyRoutes(work: MainWorkDependencies) {
     .get('/v1/access/revocations/:revocationId', {
       params: t.Object({ revocationId: groupUuid }),
       query: t.Object({ issuerSubject: groupAgent }, { additionalProperties: false }),
-      response: { 200: revocationResult, ...authorizedReadProblems },
+      response: transportResponses(openApiOperations["/v1/access/revocations/{revocationId}"].get, { 200: revocationResult, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['access:grant']);
