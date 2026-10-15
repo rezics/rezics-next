@@ -1,5 +1,30 @@
 # State
 
+Checkpoint a93e497a-d9eb-4254-b6a8-29e44fc89eeb consolidates handled events
+task:G-2234:5 and task:G-2585:7. These dispositions supersede the affected
+holds below; other tasks and later events retain their own decisions.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2234 | Task:G-2234:5 reports no new edits or verification: G-2462 holds the needed shared paths. Keep exited until those claims are released, then restore the needed claims and reclaim before an authorized resume. Finish the production-route replay/access integration, phone/desktop inspection and complete surface gate. No new brief decision, landing or whole-row proof was accepted. |
+| G-2585 | Task:G-2585:7 and brief decision `0e9245e2be` replace the earlier G-2587 hold with G-2668's retained-source manifest prerequisite, reported in QA `20261015t180959-989152`. Keep exited until the correction is available on the integration baseline; Program owns the resume. Do not retry capture or repair the shared harness here. Then incorporate the correction and finish six-persona production captures, answer-records, zero-miss replay, phone/desktop inspection and the complete affected gate. Focused passing checks accept no captures or screenshots and do not complete the surface gate. |
+
+The method's measures, current status and latest efficiency report were read.
+Concurrent scope is 67/68 API rows and 402 proved/6 pending persona cells;
+this is a ledger measurement, not surface acceptance by these events. Codex,
+Codex-1 and Codex-2 use 10%, 9% and 1% of their weekly windows respectively.
+The latest efficiency report remains dated 2026-10-13 21:49 UTC and supplies
+no current tokens-per-proved-row reading; earlier attempt measures retain
+their checkpoint attribution. These two stops are shared-path ownership and
+a Program-owned retained-corpus fault, not accepted surface corrections.
+No efficiency improvement is inferred and no additional work is decided.
+
+Both task events were acknowledged in their deciding turns. This checkpoint
+supplies no mail to acknowledge and acknowledges their consolidation only.
+It changes only this file and starts no worker, landing, closure or watcher.
+
+## Retained checkpoint 6ca2314e
+
 Checkpoint 6ca2314e-45fa-491e-b0c5-74dea042fbdd consolidates handled events
 mail:d32cd50f-3ca9-4a2b-a9cb-4186047bfc10 and task:G-2586:22.
 This disposition supersedes G-2586's preview-proof remainder below; other
