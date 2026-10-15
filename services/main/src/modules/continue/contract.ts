@@ -14,7 +14,8 @@ export const continueItem = t.Object({ work: readId, title: readName, cover: rea
     kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) }),
   updatedAt: t.String() });
 export const continueResult = t.Object({ profile: t.Literal('home-continue-v1'),
-  nextCursor: t.Nullable(t.String()), complete: t.Boolean(),
+  // Additive to the v1 preview response; the reader now always supplies both.
+  nextCursor: t.Optional(t.Nullable(t.String())), complete: t.Optional(t.Boolean()),
   items: t.Array(continueItem, { maxItems: 6 }), sourcePosition: t.Object({ dataEpoch: t.String(), sequence: t.String() }),
   scanned: t.Object({ reading: t.Integer(), followed: t.Integer(), limit: t.Integer() }) });
 export const hiddenCommand = t.Object({ actingSubject: readId, hidden: t.Boolean() },
