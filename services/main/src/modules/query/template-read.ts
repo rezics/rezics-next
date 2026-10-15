@@ -225,7 +225,12 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
     const summaryIds=[...new Set(page.flatMap(candidate=>resourceFields.map(name=>byId.get(candidate.id)![name]?.value).filter((id):id is string=>!!id)))];
     const summaries=new Map((await session.summaries(summaryIds)).map(summary=>[summary.reference,summary]));
     const authorFields=Object.values(template.fields).flatMap(field=>'author' in field?[field.author]:[]);
-    const names=authorFields.length ? await readAuthorNames(session,page.flatMap(candidate=>authorFields.map(name=>byId.get(candidate.id)![name]?.value).filter((key):key is string=>!!key))) : new Map();
+    const names=authorFields.length ? await readAuthorNames(session,page.flatMap(candidate=> {
+      const row=byId.get(rowKey(candidate))!;
+      // A publication supplies its retained display name; its provider key is not an Open Library author key.
+      if(Object.values(template.fields).some(field=>'author' in field && field.fallbackTerm && row[field.fallbackTerm])) return [];
+      return authorFields.map(name=>row[name]?.value).filter((key):key is string=>!!key);
+    })) : new Map();
     const items=page.flatMap(candidate=> {
       const row=byId.get(rowKey(candidate))!,item:Record<string,unknown>={};
       for(const [name,field] of Object.entries(template.fields)) {

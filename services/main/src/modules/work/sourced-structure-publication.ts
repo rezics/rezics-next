@@ -1,6 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { discloseInventory } from '../disclosure/read.ts';
+import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
 import { PublicationUnavailable } from '../contribution/publish.ts';
 import { importRecipe } from '../recipe/importer.ts';
 import { GUTENBERG_LICENSE } from '../rights/import-policy.ts';
@@ -95,6 +97,8 @@ export async function prepareSourcedStructurePublication(deps: MainWorkDependenc
       throw refuse('source-text');
     }
   }
+  if ((await discloseInventory(deps.environment, [{ owner: 'source', resource: observation.record,
+    component: 'record', revision: observation.observation }], ANONYMOUS_VIEWER))[0] !== 'visible') throw refuse('source-disclosure');
   if (!deps.rights || !(await deps.rights.store.structuredPublicationRights(input.work, observation.record)).allowed)
     throw refuse();
   return { record: observation.record, observation: observation.observation, provider: observation.provider,
@@ -122,7 +126,8 @@ export async function readPublicationAttribution(env: Pick<WorkActivationEnviron
 export async function selectedPublicationAttribution(session: WorkReadSession,
   source: { source: string; sourceObservation?: string; work: string } | null) {
   if (!source?.sourceObservation) return null;
-  const attribution = await readPublicationAttribution(session.deps.environment, source.source, source.sourceObservation);
+  const attribution = await session.retained(`publication-attribution:${source.source}`,
+    () => readPublicationAttribution(session.deps.environment, source.source, source.sourceObservation!));
   if ((await session.disclosure([{ owner: 'source', resource: attribution.record, component: 'record',
     revision: attribution.observation }]))[0] !== 'visible')
     throw new WorkReadUnavailable('Publication source is unavailable');

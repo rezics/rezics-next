@@ -137,6 +137,6 @@ test('public-domain publication binds replay, rejects stale heads, and withdraws
     const header = await json<{ rights?: unknown; publicationState: string }>(person.main('GET', `/v1/works/${source.work.slice(-36)}${query}`));
     expect(header.rights).toBeUndefined();
     expect(header.publicationState).toBe('unpublished');
-    if (persona !== 'operator') await json(person.main('GET', `/v1/recipes/works/${source.work.slice(-36)}${query}`), 404);
+    if (persona !== 'operator') expect(await json(person.main('GET', `/v1/recipes/works/${source.work.slice(-36)}${query}`))).toBeNull();
   }
 });
