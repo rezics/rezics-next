@@ -22,8 +22,8 @@ export function ReadingStats({ stats, locale, messages }: { stats: Loaded<Readin
     <div className="grid gap-1">
       <h2 id="library-reading-stats" className="font-semibold text-xl">{title}</h2>
       <p className="flex flex-wrap gap-x-4 text-muted-foreground text-sm tabular-nums">
-        <span>{t.booksFinished({ count: number(data.books) })}</span>
-        <span>{t.chaptersFinished({ count: number(data.chapters) })}</span></p>
+        <span>{t.booksFinished({ count: data.books })}</span>
+        <span>{t.chaptersFinished({ count: data.chapters })}</span></p>
     </div>
     <div className="grid gap-3 text-sm sm:grid-cols-2">
       {data.averageRating !== null && data.ratedBooks !== null && <p>{t.averageRating({ rating: number(data.averageRating),
