@@ -6,6 +6,7 @@ import { Pool } from 'pg';
 import { readEnv, savePrivate } from '../../../scripts/dev/config.ts';
 import { sha256, stable } from '../../../scripts/fixture/corpus.ts';
 import { fixtureModel } from '../../../scripts/fixture/model.ts';
+import { repairCopiedPostgresCollations } from '../../../scripts/fixture/postgres-collation.ts';
 import type { RetainedFileIntegrity, RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
 import { copyVolume, currentEngines, freshPorts, postgresImage, removeVolumes, run, volumeExists } from '../../../scripts/fixture/stack.ts';
 import { migrateTracked } from '../../../scripts/ops/migrate.ts';
@@ -332,6 +333,9 @@ SELECT ?g ?s ?p ?o WHERE {
         const result = await runQaStartupChildAsync(root, ['stack:up', ...stack.args], 180_000);
         context.budget.excludeAdmissionWait(result.admissionWaitMs);
         if (!result.ok) throw new Error(`isolated Content restore startup failed: ${result.output.slice(-4000)}`);
+        const compose = readEnv(join(stack.directory, 'compose.env'));
+        await repairCopiedPostgresCollations({ host: '127.0.0.1', port: Number(compose.POSTGRES_PORT),
+          user: 'postgres', password: compose.POSTGRES_PASSWORD });
         const pools = { content: new Pool({ connectionString: stack.apps.CONTENT_DATABASE_URL, max: 4 }),
           access: new Pool({ connectionString: stack.apps.ACCESS_DATABASE_URL, max: 4 }),
           relay: new Pool({ connectionString: stack.apps.MAIN_RELAY_DATABASE_URL, max: 2 }) };

@@ -1,6 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
 import { Pool } from 'pg';
+import { repairCopiedPostgresCollations } from '../fixture/postgres-collation.ts';
 import { DATASET } from '../../services/main/src/modules/work/activate.ts';
 import {
   run,
@@ -234,7 +235,7 @@ async function retargetRestoredGraphRoute(apps: Record<string, string>): Promise
 }
 
 const restoreRuntime = { task, run, copyVolume, projectRunning, dockerEnvironment, freshPorts,
-  retargetGraphRoute: retargetRestoredGraphRoute, now: Date.now };
+  repairCollations: repairCopiedPostgresCollations, retargetGraphRoute: retargetRestoredGraphRoute, now: Date.now };
 
 /** Wall time includes startup admission, storage copy and readiness. */
 export interface CorpusPreparationTiming {
@@ -254,7 +255,7 @@ export async function restoreCatalogueBackup(path: string, runId: string,
   dependencies: Partial<typeof restoreRuntime> & { signal?: AbortSignal; resourceClass?: QaResourceClass } = {}) {
   const { signal, resourceClass, ...runtimeDependencies } = dependencies;
   const { task, run, copyVolume, projectRunning, dockerEnvironment, freshPorts,
-    retargetGraphRoute, now } = { ...restoreRuntime, ...runtimeDependencies };
+    repairCollations, retargetGraphRoute, now } = { ...restoreRuntime, ...runtimeDependencies };
   const checkSignal = () => signal?.throwIfAborted();
   const startedAt = now(),
     directory = corpusBackupSourceDirectory(resolve(path, '..'));
@@ -347,6 +348,8 @@ export async function restoreCatalogueBackup(path: string, runId: string,
     }
     const startedUpAt = now();
     checkSignal();
+    const collationRepairs = await repairCollations({
+      host: '127.0.0.1', port: Number(compose.POSTGRES_PORT), user: 'postgres', password: compose.POSTGRES_PASSWORD });
     await retargetGraphRoute(apps);
     checkSignal();
     const admissionWaitMs = admissionWaitDuration(startup);
@@ -363,6 +366,7 @@ export async function restoreCatalogueBackup(path: string, runId: string,
       throw new Error('Catalogue restore exceeded 600 seconds');
     return {
       apps,
+      collationRepairs,
       elapsedMs: now() - startedAt - admissionWaitMs,
       admissionWaitMs,
       preparation,

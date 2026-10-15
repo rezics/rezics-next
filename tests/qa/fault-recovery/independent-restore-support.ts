@@ -1707,7 +1707,7 @@ async function produceIndependentRestoreSource(withRecipe: boolean, context: Sou
     execFileSync('pg_verifybackup', [baseDirectory], { timeout: 180_000 });
     appendFileSync(join(baseDirectory, 'postgresql.auto.conf'), "\narchive_mode = off\nrestore_command = 'false'\n");
     writeFileSync(join(baseDirectory, 'recovery.signal'), '', { mode: 0o600 });
-    baseCluster = await startPreparedPostgresCluster(baseDirectory, { role: 'postgres' });
+    baseCluster = await startPreparedPostgresCluster(baseDirectory, { role: 'postgres', password: saved.POSTGRES_PASSWORD });
     const basePools: Record<string, Pool> = {};
     for (const name of ['access', 'relay']) {
       const url = administratorUrl({ ...saved, POSTGRES_PORT: String(baseCluster.port) }, name);

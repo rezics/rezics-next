@@ -312,7 +312,7 @@ export function createRetainedErasureRecoveryFixture(options: RetainedErasureRec
         "\narchive_mode = off\nrestore_command = 'false'\n"
           + (process.platform === 'linux' ? "recovery_init_sync_method = 'syncfs'\n" : ''));
       writeFileSync(join(postgresDirectory, 'recovery.signal'), '');
-      const cluster = await startPreparedPostgresCluster(postgresDirectory, { role: 'postgres' });
+      const cluster = await startPreparedPostgresCluster(postgresDirectory, { role: 'postgres', password: qa.composeEnv.POSTGRES_PASSWORD });
       clusters.push(cluster);
       candidateCluster = cluster;
       const pool = (database: string) => {

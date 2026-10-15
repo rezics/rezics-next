@@ -5,6 +5,8 @@ services:
     image: postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
     oom_score_adj: ${REZICS_POSTGRES_OOM_SCORE_ADJ:-0}
     environment:
+      # Match native QA clusters using PostgreSQL's own UTF-8 collation, independent of host glibc.
+      POSTGRES_INITDB_ARGS: --locale-provider=builtin --locale=C.UTF-8 --encoding=UTF8
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       REZICS_ACCOUNT_PASSWORD: ${REZICS_ACCOUNT_PASSWORD:?set REZICS_ACCOUNT_PASSWORD}
       REZICS_ACCESS_PASSWORD: ${REZICS_ACCESS_PASSWORD:?set REZICS_ACCESS_PASSWORD}

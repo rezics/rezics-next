@@ -232,6 +232,7 @@ test('round 2 finding 4: restore drives the real bootstrap from an empty model a
           if (name === 'configure') { owner.configure(); return undefined as T; }
           if (['copy', 'start', 'ready'].includes(name)) return undefined as T;
           if (name === 'migrate') return [] as T;
+          if (name === 'postgres-collation') return [] as T;
           if (name === 'smoke') return 6 as T;
           return work();
         };
@@ -339,6 +340,7 @@ function restoreRuntime(manifest: FixtureManifest, events: string[], artifactsRo
       events.push(name);
       if (['configure', 'copy', 'start', 'ready'].includes(name)) return undefined as T;
       if (name === 'migrate') return ['newer.sql'] as T;
+      if (name === 'postgres-collation') return [] as T;
       if (name === 'smoke') return 6 as T;
       return work();
     },
@@ -364,7 +366,7 @@ test('finding 5: restore invokes alignment between migration and readiness and p
       return alignFixtureModel(checkout, stack, apps, stored, options, async () => installation);
     };
     const evidence = await restoreFixture(manifest.id, `align-${randomUUID().slice(0, 8)}`, fixtureOwners, runtime);
-    expect(events).toEqual(['compatibility', 'configure', 'copy', 'start', 'migrate', 'align-model', 'bootstrap', 'ready', 'smoke']);
+    expect(events).toEqual(['compatibility', 'configure', 'copy', 'start', 'postgres-collation', 'migrate', 'align-model', 'bootstrap', 'ready', 'smoke']);
     expect(alignmentBudget).toBeGreaterThan(0);
     expect(alignmentBudget).toBeLessThanOrEqual(600_000);
     expect(evidence.modelAlignment).toEqual({ backupGeneration: manifest.modelGeneration,
@@ -394,7 +396,7 @@ test('finding 5: restore maps alignment errors and timeouts to typed failure evi
       expect(evidence.failureKind).toBe(timeout ? 'timeout' : 'error');
       expect(evidence.failure).toContain(timeout ? 'timed out during align-model' : 'owner alignment failed');
       expect(evidence.modelAlignment).toBeUndefined();
-      expect(events).toEqual(['compatibility', 'configure', 'copy', 'start', 'migrate', 'align-model', 'cleanup']);
+      expect(events).toEqual(['compatibility', 'configure', 'copy', 'start', 'postgres-collation', 'migrate', 'align-model', 'cleanup']);
       const saved = JSON.parse(readFileSync(join(artifactsRoot, target, 'run.json'), 'utf8')) as FixtureRestoreEvidence;
       expect(saved.failurePhase).toBe('align-model');
       expect(saved.failureKind).toBe(evidence.failureKind);

@@ -125,6 +125,7 @@ import { ownerRoutes } from '../../../services/main/src/routes/owners.ts';
 import { ratingAccount, restoreRatingAccount, type RetainedRatingAuth } from '../../../tests/qa/support/rating-account.ts';
 import { stable } from '../../../scripts/fixture/corpus.ts';
 import { copyVolume, currentEngines, fixtureProject, postgresImage, removeVolumes, run, volumeExists } from '../../../scripts/fixture/stack.ts';
+import { repairCopiedPostgresCollations } from '../../../scripts/fixture/postgres-collation.ts';
 import { isRetainedJson, migrationInventory, type RetainedFileIntegrity, type RetainedJson, type RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
 import { fixtureModel } from '../../../scripts/fixture/model.ts';
 import { isRetainedSourceInput, RetainedSourceRefusal, RetainedSources, SOURCE_PREPARATION_MS, sourceFileDigests, sourceKey, type RetainedSourceAdapter, type SourceContext, type RetainedSourceManifest, type SourceInputs } from '../../../scripts/qa/retained-source.ts';
@@ -1502,6 +1503,9 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         }
         expect(recovering).toBe(false);
       });
+      await timing.phase('retained.source-postgres-collation', () => repairCopiedPostgresCollations({
+        host: '127.0.0.1', port: retainedPort, user: 'postgres', password: qa.composeEnv.POSTGRES_PASSWORD,
+      }));
       const liveVolume = volume('source-current');
       await copyGraph(retainedSourceVolumes(retained!.context.key).current, liveVolume);
       const cutVolume = retainedSourceVolumes(retained!.context.key).cut;
@@ -1654,6 +1658,9 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
             if (recovering) await Bun.sleep(100);
           }
           expect(recovering).toBe(false);
+          await timing.phase('candidate.postgres-collation', () => repairCopiedPostgresCollations({
+            host: '127.0.0.1', port, user: 'postgres', password: qa.composeEnv.POSTGRES_PASSWORD,
+          }), ordinal);
           // Recovery connects as postgres while ordinary owner roles stay offline.
           await owners.account.query(
             'ALTER ROLE account NOLOGIN; ALTER ROLE access NOLOGIN; ALTER ROLE content NOLOGIN; ALTER ROLE relay NOLOGIN',

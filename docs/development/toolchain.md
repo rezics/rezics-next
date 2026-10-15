@@ -16,6 +16,14 @@ A few integration tests start a host PostgreSQL 18 with `initdb`; install the
 server and its contrib extensions (Fedora: `postgresql-server postgresql-contrib`)
 because Content migrations create `pg_trgm`.
 
+Compose and native QA clusters initialize with PostgreSQL's built-in `C.UTF-8`
+locale provider, so new physical fixtures share Unicode code-point ordering
+without inheriting different host and container glibc versions. Existing retained
+copies keep their original locale: restore rebuilds indexes before refreshing
+changed collation versions, and records repairs on the disposable copy. See
+[PostgreSQL locale providers](https://www.postgresql.org/docs/18/locale.html#LOCALE-PROVIDERS)
+and [collation version repair](https://www.postgresql.org/docs/18/sql-altercollation.html).
+
 The development host uses native Docker Engine 29.9 (`docker-ce`), context
 `default`, through `/var/run/docker.sock` as of 2026-10-14. It replaced Docker
 Desktop because the QEMU VM pinned up to 18 GiB of host RAM as shared memory

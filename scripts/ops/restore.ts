@@ -20,6 +20,7 @@ import {
 } from '../../services/main/src/modules/work/restore-lineage.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../../services/main/src/modules/work/activate.ts';
 import { appEnvironment, replacePrivate, savePrivate, stackDirectory } from '../dev/config.ts';
+import { repairCopiedPostgresCollations, type PostgresCollationRepair } from '../fixture/postgres-collation.ts';
 import { releaseDigest } from '../dev/release-manifest.ts';
 import { currentEngines, freshPorts, root } from '../fixture/stack.ts';
 import {
@@ -111,6 +112,7 @@ export interface RestoreEvidence {
   loginEnabled: boolean;
   servingVerified: boolean;
   phases: Record<string, number>;
+  collationRepairs?: PostgresCollationRepair[];
   elapsedMs: number;
   admissionWaitMs: number;
   budgetMs: number;
@@ -552,6 +554,8 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
         context!.compose(['up', '-d', '--wait', 'postgres', 'fuseki', 'rustfs']);
       }),
     );
+    evidence.collationRepairs = await budget.phase('postgres-collation', () =>
+      repairCopiedPostgresCollations({ connectionString: administratorUrl(context!.saved, 'postgres') }));
     pools = Object.fromEntries(
       ['account', 'access', 'content', 'relay'].map((database) => [
         database,
