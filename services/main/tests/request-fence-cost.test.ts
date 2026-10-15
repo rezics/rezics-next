@@ -48,9 +48,13 @@ test('baseline Work creation and its Agent fence have a fixed statement budget',
     action: 'work.create', scope: 'work:create:root', idempotencyKey: 'create', requestDigest: 'a'.repeat(64),
   });
   expect(admitted.dispatchEligible).toBe(true);
-  const registrationStatements = f.statements.length;
+  // READ_BEGIN sends BEGIN and SET in one round trip: count SQL statements,
+  // rather than silently treating that batch as a single statement.
+  const statements = () => f.statements.reduce((count, sql) => count + sql.split(';').filter(part => part.trim()).length, 0);
+  const registrationStatements = statements();
   expect(await new ProfilesAccess(f.pool).agentFence(actor)).toBe('1:1');
-  expect([registrationStatements, f.statements.length]).toEqual([21, 26]);
+  expect([registrationStatements, statements()]).toEqual([21, 27]);
+  expect(f.statements).toHaveLength(26);
 });
 
 test('baseline authority captures and checks all exact sources in one statement each', async () => {
