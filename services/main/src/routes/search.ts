@@ -41,6 +41,7 @@ import { normalizedSearchText, fenceSearchFields } from '../modules/search/field
 import { readPublicTypeahead } from '../modules/search/typeahead.ts';
 import { withPublicRealmSearch } from '../modules/search/realm-disclosure.ts';
 import { WorkReadLimit } from '../modules/work/read-session.ts';
+import { workReadError } from './work-reads.ts';
 import { readName, readAvatar } from '../modules/work/read-contract.ts';
 import { discoveryCredit } from '../modules/discovery/contract.ts';
 import { problemResult, phraseMatch, publicPhrasePageRequest, publicPhrasePageResult, publicQueryResult,
@@ -261,7 +262,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
         logSearchFailure('catalogue', error, undefined);
-        return commandError(error);
+        return workReadError(error);
       }
     })
     .get('/v1/search/typeahead', {

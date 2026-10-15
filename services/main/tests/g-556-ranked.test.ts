@@ -4,6 +4,7 @@ import { searchGraphSnapshot } from '../src/modules/search/snapshot-state.ts';
 import { InvalidSearchContinuation, SearchContinuationRestart } from '../src/modules/work/search-continuation.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { PublicTextPosition } from '../src/modules/work/search-readiness.ts';
+import { WorkReadMoved } from '../src/modules/work/read-session.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const b = (value: string) => ({ type: 'literal', value });
@@ -44,6 +45,16 @@ function fixture(count = 2005) {
   return { env, read, calls };
 }
 const request = { phrase: 'common catalogue phrase', language: null, pageSize: 20 } as const;
+
+test('cancelled Realm hydration discloses no scope, count or continuation on first and continued pages', async () => {
+  const { env, read } = fixture(100);
+  const selected = { ...request, realm: id(9001) };
+  const first = await read(() => readRankedCatalogue(env, selected));
+  for (const continuation of [undefined, first.next!]) {
+    await expect(read(() => readRankedCatalogue(env, { ...selected, continuation },
+      undefined, undefined, async () => null))).rejects.toBeInstanceOf(WorkReadMoved);
+  }
+});
 
 test('G-556: catalogue >20,000 and phrase >2,000 traverse 200 ranked Works without gaps or duplicates', async () => {
   const { env, read, calls } = fixture();

@@ -8,7 +8,7 @@ import { PublicQueryUnavailable } from '../work/search-budget.ts';
 import { InvalidPublicQuery, PublicRealmUnavailable } from '../work/search-public.ts';
 import { SELECTION_POLICY } from '../space/create.ts';
 import { InvalidSearchContinuation, SearchContinuationRestart, SEARCH_PAGE_TTL_MS } from '../work/search-continuation.ts';
-import { decodeReadCursor, encodeReadCursor, WorkReadExpired, WorkReadInvalid } from '../work/read-session.ts';
+import { decodeReadCursor, encodeReadCursor, WorkReadExpired, WorkReadInvalid, WorkReadMoved } from '../work/read-session.ts';
 import { FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge, type SparqlResult } from '../../infrastructure/fuseki.ts';
 import { observeSearchPhase } from './operation-evidence.ts';
 
@@ -207,6 +207,9 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
   if (!hydrate || !results.length) return page;
   const hydrated = await hydrate(page);
   if (hydrated) return hydrated;
+  // A cancelled Realm hydration has no completed occurrence proof. Its scope,
+  // population and continuation are disclosures too; restart without them.
+  if (input.realm) throw new WorkReadMoved('Realm search hydration did not complete');
   // None of this page was delivered. Keep the preceding native anchor and
   // visible count, including a resumable first page and a deferred last page.
   return { ...page, results: [], count: { value: prior?.visible ?? 0, precision: 'lower-bound' },
