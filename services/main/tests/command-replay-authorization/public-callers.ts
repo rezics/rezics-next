@@ -1,7 +1,24 @@
 import { join, relative } from 'node:path';
 import ts from 'typescript-6';
+import type { NonReplayEntry, AnyReplayEntry } from './authority-classes.ts';
 
-export function discoverPublicSavedResults(root: string) {
+export interface ReplayArea {
+  moduleOwners: string[];
+  replayEntries: AnyReplayEntry[];
+  coveredOperations: string[];
+  uncoveredOperations: string[];
+  nonReplayEntries?: NonReplayEntry[];
+}
+
+export interface PublicCommand {
+  operation: string;
+  caller: string;
+  paths: string[][];
+  reachableOwners: string[];
+  idempotencyKey: boolean;
+}
+
+export function discoverPublicCommands(root: string) {
   const files = [...new Bun.Glob('services/main/src/**/*.ts').scanSync({ cwd: root, absolute: true })];
   const program = ts.createProgram(files, { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.Preserve,
     moduleResolution: ts.ModuleResolutionKind.Bundler, allowImportingTsExtensions: true, skipLibCheck: true });
@@ -59,10 +76,10 @@ export function discoverPublicSavedResults(root: string) {
     savedCache.set(node, saved);
     return saved;
   };
-  const inventory: { operation: string; caller: string; paths: string[][] }[] = [];
+  const inventory: PublicCommand[] = [];
   for (const source of program.getSourceFiles().filter(file => file.fileName.startsWith(join(root, 'services/main/src/routes/')))) {
     // Contract declarations supply exposure independently of route traversal.
-    const contracts = new Map<string, string>();
+    const contracts = new Map<string, { exposure: string; idempotencyKey: boolean }>();
     const normalize = (path: string) => path.replace(/:[^/]+|\{[^}]+\}/g, '{}');
     const inspect = (node: ts.Node) => {
       if (ts.isPropertyAssignment(node) && ts.isStringLiteral(node.name) && node.name.text.startsWith('/v1/')
@@ -72,7 +89,12 @@ export function discoverPublicSavedResults(root: string) {
           const exposure = method.initializer.properties.find(prop => ts.isPropertyAssignment(prop)
             && prop.name.getText() === 'exposure');
           if (exposure && ts.isPropertyAssignment(exposure) && ts.isStringLiteral(exposure.initializer)) {
-            contracts.set(`${method.name.getText().toUpperCase()} ${normalize(node.name.text)}`, exposure.initializer.text);
+            const key = method.initializer.properties.find(prop => ts.isPropertyAssignment(prop)
+              && prop.name.getText() === 'idempotencyKey');
+            contracts.set(`${method.name.getText().toUpperCase()} ${normalize(node.name.text)}`, {
+              exposure: exposure.initializer.text,
+              idempotencyKey: !!key && ts.isPropertyAssignment(key) && key.initializer.kind !== ts.SyntaxKind.FalseKeyword,
+            });
           }
         }
       }
@@ -84,21 +106,35 @@ export function discoverPublicSavedResults(root: string) {
         && ['post', 'put', 'patch', 'delete'].includes(node.expression.name.text)
         && node.arguments[0] && ts.isStringLiteral(node.arguments[0])) {
         const operation = `${node.expression.name.text.toUpperCase()} ${normalize(node.arguments[0].text)}`;
-        if (contracts.get(operation) === 'public') {
+        const contract = contracts.get(operation);
+        if (contract?.exposure === 'public') {
           const handler = node.arguments.find(arg => functionLike(arg));
-          if (handler && functionLike(handler)) {
+          const factory = node.arguments.at(-1);
+          const callbacks = factory && ts.isCallExpression(factory)
+            ? factory.arguments.flatMap(arg => functionLike(arg) ? [arg] : []) : [];
+          if (handler && functionLike(handler) || callbacks.length) {
             const paths: string[][] = [];
+            const reachableOwners: string[] = [];
             const visited = new Set<ts.Node>();
             const walk = (current: ts.FunctionLikeDeclaration, path: string[]) => {
               if (visited.has(current)) return;
               visited.add(current);
               const next = [...path, label(current)];
+              reachableOwners.push(label(current));
               if (savedResult(current)) paths.push(next);
               for (const target of edges(current)) walk(target, next);
             };
-            walk(handler, []);
-            if (paths.length) inventory.push({ operation, caller: relative(root, source.fileName), paths });
-          }
+            if (handler && functionLike(handler)) walk(handler, []);
+            else {
+              // Factory callbacks establish owner reachability; the tracer cannot
+              // prove that the returned handler invokes each saved-result branch.
+              for (const callback of callbacks) walk(callback, []);
+              paths.length = 0;
+            }
+            inventory.push({ operation, caller: relative(root, source.fileName), paths, reachableOwners,
+              idempotencyKey: contract.idempotencyKey });
+          } else inventory.push({ operation, caller: relative(root, source.fileName), paths: [], reachableOwners: [],
+            idempotencyKey: contract.idempotencyKey });
         }
       }
       ts.forEachChild(node, routes);
@@ -106,4 +142,40 @@ export function discoverPublicSavedResults(root: string) {
     routes(source);
   }
   return inventory;
+}
+
+export const discoverPublicSavedResults = (root: string) => discoverPublicCommands(root).filter(command => command.paths.length);
+
+export function commandCoverage(commands: PublicCommand[], areas: ReplayArea[], uncoveredLimit: number) {
+  const covered = areas.flatMap(area => area.coveredOperations);
+  const uncovered = areas.flatMap(area => area.uncoveredOperations);
+  const replay = areas.flatMap(area => area.replayEntries);
+  const nonReplayEntries = areas.flatMap(area => area.nonReplayEntries ?? []);
+  const nonReplay = nonReplayEntries.map(entry => entry.operation);
+  const classified = [...covered, ...nonReplay, ...uncovered];
+  const require = (condition: boolean, message: string) => { if (!condition) throw new Error(message); };
+  require(new Set(classified).size === classified.length, 'A command must have exactly one coverage classification');
+  require(uncovered.length <= uncoveredLimit, `Uncovered command count ${uncovered.length} exceeds baseline ${uncoveredLimit}`);
+  // Partial witnesses remain uncovered until every applicable owner path executes.
+  for (const entry of replay) require(covered.includes(entry.operation) || uncovered.includes(entry.operation), `Replay entry outside covered operations: ${entry.operation}`);
+  for (const operation of covered) require(replay.some(entry => entry.operation === operation), `Covered command has no replay entry: ${operation}`);
+  // Executed entries also cover owners whose receipt helper the static tracer cannot follow.
+  const inventory = commands.filter(command => command.paths.length || covered.includes(command.operation) || nonReplay.includes(command.operation));
+  for (const command of inventory) {
+    require(classified.includes(command.operation), `Unclassified command: ${command.operation}`);
+    if (covered.includes(command.operation)) {
+      const owners = replay.filter(entry => entry.operation === command.operation).flatMap(entry => entry.owners);
+      require(command.paths.every(path => path.some(owner => owners.includes(owner))), `Missing replay owner: ${command.operation}`);
+    }
+  }
+  // Executed replay witnesses predate discovery and may use opaque route adapters.
+  for (const operation of [...uncovered, ...nonReplay]) require(inventory.some(command => command.operation === operation), `Undiscovered command: ${operation}`);
+  for (const entry of nonReplayEntries) {
+    const command = commands.find(command => command.operation === entry.operation)!;
+    require(entry.reason.trim().length > 0 && entry.subcases.length > 0, `Non-replay entry needs a reason and executable cases: ${entry.operation}`);
+    require(!command.idempotencyKey, `Non-replay contract declares an idempotency key: ${entry.operation}`);
+    require(command.paths.length === 0, `Non-replay command has a saved-result path: ${entry.operation}`);
+    require(entry.owners.length > 0 && entry.owners.every(owner => command.reachableOwners.includes(owner)), `Missing non-replay owner: ${entry.operation}`);
+  }
+  return { covered, nonReplay, uncovered, inventory };
 }

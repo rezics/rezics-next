@@ -90,7 +90,7 @@ const membershipConsentEntries: ReplayEntry[] = ['domain-grant', 'controller'].m
   scope: 'work:create:root', action: 'access.membership.consent', family: `Membership consent ${authorityClass}`,
   owners: ['modules/access/membership-consents.ts#AccessMembershipConsents.issue'], subcases: ['Realm recipient'],
   ...(authorityClass === 'controller' ? { losses: ['revoked'] as Loss[] } : {}),
-  denied: MembershipDenied, conflict: MembershipConflict, registration: 'registered-failing',
+  denied: MembershipDenied, conflict: MembershipConflict, registration: 'turned',
   requestBuilder: async () => {
     const fixture = await realmFixture(), recipient = await stack.member(randomUUID());
     let grant: string, controller: string | undefined;
@@ -236,7 +236,7 @@ const realmMemberEntries: ReplayEntry[] = (['domain-grant', 'controller'] as con
 const realmSettingsEntries: ReplayEntry[] = [
   { authorityClass: 'domain-grant', lossAction: 'realm.settings.manage', registration: 'turned' },
   { authorityClass: 'controller', lossAction: 'realm.settings.manage', registration: 'turned' },
-  { authorityClass: 'domain-grant', lossAction: 'governance.rule.publish', registration: 'registered-failing' },
+  { authorityClass: 'domain-grant', lossAction: 'governance.rule.publish', registration: 'turned' },
 ].map(spec => ({
   operation: 'PUT /v1/realms/{}/settings', authorityClass: spec.authorityClass as ReplayEntry['authorityClass'],
   scope: 'governance:realm:<Realm>', action: spec.lossAction,

@@ -104,7 +104,7 @@ const headerState = (description: string): MetadataHeaderState => ({ kind: 'head
 function admittedEntry(operation: string, family: string, owner: string, scope: string, action: string,
   requestBuilder: ReplayEntry['requestBuilder'], subcases = ['represented-agent']): ReplayEntry {
   return { operation, family, owners: [owner], scope, action, authorityClass: 'domain-grant',
-    denied: AdmissionDenied, conflict: AdmissionConflict, registration: 'registered-failing', subcases, requestBuilder };
+    denied: AdmissionDenied, conflict: AdmissionConflict, registration: 'turned', subcases, requestBuilder };
 }
 
 async function workEdit(kind: string): Promise<Scenario> {
@@ -430,6 +430,7 @@ async function editorialCommand(kind: string, authorityClass: ReplayEntry['autho
     else result = await owner.decide(currentCall, id!, { revision: 1, outcome: outcome as 'applied' | 'rejected', approve: outcome === 'applied',
       message: changed ? 'Other binding' : 'Checked retained evidence',
     }, idempotencyKey);
+    if (kind === 'decide') expect(result.outcome).toBe(outcome);
     savedProposal ||= result.proposal;
     return result;
   }, lose: loss => authorityClass === 'controller'
@@ -458,7 +459,7 @@ function editorialEntry(operation: string, kind: string, authorityClass: ReplayE
     subcases: kind === 'decide' ? ['rejected', 'applied'] : ['component-correction'],
     losses: authorityClass === 'controller' ? ['revoked'] : ['expired', 'revoked'],
     denied: kind === 'review' || kind === 'decide' ? EditorialBlocked : AdmissionDenied,
-    conflict: AdmissionConflict, registration: 'registered-failing',
+    conflict: AdmissionConflict, registration: 'turned',
     requestBuilder: subcase => editorialCommand(kind, authorityClass, subcase) };
 }
 
@@ -864,7 +865,7 @@ export const entries: ReplayEntry[] = [
   { operation: 'POST /v1/work-maintainer-changes', family: 'Work maintainer changes',
     authorityClass: 'controller', scope: 'Work maintainer Agent', action: 'agent.control',
     owners: ['modules/work/maintainers.ts#WorkMaintainers.change'], subcases: ['add', 'transfer', 'remove'],
-    losses: ['revoked'], denied: AdmissionDenied, conflict: AdmissionConflict, registration: 'registered-failing',
+    losses: ['revoked'], denied: AdmissionDenied, conflict: AdmissionConflict, registration: 'turned',
     requestBuilder: subcase => maintainerCommand(subcase) },
   admittedEntry('POST /v1/work-publications', 'Structured Work publication',
     'modules/work/structured-publication-admitted.ts#changeAdmittedWorkStructurePublication',

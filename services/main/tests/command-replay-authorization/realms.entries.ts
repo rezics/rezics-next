@@ -567,58 +567,9 @@ const controllerEntries: ReplayEntry[] = [
 ];
 // Each registration names an observed disclosure whose ordinary controls passed.
 // Keep registrations per witness so a repaired path cannot hide a sibling leak.
-const registeredDisclosures = new Set([
-  'Zone publish / represented-agent / expired',
-  'Zone publish / represented-agent / revoked',
-  'Realm submission submit by author / content-publication / revoked',
-  'Realm submission submit / correction / revoked',
-  'Realm submission decide / accept / expired',
-  'Realm submission decide / accept / revoked',
-  'Realm submission decide / accept-content-publication / expired',
-  'Realm submission decide / accept-content-publication / revoked',
-  'Realm reply review / reviewed-revision / expired',
-  'Realm reply review / reviewed-revision / revoked',
-  'Realm reply place / reviewed-revision / expired',
-  'Realm reply place / reviewed-revision / revoked',
-  'Realm profile / represented-agent / expired',
-  'Realm profile / represented-agent / revoked',
-  'Realm public-choice / represented-agent / expired',
-  'Realm public-choice / represented-agent / revoked',
-  'Realm reply create / person-controller / revoked',
-  'Realm reply place by member / member-controller / revoked',
-  'Realm submission decide / accept-work / expired',
-  'Realm submission decide / accept-work / revoked',
-  'Realm submission decide / reject / expired',
-  'Realm submission decide / reject / revoked',
-  'Realm submission decide / request-changes / expired',
-  'Realm submission decide / request-changes / revoked',
-  'Realm submission submit by author / work / revoked',
-  'Realm submission submit / contribution / expired',
-  'Realm submission submit / contribution / revoked',
-  'Realm submission submit / correction / expired',
-  'Realm submission withdraw by author / author-controller / revoked',
-  'Realm submission withdraw / contribution / expired',
-  'Realm submission withdraw / contribution / revoked',
-  'Zone configure by creator / creator-controller / revoked',
-  'Zone configure / represented-agent / expired',
-  'Zone configure / represented-agent / revoked',
-  'Zone publish by creator / creator-controller / revoked',
-  'Zone recover by creator / creator-controller / revoked',
-  'Zone recover / represented-agent / expired',
-  'Zone recover / represented-agent / revoked',
-  'Zone retire by creator / creator-controller / revoked',
-  'Zone retire / represented-agent / expired',
-  'Zone retire / represented-agent / revoked',
-  'Zone withdraw by steward / steward-controller / revoked',
-  'Zone withdraw / represented-agent / expired',
-  'Zone withdraw / represented-agent / revoked',
-  'Zone withdraw / steward / expired',
-  'Zone withdraw / steward / revoked',
-]);
 export const entries: ReplayEntry[] = [...joinEntries, ...profileEntries, ...zoneEntries, ...submissionEntries, ...replyEntries, ...controllerEntries]
   .flatMap(entry => entry.subcases.flatMap(subcase => (entry.losses ?? ['expired', 'revoked'] as const).map(loss => ({
-    ...entry, subcases: [subcase], losses: [loss], registration: registeredDisclosures.has(`${entry.family} / ${subcase} / ${loss}`)
-      ? 'registered-failing' as const : 'turned' as const,
+    ...entry, subcases: [subcase], losses: [loss], registration: 'turned' as const,
   }))));
 export const area = 'realms';
 export const moduleOwners = ['realm-admin', 'realm-profile', 'realm-reply', 'realm-submission', 'zone'];

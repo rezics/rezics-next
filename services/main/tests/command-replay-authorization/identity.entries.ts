@@ -264,7 +264,7 @@ export const entries: ReplayEntry[] = [
   { operation: 'POST /v1/works/{}/agent-credits', authorityClass: 'domain-grant',
     scope: 'work:edit:{work}', action: 'work.edit', family: 'Native Agent credit creation',
     owners: ['modules/profiles/credits.ts#createNativeCredit'], subcases: ['represented-agent'],
-    denied: AdmissionDenied, conflict: AdmissionConflict, registration: 'registered-failing',
+    denied: AdmissionDenied, conflict: AdmissionConflict, registration: 'turned',
     requestBuilder: async () => {
       const member = await stack.member(randomUUID()), credited = await stack.member(randomUUID());
       await member.grant('work:create:root', 'work.create');

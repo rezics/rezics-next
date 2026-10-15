@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, expect } from 'bun:test';
+import type { Loss } from './authority-classes.ts';
+import { afterAll, beforeAll, beforeEach, expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -11,6 +12,7 @@ import { admitIntegrationWorkScope, qaStartupTestTimeout, runQaAdmissionChildAsy
 import { exclusiveWorkScopeAssembler, qaStackEnvironment } from '../../../../scripts/qa/stack-environment.ts';
 import { startMediaStack, type MediaStack } from '../../../../tests/qa/integration/media-support.ts';
 import { expireFixtureAuthority, grantFixtureAuthority, registerFixtureIdentity, reduceFixtureGrant } from '../../src/modules/access/fixture-authority.ts';
+import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../src/modules/outbox/relay.ts';
 
 export const root = resolve(import.meta.dir, '../../../..');
 export const evidenceDirectory = join(root, '.temp/goal/replay-authorization');
@@ -21,28 +23,7 @@ export let legacyController: Member;
 let selfHostedRun: string | undefined;
 const savedEnvironment = { ...process.env };
 export type Member = Awaited<ReturnType<MediaStack['member']>>;
-export type Loss = 'expired' | 'revoked';
-export interface Scenario {
-  command: (fresh?: boolean, changed?: boolean) => Promise<unknown>;
-  lose: (loss: Loss) => Promise<void>;
-  snapshot: () => Promise<unknown>;
-  advance?: () => Promise<void>;
-  restore?: () => Promise<void>;
-}
-export interface ReplayEntry {
-  operation: string;
-  authorityClass: 'controller' | 'domain-grant';
-  scope: string;
-  action: string;
-  family: string;
-  owners: string[];
-  subcases: string[];
-  denied: new (...args: never[]) => Error;
-  conflict: new (...args: never[]) => Error;
-  registration: 'turned' | 'registered-failing';
-  requestBuilder: (subcase: string, loss: Loss) => Promise<Scenario>;
-  losses?: Loss[];
-}
+export type { Loss, Scenario, ReplayEntry } from './authority-classes.ts';
 
 export function initializeReplayFixtures() {
   beforeAll(async () => {
@@ -65,6 +46,7 @@ export function initializeReplayFixtures() {
       expect(startup.activeElapsedMs + bootstrap.elapsedMs).toBeLessThan(600_000);
     }
     stack = await startMediaStack('command-replay-authorization', { profileCredits: true });
+    await initializeRelayCheckpoint(stack.composition.relayPool!, stack.composition.relayConsumer!, stack.env.lineage.dataEpoch);
     legacyCluster = await startPostgresCluster();
     legacyPool = new Pool({ ...legacyCluster.connection, max: 4 });
     legacyController = await stack.member('legacy-controller');
@@ -90,6 +72,15 @@ export function initializeReplayFixtures() {
       await legacyPool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
     }
   }, qaStartupTestTimeout(600_000));
+  beforeEach(async () => {
+    // composeMain does not start process workers. Consume the real outbox
+    // between scenarios so a long sequential run respects the broker budget.
+    for (let batch = 0; batch < 128; batch++) {
+      if (!await relayMainOutboxOnce(stack.fuseki, stack.composition.relayPool!, stack.composition.relayConsumer!,
+        { ownerOutbox: stack.env.receiptCustody })) return;
+    }
+    throw new Error('Replay fixture relay exceeded 128 batches between cases');
+  }, 60_000);
   afterAll(async () => {
     await legacyPool?.end(); legacyCluster?.remove(); await stack?.stop();
     if (selfHostedRun) {

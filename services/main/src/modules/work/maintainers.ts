@@ -95,6 +95,7 @@ export class WorkMaintainers {
       const person = (await client.query<{ id: string }>(`SELECT id FROM access.principal
         WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`, [fresh.issuer, fresh.subject])).rows[0];
       if (!person) throw new AdmissionDenied('principal is inactive');
+      if (!await maintainerControllerProof(client, person.id, input.actingSubject)) throw new AdmissionDenied('Agent is not controlled by this member');
       const prior = (await client.query<{ id: string; request_digest: string; generation: string; maintainers: string[]; owner: string | null }>(`
         SELECT id, request_digest, generation::text, maintainers, owner FROM access.work_maintainer_receipt
         WHERE principal_id = $1 AND idempotency_key = $2`, [person.id, key])).rows[0];
@@ -109,7 +110,6 @@ export class WorkMaintainers {
       }
       await lockControllerContinuity(client, [input.target]);
       await assertControllerContinuity(client, [input.target]);
-      if (!await maintainerControllerProof(client, person.id, input.actingSubject)) throw new AdmissionDenied('Agent is not controlled by this member');
       const current = (await client.query<SetRow>(`SELECT main_version, generation::text
         FROM access.work_maintainer_set WHERE work = $1 FOR UPDATE`, [input.work])).rows[0]!;
       const roster = await this.members(client, input.work);

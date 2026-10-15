@@ -290,6 +290,9 @@ export class AccessRealmManagement {
     const intent = digest({ realm, action, input });
     return this.transaction(realm, async (client, generation) => {
       const actor = await this.authorize(client, principal, realm, input.actingSubject, action);
+      if (action === 'realm.settings.manage') {
+        await this.authorize(client, principal, realm, input.actingSubject, 'governance.rule.publish');
+      }
       const prior = (await client.query<{ request_digest: string; result: T }>(`SELECT request_digest, result
         FROM access.realm_admin_receipt WHERE principal_id = $1 AND idempotency_key = $2`, [actor.id, key])).rows[0];
       if (prior) {
@@ -341,7 +344,6 @@ export class AccessRealmManagement {
     await this.settlePolicy(realm, env);
     const result = await this.write(principal, realm, input, key, 'realm.settings.manage',
       async (client, principalId, receiptId, generation) => {
-        await this.authorize(client, principal, realm, input.actingSubject, 'governance.rule.publish');
         if ((await client.query('SELECT 1 FROM access.realm_policy_delivery WHERE realm = $1 AND NOT delivered', [realm])).rowCount) {
           throw new RealmAdminUnavailable('Realm policy publication is pending; retry');
         }

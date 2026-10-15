@@ -258,9 +258,9 @@ export class EditorialReviewStore {
     return this.locked(id,async client => {
       await this.begin(client);
       const principal = await editorialPrincipal(client,call.principal);
+      await editorialController(client,principal,call.actingSubject);
       const replay = await this.replay(client,principal,key,requestDigest);
       if (replay) { await this.commitEvents(client); return replay; }
-      await editorialController(client,principal,call.actingSubject);
       if (target.revision !== input.target.revision) throw new EditorialBlocked({ code: 'stale_base',
         expectedHeads: [{ component: target.resource,head: input.target.revision }],actualHeads: [{ component: target.resource,head: target.revision }] });
       const validated = await adapter.validate(target,input.candidate,input.baseHeads);
@@ -288,9 +288,9 @@ export class EditorialReviewStore {
     return this.locked(id,async client => {
       await this.begin(client); const principal = await editorialPrincipal(client,call.principal), row = await this.proposal(client,id);
       await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge');
+      await editorialController(client,principal,call.actingSubject);
       const replay = await this.replay(client,principal,key,requestDigest);
       if (replay) { await this.commitEvents(client); return replay; }
-      await editorialController(client,principal,call.actingSubject);
       if (call.actingSubject !== row.proposer_agent) throw new AdmissionDenied('Only the proposer revises this proposal');
       const proposal = rowToProposal(row), old = await this.revision(client,id,input.revision);
       assertOpenRevision(proposal,old); this.pending(await this.application(client,id,row.latest));
@@ -315,6 +315,7 @@ export class EditorialReviewStore {
     return this.locked(id,async client => {
       await this.begin(client); const principal = await editorialPrincipal(client,call.principal), row = await this.proposal(client,id);
       await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge');
+      await requireReview(client,rowToProposal(row),principal,call.actingSubject,call.work.environment.fuseki);
       const replay = await this.replay(client,principal,key,requestDigest);
       if (replay) { await this.commitEvents(client); return replay; }
       const proposal = rowToProposal(row);
@@ -426,6 +427,7 @@ export class EditorialReviewStore {
       await this.begin(client); const principal = await editorialPrincipal(client,call.principal);
       let row = await this.proposal(client,id);
       await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge');
+      await requireReview(client,rowToProposal(row),principal,call.actingSubject,call.work.environment.fuseki);
       const replay = await this.replay(client,principal,key,requestDigest);
       if (replay) { await this.commitEvents(client); return replay; }
       const adapter = await this.adapter(row.kind,call);
@@ -477,7 +479,9 @@ export class EditorialReviewStore {
         await requireReview(client,proposal,principal,call.actingSubject,call.work.environment.fuseki);
         const fresh = await reviewBasis(client,proposal,adapter.requiredApprovals,call.work.environment.fuseki,prospective);
         const viewer = await viewerFor(client,proposal,principal,call.actingSubject,call.work.environment.fuseki);
-        if (adapter.commands) await client.query('COMMIT');
+        // The owner's register/claim/outcome calls commit independently. Even
+        // a single command must not inherit this uncommitted Access checkout.
+        await client.query('COMMIT');
         deliveryAttempted = true;
         const deliver = () => applyReviewedRevision(adapter,proposal,this.applyInput(proposal,revision,application!),fresh.reviews,fresh.authority,viewer,row.reverts);
         decision = adapter.commands ? await deliver() : await fusekiReadBudget.run({ signal: AbortSignal.timeout(EDITORIAL_STORE_COST.applyDeadlineMs),
@@ -512,7 +516,7 @@ export class EditorialReviewStore {
         }
         return { proposal: id,revision: revision.n,outcome: 'apply_pending',replayed: false };
       }
-      if (adapter.commands) await this.begin(client);
+      await this.begin(client);
       const result = await this.finish(client,row,revision,application,'applied',decision.receipt!);
       await this.commitEvents(client); return result;
     },{ call,key });
@@ -522,9 +526,9 @@ export class EditorialReviewStore {
     return this.locked(id,async client => {
       await this.begin(client); const principal = await editorialPrincipal(client,call.principal), row = await this.proposal(client,id);
       await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge');
+      await editorialController(client,principal,call.actingSubject);
       const replay = await this.replay(client,principal,key,requestDigest);
       if (replay) { await this.commitEvents(client); return replay; }
-      await editorialController(client,principal,call.actingSubject);
       if (call.actingSubject !== row.proposer_agent) throw new AdmissionDenied('Only the proposer withdraws this proposal');
       assertOpenRevision(rowToProposal(row),await this.revision(client,id,revision)); this.pending(await this.application(client,id,row.latest));
       await client.query(`INSERT INTO access.editorial_decision (proposal,revision,principal,actor,outcome)

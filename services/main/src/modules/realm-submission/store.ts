@@ -5,7 +5,7 @@ import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { requireRealmSubmissionPolicy } from '../access/realm-management-settings.ts';
 import type { Pool, PoolClient } from 'pg';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
-import { AdmissionConflict, AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
+import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type RegisteredAdmission, type VerifiedPrincipal } from '../access/admission.ts';
 import { hash, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
@@ -55,25 +55,13 @@ export class RealmSubmissionStore {
 
   private async admission(principal: VerifiedPrincipal, actingSubject: string, action: string,
     scope: string, key: string, digest: string, contribution?: string): Promise<RegisteredAdmission> {
-    // A durable operation can settle after the original permission is revoked.
-    // This lookup permits only its original principal, exact actor and intent.
-    const saved = (await this.pool.query<{ admission: RegisteredAdmission }>(`SELECT jsonb_build_object(
-      'id', a.id, 'principalId', a.principal_id, 'actingSubject', a.acting_subject,
-      'scope', a.scope_id, 'action', a.action, 'idempotencyKey', a.idempotency_key,
-      'requestDigest', a.request_digest, 'authorityEpoch', a.authority_epoch::text,
-      'expiresAt', a.expires_at, 'state', a.state, 'dispatchEligible', false, 'replayed', true) AS admission
-      FROM access.admission a JOIN access.principal p ON p.id = a.principal_id AND p.active
-      JOIN access.realm_submission_operation o ON o.admission_id = a.id
-      WHERE p.account_issuer = $1 AND p.account_subject = $2 AND a.action = $3 AND a.idempotency_key = $4`,
-    [principal.issuer, principal.subject, action, key])).rows[0]?.admission;
-    if (saved) {
-      if (saved.requestDigest !== digest || saved.actingSubject !== actingSubject || saved.scope !== scope) {
-        throw new AdmissionConflict('Submission key binds another intent');
-      }
-      return saved;
-    }
+    // Registration rechecks current authority even when an operation already
+    // has its result; retained effects are not permission to disclose it.
     const registered = await this.access.register({ principal, actingSubject, action, scope,
       idempotencyKey: key, requestDigest: digest, baselineContribution: contribution });
+    const saved = (await this.pool.query('SELECT 1 FROM access.realm_submission_operation WHERE admission_id = $1',
+      [registered.id])).rowCount;
+    if (saved) return registered;
     if (registered.state === 'sealed' || !registered.dispatchEligible) {
       throw new SubmissionStale('Submission admission is no longer dispatchable');
     }

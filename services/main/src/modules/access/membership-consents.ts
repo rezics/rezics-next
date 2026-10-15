@@ -78,6 +78,30 @@ export class AccessMembershipConsents {
       if (!transaction) await this.begin(client);
       const principal = await this.principal(client, input.principal);
       await lockAccessKey(client, `membership-consent:${principal.id}:${input.idempotencyKey}`);
+      const mandate = await client.query<{ member_generation: string;
+        representation_id: string; representation_generation: string;
+        grant_id: string; grant_generation: string; expires_at: Date }>(`
+        SELECT s.generation AS member_generation, r.id AS representation_id,
+          r.generation AS representation_generation, g.id AS grant_id,
+          g.generation AS grant_generation,
+          LEAST(clock_timestamp() + interval '5 minutes', r.valid_until, g.valid_until) AS expires_at
+        FROM access.authority_subject s
+        JOIN LATERAL (SELECT id, generation, valid_until
+          FROM access.representation
+          WHERE subject_id = s.id AND principal_id = $1
+            AND action IN ('access.membership.consent', 'agent.control')
+            AND active AND valid_until > clock_timestamp()
+          LIMIT 1 FOR SHARE) r ON true
+        JOIN LATERAL (SELECT id, generation, valid_until
+          FROM access.permission_grant
+          WHERE recipient_subject = s.id AND scope_id = $2
+            AND action = 'access.membership.consent' AND membership_id IS NULL
+            AND active AND valid_until > clock_timestamp()
+          LIMIT 1 FOR SHARE) g ON true
+        WHERE s.id = $3 AND s.kind = 'agent' AND s.active
+        FOR SHARE OF s`,
+      [principal.id, SCOPE, input.memberSubject]);
+      if (!mandate.rows[0]) throw new MembershipDenied('recipient mandate missing');
       const prior = await client.query<{ request_digest: string; consent_id: string }>(`
         SELECT request_digest, consent_id FROM access.membership_consent_receipt
         WHERE principal_id = $1 AND idempotency_key = $2`,
@@ -116,30 +140,6 @@ export class AccessMembershipConsents {
           AND (expires_at IS NULL OR expires_at > clock_timestamp()) FOR SHARE`,
       [input.kind, input.ownerSubject, input.memberSubject]);
       if (ban.rows[0]) throw new MembershipDenied('member is banned');
-      const mandate = await client.query<{ member_generation: string;
-        representation_id: string; representation_generation: string;
-        grant_id: string; grant_generation: string; expires_at: Date }>(`
-        SELECT s.generation AS member_generation, r.id AS representation_id,
-          r.generation AS representation_generation, g.id AS grant_id,
-          g.generation AS grant_generation,
-          LEAST(clock_timestamp() + interval '5 minutes', r.valid_until, g.valid_until) AS expires_at
-        FROM access.authority_subject s
-        JOIN LATERAL (SELECT id, generation, valid_until
-          FROM access.representation
-          WHERE subject_id = s.id AND principal_id = $1
-            AND action IN ('access.membership.consent', 'agent.control')
-            AND active AND valid_until > clock_timestamp()
-          LIMIT 1 FOR SHARE) r ON true
-        JOIN LATERAL (SELECT id, generation, valid_until
-          FROM access.permission_grant
-          WHERE recipient_subject = s.id AND scope_id = $2
-            AND action = 'access.membership.consent' AND membership_id IS NULL
-            AND active AND valid_until > clock_timestamp()
-          LIMIT 1 FOR SHARE) g ON true
-        WHERE s.id = $3 AND s.kind = 'agent' AND s.active
-        FOR SHARE OF s`,
-      [principal.id, SCOPE, input.memberSubject]);
-      if (!mandate.rows[0]) throw new MembershipDenied('recipient mandate missing');
       const consentReference = randomUUID();
       const nextGeneration = (BigInt(input.expectedGeneration) + 1n).toString();
       await client.query(`INSERT INTO access.membership_consent

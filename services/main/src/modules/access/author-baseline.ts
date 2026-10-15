@@ -157,13 +157,14 @@ export async function authorSubmissionProof(client: PoolClient,
 }
 
 /** Withdrawal is owned by the submitter recorded in Access, even if the
- * publication subsequently moves. One indexed submission lookup. */
+ * publication subsequently moves or the withdrawal already completed. The
+ * submission owner checks workflow state before a new effect; state must not
+ * erase the submitter's authority to retry. One indexed submission lookup. */
 export async function authorWithdrawalProof(client: PoolClient, actor: string,
   realm: string, submission: string | null): Promise<string | null> {
   if (!submission || !native.test(submission)) return null;
   const row = (await client.query<{ work: string }>(`SELECT work FROM access.realm_submission
-    WHERE id = $1 AND realm = $2 AND submitting_agent = $3
-      AND state IN ('pending', 'changes-requested') FOR SHARE`,
+    WHERE id = $1 AND realm = $2 AND submitting_agent = $3 FOR SHARE`,
   [submission.slice(-36), realm, actor])).rows[0];
   return row?.work ?? null;
 }

@@ -114,7 +114,7 @@ function workEntry(kind: 'protection' | 'proposal' | 'decision', authorityClass:
   owners: [`modules/protection/work.ts#${kind === 'protection' ? 'changeWorkProtection'
     : kind === 'proposal' ? 'proposeWorkCorrection' : 'reviewWorkCorrection'}`],
   subcases: kind === 'protection' ? ['tighten', 'confirm', 'relax'] : kind === 'proposal' ? ['candidate'] : ['approved', 'rejected'],
-  denied: AdmissionDenied, conflict: AdmissionConflict, registration: 'registered-failing',
+  denied: AdmissionDenied, conflict: AdmissionConflict, registration: 'turned',
   requestBuilder: async subcase => {
     const { author, created } = await workFixture();
     const member = await stack.member(randomUUID());
@@ -179,7 +179,7 @@ function contentEntry(kind: 'protection' | 'proposal' | 'decision', authorityCla
   owners: [`modules/protection/admitted.ts#${kind === 'protection' ? 'changeAdmittedProtection'
     : kind === 'proposal' ? 'proposeAdmittedCorrection' : 'decideAdmittedCorrection'}`],
   subcases: kind === 'protection' ? ['tighten', 'confirm', 'relax'] : kind === 'proposal' ? ['candidate'] : ['approved', 'rejected'],
-  denied: AdmissionDenied, conflict: AdmissionConflict, registration: 'registered-failing',
+  denied: AdmissionDenied, conflict: AdmissionConflict, registration: 'turned',
   requestBuilder: async subcase => {
     const { author, created, variant, draft } = await contentFixture();
     const member = await stack.member(randomUUID());
@@ -381,7 +381,7 @@ function erasureEntry(authorityClass: AuthorityClass): ReplayEntry {
   return { operation: 'POST /v1/erasures', authorityClass, losses: losses(authorityClass),
     scope: 'erasure:{work}', action: 'erasure.request', family: `Content erasure ${authorityClass}`,
     owners: ['modules/erasure/request.ts#requestContentErasure'], subcases: ['unpublished Content revision'],
-    denied: AdmissionDenied, conflict: AdmissionConflict, registration: 'registered-failing',
+    denied: AdmissionDenied, conflict: AdmissionConflict, registration: 'turned',
     requestBuilder: async () => {
       const { author, created, variant, draft } = await contentFixture();
       const member = await stack.member(randomUUID());

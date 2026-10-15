@@ -3,8 +3,10 @@ import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { initializeReplayFixtures, root, evidenceDirectory } from './command-replay-authorization/fixtures.ts';
-import { registerReplayCases } from './command-replay-authorization/driver.ts';
-import { discoverPublicSavedResults } from './command-replay-authorization/public-callers.ts';
+import { registerReplayCases, registerNonReplayCases, replayCaseNames } from './command-replay-authorization/driver.ts';
+import { authorityLosses } from './command-replay-authorization/authority-classes.ts';
+import { commandCoverage, discoverPublicCommands, type ReplayArea } from './command-replay-authorization/public-callers.ts';
+import { uncoveredReasons } from './command-replay-authorization/uncovered-reasons.ts';
 import { coveredBaseline } from './command-replay-authorization/covered-baseline.ts';
 import * as access from './command-replay-authorization/access.entries.ts';
 import * as identity from './command-replay-authorization/identity.entries.ts';
@@ -17,17 +19,24 @@ import * as realms from './command-replay-authorization/realms.entries.ts';
 import * as reading from './command-replay-authorization/reading.entries.ts';
 import * as media from './command-replay-authorization/media.entries.ts';
 
-const areas = [access, identity, governance, source, editorial, meaning, structure, realms, reading, media];
+const areas: ReplayArea[] = [access, identity, governance, source, editorial, meaning, structure, realms, reading, media];
 const replayEntries = areas.flatMap(area => area.replayEntries);
 initializeReplayFixtures();
 registerReplayCases(replayEntries);
+registerNonReplayCases(areas.flatMap(area => area.nonReplayEntries ?? []));
 
 test('public saved-result coverage ratchet preserves executed cases and names every remaining command', () => {
   // The cut's executed baseline is immutable; area entries can only extend it.
   expect(createHash('sha256').update(JSON.stringify(coveredBaseline)).digest('hex'))
     .toBe('d9a5d511a9ef756958620408ca46944da207c9f4bb4dba13a3e026420da31bb4');
-  const inventory = discoverPublicSavedResults(root);
+  const coverage = commandCoverage(discoverPublicCommands(root), areas, 117);
+  const { inventory } = coverage;
   writeFileSync(join(evidenceDirectory, 'public-command-inventory.json'), JSON.stringify(inventory, null, 2));
+  expect(Object.keys(uncoveredReasons).sort()).toEqual([...coverage.uncovered].sort());
+  const gaps = coverage.uncovered.map(operation => ({ ...inventory.find(command => command.operation === operation),
+    operation, reason: uncoveredReasons[operation] }));
+  for (const gap of gaps) expect(gap.reason!.trim().length).toBeGreaterThan(0);
+  writeFileSync(join(evidenceDirectory, 'public-command-coverage.json'), JSON.stringify({ ...coverage, gaps }, null, 2));
   expect(inventory.length).toBeGreaterThan(0);
   const covered = areas.flatMap(area => area.coveredOperations);
   const uncovered = areas.flatMap(area => area.uncoveredOperations);
@@ -36,10 +45,7 @@ test('public saved-result coverage ratchet preserves executed cases and names ev
   expect(covered.filter(operation => uncovered.includes(operation))).toEqual([]);
   for (const operation of coveredBaseline.operations) expect(covered).toContain(operation);
   const cases = replayEntries.flatMap(entry => entry.subcases.flatMap(subcase =>
-    (entry.losses ?? ['expired', 'revoked']).flatMap(loss => [
-      `${entry.family} / ${subcase} / ${loss}: original, binding, fresh refusal and preservation controls`,
-      `${entry.family} / ${subcase} / ${loss}: exact replay requires current authority`,
-    ])));
+    authorityLosses(entry).flatMap(loss => replayCaseNames(entry, subcase, loss))));
   expect(new Set(cases).size).toBe(cases.length);
   for (const witness of coveredBaseline.cases) expect(cases).toContain(witness);
   expect(inventory.filter(command => !covered.includes(command.operation) && !uncovered.includes(command.operation))
