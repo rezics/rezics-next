@@ -4,6 +4,28 @@ import { WorkReadSession, WorkReadMoved } from '../src/modules/work/read-session
 import type { OccurrenceRecord } from '../src/modules/structure/format.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { resolveContentReference } from '../src/modules/content-publication/reference.ts';
+
+function contentPreview(target: string, revision: string, variantId: string) {
+  const state = { readable: true, assessment: true, visible: true, reads: 0, rightsKind: false };
+  const deps = { environment: { lineage: { dataEpoch: 'fixture', routingEpoch: 'fixture' },
+    fuseki: { query: async (query: string) => ({ results: { bindings: query.includes('SELECT DISTINCT ?type')
+      ? [{ type: { type: 'uri', value: 'https://rezics.com/vocab/Post' } }] : [] } }) } },
+    access: { canReadWork: async () => state.readable },
+    rights: { store: { currentPublicDomainAssessment: async () => state.assessment } },
+    content: { owningResourceForRevision: async () => target, readExactBatch: async (ids: string[]) => {
+      state.reads++; expect(ids).toEqual([revision]);
+      return [{ revisionId: revision, status: 'available', reference: { resourceId: target, variantId,
+        provenance: state.rightsKind ? { kind: 'admitted-public-domain-v1', rightsAssessmentId: 'assessment' } : {} },
+        body: { body: 'Exact original method.' } }];
+    } },
+  } as unknown as MainWorkDependencies;
+  configureDisclosure(deps.environment, { read: async targets => targets.map(() => state.visible ? 'visible' : 'hidden') });
+  const session = new WorkReadSession(deps, new Request('http://localhost/recipe'),
+    { actingSubject: target }, { dataEpoch: 'fixture', sequence: '1' });
+  session.principal = { issuer: 'https://accounts.example', subject: 'reader' };
+  return { session, state };
+}
 
 test('exact Post text stays available and duplicate uses share a read while retaining their order', async () => {
   const target = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
@@ -13,18 +35,26 @@ test('exact Post text stays available and duplicate uses share a read while reta
     labels: [], target, introducedBy: target, selection: { mode: 'fixed-revision', revision,
       selector: { grain: 'content', revision, variantId } } };
   const second = { ...first, occurrence: target.replace(/001$/, '003') };
-  let reads = 0;
-  const session = { deps: { content: { readExactBatch: async (ids: string[]) => {
-    reads++; expect(ids).toEqual([revision]);
-    return [{ revisionId: revision, status: 'available', reference: { resourceId: target, variantId },
-      body: { body: 'Exact original method.' } }];
-  } } }, observeDependency() {} } as unknown as WorkReadSession;
-  const instructions = await readRecipeInstructions(session, [first, second]);
-  expect(reads).toBe(1);
+  const f = contentPreview(target, revision, variantId);
+  const instructions = await readRecipeInstructions(f.session, [first, second]);
+  expect(f.state.reads).toBe(1);
   expect(instructions.map(item => item.occurrence)).toEqual([first.occurrence, second.occurrence]);
   expect(instructions.map(item => ({ status: item.status, text: item.text }))).toEqual([
     { status: 'available', text: 'Exact original method.' }, { status: 'available', text: 'Exact original method.' },
   ]);
+});
+
+test('Content reference fencing repeats private authority, governance and public-domain rights without adding dependencies', async () => {
+  const target = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+  const revision = '00000000-0000-4000-8000-000000000002', variantId = `urn:rezics:variant:${revision}`;
+  for (const change of [{ readable: false }, { assessment: false }, { visible: false }]) {
+    const f = contentPreview(target, revision, variantId); f.state.rightsKind = true;
+    expect((await resolveContentReference(f.session,
+      { target, selector: { grain: 'content', revision, variantId } })).status).toBe('available');
+    await f.session.fenceDependencies();
+    Object.assign(f.state, change);
+    await expect(f.session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+  }
 });
 
 function recordingPreview() {

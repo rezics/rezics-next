@@ -1,11 +1,27 @@
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
+import { randomUUID } from 'node:crypto';
 import { personaSessions, type PersonaSession } from '../support/personas.ts';
 import { grantPersonaFixtureAuthority } from '../support/persona-fixture-authority.ts';
 import { originalRecipe, short, fixtureAnswer as answer } from '../../../scripts/qa/cases/outcomes/recipes/read-a-recipe.ts';
 import { document, paragraph, type BlocksDocument } from '../../../scripts/qa/cases/outcomes/recipes/instructions-in-any-form.ts';
 
 const query = (person: PersonaSession) => `actingSubject=${encodeURIComponent(person.actingSubject!)}`;
+async function revocation(pool: Pool, person: PersonaSession, scope: string) {
+  await grantPersonaFixtureAuthority(person, [{ scope, action: 'access.revoke' }]);
+  const selected = await pool.query<{ id: string; generation: string; authority_epoch: string }>(
+    `SELECT granted.id, granted.generation, gate.authority_epoch FROM access.permission_grant granted
+      JOIN access.scope_gate gate ON gate.id = granted.scope_id
+      WHERE granted.scope_id = $1 AND granted.recipient_subject = $2 AND granted.action = 'work.read' AND granted.active`,
+    [scope, person.actingSubject]);
+  expect(selected.rows).toHaveLength(1);
+  const grant = selected.rows[0]!;
+  return () => answer(person.main('POST', '/v1/access/revocations', {
+    profile: 'access-revocation-v1', revocationId: randomUUID(), issuerSubject: person.actingSubject,
+    mode: 'ordinary', scopeId: scope, expectedAuthorityEpoch: grant.authority_epoch,
+    target: { kind: 'permission_grant', id: grant.id, expectedGeneration: grant.generation },
+  }));
+}
 async function post(person: PersonaSession, value: BlocksDocument) {
   const actingSubject = person.actingSubject;
   const book = await answer<{ work: string; mainVersion: string }>(person.main('POST', '/v1/works', {
@@ -53,12 +69,13 @@ test('an anonymous reader gets only the adopted procedure on the Recipe, export 
       structure: recipe.structure, expectedStructureHead: recipe.revision, expectedPublicationHead: null,
       rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: owner.actingSubject,
     }), 201);
-    for (const path of [`/v1/recipes/works/${short(recipe.work)}`,
-      `/v1/recipes/${short(recipe.structure)}/export?format=native&revision=${encodeURIComponent(recipe.revision)}`]) {
-      const body = await answer(visitor.main('GET', path));
-      expect(JSON.stringify(body)).toContain('Stir.');
-      expect(JSON.stringify(body)).not.toContain('PRIVATE journal');
-    }
+    const page = await answer(visitor.main('GET', `/v1/recipes/works/${short(recipe.work)}`));
+    expect(JSON.stringify(page)).toContain('Stir.');
+    expect(JSON.stringify(page)).not.toContain('PRIVATE journal');
+    const reader = sessions.stranger;
+    const exported = await answer(reader.main('GET', `/v1/recipes/${short(recipe.structure)}/export?${query(reader)}&format=native&revision=${encodeURIComponent(recipe.revision)}`));
+    expect(JSON.stringify(exported)).toContain('Stir.');
+    expect(JSON.stringify(exported)).not.toContain('PRIVATE journal');
     const resolved = await answer<{ items: { status: string; document?: unknown }[] }>(visitor.main('POST',
       '/v1/resource-reference-resolutions', { references: [selected, reference(source), reference(source, 'journal')] }));
     expect(resolved.items.map(item => item.status)).toEqual(['available', 'unavailable', 'unavailable']);
@@ -76,13 +93,13 @@ test('a private Recipe reader loses Post bytes on preview and native export when
     const source = await post(sessions.owner, document([paragraph('method', 'PRIVATE revoked method')]));
     const scope = `work:read:${source.post}`;
     await grantPersonaFixtureAuthority(reader, [{ scope, action: 'work.read' }]);
+    const revoke = await revocation(pool, reader, scope);
     const recipe = await adopt(reader, reference(source));
     const paths = [`/v1/recipes/works/${short(recipe.work)}?${query(reader)}&revision=${encodeURIComponent(recipe.revision)}`,
       `/v1/recipes/${short(recipe.structure)}/export?${query(reader)}&format=native&revision=${encodeURIComponent(recipe.revision)}`];
     for (const path of paths) expect(JSON.stringify(await answer(reader.main('GET', path)))).toContain('PRIVATE revoked method');
     // Revoke this target alone; the principal and Recipe preview remain live.
-    await pool.query('UPDATE access.permission_grant SET active = false WHERE scope_id = $1 AND recipient_subject = $2',
-      [scope, reader.actingSubject]);
+    await revoke();
     expect((await reader.main('GET', `/v1/content-revisions/${source.revisionId}?${query(reader)}`)).status).toBe(404);
     for (const path of paths) {
       const body = await answer(reader.main('GET', path));
@@ -104,6 +121,7 @@ test('a reference response rechecks private Post authority after waiting on anot
     const second = await post(owner, document([paragraph('second', 'Second method')]));
     const firstScope = `work:read:${first.post}`, secondScope = `work:read:${second.post}`;
     await grantPersonaFixtureAuthority(reader, [firstScope, secondScope].map(scope => ({ scope, action: 'work.read' })));
+    const revoke = await revocation(pool, reader, firstScope);
     await held.query('BEGIN');
     await held.query('SELECT id FROM access.scope_gate WHERE id = $1 FOR UPDATE', [secondScope]);
     const pid = (await held.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
@@ -118,8 +136,7 @@ test('a reference response rechecks private Post authority after waiting on anot
       if (!blocked) await Bun.sleep(5);
     }
     expect(blocked).toBe(true);
-    await pool.query('UPDATE access.permission_grant SET active = false WHERE scope_id = $1 AND recipient_subject = $2',
-      [firstScope, reader.actingSubject]);
+    await revoke();
     await held.query('COMMIT');
     const result = await answer<{ items: { status: string }[] }>(pending);
     expect(result.items.map(item => item.status)).toEqual(['unavailable', 'available']);

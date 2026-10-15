@@ -17,7 +17,7 @@ export const isAdoptedInstruction = (record: OccurrenceRecord) =>
   (record.role === 'instruction' || record.role === 'step') && record.selection?.mode === 'fixed-revision'
     && !!record.selection.selector;
 
-/** Hydrates only this bounded page, deduplicating revisions without deduplicating ordered uses. */
+/** Hydrates only this bounded page, deduplicating selections without deduplicating ordered uses. */
 export async function readRecipeInstructions(session: WorkReadSession, records: readonly OccurrenceRecord[],
   cut?: { work: string; revision: string; admitted?: true }):
   Promise<RecipeInstruction[]> {
@@ -25,32 +25,30 @@ export async function readRecipeInstructions(session: WorkReadSession, records: 
   const instructions: RecipeInstruction[] = [];
   const readAdoptions = () => cut ? readPublicInstructionAdoptions(session.deps.environment, cut, session.viewer,
     cut.admitted ? new Set([cut.work]) : undefined) : Promise.resolve([]);
-  const adoptions = adopted.some(record => record.selection?.mode === 'fixed-revision'
-    && record.selection.selector?.grain === 'representation') ? await readAdoptions() : [];
+  const adoptions = adopted.length ? await readAdoptions() : [];
   if (adoptions.length) session.observeDependency(`recipe-instruction-adoptions:${cut?.revision}`, adoptions, readAdoptions);
-  const revisions = [...new Set(adopted.flatMap(record => record.selection?.mode === 'fixed-revision'
-    && record.selection.selector?.grain === 'content' ? [record.selection.revision] : []))];
-  const exact = new Map<string, Awaited<ReturnType<NonNullable<typeof session.deps.content>['readExactBatch']>>[number]>();
-  for (let offset = 0; offset < revisions.length; offset += 16) {
-    const batch = revisions.slice(offset, offset + 16);
-    const read = () => session.deps.content!.readExactBatch(batch, async ids => new Set(ids));
-    if (!session.deps.content) continue;
-    const results = await read();
-    session.observeDependency(`recipe-instruction-content:${batch.join(',')}`, results, read);
-    for (const result of results) exact.set(result.revisionId, result);
-  }
+  const exact = new Map<string, Awaited<ReturnType<typeof resolveContentReference>>>();
   for (const record of adopted) {
     if (record.selection?.mode !== 'fixed-revision' || !record.selection.selector || !record.target) continue;
     const reference = { target: record.target, selector: record.selection.selector };
     const instruction: RecipeInstruction = { occurrence: record.occurrence, reference, status: 'unavailable' };
     const selector = reference.selector;
     if (selector.grain === 'content') {
-      const value = exact.get(selector.revision);
-      if (value?.status === 'available' && value.reference.resourceId === reference.target
-        && value.reference.variantId === selector.variantId && (value.body.document || typeof value.body.body === 'string')) {
+      const key = JSON.stringify(reference);
+      let value = exact.get(key);
+      if (!value) {
+        const matches = (items: typeof adoptions) => items.some(item => item.occurrence === record.occurrence
+          && item.target === record.target && JSON.stringify(item.selector) === JSON.stringify(selector));
+        // The surrounding Recipe read already admits this publication. Repeat
+        // its exact cut without rediscovering the same Work for every block.
+        value = await resolveContentReference(session, reference,
+          matches(adoptions) ? async () => matches(await readAdoptions()) : undefined);
+        exact.set(key, value);
+      }
+      if (value.status === 'available') {
         instruction.status = 'available';
-        if (value.body.document) instruction.document = value.body.document as DocumentSnapshot;
-        else instruction.text = value.body.body as string;
+        if (value.document) instruction.document = value.document;
+        else if (value.text !== undefined) instruction.text = value.text;
       }
     } else {
       const adoption = adoptions.find(item => item.occurrence === record.occurrence && item.target === record.target

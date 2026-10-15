@@ -39,6 +39,15 @@ a recording adoption binds a normal exact Media Use to the Recipe publication;
 the instruction answer includes its `mediaUse` for Media's existing metadata and
 byte-delivery operations. A reference alone cannot make private bytes public.
 
+A public Content adoption grants only its selected block/span. Recipe pages,
+native exports and reference resolution project that selection; whole-revision
+delivery still requires a whole-revision adoption, an independent Content
+publication or the reader's current private authority. Derivation pages disclose
+only records whose exact output selection is readable. Private previews repeat
+the Post read decision on every read. The final dependency fence repeats the
+selected private or public authority, exact membership, disclosure and current
+public-domain rights assessment before delivering bytes.
+
 ## One structured procedure
 
 The only stored structured instruction form is a Content `extensionBlock` with

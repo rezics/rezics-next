@@ -259,6 +259,15 @@ async function readInstructions(name: PersonaName) {
   expect(pinned.instructions).toEqual(final.pages[name].instructions);
   expect(JSON.stringify(pinned)).not.toContain(privateText);
   for (const [post, expectedDocument] of [[slice.post, slice.postDocument], [slice.procedure, slice.procedureDocument]] as const) {
+    if (post === slice.procedure && name !== 'owner') {
+      // A block adoption grants its projected bytes, never the enclosing revision.
+      await answer(person.main('GET', `/v1/content-revisions/${post.revisionId}${query(person)}`), 404);
+      const selected = await answer<{ items: { status: string; document: BlocksDocument }[] }>(person.main('POST',
+        '/v1/resource-reference-resolutions', { references: [contentReference(post, 'procedure')],
+          ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}) }));
+      expect(selected.items[0]).toMatchObject({ status: 'available', document: expectedDocument });
+      continue;
+    }
     const exact = await answer<{ reference: { revisionId: string; byteDigest: string }; serializedJson: string;
       body: { document: BlocksDocument } }>(person.main('GET', `/v1/content-revisions/${post.revisionId}${query(person)}`));
     expect(exact.reference.revisionId).toBe(post.revisionId);

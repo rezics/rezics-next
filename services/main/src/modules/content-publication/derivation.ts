@@ -70,13 +70,16 @@ export async function readContentDerivations(session: WorkReadSession, revision:
   if (exact?.status !== 'available') throw new WorkReadMissing('Revision is unavailable');
   const owners = contentReferenceOwners(session);
   const output = { target: resource, selector: { grain: 'content' as const, variantId: exact.reference.variantId, revision } };
-  if ((await resolveResourceReference(output, owners)).status !== 'available') throw new WorkReadMissing('Revision is unavailable');
+  const wholeReadable = (await resolveResourceReference(output, owners)).status === 'available';
   const binding = { family: 'content-derivations-v1', revision, limit, actor: session.options.actingSubject ?? null };
   const after = decodeReadCursor(cursor, binding, session.position, true)?.after ?? null;
   const page = await content.derivations.page(revision, limit, after);
   const next = page.length > limit; page.splice(limit);
   const items: DisclosedDerivation[] = [];
   for (const record of page) {
+    // A public fragment grants only its own provenance, not records for other
+    // private outputs stored in the same Content revision.
+    if ((await resolveResourceReference(record.output, owners)).status !== 'available') continue;
     const inputs: DisclosedDerivation['inputs'] = [];
     for (const input of record.inputs) inputs.push((await resolveResourceReference(input, owners)).status === 'available'
       ? input : { status: 'unavailable' });
@@ -85,7 +88,8 @@ export async function readContentDerivations(session: WorkReadSession, revision:
       ...(agentAvailable && inputs.every(item => !('status' in item)) ? { projection: derivationProjection(record) } : {}) });
   }
   // Publication can close while input checks await. Re-fence the output too.
-  if ((await resolveResourceReference(output, owners)).status !== 'available') throw new WorkReadMissing('Revision is unavailable');
+  if (wholeReadable ? (await resolveResourceReference(output, owners)).status !== 'available' : !items.length)
+    throw new WorkReadMissing('Revision is unavailable');
   return { revision, items, complete: !next, nextCursor: next ? encodeReadCursor(binding, session.position, page.at(-1)!.derivation,
     '', Date.now() + 15 * 60_000) : null };
 }
