@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { grantLaunchRecipeAuthority } from '../../../../../scripts/load/launch-corpus.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
-import { recordCatalogueStoryReads } from '../../../support/catalogue-story-reads.ts';
+import { recordAnimeCatalogueVisits, recordCatalogueStoryReads } from '../../../support/catalogue-story-reads.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(90_000);
@@ -283,6 +283,7 @@ const qualification: { persona: string; passed: boolean; error?: string }[] = []
 async function qualify(name: PersonaName) {
   try {
     await recordCatalogueStoryReads(recording, name, sessions[name], sessions.realm, 'anime');
+    await recordAnimeCatalogueVisits(recording, name, sessions, phrase, tv);
     await journey(name);
     qualification.push({ persona: name, passed: true });
   } catch (error) {

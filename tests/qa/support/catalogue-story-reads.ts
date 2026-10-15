@@ -36,3 +36,105 @@ export async function recordZoneBrowseContinuation(recording: OutcomeRecorder, n
     'GET', `/v1/zones/${zone.slice(-36)}/routes?${params}`);
   await response.body?.cancel();
 }
+
+/** Record the production browse route and its shared frame, using each session's own credentials. */
+export async function recordAnimeCatalogueVisits(recording: OutcomeRecorder, name: PersonaName,
+  sessions: { visitor: PersonaSession; realm: string; zone: string } & Record<PersonaName, PersonaSession>,
+  phrase: string, format: string) {
+  const { mainApiWithToken } = await import('../../../apps/web/features/api/main.ts');
+  const { RealmBrowseRoute } = await import('../../../apps/web/features/realm/routes.tsx');
+  const { realmFrameReads } = await import('../../../apps/web/features/realm/read.ts');
+  const { ZoneBrowse } = await import('../../../apps/web/features/zones/browse.tsx');
+  const { mainRelationships } = await import('../../../apps/web/features/relationships/api.ts');
+  const { isValidElement } = await import('react');
+  type Node = import('react').ReactNode;
+  type Model = import('../../../apps/web/features/zones/browse-view.ts').BrowseModel;
+  const person = sessions[name];
+  const retained = new Map<string, Promise<Response>>();
+  let pageLabel = '';
+  const frameLabel = (url: URL): string => {
+    if (url.pathname.endsWith('/modules/browse')) return pageLabel;
+    if (url.pathname.endsWith('/presentation')) return `frame-presentation${url.searchParams.has('after') ? `-${url.searchParams.get('after')}` : ''}`;
+    if (url.pathname.endsWith('/routes')) return `frame-routes${url.searchParams.has('cursor') ? `-${url.searchParams.get('cursor')}` : ''}`;
+    if (url.pathname === '/v1/addresses/resolve') return 'frame-address';
+    if (/\/v1\/realms\/[^/]+$/.test(url.pathname)) return 'frame-realm-header';
+    if (url.pathname.startsWith('/v1/follows/')) return 'frame-follow';
+    return `frame-${url.pathname.split('/').at(-1)}`;
+  };
+  const transport = (personal: boolean): typeof fetch => (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    const label = frameLabel(url);
+    const key = `${label}:${personal}:${request.method}:${url.pathname}${url.search}`;
+    let pending = retained.get(key);
+    if (!pending) {
+      const headers = Object.fromEntries([...request.headers].filter(([header]) =>
+        !['authorization', 'cookie', 'x-session-key'].includes(header)));
+      pending = recording.session(name, personal ? person : sessions.visitor)(label,
+        request.method, url.pathname + url.search, undefined, undefined, { headers });
+      retained.set(key, pending);
+    }
+    return (await pending).clone();
+  }) as typeof fetch;
+  const main = mainApiWithToken(undefined, { fetcher: transport(false) });
+  const personal = person.actingSubject ? mainApiWithToken('persona-session', { fetcher: transport(true) }) : main;
+  const client = { main, personal, signedIn: name !== 'visitor', actingSubject: person.actingSubject ?? undefined };
+  const frame = realmFrameReads({ ...client, keepProblem: false });
+  const resolved = await frame.resolveRealm(sessions.zone.slice(-36), 'en', 'site');
+  expect(resolved.kind).toBe('realm');
+  if (resolved.kind !== 'realm') throw new Error(`Anime site did not resolve: ${resolved.kind}`);
+  // Resolve once for the canonical key; subsequent visits reuse the same actual frame answers.
+  const siteKey = sessions.zone.slice(-36);
+  await frame.readZoneRoute(sessions.zone.slice(-36), 'browse');
+  function modelOf(node: Node): Model | null {
+    if (Array.isArray(node)) return node.map(modelOf).find(Boolean) ?? null;
+    if (!isValidElement<{ children?: Node; model?: Model }>(node)) return null;
+    if (node.type === ZoneBrowse) return node.props.model ?? null;
+    return modelOf(node.props.children);
+  }
+  const addresses: [string, Record<string, string>][] = [
+    ['page-browse-default', {}], ['page-browse-newest', { sort: 'newest' }],
+    ['page-browse-updated', { sort: 'updated' }], ['page-browse-bare-relevance', { sort: 'relevance' }],
+    ['page-search-default', { q: phrase }], ['page-search-newest', { q: phrase, sort: 'newest' }],
+    ['page-search-updated', { q: phrase, sort: 'updated' }],
+    ['page-search-no-match', { q: `${phrase}nomatch` }],
+    ['page-format', { concept: format.slice(-36) }], ['page-status', { status: 'completed' }],
+    ['page-year', { year: '2004' }],
+    ['page-combined', { concept: format.slice(-36), status: 'completed', year: '2004', q: phrase, sort: 'updated' }],
+  ];
+  for (const [label, address] of addresses) {
+    let search = address;
+    const ids: string[] = [], cursors = new Set<string>();
+    for (let page = 0; ; page++) {
+      pageLabel = page ? `${label}-continuation-${page}` : label;
+      const rendered = await RealmBrowseRoute({
+        params: Promise.resolve({ locale: 'en', realm: siteKey }), searchParams: Promise.resolve(search),
+      }, undefined, client);
+      const model = modelOf(rendered);
+      expect(model, `${pageLabel} rendered the production catalogue`).not.toBeNull();
+      if (!model) throw new Error(`${pageLabel} has no catalogue`);
+      ids.push(...model.items.map(work => work.id));
+      if (!model.next) break;
+      const next = new URL(model.next, 'http://web.local');
+      const cursor = next.searchParams.get('cursor');
+      expect(cursor).toBeTruthy();
+      expect(cursors.has(cursor!)).toBe(false);
+      cursors.add(cursor!);
+      for (const [key, value] of Object.entries(address)) {
+        if (key !== 'sort' || value !== 'relevance') expect(next.searchParams.get(key)).toBe(value);
+      }
+      await frame.readZoneRoute(sessions.zone.slice(-36), 'browse', cursor!);
+      search = Object.fromEntries(next.searchParams);
+    }
+    expect(new Set(ids).size).toBe(ids.length);
+  }
+  if (person.actingSubject) {
+    const follow = await personal.v1.follows({ id: sessions.realm.slice(-36) }).get({
+      query: { kind: 'realm', actingSubject: person.actingSubject },
+    });
+    const initial = follow.data as { following?: boolean | null; level?: string | null } | null;
+    if (initial?.following == null || initial.level == null) {
+      await mainRelationships(person.actingSubject, { origin: 'http://main.local', fetch: transport(true) })
+        .state(resolved.header.id);
+    }
+  }
+}

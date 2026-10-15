@@ -11,7 +11,6 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { ZoneBrowse } from '../zones/browse.tsx';
 import {
-  mainBrowseQuery,
   parseBrowseState,
 } from '../zones/browse-state.ts';
 import { browseEntry } from '../zones/browse-view.ts';
@@ -28,6 +27,7 @@ import {
 } from '../release-filter/state.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { applyCatalogueYear, catalogueBrowseQuery } from '../zones/catalogue-browse.tsx';
+import { catalogueYearCondition } from '../zones/catalogue-year.ts';
 import { zoneDecision, zoneText, zoneWork } from './adapt.ts';
 import { loadHomeModules } from './modules.ts';
 import {
@@ -325,7 +325,7 @@ export function RealmBrowseRoute(
       const state = parseBrowseState(search);
       const [page, facets] = await Promise.all([
         readZoneBrowse(view.context.realm, locale,
-          view.pkg?.catalogue ? catalogueBrowseQuery(search) : mainBrowseQuery(state),
+          catalogueBrowseQuery(search),
           client?.main),
         readFacets(client?.main),
       ]);
@@ -343,7 +343,8 @@ export function RealmBrowseRoute(
       });
       if (!built.ok) return failure(view, 'browse', built.failure, built.reference);
       const model = built.data;
-      const year = catalogue ? await applyCatalogueYear({ view, search, model }) : null;
+      const year = catalogue || catalogueYearCondition(search.year) !== null
+        ? await applyCatalogueYear({ view, search, model }) : null;
       if (year?.failure) return <>
         {year.header ? <PageContainer className="pb-0 sm:pb-0 lg:pb-0">{year.header}</PageContainer> : null}
         {failure(view, 'browse', 'unavailable')}
