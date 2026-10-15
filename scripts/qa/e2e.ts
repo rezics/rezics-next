@@ -456,6 +456,14 @@ async function runE2e(): Promise<void> {
     } finally { await access.end(); }
   }
 
+  let accounts: ChildProcess | undefined;
+  function startAccounts() {
+    if (!apps.ACCOUNTS_PORT) throw new Error('The e2e stack has no public Accounts origin');
+    return launch('accounts', 'bun', ['scripts/dev/accounts-preview.ts', '--profile', 'qa', '--run-id', appRunId], {
+      REZICS_WEB_E2E_BASE_URL: web.origin,
+    });
+  }
+
   try {
     adoptWebPort(web.port, web.holderPid);
     ownedPort = web.port;
@@ -465,6 +473,12 @@ async function runE2e(): Promise<void> {
     const initialFailures: JourneyPreparationFailure[] = existsSync(failuresPath)
       ? JSON.parse(readFileSync(failuresPath, 'utf8')) : [];
     if (apiOutcomes.length) {
+      // API fixtures use the public Account issuer too. Start its gateway first;
+      // the fixture then owns the Account/Main listeners until its proof ends.
+      await measured('Accounts Worker setup', 240_000, async () => {
+        accounts = startAccounts();
+        await started('accounts', accounts, 'Ready on', 240_000);
+      });
       await measured('API outcomes on browser stack', apiOutcomeBudget, async () => {
         for (const file of apiOutcomes) if (!existsSync(join(root, file))) throw new Error(`Missing API outcome ${file}`);
         await admitIntegrationWorkScope({ root, projectRunId: appRunId, fusekiUrl: env.FUSEKI_URL!,
@@ -478,7 +492,7 @@ async function runE2e(): Promise<void> {
         if (code !== 0) throw new Error(`API outcomes failed (${code}); see logs/e2e-api-outcomes.log`);
       });
     }
-    await measured('Application setup', budgets.setup - apiOutcomeBudget, async () => {
+    await measured('Application setup', budgets.setup - apiOutcomeBudget - (apiOutcomes.length ? 240_000 : 0), async () => {
       if (!env.MAIN_RELAY_DATABASE_URL || !env.MAIN_RELAY_CONSUMER || !env.MAIN_DATA_EPOCH) {
         throw new Error('The e2e stack needs a Main relay checkpoint');
       }
@@ -490,10 +504,7 @@ async function runE2e(): Promise<void> {
       await registerBrowserPrincipals();
       const account = launch('account', 'bun', ['services/account/src/index.ts']);
       await ready('Account', `http://127.0.0.1:${apps.ACCOUNT_PORT}/health/ready`, account, 30_000);
-      if (!apps.ACCOUNTS_PORT) throw new Error('The e2e stack has no public Accounts origin');
-      const accounts = launch('accounts', 'bun', ['scripts/dev/accounts-preview.ts', '--profile', 'qa', '--run-id', appRunId], {
-        REZICS_WEB_E2E_BASE_URL: web.origin,
-      });
+      accounts ??= startAccounts();
       await ready('Accounts', `http://127.0.0.1:${apps.ACCOUNTS_PORT}/sign-in`, accounts, 240_000);
       if (!env.PLATFORM_FIRST_ADMIN_ACCOUNT) {
         throw new Error('The e2e stack has no first platform administrator');
