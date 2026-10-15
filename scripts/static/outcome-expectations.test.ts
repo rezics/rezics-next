@@ -115,6 +115,22 @@ function expressions(source: ts.SourceFile, sources: Sources = new Map()): strin
       || ts.isSatisfiesExpression(node)) return unwrap(node.expression);
     return node;
   };
+  const readinessStatus = (input: ts.Expression): boolean => {
+    const actual = unwrap(input);
+    if (!ts.isPropertyAccessExpression(actual) || actual.name.text !== 'status') return false;
+    let response = unwrap(actual.expression);
+    if (ts.isAwaitExpression(response)) response = unwrap(response.expression);
+    if (!ts.isCallExpression(response) || response.arguments.length !== 1) return false;
+    let address = unwrap(response.arguments[0]!);
+    if (ts.isPropertyAccessExpression(response.expression) && response.expression.name.text === 'handle') {
+      if (!ts.isNewExpression(address) || !ts.isIdentifier(address.expression) || address.expression.text !== 'Request'
+        || address.arguments?.length !== 1) return false;
+      address = unwrap(address.arguments[0]!);
+    } else if (!ts.isIdentifier(response.expression) || response.expression.text !== 'fetch') return false;
+    if (!ts.isStringLiteral(address) && !ts.isNoSubstitutionTemplateLiteral(address)) return false;
+    try { return new URL(address.text, 'http://localhost').pathname === '/health/ready'; }
+    catch { return false; }
+  };
   const status = (input: ts.Expression, seen = new Set<string>()): boolean => {
     const node = unwrap(input);
     if (ts.isPropertyAccessExpression(node)) return /^(status|statusCode)$/.test(node.name.text);
@@ -206,13 +222,17 @@ function expressions(source: ts.SourceFile, sources: Sources = new Map()): strin
           && receiver.expression.text === 'expect' && receiver.arguments[0]) {
           const actual = receiver.arguments[0];
           const matcher = callee.name.text;
-          if ((status(actual) && /^(toBe|toEqual|toStrictEqual|toContain|toContainEqual|toBeOneOf|toBeGreaterThanOrEqual|toBeLessThanOrEqual|toMatchObject)$/.test(matcher)
+          // A direct GET readiness probe reports 503 until recovery completes;
+          // this exact assertion does not accept a failed product operation.
+          const notReady = /^(toBe|toEqual|toStrictEqual)$/.test(matcher) && node.arguments.length === 1
+            && ts.isNumericLiteral(node.arguments[0]!) && node.arguments[0]!.text === '503' && readinessStatus(actual);
+          if (!notReady && ((status(actual) && /^(toBe|toEqual|toStrictEqual|toContain|toContainEqual|toBeOneOf|toBeGreaterThanOrEqual|toBeLessThanOrEqual|toMatchObject)$/.test(matcher)
             && node.arguments.some(item => faults(item)))
             || (status(actual) && matcher === 'toBeGreaterThan' && node.arguments.some(item => ts.isNumericLiteral(item) && Number(item.text) >= 500 && Number(item.text) < 599))
             || (/^toContain(Equal)?$/.test(matcher) && faults(actual) && node.arguments.some(item => status(item)))
             || (/^(toEqual|toStrictEqual|toMatchObject)$/.test(matcher) && node.arguments.some(item => ts.isObjectLiteralExpression(item) && faults(item)))
             || (status(actual) && matcher === 'toBeLessThan' && node.arguments.some(item => ts.isNumericLiteral(item) && Number(item.text) > 500 && Number(item.text) <= 599))
-            || (comparison(actual) && matcher === 'toBe' && node.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword)) record(node);
+            || (comparison(actual) && matcher === 'toBe' && node.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword))) record(node);
         }
         if (/^(includes|has)$/.test(callee.name.text) && faults(callee.expression) && node.arguments.some(item => status(item))
           && acceptedMembership(node)) record(node);
@@ -309,6 +329,33 @@ test('imported helpers and accepted status constants retain their meaning throug
     import { answer as check, accepted as allowed } from '../../support/fixture.ts';
     check(response, 503); expect(allowed.has(response.status)).toBe(true);
   `), sources)).toEqual(['allowed.has(response.status)', 'check(response, 503)']);
+});
+
+test('an exact not-ready probe is a recovery check while product server faults remain forbidden', () => {
+  for (const request of [
+    "app.handle(new Request('http://localhost/health/ready'))",
+    "fetch('/health/ready')",
+  ]) {
+    const actual = `(await ${request}).status`;
+    for (const matcher of ['toBe', 'toEqual', 'toStrictEqual'])
+      expect(expressions(parse('fixture.ts', `expect(${actual}).${matcher}(503)`))).toEqual([]);
+    for (const assertion of [`expect(${actual}).toBe(500)`, `expect(${actual}).toBeGreaterThanOrEqual(500)`])
+      expect(expressions(parse('fixture.ts', assertion)), assertion).toHaveLength(1);
+  }
+  for (const request of [
+    "app.handle(new Request('http://localhost/v1/owners/reconciliations'))",
+    "fetch('/v1/health/ready')",
+    "fetch('/health/ready-extra')",
+    "fetch('/health/ready', { method: 'POST' })",
+    "app.handle(new Request('http://localhost/health/ready', { method: 'POST' }))",
+  ]) {
+    const assertion = `expect((await ${request}).status).toBe(503)`;
+    expect(expressions(parse('fixture.ts', assertion)), assertion).toHaveLength(1);
+  }
+  expect(expressions(parse('fixture.ts', `
+    expect((await fetch('/health/ready')).status).toBe(503);
+    expect((await fetch('/v1/works')).status).toBe(503);
+  `))).toEqual(["expect((await fetch('/v1/works')).status).toBe(503)"]);
 });
 
 test('outcome proof server fault debt only shrinks', () => {
