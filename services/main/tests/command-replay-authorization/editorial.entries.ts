@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect } from 'bun:test';
+import { fromPlainText } from '@rezics/document';
+import { ContentConflict } from '../../../content/src/errors.ts';
 import { AdmissionConflict, AdmissionDenied } from '../../src/modules/access/admission.ts';
 import { deactivateFixtureController, grantFixtureAuthority, reduceFixtureGrant } from '../../src/modules/access/fixture-authority.ts';
 import { createAdmittedMetadataWork } from '../../src/modules/work/create-admitted.ts';
@@ -23,6 +25,9 @@ import { createAdmittedComposition, changeAdmittedComposition } from '../../src/
 import { derivedId } from '../../src/modules/structure/graph.ts';
 import { structureProfileFor } from '../../src/modules/structure/profiles.ts';
 import { identifyPost } from '../../src/modules/post/identification.ts';
+import { authorPost } from '../../src/modules/post/author.ts';
+import { readWorkTerminalReceipt } from '../../src/modules/work/receipt.ts';
+import { recordContentDerivation } from '../../src/modules/content-publication/derivation.ts';
 import { readDefinitionByKey } from '../../src/modules/relation/change.ts';
 import { systemDisclosure } from '../../src/modules/target/disclosed-references.ts';
 import { admittedSemanticChange } from '../../src/modules/semantic/admitted.ts';
@@ -229,6 +234,66 @@ async function contentDraft(member: Member, work: string) {
   expect(saved.outcome).toBe('succeeded');
   if (!saved.revisionId) throw new Error('Content setup has no retained revision');
   return { input, saved: { ...saved, revisionId: saved.revisionId } };
+}
+
+async function contentDerivationCommand(): Promise<Scenario> {
+  const member = await stack.member(randomUUID()), work = await workFor(member);
+  const draft = await contentDraft(member, work.work);
+  const scope = `content:draft:${work.work}`;
+  const grant = await member.grant(scope, 'content.draft');
+  await member.grant(`agent:control:${member.actor}`, 'agent.control');
+  const selection = { target: work.work, selector: { grain: 'content' as const,
+    variantId: draft.input.variant.id, revision: draft.saved.revisionId } };
+  const input = { output: selection, inputs: [selection], activity: { kind: 'transformation' as const },
+    responsibleAgent: member.actor, expectedOutputHead: draft.saved.revisionId, actingSubject: member.actor };
+  const key = randomUUID();
+  return { command: (fresh, changed) => recordContentDerivation(deps(), request(member), {
+    ...input, ...(changed ? { activity: { kind: 'translation' as const } } : {}),
+  }, fresh ? randomUUID() : key),
+  advance: async () => {
+    await saveAdmittedContentDraft(stack.env, stack.content, deps().account, stack.access, request(member), {
+      ...draft.input, expectedHead: draft.saved.revisionId, body: 'Advanced derivation output', idempotencyKey: randomUUID(),
+    });
+  }, lose: loss => grantLoss(member, grant, loss),
+  restore: async () => { await member.grant(scope, 'content.draft'); },
+  snapshot: async () => ({ ...await snapshot(member, [work.work]),
+    derivations: (await stack.contentPool.query(`SELECT to_jsonb(d) AS row FROM content.derivation d
+      WHERE output_revision = $1 ORDER BY id`, [draft.saved.revisionId])).rows }) };
+}
+
+async function postAuthoringCommand(): Promise<Scenario> {
+  const member = await stack.member(randomUUID());
+  const grant = await member.grant('work:create:root', 'work.create');
+  const key = randomUUID(), input = { title: { value: 'Saved authored Post', language: 'en' },
+    language: 'en', document: fromPlainText('Saved Post paragraph', 'blocks'), actingSubject: member.actor };
+  // A represented Agent's creation grant does not grant draft access to a new
+  // resource. Let the owner establish custody, then authorize its exact Post
+  // and recover through the same command; no admission or receipt is fabricated.
+  await expect(authorPost(deps(), request(member), input, key)).rejects.toBeInstanceOf(AdmissionDenied);
+  const admissions = (await stack.accessPool.query<{ id: string }>(`SELECT id FROM access.admission
+    WHERE principal_id = $1 AND action = 'work.create' AND idempotency_key = $2`, [member.principalId, key])).rows;
+  expect(admissions).toHaveLength(1);
+  const terminal = await readWorkTerminalReceipt(stack.fuseki, admissions[0]!.id);
+  if (!terminal?.work || terminal.outcome !== 'succeeded') throw new Error('Post setup has no settled custody');
+  const post = terminal.work;
+  await member.grant(`content:draft:${post}`, 'content.draft');
+  let saved: Awaited<ReturnType<typeof authorPost>>;
+  return { command: async (fresh, changed) => {
+    const result = await authorPost(deps(), request(member), {
+      ...input, ...(changed ? { title: { value: 'Other binding', language: 'en' } } : {}),
+    }, fresh ? randomUUID() : key);
+    saved ??= result;
+    return result;
+  }, advance: async () => {
+    await saveAdmittedContentDraft(stack.env, stack.content, deps().account, stack.access, request(member), {
+      resourceId: post, variant: { id: saved.variantId, resourceId: post,
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
+      expectedHead: saved.revisionId, document: fromPlainText('Advanced Post paragraph', 'blocks'),
+      actingSubject: member.actor, idempotencyKey: randomUUID(),
+    });
+  }, lose: loss => grantLoss(member, grant, loss),
+  restore: async () => { await member.grant('work:create:root', 'work.create'); },
+  snapshot: () => snapshot(member, [post, terminal.receipt]) };
 }
 
 async function contentCommand(kind: string): Promise<Scenario> {
@@ -747,6 +812,11 @@ async function identificationCommand(): Promise<Scenario> {
 }
 
 export const entries: ReplayEntry[] = [
+  { ...admittedEntry('POST /v1/content-derivations', 'Content derivation records',
+    'modules/content-publication/derivation.ts#recordContentDerivation', 'content:draft:{output}', 'content.draft',
+    () => contentDerivationCommand()), conflict: ContentConflict, registration: 'turned' },
+  { ...admittedEntry('POST /v1/posts', 'Post authoring', 'modules/post/author.ts#authorPost',
+    'work:create:root', 'work.create', () => postAuthoringCommand()), registration: 'turned' },
   admittedEntry('POST /v1/content-edits', 'Content title edits', 'modules/work/edit-admitted.ts#editAdmittedMetadataWork',
     'work:edit:{work}', 'work.edit', () => workEdit('title-control')),
   admittedEntry('PUT /v1/works/{}/metadata', 'Work metadata edits', 'modules/work/metadata-command.ts#setWorkMetadata',
@@ -814,15 +884,6 @@ export const moduleOwners = ["work", "content-publication", "editorial-review", 
 export const replayEntries = entries;
 export const coveredOperations = [...new Set(replayEntries.map(entry => entry.operation))];
 export const uncoveredOperations: string[] = [
-  // recordContentDerivation checks live content.draft and agent.control authority
-  // around ContentDerivations.record. content-adoption.test.ts (integration) and
-  // content-derivation-checkout.test.ts witness its owner boundary, but the shared
-  // expired/revoked command replay controls have no registered scenario yet.
-  "POST /v1/content-derivations",
-  // authorPost registers work.create and saves an admitted Content draft. No
-  // executed owner/replay witness is registered for this new route; name that
-  // gap rather than borrowing identification or ordinary draft coverage.
-  "POST /v1/posts",
   // Fresh reference resolution takes no idempotency key and retains no saved result.
   // The tracer reaches the generic owner helper through the live Zone content.draft
   // authority check; tests/qa/integration/content-adoption.test.ts witnesses public

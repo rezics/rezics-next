@@ -8,6 +8,7 @@ import { profileValidations } from '../../infrastructure/profile.ts';
 import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { saveAdmittedContentDraft } from '../content-publication/draft.ts';
 import { authoredDocumentBody } from '../../../../content/src/document-body.ts';
+import { CommandRejected } from '../../infrastructure/fuseki.ts';
 
 /** Native Post custody uses the same admitted creator/maintainer proof as placed Posts. */
 export async function authorPost(deps: MainWorkDependencies, request: Request, input: {
@@ -32,7 +33,7 @@ export async function authorPost(deps: MainWorkDependencies, request: Request, i
     const validations = await profileValidations(env.fuseki, 'post-v1', [
       { shape: 'https://rezics.com/definition/post-v1/post-shape', focus: [post], graphs: [GRAPHS.current] },
     ], { post, publisher: input.actingSubject, revision });
-    await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
       update: `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
         INSERT {
@@ -60,6 +61,7 @@ export async function authorPost(deps: MainWorkDependencies, request: Request, i
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(post)} ?p ?o } }
           BIND(?n + 1 AS ?next) }`,
     }, admission);
+    if (result.status !== 'committed') throw new CommandRejected(result);
     terminal = await readWorkTerminalReceipt(env.fuseki, admission.id);
   }
   if (!terminal || terminal.outcome !== 'succeeded') throw new PendingActivation('Post custody is not settled');
