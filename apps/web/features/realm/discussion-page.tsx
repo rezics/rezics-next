@@ -1,4 +1,6 @@
 import { materializeData } from 'native-i18n';
+import { buttonVariants } from '@rezics/ui/button';
+import { PlusIcon } from 'lucide-react';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -24,12 +26,24 @@ import { realmHref } from './route.ts';
 import { RealmUnavailable } from './states.tsx';
 import type { RealmReadClient } from './read.ts';
 import { DiscussionColumns, ThreadRail } from './thread-rail.tsx';
+import LocalizedLink from '../shell/localized-link.tsx';
 
 // What a Realm's Discussions tab and its thread pages share: the Realm frame
 // with the Discussions tab current, a community rail beside the posts, and
 // the feed's environment so votes, replies and cards act as the reader.
 
 export type Search = Record<string, string | string[] | undefined>;
+
+/** The collection action stays with the same content in routes and recorded visits. */
+export function DiscussionCollection({ view, children }: { view: RealmView; children: ReactNode }) {
+  return <>
+    <div className="mb-4 flex justify-end">
+      <LocalizedLink href={`${realmPathOf(view)}/submit`} className={buttonVariants({ size: 'sm', pill: true })}>
+        <PlusIcon aria-hidden="true" className="size-4" />{view.messages.createPost}</LocalizedLink>
+    </div>
+    {children}
+  </>;
+}
 
 /**
  * The Realm view for `/r/{ref}/discussions…`, or the response that replaces

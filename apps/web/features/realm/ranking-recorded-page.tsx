@@ -10,7 +10,10 @@ import { rankingChart, rankingVisit, rankingVisitHost } from './ranking-visit.ts
 import type { DiscussionQuery } from './discussion-read.ts';
 
 /** Only a complete visit's own samples may answer this reader. No answer is edited. */
-export function rankingRecording(record: AnswerRecord, persona: AnswerPersona, visit: string, loading = false) {
+export function rankingRecording(record: AnswerRecord, persona: AnswerPersona, visit: string, loading = false,
+  locale: UiLocale = 'en', onMismatch?: (error: unknown) => void) {
+  const localized = `${visit}@${locale}`;
+  if (locale !== 'en' && record.personas[persona].some(sample => sample.label.startsWith(`${localized}-`))) visit = localized;
   const samples = record.personas[persona].filter(sample => sample.label.startsWith(`${visit}-`)
     && /^\d+$/.test(sample.label.slice(visit.length + 1)))
     .sort((a, b) => Number(a.label.slice(visit.length + 1)) - Number(b.label.slice(visit.length + 1)));
@@ -33,7 +36,10 @@ export function rankingRecording(record: AnswerRecord, persona: AnswerPersona, v
   const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
     try { return await playback.fetcher(input, init); }
     catch (error) {
-      if (!(error instanceof DOMException && error.name === 'AbortError')) misses.push(String(error));
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        misses.push(String(error));
+        onMismatch?.(error);
+      }
       throw error;
     }
   }) as typeof fetch;
@@ -58,7 +64,8 @@ export function RecordedRankingPage({ record, persona, visit, loading = false, l
     let active = true;
     setPage(null);
     setFailure(null);
-    const transport = rankingRecording(record, persona, visit, loading);
+    const transport = rankingRecording(record, persona, visit, loading, locale,
+      error => { if (active) setFailure(error); });
     void transport.read(locale).then(result => { if (active) setPage(result); }, error => { if (active) setFailure(error); });
     return () => { active = false; transport.dispose(); };
   }, [record, persona, visit, loading, locale]);

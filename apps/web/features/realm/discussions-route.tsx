@@ -1,10 +1,7 @@
-import { buttonVariants } from '@rezics/ui/button';
-import { PlusIcon } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { parseThreadSort, parseThreadWindow } from '../feed/thread.ts';
-import LocalizedLink from '../shell/localized-link.tsx';
-import { DiscussionFrame, discussionView, readerMain, realmPathOf, type Search } from './discussion-page.tsx';
+import { DiscussionCollection, DiscussionFrame, discussionView, readerMain, realmPathOf, type Search } from './discussion-page.tsx';
 import { DiscussionBoards, DiscussionListContent, DiscussionListSkeleton } from './discussion-content.tsx';
 import { discussionListHref, realmDiscussionReads, type DiscussionQuery } from './discussion-read.ts';
 import type { RealmView } from './realm-page.tsx';
@@ -40,10 +37,8 @@ export async function RealmDiscussionsRoute({ params, searchParams }: RealmRoute
     concept: first(search.concept), boardsCursor: first(search.boardsCursor), language: first(search.language) };
   return <DiscussionFrame view={view} locale={resolved.locale} feed={feed} search={search}
     here={discussionListHref(realmPathOf(view), query)}>
-    <div className="mb-4 flex justify-end">
-      <LocalizedLink href={`${realmPathOf(view)}/submit`} className={buttonVariants({ size: 'sm', pill: true })}>
-        <PlusIcon aria-hidden="true" className="size-4" />{view.messages.createPost}</LocalizedLink>
-    </div>
-    <Suspense fallback={<DiscussionListSkeleton />}><Threads view={view} query={query} feed={feed} /></Suspense>
+    <DiscussionCollection view={view}>
+      <Suspense fallback={<DiscussionListSkeleton />}><Threads view={view} query={query} feed={feed} /></Suspense>
+    </DiscussionCollection>
   </DiscussionFrame>;
 }

@@ -12,6 +12,7 @@ import { BFF_PREFIX } from '../../../../../apps/web/features/api/browser.ts';
 import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
 import { rankingVisit, rankingVisitHost, rankingChart } from '../../../../../apps/web/features/realm/ranking-visit.tsx';
 import type { DiscussionQuery } from '../../../../../apps/web/features/realm/discussion-read.ts';
+import { uiLocales, type UiLocale } from '../../../../../apps/web/i18n/define.ts';
 
 type Page = {
   items: { reply: string; author: { id: string } | null; work: { id: string }; vote: { score: number } }[];
@@ -57,7 +58,7 @@ afterAll(async () => {
 
 /** Capture the whole production visit, preserving the anonymous/personal split. */
 async function captureVisit(sessions: PersonaSessions, name: PersonaName, label: string,
-  query: DiscussionQuery, chart = false) {
+  query: DiscussionQuery, chart = false, locale: UiLocale = 'en') {
   let ordinal = 0;
   let refreshFollow = false;
   const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -74,7 +75,7 @@ async function captureVisit(sessions: PersonaSessions, name: PersonaName, label:
     return response;
   }) as typeof fetch;
   const page = await rankingVisit({ replay: rankingVisitHost(fetcher, name !== 'visitor'),
-    ref: short(sessions.realm), locale: 'en', query, ...(chart ? { module: rankingChart } : {}) });
+    ref: short(sessions.realm), locale, query, ...(chart ? { module: rankingChart } : {}) });
   expect(page).not.toBeNull();
   // The shared relationship control refreshes unknown follow levels on mount.
   if (refreshFollow && sessions[name].actingSubject) await mainRelationships(sessions[name].actingSubject!, {
@@ -119,6 +120,11 @@ async function storyStates(name: PersonaName) {
   }
   await captureVisit(publicRealm, name, 'visit-ranking-module', { sort: 'best', window: 'all' }, true);
   await captureVisit(stateRealm, name, 'visit-ranking-module-empty', { sort: 'best', window: 'all' }, true);
+  if (name === 'visitor') for (const locale of uiLocales) {
+    if (locale === 'en') continue;
+    await captureVisit(publicRealm, name, `visit-best-all@${locale}`, { sort: 'best', window: 'all' }, false, locale);
+    await captureVisit(publicRealm, name, `visit-ranking-module@${locale}`, { sort: 'best', window: 'all' }, true, locale);
+  }
   for (const interval of ['day', 'week', 'month'] as const) {
     const main = recordedMainClient(recording, name, person, `ranking-module-${interval}`);
     const populated = await readRankingModuleAnswer(main, publicRealm.realm, interval, 'reads');

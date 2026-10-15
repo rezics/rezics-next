@@ -9,7 +9,7 @@ import { spaceAccessApi } from '../manage/settings-api.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { placedModule, type PresentationModule } from '../zones/presentation.ts';
 import { ZoneHome } from '../zones/zone-home.tsx';
-import { DiscussionFrame, realmPathOf } from './discussion-page.tsx';
+import { DiscussionCollection, DiscussionFrame, realmPathOf } from './discussion-page.tsx';
 import { discussionListHref, type DiscussionQuery } from './discussion-read.ts';
 import { loadRankingsModule, rankingModuleReads } from './modules.ts';
 import { loadRealmView, privateJoinPage, RealmFrame, type RealmReplay } from './realm-page.tsx';
@@ -59,5 +59,6 @@ export async function rankingVisit({ replay, ref, locale, query, module }: {
   }
   const feed = await catalogs.feed[locale]();
   const content = await RealmRankingBody({ main: view.reader.actingSubject ? client.personal : client.main, view, query, feed });
-  return DiscussionFrame({ view, locale, feed, search: {}, here: discussionListHref(realmPathOf(view), query), children: content, client });
+  return DiscussionFrame({ view, locale, feed, search: {}, here: discussionListHref(realmPathOf(view), query),
+    children: <DiscussionCollection view={view}>{content}</DiscussionCollection>, client });
 }
