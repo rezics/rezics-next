@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { Elysia, t } from 'elysia';
 import { openapi } from '@elysia/openapi';
 import { readFileSync } from 'node:fs';
-import { buildMainOpenApi, isProblemSchema, overlayAuthoredResponses } from './generate.ts';
+import { buildMainOpenApi, isProblemSchema, overlayAuthoredResponses, responseMediaSchemas } from './generate.ts';
 
 test.each([false, true])('authored binary content survives generation and raw delivery (stream=%s)', async streamed => {
   const binary = { description: 'Retained recording', content: { 'audio/wav': { schema: { type: 'string', format: 'binary' } } } } as const;
@@ -35,6 +35,13 @@ test('JSON error representations keep their media type while Problem variants us
     expect(response.content).not.toHaveProperty('application/problem+json');
   }
   expect(document.paths['/v1/works'].post.responses['429'].content).toHaveProperty('application/problem+json');
+  for (const [path, method, status] of [
+    ['/v1/works/{id}', 'get', '404'],
+    ['/v1/works/{id}/scalar-value', 'post', '409'],
+    ['/v1/me/acting-context-preferences/work.create', 'put', '409'],
+  ]) {
+    expect(document.paths[path!][method!].responses[status!].content).toHaveProperty('application/problem+json');
+  }
   for (const response of [document.paths['/v1/connected-apps/invocations'].post.responses['502'],
     document.paths['/v1/recipes/works/{id}'].get.responses['409']]) {
     expect(response.content).toHaveProperty('application/json');
@@ -51,4 +58,16 @@ test('a mixed JSON body is not re-labelled as a Problem based on its status', ()
   const problem = { properties: { type: {}, title: {}, status: {}, code: {} } };
   expect(isProblemSchema({ anyOf: [problem, problem] })).toBe(true);
   expect(isProblemSchema({ anyOf: [problem, { properties: { upload: {} } }] })).toBe(false);
+});
+
+test('named response models retain references while partitioning Problem and JSON variants', () => {
+  const problem = { properties: { type: {}, title: {}, status: {}, code: {} } };
+  const receipt = { properties: { upload: {} } };
+  const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` });
+  const models = { Problem: problem, Receipt: receipt, Mixed: { anyOf: [ref('Problem'), ref('Receipt')] }, Loop: ref('Loop') };
+  expect(responseMediaSchemas(ref('Problem'), models)).toEqual({ problem: ref('Problem') });
+  expect(responseMediaSchemas(ref('Receipt'), models)).toEqual({ json: ref('Receipt') });
+  expect(responseMediaSchemas(ref('Mixed'), models)).toEqual({ problem: ref('Problem'), json: ref('Receipt') });
+  expect(responseMediaSchemas(ref('Loop'), models)).toEqual({ json: ref('Loop') });
+  expect(responseMediaSchemas(ref('Missing'), models)).toEqual({ json: ref('Missing') });
 });

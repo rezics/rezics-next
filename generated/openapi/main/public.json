@@ -293124,7 +293124,7 @@
           },
           "400": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ActingContextPreferenceInvalid"
                 }
@@ -293134,7 +293134,7 @@
           },
           "401": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ActingContextPreferenceUnauthorized"
                 }
@@ -293144,7 +293144,7 @@
           },
           "403": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ActingContextPreferenceDenied"
                 }
@@ -293154,7 +293154,7 @@
           },
           "409": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ActingContextPreferenceStale"
                 }
@@ -293164,7 +293164,7 @@
           },
           "429": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ActingContextPreferenceLimited"
                 }
@@ -293174,7 +293174,7 @@
           },
           "500": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ActingContextPreferenceInternal"
                 }
@@ -293184,7 +293184,7 @@
           },
           "503": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ActingContextPreferenceUnavailable"
                 }
@@ -910638,7 +910638,7 @@
           },
           "400": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkHeaderInvalid"
                 }
@@ -910648,7 +910648,7 @@
           },
           "401": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkHeaderUnauthorized"
                 }
@@ -910658,7 +910658,7 @@
           },
           "403": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkHeaderDenied"
                 }
@@ -910668,7 +910668,7 @@
           },
           "404": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkHeaderMissing"
                 }
@@ -910678,7 +910678,7 @@
           },
           "409": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkHeaderMoved"
                 }
@@ -910688,7 +910688,7 @@
           },
           "422": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkHeaderLimit"
                 }
@@ -910698,7 +910698,7 @@
           },
           "500": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkHeaderInternal"
                 }
@@ -910708,7 +910708,7 @@
           },
           "503": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkHeaderUnavailable"
                 }
@@ -950572,7 +950572,7 @@
           },
           "400": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkScalarInvalid"
                 }
@@ -950582,7 +950582,7 @@
           },
           "401": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkScalarUnauthorized"
                 }
@@ -950592,7 +950592,7 @@
           },
           "403": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkScalarDenied"
                 }
@@ -950602,7 +950602,7 @@
           },
           "404": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkScalarMissing"
                 }
@@ -950612,7 +950612,7 @@
           },
           "409": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkScalarConflict"
                 }
@@ -950622,7 +950622,7 @@
           },
           "429": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkScalarLimited"
                 }
@@ -950632,7 +950632,7 @@
           },
           "500": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkScalarInternal"
                 }
@@ -950642,7 +950642,7 @@
           },
           "503": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkScalarUnavailable"
                 }

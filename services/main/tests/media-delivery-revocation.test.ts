@@ -141,7 +141,9 @@ for (const surface of ['bare', 'exact', 'use', 'avatar', 'agent-avatar', 'privat
       await absent(await response);
       expect(f.state.reads).toBe(1);
       expect(f.state.closing).toBeGreaterThan(0);
-      if (surface === 'private' || surface === 'original') expect(f.finished).toEqual(['aborted']);
+      if (surface === 'original') expect(f.finished).toEqual(['aborted']);
+      // Uploader previews use the Asset fence without admitting a download lease.
+      if (surface === 'private') expect(f.finished).toEqual([]);
       if (revocation === 'realm' && surface === 'bare') {
         const control = await f.get(undefined, `/v1/media/representations/${representation}/bytes?use=${independent}`);
         expect(control.status).toBe(200);

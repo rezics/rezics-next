@@ -218,10 +218,10 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
     }
   }
   const path = `/v1/works/${work.slice(-36)}`;
+  const attribution = await selectedPublicationAttribution(session, basis.structuredPublication);
   return { profile: 'work-read-v1' as const, ...basis.card, disclosure: basis.disclosure,
     publicationState: basis.publicationState,
-    ...(basis.structuredPublication?.sourceObservation ? { rights: { basis: 'public-domain' as const,
-      source: await selectedPublicationAttribution(session, basis.structuredPublication) } } : {}),
+    ...(attribution ? { rights: { basis: 'public-domain' as const, source: attribution } } : {}),
     ...(session.principal && session.options.actingSubject
       && await session.deps.access.canEditWork(session.principal, session.options.actingSubject, work)
       ? { structurePublicationHead: basis.structurePublicationHead } : {}),

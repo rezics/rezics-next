@@ -158,12 +158,22 @@ export function isProblemSchema(value: unknown): boolean {
 
 /** A single status can carry both a domain receipt and a Problem. Partition
  * alternatives by their body shape rather than relabelling the entire union. */
-export function responseMediaSchemas(value: unknown): { json?: unknown; problem?: unknown } {
+export function responseMediaSchemas(value: unknown, definitions: Record<string, unknown> = {},
+  seen = new Set<string>()): { json?: unknown; problem?: unknown } {
   if (!value || typeof value !== 'object') return { json: value };
   const schema = value as Record<string, unknown>;
+  if (typeof schema.$ref === 'string' && schema.$ref.startsWith('#/components/schemas/') && !seen.has(schema.$ref)) {
+    const name = schema.$ref.slice('#/components/schemas/'.length).replaceAll('~1', '/').replaceAll('~0', '~');
+    if (definitions[name]) {
+      const parts = responseMediaSchemas(definitions[name], definitions, new Set([...seen, schema.$ref]));
+      if (parts.json === undefined) return { problem: value };
+      if (parts.problem === undefined) return { json: value };
+      return parts;
+    }
+  }
   const key = Array.isArray(schema.anyOf) ? 'anyOf' : Array.isArray(schema.oneOf) ? 'oneOf' : undefined;
   if (!key) return isProblemSchema(schema) ? { problem: schema } : { json: schema };
-  const alternatives = (schema[key] as unknown[]).map(responseMediaSchemas);
+  const alternatives = (schema[key] as unknown[]).map(part => responseMediaSchemas(part, definitions, seen));
   const result: { json?: unknown; problem?: unknown } = {};
   for (const media of ['json', 'problem'] as const) {
     const variants = alternatives.flatMap(part => part[media] === undefined ? [] : [part[media]]);
@@ -378,7 +388,8 @@ export async function buildMainOpenApi(): Promise<string> {
     for (const [status, result] of Object.entries(operation.responses ?? {})) {
       const json = result.content?.['application/json'] as { schema?: unknown } | undefined;
       if (Number(status) < 400 || !result.content || !json) continue;
-      const schemas = responseMediaSchemas(json.schema);
+      const schemas = responseMediaSchemas(json.schema,
+        document.components?.schemas as Record<string, unknown> | undefined);
       if (schemas.problem !== undefined) result.content['application/problem+json'] = { ...json, schema: schemas.problem };
       if (schemas.json !== undefined) result.content['application/json'] = { ...json, schema: schemas.json };
       else delete result.content['application/json'];

@@ -65,6 +65,14 @@ new Elysia().post('/v1/a', { response: {} }, write(() => owner.change()));`;
   expect(inspectHandler(source, 2, false)?.responses).toEqual([]);
 });
 
+test('native contract registration locates inline and factory handlers at the operation method', () => {
+  const inline = `new Elysia().model(models)\n  [operation.method](operation.path, operation.options, () => Response.json({}, { status: 202 }));`;
+  expect(inspectHandler(inline, 2, false)?.responses.map(value => value.status)).toEqual([202]);
+  const factory = `new Elysia().model(models)\n  [operation.method](operation.path, operation.options, handler(work));`;
+  expect(inspectHandler(factory, 2, false)?.calls).toEqual(['handler']);
+  expect(inspectHandler(factory, 1)).toBeUndefined();
+});
+
 test('named response options resolve, while unknown options do not fabricate a 200 response', () => {
   const source = `const noStore = { headers: { 'cache-control': 'no-store' } };
 const accepted = { status: 202 };

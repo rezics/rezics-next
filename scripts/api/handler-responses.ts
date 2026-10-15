@@ -43,9 +43,14 @@ export function inspectHandler(source: string, line: number, followLocal = true)
       && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) {
       helpers.set(node.name.text, node.initializer);
     }
-    if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return;
-    if (!/^(get|post|put|patch|delete|head|options|all|ws|route)$/.test(node.expression.name.text)) return;
-    if (file.getLineAndCharacterOfPosition(node.expression.name.getStart(file)).line + 1 !== line) return;
+    if (!ts.isCallExpression(node)) return;
+    const member = node.expression;
+    const method = ts.isPropertyAccessExpression(member) ? member.name
+      : ts.isElementAccessExpression(member) && ts.isPropertyAccessExpression(member.argumentExpression)
+        && member.argumentExpression.name.text === 'method' ? member.argumentExpression : undefined;
+    if (!method) return;
+    if (ts.isIdentifier(method) && !/^(get|post|put|patch|delete|head|options|all|ws|route)$/.test(method.text)) return;
+    if (file.getLineAndCharacterOfPosition(method.getStart(file)).line + 1 !== line) return;
     handler = [...node.arguments].reverse().find(arg => ts.isArrowFunction(arg) || ts.isFunctionExpression(arg));
     if (!handler) {
       const candidate = node.arguments.at(-1);
