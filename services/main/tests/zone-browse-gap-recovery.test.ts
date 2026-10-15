@@ -43,6 +43,7 @@ function fixture(count = 65) {
   const headers = new Set(['1', '2', '3', '4', '5']);
   const actualCounts = new Map<string, number>();
   const headerCounts = new Map<string, number>();
+  const deliveredEvents = new Map<string, CustodiedOutbox['events']>();
   const delivered = { sequence: '5', epoch: 'epoch' };
   const acknowledged = { sequence: '5', epoch: 'epoch' };
   const custody = { value: null as CustodiedOutbox | null, reads: [] as { epoch: string; sequence: string }[] };
@@ -108,7 +109,8 @@ function fixture(count = 65) {
         routing_epoch: 'routing', event_count: headerCounts.get(sequence) ?? 0,
         actual_count: String(actualCounts.get(sequence) ?? 0) }] : [] };
     }
-    if (statement.includes('FROM relay.delivered_event')) return { rows: [] };
+    if (statement.includes('FROM relay.delivered_event')) return {
+      rows: (deliveredEvents.get(String(values[2])) ?? []).map(envelope => ({ envelope })) };
     throw new Error(`unexpected relay query: ${statement}`);
   };
   const relay = { query: relayQuery, connect: async () => ({ query: relayQuery, release() {} }) } as unknown as Pool;
@@ -170,7 +172,8 @@ function fixture(count = 65) {
     expect(state.usableCut).toBe(true);
     expect(await current()).toBe(true);
   };
-  return { instance, state, graph, headers, headerCounts, delivered, acknowledged, custody, calls, failures, gap, finish, current, env,
+  return { instance, state, graph, headers, headerCounts, actualCounts, deliveredEvents,
+    delivered, acknowledged, custody, calls, failures, gap, finish, current, env,
     supplyCustody: (value: CustodiedOutbox | null) => {
       custody.value = value;
       if (!headerCounts.has('4')) headers.delete('4');
@@ -194,6 +197,25 @@ test('explicit backfill waits for all pages and remains idempotent for preparati
   await f.instance.backfill();
   expect(f.candidates().size).toBe(130);
   expect(await f.current()).toBe(true);
+});
+
+test('preparation verifies more than 128 delivered event batches without spending native custody probes', async () => {
+  const f = fixture(1);
+  f.graph.relaySequence = f.acknowledged.sequence = f.delivered.sequence = '200';
+  for (let index = 1; index <= 200; index++) {
+    const sequence = String(index), retained = slimCustody(), event = retained.events[0]!;
+    const batchId = index === 4 ? retained.batch.batchId : `batch-${sequence}`;
+    f.headers.add(sequence);
+    f.headerCounts.set(sequence, 1);
+    f.actualCounts.set(sequence, 1);
+    f.deliveredEvents.set(sequence, [{ ...event, id: `event-${sequence}`, data: { ...event.data,
+      batchId, relayPosition: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence } } }]);
+  }
+  await f.instance.backfill();
+  expect(await f.current()).toBe(true);
+  expect(f.state.checkpoint.sequence).toBe('200');
+  expect(f.calls.relay.filter(sql => sql.includes('FROM relay.delivered_batch AS batch'))).toHaveLength(200);
+  expect(f.calls.graph.some(query => query.includes('SELECT ?controlSequence'))).toBe(false);
 });
 
 test('an empty fresh stack finishes its authoritative scan in one poll before admissions begin', async () => {

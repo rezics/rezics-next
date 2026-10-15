@@ -246,7 +246,10 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
             { supplied: Boolean(this.env.receiptCustody), found: false });
         }
         this.verifiedCoverage = { ...coverage, sequence };
-        if (classification.events?.length) break;
+        // Delivered envelopes need only bounded SQL reads. A custody fallback
+        // spends the page's native probes, so leave further batches to the next
+        // page without turning event-bearing history into a 128-batch limit.
+        if (classification.custodied) break;
       }
       if (this.verifiedCoverage.sequence !== coverage.sequence) return;
       const cut = await this.graphCut();
@@ -439,7 +442,8 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     const read = (client: Pool | PoolClient) => classifyDeliveredRelayBatch(client,
       { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: this.env.lineage.dataEpoch, sequence },
       { readEvents: true, custody: () => this.custodiedBatch(custody, sequence) });
-    return deadline === undefined ? read(this.relay) : this.poolPage(this.relay, deadline, read);
+    const classification = await (deadline === undefined ? read(this.relay) : this.poolPage(this.relay, deadline, read));
+    return { ...classification, custodied: custody.found };
   }
 
   private async relayGap(message: string, expected: string, coverage: RelayHandoffPosition,
