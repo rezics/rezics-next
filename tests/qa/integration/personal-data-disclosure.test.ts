@@ -18,10 +18,12 @@ type Fixture = {
   shelvesCursor: string; statusCursor: string; progressCursor: string; followsCursor: string;
   snapshot: string; exportCursor: string; file: string; copyCursor: string; loanCursor: string;
   representation: string; asset: string; etag: string;
+  notificationCursor: string; notificationIds: string[];
 };
 let people: PersonaSessions, works: Array<{ work: string; mainVersion: string }>;
 let structure: string, occurrences: string[], release: string;
 const fixtures: Fixture[] = [];
+type Inbox = { next: string | null; items: Array<{ id: string }> };
 
 beforeAll(async () => {
   people = await personaSessions();
@@ -97,6 +99,10 @@ beforeAll(async () => {
       contentLanguages: ['ja'], spoilerPolicy: 'show' }));
     const file = await json<{ id: string }>(person.main('POST', '/v1/me/library-imports', { ...own, format: 'rezics',
       file: JSON.stringify({ profile: 'rezics-library-export-v1', rows: [0, 1].map(index => emptyRow(String(index), secret, { secret })) }) }), 201);
+    const imported = await person.main('GET', `/v1/me/library-imports/${file.id}/rows?${q}&cursor=0`, undefined, randomUUID());
+    const importedRows = await imported.text();
+    expect(imported.status, importedRows).toBe(200);
+    expect(importedRows).toContain(secret);
     for (let index = 0; index < 2; index++) {
       const copy = await json<{ id: string }>(person.main('POST', '/v1/me/library-copies', { ...own, release,
         expectedVersion: 0, format: secret, acquiredFrom: { kind: 'name', name: secret } }), 201);
@@ -128,7 +134,46 @@ beforeAll(async () => {
       progressCursor: await cursor(`/v1/compositions/${short(structure)}/progress`), followsCursor: await cursor('/v1/me/follows'),
       copyCursor: await cursor(`/v1/works/${short(works[0]!.work)}/copies`), loanCursor: await cursor('/v1/me/library-loans'),
       snapshot: exported.snapshot, exportCursor: exported.nextCursor!, file: file.id,
-      representation: activated.representation, asset: upload.asset, etag: `"${sha(bytes)}"` });
+      representation: activated.representation, asset: upload.asset, etag: `"${sha(bytes)}"`,
+      notificationCursor: '', notificationIds: [] });
+  }
+  // Keep the public profile gate open while proving that a private library's
+  // counts and membership cannot be read through its public shelf endpoints.
+  for (const person of [people.moderator, people.operator]) for (const work of works) {
+    await json(person.main('PUT', `/v1/works/${short(work.work)}/reader-status`, {
+      actingSubject: person.actingSubject, expectedVersion: 0, status: 'reading',
+    }));
+  }
+  // Real invitation events provide nonempty, recipient-private inboxes and
+  // actual API-issued descending tokens. No manufactured notification rows.
+  const sender = people.moderator;
+  for (let index = 0; index < 2; index++) {
+    const realm = await json<{ realm: string }>(sender.main('POST', '/v1/spaces', {
+      profile: 'space-realm-v2', actingSubject: sender.actingSubject, language: 'en',
+      name: `Invitation partition ${randomUUID()}`, capabilities: ['realm'],
+      initialSettings: { visibility: 'private', reviewRequired: false, reviewMode: 'open',
+        whoMaySubmit: 'members', selfJoin: false, rules: [] },
+    }), 201);
+    for (const victim of fixtures) {
+      await json(sender.main('POST', `/v1/realms/${short(realm.realm)}/invitations`, {
+        actingSubject: sender.actingSubject, member: victim.agent, expiresInSeconds: 3600,
+      }));
+    }
+  }
+  for (const victim of fixtures) {
+    const deadline = performance.now() + 45_000;
+    for (;;) {
+      const inbox = await json<Inbox>(victim.person.main('GET', '/v1/me/notifications?before=latest&limit=1'));
+      if (inbox.next) {
+        victim.notificationCursor = inbox.next;
+        const all = await json<Inbox>(victim.person.main('GET', '/v1/me/notifications?before=latest&limit=50'));
+        victim.notificationIds = all.items.map(item => item.id);
+        expect(victim.notificationIds.length).toBeGreaterThanOrEqual(2);
+        break;
+      }
+      expect(performance.now(), 'Invitation events must provide a real inbox continuation').toBeLessThan(deadline);
+      await Bun.sleep(100);
+    }
   }
 }, 600_000);
 afterAll(async () => { await people?.close(); });
@@ -170,6 +215,12 @@ for (const name of personaNames) {
       expect(raw).not.toContain(victim.secret);
       if (name === 'visitor') expect(raw).toContain('"status":null');
     }
+    const stale = await person.main('PUT', `/v1/compositions/${short(structure)}/occurrences/${short(occurrences[2]!)}/progress`, {
+      actingSubject: victim.agent, expectedVersion: 0, completed: false, position: 'second device stale write',
+    });
+    const conflict = await stale.text();
+    expect(stale.status, conflict).toBe(expected);
+    expect(conflict).not.toContain(victim.secret);
     // Even replacing the victim's Person with one's own cannot transfer a token.
     if (person.actingSubject) for (const path of [
       `/v1/me/library-export?${query(person.actingSubject)}&snapshot=${victim.snapshot}&cursor=${victim.exportCursor}`,
@@ -210,6 +261,24 @@ for (const name of personaNames) {
     const anonymousFollow = await json<{ following: boolean | null; revision: string | null }>(
       people.visitor.main('GET', `/v1/follows/${short(works[0]!.work)}`));
     expect(anonymousFollow).toMatchObject({ following: null, revision: null });
+    const metadata = await json<{ items: unknown[] }>(person.main('POST', '/v1/media/metadata', {
+      ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}), items: [{ representation: victim.representation }],
+    }));
+    expect(metadata.items).toEqual([{ status: 'unavailable', reference: { representation: victim.representation } }]);
+    const publicProfile = people[name === 'moderator' ? 'operator' : 'moderator'].actingSubject!;
+    const profile = await json<{ library: { visibility: string; statusShelvesVisible: boolean } }>(
+      person.main('GET', `/v1/agents/${short(publicProfile)}${actor}`));
+    expect(profile.library).toEqual({ visibility: 'private', statusShelvesVisible: false });
+    for (const path of [`/v1/agents/${short(publicProfile)}/shelves${actor}`,
+      `/v1/agents/${short(publicProfile)}/shelves/status/reading/works${actor}`]) {
+      const response = await person.main('GET', path);
+      expect(response.status, await response.text()).toBe(404);
+    }
+    const position = await person.main('GET', `/v1/reading-positions/${short(works[0]!.work)}?${query(victim.agent)}&position=mine`);
+    const resume = await position.text();
+    expect(position.status, resume).toBe(name === 'visitor' ? 401 : 200);
+    expect(resume).not.toContain(victim.secret);
+    if (name !== 'visitor') expect(JSON.parse(resume)).toMatchObject({ resolved: 'start' });
   });
 
   test(`${name}: Account identity and notification payloads stay in the caller's partition`, async () => {
@@ -222,16 +291,14 @@ for (const name of personaNames) {
     expect(raw).not.toContain(victim.person.accountId!);
     if (person.accountId) expect(JSON.parse(raw)).toMatchObject({ user: { id: person.accountId } });
     else expect(JSON.parse(raw)).toBeNull();
-    for (const path of ['/v1/me/notifications?before=latest&limit=1', '/v1/me/notifications/unread-count', '/v1/me/notifications/hint', '/v1/me/notification-preferences']) {
+    for (const path of ['/v1/me/notifications?before=latest&limit=50', '/v1/me/notifications/unread-count', '/v1/me/notifications/hint', '/v1/me/notification-preferences']) {
       const notification = await person.main('GET', path), body = await notification.text();
       expect(notification.status, body).toBe(name === 'visitor' ? 401 : 200);
       expect(body).not.toContain(victim.secret);
+      for (const id of victim.notificationIds) expect(body).not.toContain(id);
       expect(notification.headers.get('etag')).toBeNull();
     }
-    const first = await json<{ next: string | null }>(victim.person.main('GET', '/v1/me/notifications?before=latest&limit=1'));
-    if (first.next) {
-      const copied = await person.main('GET', `/v1/me/notifications?before=${encodeURIComponent(first.next)}&limit=1`);
-      expect(copied.status, await copied.text()).toBe(name === 'visitor' ? 401 : 400);
-    }
+    const copied = await person.main('GET', `/v1/me/notifications?before=${encodeURIComponent(victim.notificationCursor)}&limit=1`);
+    expect(copied.status, await copied.text()).toBe(name === 'visitor' ? 401 : 400);
   });
 }
