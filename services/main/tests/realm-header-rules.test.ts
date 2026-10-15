@@ -1,3 +1,4 @@
+import { withFixtureRealmDisclosure } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { GovernanceRules } from '../src/modules/governance/rules.ts';
@@ -70,7 +71,7 @@ function headerSession(document: unknown, legacyRules: unknown[]) {
       access: {},
     },
   } as unknown as WorkReadSession;
-  return { session, calls, governance };
+  return { session: withFixtureRealmDisclosure(session), calls, governance };
 }
 
 test('settings rules stay the header source when an old profile also has rules', async () => {

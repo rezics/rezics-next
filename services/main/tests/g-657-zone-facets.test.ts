@@ -21,7 +21,7 @@ function refused(filter: NonNullable<Parameters<typeof compileQuery>[0]['filter'
 }
 
 test('G657: every browse parameter and response Facet resolves through the admitted registry', () => {
-  const controls = ['language', 'limit', 'cursor', 'q', 'sort'];
+  const controls = ['language', 'limit', 'cursor', 'q', 'sort', 'displayLanguages'];
   for (const parameter of Object.keys(zoneBrowseQuery.properties)) {
     if (controls.includes(parameter)) continue;
     const facet = resolveFacet(parameter === 'excludeConcept' ? 'concept' : parameter);

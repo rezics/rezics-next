@@ -1,3 +1,4 @@
+import { withFixtureRealmDisclosure } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import { chapterLabel, readZoneChapters } from '../src/modules/zone-modules/read.ts';
 import type { WorkReadSession } from '../src/modules/work/read-session.ts';
@@ -45,7 +46,7 @@ function session(times: Map<string, string> | undefined) {
         return times;
       } } } : {},
   };
-  return { read: read as unknown as WorkReadSession, calls };
+  return { read: withFixtureRealmDisclosure(read as unknown as WorkReadSession), calls };
 }
 
 test('latest chapters carry the Book’s own chapter label and the Content receipt time, in one batch each', async () => {

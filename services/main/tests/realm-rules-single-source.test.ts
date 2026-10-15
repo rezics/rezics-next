@@ -1,3 +1,4 @@
+import { withFixtureRealmDisclosure } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import { Elysia } from 'elysia';
 import type { Pool, PoolClient } from 'pg';
@@ -126,7 +127,7 @@ function readSession(governance: GovernanceRules, profileRules: unknown, summary
     query: async () => [{ name: { value: 'Readers', 'xml:lang': 'en' } }],
     deps: { environment, governance: { rules: governance }, access: {} },
   } as unknown as WorkReadSession;
-  return session;
+  return withFixtureRealmDisclosure(session);
 }
 
 test('profile publication refuses rules on every matched route form', async () => {

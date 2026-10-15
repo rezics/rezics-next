@@ -224,7 +224,7 @@ test('land review 12: unrelated writes do not change the private preview selecti
 
 test('land review 12: a public Work cannot retain private Recipe preview authority after its grant is revoked', async () => {
   const f = ownerFixture(() => undefined); let allowed = true;
-  f.deps.access.canReadWork = async () => allowed;
+  f.deps.access.canPreviewWork = async () => allowed;
   const session = new WorkReadSession(f.deps, f.request, { actingSubject: agent }, { dataEpoch: 'epoch', sequence: '1' });
   session.principal = principal;
   expect(await readRecipePreviewGrant(session, work)).toBe(true);

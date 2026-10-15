@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
   configureDisclosureAncestrySource,
+  configureDisclosure,
   type DisclosureAncestryEvidence,
   type DisclosureReader,
   type DisclosureTarget,
@@ -52,4 +53,18 @@ export function fixtureDisclosureReader(read: DisclosureReader['read']): Disclos
     anonymousNames: anonymousNames ? targets.map(() => 'visible') : [],
     fenceBases: targets.map(() => ({ ...fixtureDisclosureCut })),
   }) };
+}
+
+/** Realm module fixtures authorize the already selected Realm explicitly. Their
+ * graph stubs describe module candidates, not the separate disclosure owner. */
+export function withFixtureRealmDisclosure<T extends import('../../src/modules/work/read-session.ts').WorkReadSession>(session: T): T {
+  const environment = session.deps.environment ?? {
+    fuseki: {}, lineage: { dataEpoch: session.position.dataEpoch, routingEpoch: 'fixture' },
+    objectDirectory: '.temp/realm-module-fixture',
+  } as WorkActivationEnvironment;
+  Object.assign(session.deps, { environment });
+  configureFixtureDisclosureAncestry(environment, () => undefined);
+  configureDisclosure(environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
+  if (!session.observeDependency) Object.assign(session, { observeDependency: () => '' });
+  return session;
 }

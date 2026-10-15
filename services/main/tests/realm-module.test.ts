@@ -1,3 +1,4 @@
+import { withFixtureRealmDisclosure } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readZoneChapters, readZoneDecisions, readZoneWorks }
@@ -68,7 +69,7 @@ function session(options: { cursor?: string; candidate?: boolean; privateRealm?:
       name: { value: 'Serial', language: 'en', direction: 'ltr', basis: 'fallback' },
       avatar: { kind: 'fallback', policy: 'test', key: work, resourceType: 'work' } }],
   };
-  return { read: read as unknown as WorkReadSession, calls, nameBatches };
+  return { read: withFixtureRealmDisclosure(read as unknown as WorkReadSession), calls, nameBatches };
 }
 
 test('Zone modules reject private Realms and tampered cursors before candidate enumeration', async () => {

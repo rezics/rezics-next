@@ -1,3 +1,4 @@
+import { withFixtureRealmDisclosure } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import { readZonePopulation, realmPopulation, collectionPopulation, editorialPopulationKey,
@@ -76,7 +77,7 @@ test('G893: discussions and quotes retain public replies after adoption removal 
       } }, content: { readExactBatch: async () => [0, 1].map(n => ({ status: 'available',
         reference: { resourceId: id(20 + n) }, body: { body: 'A public discussion about a formerly adopted Work.' } })) } },
     } as unknown as WorkReadSession;
-    const page = await readZoneReplies(session, realm, kind);
+    const page = await readZoneReplies(withFixtureRealmDisclosure(session), realm, kind);
     expect(page.items.map(item => item.work)).toEqual([
       { id: member, title: name, inZone: true }, { id: outside, title: name, inZone: false }]);
     expect(queries.filter(query => query.includes('# Zone population batch'))).toHaveLength(1);

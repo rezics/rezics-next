@@ -20,7 +20,7 @@ test('Work header hydration stays a Work read and rejects a Post without a Work 
     options: { actingSubject: work },
     principal: {},
     position: { dataEpoch: 'test', sequence: '1' },
-    deps: { access: { canReadWork: async () => true },
+    deps: { access: { canEditWork: async () => false, canReadWork: async () => true },
       environment: { fuseki: { query: async () => ({ results: { bindings: [] } }) } } },
     query: async (query: string, maximumRows: number) => {
       queries.push(query);

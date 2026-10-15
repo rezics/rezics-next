@@ -1,3 +1,4 @@
+import { withFixtureRealmDisclosure } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import { compileZoneBrowse, readZoneBrowse } from '../src/modules/zone-modules/browse.ts';
 import { compileQuery, QueryRejected } from '../src/modules/query/compile.ts';
@@ -180,7 +181,7 @@ function browseSession(count = 310, firstMatch = 300, cursor?: string) {
       discovery: { active: async () => ({ stale: false }), workTerms: async () => [] },
     },
   } as unknown as WorkReadSession;
-  return { session, batches, queries };
+  return { session: withFixtureRealmDisclosure(session), batches, queries };
 }
 
 test('a year match beyond member 300 remains reachable after an empty bounded page', async () => {

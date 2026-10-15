@@ -1,3 +1,4 @@
+import { withFixtureRealmDisclosure } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import { readZoneReplies } from '../src/modules/zone-modules/replies.ts';
 import { WorkReadMissing, type WorkReadSession } from '../src/modules/work/read-session.ts';
@@ -36,7 +37,7 @@ function fixture(options: { privateRealm?: boolean; approved?: boolean; erased?:
     content: { readExactBatch: async () => [{ status: options.erased ? 'erased' : 'available',
       reference: { resourceId: reply }, body: { body: 'A thoughtful public reply about this story.' } }] } },
   } as unknown as WorkReadSession;
-  return { session, calls };
+  return { session: withFixtureRealmDisclosure(session), calls };
 }
 
 test('Realm discussions and quote excerpts are bounded by current public placement review', async () => {
