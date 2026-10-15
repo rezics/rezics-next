@@ -295,7 +295,11 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
     expect((await home.deps.libraryStatus.batch(other,[first.work,dropped.work])).map(s => [s.work,s.status,s.startedOn,s.finishedOn])).toEqual(originalStatuses);
     const copiedReview = (await home.deps.libraryStatus.privateReviews(other,[first.work]))[0];
     expect(copiedReview).toMatchObject({ text: 'Private imported review',language: 'en',spoiler: true });
-    expect((await stack.accessPool.query('SELECT count(*)::integer AS n FROM access.rating_aggregate_head')).rows[0].n).toBe(3);
+    expect((await stack.accessPool.query('SELECT count(*)::integer AS n FROM access.rating_aggregate_head')).rows[0].n,
+      JSON.stringify({ ratings: all.filter(row => row.sourceId.startsWith('rating:')),
+        restored: (await stack.contentPool.query(`SELECT r.match,r.resolution,r.outcome,s.source FROM reader.library_import_source_row r
+          JOIN reader.library_import_source s ON s.agent=r.agent AND s.digest=r.source_digest
+          WHERE r.agent=$1 AND s.source->>'sourceId' LIKE 'rating:%'`, [other])).rows })).toBe(3);
     const shelvesOf = (rows: CanonicalRow[]) => rows.filter(r => r.kind === 'shelf').map(r => [r.title,r.raw.disclosure]).sort();
     const copy: CanonicalRow[] = []; next = null; let snapshot: string | undefined;
     do { const page = await checked<Page>(await exported(other,home.author.token,next,snapshot)); snapshot ??= page.snapshot;
