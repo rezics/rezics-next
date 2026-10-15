@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { independentRestorePreparationOptions, ownerErasurePreparationOptions, RetainedSources } from './retained-source.ts';
 import type { RetainedRequirement } from './retained-preflight.ts';
-import { smallRecoveryFixtureConsumers } from './preparation-selection.ts';
+import { needsRealmDiscussionSource, smallRecoveryFixtureConsumers } from './preparation-selection.ts';
 
 /** Walk authored relative imports without evaluating tests (which may bootstrap
  * personas at module scope). Stop at source APIs; their implementations import
@@ -45,6 +45,8 @@ export function retainedRequirements(root: string, files: readonly string[], cus
   return retainedRequirementKinds(root, files).map(kind => ({
     source: kind,
     ...(kind === 'fixture-small' ? { preparedByRun: 'small fixture before fault/recovery shards' } : {}),
+    ...(kind === 'realm' && needsRealmDiscussionSource(files)
+      ? { preparedByRun: 'Realm discussion source before integration shards' } : {}),
     build: kind === 'realm' ? 'task goal -- test tests/qa/integration/realm-discussion-source.test.ts'
       : kind === 'seed' ? 'task goal -- test tests/qa/fault-recovery/work-profile-seed-build.test.ts'
       : kind === 'content' ? 'task goal -- test tests/qa/fault-recovery/retained-content-source-preparation.test.ts'

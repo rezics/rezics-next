@@ -115,6 +115,7 @@ test('selection discovers retained APIs through helpers without executing person
   write(join(f.directory, 'tests/qa/integration/helper.ts'), `export { realmDiscussionSource } from '../support/realm-discussion-source.ts';`);
   write(join(f.directory, 'tests/qa/support/realm-discussion-source.ts'), `throw new Error('must not evaluate');`);
   expect(retainedRequirementKinds(f.directory, ['tests/qa/integration/one.test.ts'])).toEqual(['realm']);
+  expect(retainedRequirements(f.directory, ['tests/qa/integration/one.test.ts'])[0]!.preparedByRun).toBeUndefined();
   expect(retainedRequirementKinds(root, ['tests/qa/integration/outcomes/realm/ranking.test.ts'])).toEqual(['realm']);
   expect(retainedRequirementKinds(root, ['tests/qa/integration/library-growth.test.ts'])).toEqual(['seed']);
   expect(retainedRequirementKinds(root, ['tests/qa/fault-recovery/work-profile-seed-build.test.ts'])).toEqual([]);
@@ -139,6 +140,22 @@ test('run-prepared sources are reported without checking absent custody', async 
   expect(result.ok).toBe(true);
   expect(checked).toBe(false);
   expect(retainedPreflightSummary(result)).toContain('fixture-small: prepared by run:');
+});
+
+test('a standalone ranking confirmation declares its source preparation before custody preflight', async () => {
+  const files = ['tests/qa/integration/outcomes/realm/ranking.test.ts'];
+  const requirements = retainedRequirements(root, files);
+  expect(requirements).toHaveLength(1);
+  expect(requirements[0]!.source).toBe('realm');
+  expect(requirements[0]!.preparedByRun).toContain('before integration shards');
+  let checks = 0;
+  const result = await preflightRetainedSources(root, files, requirements.map(requirement => ({
+    ...requirement,
+    check() { checks++; throw new Error('missing custody before producer runs'); },
+  })));
+  expect(result.ok).toBe(true);
+  expect(checks).toBe(0);
+  expect(retainedPreflightSummary(result)).toContain('realm: prepared by run:');
 });
 
 test('the printed owner repair command publishes a synthetic source through the real command', async () => {
