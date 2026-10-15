@@ -33,7 +33,8 @@ async function createRecipe(page: Page, title: string): Promise<string> {
   }).toPass({ timeout: 30_000 });
   await english.click();
   await page.getByRole('button', { name: /^Create as / }).click();
-  await page.waitForURL(/\/en\/w\/[1-9A-HJ-NP-Za-km-z]{22}\/edit\/recipe$/);
+  // Studio can retain the represented Agent in the query; the pathname identifies the editor.
+  await page.waitForURL(url => /^\/en\/w\/[1-9A-HJ-NP-Za-km-z]{22}\/edit\/recipe$/.test(url.pathname), { timeout: 30_000 });
   return new URL(page.url()).pathname.replace(/\/edit\/recipe$/, '');
 }
 
