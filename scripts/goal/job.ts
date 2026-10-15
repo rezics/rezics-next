@@ -36,6 +36,10 @@ export const jobDirectory = (cwd: string): string => join(cwd, '.temp/goal/jobs'
 export const jobRuntime = (cwd: string): string => join(dirname(git(cwd,
   ['rev-parse', '--path-format=absolute', '--git-common-dir'])), 'scripts/goal/job.ts');
 
+export interface JobStep {
+  command: string[]; started?: number; code?: number; ended?: number; reason?: string; signal?: NodeJS.Signals;
+}
+
 export interface Job {
   id: string; task: string; attempt: number; cwd: string; command: string[]; created: number;
   phase: 'running' | 'inline' | 'parked' | 'waking' | 'woken' | 'reported';
@@ -43,6 +47,7 @@ export interface Job {
   executor?: Pick<ProcessIdentity, 'pid'> & Partial<ProcessIdentity>;
   signal?: NodeJS.Signals;
   code?: number; ended?: number; resumedAttempt?: number; reason?: string;
+  sequence?: JobStep[]; current?: number; timeoutMs?: number;
 }
 
 /** Jobs stay with their worktree; the resident coordinator discovers them from its task ledger. */
@@ -68,7 +73,7 @@ export class JobStore {
       change(job); this.put(job); return job;
     }).immediate();
   }
-  log(id: string): string { return join(this.directory, `${id}.log`); }
+  log(id: string, step?: number): string { return join(this.directory, `${id}${step === undefined ? '' : `.${step + 1}`}.log`); }
   close(): void { this.db.close(); }
 }
 
@@ -77,6 +82,60 @@ function childResult(child: ChildProcess): Promise<{ code: number | null; signal
     child.once('error', reject);
     child.once('close', (code, signal) => resolveExit({ code, signal }));
   });
+}
+
+function killGroup(pid: number): void {
+  try { process.kill(-pid, 'SIGKILL'); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+}
+
+/** Each command gets the ordinary executor group and admission, but only the sequence owns a continuation. */
+async function ownSequence(store: JobStore, job: Job): Promise<void> {
+  for (let index = 0; index < job.sequence!.length; index++) {
+    const path = store.log(job.id, index);
+    const current = store.update(job.id, record => {
+      if (record.code !== undefined) return;
+      record.current = index; delete record.executor;
+      record.sequence![index]!.started = Date.now();
+    });
+    if (current.code !== undefined) return;
+    const step = current.sequence![index]!;
+    appendFileSync(path, `$ ${step.command.join(' ')}\n`);
+    const log = openSync(path, 'a');
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
+    try {
+      const child = spawn(process.execPath, [jobRuntime(job.cwd), '--run', store.directory, job.id], {
+        cwd: job.cwd, detached: true, stdio: ['ignore', log, log],
+      });
+      const result = childResult(child);
+      timer = setTimeout(() => {
+        timedOut = true;
+        if (child.pid) killGroup(child.pid);
+      }, job.timeoutMs ?? JOB_WAIT_MS);
+      const { code, signal } = await result;
+      if (signal && child.pid) killGroup(child.pid);
+      store.update(job.id, record => {
+        const finished = record.sequence![index]!;
+        if (timedOut || finished.code === undefined) {
+          finished.code = timedOut ? 124 : signal ? 128 + constants.signals[signal] : code || 1;
+          finished.reason = timedOut ? `command timed out after ${job.timeoutMs ?? JOB_WAIT_MS}ms`
+            : signal ? `executor exited with signal ${signal}` : `executor exited with status ${code} without recording a result`;
+          finished.ended = Date.now();
+          if (signal) finished.signal = signal;
+          appendFileSync(path, `error: ${finished.reason}\n`);
+        }
+        if (finished.code !== 0 || index === record.sequence!.length - 1) {
+          record.code = finished.code; record.ended = finished.ended;
+          record.reason = finished.reason; record.signal = finished.signal;
+        }
+      });
+      if (store.get(job.id)!.code !== undefined) return;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      closeSync(log);
+    }
+  }
 }
 
 /** The supervisor survives the caller and can record even SIGKILL of the executor. Both have their own
@@ -93,27 +152,30 @@ async function jobProcess(directory: string, id: string, role: 'owner' | 'execut
     const job = store.update(id, current => {
       current[role] = processIdentity(process.pid) ?? { pid: process.pid };
     });
-    log = openSync(path, 'a');
+    if (role === 'owner' && job.sequence) { await ownSequence(store, job); return; }
+    const command = job.sequence ? job.sequence[job.current!]!.command : job.command;
+    const commandPath = job.sequence ? store.log(id, job.current) : path;
+    log = openSync(commandPath, 'a');
     const child = role === 'owner'
       ? spawn(process.execPath, [jobRuntime(job.cwd), '--run', directory, id], {
         cwd: job.cwd, detached: true, stdio: ['ignore', log, log],
       })
-      : spawn(job.command[0]!, job.command.slice(1), { cwd: job.cwd, stdio: ['ignore', log, log] });
+      : spawn(command[0]!, command.slice(1), { cwd: job.cwd, stdio: ['ignore', log, log] });
     const { code, signal } = await childResult(child);
     const reason = signal ? `${role === 'owner' ? 'executor' : 'command'} exited with signal ${signal}`
       : role === 'owner' ? `executor exited with status ${code} without recording a result` : undefined;
     if (role === 'owner' && signal && child.pid) {
       // The executor cannot reap its command after SIGKILL. Its separate group contains only this job.
-      try { process.kill(-child.pid, 'SIGKILL'); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+      killGroup(child.pid);
     }
     store.update(id, current => {
-      if (current.code !== undefined) return;
-      if (reason) appendFileSync(path, `error: ${reason}\n`);
-      current.code = signal ? 128 + constants.signals[signal] : role === 'owner' ? code || 1 : code ?? 1;
-      current.ended = Date.now();
-      if (reason) current.reason = reason;
-      if (signal) current.signal = signal;
+      const result = current.sequence ? current.sequence[current.current!]! : current;
+      if (result.code !== undefined || current.code !== undefined) return;
+      if (reason) appendFileSync(commandPath, `error: ${reason}\n`);
+      result.code = signal ? 128 + constants.signals[signal] : role === 'owner' ? code || 1 : code ?? 1;
+      result.ended = Date.now();
+      if (reason) result.reason = reason;
+      if (signal) result.signal = signal;
     });
   } catch (error) {
     const reason = `error: ${role}: ${error instanceof Error ? error.stack ?? error.message : String(error)}`;
@@ -121,8 +183,9 @@ async function jobProcess(directory: string, id: string, role: 'owner' | 'execut
     process.exitCode = 1;
     if (store?.get(id)) {
       store.update(id, current => {
-        if (current.code !== undefined) return;
-        current.code = 1; current.ended = Date.now(); current.reason = reason;
+        const result = role === 'executor' && current.sequence ? current.sequence[current.current!]! : current;
+        if (result.code !== undefined) return;
+        result.code = 1; result.ended = Date.now(); result.reason = reason;
       });
     }
   } finally {
@@ -130,7 +193,8 @@ async function jobProcess(directory: string, id: string, role: 'owner' | 'execut
     if (store) {
       try {
         // Completion owns the first wake; the coordinator retries if this process dies or admission waits.
-        if (store.get(id)?.code !== undefined) await wakeJobs(store, {}, id);
+        const result = store.get(id);
+        if (result?.code !== undefined && !(role === 'executor' && result.sequence)) await wakeJobs(store, {}, id);
       } catch (error) {
         appendFileSync(path, `error: job wake: ${error instanceof Error ? error.message : String(error)}\n`);
       } finally { store.close(); }
@@ -141,8 +205,15 @@ async function jobProcess(directory: string, id: string, role: 'owner' | 'execut
 export const executeJob = (directory: string, id: string): Promise<void> => jobProcess(directory, id, 'executor');
 
 export async function runJob(command: string[], options: {
-  cwd?: string; task?: Task; inlineMs?: number; print?: (line: string) => void;
+  cwd?: string; task?: Task; inlineMs?: number; print?: (line: string) => void; timeoutMs?: number;
 } = {}): Promise<number> {
+  const then: string[][] = [];
+  while (command[0] === '--then') {
+    if (!command[1]?.trim() || command[1] === '--') throw new Error('--then needs a nonempty shell command');
+    then.push(['/bin/sh', '-c', command[1]]);
+    command = command.slice(2);
+  }
+  if (then.length && command[0] !== '--') throw new Error('job --then needs -- <first command…>');
   if (command[0] === '--') command = command.slice(1);
   if (!command.length) throw new Error('job needs -- <command…>');
   const cwd = resolve(options.cwd ?? process.cwd());
@@ -151,7 +222,8 @@ export async function runJob(command: string[], options: {
   const print = options.print ?? console.log;
   const store = new JobStore(jobDirectory(cwd));
   const job: Job = { id: randomUUID(), task: task.id, attempt: lastAttempt(task).n, cwd, command,
-    created: Date.now(), phase: 'running' };
+    created: Date.now(), phase: 'running',
+    ...(then.length ? { sequence: [command, ...then].map(command => ({ command })), timeoutMs: options.timeoutMs ?? JOB_WAIT_MS } : {}) };
   try {
     // Commit the record before starting anything that reads it on another connection.
     if (store.all().some(current => current.task === task.id && ['parked', 'waking'].includes(current.phase))) {
@@ -177,7 +249,7 @@ export async function runJob(command: string[], options: {
     while (store.get(job.id)!.code === undefined && Date.now() < deadline) await Bun.sleep(Math.min(100, Math.max(1, deadline - Date.now())));
     const result = store.update(job.id, current => { current.phase = current.code === undefined ? 'parked' : 'inline'; });
     if (result.phase === 'inline') {
-      print(readFileSync(store.log(job.id), 'utf8'));
+      print(result.sequence ? jobResult(store, result) : readFileSync(store.log(job.id), 'utf8'));
       print(`job:${job.id} exit:${result.code}; whole output: ${store.log(job.id)}`);
       return result.code!;
     }
@@ -187,6 +259,16 @@ export async function runJob(command: string[], options: {
 }
 
 export function jobResult(store: JobStore, job: Job): string {
+  if (job.sequence) {
+    const failed = job.code !== 0 ? job.sequence[job.current ?? 0] : undefined;
+    const log = store.log(job.id, job.current ?? 0);
+    const summary = failed
+      ? `Command: ${failed.command.join(' ')}\nReason: ${job.reason ?? failed.reason ?? 'command failed'}\n`
+        + (existsSync(log) ? checkFailureLines(readFileSync(log, 'utf8')).join('\n').slice(0, 12_000) : '')
+        + `\nWhole output: ${log}`
+      : job.sequence.map((step, index) => `${index + 1}. exit:${step.code} ${step.command.join(' ').replaceAll('\n', '\\n').replaceAll('\r', '\\r')}; log: ${store.log(job.id, index)}`).join('\n');
+    return `Job job:${job.id} finished with exit status ${job.code}.\n${summary}\nContinue where you parked; this is a continuation, not a fix round.`;
+  }
   const lines = job.code ? checkFailureLines(readFileSync(store.log(job.id), 'utf8')) : [];
   return `Job job:${job.id} finished with exit status ${job.code}.\nCommand: ${job.command.join(' ')}\n`
     + (job.reason ? `Reason: ${job.reason.slice(0, 2000)}\n` : '')
@@ -229,7 +311,8 @@ export async function wakeJobs(store: JobStore, options: JobPassOptions = {}, id
         (options.report ?? reportJob)(job, reason, ledger);
         store.update(job.id, current => { current.phase = 'reported'; current.reason = reason; });
       };
-      if ((options.now ?? Date.now()) - job.created > JOB_WAIT_MS) { report('wait exceeded 4 hours'); return; }
+      const waitingSince = job.sequence ? job.ended : job.created;
+      if (waitingSince !== undefined && (options.now ?? Date.now()) - waitingSince > JOB_WAIT_MS) { report('wait exceeded 4 hours'); return; }
       const later = task && lastAttempt(task).n > job.attempt && !['verified', 'cancelled', 'stopped'].includes(task.state)
         ? lastAttempt(task) : undefined;
       if (later) {
@@ -254,9 +337,14 @@ export async function wakeJobs(store: JobStore, options: JobPassOptions = {}, id
             if (current.code !== undefined) return;
             appendFileSync(store.log(job.id), `error: ${reason}\n`);
             current.code = 1; current.ended = Date.now(); current.reason = reason;
+            if (current.sequence) {
+              const step = current.sequence[current.current ?? 0]!;
+              step.code = 1; step.ended = current.ended; step.reason = reason;
+              if (current.executor && processAlive(current.executor)) killGroup(current.executor.pid);
+            }
             lost = true;
           });
-          if (lost) report(reason);
+          if (lost && !job.sequence) report(reason);
         }
         return;
       }
