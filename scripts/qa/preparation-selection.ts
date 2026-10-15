@@ -13,6 +13,13 @@ const preparationWalls = new Map([
   [RETAINED_SOURCE_BUILD_FILE, RETAINED_SOURCE_BUILD_WALL_MS],
 ]);
 
+/** Every standalone consumer prepares custody before its operation clock starts.
+ * Confirmation selects outcome files independently of the source proof file. */
+export function needsRealmDiscussionSource(files: readonly string[]): boolean {
+  return files.some(file => file === 'tests/qa/integration/realm-discussion-source.test.ts'
+    || file === 'tests/qa/integration/outcomes/realm/ranking.test.ts');
+}
+
 /** Select consumers independently; a supplied (even invalid) source never falls back. */
 export function smallRecoveryFixtureConsumers(files: readonly string[], environment: NodeJS.ProcessEnv) {
   return {

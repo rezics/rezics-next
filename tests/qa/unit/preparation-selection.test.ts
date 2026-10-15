@@ -1,10 +1,25 @@
 import { expect, test } from 'bun:test';
-import { exclusivePreparationWallMs, preparationTestFiles, RETAINED_SOURCE_BUILD_FILE, RETAINED_SOURCE_BUILD_WALL_MS, smallRecoveryFixtureConsumers, WORK_PROFILE_SEED_BUILD_FILE, WORK_PROFILE_SEED_BUILD_WALL_MS } from '../../../scripts/qa/preparation-selection.ts';
+import { exclusivePreparationWallMs, needsRealmDiscussionSource, preparationTestFiles, RETAINED_SOURCE_BUILD_FILE, RETAINED_SOURCE_BUILD_WALL_MS, smallRecoveryFixtureConsumers, WORK_PROFILE_SEED_BUILD_FILE, WORK_PROFILE_SEED_BUILD_WALL_MS } from '../../../scripts/qa/preparation-selection.ts';
 
 const restore = 'tests/qa/integration/work-profile-seed-checkpoints.test.ts';
 const ordinary = 'tests/qa/fault-recovery/access-restore.test.ts';
 const launch = 'tests/qa/fault-recovery/g-727-launch-drill.test.ts';
 const campaign = 'tests/qa/fault-recovery/erasure-campaign-qualification.test.ts';
+
+test('a singleton ranking confirmation prepares its own Realm source without depending on another file', () => {
+  const ranking = 'tests/qa/integration/outcomes/realm/ranking.test.ts';
+  const proof = 'tests/qa/integration/realm-discussion-source.test.ts';
+  expect(needsRealmDiscussionSource([ranking])).toBe(true);
+  expect(needsRealmDiscussionSource([proof])).toBe(true);
+  expect(needsRealmDiscussionSource([ranking, proof])).toBe(true);
+  for (const name of ['closure-rankings', 'closure-search', 'closure-directory']) {
+    const closure = `tests/qa/integration/outcomes/realm/${name}.test.ts`;
+    expect(needsRealmDiscussionSource([closure])).toBe(false);
+    expect(needsRealmDiscussionSource([closure, ranking])).toBe(true);
+  }
+  expect(needsRealmDiscussionSource([])).toBe(false);
+  expect(needsRealmDiscussionSource([ordinary])).toBe(false);
+});
 
 test('retained fixture selection is independent for each consumer and never replaces supplied custody', () => {
   expect(smallRecoveryFixtureConsumers([launch, campaign], {})).toEqual({ launch: true, erasure: true });

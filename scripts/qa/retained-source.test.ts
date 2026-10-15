@@ -43,6 +43,15 @@ function setup() {
   return { directory, inputs, adapter, store, removed, counts: () => ({ builds, verifies, restores }) };
 }
 
+test('restoring absent custody refuses without creating a source directory or running a producer', async () => {
+  const f = setup(), key = sourceKey(f.inputs);
+  await expect(f.store.restore(f.adapter)).rejects.toThrow('complete manifest is missing or unreadable');
+  expect(existsSync(join(f.directory, 'sources', key))).toBe(false);
+  expect(readdirSync(join(f.directory, 'sources'))).toEqual([`${key}.lock`]);
+  expect(f.counts()).toEqual({ builds: 0, verifies: 0, restores: 0 });
+  expect(f.removed).toEqual([]);
+});
+
 test('a failed build remains primary when removal fails and cannot become selectable custody', async () => {
   const f = setup(), cause = new Error('producer cause'), primary = new Error('producer interrupted', { cause });
   const cleanup = new Error('external volume still held');

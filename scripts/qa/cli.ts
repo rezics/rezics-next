@@ -89,7 +89,7 @@ import { exclusiveWorkScopeAssembler, integrationStackAdmitsWorkScope, qaStackEn
 
 import { ownerTierBudgetMs } from './owner-tier-budget.ts';
 import { assertQaResourceAllocation, integrationResourceClass, qaResourceClasses, queuedProjectsBudget } from './resource-classes.ts';
-import { exclusivePreparationWallMs, preparationTestFiles, restoreDrillSchedule, smallRecoveryFixtureConsumers, WORK_PROFILE_SEED_BUILD_FILE } from './preparation-selection.ts';
+import { exclusivePreparationWallMs, needsRealmDiscussionSource, preparationTestFiles, restoreDrillSchedule, smallRecoveryFixtureConsumers, WORK_PROFILE_SEED_BUILD_FILE } from './preparation-selection.ts';
 import {
   campaignCommandAccepted, campaignPhaseDeadline, campaignQualificationShard, campaignShardActiveMs,
   childStackCleanupCommand, currentSuppliedRunIds, openCampaignEvidence,
@@ -772,7 +772,7 @@ async function runShardWork(
       environment.REZICS_FIXTURE_ROOT ??= join(process.env.REZICS_QA_RETAINED_ROOT ?? root, '.temp', 'fixture');
     }
   }
-  if (tier === 'integration' && files.includes('tests/qa/integration/realm-discussion-source.test.ts')) {
+  if (tier === 'integration' && needsRealmDiscussionSource(files)) {
     // This producer owns the declared build clock, followed by the unchanged
     // physical-cut clock. The consumer file only selects/restores custody.
     const prepared = await commandAsync(root, 'bun', [
