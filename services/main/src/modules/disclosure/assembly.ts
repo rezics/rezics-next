@@ -50,14 +50,19 @@ export async function discloseContent(env: WorkActivationEnvironment, results: r
 
 /** Main's public read adapter; the original owner remains available to admitted
  * commands, evidence capture and projection recovery. No stored body is redacted in place. */
+const contentDisclosureEnvironments = new WeakMap<object, WorkActivationEnvironment>();
+
 export function disclosureContent<T extends Pick<ContentCore, 'readExactBatch'>>(content: T,
   env: WorkActivationEnvironment): T {
-  return new Proxy(content, { get(target, property) {
+  if (contentDisclosureEnvironments.get(content) === env) return content;
+  const proxy = new Proxy(content, { get(target, property) {
     if (property === 'readExactBatch') return async (...args: Parameters<ContentCore['readExactBatch']>) =>
       discloseContent(env, await target.readExactBatch(...args), currentDisclosureViewer());
     const value: unknown = Reflect.get(target, property, target);
     return typeof value === 'function' ? value.bind(target) : value;
   } });
+  contentDisclosureEnvironments.set(proxy, env);
+  return proxy;
 }
 
 /** Asset state remains the media owner's responsibility. This adapter adds the

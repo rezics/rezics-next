@@ -28,7 +28,7 @@ import { publicDomainRevisionCurrent } from '../modules/content-publication/publ
 import { authoredBodySchema } from '../api-document.ts';
 import type { DocumentSnapshot } from '@rezics/document';
 import { isZonePublishedPageRevision } from '../modules/zone/publication.ts';
-import { discloseContent } from '../modules/disclosure/assembly.ts';
+import { disclosureContent } from '../modules/disclosure/assembly.ts';
 import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { graphErasedContentRevisions } from '../modules/erasure/graph.ts';
 import { isPublicContentRevision } from '../modules/content-publication/public-selection.ts';
@@ -438,10 +438,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           principal = await work.account.verify(request, []);
         }
         const viewer = disclosureViewer(principal, query.actingSubject);
-        const read = () => work.content!.readExactBatch([params.revision], async ids => new Set(ids));
-        let results = await withDisclosureViewer(viewer, read);
-        results = await discloseContent(work.environment, results,
-          viewer);
+        const read = () => disclosureContent(work.content!, work.environment)
+          .readExactBatch([params.revision], async ids => new Set(ids));
+        const results = await withDisclosureViewer(viewer, read);
         const exact = results[0];
         if (exact?.status === 'available'
           && exact.reference.resourceId === resourceId
