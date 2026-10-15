@@ -1,6 +1,6 @@
 # Bounded community automation
 
-Status: proposal for program review, 2026-10-16. This note proposes ownership
+Status: decided by program on 2026-10-16 and deferred past the first launch (see Program review). This note proposes ownership
 and semantics for competitor-coverage finding B07. It adds no contracts, scope
 rows, operations, migrations or implementation. Program reviews the proposal
 before any contract step; it does not change the first-public-scope cut.
