@@ -30,7 +30,7 @@ export async function authorPost(deps: MainWorkDependencies, request: Request, i
       { publisher: input.actingSubject, labels: [input.title] }, 'https://rezics.com/definition/post-v1');
     const validations = await profileValidations(env.fuseki, 'post-v1', [
       { shape: 'https://rezics.com/definition/post-v1/post-shape', focus: [post], graphs: [GRAPHS.current] },
-    ]);
+    ], { post, publisher: input.actingSubject, revision });
     await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
       update: `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
         DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
