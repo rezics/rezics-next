@@ -161,17 +161,23 @@ beforeAll(async () => {
     hydration.arm(publications.map(publication => publication.work), personaNames.length);
     const params = new URLSearchParams({ q: phrase, realm: sessions.realm, limit: '1' });
     const path = `/v1/search/catalogue?${params}`;
-    const pending = personaNames.map(async name => {
-      const response = await sessions[name].main('GET', path);
-      raced.set(name, { path, status: response.status, body: await response.text() });
-    });
-    const finished = Promise.allSettled(pending);
+    const pending: Promise<void>[] = [];
     try {
+      // Admit each real summary transport before starting the next reader.
+      // Six simultaneous cold searches can spend their unchanged wall budget
+      // before reaching hydration, which qualifies no closure race at all.
+      for (const [index, name] of personaNames.entries()) {
+        pending.push((async () => {
+          const response = await sessions[name].main('GET', path);
+          raced.set(name, { path, status: response.status, body: await response.text() });
+        })());
+        await hydration.blocked(index + 1);
+      }
       await hydration.blocked();
       await enforce();
     } finally {
       hydration.resume();
-      const results = await finished;
+      const results = await Promise.allSettled(pending);
       for (const result of results) if (result.status === 'rejected') throw result.reason;
     }
   });

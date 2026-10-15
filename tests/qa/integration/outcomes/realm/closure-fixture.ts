@@ -302,6 +302,7 @@ export function closureHydrationFence() {
   let heldPromise = Promise.resolve();
   let release: (() => void) | undefined;
   let released = Promise.resolve();
+  const waiting: { count: number; resolve: () => void }[] = [];
   const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
     const incoming = new URL(request.url);
     const body = ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer();
@@ -318,6 +319,7 @@ export function closureHydrationFence() {
       const bytes = await response.arrayBuffer();
       held++;
       if (held === expected) signalHeld?.();
+      for (const waiter of waiting.filter(waiter => waiter.count <= held)) waiter.resolve();
       await released;
       return new Response(bytes, { status: response.status, headers: response.headers });
     }
@@ -327,12 +329,15 @@ export function closureHydrationFence() {
     url: server.url.toString(),
     arm(works: string[], readers: number) {
       targets = works; expected = readers; held = 0;
+      waiting.length = 0;
       heldPromise = new Promise<void>(resolve => { signalHeld = resolve; });
       released = new Promise<void>(resolve => { release = resolve; });
     },
-    async blocked() {
-      await Promise.race([heldPromise, Bun.sleep(10_000).then(() => {
-        throw new Error(`Storage hydration fence held ${held} of ${expected} real summary reads`);
+    async blocked(count = expected) {
+      const reached = held >= count ? Promise.resolve() : count === expected ? heldPromise
+        : new Promise<void>(resolve => { waiting.push({ count, resolve }); });
+      await Promise.race([reached, Bun.sleep(10_000).then(() => {
+        throw new Error(`Storage hydration fence held ${held} of ${count} real summary reads`);
       })]);
       console.log('Realm closure hydration fence', JSON.stringify({ held, expected }));
     },
