@@ -1,29 +1,64 @@
 # State
 
-Checkpoint `0cd7b6e8-a3bc-4798-a106-fce61a810553` for [this Goal](GOAL.md),
-carrying forward `checkpoint:6bf820fc-9723-4ec8-9256-f05b31f826e1` and recording
+Checkpoint `9992e78d-8512-462e-b7cc-c27180d39cca` for [this Goal](GOAL.md),
+carrying forward `checkpoint:0cd7b6e8-a3bc-4798-a106-fce61a810553` and recording
 only these handled events:
 
-- `task:G-2248:15` (exact-key selection refused; frozen-tree current-key preparation authorized).
-- `task:G-2248:17` (current-key publication accepted for qualification; consumers resumed on the frozen tree).
-- `mail:eb521b6c-e168-4b1b-a927-9fdfbf5a30ad` (Program takes direct steering of G-2248 and G-2205).
-- `task:G-2248:20` (completion refused a retained template collation mismatch; evidence and repair question mailed to Program).
-- `mail:96445aa6-62b5-47d6-8af1-b48bfbba30fc` (Program scopes G-2678 and owns the later qualification resume).
+- `task:G-2205:8` (rebased landing check refused missing fixture backup custody; Program notified).
+- `task:G-2248:21` (preflight stopped on current-key absence and conflicting retention protection; Program asked to rule).
+- `mail:1252e320-850b-41b0-b13a-476df99ed67b` (Program supersedes earlier G-2248 decisions and has resumed its worker).
 
-The handled turns acknowledged these events on 2026-10-15 UTC; both listed
-mail messages are acknowledged and this checkpoint found no pending Operations
-mail. Later parallel handoffs and repair outcomes are outside this
+The task turns acknowledged receipt in their reports to Program. The listed
+mail was acknowledged at 20:02:17 UTC on 2026-10-15; this turn confirmed that
+acknowledgement. Later parallel handoffs and landing results are outside this
 checkpoint. It updates state only and authorizes no new work or proof.
 
 | Field | State |
 | --- | --- |
 | Manager | Enrolled with the coordinator on 2026-10-13 15:34 UTC |
-| Phase | Program directly steers G-2248 and G-2205 from 2026-10-15 19:04 UTC. Completion on verified current-key custody refused a PostgreSQL collation mismatch; Program scoped G-2678 and owns resuming completion then production after that repair lands. Operations sends findings to Program and makes no further decisions in either brief |
+| Phase | Program directly steers G-2248 and G-2205. Its 19:59 UTC ruling supersedes every earlier G-2248 decision: prune superseded custody normally, prepare and verify the current key once, then completion and production serially, once each. G-2248 has resumed; G-2205 rebuilds its own fixture. Operations sends findings to Program and makes no further decisions in either brief |
 | Proved on physical fixtures | D108 restore consumption qualifies in two post-fix restores; no physical erasure row or OPS10 pass is proved. These events add no proved row |
-| Fixture | Preserve small `fx-small-180553eb933a` (154.817-second build; 37.620/65.559-second post-fix restores) and superseded `fx-small-a3a906c1c1b7`. G-2248 published current-key `5a242e29…` custody on frozen `375cbb93609aac36cc19802b99971b561bde5c92`, one build / zero reuses. Preserve both worktree-local publications, graph volumes, unpublished staging and protected historical/G-2205 backups |
-| Measures | Current `task goal -- status` scope sample: 67/68 rows, 402 proved and 6 pending cells; no new row from these events. The command had not returned Operations measures when this bounded turn recorded state. Prior checkpoint's historical sample remains 50% first attempts (that day 0%, 0/5), landed-task median 2, max 15 (G-2248), 110.5M input / 532k output tokens, 14 first / 12 step / 14 fix attempts and seven inferred fixes; these are not refreshed figures. Tokens per proved row remain unavailable. G-2248 has now reached event 20, above the three-attempt cap. This event set's repeat-work causes are transitive source-key drift and producer-to-host collation incompatibility. Decisions froze the source and separated current-key preparation from consumption; Program scoped G-2678 for the collation boundary. No weekly efficiency improvement follows; prior zero refusal counters do not erase the retained prerequisite refusals |
+| Fixture | G-2205's passing handoff used `fx-small-3639021cd088`; its rebased check selected `fx-small-180553eb933a` with no `postgres_data` backup. G-2248's current key at event 21 was `c2b19656…`, absent before preparation. Program permits normal pruning of `7a2197cc…` and all older keys; historical preservation directions below no longer block that task. Manifest hashes alone prove no physical custody |
+| Measures | No new row proved by these events. `task goal -- status` was invoked but returned no figures before yielding; this no-wait turn does not claim refreshed measures. Historical scope sample: 67/68 rows, 402 proved and 6 pending cells. Earlier Operations sample: 50% first attempts (that day 0%, 0/5), landed-task median 2, max 15 (G-2248), 110.5M input / 532k output tokens, 14 first / 12 step / 14 fix attempts and seven inferred fixes. Tokens per proved row remain unavailable. G-2248 event 21 and G-2205 event 8 exceed the three-attempt cap. Repeat work here comes from qualification selecting incompatible or absent fixture custody and protection of superseded keys conflicting with retention. Program's ruling removes the retention stop and assigns each worker its current-key preparation. No efficiency improvement or consumer pass is yet evidenced |
 
-## G-2248 qualification decisions and next action
+## Handled decisions and next action
+
+G-2205 event 8 was a failed rebased landing check, not an accepted OPS10
+outcome. QA `20261015t193652-0e862f` refused missing `postgres_data` custody for
+`fx-small-180553eb933a` in restore-0 after 2.270 seconds; zero copies qualified
+and no merge occurred. Eight pre-merge unit/guard files, types, lint and AST
+passed. Worker QA `20261015t192358-8901b0` used `fx-small-3639021cd088` and
+reported 19 tests / 217 assertions, a 132.194-second build and 32.214/38.577-second
+restores; that different-fixture result does not discharge the failed check.
+Operations sent the reconciliation question to Program in
+`.temp/goal-orchestration/mail/operations-g2205-event8-program.md` and made no
+brief edit, resume, repeated landing or closure.
+
+G-2248 event 21 stopped before preparation or either consumer on clean frozen
+`a05911a9b01cba1c9ffb78ff472ea63b3f683415`: exact key `c2b19656…` was absent,
+the two-source policy would prune protected `7a2197cc…`, and G-2205's historical
+manifest was absent at its recorded path. Both publication manifest hashes
+were unchanged, which does not establish physical custody. Evidence:
+`.temp/worktrees/g-2248/.temp/goal/collation-qualification-handoff.md`.
+Operations referred the custody/retention question in
+`.temp/goal-orchestration/mail/operations-g2248-attempt21-program.md`, accepted
+no physical outcome and started nothing; attempt-22 artifacts already existed.
+
+Program's supplied 19:59 UTC mail points to decision `7aad8d39c3` in G-2248.
+It supersedes every earlier decision in that brief: completion and production
+physical erasure consumers must pass on current main; prune superseded custody
+through normal retention, prepare and verify current `c2b19656…` once through
+Task admission, then run completion followed by production once each serially.
+Stop only for a consumer assertion failure or product refusal. Superseded
+evidence protection and G-2205's historical manifest are no longer stop reasons;
+G-2205 rebuilds its own fixture. Program already resumed G-2248. Operations
+awaits the resulting event without starting a wait, worker or landing here.
+These events contain no accepted qualification or successful landing result.
+
+## Earlier G-2248 qualification evidence
+
+The following is historical evidence. Program's 19:59 UTC ruling above
+supersedes its frozen-tree, preservation, stop and separate-resume directions.
 
 Event 15 accepted a correct compatibility refusal, not a physical outcome.
 Completion QA `20261015t184354-9332cf` requested current key `5a242e29…` while
