@@ -1,7 +1,7 @@
 import type { WorkPageMessages } from './messages.ts';
 
 export interface PublicDomainSource {
-  record: string; observation: string; provider: string; externalId: string; url: string;
+  record: string; observation: string; provider: string; externalId: string; url: string; license?: string | null;
 }
 
 /** Read only the selected publication's public source contract. Intake evidence is not publication clearance. */
@@ -24,5 +24,7 @@ export function PublicationSource({ source, messages }: { source: PublicDomainSo
   return source ? <p className="break-words text-muted-foreground text-sm" data-publication-source>
     {messages.publicDomainSource}{': '}<a href={source.url} rel="noreferrer"
       className="text-primary underline underline-offset-4">{source.provider} · {source.externalId}</a>
+    {source.license ? <> · <a href={source.license} rel="noreferrer"
+      className="text-primary underline underline-offset-4">{source.license}</a></> : null}
   </p> : null;
 }

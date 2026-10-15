@@ -217,6 +217,27 @@ export class RightsStore {
     } catch { throw new RightsUnavailable('delivery cut is unavailable'); }
   }
 
+  /** Source evidence supplies the positive basis; an existing Rights refusal still closes that exact Work/source. */
+  async structuredPublicationRights(work: string, record: string): Promise<{ allowed: boolean; heads: string[] }> {
+    if (!agentPattern.test(work) || !agentPattern.test(record)) throw new RightsInvalid('invalid structured publication rights');
+    try {
+      const rows = (await contentConnection(this.content).query<{ assessment_id: string; outcome: string }>(`
+        SELECT h.assessment_id::text, a.outcome FROM rights.material m
+        JOIN rights.use_assessment_head h ON h.material_id = m.id
+        JOIN rights.use_assessment a ON a.id = h.assessment_id
+        WHERE ((m.work_id = $1 AND m.component IN ('record', 'body', 'structure'))
+          OR m.source_record_id = $2::uuid) AND h.family = 'data_rights'
+          AND ((h.use_kind = 'wiki_display' AND h.use_scope = 'rezics:wiki')
+            OR (h.use_kind = 'redistribution' AND h.use_scope IN ('rezics:imports', 'rezics:public-text')))
+        ORDER BY h.assessment_id LIMIT 65`, [work, record.slice(-36)])).rows;
+      if (rows.length > 64) throw new RightsUnavailable('structured publication rights exceed their bound');
+      return { allowed: rows.every(row => row.outcome !== 'not_supported'), heads: rows.map(row => row.assessment_id) };
+    } catch (error) {
+      if (error instanceof RightsUnavailable) throw error;
+      throw new RightsUnavailable('structured publication rights are unavailable');
+    }
+  }
+
   /** One indexed current-head lookup. Historical or withdrawn assessments are never a public basis. */
   async currentPublicDomainAssessment(work: string, assessmentId: string, client?: PoolClient): Promise<boolean> {
     if (!agentPattern.test(work) || !/^[0-9a-f-]{36}$/i.test(assessmentId)) {

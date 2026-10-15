@@ -1398,6 +1398,11 @@
       "file": "shapes/work-structure-publication-v1.ttl"
     },
     {
+      "id": "work-structure-publication-v2",
+      "sha256": "2148417cd96941148902cfcbb4afcd16578fab7a6fefc3e1c3c5819cfd89399d",
+      "file": "shapes/work-structure-publication-v2.ttl"
+    },
+    {
       "id": "work-title-control-v1",
       "sha256": "4b9028fab23fb2fa56e3be8ba4364cb15d0bcfdaaee646c868203fed48f26822",
       "file": "shapes/work-title-control-v1.ttl"
@@ -3830,6 +3835,16 @@
       "type": "https://rezics.com/vocab/WorkStructurePublicSource",
       "routes": [
         {
+          "profile": "work-structure-publication-v2",
+          "shape": "https://rezics.com/definition/work-structure-publication-v2/source-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/work-structure-publication-v2"
+            }
+          ]
+        },
+        {
           "profile": "work-structure-publication-v1",
           "shape": "https://rezics.com/definition/work-structure-publication-v1/source-shape",
           "when": []
@@ -3839,6 +3854,16 @@
     {
       "type": "https://rezics.com/vocab/WorkStructurePublicationDecision",
       "routes": [
+        {
+          "profile": "work-structure-publication-v2",
+          "shape": "https://rezics.com/definition/work-structure-publication-v2/decision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/work-structure-publication-v2"
+            }
+          ]
+        },
         {
           "profile": "work-structure-publication-v1",
           "shape": "https://rezics.com/definition/work-structure-publication-v1/decision-shape",
@@ -4392,6 +4417,7 @@
     "contexts/work-native-child-v1.jsonld": "6f5a3d023edc2048a18af848f10cacb6264a55d486e703d5909ec7ca4e9828ba",
     "contexts/work-reference-block-v1.jsonld": "f2fb459d6b1cce6db2b6734af79fffdfa945529fd95287a33cbf55791c32370d",
     "contexts/work-structure-publication-v1.jsonld": "9800cd056839fef758a5a5ad2500a523b9f3c5a6d5978dec3f69675536cd72cf",
+    "contexts/work-structure-publication-v2.jsonld": "dddc07f65ea505e2cdeb45f671b4ec24147e831f94510f6b0d0a12d41529e054",
     "contexts/work-title-control-v1.jsonld": "469a57da332b80e0bdb6eb123c3e85e04facc773964ae271a4d7cbebb3058886",
     "contexts/work-title-control-v2.jsonld": "224805f13abcb6341dbb1d1a9e33d2b6a96fc64f2eb8da1008eb742d9003acbd",
     "contexts/work-type-v1.jsonld": "9836e0759eba77a3e7a5648ca3b223a2973d9ada49038b4c8fcbe8c034f1ea5f",
@@ -4534,6 +4560,7 @@
     "shapes/work-native-child-v1.ttl": "1c9e1ed2ab97a4211095848ddce43f361082b5b80c042000d384658ad029d5d5",
     "shapes/work-reference-block-v1.ttl": "c72c3a6b828632aeddc1a3078dead4dd0dfd0f989fca550530ad850dbcb9b9a0",
     "shapes/work-structure-publication-v1.ttl": "aed234ca3a830ffcfa1006a1f5710aed42611a7edb70946567934f52def443c8",
+    "shapes/work-structure-publication-v2.ttl": "2148417cd96941148902cfcbb4afcd16578fab7a6fefc3e1c3c5819cfd89399d",
     "shapes/work-title-control-v1.ttl": "4b9028fab23fb2fa56e3be8ba4364cb15d0bcfdaaee646c868203fed48f26822",
     "shapes/work-title-control-v2.ttl": "deeee87603c9babb4211ffc0fd37c8523a88addbe1e56cf2a3aa9fa3769173d8",
     "shapes/work-type-v1.ttl": "e8ad5bd6e3e4bb4754e530c53f4caa5b60ec6e064e0d7b4a66bcdd23c7d7c6a4",
@@ -4542,8 +4569,8 @@
     "shapes/zone-capability-v1.ttl": "a7296e09f052999c0578caa2894ebdbd272cedd04357e4f291e2506e73eed611",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "5048ba205c2ea651c70ec751b5e3356aedd4d829cf2c8676426b541e5e9eca67",
-    "packages/model/src/generated/schemas.ts": "d55fa62b917d13708f295636a4786778544aac3db3bf4aef7fd3e78de39d9cce",
-    "packages/model/src/generated/vocabulary.ts": "847173cac2e97a241247a40eaff2b23a94895b1d3a09ca972a3f4abe2e772546"
+    "packages/model/src/generated/profiles.ts": "decd75103b8d9887a563ca200fb116b620c62e328c80d6b85cad5a5dad251dd1",
+    "packages/model/src/generated/schemas.ts": "c69a261b023cd3db44b42bd1f0d18dc3770aa49f6076b9470653e470fe066c17",
+    "packages/model/src/generated/vocabulary.ts": "b77f7a34baa975b67620377a5bb348a198b7d0c11780991fa932063f20fe313e"
   }
 }

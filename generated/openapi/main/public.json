@@ -158017,11 +158017,11 @@
                                           "type": "string"
                                         },
                                         "provider": {
-                                          "const": "open-library",
                                           "type": "string"
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -158135,6 +158135,7 @@
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -213945,11 +213946,11 @@
                                                         "type": "string"
                                                       },
                                                       "provider": {
-                                                        "const": "open-library",
                                                         "type": "string"
                                                       },
                                                       "role": {
                                                         "enum": [
+                                                          "transcriber",
                                                           "author",
                                                           "director",
                                                           "artist",
@@ -214063,6 +214064,7 @@
                                                       },
                                                       "role": {
                                                         "enum": [
+                                                          "transcriber",
                                                           "author",
                                                           "director",
                                                           "artist",
@@ -249619,11 +249621,11 @@
                                           "type": "string"
                                         },
                                         "provider": {
-                                          "const": "open-library",
                                           "type": "string"
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -249737,6 +249739,7 @@
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -553083,11 +553086,11 @@
                                               "type": "string"
                                             },
                                             "provider": {
-                                              "const": "open-library",
                                               "type": "string"
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -553201,6 +553204,7 @@
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -555344,11 +555348,11 @@
                                               "type": "string"
                                             },
                                             "provider": {
-                                              "const": "open-library",
                                               "type": "string"
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -555462,6 +555466,7 @@
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -557614,11 +557619,11 @@
                                               "type": "string"
                                             },
                                             "provider": {
-                                              "const": "open-library",
                                               "type": "string"
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -557732,6 +557737,7 @@
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -560035,11 +560041,11 @@
                                               "type": "string"
                                             },
                                             "provider": {
-                                              "const": "open-library",
                                               "type": "string"
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -560153,6 +560159,7 @@
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -562467,11 +562474,11 @@
                                               "type": "string"
                                             },
                                             "provider": {
-                                              "const": "open-library",
                                               "type": "string"
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -562585,6 +562592,7 @@
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -564926,11 +564934,11 @@
                                               "type": "string"
                                             },
                                             "provider": {
-                                              "const": "open-library",
                                               "type": "string"
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -565044,6 +565052,7 @@
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -570573,11 +570582,11 @@
                                               "type": "string"
                                             },
                                             "provider": {
-                                              "const": "open-library",
                                               "type": "string"
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -570691,6 +570700,7 @@
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -571645,11 +571655,11 @@
                                               "type": "string"
                                             },
                                             "provider": {
-                                              "const": "open-library",
                                               "type": "string"
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -571763,6 +571773,7 @@
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -572729,11 +572740,11 @@
                                               "type": "string"
                                             },
                                             "provider": {
-                                              "const": "open-library",
                                               "type": "string"
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -572847,6 +572858,7 @@
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -573961,11 +573973,11 @@
                                               "type": "string"
                                             },
                                             "provider": {
-                                              "const": "open-library",
                                               "type": "string"
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -574079,6 +574091,7 @@
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -575203,11 +575216,11 @@
                                               "type": "string"
                                             },
                                             "provider": {
-                                              "const": "open-library",
                                               "type": "string"
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -575321,6 +575334,7 @@
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -576472,11 +576486,11 @@
                                               "type": "string"
                                             },
                                             "provider": {
-                                              "const": "open-library",
                                               "type": "string"
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -576590,6 +576604,7 @@
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -578268,6 +578283,7 @@
                             "properties": {
                               "role": {
                                 "enum": [
+                                  "transcriber",
                                   "author",
                                   "director",
                                   "artist",
@@ -579039,6 +579055,7 @@
                             "properties": {
                               "role": {
                                 "enum": [
+                                  "transcriber",
                                   "author",
                                   "director",
                                   "artist",
@@ -579810,6 +579827,7 @@
                             "properties": {
                               "role": {
                                 "enum": [
+                                  "transcriber",
                                   "author",
                                   "director",
                                   "artist",
@@ -580855,11 +580873,11 @@
                                                       "type": "string"
                                                     },
                                                     "provider": {
-                                                      "const": "open-library",
                                                       "type": "string"
                                                     },
                                                     "role": {
                                                       "enum": [
+                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
@@ -580973,6 +580991,7 @@
                                                     },
                                                     "role": {
                                                       "enum": [
+                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
@@ -581927,11 +581946,11 @@
                                                       "type": "string"
                                                     },
                                                     "provider": {
-                                                      "const": "open-library",
                                                       "type": "string"
                                                     },
                                                     "role": {
                                                       "enum": [
+                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
@@ -582045,6 +582064,7 @@
                                                     },
                                                     "role": {
                                                       "enum": [
+                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
@@ -583011,11 +583031,11 @@
                                                       "type": "string"
                                                     },
                                                     "provider": {
-                                                      "const": "open-library",
                                                       "type": "string"
                                                     },
                                                     "role": {
                                                       "enum": [
+                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
@@ -583129,6 +583149,7 @@
                                                     },
                                                     "role": {
                                                       "enum": [
+                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
@@ -584243,11 +584264,11 @@
                                                       "type": "string"
                                                     },
                                                     "provider": {
-                                                      "const": "open-library",
                                                       "type": "string"
                                                     },
                                                     "role": {
                                                       "enum": [
+                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
@@ -584361,6 +584382,7 @@
                                                     },
                                                     "role": {
                                                       "enum": [
+                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
@@ -585485,11 +585507,11 @@
                                                       "type": "string"
                                                     },
                                                     "provider": {
-                                                      "const": "open-library",
                                                       "type": "string"
                                                     },
                                                     "role": {
                                                       "enum": [
+                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
@@ -585603,6 +585625,7 @@
                                                     },
                                                     "role": {
                                                       "enum": [
+                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
@@ -586754,11 +586777,11 @@
                                                       "type": "string"
                                                     },
                                                     "provider": {
-                                                      "const": "open-library",
                                                       "type": "string"
                                                     },
                                                     "role": {
                                                       "enum": [
+                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
@@ -586872,6 +586895,7 @@
                                                     },
                                                     "role": {
                                                       "enum": [
+                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
@@ -587890,11 +587914,11 @@
                                                   "type": "string"
                                                 },
                                                 "provider": {
-                                                  "const": "open-library",
                                                   "type": "string"
                                                 },
                                                 "role": {
                                                   "enum": [
+                                                    "transcriber",
                                                     "author",
                                                     "director",
                                                     "artist",
@@ -588008,6 +588032,7 @@
                                                 },
                                                 "role": {
                                                   "enum": [
+                                                    "transcriber",
                                                     "author",
                                                     "director",
                                                     "artist",
@@ -589006,11 +589031,11 @@
                                                   "type": "string"
                                                 },
                                                 "provider": {
-                                                  "const": "open-library",
                                                   "type": "string"
                                                 },
                                                 "role": {
                                                   "enum": [
+                                                    "transcriber",
                                                     "author",
                                                     "director",
                                                     "artist",
@@ -589124,6 +589149,7 @@
                                                 },
                                                 "role": {
                                                   "enum": [
+                                                    "transcriber",
                                                     "author",
                                                     "director",
                                                     "artist",
@@ -590111,11 +590137,11 @@
                                                   "type": "string"
                                                 },
                                                 "provider": {
-                                                  "const": "open-library",
                                                   "type": "string"
                                                 },
                                                 "role": {
                                                   "enum": [
+                                                    "transcriber",
                                                     "author",
                                                     "director",
                                                     "artist",
@@ -590229,6 +590255,7 @@
                                                 },
                                                 "role": {
                                                   "enum": [
+                                                    "transcriber",
                                                     "author",
                                                     "director",
                                                     "artist",
@@ -591425,11 +591452,11 @@
                                                       "type": "string"
                                                     },
                                                     "provider": {
-                                                      "const": "open-library",
                                                       "type": "string"
                                                     },
                                                     "role": {
                                                       "enum": [
+                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
@@ -591543,6 +591570,7 @@
                                                     },
                                                     "role": {
                                                       "enum": [
+                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
@@ -592163,11 +592191,11 @@
                                             "type": "string"
                                           },
                                           "provider": {
-                                            "const": "open-library",
                                             "type": "string"
                                           },
                                           "role": {
                                             "enum": [
+                                              "transcriber",
                                               "author",
                                               "director",
                                               "artist",
@@ -592281,6 +592309,7 @@
                                           },
                                           "role": {
                                             "enum": [
+                                              "transcriber",
                                               "author",
                                               "director",
                                               "artist",
@@ -657372,11 +657401,11 @@
                                           "type": "string"
                                         },
                                         "provider": {
-                                          "const": "open-library",
                                           "type": "string"
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -657490,6 +657519,7 @@
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -661850,11 +661880,11 @@
                                               "type": "string"
                                             },
                                             "provider": {
-                                              "const": "open-library",
                                               "type": "string"
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -661968,6 +661998,7 @@
                                             },
                                             "role": {
                                               "enum": [
+                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
@@ -663415,11 +663446,11 @@
                                           "type": "string"
                                         },
                                         "provider": {
-                                          "const": "open-library",
                                           "type": "string"
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -663533,6 +663564,7 @@
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -666707,11 +666739,11 @@
                                           "type": "string"
                                         },
                                         "provider": {
-                                          "const": "open-library",
                                           "type": "string"
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -666825,6 +666857,7 @@
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -736016,6 +736049,66 @@
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                     "type": "string"
                                   },
+                                  "rights": {
+                                    "properties": {
+                                      "basis": {
+                                        "const": "public-domain",
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "properties": {
+                                          "author": {
+                                            "type": "string"
+                                          },
+                                          "externalId": {
+                                            "type": "string"
+                                          },
+                                          "license": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "observation": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                            "type": "string"
+                                          },
+                                          "provider": {
+                                            "type": "string"
+                                          },
+                                          "record": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                            "type": "string"
+                                          },
+                                          "transcriber": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                            "type": "string"
+                                          },
+                                          "url": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "record",
+                                          "observation",
+                                          "provider",
+                                          "externalId",
+                                          "url",
+                                          "license",
+                                          "author",
+                                          "transcriber"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    },
+                                    "required": [
+                                      "basis",
+                                      "source"
+                                    ],
+                                    "type": "object"
+                                  },
                                   "selectedLanguage": {
                                     "~elyTyp": 7,
                                     "nullable": true,
@@ -744398,6 +744491,66 @@
                         "revision": {
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
+                        },
+                        "rights": {
+                          "properties": {
+                            "basis": {
+                              "const": "public-domain",
+                              "type": "string"
+                            },
+                            "source": {
+                              "properties": {
+                                "author": {
+                                  "type": "string"
+                                },
+                                "externalId": {
+                                  "type": "string"
+                                },
+                                "license": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "observation": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                },
+                                "record": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "transcriber": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "record",
+                                "observation",
+                                "provider",
+                                "externalId",
+                                "url",
+                                "license",
+                                "author",
+                                "transcriber"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "source"
+                          ],
+                          "type": "object"
                         },
                         "selectedLanguage": {
                           "~elyTyp": 7,
@@ -785087,11 +785240,11 @@
                                           "type": "string"
                                         },
                                         "provider": {
-                                          "const": "open-library",
                                           "type": "string"
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -785205,6 +785358,7 @@
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -786489,11 +786643,11 @@
                                           "type": "string"
                                         },
                                         "provider": {
-                                          "const": "open-library",
                                           "type": "string"
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -786607,6 +786761,7 @@
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -897334,7 +897489,14 @@
                         "type": "string"
                       },
                       "rightsBasis": {
-                        "const": "original-contribution",
+                        "enum": [
+                          "original-contribution",
+                          "public-domain"
+                        ],
+                        "type": "string"
+                      },
+                      "sourceObservation": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
                       "structure": {
@@ -897439,7 +897601,14 @@
                         "type": "string"
                       },
                       "rightsBasis": {
-                        "const": "original-contribution",
+                        "enum": [
+                          "original-contribution",
+                          "public-domain"
+                        ],
+                        "type": "string"
+                      },
+                      "sourceObservation": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
                       "structure": {
@@ -897544,7 +897713,14 @@
                         "type": "string"
                       },
                       "rightsBasis": {
-                        "const": "original-contribution",
+                        "enum": [
+                          "original-contribution",
+                          "public-domain"
+                        ],
+                        "type": "string"
+                      },
+                      "sourceObservation": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
                       "structure": {
@@ -903914,11 +904090,11 @@
                                           "type": "string"
                                         },
                                         "provider": {
-                                          "const": "open-library",
                                           "type": "string"
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -904032,6 +904208,7 @@
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -907734,6 +907911,66 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "rights": {
+                      "properties": {
+                        "basis": {
+                          "const": "public-domain",
+                          "type": "string"
+                        },
+                        "source": {
+                          "properties": {
+                            "author": {
+                              "type": "string"
+                            },
+                            "externalId": {
+                              "type": "string"
+                            },
+                            "license": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "observation": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "record": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "transcriber": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "record",
+                            "observation",
+                            "provider",
+                            "externalId",
+                            "url",
+                            "license",
+                            "author",
+                            "transcriber"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "basis",
+                        "source"
+                      ],
+                      "type": "object"
+                    },
                     "selectedLanguage": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -911111,11 +911348,11 @@
                                           "type": "string"
                                         },
                                         "provider": {
-                                          "const": "open-library",
                                           "type": "string"
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -911229,6 +911466,7 @@
                                         },
                                         "role": {
                                           "enum": [
+                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
@@ -921719,11 +921957,11 @@
                                 "type": "string"
                               },
                               "provider": {
-                                "const": "open-library",
                                 "type": "string"
                               },
                               "role": {
                                 "enum": [
+                                  "transcriber",
                                   "author",
                                   "director",
                                   "artist",
@@ -921837,6 +922075,7 @@
                               },
                               "role": {
                                 "enum": [
+                                  "transcriber",
                                   "author",
                                   "director",
                                   "artist",

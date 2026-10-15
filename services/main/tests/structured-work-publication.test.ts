@@ -87,6 +87,15 @@ test('WORK10/COMP08: publication intent digest binds the exact source, disclosur
     rightsBasis: 'imported-material' as 'original-contribution' })).toThrow('invalid structured Work publication source');
 });
 
+test('sourced publication digest requires and binds its exact observation; original requests stay source-free', () => {
+  const sourced = { ...publishInput, rightsBasis: 'public-domain' as const, sourceObservation: actor };
+  const digest = workStructurePublicationDigest(sourced);
+  expect(digest).not.toBe(workStructurePublicationDigest(publishInput));
+  expect(workStructurePublicationDigest({ ...sourced, sourceObservation: decision })).not.toBe(digest);
+  expect(() => workStructurePublicationDigest({ ...sourced, sourceObservation: undefined } as never)).toThrow();
+  expect(() => workStructurePublicationDigest({ ...publishInput, sourceObservation: actor } as never)).toThrow();
+});
+
 test('WORK10: publication receipt families and typed outbox handlers are owner-discovered', async () => {
   expect(receiptFamilyFor('work.publish')).toBe('work-structure-publication-v1');
   expect(receiptFamilyFor('work.withdraw-publication')).toBe('work-structure-withdrawal-v1');

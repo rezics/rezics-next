@@ -1,7 +1,7 @@
 PREFIX rv: <https://rezics.com/vocab/>
 PREFIX schema: <https://schema.org/>
 # An unbound _role reads author, director, artist and animation-studio. The seek key supplies that order.
-SELECT ?id ?key ?ordinal ?confirmation ?role ?participantKind ?provider ?agent WHERE {
+SELECT ?id ?key ?ordinal ?confirmation ?role ?participantKind ?provider ?agent ?displayName WHERE {
   VALUES (?_work_iri ?_main_iri) {}
   VALUES (?id ?_sort) {}
   {
@@ -31,12 +31,14 @@ SELECT ?id ?key ?ordinal ?confirmation ?role ?participantKind ?provider ?agent W
     FILTER(?role = "author" || ?role = "director" || ?role = "artist" || ?role = "animation-studio")
     FILTER(!BOUND(?_role) || ?role = ?_role)
   } UNION {
-    VALUES (?id ?key ?ordinal ?_work_iri ?_source_confirmed) {}
+    VALUES (?id ?key ?ordinal ?_work_iri ?_source_confirmed ?_source_role ?_source_provider ?_source_agent ?_source_name) {}
     FILTER(!?_source_confirmed)
-    FILTER(!BOUND(?_role) || ?_role = "author")
+    FILTER(!BOUND(?_role) || ?_role = ?_source_role)
     BIND("source-reported" AS ?confirmation)
-    BIND("author" AS ?role)
-    BIND("external-reference" AS ?participantKind)
-    BIND("open-library" AS ?provider)
+    BIND(?_source_role AS ?role)
+    BIND(IF(?_source_role = "transcriber", "agent", "external-reference") AS ?participantKind)
+    BIND(?_source_provider AS ?provider)
+    BIND(IF(STRLEN(?_source_agent) > 0, IRI(?_source_agent), 1/0) AS ?agent)
+    BIND(IF(STRLEN(?_source_name) > 0, ?_source_name, 1/0) AS ?displayName)
   }
 }

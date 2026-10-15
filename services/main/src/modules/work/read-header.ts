@@ -10,6 +10,7 @@ import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable, publicWork, uneras
 import { readPublishedStructuredWorkSource, readWorkPublicationParents,
   type PublishedStructuredWorkSource } from './public-patterns.ts';
 import { readMetadataHeader, recordedDisplayText, selectedMetadata } from './metadata-read.ts';
+import { selectedPublicationAttribution } from './sourced-structure-publication.ts';
 import { readSerialStatistics } from './summary-serial.ts';
 
 export type WorkCard = Static<typeof workCard>;
@@ -218,6 +219,8 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
   const path = `/v1/works/${work.slice(-36)}`;
   return { profile: 'work-read-v1' as const, ...basis.card, disclosure: basis.disclosure,
     publicationState: basis.publicationState,
+    ...(basis.structuredPublication?.sourceObservation ? { rights: { basis: 'public-domain' as const,
+      source: await selectedPublicationAttribution(session, basis.structuredPublication) } } : {}),
     ...(session.principal && session.options.actingSubject
       && await session.deps.access.canEditWork(session.principal, session.options.actingSubject, work)
       ? { structurePublicationHead: basis.structurePublicationHead } : {}),

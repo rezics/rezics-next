@@ -10,6 +10,7 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from './activate.ts';
 import { WORK_STRUCTURE_PUBLICATION_RECEIPT_FAMILY, WORK_STRUCTURE_WITHDRAWAL_RECEIPT_FAMILY }
   from './receipt-family.ts';
+import type { PublicationAttribution } from './sourced-structure-publication.ts';
 import { instructionAdoptionTriples, type InstructionAdoption } from './instruction-adoption.ts';
 
 export const WORK_STRUCTURE_PUBLICATION_PROFILE = 'https://rezics.com/definition/work-structure-publication-v1';
@@ -18,7 +19,7 @@ const NONE = 'urn:rezics:none';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const sourceRoot = /^urn:rezics:sha256:[0-9a-f]{64}$/;
 
-export type WorkStructurePublicationInput = {
+export type WorkStructurePublicationInput = ({
   profile: typeof WORK_STRUCTURE_PUBLICATION_OPERATION;
   operation: 'publish';
   work: string;
@@ -29,8 +30,8 @@ export type WorkStructurePublicationInput = {
   expectedStructureHead: string;
   expectedPublicationHead: string | null;
   disclosure: 'public';
-  rightsBasis: 'original-contribution';
-} | {
+} & ({ rightsBasis: 'original-contribution'; sourceObservation?: never }
+  | { rightsBasis: 'public-domain'; sourceObservation: string })) | {
   profile: typeof WORK_STRUCTURE_PUBLICATION_OPERATION;
   operation: 'withdraw';
   work: string;
@@ -86,7 +87,9 @@ function checkInput(input: WorkStructurePublicationInput): void {
     if (!nativeId.test(input.expectedWorkHead) || !nativeId.test(input.expectedMainVersion)
       || !nativeId.test(input.structure) || !nativeId.test(input.expectedStructureHead)
       || input.expectedPublicationHead !== null && !nativeId.test(input.expectedPublicationHead)
-      || input.disclosure !== 'public' || input.rightsBasis !== 'original-contribution') {
+      || input.disclosure !== 'public'
+      || (input.rightsBasis === 'public-domain' ? !nativeId.test(input.sourceObservation)
+        : input.rightsBasis !== 'original-contribution' || input.sourceObservation !== undefined)) {
       throw new InvalidPublicationInput('invalid structured Work publication source');
     }
   } else if (!nativeId.test(input.expectedPublicationHead)) {
@@ -102,7 +105,8 @@ export function workStructurePublicationDigest(input: WorkStructurePublicationIn
       expectedMainVersion: input.expectedMainVersion, structure: input.structure,
       expectedStructureHead: input.expectedStructureHead,
       expectedPublicationHead: input.expectedPublicationHead,
-      disclosure: input.disclosure, rightsBasis: input.rightsBasis }
+      disclosure: input.disclosure, rightsBasis: input.rightsBasis,
+      ...(input.rightsBasis === 'public-domain' ? { sourceObservation: input.sourceObservation } : {}) }
     : { family: WORK_STRUCTURE_PUBLICATION_OPERATION, operation: input.operation,
       work: input.work, actor: input.actingSubject,
       expectedPublicationHead: input.expectedPublicationHead }));
@@ -428,7 +432,8 @@ export async function denyWorkStructurePublicationAdmission(env: WorkActivationE
 
 async function publish(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   input: Extract<WorkStructurePublicationInput, { operation: 'publish' }>,
-  admittedActingSubject: (id: string) => Promise<string>, adoptions: readonly InstructionAdoption[] = []): Promise<WorkStructurePublicationReceipt> {
+  admittedActingSubject: (id: string) => Promise<string>, adoptions: readonly InstructionAdoption[] = [],
+  attribution?: PublicationAttribution): Promise<WorkStructurePublicationReceipt> {
   const header = await readCompositionHeader(env, input.structure);
   if (!header) return sealForReason(env, admission, input, 'source-unavailable');
   let reviewed;
@@ -441,14 +446,19 @@ async function publish(env: WorkActivationEnvironment, admission: RegisteredAdmi
         ? 'source-unavailable' : 'stale-head');
   }
   if (!sourceRoot.test(header.manifest)) return sealForReason(env, admission, input, 'source-unavailable');
-  let originalContribution = false;
+  const sourced = input.rightsBasis === 'public-domain';
+  if (sourced && attribution?.observation !== input.sourceObservation)
+    return sealForReason(env, admission, input, 'rights-unavailable');
+  let originalContribution = sourced;
   try {
-    originalContribution = await verifyOriginalWorkStructureContribution(env, {
-      structure: input.structure, revision: header.head, generation: header.generation,
-      manifest: header.manifest, placementCount: header.placementCount,
-      actingSubject: input.actingSubject,
-      adoptions,
-    }, admittedActingSubject);
+    if (!sourced) {
+      originalContribution = await verifyOriginalWorkStructureContribution(env, {
+        structure: input.structure, revision: header.head, generation: header.generation,
+        manifest: header.manifest, placementCount: header.placementCount,
+        actingSubject: input.actingSubject,
+        adoptions,
+      }, admittedActingSubject);
+    }
   } catch (error) {
     if (!(error instanceof AdmissionDenied)) throw error;
   }
@@ -465,6 +475,9 @@ async function publish(env: WorkActivationEnvironment, admission: RegisteredAdmi
   const source = `urn:rezics:work-source:${hash(`${decision}\0source`)}`;
   const operation = operationIri(admission, action);
   const sourceTerm = iri(source);
+  const profile = sourced ? 'https://rezics.com/definition/work-structure-publication-v2' : WORK_STRUCTURE_PUBLICATION_PROFILE;
+  const basis = sourced ? 'PublicDomain' : 'OriginalContribution';
+  const sourceObservation = sourced ? `rv:sourceObservation ${iri(input.sourceObservation)} ;` : '';
   const predecessor = input.expectedPublicationHead
     ? `rv:predecessor ${iri(input.expectedPublicationHead)} ;` : '';
   const receiptPredecessor = input.expectedPublicationHead
@@ -475,17 +488,17 @@ async function publish(env: WorkActivationEnvironment, admission: RegisteredAdmi
     structure: input.structure, structureProfile: reviewed.graphProfile,
     structureRevision: input.expectedStructureHead, selectedGeneration: header.generation,
     sourceRoot: header.manifest, rightsBasis: input.rightsBasis, disclosure: input.disclosure,
-    dependencies: adoptions,
+    dependencies: adoptions, ...(attribution ? { attribution } : {}),
     attestation: { actingSubject: input.actingSubject, action, scope: admission.scope,
       admissionId: admission.id, authorityEpoch: admission.authorityEpoch,
       requestDigest: admission.requestDigest },
-  }, WORK_STRUCTURE_PUBLICATION_PROFILE);
-  const validations = await profileValidations(env.fuseki, 'work-structure-publication-v1' as ProfileId, [
-    { shape: `${WORK_STRUCTURE_PUBLICATION_PROFILE}/work-shape`, focus: [input.work],
+  }, profile);
+  const validations = await profileValidations(env.fuseki, (sourced ? 'work-structure-publication-v2' : 'work-structure-publication-v1') as ProfileId, [
+    { shape: `${profile}/work-shape`, focus: [input.work],
       graphs: [GRAPHS.current, GRAPHS.revisions] },
-    { shape: `${WORK_STRUCTURE_PUBLICATION_PROFILE}/decision-shape`, focus: [decision],
+    { shape: `${profile}/decision-shape`, focus: [decision],
       graphs: [GRAPHS.current, GRAPHS.revisions] },
-    { shape: `${WORK_STRUCTURE_PUBLICATION_PROFILE}/source-shape`, focus: [source],
+    { shape: `${profile}/source-shape`, focus: [source],
       graphs: [GRAPHS.current, GRAPHS.revisions] },
   ]);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
@@ -504,17 +517,20 @@ async function publish(env: WorkActivationEnvironment, admission: RegisteredAdmi
           rv:structureProfile ${structureIri(reviewed.graphProfile)} ; rv:structure ${iri(input.structure)} ;
           rv:component ${iri(input.expectedMainVersion)} ;
           rv:structureRevision ${iri(input.expectedStructureHead)} ;
-          rv:selectedGeneration ${iri(header.generation)} ; rv:sourceRoot ${iri(header.manifest)} .
+          rv:selectedGeneration ${iri(header.generation)} ; ${sourceObservation}
+          ${sourced ? `rv:modelRevision ${iri(profile)} ;` : ''}
+          ${attribution ? `<https://schema.org/citation> ${lit(JSON.stringify(attribution))} ;` : ''}
+          rv:sourceRoot ${iri(header.manifest)} .
         ${iri(decision)} a rv:WorkStructurePublicationDecision, rv:RevisionAnchor ;
           rv:component ${iri(input.work)} ; ${predecessor}
           rv:operation ${iri(operation)} ; rv:publicationOutcome rv:Published ;
-          rv:publicSource ${sourceTerm} ; rv:rightsBasis rv:OriginalContribution ;
+          rv:publicSource ${sourceTerm} ; ${sourceObservation} rv:rightsBasis rv:${basis} ;
           rv:disclosure rv:Public ; rv:attestedBy ${iri(input.actingSubject)} ;
           rv:admissionId ${lit(admission.id)} ; rv:admittedScope ${lit(admission.scope)} ;
           rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
           rv:requestDigest ${lit(admission.requestDigest)} ; rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
-          rv:modelRevision ${iri(WORK_STRUCTURE_PUBLICATION_PROFILE)} ;
-          rv:shapeRevision ${iri(WORK_STRUCTURE_PUBLICATION_PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
+          rv:modelRevision ${iri(profile)} ;
+          rv:shapeRevision ${iri(profile)} ; rv:datasetId ${iri(DATASET)} ;
           rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
       }
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
@@ -526,7 +542,7 @@ async function publish(env: WorkActivationEnvironment, admission: RegisteredAdmi
         rv:structureProfile ${structureIri(reviewed.graphProfile)} ; rv:structureRevision ${iri(input.expectedStructureHead)} ;
         rv:selectedGeneration ${iri(header.generation)} ; rv:sourceRoot ${iri(header.manifest)} ;
         rv:publicationDecision ${iri(decision)} ; ${receiptPredecessor}
-        rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public ;
+        ${sourceObservation} rv:rightsBasis rv:${basis} ; rv:disclosure rv:Public ;
         rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.outbox)} {
         ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
@@ -679,7 +695,8 @@ async function withdraw(env: WorkActivationEnvironment, admission: RegisteredAdm
 
 export async function changeStructuredWorkPublication(env: WorkActivationEnvironment,
   admission: RegisteredAdmission, input: WorkStructurePublicationInput,
-  admittedActingSubject: (id: string) => Promise<string>, adoptions: readonly InstructionAdoption[] = []): Promise<WorkStructurePublicationReceipt> {
+  admittedActingSubject: (id: string) => Promise<string>, adoptions: readonly InstructionAdoption[] = [],
+  attribution?: PublicationAttribution): Promise<WorkStructurePublicationReceipt> {
   checkInput(input);
   const digest = workStructurePublicationDigest(input);
   const action = actionFor(input);
@@ -692,5 +709,5 @@ export async function changeStructuredWorkPublication(env: WorkActivationEnviron
   if (existing) return checkedWorkStructurePublicationReceipt(existing, admission, input, digest);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Work publication admission expired');
   return input.operation === 'publish'
-    ? publish(env, admission, input, admittedActingSubject, adoptions) : withdraw(env, admission, input);
+    ? publish(env, admission, input, admittedActingSubject, adoptions, attribution) : withdraw(env, admission, input);
 }

@@ -31,6 +31,7 @@ import { AuthorSection } from './author.tsx';
 import { booksEditionReads, settle, type BooksRead } from './books-edition-page.read.ts';
 import { ClassificationRegion } from './classification.tsx';
 import { ProposeCorrectionSlot } from './correction-slot.tsx';
+import { publicationSource } from './publication-source.tsx';
 import { coverAuthors, WorkCredits } from './credits.tsx';
 import { AdoptionRegion } from './adoption.tsx';
 import type { WorkPageMessages } from './messages.ts';
@@ -209,7 +210,7 @@ export async function recipeWorkFrame({ host, workRef, id, work, locale, message
     showcase={workShowcaseHeader(art ?? undefined, showcaseMessages[locale])}
     cover={<WorkPageCover work={work} authors={authors} avatarQuery={avatarQuery} />}
     credits={identity.kind === 'ready'
-      ? <WorkCredits agentCredits={identity.agentCredits} credits={identity.credits} locale={locale} messages={messages} />
+      ? <WorkCredits agentCredits={identity.agentCredits} credits={identity.credits} source={publicationSource(work)} locale={locale} messages={messages} />
       : <WorkCredits agentCredits={{ ok: false, failure: 'unavailable' }} credits={{ ok: false, failure: 'unavailable' }}
         locale={locale} messages={messages} />}
     ratingLine={<RatingLine ratings={ratings} stats={stats} experience={experience} locale={locale} messages={messages} />}

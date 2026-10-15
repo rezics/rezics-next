@@ -113,3 +113,21 @@ test('publication shapes pin Work, MainVersion, Structure, revision, generation 
   expect(sourceText).toContain('sh:hasValue rv:Withdrawn');
   expect(sourceText).not.toContain('rv:ContentPublicationDecision');
 });
+
+test('sourced publication revision keeps original source-free and requires evidence for public-domain text', async () => {
+  const profile = 'work-structure-publication-v2';
+  const artifact = buildModelOutputs(authoredProfiles.filter(item => item.id === profile));
+  const path = join(directory(), 'sourced-schemas.ts');
+  writeFileSync(path, artifact.get('packages/model/src/generated/schemas.ts')!);
+  const generated = (await import(path)).shapeSchemas as Record<string, TSchema>;
+  const shape = generated[`${definition}${profile}/decision-shape`]!;
+  const original = { ...decision(), 'rv:modelRevision': [definition + profile],
+    'rv:shapeRevision': [definition + profile], 'rv:rightsBasis': [rv + 'OriginalContribution'] };
+  expect(Value.Check(shape, original)).toBe(true);
+  const sourced = { ...original, 'rv:rightsBasis': [rv + 'PublicDomain'] };
+  expect(Value.Check(shape, sourced)).toBe(false);
+  const observation = ['https://rezics.com/id/00000000-0000-4000-8000-000000000006'];
+  expect(Value.Check(shape, { ...sourced, 'rv:sourceObservation': observation })).toBe(true);
+  expect(Value.Check(shape, { ...original, 'rv:sourceObservation': observation })).toBe(false);
+  expect(Value.Check((await schemas())[`${definition}${id}/decision-shape`]!, sourced)).toBe(false);
+});

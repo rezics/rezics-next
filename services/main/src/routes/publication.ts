@@ -3,6 +3,7 @@ import { chooseMainLanguage, readMainLanguageHeads } from '../modules/work/selec
 import { discloseInventory } from '../modules/disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
 import { Elysia, t } from 'elysia';
+import { prepareSourcedStructurePublication } from '../modules/work/sourced-structure-publication.ts';
 import { prepareInstructionAdoptions } from '../modules/work/instruction-adoption.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
 import { readRealmMediaSet, RealmMediaUnavailable, RealmMediaMissing } from '../modules/content-publication/realm-media.ts';
@@ -126,7 +127,8 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
             t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }), t.Null(),
           ]),
           disclosure: t.Literal('public'),
-          rightsBasis: t.Literal('original-contribution'),
+          rightsBasis: t.Union([t.Literal('original-contribution'), t.Literal('public-domain')]),
+          sourceObservation: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
         }, { additionalProperties: false }),
         t.Object({
           profile: t.Literal('work-structure-publication-v1'),
@@ -144,10 +146,16 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       try {
+        const input = body as Parameters<typeof changeAdmittedWorkStructurePublication>[4];
         const receipt = await changeAdmittedWorkStructurePublication(work.environment, work.account,
-          work.access, request, { ...body, idempotencyKey }, dispatch =>
+          work.access, request, { ...input, idempotencyKey }, dispatch =>
           withStructuredPublicationFence(work, body.work, dispatch), body.operation === 'publish'
-            ? (admissionId, principal) => prepareInstructionAdoptions(work, body, admissionId, principal) : undefined);
+            ? async (admissionId, principal) => ({
+              adoptions: body.rightsBasis === 'public-domain' ? []
+                : await prepareInstructionAdoptions(work, body, admissionId, principal),
+              ...(input.operation === 'publish' && input.rightsBasis === 'public-domain'
+                ? { attribution: await prepareSourcedStructurePublication(work, input, principal) } : {}),
+            }) : undefined);
         return Response.json({ profile: 'work-structure-publication-v1', operation: body.operation,
           work: receipt.work, publicationDecision: receipt.publicationDecision!,
           ...(receipt.mainVersion ? { mainVersion: receipt.mainVersion } : {}),

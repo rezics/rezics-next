@@ -12,6 +12,8 @@ import { messages } from './messages.ts';
 import { publicationSource } from './publication-source.tsx';
 import { RegionSkeleton } from './region.tsx';
 import type { WorkHeader as Header } from './types.ts';
+import { RecipeContent, type ReadableRecipe } from './types/recipe.tsx';
+import { Region } from './region.tsx';
 import { WorkHeader } from './work-header.tsx';
 
 const id = work.id.slice(-36);
@@ -23,9 +25,10 @@ const subjects: Record<AnswerPersona, string | undefined> = { visitor: undefined
   moderator: 'https://rezics.com/id/00000000-0000-4000-8000-000000000013', operator: importer };
 const source = { record: 'https://rezics.com/id/00000000-0000-4000-8000-000000000006',
   observation: 'https://rezics.com/id/00000000-0000-4000-8000-000000000007', provider: 'gutenberg',
-  externalId: '65061/quick-puff-paste', url: 'https://www.gutenberg.org/ebooks/65061' };
+  externalId: '65061/quick-puff-paste', url: 'https://www.gutenberg.org/ebooks/65061',
+  license: 'https://www.gutenberg.org/policy/license.html' };
 const header = { ...work, types: ['https://schema.org/Recipe'],
-  title: { ...work.title, value: 'Quick Puff Paste' }, tagline: null, description: null,
+  title: { ...work.title, value: 'Quick Puff Paste' }, originalTitle: null, tagline: null, description: null,
   chapterCount: null, wordCount: null, completionStatus: null, lastUpdatedAt: null,
   rights: { basis: 'public-domain', source } };
 const credits = { nextCursor: null, sourcePosition: work.sourcePosition,
@@ -35,6 +38,19 @@ const credits = { nextCursor: null, sourcePosition: work.sourcePosition,
   { id: 'https://rezics.com/id/00000000-0000-4000-8000-000000000005', role: 'transcriber', agent: importer,
     displayName: 'Recipe transcriber', handle: null, provider: null, key: null, ordinal: 1 },
 ] };
+
+const recipe: ReadableRecipe = {
+  measures: [], ingredients: ['1 cup bread flour', '1 tablespoon lard', 'Cold water', '⅞ cup butter'].map((text, index) => ({
+    occurrence: `ingredient-${index}`, originalText: text, line: text, language: 'en',
+  })), occurrences: [{ occurrence: 'method', role: 'step', parent: work.id, labels: [], qualifier: {
+    type: 'recipe-step', instructionText: { language: 'en', value: 'Work lard into flour, first using knife then tips of fingers. Moisten to\n'
+      + 'a dough with cold water, pat, and roll out same as Puff Paste. Dot paste\n'
+      + 'with small pieces of butter, using one-third the quantity. Dredge with\n'
+      + 'flour, fold from ends toward centre, then double, making four layers.\n'
+      + 'Pat, and roll out. Repeat until butter is used. Roll, shape, chill, and\n'
+      + 'bake in a hot oven.' },
+  } }],
+};
 
 /** No recording exists for recipes/work-hub-and-reading. These are the proposed delivery/credit states in that row. */
 export const missingSourceRecipeStates = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'].flatMap(persona => {
@@ -79,6 +95,7 @@ function SourceRecipeHubContract({ persona, locale }: { persona: AnswerPersona; 
     <WorkHeader work={view.work} locale={locale} messages={messages[locale]} credits={<WorkCredits
       agentCredits={{ ok: true, data: { items: [], nextCursor: null } }} credits={{ ok: true, data: view.credits }}
       source={publicationSource(view.work)} locale={locale} messages={messages[locale]} />} />
+    <Region id="source-recipe-method" title={messages[locale].recipeMethod}><RecipeContent page={recipe} units="written" messages={messages[locale]} /></Region>
   </main>;
 }
 const meta = { title: 'Work page/Source recipe hub contract (unrecorded)', component: SourceRecipeHubContract,
@@ -93,6 +110,9 @@ const credited: NonNullable<Story['play']> = async ({ canvasElement, args }) => 
   await expect(canvas.findByText('Fannie Merritt Farmer')).resolves.toBeVisible();
   await expect(canvas.getByText(messages[args.locale].transcribedBy, { exact: false })).toBeVisible();
   await expect(canvas.getByRole('link', { name: /gutenberg · 65061\/quick-puff-paste/ })).toHaveAttribute('href', source.url);
+  await expect(canvas.getByRole('link', { name: source.license })).toHaveAttribute('href', source.license);
+  await expect(canvas.getByText('1 cup bread flour')).toBeVisible();
+  await expect(canvas.getByText(/Work lard into flour/)).toBeVisible();
   const authors = canvasElement.querySelector('.font-work-title.text-foreground\\/85');
   await expect(authors).not.toHaveTextContent('Recipe transcriber');
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);

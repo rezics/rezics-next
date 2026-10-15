@@ -36,7 +36,7 @@ export function closedStringEnum(schema: TSchema, parameter: string): readonly s
 export type TemplateField = { term:string; valueType?:'boolean'|'integer'; nullable?:boolean;optional?:boolean }
   | { constant: string | number | boolean | null }
   | { summary:string; path:'name' }
-  | { author:string; path:'displayName'|'nameSource'; optional?:boolean };
+  | { author:string; path:'displayName'|'nameSource'; optional?:boolean; fallbackTerm?:string };
 export interface ReviewedTemplate { query:string;revision:1;request:TSchema;response:TSchema;
   scope:'work'|'public';root:'work'|'concept';
   serverBoundInputs:readonly string[];

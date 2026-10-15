@@ -220,17 +220,16 @@ test('Source-backed Structure / operator: preserves nested section parents as we
   await structureAndText('operator', imported.revision);
 });
 for (const name of personaNames.filter(name => name !== 'operator')) {
-  test.failing(`Sourced publication / ${name}: refuses caller without the corresponding platform mandate`, async () => {
+  test(`Sourced publication / ${name}: refuses caller without the corresponding platform mandate`, async () => {
     await supportedStructure();
-    // Pending separately: current schema rejects before Access can decide.
     await answer(sessions[name].main('POST', '/v1/work-publications', publication(name)), name === 'visitor' ? 401 : 403);
   });
 }
-test.failing('Sourced publication / operator: platform status and import mandate alone cannot publish', async () => {
+test('Sourced publication / operator: platform status and import mandate alone cannot publish', async () => {
   await supportedStructure();
   await answer(sessions.operator.main('POST', '/v1/work-publications', publication('operator')), 403);
 });
-test.failing('Sourced publication / operator: a mandate for another Work cannot publish this source', async () => {
+test('Sourced publication / operator: a mandate for another Work cannot publish this source', async () => {
   await supportedStructure();
   const grant = await mandate('platform:resource:work.publish', `work:publish:${original.work}`);
   try { await answer(sessions.operator.main('POST', '/v1/work-publications', publication('operator')), 403); }

@@ -193,6 +193,25 @@ async function readAllBrowsePages(api: CorpusApi, realm: string, q?: string): Pr
   return pages;
 }
 
+test('Gutenberg recipes publish as copied public-domain text with source and author credit', async () => {
+  for (const record of corpus.records) {
+    const header = await recipeApi.read<{ rights: { basis: string; source: {
+      provider: string; externalId: string; url: string; license: string; author: string;
+      observation: string; transcriber: string } } }>(`/v1/works/${short(record.work)}`);
+    expect(header.rights.basis).toBe('public-domain');
+    expect(header.rights.source).toMatchObject({ provider: 'gutenberg',
+      license: 'https://www.gutenberg.org/policy/license.html',
+      author: record.pinId === 'artusi' ? 'Pellegrino Artusi' : 'Fannie Merritt Farmer' });
+    expect(header.rights.source.externalId).toEndWith(`/${record.recipeId}`);
+    const credits = await recipeApi.read<{ items: Array<{ role: string; agent: string | null; displayName: string }> }>(
+      `/v1/works/${short(record.work)}/credits`);
+    expect(credits.items).toContainEqual(expect.objectContaining({ role: 'author', agent: null,
+      displayName: header.rights.source.author }));
+    expect(credits.items).toContainEqual(expect.objectContaining({ role: 'transcriber', agent: header.rights.source.transcriber }));
+    expect(credits.items.some(item => item.role === 'author' && item.agent === header.rights.source.transcriber)).toBe(false);
+  }
+});
+
 test('recipes / Pinned Schema.org imports retain ordered content, quantities and separate flour steps', async () => {
   const sources = launchRecipeSources();
   const sourceByKey = new Map(sources.map(item => [`${item.pinId}/${item.recipeId}`, item]));

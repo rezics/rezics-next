@@ -1,4 +1,5 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
+import type { PublicationAttribution } from './sourced-structure-publication.ts';
 import type { InstructionAdoption } from './instruction-adoption.ts';
 import { AdmissionDenied, AdmissionExpired, AdmissionUnavailable,
   type AccessAdmissionRegistry, type VerifiedPrincipal } from '../access/admission.ts';
@@ -22,7 +23,7 @@ export async function changeAdmittedWorkStructurePublication(
   request: Request,
   input: WorkStructurePublicationInput & { idempotencyKey: string },
   publicationFence: <T>(dispatch: (allowed: boolean) => Promise<T>) => Promise<T>,
-  prepareDependencies?: (admissionId: string, principal: VerifiedPrincipal) => Promise<readonly InstructionAdoption[]>,
+  prepareDependencies?: (admissionId: string, principal: VerifiedPrincipal) => Promise<{ adoptions: readonly InstructionAdoption[]; attribution?: PublicationAttribution }>,
 ): Promise<WorkStructurePublicationReceipt & { replayed: boolean }> {
   const digest = workStructurePublicationDigest(input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
@@ -46,13 +47,17 @@ export async function changeAdmittedWorkStructurePublication(
       if (!admission.dispatchEligible || admission.state === 'registered') {
         terminal = await sealWorkStructurePublicationAdmission(env, admission);
       } else {
-        terminal = await publicationFence(async allowed => !allowed
-          ? denyWorkStructurePublicationAdmission(env, admission, input)
-          : changeStructuredWorkPublication(env, admission, input,
+        terminal = await publicationFence(async allowed => {
+          const dependencies = allowed && input.operation === 'publish'
+            ? await prepareDependencies?.(admission.id, principal) : undefined;
+          return !allowed
+            ? denyWorkStructurePublicationAdmission(env, admission, input)
+            : changeStructuredWorkPublication(env, admission, input,
             id => access.admittedActingSubject
               ? access.admittedActingSubject(id)
               : Promise.reject(new AdmissionDenied('Structure author provenance is unavailable')),
-            input.operation === 'publish' ? await prepareDependencies?.(admission.id, principal) : []));
+            dependencies?.adoptions, dependencies?.attribution);
+        });
       }
     }
     if (!terminal) throw new PendingAdmittedWork(registered.id, 'work-publication');

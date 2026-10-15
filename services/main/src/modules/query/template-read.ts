@@ -8,6 +8,7 @@ import { GRAPHS, iri } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, readDependencyToken, publicWork, unerased,
   workRead, publicWorkRead, WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadUnavailable, WorkReadMoved,
   readRowsToken, type WorkReadSession, type ReadRow } from '../work/read-session.ts';
+import { sourcedPublicationCreditReferences } from '../work/sourced-publication-credits.ts';
 import { readAuthorNames, sourceCreditReferences } from '../source/author-name-read.ts';
 import { resolveConcepts } from '../concept-page/read.ts';
 import { discoveryStorage } from '../discovery/store.ts';
@@ -81,7 +82,8 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       fromYear:input.parameters.fromYear ?? null,toYear:input.parameters.toYear ?? null,
       realm:input.parameters.realm ?? null,filter:input.parameters.filter ?? null,
       languages:session.displayLanguages,actor:session.options.actingSubject ?? null,limit};
-    const refs=template.sourceCredits ? await sourceCreditReferences(session,roots) : [];
+    const refs=template.sourceCredits ? [...(await sourceCreditReferences(session,roots)).map(ref=>({...ref,role:'author',provider:'open-library',agent:null as string|null,displayName:null as string|null})),
+      ...await sourcedPublicationCreditReferences(session,roots)] : [];
     let membership:unknown, candidateRead:(after:{key:string;id:string}|null)=>Promise<SeekCandidate[]>;
     let extraBasis:()=>Promise<unknown>;
     let physicalMore=true;
@@ -153,7 +155,7 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
     if(template.sourceCredits) {
       const cutoff=candidates.at(-1)?.key;
       const added=source.map(ref=>{
-        const sort=creditSeekKey('author',ref.ordinal,ref.id);
+        const sort=creditSeekKey(ref.role,ref.ordinal,ref.id);
         if(!sort) throw new WorkReadUnavailable('Source credit order is unavailable');
         return {...ref,sort};
       })
@@ -170,8 +172,10 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       ? [[uri(FIRST_PUBLICATION_ANCHOR),uri(FIRST_PUBLICATION_ANCHOR)]]
       : admission.rows.map(row=>[uri(row.root),uri(row.main)])},
       {columns:['id','_sort'],rows:candidates.map(row=>[uri(row.id),literal(row.key)])}];
-    if(template.sourceCredits) tables.push({columns:['id','key','ordinal','_work_iri','_source_confirmed'],
-      rows:source.map(row=>[uri(row.id),literal(row.key),integer(row.ordinal),uri(row.work),bool(row.confirmed)])});
+    if(template.sourceCredits) tables.push({columns:['id','key','ordinal','_work_iri','_source_confirmed','_source_role','_source_provider','_source_agent','_source_name'],
+      rows:source.map(row=>[uri(row.id),literal(row.key),integer(row.ordinal),uri(row.work),bool(row.confirmed),
+        literal(row.role),literal(row.provider),
+        literal(row.agent ?? ''),literal(row.displayName ?? '')])});
     const bindings:Record<string,TemplateTerm>={};
     if(template.serverBoundInputs.includes('_contentLanguage')) {
       bindings._contentLanguage=literal(normalized.contentLanguage);
@@ -231,7 +235,8 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
           if(summary?.status!=='available') return [];
           item[name]=summary[field.path];
         } else if('author' in field) {
-          const value=names.get(row[field.author]?.value ?? '')?.[field.path];
+          const value=(field.fallbackTerm ? row[field.fallbackTerm]?.value : undefined)
+            ?? names.get(row[field.author]?.value ?? '')?.[field.path];
           if(value===undefined && field.optional) continue;
           item[name]=value ?? null;
         } else {
@@ -241,6 +246,7 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
           item[name]=value===undefined?null:field.valueType==='boolean'?value==='true':field.valueType==='integer'?Number(value):value;
         }
       }
+      if(item.role==='transcriber') { item.key=null; item.ordinal=null; item.provider=null; }
       return [item];
     });
     const window=yearScope?examined:candidates;

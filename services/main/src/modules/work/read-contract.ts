@@ -76,7 +76,9 @@ export const workCard = t.Object({ id: readId, revision: readId, mainVersion: re
   chapterCount: t.Nullable(t.Integer({ minimum: 0 })),
   wordCount: t.Nullable(t.Integer({ minimum: 0 })),
   lastUpdatedAt: t.Nullable(t.String({ format: 'date-time' })) });
-export const workHeader = t.Object({ profile: t.Literal('work-read-v1'), ...workCard.properties,
+export const workHeader = t.Object({ rights: t.Optional(t.Object({ basis: t.Literal('public-domain'),
+  source: t.Object({ record: readId, observation: readId, provider: t.String(), externalId: t.String(),
+    url: t.String(), license: t.Nullable(t.String()), author: t.String(), transcriber: readId }) })), profile: t.Literal('work-read-v1'), ...workCard.properties,
   fieldProvenance: t.Optional(t.Object({ basis: t.Literal('creation'), revision: readId,
     contributor: t.String(), admission: t.String(),
     candidateReceipt: t.String(), fields: t.Array(t.String()) })),
@@ -107,7 +109,7 @@ export const adoptionItem = t.Object({ realm: readId, name: readName, selection:
 /** Stored native-agent roles. Translator and editor stay writable and are not on the public credit page. */
 export const NATIVE_CREDIT_ROLES = ['author', 'translator', 'editor', 'director', 'artist', 'animation-studio'] as const;
 /** Public credit page order. The seek ranks in seek-index.ts start with this sequence. */
-export const WORK_CREDIT_ROLES = ['author', 'director', 'artist', 'animation-studio'] as const;
+export const WORK_CREDIT_ROLES = ['author', 'director', 'artist', 'animation-studio', 'transcriber'] as const;
 export type NativeCreditRole = typeof NATIVE_CREDIT_ROLES[number];
 export type WorkCreditRole = typeof WORK_CREDIT_ROLES[number];
 export const nativeCreditRole = t.Union([
@@ -115,7 +117,7 @@ export const nativeCreditRole = t.Union([
   t.Literal('director'), t.Literal('artist'), t.Literal('animation-studio'),
 ]);
 export const workCreditRole = t.Union([
-  t.Literal('author'), t.Literal('director'), t.Literal('artist'), t.Literal('animation-studio'),
+  t.Literal('transcriber'), t.Literal('author'), t.Literal('director'), t.Literal('artist'), t.Literal('animation-studio'),
 ]);
 export function isNativeCreditRole(role: string): role is NativeCreditRole {
   return (NATIVE_CREDIT_ROLES as readonly string[]).includes(role);
@@ -129,7 +131,7 @@ const creditName = {
 export const creditItem = t.Union([
   t.Object({
     id: readId, role: workCreditRole,
-    participantKind: t.Literal('external-reference'), provider: t.Literal('open-library'),
+    participantKind: t.Literal('external-reference'), provider: t.String(),
     key: t.String(), ordinal: t.Integer(), agent: t.Null(), ...creditName,
   }),
   t.Object({

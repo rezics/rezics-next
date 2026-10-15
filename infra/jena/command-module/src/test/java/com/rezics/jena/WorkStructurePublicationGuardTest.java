@@ -215,6 +215,23 @@ public class WorkStructurePublicationGuardTest {
         } finally { data.abort(); data.end(); data.close(); }
     }
 
+    @Test public void publicDomainWithoutObservationIsRefusedWhileOriginalNeedsNone() {
+        DatasetGraph data = publication();
+        data.begin(ReadWrite.WRITE);
+        try {
+            assertNull(CommandService.workStructurePublicationDecisionLinks(data, null, DECISION));
+            for (String field : List.of("modelRevision", "shapeRevision"))
+                put(data, CommandPolicy.REVISIONS, DECISION, field,
+                    uri("https://rezics.com/definition/work-structure-publication-v2"));
+            put(data, CommandPolicy.REVISIONS, DECISION, "rightsBasis", p("PublicDomain"));
+            assertNotNull(CommandService.workStructurePublicationDecisionLinks(data, null, DECISION));
+            put(data, CommandPolicy.REVISIONS, DECISION, "sourceObservation", uri(OBSERVATION));
+            assertNotNull(CommandService.workStructurePublicationDecisionLinks(data, null, DECISION));
+            put(data, CommandPolicy.REVISIONS, SOURCE, "sourceObservation", uri(OBSERVATION));
+            assertNull(CommandService.workStructurePublicationDecisionLinks(data, null, DECISION));
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+
     @Test public void originalAndWithdrawalRetainV1FamiliesUnderEitherAdmittedRevision() {
         for (String profile : List.of("work-structure-publication-v1", "work-structure-publication-v2")) {
             DatasetGraph data = publication();

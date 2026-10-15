@@ -161,7 +161,7 @@ export async function prepareLaunchBooksCorpus(input: {
 }): Promise<LaunchBooksCorpus> {
   const sources = launchBookSources().map(({ entry }) => ({ id: entry.id, sha256: entry.sha256, reuseBasis: entry.reuseBasis }));
   const compatibility = loadCompatibility(root);
-  const id = `launch-books-${createHash('sha256').update(JSON.stringify([recipe, sources, compatibility.digest, 'source-rights-v1'])).digest('hex').slice(0, 20)}`;
+  const id = `launch-books-${createHash('sha256').update(JSON.stringify([recipe, sources, compatibility.digest, 'sourced-structure-publication-v2'])).digest('hex').slice(0, 20)}`;
   const directory = resolve(input.directory);
   if (!relative(root, directory).startsWith('.temp/')) throw new Error('Launch corpus must stay in this checkout .temp');
   mkdirSync(directory, { recursive: true });
@@ -280,11 +280,10 @@ export function launchRecipeSources(): LaunchRecipeSource[] {
   return extracted;
 }
 
-type RecipeWorkReceipt = { work: string; mainVersion: string };
+type RecipeWorkReceipt = { work: string; workRevision: string; mainVersion: string };
 type RecipeCompositionReceipt = { structure: string; revision: string };
 type RecipeFileImportReceipt = { structure: string; revision: string; sourceObservation: string; replayed: boolean };
-type TextDraftReceipt = { contribution: string; draftRevision: string };
-type TextPublicationReceipt = { publicationDecision: string };
+
 
 /** Create, import and publish each pin with Main commands; the input is never parsed here. */
 async function buildRecipes(api: CorpusApi, actor: string, key: string,
@@ -307,7 +306,7 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
   await api.command(`${key}:zone-default-realm`, { method: 'PUT', path: `/v1/zones/${short(zone)}/configuration`,
     body: { expectedHead: zoneConfig.revision, defaultRealm: space.realm, actingSubject: actor },
   }, signal);
-  await authorize(`publication:adopt:${space.realm}`, 'publication.adopt');
+
   await authorize('work:create:root', 'work.create');
   await authorize('rights:assess', 'rights.assess');
 
@@ -315,9 +314,16 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
   const records: LaunchRecipeRecord[] = [];
   for (const source of sources) {
     signal.throwIfAborted();
+    const credit = source.pinId === 'artusi' ? 'Pellegrino Artusi' : 'Fannie Merritt Farmer';
+    const sourceUrl = `https://www.gutenberg.org/ebooks/${source.sourceId.replace(/^pg/, '')}`;
+    const candidates = await api.command<{ candidateReceipt: string }>(`${key}:candidate:${source.pinId}:${source.recipeId}`, {
+      method: 'POST', path: '/v1/catalogue/candidates', body: { profile: 'catalogue-candidates-v1',
+        originalTitle: { value: source.title, language: source.language }, aliases: [], romanizations: [],
+        creators: [credit], dates: [], identifiers: [] },
+    }, signal);
     const work = await api.command<RecipeWorkReceipt>(`${key}:work:${source.pinId}:${source.recipeId}`, {
-      method: 'POST', path: '/v1/works', body: { profile: 'metadata-only-v1', authoring: 'own-work',
-        title: source.title, language: source.language,
+      method: 'POST', path: '/v1/works', body: { profile: 'metadata-only-v1', authoring: 'catalogue', grain: 'new-creative-scope',
+        candidateReceipt: candidates.candidateReceipt, title: source.title, language: source.language,
         semanticTypes: ['https://schema.org/Recipe'], actingSubject: actor },
     }, signal);
     await authorize(`work:edit:${work.work}`, 'recipe.edit');
@@ -327,11 +333,13 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
         body: { profile: 'recipe-composition', work: work.work, mainVersion: work.mainVersion, actingSubject: actor },
       }, signal);
     const file: Record<string, unknown> = { '@context': 'https://schema.org', '@type': 'Recipe',
-      name: source.title, inLanguage: source.language, recipeIngredient: source.ingredients,
+      name: source.title, inLanguage: source.language, url: sourceUrl, author: { '@type': 'Person', name: credit },
+      license: 'https://www.gutenberg.org/policy/license.html',
+      isBasedOn: { url: sourceUrl, sourceSha256: source.sourceSha256, recipeId: source.recipeId },
+      recipeIngredient: source.ingredients,
       recipeInstructions: source.methods.map(text => ({ '@type': 'HowToStep', text, inLanguage: source.language })) };
     const imported = await importFile(`${key}:file:${source.pinId}:${source.recipeId}`,
       actor, composition, file, signal);
-    const credit = source.pinId === 'artusi' ? 'Pellegrino Artusi' : 'Fannie Merritt Farmer';
     for (const [index, assessment] of importedRightsAssessments({ provider: 'project-gutenberg',
       url: `https://www.gutenberg.org/ebooks/${source.sourceId.replace(/^pg/, '')}`, credit }, work.work, true).entries()) {
       const assessmentKey = `${key}:rights:${source.pinId}:${source.recipeId}:${index}`;
@@ -341,32 +349,13 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
           idempotencyKey: assessmentKey } }, signal);
     }
 
-    await authorize(`contribution:create:${work.work}`, 'contribution.create');
-    const draft = await api.command<TextDraftReceipt>(`${key}:draft:${source.pinId}:${source.recipeId}`, {
-      method: 'POST', path: '/v1/contributions', body: { profile: 'text-contribution-v1', work: work.work,
-        language: source.language, body: [source.title, '', 'Ingredients:',
-          ...source.ingredients.map(line => line.trim()), '', 'Method:', ...source.methods.map(line => line.trim())].join('\n'),
-        actingSubject: actor },
-    }, signal);
-    await authorize(`contribution:read:${draft.contribution}`, 'contribution.read');
-    await authorize(`contribution:publish:${draft.contribution}`, 'contribution.publish');
-    const publication = await api.command<TextPublicationReceipt>(`${key}:publication:${source.pinId}:${source.recipeId}`, {
-      method: 'POST', path: '/v1/contribution-publications', body: { profile: 'text-publication-v1',
-        contribution: draft.contribution, expectedDraftHead: draft.draftRevision,
-        expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: actor },
-    }, signal);
-    await authorize(`publication:select:${work.mainVersion}`, 'publication.select');
-    await api.command(`${key}:main-selection:${source.pinId}:${source.recipeId}`, {
-      method: 'POST', path: '/v1/publication-selections', body: { profile: 'main-default-selection-v1',
-        context: { kind: 'main-version-default', id: work.mainVersion }, work: work.work,
-        contribution: draft.contribution, publicationDecision: publication.publicationDecision,
-        expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: actor },
-    }, signal);
-    await api.command(`${key}:zone-adoption:${source.pinId}:${source.recipeId}`, {
-      method: 'POST', path: '/v1/publication-selections', body: { profile: 'realm-local-selection-v1',
-        context: { kind: 'realm-local', id: space.realm }, work: work.work, mainVersion: work.mainVersion,
-        contribution: draft.contribution, publicationDecision: publication.publicationDecision,
-        expectedSelectionHead: null, selectionBasis: 'realm-manager-review', actingSubject: actor },
+    await authorize(`work:publish:${work.work}`, 'work.publish');
+    await api.command(`${key}:publication:${source.pinId}:${source.recipeId}`, {
+      method: 'POST', path: '/v1/work-publications', body: { profile: 'work-structure-publication-v1', operation: 'publish',
+        work: work.work, expectedWorkHead: work.workRevision, expectedMainVersion: work.mainVersion,
+        structure: composition.structure, expectedStructureHead: imported.revision,
+        expectedPublicationHead: null, rightsBasis: 'public-domain', sourceObservation: imported.sourceObservation,
+        disclosure: 'public', actingSubject: actor },
     }, signal);
     records.push({ recipeId: source.recipeId, pinId: source.pinId, title: source.title,
       language: source.language, caseIds: source.caseIds, sourceIngredients: source.ingredients,
@@ -406,7 +395,7 @@ const launchRecipeCounts: LaunchRecipesCorpus['counts'] = { works: 30, recipes: 
 
 function launchRecipesIdentity(sources: LaunchRecipesCorpus['sources'], compatibility: LoadCompatibility): string {
   return `launch-recipes-${createHash('sha256')
-    .update(JSON.stringify([launchRecipesRecipe, sources, compatibility.digest, 'source-rights-v1'])).digest('hex').slice(0, 20)}`;
+    .update(JSON.stringify([launchRecipesRecipe, sources, compatibility.digest, 'sourced-structure-publication-v2'])).digest('hex').slice(0, 20)}`;
 }
 
 function launchRecipesManifestPath(directory: string, id: string): string {
@@ -591,6 +580,8 @@ async function buildRecipesApiBackup() {
     };
 
     const importer = await source.member('launch-recipes-importer', { stable: true, verified: true });
+    const { grantRecordedPlatformUse } = await import('../../tests/qa/fixtures/platform-grant.ts');
+    await grantRecordedPlatformUse(source.accessPool, importer.principalId, ['catalogue-import']);
     await initializeRelayCheckpoint(relay, sourceEnvironment.MAIN_RELAY_CONSUMER!, source.env.lineage.dataEpoch);
     const api = workProfileCorpusApi('http://main.local', importer.token, {
       fetch: (async (request, init) => {
@@ -622,14 +613,24 @@ async function buildRecipesApiBackup() {
       directory, authorize: (scope, action) => grantLaunchRecipeAuthority(source!.accessPool,
         importer.principalId, importer.actor, scope, action),
       importFile: async (key, actor, composition, file, signal) => {
-        const path = `/v1/recipes/${short(composition.structure)}/file-imports`
-          + `?actingSubject=${encodeURIComponent(actor)}&expectedHead=${encodeURIComponent(composition.revision)}`;
-        const response = await source!.main.handle(new Request(`http://main.local${path}`, { method: 'POST',
-          headers: { authorization: `Bearer ${importer.token}`, 'idempotency-key': key,
-            'content-type': 'application/ld+json' }, body: JSON.stringify(file), signal }));
-        if (![200, 201].includes(response.status))
-          throw new Error(`Recipe file import returned HTTP ${response.status}: ${await response.text()}`);
-        return await response.json() as RecipeFileImportReceipt;
+        const sourceUrl = String(file.url);
+        const retained = await api.command<{ observation: { observation: string } }>(`${key}:source`, {
+          method: 'POST', path: '/v1/sources/intakes', body: { profile: 'source-manual-intake-v1',
+            provider: 'gutenberg', namespace: 'recipe-extract',
+            externalId: `${sourceUrl.split('/').at(-1)}/${(file.isBasedOn as { recipeId: string }).recipeId}`,
+            sourceRevision: (file.isBasedOn as { sourceSha256: string }).sourceSha256,
+            mediaType: 'application/ld+json', retention: 'retained',
+            rawBytesBase64: Buffer.from(JSON.stringify(file)).toString('base64'),
+            coverage: { scope: 'complete-recipe', complete: true, omittedFields: [] },
+            rightsEvidence: { basis: 'public-domain', note: `Pinned Project Gutenberg extract; ${sourceUrl}` } },
+        }, signal);
+        const imported = await api.command<{ revision: string }>(key, {
+          method: 'POST', path: `/v1/recipes/${short(composition.structure)}/imports`, body: {
+            actingSubject: actor, expectedHead: composition.revision,
+            sourceObservation: retained.observation.observation },
+        }, signal);
+        return { structure: composition.structure, revision: imported.revision,
+          sourceObservation: retained.observation.observation, replayed: false };
       },
     });
     if (JSON.stringify(corpus.counts) !== JSON.stringify(launchRecipeCounts) || corpus.records.length !== 30)
