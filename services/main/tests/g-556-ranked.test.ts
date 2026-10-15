@@ -52,7 +52,7 @@ test('cancelled Realm hydration discloses no scope, count or continuation on fir
   const first = await read(() => readRankedCatalogue(env, selected));
   for (const continuation of [undefined, first.next!]) {
     await expect(read(() => readRankedCatalogue(env, { ...selected, continuation },
-      undefined, undefined, async () => null))).rejects.toBeInstanceOf(WorkReadMoved);
+      undefined, async () => null))).rejects.toBeInstanceOf(WorkReadMoved);
   }
 });
 
