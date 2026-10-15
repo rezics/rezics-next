@@ -6,7 +6,9 @@ import { gateFor } from '../../../../../apps/web/features/api/platform-access.ts
 import type { PlatformAccessSummary } from '../../../../../generated/openapi/main/exposure.ts';
 import { readQueueNames } from '../../../../../apps/web/features/manage/queue-api.ts';
 import { readDecisionBasis, readManagedRealms, readQueue, readRealmHeader, settle } from '../../../../../apps/web/features/manage/read.ts';
+import { readManagementAccess } from '../../../../../apps/web/features/manage/settings-api.ts';
 import { realmEditSite } from '../../../../../apps/web/features/manage/realm-site.ts';
+import { readAppealReceipt } from '../../../../../apps/web/features/realm-appeal/ban-read.ts';
 import moderation from '../../../../../scripts/qa/cases/outcomes/realm/moderation-and-appeal.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { recordFrameReads } from '../../../support/frame-reads.ts';
@@ -69,6 +71,25 @@ async function managementReads(name: PersonaName, fixture: Fixture, person: Pers
       productionMain(name, fixture.sessions.visitor, `${prefix}-public-name`).main);
   }
   if (caseId) await readDecisionBasis(main, realm, caseId, actingSubject);
+  // The queue's current sanction appeal reads its basis and receipt on first paint.
+  // Selecting a different case reads that case too. The basis of a named case was read above.
+  if (!page.ok) {
+    // The frame still mounts its section tabs when the queue refuses.
+    await readManagementAccess(main, realm, actingSubject);
+    return;
+  }
+  const appeals = page.data.items.filter(item => item.kind === 'realm_sanction_appeal');
+  const initial = appeals[0];
+  const chosen = caseId ? appeals.find(item => item.id === caseId) ?? initial : initial;
+  const seen = new Set<string>();
+  for (const item of [initial, chosen]) {
+    if (!item || seen.has(item.id)) continue;
+    seen.add(item.id);
+    if (item.id !== caseId) await readDecisionBasis(main, realm, item.id, actingSubject);
+    if (/^[0-9a-f-]{36}$/.test(item.target.resource)) await readAppealReceipt(main, realm, item.target.resource);
+  }
+  // Section tabs resolve settings authority after the queue is on screen.
+  await readManagementAccess(main, realm, actingSubject);
 }
 
 async function pageReads(name: PersonaName) {

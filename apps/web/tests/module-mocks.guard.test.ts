@@ -6,7 +6,6 @@ import ts from 'typescript-6';
 // These files are claimed by another worker converting their cleanup; this list may only shrink.
 const legacyCleanupFiles = [
   'features/work-page/hub-access.test.ts',
-  'features/realm-appeal/read.test.ts',
 ];
 
 function expression(node: ts.Expression): ts.Expression {

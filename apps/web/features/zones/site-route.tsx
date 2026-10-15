@@ -12,8 +12,10 @@ import {
   readPresentation,
   readCompletePresentation,
   readZoneRoute,
+  realmFrameReads,
   resolveRealm,
   resolveSite,
+  type RealmReadClient,
   type SiteResolution,
 } from '../realm/read.ts';
 import { parseCursor, siteHref } from '../realm/route.ts';
@@ -183,10 +185,17 @@ function failure(
   );
 }
 
-export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Promise<ReactNode> {
+export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps, client?: RealmReadClient): Promise<ReactNode> {
   const [{ locale, space, path = [] }, search] = await Promise.all([params, searchParams]);
   if (!isUiLocale(locale)) notFound();
-  const resolved = await resolveSite(space, locale);
+  // A story passes the replaying client. Production omits it and keeps the request-cached host client.
+  const replay = client ? realmFrameReads({
+    keepProblem: false,
+    main: client.main,
+    personal: client.personal ?? client.main,
+    actingSubject: client.actingSubject,
+  }) : null;
+  const resolved = replay ? await replay.resolveSite(space, locale) : await resolveSite(space, locale);
   if (resolved.kind === 'missing') notFound();
   if (resolved.kind === 'unavailable')
     return <RealmUnavailable messages={await getMessages('realm', locale)} failure={resolved.failure}
@@ -219,9 +228,11 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
     return SiteHomeRoute(communityProps, async () => homeView);
   }
   // Resolve mounts before the starter Browse renderer, so a mount named browse is never shadowed.
-  const routed = await readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search));
+  const routed = replay
+    ? await replay.readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search))
+    : await readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search));
   if (!routed.ok && routed.status === 404 && routed.failure === 'missing' && path.length === 1 && path[0] === 'browse') {
-    return RealmBrowseRoute(communityProps);
+    return RealmBrowseRoute(communityProps, undefined, client);
   }
   const view = await loadRealmView(space, locale, search, 'site');
   if (view.kind === 'missing') notFound();

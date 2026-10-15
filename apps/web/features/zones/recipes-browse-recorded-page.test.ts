@@ -32,6 +32,11 @@ function pageAnswer(sample: { answer: unknown }): ZoneBrowsePage {
   return sample.answer as ZoneBrowsePage;
 }
 
+/** A recorded cursor is null when the page ends; a query omits it. Both mean the same absence. */
+function expectSameCursor(actual: string | null | undefined, expected: string | null | undefined) {
+  expect(actual ?? null).toBe(expected ?? null);
+}
+
 function resultsText(answer: ZoneBrowsePage) {
   const t = materializeData(messages, { locale: 'en' });
   return answer.matches.kind === 'exact'
@@ -226,6 +231,7 @@ test('the visitor changed cursor stays the recorded refusal', async () => {
 });
 
 let persona: AnswerPersona = 'visitor';
+const observedAddresses: { key: string | null; authorization: string | null; scope: string | null; actingSubject: string | null }[] = [];
 const host = { ...(await import('next/headers')) };
 const restoreHost = replaceModule(import.meta.resolve('next/headers'), host, {
   cookies: async () => ({ get: (name: string) => persona === 'visitor' ? undefined
@@ -254,17 +260,26 @@ function searchFrom(label: string) {
   return Object.fromEntries(new URL(productionSample(label).path, 'https://recorded.invalid').searchParams);
 }
 
-function replay(labels: string[]) {
-  const transport = recordedFetch(browse, persona, labels.map(label => ({ label,
-    state: productionSample(label).status >= 400 ? 'error' : 'populated' })));
+function searchFromRecord(record: AnswerRecord, label: string) {
+  return Object.fromEntries(new URL(sampleOf(record, persona, label).path, 'https://recorded.invalid').searchParams);
+}
+
+function replay(labels: string[], record: AnswerRecord = browse) {
+  const transport = recordedFetch(record, persona, labels.map(label => ({ label,
+    state: sampleOf(record, persona, label).status >= 400 ? 'error' : 'populated' })));
   disposals.push(transport.dispose);
   const requests: { method: string; path: string; query: Record<string, string>; authorization: string | null }[] = [];
   const gaps: string[] = [];
   fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
-    requests.push({ method: request.method, path: url.pathname, query: Object.fromEntries(url.searchParams),
-      authorization: request.headers.get('authorization') });
+    const seen = { method: request.method, path: url.pathname, query: Object.fromEntries(url.searchParams),
+      authorization: request.headers.get('authorization') };
+    requests.push(seen);
+    if (url.pathname.endsWith('/addresses/resolve')) observedAddresses.push({
+      key: url.searchParams.get('key'), authorization: seen.authorization, scope: url.searchParams.get('scope'),
+      actingSubject: url.searchParams.get('actingSubject'),
+    });
     try { return await transport.fetcher(input, init); }
     catch (error) { gaps.push(error instanceof Error ? error.message : String(error)); throw error; }
   }) as typeof fetch;
@@ -287,10 +302,14 @@ function findBrowse(node: ReactNode): BrowseModel {
   return found.props.model;
 }
 
+function followStateLabel(record: AnswerRecord) {
+  return record.personas[persona].some(sample => sample.label === 'frame-follow-state') ? ['frame-follow-state'] : [];
+}
+
 function frameLabels(page: string) {
   return ['frame-address', 'frame-presentation', 'frame-routes', 'frame-realm-header', 'frame-facets', page,
     ...(persona === 'visitor' ? [] : ['frame-session-agent', 'frame-person-preferences', 'frame-joining', 'frame-member-ban',
-      'frame-follow', 'frame-platform-access'])];
+      'frame-follow', 'frame-platform-access', ...followStateLabel(browse)])];
 }
 
 /** Labels the browse route reaches. The site route's `routes` read is absent here. */
@@ -298,15 +317,55 @@ function routeLabels(page: string) {
   return frameLabels(page).filter(label => label !== 'frame-routes');
 }
 
-async function visit(page: string) {
-  const siteKey = new URL(productionSample('frame-address').path, 'https://recorded.invalid').searchParams.get('key');
-  if (!siteKey) throw new Error('Recorded address has no site key');
-  const seen = replay(frameLabels(page));
+function addressKey(record: AnswerRecord, label: string) {
+  const key = new URL(sampleOf(record, persona, label).path, 'https://recorded.invalid').searchParams.get('key');
+  if (!key) throw new Error('Recorded address has no site key');
+  return key;
+}
+
+async function visitRoute(record: AnswerRecord, labels: string[], page: string, spaceLabel: string) {
+  const seen = replay(labels, record);
   const rendered = await ZoneSiteRoute({
-    params: Promise.resolve({ locale: 'en', space: siteKey, path: ['browse'] }),
-    searchParams: Promise.resolve(searchFrom(page)),
+    params: Promise.resolve({ locale: 'en', space: addressKey(record, spaceLabel), path: ['browse'] }),
+    searchParams: Promise.resolve(searchFromRecord(record, page)),
   });
   return { ...seen, model: findBrowse(rendered) };
+}
+
+async function visit(page: string) {
+  return visitRoute(browse, frameLabels(page), page, 'frame-address');
+}
+
+function actingSubject(record: AnswerRecord) {
+  if (persona === 'visitor') return undefined;
+  return (sampleOf(record, persona, 'frame-session-agent').answer as {
+    sessionAgent: { actingSubject: string };
+  }).sessionAgent.actingSubject;
+}
+
+function expectSiteGraph(requests: { method: string; path: string; query: Record<string, string>; authorization: string | null }[],
+  record: AnswerRecord, spaceLabel: string) {
+  const actor = actingSubject(record);
+  const browseCalls = requests.filter(request => request.path.endsWith('/modules/browse'));
+  expect(browseCalls.length).toBeGreaterThan(0);
+  expect(browseCalls.every(request => request.authorization === null
+    && request.query.limit === undefined && request.query.language === undefined)).toBe(true);
+  const presentations = requests.filter(request => request.path.endsWith('/presentation'));
+  expect(presentations.length).toBeGreaterThan(0);
+  expect(presentations.every(request => request.query.actingSubject === actor
+    && request.authorization === (actor ? `Bearer recorded-${persona}` : null))).toBe(true);
+  // Anonymous address resolution is cached for the page. A later visit of the same key sends no second lookup.
+  const key = addressKey(record, spaceLabel);
+  const addresses = requests.filter(request => request.path.endsWith('/addresses/resolve'));
+  expect(addresses.every(request => request.authorization === null && request.query.actingSubject === undefined
+    && request.query.scope === 'space' && request.query.key === key)).toBe(true);
+  expect(observedAddresses.some(item => item.key === key && item.authorization === null
+    && item.scope === 'space' && item.actingSubject === null)).toBe(true);
+  const routeAt = requests.findIndex(request => request.path.endsWith('/routes'));
+  const browseAt = requests.findIndex(request => request.path.endsWith('/modules/browse'));
+  expect(routeAt).toBeGreaterThanOrEqual(0);
+  expect(routeAt).toBeLessThan(browseAt);
+  return actor;
 }
 
 function expectRecordedPage(model: BrowseModel, answer: ZoneBrowsePage) {
@@ -354,18 +413,23 @@ for (const who of personas) {
     });
   }
 
-  test(`${who} cannot follow the recorded next page: the site route reads routes with that cursor`, async () => {
+  test(`${who} follows the recorded next page through the site route`, async () => {
     persona = who;
-    const answer = pageAnswer(productionSample('page-browse-default'));
-    const cursor = answer.nextCursor;
-    expect(cursor).toBeTruthy();
-    const siteKey = new URL(productionSample('frame-address').path, 'https://recorded.invalid').searchParams.get('key');
-    const { gaps } = replay([...frameLabels('page-browse-default-continuation-1')]);
-    await expect(ZoneSiteRoute({
-      params: Promise.resolve({ locale: 'en', space: siteKey!, path: ['browse'] }),
-      searchParams: Promise.resolve({ cursor: cursor! }),
-    })).rejects.toThrow(/Unmatched recorded request/);
-    expect(gaps.some(gap => gap.includes('/routes') && gap.includes(`cursor=${cursor}`) && gap.includes('"method":"GET"'))).toBe(true);
+    const first = pageAnswer(productionSample('page-browse-default'));
+    const answer = pageAnswer(productionSample('page-browse-default-continuation-1'));
+    expect(first.nextCursor).toBeTruthy();
+    const labels = frameLabels('page-browse-default-continuation-1')
+      .map(label => label === 'frame-routes' ? 'page-browse-default-zone-continuation' : label);
+    const { requests, gaps, model } = await visitRoute(browse, labels, 'page-browse-default-continuation-1', 'frame-address');
+    expect(gaps).toEqual([]);
+    expectRecordedPage(model, answer);
+    const actor = expectSiteGraph(requests, browse, 'frame-address');
+    expect(requests.find(request => request.path.endsWith('/routes'))?.query).toEqual({
+      path: 'browse', cursor: first.nextCursor!, ...(actor ? { actingSubject: actor } : {}),
+    });
+    expectSameCursor(requests.filter(request => request.path.endsWith('/modules/browse')).at(-1)?.query.cursor, first.nextCursor);
+    expect(answer.nextCursor).toBeNull();
+    expect(answer.matches).toEqual({ value: 23, kind: 'exact' });
   });
 
   for (const page of pages) {
@@ -383,6 +447,86 @@ for (const who of personas) {
       expect(requests.some(request => request.path.endsWith('/routes'))).toBe(false);
     });
   }
+}
+
+const paginationPages = [
+  ['page-search-newest', 'frame-routes'],
+  ['page-search-newest-continuation-1', 'site-search-newest-route'],
+] as const;
+
+for (const who of personas) {
+  for (const [page, route] of paginationPages) {
+    test(`${who} production site ${page} follows the recorded catalogue`, async () => {
+      persona = who;
+      const answer = pageAnswer(sampleOf(pagination, who, page));
+      const labels = ['site-address', 'frame-presentation', route, 'frame-realm-header', 'frame-facets', page,
+        ...(who === 'visitor' ? [] : ['frame-session-agent', 'frame-person-preferences', 'frame-joining',
+          'frame-member-ban', 'frame-follow', 'frame-platform-access', ...followStateLabel(pagination)])];
+      const { requests, gaps, model } = await visitRoute(pagination, labels, page, 'site-address');
+      expect(gaps).toEqual([]);
+      expectRecordedPage(model, answer);
+      expectSiteGraph(requests, pagination, 'site-address');
+      const requested = new URL(sampleOf(pagination, who, page).path, 'https://recorded.invalid').searchParams.get('cursor');
+      const routed = requests.find(request => request.path.endsWith('/routes'));
+      expect(routed?.query.path).toBe('browse');
+      expect(routed?.query.actingSubject ?? null).toBe(actingSubject(pagination) ?? null);
+      expect(routed?.query.cursor ?? null).toBe(requested);
+      expect(requests.filter(request => request.path.endsWith('/modules/browse')).at(-1)?.query)
+        .toEqual(searchFromRecord(pagination, page));
+      if (requested) {
+        expectSameCursor(requested, pageAnswer(sampleOf(pagination, who, 'page-search-newest')).nextCursor);
+        expect(answer.items).toHaveLength(3);
+        expect(answer.matches).toEqual({ value: 23, kind: 'exact' });
+        expect(answer.nextCursor).toBeNull();
+      }
+    });
+  }
+}
+
+async function visitInjectedSite(record: AnswerRecord, labels: string[], page: string, spaceLabel: string) {
+  const seen = replay(labels, record);
+  const actor = actingSubject(record);
+  const main = api.mainApiWithToken(undefined, { fetcher });
+  const rendered = await ZoneSiteRoute({
+    params: Promise.resolve({ locale: 'en', space: addressKey(record, spaceLabel), path: ['browse'] }),
+    searchParams: Promise.resolve(searchFromRecord(record, page)),
+  }, {
+    main,
+    personal: actor ? api.mainApiWithToken(`recorded-${persona}`, { fetcher }) : main,
+    actingSubject: actor,
+    signedIn: persona !== 'visitor',
+  });
+  return { ...seen, model: findBrowse(rendered) };
+}
+
+for (const who of personas) {
+  test(`${who} site route follows the recorded next page with the supplied client`, async () => {
+    persona = who;
+    const first = pageAnswer(productionSample('page-browse-default'));
+    const answer = pageAnswer(productionSample('page-browse-default-continuation-1'));
+    const labels = frameLabels('page-browse-default-continuation-1')
+      .map(label => label === 'frame-routes' ? 'page-browse-default-zone-continuation' : label);
+    const { requests, gaps, model } = await visitInjectedSite(browse, labels, 'page-browse-default-continuation-1', 'frame-address');
+    expect(gaps).toEqual([]);
+    expectRecordedPage(model, answer);
+    expectSiteGraph(requests, browse, 'frame-address');
+    expectSameCursor(requests.find(request => request.path.endsWith('/routes'))?.query.cursor, first.nextCursor);
+  });
+
+  test(`${who} site route follows the recorded search continuation with the supplied client`, async () => {
+    persona = who;
+    const page = 'page-search-newest-continuation-1';
+    const answer = pageAnswer(sampleOf(pagination, who, page));
+    const labels = ['site-address', 'frame-presentation', 'site-search-newest-route', 'frame-realm-header', 'frame-facets', page,
+      ...(who === 'visitor' ? [] : ['frame-session-agent', 'frame-person-preferences', 'frame-joining',
+        'frame-member-ban', 'frame-follow', 'frame-platform-access', ...followStateLabel(pagination)])];
+    const { requests, gaps, model } = await visitInjectedSite(pagination, labels, page, 'site-address');
+    expect(gaps).toEqual([]);
+    expectRecordedPage(model, answer);
+    expectSiteGraph(requests, pagination, 'site-address');
+    expectSameCursor(requests.find(request => request.path.endsWith('/routes'))?.query.cursor,
+      pageAnswer(sampleOf(pagination, who, 'page-search-newest')).nextCursor);
+  });
 }
 
 async function visitInjected(page: string) {
@@ -404,3 +548,26 @@ async function visitInjected(page: string) {
   });
   return { ...seen, model: findBrowse(rendered) };
 }
+
+test('both Recipe records keep the header follow-state refresh for a null level', () => {
+  for (const record of [browse, pagination]) {
+    for (const who of personas) {
+      persona = who;
+      const follow = record.personas[who].find(sample => sample.label === 'frame-follow');
+      const state = record.personas[who].find(sample => sample.label === 'frame-follow-state');
+      const fields = follow?.answer as { following: boolean | null; level: string | null } | undefined;
+      const needs = who !== 'visitor' && !!fields && (fields.following === null || fields.level === null);
+      expect(state !== undefined).toBe(needs);
+      if (!state) continue;
+      const url = new URL(state.path, 'https://recorded.invalid');
+      expect(state.method).toBe('GET');
+      expect(state.status).toBe(200);
+      expect(state.operationId).toBe('getV1MeFollow-state');
+      expect(state.body).toBeUndefined();
+      expect(url.pathname).toBe('/v1/me/follow-state');
+      expect([...url.searchParams.keys()]).toEqual(['actingSubject', 'target']);
+      expect(url.searchParams.get('actingSubject') ?? null).toBe(actingSubject(record) ?? null);
+      expect(url.searchParams.get('target')).toBe((sampleOf(record, who, 'frame-realm-header').answer as { id: string }).id);
+    }
+  }
+});

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { foregroundCounted } from '../../../tests/qa/integration/support/operation-cost.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -134,7 +135,7 @@ function measured(client: Pick<PoolClient, 'query'>) {
   const statements: string[] = [];
   const proxy = new Proxy(client, { get(source, property) {
     if (property === 'query') return (sql: string, args?: unknown[]) => {
-      statements.push(sql);
+      if (foregroundCounted()) statements.push(sql);
       return source.query(sql, args);
     };
     return Reflect.get(source, property, source);
