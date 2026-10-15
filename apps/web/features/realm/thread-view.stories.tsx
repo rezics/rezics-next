@@ -146,7 +146,7 @@ export const ReplyInline: Story = {
     const daniel = reply(canvas, /Daniel Chen 陈丹尼/);
     await userEvent.click(within(daniel).getAllByRole('button', { name: 'Reply' })[0]!);
     const box = within(daniel).getByRole('textbox', { name: 'Reply to Daniel Chen 陈丹尼' });
-    await userEvent.type(box, 'Mr. Bennet is funnier on a second read.');
+    await userEvent.type(box, 'Mr. Bennet is funnier on a second read.', { delay: 20 });
     const form = box.closest('form')!;
     await userEvent.click(within(form).getByRole('checkbox', { name: 'Mark as spoiler' }));
     await userEvent.click(within(form).getByRole('button', { name: 'Reply' }));

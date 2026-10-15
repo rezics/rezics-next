@@ -38,7 +38,7 @@ export function ZoneEditorFrame({ name, editorPath, agent, locale, manageMessage
   const sectionLabels = { home: sectionHome, navigation: sectionNavigation, theme: sectionTheme, attachment: sectionRealm };
   return <div className="grid min-w-0 grid-cols-1">
     <div className="border-border/60 border-b bg-background/80">
-      <div className="mx-auto grid w-full max-w-7xl gap-2 px-4 pt-3 sm:px-6 lg:px-10">
+      <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-2 px-4 pt-3 sm:px-6 lg:px-10">
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
           <nav aria-label={manage.title} className="flex min-w-0 items-center gap-1 text-muted-foreground text-sm">
             <LocalizedLink href="/manage" className="rounded-md px-1 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
