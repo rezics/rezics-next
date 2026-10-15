@@ -48,7 +48,7 @@ function fixture(input: { spacePrivate: boolean; zonePrivate: boolean; member: b
         disclosure: RV + (input.zonePrivate ? 'Private' : 'Public'),
         spaceDisclosure: RV + (input.spacePrivate ? 'Private' : 'Public'), realm,
         listing: input.listing ?? 'listed' }]);
-      if (query.includes('?kind ?space ?realm ?disclosure')) return rows([{ kind: 'space', space, realm,
+      if (query.includes('?kind ?space ?realm ?disclosure')) return rows([{ target: zone, kind: 'space', space, realm,
         disclosure: RV + (input.spacePrivate ? 'Private' : 'Public'),
         zoneDisclosure: RV + (input.zonePrivate ? 'Private' : 'Public'), listing: input.listing ?? 'listed' }]);
       if (query.includes('SELECT ?space ?realmRevision')) return rows([{ space, realmRevision: head,
