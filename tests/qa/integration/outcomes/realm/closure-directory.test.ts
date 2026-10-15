@@ -87,7 +87,7 @@ beforeAll(async () => {
   for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
     const response = await closed[name].main('POST', '/v1/query', directoryBody, undefined,
       { headers: { 'accept-language': 'en' } });
-    expect(response.status).toBe(200);
+    expect(response.status, await response.clone().text()).toBe(200);
     const { result } = await response.json() as { result: Page };
     expect(result.nextCursor).not.toBeNull();
     beforeClosure.set(name, result.nextCursor!);
