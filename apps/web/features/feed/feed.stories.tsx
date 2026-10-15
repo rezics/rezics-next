@@ -729,10 +729,12 @@ export const NewPosts: Story = {
     }),
   },
   async play({ canvasElement }) {
-    await expect(
-      await within(canvasElement).findByRole('button', { name: '3 new posts' }),
-    ).toBeVisible();
-    await expect(within(canvasElement).getAllByRole('article')).toHaveLength(everyKind.length);
+    const canvas = within(canvasElement);
+    const newest = await canvas.findByRole('button', { name: '3 new posts' });
+    await expect(newest).toBeVisible();
+    const posts = canvas.getAllByRole('article');
+    await expect(posts).toHaveLength(everyKind.length);
+    await expect(newest.getBoundingClientRect().bottom).toBeLessThanOrEqual(posts[0]!.getBoundingClientRect().top);
   },
 };
 
@@ -779,8 +781,8 @@ const style = (element: Element) => getComputedStyle(element);
 /**
  * Posts breathe as X's rows do (`postRhythm`, measured on X on 2026-09-28):
  * 12 px above and below and 16 px at the sides at every width, a 17/24 title,
- * 15/20 text with CJK at 1.8, then 12 px before the Work and before a 20 px
- * action bar. Home once shrank posts to 80–110 px; this keeps them from it.
+ * 15/20 text with CJK at 1.8, then 12 px before the Work and the action bar.
+ * Actions occupy their full target height and may wrap on narrow screens.
  */
 async function expectRhythm(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
@@ -794,7 +796,7 @@ async function expectRhythm(canvasElement: HTMLElement) {
   const bar = within(bennet).getByRole('group', { name: 'Actions' }).parentElement!;
   await expect(gap(preview, work)).toBe(12);
   await expect(gap(work, bar)).toBe(12);
-  await expect(bar.getBoundingClientRect().height).toBe(20);
+  await expect(bar.getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
   // The bottom padding, then the one-pixel divider.
   await expect(bennet.getBoundingClientRect().bottom - bar.getBoundingClientRect().bottom).toBe(13);
   // Chinese words in an English page keep the CJK line.

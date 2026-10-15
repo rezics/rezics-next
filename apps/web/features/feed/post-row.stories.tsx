@@ -33,6 +33,10 @@ const meta = {
     const canvas = within(canvasElement);
     const community = await canvas.findByRole('link', { name: communityName });
     const original = canvas.getByRole('link', { name: title });
+    // Truncation must preserve the metadata link's pointer target.
+    const communityRect = community.getBoundingClientRect();
+    await expect(communityRect.height).toBeGreaterThanOrEqual(24);
+    await expect(communityRect.width).toBeGreaterThanOrEqual(24);
     for (const link of [community, original]) {
       for (let count = 0; document.activeElement !== link && count < 20; count++) await userEvent.tab();
       await expect(link).toHaveFocus();

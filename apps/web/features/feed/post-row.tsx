@@ -27,14 +27,15 @@ export const readableText = '[text-autospace:normal] [&:is(:lang(zh),:lang(ja),:
  * A post's rhythm, from X's rows as measured on 2026-09-28 (a public profile at
  * 1440×900 and 390×844): 12 px above and below and 16 px at the sides at every
  * width, 15/20 px text, 12 px before an attachment and before the action bar,
- * and a 20 px bar whose larger targets overhang it. REZICS adds Reddit's title,
+ * and compact actions. REZICS keeps metadata targets at least 24 px tall and
+ * lets the action bar wrap at narrow widths. It adds Reddit's title,
  * a step above the text, and keeps its meta line a step below. Skeletons and
  * other lists of posts take the same values, so every list breathes alike.
  */
 export const postRhythm = {
   row: 'px-4 py-3',
-  /** The meta line: one 20 px line; Follow and the menu overhang it rather than grow it. */
-  meta: 'h-5 text-sm',
+  /** Metadata links keep their full 24 px target inside the line. */
+  meta: 'min-h-6 text-sm',
   /** Meta to title. */
   afterMeta: 'mt-2',
   title: 'text-[1.0625rem]/6 font-semibold',
@@ -43,17 +44,17 @@ export const postRhythm = {
   preview: 'text-[0.9375rem]/5',
   /** Before the attachment, and before the action bar. */
   section: 'mt-3',
-  /** The action bar's line: 20 px, its 32 px targets centred on it. */
-  bar: 'h-5',
+  /** Actions retain their 32 px targets when the bar needs another line. */
+  bar: 'min-h-8',
 } as const;
 
 /** A bare icon action in a post's bar: no pill until hovered, as X draws them. */
-export const barAction = 'relative z-10 inline-flex h-8 items-center gap-1.5 rounded-full px-2 font-medium '
+export const barAction = 'relative z-10 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2 font-medium '
   + 'text-muted-foreground text-[13px] outline-none transition-colors hover:bg-accent hover:text-accent-foreground '
   + 'focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4.5';
 
 /** Links inside a row sit above its stretched title link, so they keep their own target. */
-export const rowLink = 'relative z-10 inline-block max-w-full align-bottom outline-none hover:underline '
+export const rowLink = 'relative z-10 inline-block min-h-6 max-w-full align-bottom leading-6 outline-none hover:underline '
   + 'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring';
 
 /** "3 h ago", with the full date on hover. */
@@ -72,11 +73,11 @@ export function MetaLine({ icon, parts, end }: { icon: ReactNode; parts: readonl
   const shown = parts.filter((part): part is MetaPart => Boolean(part));
   return <div className={cn('relative z-10 flex min-w-0 items-center gap-2 text-muted-foreground', postRhythm.meta)}>
     {icon}
-    <p className="flex min-w-0 flex-1 items-center gap-x-1 overflow-hidden whitespace-nowrap">
+    <p className="flex min-h-6 min-w-0 flex-1 items-center gap-x-1 overflow-hidden whitespace-nowrap">
       {shown.map((part, index) => <span key={index} className={cn('flex min-w-0 items-center gap-x-1',
         part.keep ? 'shrink-0' : part.name ? 'min-w-[3.5rem] shrink' : 'shrink-[2]')}>
         {index ? <span aria-hidden="true">·</span> : null}
-        <span className="min-w-0 truncate">{part.node}</span></span>)}
+        <span className="min-h-6 min-w-0 truncate leading-6">{part.node}</span></span>)}
     </p>
     {end ? <div className="relative z-10 flex shrink-0 items-center gap-1">{end}</div> : null}
   </div>;
@@ -200,8 +201,8 @@ export function PostRow({ kind, href, report, reportKind = 'post', meta, title, 
       {thumbnailCredit ? <div className="col-span-full mt-1 min-w-0">{thumbnailCredit}</div> : null}
     </div>
     {attachment ? <div className={cn('flex min-w-0', postRhythm.section)}>{attachment}</div> : null}
-    <div className={cn('-ms-2 flex items-center', postRhythm.section, postRhythm.bar)}>
-      <div role="group" aria-label={t.actions} className="relative z-10 flex items-center gap-x-1 sm:gap-x-3">
+    <div className={cn('-ms-2 flex items-start gap-x-1', postRhythm.section, postRhythm.bar)}>
+      <div role="group" aria-label={t.actions} className="relative z-10 flex min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-1 sm:gap-x-3">
         {vote}{comments}{actions}</div>
       {report ? <ReportAction target={report} kind={reportKind} iconOnly className={cn(barAction, 'ms-auto w-8 justify-center px-0')} /> : null}
     </div>

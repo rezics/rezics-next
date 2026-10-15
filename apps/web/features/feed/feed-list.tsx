@@ -416,11 +416,11 @@ function FeedPages({
   return (
     <div ref={list} className="relative">
       {fresh ? (
-        <div className="pointer-events-none sticky top-20 z-30 flex justify-center">
+        <div className="flex justify-center py-2">
           <Button
             size="sm"
             onClick={showNewest}
-            className="pointer-events-auto rounded-full shadow-lg"
+            className="rounded-full shadow-lg"
           >
             <ArrowUpIcon aria-hidden="true" />
             {fresh.newPosts.kind === 'exact'
