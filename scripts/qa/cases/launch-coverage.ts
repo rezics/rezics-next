@@ -22,6 +22,7 @@ export interface LaunchCoverage {
 
 const api = (file: string, test: string, evidence?: string): ApiProof => ({ file, test, evidence });
 const browser = api;
+const missing = (item: string, reason?: string): MissingProof => ({ missing: item, reason });
 const journeyBrowser = (file: string, journey: string, test: string, evidence?: string): JourneyProof => ({ file, journey, test, evidence });
 
 export const launchCoverage: readonly LaunchCoverage[] = [
