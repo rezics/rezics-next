@@ -11,6 +11,9 @@ import { AdmissionDenied, AdmissionUnavailable, AccessAdmissionRegistry }
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { AccessOrgRealmParticipation } from '../../../services/main/src/modules/access/org-realm-participation.ts';
 import { AccessOrganizationModeration } from '../../../services/main/src/modules/access/organization-moderation.ts';
+import { ownerEvidenceCapture, ownerTargetHeads } from '../../../services/main/src/modules/governance/evidence.ts';
+import { GovernanceRules } from '../../../services/main/src/modules/governance/rules.ts';
+import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
 import { ORGANIZATION_MODERATION_ACTION, ORGANIZATION_MODERATION_PROFILE }
   from '../../../services/main/src/modules/access/organization-publication.ts';
 import { GRAPHS, ID, type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
@@ -71,6 +74,8 @@ test('IAM23/IAM24: exact organization publication moderation and suspension affe
   const access = new AccessAdmissionRegistry(pool);
   const owner = new AccessOrganizationModeration(measured);
   const deps = { environment: env, account: account.verifier, access,
+    governance: { store: new GovernanceStore(pool, ownerEvidenceCapture({ graph: env }),
+      ownerTargetHeads({ graph: env }), new GovernanceRules(pool)) },
     accessPolicy: new AccessPolicyOwner(pool),
     orgRealmParticipation: new AccessOrgRealmParticipation(pool), organizationModeration: owner };
   const app = createMainApp(fuseki, deps);

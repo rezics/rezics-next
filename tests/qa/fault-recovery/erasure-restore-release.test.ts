@@ -240,7 +240,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: composed retained erasure release reopens prot
       expect({ ...archivedErasure, dispositions: [...archivedErasure.dispositions].sort(byDomain) })
         .toEqual({ ...retainedErasure, dispositions: [...retainedErasure.dispositions].sort(byDomain) });
       expect(archivedErasure).toMatchObject({ erasureId: entry.erasureId,
-        erasureEpoch: entry.erasureEpoch, stage: 'reconciling',
+        erasureEpoch: entry.erasureEpoch, stage: 'inventory_complete',
         suppression: 'suppressed', destruction: 'retained',
         targets: [expect.objectContaining({ ordinal: 1, owner: 'content',
           kind: 'content_revision', ref: revisionId })] });

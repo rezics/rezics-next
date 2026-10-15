@@ -80,14 +80,17 @@ test('journal replay clears restored comment quotes and the comment API does not
     await pool.query(`UPDATE content.comment SET exact = $2, prefix = 'Opening paragraph', suffix = 'Closing'
       WHERE id = $1`, [commentId, canary]);
     await pool.query('COMMIT');
-    expect(await probeContentErasure(pool, erasureId, [saved.revisionId!]))
-      .toEqual(new Map([[saved.revisionId, 'erased']]));
+    // A tombstone cannot certify erasure while a restored quote still exists.
+    expect(await probeContentErasure(pool, erasureId, [saved.revisionId!], '2'))
+      .toEqual(new Map([[saved.revisionId, 'foreign']]));
     expect(await openCommentSourceRevisions(pool, [saved.revisionId!])).toEqual([saved.revisionId]);
     const resurrected = await comments.read(commentId);
     expect(resurrected && commentTargetHasSource(resurrected.target) && resurrected.target.selector.exact)
       .toBe(canary);
     expect(await applyContentErasure(pool, { preservationAccess: access, erasureId, erasureEpoch: '2',
       resourceId: work, revisionIds: [saved.revisionId!] })).toEqual({ applied: 0 });
+    expect(await probeContentErasure(pool, erasureId, [saved.revisionId!], '2'))
+      .toEqual(new Map([[saved.revisionId, 'erased']]));
     const replay = await comments.create({ ...input, admissionId, authorityEpoch: '1',
       scope: `content:comment:${work}`, requestDigest: contentCommentIntentDigest(input) });
     expect(replay.replayed).toBe(true);

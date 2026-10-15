@@ -23,11 +23,9 @@ import type { RealmSettings } from '../../../services/main/src/modules/realm-adm
 import { AliasRegistry } from '../../../services/main/src/modules/address/registry.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AgentVanityHandles } from '../../../services/main/src/modules/agent/vanity.ts';
-import {
-  configureDisclosure,
-  configureDisclosurePool,
-  DisclosureStore,
-} from '../../../services/main/src/modules/disclosure/read.ts';
+import { ownerEvidenceCapture, ownerTargetHeads } from '../../../services/main/src/modules/governance/evidence.ts';
+import { GovernanceRules } from '../../../services/main/src/modules/governance/rules.ts';
+import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
 import { FeedStore } from '../../../services/main/src/modules/feed/store.ts';
 import { FeedRefreshWorker } from '../../../services/main/src/modules/feed/refresh.ts';
 import { FeedViewerStateReader } from '../../../services/main/src/modules/feed/viewer-state.ts';
@@ -119,9 +117,8 @@ test('one guarded Access connection projects and reads mandatory-review Realm di
       heldClient = client;
       return fenceClaim(client, ...args);
     };
-    const disclosure = new DisclosureStore(accessPool);
-    configureDisclosurePool(accessPool, disclosure);
-    configureDisclosure(env, disclosure);
+    const governance = new GovernanceStore(accessPool, ownerEvidenceCapture({ graph: env }),
+      ownerTargetHeads({ graph: env }), new GovernanceRules(accessPool));
     const content = new ContentCore(contentPool);
     const feed = new FeedStore(accessPool);
     const replyOwner = new RealmReplyContentStore(contentPool);
@@ -130,6 +127,7 @@ test('one guarded Access connection projects and reads mandatory-review Realm di
       environment: env,
       account: { verify: async () => ({ ...principal, currentAssertion: async () => principal }) },
       access,
+      governance: { store: governance },
       realmAdmin: new AccessRealmManagement(accessPool),
       content,
       contentAuthoring: content,

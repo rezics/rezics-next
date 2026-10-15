@@ -1157,9 +1157,12 @@ export async function createRetainedErasureRestoreScenario() {
         sequence: event.native_sequence }).not.toEqual({ streamScope: event.relay_scope,
         dataEpoch: event.relay_data_epoch, sequence: event.relay_sequence });
       const report = await readErasure(relay, entry.erasureId);
-      expect(report).toMatchObject({ erasureEpoch: entry.erasureEpoch, stage: 'reconciling',
+      // This owner path records inventory without the live command's completion
+      // marker. Recovery must still reconcile its pending target evidence.
+      expect(report).toMatchObject({ erasureEpoch: entry.erasureEpoch, stage: 'inventory_complete',
         suppression: 'suppressed', destruction: 'retained',
-        targets: [{ kind: 'content_revision', ref: revisionId }] });
+        targets: [{ kind: 'content_revision', ref: revisionId, completionState: 'pending',
+          completionEvidenceRef: null, completedAt: null }] });
       expect((await access.query<{ count: string }>(
         'SELECT count(*)::text AS count FROM access.admission')).rows[0]!.count).toBe(admissionsAtFence);
       return { ...entry, nativeProof, retainedEvent: event };
