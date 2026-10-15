@@ -127,7 +127,7 @@ import { erasureRoutes } from '../../../services/main/src/routes/erasures.ts';
 import { ownerRoutes } from '../../../services/main/src/routes/owners.ts';
 import { ratingAccount, restoreRatingAccount, type RetainedRatingAuth } from '../../../tests/qa/support/rating-account.ts';
 import { stable } from '../../../scripts/fixture/corpus.ts';
-import { copyVolume, currentEngines, fixtureProject, postgresImage, removeVolumes, run, volumeExists } from '../../../scripts/fixture/stack.ts';
+import { copyVolume, currentEngines, fixtureProject, removeVolumes, volumeExists } from '../../../scripts/fixture/stack.ts';
 import { repairCopiedPostgresCollations } from '../../../scripts/fixture/postgres-collation.ts';
 import { isRetainedJson, migrationInventory, type RetainedFileIntegrity, type RetainedJson, type RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
 import { fixtureModel } from '../../../scripts/fixture/model.ts';

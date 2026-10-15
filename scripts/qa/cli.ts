@@ -1200,7 +1200,7 @@ function noteIntegrationBudget(artifactDirectory: string): void {
 
 try {
   await assertRetainedSources(root, selected.flatMap(tier => {
-    if (!['integration', 'fault/recovery', 'e2e', 'load'].includes(tier)) return [];
+    if (tier !== 'integration' && tier !== 'fault/recovery' && tier !== 'load') return [];
     return splitTestArgs(testArgs(tier, selection, chosenFor(tier))).paths.flatMap(path => expandTestPaths(root, [path]));
   }));
   await stackPool.sweep();
