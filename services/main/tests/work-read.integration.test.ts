@@ -6,6 +6,8 @@ import { Value } from 'typebox/value';
 import type { Static } from 'typebox';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { authorCreditFixture, author } from '../../../tests/qa/fixtures/author-credit.ts';
+import { shareClassificationContext, recordClassifiedStatement, statementDecisionBody,
+  type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
 import { createMainApp } from '../src/app.ts';
 import { GRAPHS, RV, iri, lit } from '../src/modules/work/activate.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../src/modules/rating/global.ts';
@@ -341,17 +343,33 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     expect((await json<Page<{ realm: string }>>(await get(`${root}/adoptions`))).items)
       .toMatchObject([{ realm: realm.realm, name: { value: 'Read ratings Realm' } }]);
     await a.grant('classification:define:global', 'classification.proposition.define');
-    await a.grant('classification:decide:global', 'classification.decision.set');
+    await a.grant('classification:decide:global', 'statement.decide');
     await a.grant(`classification:context:${realm.realm}`, 'classification.context.configure');
-    await a.grant(`classification:decide:${realm.realm}`, 'classification.decision.set');
+    await a.grant(`classification:decide:${realm.realm}`, 'statement.decide');
     await json(await a.send('POST', '/v1/classification-contexts', { profile: 'classification-context-v1',
       realm: realm.realm, actingSubject: a.actor }), 201);
-    const proposition = await json<{ sense: string; concept: string }>(await a.send('POST', '/v1/classification-propositions',
+    const proposition = await json<{ sense: string; concept: string; definitionRevision: string }>(await a.send('POST', '/v1/classification-propositions',
       { profile: 'classification-proposition-v1', label: 'Adventure', actingSubject: a.actor }), 201);
-    const decision = { profile: 'classification-direct-decision-v1', work: first.work,
-      mainVersion: first.mainVersion, sense: proposition.sense, expectedDecisionHead: null, actingSubject: a.actor };
-    await json(await a.send('POST', '/v1/classification-decisions',
-      { ...decision, context: { kind: 'global' }, outcome: 'accepted' }), 201);
+    await a.grant('context:create:root', 'context.create');
+    await a.grant(`statement:speak:${a.actor}`, 'statement.record');
+    const post: ClassificationPost = (path, body, _token, key) =>
+      a.send('POST', path, body, key).then(response => json(response, 201));
+    const interpretation = await shareClassificationContext(post, a.token, a.actor, [proposition], randomUUID());
+    const statement = await recordClassifiedStatement(post, a.token, a.actor,
+      first.mainVersion, proposition.concept, interpretation, randomUUID());
+    await post('/v1/statement-decisions', statementDecisionBody(a.actor, statement,
+      { kind: 'global' }, 'accepted', null), a.token, randomUUID());
+    const protectedApp = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      platformAccess, judgments: new AccessJudgments(stack.accessPool), account: { verify: async () => a.principal } });
+    const protectedRead = (path: string) => protectedApp.handle(new Request(`http://main.local${path}`));
+    const hint = (value: string, expectedGeneration: string) => protectedApp.handle(new Request(
+      `http://main.local/v1/concepts/${short(proposition.concept)}/spoiler-hints`, { method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${a.token}`, 'idempotency-key': randomUUID() },
+        body: JSON.stringify({ profile: 'concept-spoiler-hint-v1', context: { kind: 'global' }, hint: value,
+          expectedGeneration, actingSubject: a.actor }) }));
+    // Unknown spoiler hints hide accepted Statements from protected reads.
+    expect((await json<Page<unknown>>(await protectedRead(`${root}/classifications`))).items).toEqual([]);
+    await json(await hint('not-spoiler', '0'), 201);
     expect((await json<Page<unknown>>(await get(`${root}/classifications`))).items)
       .toMatchObject([{ sense: proposition.sense, concept: proposition.concept,
         name: { value: 'Adventure' }, source: 'global', relevance: null }]);
@@ -362,8 +380,10 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
           parameters:{roots:[proposition.concept]}})})));
     expect(conceptFeed.result.items).toMatchObject([{id:first.work,concept:proposition.concept,name:{value:first.title}}]);
     expect(conceptFeed.result.nextCursor).toBeNull();
-    await json(await a.send('POST','/v1/classification-decisions',{
-      ...decision,work:second.work,mainVersion:second.mainVersion,context:{kind:'global'},outcome:'accepted'}),201);
+    const secondStatement = await recordClassifiedStatement(post, a.token, a.actor,
+      second.mainVersion, proposition.concept, interpretation, randomUUID());
+    await post('/v1/statement-decisions', statementDecisionBody(a.actor, secondStatement,
+      { kind: 'global' }, 'accepted', null), a.token, randomUUID());
     await refreshDiscovery();
     const feedPage=async(cursor?:string)=>json<{result:Page<{id:string}>}>(await discoveryApp.handle(
       new Request('http://main.local/v1/query',{method:'POST',headers:{'content-type':'application/json'},
@@ -376,8 +396,8 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     expect(older.result.items.map(item=>item.id)).toEqual([first.work]);
     expect(older.result.nextCursor).toBeNull();
     expect((await json<Page<unknown>>(await get(`${root}/classifications?scope=realm&realm=${encodeURIComponent(realm.realm)}`))).items.length).toBe(1);
-    await json(await a.send('POST', '/v1/classification-decisions',
-      { ...decision, context: { kind: 'realm-classification', id: realm.realm }, outcome: 'rejected' }), 201);
+    await post('/v1/statement-decisions', statementDecisionBody(a.actor, statement,
+      { kind: 'realm-classification', id: realm.realm }, 'rejected', null), a.token, randomUUID());
     expect((await json<Page<unknown>>(await get(`${root}/classifications?scope=realm&realm=${encodeURIComponent(realm.realm)}`))).items).toEqual([]);
     const credit = `https://rezics.com/id/${randomUUID()}`;
     const creditTriples = authorCreditTriples({ work: first.work, credit, revision: `https://rezics.com/id/${randomUUID()}`,
@@ -424,31 +444,7 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     expect((await get(`${ratingRoot}/ratings?scope=realm`)).status).toBe(400);
     expect((await get(`${ratingRoot}/ratings?context=${encodeURIComponent(local.context)}`)).status).toBe(404);
 
-    // The same read must keep working after the legacy decision writer is retired.
-    await a.grant('statement:migrate:root', 'statement.migrate');
-    await a.grant('statement:migrate:root', 'statement.cutover');
-    const protectedApp = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
-      platformAccess, judgments: new AccessJudgments(stack.accessPool), account: { verify: async () => a.principal } });
-    const migrate = (method: string, path: string, body?: object) => protectedApp.handle(new Request(
-      `http://main.local${path}`, { method, headers: { authorization: `Bearer ${a.token}`,
-        'content-type': 'application/json', 'idempotency-key': randomUUID() },
-      ...(body ? { body: JSON.stringify(body) } : {}) }));
-    const pending = await json<{ pending: { application: string; decision: string }[] }>(
-      await migrate('GET', '/v1/statement-migrations/v1/pending'));
-    for (const item of pending.pending) await json(await migrate('POST',
-      `/v1/statement-migrations/v1/${short(item.application)}`, { profile: 'statement-migration-v1',
-        expectedDecision: item.decision, actingSubject: a.actor }), 201);
-    await json(await migrate('POST', '/v1/statement-migrations/v1/cutover',
-      { profile: 'statement-cutover-v1', actingSubject: a.actor }), 201);
-    const protectedRead = (path: string) => protectedApp.handle(new Request(`http://main.local${path}`));
-    expect((await json<Page<unknown>>(await protectedRead(`${root}/classifications`))).items).toEqual([]);
-    await a.grant('classification:decide:global', 'statement.decide');
-    const hint = (value: string, expectedGeneration: string) => protectedApp.handle(new Request(
-      `http://main.local/v1/concepts/${short(proposition.concept)}/spoiler-hints`, { method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${a.token}`, 'idempotency-key': randomUUID() },
-        body: JSON.stringify({ profile: 'concept-spoiler-hint-v1', context: { kind: 'global' }, hint: value,
-          expectedGeneration, actingSubject: a.actor }) }));
-    await json(await hint('not-spoiler', '0'), 201);
+    // Protected reads retain the accepted classification and the Realm's rejection.
     expect((await json<Page<unknown>>(await protectedRead(`${root}/classifications`))).items)
       .toMatchObject([{ sense: proposition.sense, concept: proposition.concept, source: 'global' }]);
     expect((await json<Page<unknown>>(await protectedRead(`${root}/classifications?scope=realm&realm=${encodeURIComponent(realm.realm)}`))).items).toEqual([]);
@@ -496,7 +492,7 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     }
     await refreshDiscovery();
     const remaining = await json<Page<{ id: string }>>(await get('/v1/works'));
-    expect(remaining.items.map(item => item.id)).toEqual([second.work]);
+    expect(remaining.items.map(item => item.id)).toEqual([...seen].filter(id => id !== first.work));
     // Unrelated writes preserve retained discovery order; live erasure still filters cards.
     await stack.privateWork(a.actor, 'Unrelated corpus growth');
     expect((await get(`/v1/works?cursor=${discover.nextCursor}`)).status).toBe(200);
