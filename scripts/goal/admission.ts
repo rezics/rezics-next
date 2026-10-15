@@ -76,7 +76,9 @@ function otherGoalWaiting(directory: string, goal: string, alive: (pid: number) 
   const waiters = join(directory, 'waiters');
   if (!existsSync(waiters)) return false;
   return readdirSync(waiters).some(name => {
-    if (!name.endsWith('.json')) return false;
+    // Diagnostic waits can outlive a nonblocking request. Share reservations,
+    // like queue turns, belong only to outstanding acquisition tickets.
+    if (!name.startsWith('ordered-slot-') || !name.endsWith('.json')) return false;
     try {
       const record = JSON.parse(readFileSync(join(waiters, name), 'utf8')) as { goal?: string; pid: number; waitingFor?: string };
       return alive(record.pid) && record.waitingFor === 'slot' && !!record.goal && record.goal !== goal;

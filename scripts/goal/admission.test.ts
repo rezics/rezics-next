@@ -154,7 +154,7 @@ test('two program wide runs still serialize with --beside-workers', async () => 
 
 function waiting(directory: string, goal: string): void {
   mkdirSync(join(directory, 'waiters'), { recursive: true });
-  writeFileSync(join(directory, 'waiters', `${goal}.json`), JSON.stringify({ pid: process.pid, goal, waitingFor: 'slot' }));
+  writeFileSync(join(directory, 'waiters', `ordered-slot-${goal}.json`), JSON.stringify({ pid: process.pid, goal, waitingFor: 'slot' }));
 }
 
 test('a startup status without an outstanding slot request cannot head slot admission', () => {
@@ -189,6 +189,20 @@ test('concurrent slot requests from one runner retain their own arrival order', 
   } finally { first.release(); second.release(); }
 });
 
+test('a diagnostic startup wait cannot reserve another Goal share without an active request', () => {
+  const directory = fixture();
+  const options = { env: { GOAL_ID: 'a' }, now: () => 100, workerGoals: () => ['a', 'b'] };
+  const first = tryAcquireQaSlot(directory, 2, 0, options);
+  if (first === 'held') throw new Error('private slot already held');
+  const ticket = qaSlotAdmission(directory, 2, options);
+  writeFileSync(join(directory, 'waiters', 'slot-pending-startup.json'), JSON.stringify({
+    pid: process.pid, goal: 'b', waitingFor: 'slot', since: new Date(0).toISOString(),
+  }));
+  const second = ticket.acquire(1);
+  try { expect(second).not.toBe('held'); }
+  finally { if (second !== 'held') second.release(); ticket.release(); first.release(); }
+});
+
 for (const goals of [['a'], ['a', 'b'], ['a', 'b', 'c']]) {
   test(`ordinary share with ${goals.length} live Goals, contention, and spare capacity`, async () => {
     const directory = fixture();
@@ -210,7 +224,7 @@ for (const goals of [['a'], ['a', 'b'], ['a', 'b', 'c']]) {
         expect(other.count).toBe(1);
         other.release();
       }
-      rmSync(join(directory, 'waiters', 'b.json'));
+      rmSync(join(directory, 'waiters', 'ordered-slot-b.json'));
       const spare = tryAcquireQaSlot(directory, total, Math.min(share, total - 1), { env, workerGoals: () => goals });
       expect(spare).not.toBe('held');
       if (spare !== 'held') held.push(spare);
@@ -359,7 +373,7 @@ for (const harness of [false, true]) {
     const options = { workerGoals, announce: (message: string) => messages.push(message), sleep: async () => {
       slept++;
       expect(readDirectoryLease(join(directory, '1'))).toBeUndefined();
-      rmSync(join(directory, 'waiters', 'b.json'));
+      rmSync(join(directory, 'waiters', 'ordered-slot-b.json'));
     } };
     try {
       if (harness) {
