@@ -5,7 +5,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
-import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { retainPrivateAgentProfile } from '../fixtures/agent-disclosure.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 
 async function json(response: Response, status = 200): Promise<Record<string, any>> {
@@ -46,10 +46,7 @@ test('search cards use public native credit names and sealed standing ratings; h
       primaryCredits: [{ participantKind: 'agent', displayName: 'Natsume 夏目漱石' }] }]);
     expect((await json(await call('/v1/search/typeahead?prefix=Nat'))).items)
       .toMatchObject([{ work: work.work, matchedField: 'credit' }]);
-    await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(agent.agent)} rv:profileDisclosure ?old } } INSERT { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(agent.agent)} rv:profileDisclosure rv:Private } } WHERE { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(agent.agent)} rv:profileDisclosure ?old } }`);
+    await retainPrivateAgentProfile(stack.env, agent.agent);
     expect((await search('夏目')).total).toBe(0);
     expect((await json(await call('/v1/search/typeahead?prefix=Nat'))).items).toEqual([]);
 

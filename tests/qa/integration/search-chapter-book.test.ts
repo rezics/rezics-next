@@ -7,7 +7,6 @@ import {
   activateMetadataWork,
   iri,
   metadataWorkRequestDigest,
-  PUBLIC_SEARCH_ANCHOR,
   RV,
 } from '../../../services/main/src/modules/work/activate.ts';
 import {
@@ -22,6 +21,8 @@ import {
   verifyQuarantinedContentIndex,
 } from '../../../services/main/src/modules/content-publication/rebuild.ts';
 import { seedContent } from '../load/corpus.ts';
+import { contentRebuildDelivery, prepareContentRebuild }
+  from '../../../services/main/src/modules/content-publication/rebuild-preflight.ts';
 
 const short = (id: string) => id.slice(-36);
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -194,7 +195,12 @@ test('Anthology entry Works remain visible in search and Realm/Zone lists throug
     );
     const cursor = new ContentProjectionCursor(stack.contentPool);
     const maintenanceEnv = { ...stack.env, fuseki: maintenance };
-    const job = await quarantinePublicContentSearch(maintenanceEnv, stack.content, randomUUID());
+    const relayPool = stack.composition.relayPool;
+    if (!relayPool || !Bun.env.MAIN_RELAY_CONSUMER) throw new Error('Content rebuild needs its Main relay');
+    const frontier = await prepareContentRebuild({ env: maintenanceEnv, content: stack.content,
+      delivery: contentRebuildDelivery(maintenanceEnv, stack.content, relayPool, Bun.env.MAIN_RELAY_CONSUMER),
+      remember: () => {}, assertWritersStopped: async () => {} });
+    const job = await quarantinePublicContentSearch(maintenanceEnv, stack.content, randomUUID(), undefined, frontier.cut);
     expect(await clearQuarantinedContentUnits(maintenanceEnv, job)).toBe(0);
     expect(
       await replayQuarantinedContentCut(maintenanceEnv, stack.content, cursor, job),
@@ -217,10 +223,7 @@ test('Anthology entry Works remain visible in search and Realm/Zone lists throug
     )[0];
     expect(exact?.status).toBe('available');
   } finally {
-    // This integration tier shares one QA graph across files. Restore its live
-    // anchor after verifying the quarantined state, using the raw fault alias.
-    await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
-      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }`);
+    // The runner resets the graph between files, including a quarantined anchor.
     await stack.stop();
   }
 }, 240_000);

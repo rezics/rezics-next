@@ -374,10 +374,10 @@ test('SEARCH19/SEARCH20/OPS16: private publication, later approval and frozen re
       } });
       // The tick retries pending work before scanning its next source event.
       // The interleaved replacement makes that source obsolete, so its proved
-      // supersession is acknowledged even when the retried native write loses.
+      // supersession is acknowledged while the retry returns its original receipt.
       expect(await relayContentProjectionOnce({ ...env, fuseki: racingFuseki }, content, cursor, stale))
         .toMatchObject({ sourceSequence: oldApproval.position.sequence, disposition: 'superseded' });
-      expect(staleStatus).toBe('guard-unmatched');
+      expect(staleStatus).toBe('committed');
       if (!p3) throw new Error('Newer publication was not interleaved');
       await drain(cursor, stale);
       await drain();
@@ -399,10 +399,12 @@ test('SEARCH19/SEARCH20/OPS16: private publication, later approval and frozen re
       expect((await content.readExactBatch([privatePublication.revision], async ids => new Set(ids)))[0]?.status).toBe('erased');
       await deliver();
       await drain();
-      const erasedReplay = `composed-erasure-${randomUUID()}`;
-      await cursor.initialize(erasedReplay);
-      await drain(cursor, erasedReplay);
-      expect(await cursor.read(erasedReplay)).toEqual(await content.ownerPosition());
+      // A full replay after a rebuild uses a new rebuild identity. Live receipts
+      // refer to units the earlier rebuild retired and cannot certify its copies.
+      const erasedOutput = await rootCommand(['search:rebuild', '--job', randomUUID(), ...stackArgs], 420_000);
+      const erasedRebuild = JSON.parse(erasedOutput.trim().split(/\r?\n/u).at(-1) ?? '') as { job: string };
+      expect(await cursor.read(`content-rebuild.${erasedRebuild.job}`)).toEqual(await content.ownerPosition());
+      expect(await cursor.read(consumer)).toEqual(await content.ownerPosition());
       expect(await units()).toEqual(expected([{ variantId: corpus.content.variantId, revision: corpus.content.revisionId }, p3]));
       expect(await phrase(privatePublication.body)).toMatchObject({ complete: true, total: 0 });
       expect(await phrase(p3.body)).toMatchObject({ complete: true, total: 1 });

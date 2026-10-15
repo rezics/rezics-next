@@ -4,7 +4,7 @@ import { startMediaStack } from './media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
-import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { retainPrivateAgentProfile } from '../fixtures/agent-disclosure.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 
 async function json(response: Response, status = 200): Promise<Record<string, any>> {
@@ -49,10 +49,7 @@ test('G-377: typeahead suggestions carry the Work’s types and its public autho
       authors: [{ displayName: 'Soseki 夏目漱石' }] }]);
 
     // An author whose profile turns private is no longer named on the title's suggestion.
-    await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(agent.agent)} rv:profileDisclosure ?old } } INSERT { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(agent.agent)} rv:profileDisclosure rv:Private } } WHERE { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(agent.agent)} rv:profileDisclosure ?old } }`);
+    await retainPrivateAgentProfile(stack.env, agent.agent);
     expect(await suggest('Kokoro')).toMatchObject([{ work: work.work, authors: [] }]);
   } finally { await stack.stop(); }
 }, 90_000);
