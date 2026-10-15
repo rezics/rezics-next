@@ -117,19 +117,34 @@ function postgresControl(volume: string, docker: NodeJS.ProcessEnv): string {
 
 /** The copy starts only after this producer's writer stop boundary. */
 export async function retainStoppedContentWriters(stack: QaStack, copy: () => Promise<void>): Promise<void> {
+  const clientDeadlineMs = 180_000;
   const at = Date.now();
-  const stopped = stack.compose(['stop', 'fuseki', 'postgres', 'rustfs']) as ReturnType<QaStack['compose']> & {
-    signal?: NodeJS.Signals | null; error?: NodeJS.ErrnoException | null;
-  };
+  const stopped = stack.compose(['stop', 'fuseki', 'postgres', 'rustfs'], clientDeadlineMs);
   const stopMs = Date.now() - at;
+  const writerStates: Record<string, { Running: boolean; ExitCode: number }> = {};
+  let writerStateError: string | null = null;
+  try {
+    for (const service of ['fuseki', 'postgres', 'rustfs']) {
+      writerStates[service] = JSON.parse(run('docker', ['inspect', `${stack.project}-${service}-1`,
+        '--format', '{{json .State}}'], stack.dockerEnv));
+    }
+  } catch (error) { writerStateError = error instanceof Error ? error.message : String(error); }
   let control: string | null = null, controlError: string | null = null;
   try { control = readRetainedPostgresControl(`${stack.project}_postgres_data`, stack.dockerEnv); }
   catch (error) { controlError = error instanceof Error ? error.message : String(error); }
-  const evidence = { project: stack.project, stopMs, clientDeadlineMs: 180_000,
-    status: stopped.status, signal: stopped.signal, error: stopped.error?.code ?? null,
+  const evidence = { project: stack.project, stopMs, clientDeadlineMs,
+    status: stopped.status, writerStates, writerStateError,
     output: stopped.output.slice(-4000), postgresControl: control, controlError, copyStarted: false, copyMs: 0 };
   try {
-    if (stopped.status !== 0) throw new Error(`Content producer stop failed: ${stopped.output.slice(-2000)}`);
+    // Compose also succeeds after its grace expires and Docker kills a writer.
+    // Refuse at this boundary, before any retained resource can be copied.
+    if (stopped.status !== 0 || writerStateError ||
+      ['fuseki', 'postgres', 'rustfs'].some(service => writerStates[service]?.Running !== false) ||
+      writerStates.postgres?.ExitCode !== 0 || !control || !/Database cluster state:\s+shut down\s*$/m.test(control)) {
+      throw new Error(`Content producer stop failed: stopMs=${stopMs} clientDeadlineMs=${clientDeadlineMs} ` +
+        `composeStatus=${stopped.status} postgresExitCode=${writerStates.postgres?.ExitCode ?? 'unknown'}\n` +
+        `${stopped.output.slice(-2000)}\n${writerStateError ?? ''}\n${control ?? controlError ?? 'PostgreSQL control unavailable'}`);
+    }
     evidence.copyStarted = true;
     const copyAt = Date.now();
     try { await copy(); } finally { evidence.copyMs = Date.now() - copyAt; }
