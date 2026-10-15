@@ -24,7 +24,7 @@ function MediaPages({ surface, locale }: { surface: Surface; locale: 'en' | 'ja'
   switch (surface) {
     case 'episodeProgress': return <episodeProgress.component {...episodeProgress.args} locale={locale} />;
     case 'gamesBrowse': return <catalogueDiscovery.component {...catalogueDiscovery.args} slug="games" locale={locale} />;
-    case 'animeBrowse': return <catalogueDiscovery.component {...catalogueDiscovery.args} slug="anime" locale={locale} />;
+    case 'animeBrowse': return <animeCatalogue.component {...animeCatalogue.args} locale={locale} />;
     case 'animeHub': return <animeHub.component {...animeHub.args} locale={locale} />;
     case 'mangaHub': return <mangaHub.component {...mangaHub.args} locale={locale} />;
     case 'novelsHub': return <novelsHub.component {...novelsHub.args} persona="visitor" locale={locale} />;
