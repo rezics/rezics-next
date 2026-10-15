@@ -124,6 +124,32 @@ each TDB2 directory; a second host cannot mount the live files as a replica.
 
 ## Practical load objective
 
+Local completion uses the retained-fixture
+[restore schedule](recovery.md#timed-recovery-drill), the separate
+[erasure qualifications](erasure.md#retained-source-qualification) and the
+OCI startup check `task test -- tests/live/g-722-images.test.ts`. The image
+check builds the pinned release twice, compares identities, then exercises
+the actual runtime roles against isolated storage; a packaged Main response
+or an import-only check cannot substitute for image startup. Keep its QA run
+and `.temp/image-smoke` build/runtime logs with the release evidence described
+in [release and rollback](release.md).
+
+On clean-main release revision `54c95044eb7e5b5c77d7f90f81b3b697f9e66ca5`,
+recorded job `5c6d0f6f-48ae-493f-b595-8064e45fa86c` passed the OCI smoke's
+3 tests / 55 assertions in 348.67 seconds. Both builds produced input digest
+`683be5e4dbde5e4f98046f71487fa667e189b306aa7889813244dc6184e85a4d` with
+identical image identities. Main image
+`sha256:7fb73eadab53d96681e0c6074d476c5bc901fdd84f346642b0e4c077b8ab66e6`
+started and reached API and search readiness; Account, relay initialization,
+migration and relay runtime checks also passed. The live test runs directly
+under Goal QA admission and emits no separate QA run ID.
+
+These local checks do not install a production restore adapter, schedule
+off-host backups, measure cross-host recovery or qualify the real storage's
+media destruction. The default restore CLI continues to refuse without
+authenticated `RestoreChecks`. Production opening still requires the gates
+above and the maintainer's [external conditions](external-conditions.md).
+
 `task load` runs the named host profile. Its executable thresholds and
 evidence checks live in [the load runner](../../scripts/load/practical.ts) and
 [OPS05 cases](../../scripts/qa/cases/operations.ts). The recorded

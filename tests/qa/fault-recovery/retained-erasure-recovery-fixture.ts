@@ -726,8 +726,8 @@ export async function createRetainedErasureRestoreScenario() {
     let lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
     await initializeFreshGraph(fuseki, lineage);
     const objects = new DirectoryObjects(join(state, 'objects'));
-    const workEnvironment: WorkActivationEnvironment = { fuseki, lineage, referenceFencePool: contentPool,
-      objectDirectory: objects.directory, workObjects: objects };
+    const workEnvironment: WorkActivationEnvironment = { fuseki, lineage,
+      objectDirectory: objects.directory, workObjects: objects, referenceFencePool: contentPool };
     await ensureModelGeneration(workEnvironment);
     const request = new Request('http://main.local/v1/works', {
       headers: { authorization: `Bearer ${token}` } });

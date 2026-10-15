@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { readPublicTypeahead } from '../src/modules/search/typeahead.ts';
+import { withStableSearchSnapshot } from '../src/modules/work/search-readiness.ts';
 import { prefixWalkCursor, prefixWalkDirectoryKey,
   type PrefixWalkEntry, type PrefixWalkRequest, type PrefixWalkResponse } from '../src/modules/search/prefix-walk.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
@@ -125,6 +126,30 @@ function nativeAuthorFixture() {
   };
   return { ...f, row, agent, credit, publishName: () => { publicName = true; } };
 }
+
+test('published typeahead summaries and authors close once after hydration', async () => {
+  const f = nativeAuthorFixture(), original = f.fuseki.query;
+  f.publishName();
+  // The closure outcome timed out after 26 graph calls. Bound repeated input
+  // reads directly so host scheduling cannot make this regression flaky.
+  const reads = new Map<string, number>();
+  f.fuseki.query = async query => {
+    reads.set(query, (reads.get(query) ?? 0) + 1);
+    return original(query);
+  };
+  const page = await withStableSearchSnapshot(f.env.fuseki,
+    () => readPublicTypeahead(f.work, request(), { prefix: 'bounded' }, present));
+  expect(page.items).toMatchObject([{ work: f.row.work!.value,
+    title: { value: 'Bounded title' }, authors: [{ agent: f.agent, displayName: 'Healthy native author' }] }]);
+  expect(f.walks).toHaveLength(2);
+  for (const [query, count] of reads) {
+    if (query.includes('SELECT ?epoch ?sequence ?hold ?r ?type')
+      || query.includes('SELECT ?work ?id ?key ?ordinal ?agent')
+      || query.includes('SELECT ?agent ?displayName ?handle')) {
+      expect(count, query).toBeLessThanOrEqual(2);
+    }
+  }
+});
 
 test('a withheld native author becoming public before delivery replays authors and includes the name', async () => {
   const f = nativeAuthorFixture(), original = f.fuseki.query;

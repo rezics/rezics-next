@@ -4,6 +4,8 @@ import { existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, unli
 import { dirname, join, resolve } from 'node:path';
 import { fixtureRoot } from '../../../scripts/fixture/stack.ts';
 import { seedVerificationPlan } from '../../../scripts/qa/seed-verification.ts';
+import { sealSeedCheckpoints, type SeedCustody } from '../../../scripts/qa/seed-preflight.ts';
+import type { RetainedCollation } from '../../../scripts/fixture/runtime-facts.ts';
 import { workProfileCorpusApi, type CorpusApi, type WorkProfileCorpusManifest }
   from '../../../scripts/load/work-profile-corpus.ts';
 import type { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.ts';
@@ -22,6 +24,7 @@ export const retainedSeedPath = join(seedDirectory, 'retained.json');
 export const seedAuthorName = 'checkpoint-corpus-author';
 export type SeedWork = Awaited<ReturnType<typeof seedPublicProfileWork>>;
 export interface RetainedSeedCut {
+  collations?: RetainedCollation[];
   manifest: WorkProfileCorpusManifest;
   works: SeedWork[];
   posts: SeedPost[];
@@ -34,6 +37,7 @@ export interface RetainedSeed {
   actor: string;
   cuts: RetainedSeedCut[];
   axes: Record<SeedAxis, RetainedSeedCut[]>;
+  custody?: SeedCustody;
 }
 export interface SeedPost { post: string; variantId: string; revisionId: string; byteDigest: string }
 export function seedVerificationCuts(seed: Pick<RetainedSeed, 'cuts'>, selection = 'all'): RetainedSeedCut[] {
@@ -167,6 +171,7 @@ export function acquireSeedBuildLock(runId: string, directory = seedDirectory): 
   };
 }
 export function saveRetainedSeed(seed: RetainedSeed) {
+  seed.custody = sealSeedCheckpoints(seed);
   mkdirSync(seedDirectory, { recursive: true, mode: 0o700 });
   writeFileSync(`${retainedSeedPath}.pending`, JSON.stringify(seed, null, 2) + '\n', { mode: 0o600 });
   renameSync(`${retainedSeedPath}.pending`, retainedSeedPath);

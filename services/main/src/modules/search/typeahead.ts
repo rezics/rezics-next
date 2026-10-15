@@ -204,50 +204,58 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
       const response = validatePrefixWalkResponse(native, walkRequest);
       walks.push({ request: walkRequest, response });
       generation = response.generation;
-      const batchEntries = response.entries;
-      entries.push(...batchEntries);
+      entries.push(...response.entries);
       cursor = response.cursor; more = response.more;
-      // Candidate identities, their matched fields, facets and all cards share
-      // one selected dependency set, including across native walk batches.
-      const previouslyDelivered = new Set([...accepted.values()].map(item => item.mainVersion));
-      const visible = await session.selection(`typeahead-presentation:${JSON.stringify(batchEntries)}`, async probe => {
-        const candidates = await queryTypeaheadCandidates(env, input.prefix, batchEntries, work.sourceAuthorNames, probe);
-        const relation = await present({ context: 'main-version-default' as const, sourcePosition: position,
-          total: candidates.length, results: candidates });
-        const seen = new Set(previouslyDelivered);
-        return { ...relation, results: batchEntries.flatMap(entry => {
-          if (seen.has(entry.mainVersion)) return [];
-          const row = relation.results.find(match => match.mainVersion === entry.mainVersion
-            && match.matchUnit === entry.matchUnit && match.matchedField === entry.matchedField);
-          if (!row) return [];
-          seen.add(entry.mainVersion);
-          return [row];
-        }) };
-      }, relation => relation.results);
-      if (visible.results.length) {
-        const types = await phraseWorkTypes(env, visible.results.map(row => ({ work: row.work, language: '' })), position, session);
-        const summaries = await session.summaries(visible.results.map(row => row.work), true);
-        const authorWorks = [...new Set(visible.results.map(row => row.work))];
-        const readAuthors = () => optionalPreview(session, () => searchPageAuthors(session, authorWorks, true));
-        const authors = await readAuthors();
-        session.observeDependency(`typeahead-authors:${JSON.stringify(authorWorks)}`, authors, readAuthors);
-        const after = await session.summaries(visible.results.map(row => row.work), true);
-        if (summaries.some((summary, i) => JSON.stringify({ ...summary, avatar: undefined })
-          !== JSON.stringify({ ...after[i], avatar: undefined }))) {
-          throw new SearchSnapshotMoved('Typeahead disclosure changed during hydration');
-        }
-        accepted = new Map<string, TypeaheadItem>([...accepted, ...visible.results.flatMap<[string, TypeaheadItem]>((row, i) => {
-          const summary = summaries[i], final = after[i];
-          return summary?.status === 'available' && summary.type === 'work' && summary.disclosure === 'public'
-            ? [[`${row.mainVersion}\n${row.matchUnit}\n${row.matchedField}`, {
-              work: row.work, mainVersion: row.mainVersion, title: summary.name,
-              cover: final?.status === 'available' ? final.avatar : summary.avatar,
-              types: types.get(row.work) ?? [], authors: authors?.get(row.work) ?? [],
-              matchedField: row.matchedField as 'title' | 'credit', matchedText: row.matchedText,
-              matchedLanguage: row.matchedLanguage }]] : [];
-        })]);
-      }
-    } while (more && entries.length < cap && accepted.size < initial.pageSize);
+    } while (more && entries.length < cap);
+    // Candidate identities, their matched fields, facets and all cards share
+    // one selected dependency set, including across native walk batches.
+    const previouslyDelivered = new Set(deliveredMainVersions);
+    const visible = await session.selection(`typeahead-presentation:${JSON.stringify(entries)}`, async probe => {
+      const candidates = await queryTypeaheadCandidates(env, input.prefix, entries, work.sourceAuthorNames, probe);
+      const relation = await present({ context: 'main-version-default' as const, sourcePosition: position,
+        total: candidates.length, results: candidates });
+      const seen = new Set(previouslyDelivered);
+      return { ...relation, results: entries.flatMap(entry => {
+        if (seen.has(entry.mainVersion)) return [];
+        const row = relation.results.find(match => match.mainVersion === entry.mainVersion
+          && match.matchUnit === entry.matchUnit && match.matchedField === entry.matchedField);
+        if (!row) return [];
+        seen.add(entry.mainVersion);
+        return [row];
+      }) };
+    }, relation => relation.results);
+    if (visible.results.length) {
+      const authorWorks = [...new Set(visible.results.map(row => row.work))];
+      // Independent page sections share the request's budget. The summary
+      // owner closes its own selected disclosure/media dependencies; authors
+      // replay the delivered selection once, without also fencing every raw
+      // graph input to that same selection.
+      const summaryRead = session.summaries(visible.results.map(row => row.work), true);
+      const pending = [
+        phraseWorkTypes(env, visible.results.map(row => ({ work: row.work, language: '' })), position, session),
+        summaryRead,
+        session.selection(`typeahead-authors:${JSON.stringify(authorWorks)}`, async probe => {
+          const authors = await optionalPreview(probe, () => searchPageAuthors(probe, authorWorks, true));
+          // Register authors after summaries so the final author replay also
+          // observes name-owner changes made during the summary close.
+          await summaryRead;
+          return authors;
+        }),
+      ] as const;
+      // Finish sibling owner reads before an unsuccessful attempt can restart.
+      await Promise.allSettled(pending);
+      const [types, summaries, authors] = await Promise.all(pending);
+      accepted = new Map<string, TypeaheadItem>(visible.results.flatMap((row, i) => {
+        const summary = summaries[i];
+        return summary?.status === 'available' && summary.type === 'work' && summary.disclosure === 'public'
+          ? [[`${row.mainVersion}\n${row.matchUnit}\n${row.matchedField}`, {
+            work: row.work, mainVersion: row.mainVersion, title: summary.name,
+            cover: summary.avatar,
+            types: types.get(row.work) ?? [], authors: authors?.get(row.work) ?? [],
+            matchedField: row.matchedField as 'title' | 'credit', matchedText: row.matchedText,
+            matchedLanguage: row.matchedLanguage }]] : [];
+      }));
+    }
     const items: TypeaheadItem[] = [];
     let examined = 0;
     for (const entry of entries) {

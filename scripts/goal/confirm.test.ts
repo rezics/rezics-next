@@ -298,6 +298,27 @@ test('explicit lanes use the requested host width and reject widths outside the 
   } finally { f.cleanup(); }
 });
 
+test('retained-source refusal checks the complete pinned selection before any confirmation test starts', async () => {
+  const f = fixture();
+  let tests = 0;
+  try {
+    const manifest = await runConfirmation({ ...f.options, runId: 'retained-refusal',
+      retainedPreflight: async (checkout, files) => {
+        expect(checkout).not.toBe(f.directory);
+        expect(files).toHaveLength(5);
+        expect(readFileSync(join(checkout, files[0]!), 'utf8')).toContain('books/');
+        return { ok: false, elapsedMs: 12, sources: [{ source: 'realm', reason: 'collation drift: recorded 2.41, host 2.43',
+          repair: 'task goal -- prepare-source realm', elapsedMs: 12 }] };
+      }, runner: async () => { tests++; throw new Error('must not start a persona'); },
+    });
+    expect(tests).toBe(0);
+    expect(manifest.status).toBe('failed');
+    expect(manifest.retainedSources?.elapsedMs).toBe(12);
+    expect(manifest.preflight.reason).toContain('recorded 2.41, host 2.43');
+    expect(manifest.batches.every(batch => batch.state === 'pending' && batch.attempts.length === 0)).toBe(true);
+  } finally { f.cleanup(); }
+});
+
 test('confirmation command accepts revision, lanes and run status without changing its defaults', () => {
   expect(parseConfirmationArgs([])).toEqual({});
   expect(parseConfirmationArgs(['--record', '.temp/answers'])).toEqual({ record: '.temp/answers' });

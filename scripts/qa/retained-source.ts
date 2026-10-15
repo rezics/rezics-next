@@ -6,6 +6,7 @@ import { FixtureWorkBudget } from '../fixture/budget.ts';
 import { createGovernanceOutputRedactor, redactCommandOutput } from '../fixture/command-output.ts';
 import { isRetainedJson, retainedIntegrity, verifyRetainedIntegrity, type RetainedIntegrity, type RetainedJson, type RetainedOwnerState } from '../fixture/manifest.ts';
 import { fixtureDirectory } from '../fixture/stack.ts';
+import { POSTGRES_COLLATION_FILE, retainedCollationDifferences, retainedRuntimeFacts, retainedRuntimeDifferences, type RetainedRuntimeFacts } from '../fixture/runtime-facts.ts';
 
 export const RETAINED_SOURCE_FORMAT = 'rezics-retained-source-v1';
 export const SOURCE_PREPARATION_MS = 600_000;
@@ -20,6 +21,8 @@ export const SOURCES_PER_PRODUCER = 2;
 export const RETAINED_SOURCE_EXCLUDED_ROOTS = [
   'scripts/goal/',
   'scripts/qa/core.ts',
+  'scripts/qa/retained-preflight.ts',
+  'scripts/qa/retained-requirements.ts',
   'scripts/qa/memory-admission.ts',
   'scripts/qa/host-admission.ts',
   'scripts/qa/resource-classes.ts',
@@ -98,6 +101,7 @@ export interface RetainedSourceManifest<M extends RetainedJson = RetainedJson> {
     producerBuild?: RetainedProducerBuildEvidence;
     backupPath: string;
     manifestPath: string;
+    runtime?: RetainedRuntimeFacts;
   };
   digest: string;
 }
@@ -320,7 +324,30 @@ export class RetainedSources {
     return join(this.directory, `.${key}.pending-${randomUUID()}`);
   }
 
-  private async verified<M extends RetainedJson, C>(adapter: RetainedSourceAdapter<M, C>, context: SourceContext): Promise<RetainedSourceManifest<M>> {
+  /** Offline readiness never acquires a writable lock, repairs custody or calls
+   * a producer. Consumer selection still holds its normal lease at restore. */
+  async preflight<M extends RetainedJson, C>(adapter: RetainedSourceAdapter<M, C>,
+    host = retainedRuntimeFacts()): Promise<RetainedSourceManifest<M>> {
+    const key = sourceKey(adapter.specification);
+    if (!existsSync(join(this.directory, key))) {
+      const previous = existsSync(this.directory) ? readdirSync(this.directory)
+        .filter(name => name.startsWith(`rs-${adapter.specification.producer}-`) && !name.endsWith('.lock')) : [];
+      throw new RetainedSourceRefusal(key, [previous.length
+        ? `stale key: expected ${key}; retained ${previous.sort().join(', ')}` : 'build is missing']);
+    }
+    // Runtime checks precede potentially large physical inventories.
+    let manifest: RetainedSourceManifest<M>;
+    try { manifest = JSON.parse(readFileSync(join(this.directory, key, 'manifest.json'), 'utf8')) as RetainedSourceManifest<M>; }
+    catch { throw new RetainedSourceRefusal(key, ['complete manifest is missing or unreadable']); }
+    const runtime = retainedRuntimeDifferences(manifest?.provenance?.runtime, host);
+    if (manifest?.integrity?.files?.[POSTGRES_COLLATION_FILE])
+      runtime.push(...retainedCollationDifferences(join(this.directory, key, 'backup', POSTGRES_COLLATION_FILE), host));
+    if (runtime.length) throw new RetainedSourceRefusal(key, runtime);
+    return this.verified(adapter, this.context(key, new FixtureWorkBudget(SOURCE_RESTORE_MS, this.now)));
+  }
+
+  private async verified<M extends RetainedJson, C>(adapter: RetainedSourceAdapter<M, C>, context: SourceContext,
+    checkRuntime = false): Promise<RetainedSourceManifest<M>> {
     const evidence: string[] = [];
     let verificationError: unknown;
     let manifest: RetainedSourceManifest<M>;
@@ -329,6 +356,13 @@ export class RetainedSources {
       if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) throw new Error('invalid manifest');
     }
     catch { throw new RetainedSourceRefusal(context.key, ['complete manifest is missing or unreadable']); }
+    if (checkRuntime) {
+      const host = retainedRuntimeFacts();
+      evidence.push(...retainedRuntimeDifferences(manifest.provenance?.runtime, host));
+      if (manifest.integrity?.files?.[POSTGRES_COLLATION_FILE])
+        evidence.push(...retainedCollationDifferences(join(context.backup, POSTGRES_COLLATION_FILE), host));
+      if (evidence.length) throw new RetainedSourceRefusal(context.key, evidence);
+    }
     const { digest, ...body } = manifest;
     if (manifest.format !== RETAINED_SOURCE_FORMAT || manifest.key !== context.key)
       evidence.push('source format/key differs');
@@ -425,7 +459,7 @@ export class RetainedSources {
     if (existsSync(context.directory)) {
       try {
         const manifest = await locked(join(this.directory, `${key}.lock`), lifecycle,
-          () => lifecycle.step('verify-existing', () => this.verified(adapter, context)), true);
+          () => lifecycle.step('verify-existing', () => this.verified(adapter, context, true)), true);
         return { manifest, built: false, ...budget.timing() };
       } catch (error) {
         if (!(error instanceof RetainedSourceRefusal) || retainedSourceFailure(error)?.cleanup.length) {
@@ -437,7 +471,7 @@ export class RetainedSources {
     try { return await locked(join(this.directory, `${adapter.specification.producer}.lock`), lifecycle, () =>
       locked(join(this.directory, `${key}.lock`), lifecycle, async () => {
         if (existsSync(context.directory)) {
-          try { return { manifest: await lifecycle.step('verify-existing', () => this.verified(adapter, context)), built: false, ...budget.timing() }; }
+          try { return { manifest: await lifecycle.step('verify-existing', () => this.verified(adapter, context, true)), built: false, ...budget.timing() }; }
           catch (error) {
             if (!(error instanceof RetainedSourceRefusal)) throw error;
             try {
@@ -523,6 +557,7 @@ export class RetainedSources {
                 ...(lifecycle.producerBuild ? { producerBuild: lifecycle.producerBuild } : {}),
                 phases: build.phases, backupPath: context.backup,
                 manifestPath: join(context.directory, 'manifest.json'),
+                runtime: retainedRuntimeFacts(),
               },
             };
             writeFileSync(join(staging, 'manifest.json'), `${stable({ ...body, digest: digestManifest(body) })}\n`, { mode: 0o600 });

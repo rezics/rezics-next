@@ -143,6 +143,7 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
   const oldEntries = current?.graphProfile === RELEASE_V3_PROFILE && oldRecord?.profile === 'release-v2'
     ? oldRecord.coverage.map(entry => coverageFacts(release, entry,
       oldRecord.resolvedCoverage.find(row => row.realization === entry.realization)!)).join('\n') : '';
+  // Allocate sequence in the write transaction; unrelated commits do not change this release's basis.
   const update = `PREFIX rv: <${RV}>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
@@ -171,7 +172,7 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
     }
     WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . FILTER(?n = ${rows[0].sequence.value}) }
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} { ${iri(record.work)} a <https://schema.org/CreativeWork> .
         ${prior ? `${iri(release)} a rv:Release ; rv:work ${iri(record.work)} ; rv:releaseHead ${iri(prior)} .
           ${iri(release)} ?oldPredicate ?oldValue .

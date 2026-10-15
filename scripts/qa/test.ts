@@ -7,6 +7,7 @@ import { formatTierRunLine, goalSlotDirectory, implementedTiers, newRunId, parse
 import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 import { STORY_SCREENSHOTS_ENV } from './story-screenshots.ts';
 import { assertWideRunAllowed } from '../goal/admission.ts';
+import { assertRetainedSources } from './retained-preflight.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const testFile = /\.(?:test|spec|e2e|stories)\.[cm]?[jt]sx?$/;
@@ -240,6 +241,7 @@ async function run([program, args]: [string, string[]], envOverride?: NodeJS.Pro
 }
 
 export interface TestDispatchOptions {
+  retainedPreflight?: typeof assertRetainedSources;
   runner?: typeof run;
   admission?: typeof waitForMemory;
   deadline?: number;
@@ -266,6 +268,7 @@ async function runTierGroups(groups: TestGroup[], options: TestDispatchOptions):
 export async function dispatchTest(args: string[], options: TestDispatchOptions = {}): Promise<number> {
   assertWideRunAllowed(['bun', 'scripts/qa/test.ts', ...args], options.env ?? process.env);
   const groups = selectTestGroups(args);
+  await (options.retainedPreflight ?? assertRetainedSources)(root, groups.flatMap(group => group.files));
   const commands = commandsFor(groups, splitCallerTimeout(args).timeout ?? []);
   if (commands.length !== 1) return runTierGroups(groups, options);
   return dispatchSelectedTest(groups, commands[0]!, options);
@@ -319,6 +322,7 @@ async function dispatchSelectedTest(groups: TestGroup[], command: [string, strin
 }
 
 export async function runAffected(plan: AffectedPlan, runner = run): Promise<{ failed: boolean; results: string[] }> {
+  await assertRetainedSources(root, Object.values(plan.tests).flat());
   const results: string[] = [];
   let failed = false;
   // Every cheap selection runs, so one failure does not hide another workspace's checks.

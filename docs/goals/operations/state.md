@@ -1,26 +1,71 @@
 # State
 
-Checkpoint `ffebfab6-6566-44c0-bae5-4cbed4dd5ad2` for [this Goal](GOAL.md),
-carrying forward `checkpoint:9992e78d-8512-462e-b7cc-c27180d39cca` and recording
+Checkpoint `eaaa65f5-6a08-435e-95a7-74707dd4ce3a` for [this Goal](GOAL.md),
+carrying forward `checkpoint:ffebfab6-6566-44c0-bae5-4cbed4dd5ad2` and recording
 only these handled events:
 
-- `task:G-2248:23` (completion passed; production timed out; Program had already decided and resumed the worker).
-- `task:G-2248:27` (cleanup-clock repair offered as partial; production again timed out; Program asked to decide the partial landing and remaining startup cost).
+- `mail:616da59f-1e4b-470d-b2a5-1774faed6c94` (Program landed the cleanup step, scoped the remaining production cost and resumed G-2248).
+- `task:G-2248:30` (production qualification accepted for normal landing gates).
+- `mail:993b10a8-aaaa-4b8a-93f1-944e39611e68` (landing refused the handoff's trailing period; worker resumed for that format correction only).
+- `task:G-2248:31` (corrected handoff accepted under the existing decision; landing already active).
 
-Both task turns acknowledged receipt in their reports to Program. This
-checkpoint supplies no mail ID; the Operations mail inbox was empty. Later
-parallel decisions, handoffs and landing results are outside this checkpoint.
-It updates state only and authorizes no new work or proof.
+Both supplied mails were acknowledged in their handling turns; event 31 was
+acknowledged and its turn found the Operations inbox empty. This checkpoint
+supplies no additional mail. Later parallel decisions and landing results are
+outside it. It updates state only and authorizes no new work or proof.
 
 | Field | State |
 | --- | --- |
 | Manager | Enrolled with the coordinator on 2026-10-13 15:34 UTC |
-| Phase | Program directly steers G-2248 and G-2205. Event 23 found Program's cleanup decision `5cdc2e5c92` already committed and attempt 24 started. Event 27 referred partial repair `a5cebfde1064e193080ba70df0658d237609163a` and remaining production restore/startup cost to Program. Operations starts no landing, resume or closure; the authorized rerun is consumed |
-| Proved on physical fixtures | D108 restore consumption qualifies in two post-fix restores. G-2248 completion passed with 103 expect calls on `7aad8d39c3234b06e21fd2ca8ea0f9c9a8826940`, including `08007`, running-state, replay/release and final erasure. It was not rerun on the cleanup repair. Production, full fixture disposal and OPS10 remain unproved; no complete scope row is established by these events |
-| Fixture | G-2248 published current `c2b19656…` once and both consumers reused it, with source/key stability and physical custody verified before and after. Normal retention pruned superseded `7a2197cc…`; historical preservation directions below do not block that task. Event 27 also reports stable source/key and verified immutable custody. G-2205's last carried rebased check still lacked `postgres_data` custody for `fx-small-180553eb933a`; Program assigns it its own rebuild |
-| Measures | No complete row newly proved. `task goal -- status` returned no figures before yielding; this no-wait turn claims no refreshed measures. Historical scope sample: 67/68 rows, 402 proved and 6 pending cells. Earlier Operations sample: 50% first attempts (that day 0%, 0/5), landed-task median 2, max 15 (G-2248), 110.5M input / 532k output tokens, 14 first / 12 step / 14 fix attempts and seven inferred fixes. Tokens per proved row remain unavailable. G-2248 has reached event 27, beyond the three-attempt cap. The repeated failures now isolate production cost: separating cleanup removed the candidate-5 disposal stall, but candidate-6 startup still exhausted 360 seconds. Program has the request to scope that remaining cost; no production improvement or complete outcome is accepted |
+| Phase | Program landed cleanup repair `a5cebfde…` as a step and scoped the remaining production cost at 21:05 UTC. Operations accepted repair `937f20ad…` in decision `4ca1f08ff` and started normal landing. The first landing refused `RESULT: done.`; a brief decision narrowed attempt 31 to the exact `RESULT: done` line. Event 31 found landing already active and made no brief edit, restart, resume or closure |
+| Proved on physical fixtures | D108 restore consumption qualifies in two post-fix restores. G-2248 production QA `20261015t211446-1217fc` passed 549 assertions and all 15 retained cases on `937f20ad0ace19dd544626ceaf895819c17b1d37`, including all candidate and final fixture disposals. Completion QA `20261015t200423-eab99f` separately passed 103 assertions on `7aad8d39c3234b06e21fd2ca8ea0f9c9a8826940`, including `08007`, running-state, replay/release and final erasure; it was not requalified on the repair. Original comment-source drill, broader acceptance ID, OPS10 and a complete scope row remain unproved |
+| Fixture | G-2248 published current `c2b19656…` once and consumers reused it. Accepted production was source-stable, verified immutable manifest-bound custody before and after consumption with unchanged digests, and performed no consumer producer build. All six candidates and the final fixture disposed successfully. Normal retention pruned superseded `7a2197cc…`; historical preservation directions below do not block that task. G-2205's last carried rebased check still lacked `postgres_data` custody for `fx-small-180553eb933a`; Program assigns it its own rebuild |
+| Measures | No complete row newly proved. The method's measures were read; `task goal -- status` returned no figures before yielding, and this no-wait turn claims no refreshed measures. Historical scope sample: 67/68 rows, 402 proved and 6 pending cells. Earlier Operations sample: 50% first attempts (that day 0%, 0/5), landed-task median 2, max 15 (G-2248), 110.5M input / 532k output tokens, 14 first / 12 step / 14 fix attempts and seven inferred fixes. Tokens per proved row remain unavailable. G-2248 reached attempt 31 beyond the three-attempt cap. Program addressed repeated startup cost by splitting bounded concurrent physical startups from database clones; accepted production took 214.984/360 active operation seconds and 73.589/120 cleanup seconds. The latest fix round corrected only the handoff protocol; no new physical run or improved first-attempt share is claimed |
 
 ## Handled decisions and next action
+
+Program's supplied mail at 21:05 UTC reported the cleanup step landed and the
+worker already resumed under its new brief decision. That decision retains
+physical startup for cases that assert it, concurrently within QA admission,
+and uses database clones from one running template for the other cases,
+preserving every assertion and the 360-second operation bound. Operations
+acknowledged the mail without a duplicate action.
+
+Event 30 accepted `937f20ad0ace19dd544626ceaf895819c17b1d37` for normal
+landing gates in brief decision `4ca1f08ff`. The repair retains all 121
+production assertion call sites and default physical-copy behavior for other
+consumers. Production QA `20261015t211446-1217fc` passed all 15 retained cases
+with 549 assertions in 214.984 active operation seconds; aggregate cleanup
+took 73.589 seconds. Both unchanged bounds held, custody digests stayed
+unchanged, and all disposals completed. Supporting checks passed 15 tests /
+103 assertions plus selected types, lint and guards. Evidence:
+`.temp/worktrees/g-2248/.temp/goal/template-qualification-handoff.md`.
+
+Acceptance preserves the separate earlier completion revision and run; there
+is no completion requalification on this repair. Normal gates must resolve
+the reported G-2682 overlap; an affected-test preview is not passing evidence.
+The latest brief's production requirement is discharged once landing succeeds,
+without proving the original comment-source drill, broader acceptance ID or
+complete scope row. No further physical retry or host declaration work was
+assigned.
+
+The supplied landing mail reported refusal before landing because the handoff
+said `RESULT: done.` rather than `RESULT: done`. Operations committed a brief
+decision narrowing continuation to that protocol correction, resumed attempt
+31 without implementation changes or physical QA reruns, and acknowledged
+the mail. Event 31 returned the exact line while retaining the accepted commit,
+evidence, separate qualification revisions and limitations. Its handling turn
+found landing already active and left its brief untouched.
+
+No landing success is supplied by these events. The landing-result mail is
+the next decision: close G-2248 verified when nothing remains of its latest
+brief, or resume its worker for the remaining work. Do not restart or wait on
+the landing. This checkpoint starts nothing and changes only this state.
+
+## Earlier qualification failures
+
+These events were recorded by the preceding checkpoint. Their pending
+production verdicts and referral are superseded by the handled decisions above.
 
 Event 23 supplied no implementation to land. Completion QA
 `20261015t200423-eab99f` passed with 103 expect calls on source-stable
@@ -56,7 +101,8 @@ the unchanged operation bound, in
 `.temp/goal-orchestration/mail/operations-g2248-event27-program.md`
 (`mail:0852d402-89e4-41cb-8170-7bfdce735e19`). No production outcome was
 accepted and no brief edit, further retry, landing, resume or closure was
-initiated. Program owns that next decision; this checkpoint makes none.
+initiated in that event. Program subsequently decided it in the supplied mail
+recorded above.
 
 ## Carried custody decisions
 
@@ -234,7 +280,7 @@ physical prove prerequisites below. This checkpoint starts no worker or landing.
 | --- | --- |
 | Release image and recovery (G-2480 / G-2202) | Run `scripts/ops/tests/g-919-release-images.test.ts`, `tests/qa/integration/fresh-install.test.ts`, `tests/qa/fault-recovery/second-host-format-upgrade.test.ts` and `tests/qa/fault-recovery/g-727-launch-drill.test.ts`; qualify actual OCI role startup and recovery. G-2202's payload repair is on main at `498a578a2`; its packaged-Main healthy answer proves no actual image startup or complete recovery |
 | Declared producer clock (G-2481) | Run `scripts/qa/retained-source.test.ts` in prove. Build-support acceptance establishes no physical custody, restore or erasure outcome |
-| Owner-erasure adapter and campaign (G-2482 / G-2248 / G-2205) | Preserve all six original files under `tests/qa/fault-recovery/`: `comment-source-erasure.test.ts`, `owner-restore-erasure-production.test.ts`, `owner-restore-erasure-completion.test.ts`, `owner-restore-erasure-source-closure.test.ts`, `erasure-campaign.test.ts`, `erasure-campaign-qualification.test.ts`. First-adapter publication/custody/restore, production/completion erasure and campaign outcomes remain unproved |
+| Owner-erasure adapter and campaign (G-2482 / G-2248 / G-2205) | Preserve all six original files under `tests/qa/fault-recovery/`: `comment-source-erasure.test.ts`, `owner-restore-erasure-production.test.ts`, `owner-restore-erasure-completion.test.ts`, `owner-restore-erasure-source-closure.test.ts`, `erasure-campaign.test.ts`, `erasure-campaign-qualification.test.ts`. G-2248's accepted publication/custody and separate completion/production qualifications are recorded above. Original comment drill, source-closure, campaign and complete-row obligations are not discharged by these events |
 | Independent restore and schedule (G-2485 / G-2513) | Execute `independent-restore.test.ts`, `independent-restore-authority.test.ts` and `independent-restore-refusals.test.ts` under `tests/qa/fault-recovery/` in the accepted 21-entry serial plan. Provenance and assertion comparison: `.temp/worktrees/g-2513/.temp/goal/handoff.md`. Preserve original success, read/write, authority, authentication, refusal, recovery, disposal and budget assertions. Program runs generation and all wave gates, explicitly prepares compatible `independent-authority-source` and `independent-recipe-source` custody (Recipe also needs a compatible retained small fixture), then executes through Task against isolated retained copies. Historical `realm_directory_position` capture refusal remains unproved; report it if it recurs. Registration and test recovery discharge no physical obligation. Physical restore, erasure drills and second-host rollback belong to prove |
 | API Content and Realm prerequisites | G-2427 consumes G-2481's wave interface; G-2365 still needs a complete verified Realm source. G-2249 preparation, reconstruction, G-2364 and original physical crash/campaign outcomes are not accepted by these events |
 

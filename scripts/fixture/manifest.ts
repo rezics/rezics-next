@@ -13,6 +13,7 @@ import {
 import type { FixtureOwner } from './owners/types.ts';
 import type { FixtureEngines } from './stack.ts';
 import { fixtureModel } from './model.ts';
+import type { FixtureCustody } from './custody.ts';
 
 export const MANIFEST_FORMAT = 'rezics-fixture-manifest-v1';
 
@@ -190,6 +191,7 @@ export interface FixtureManifest extends FixtureManifestCore {
     loads: Record<string, unknown>;
   };
   backup: { project: string; volumes: Record<string, { bytes: number; files: number }> };
+  custody?: FixtureCustody;
 }
 
 function fileDigests(root: string, paths: string[]): Record<string, string> {

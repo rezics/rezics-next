@@ -14,7 +14,7 @@ import { fusekiBuildInputs } from '../../../scripts/dev/fuseki-image.ts';
 import { classify, erasureCampaignNativeTest, formatPlan, heldReplayNativeTest, inputSelectedNativeTests, nativeIntegerPreservationTest, nativeModuleCopies, nativeModuleCopyInputs, nativeUnionTest, needsGraph, planAffected, routeTest, typecheckWorkspaces, workNameScopeBasisTest, type GraphModule } from '../../../scripts/qa/affected.ts';
 import { mergeUnitFiles, ownerFilesFromPlan, unitFilesFromPlan } from '../../../scripts/goal/goalctl.ts';
 import { regressionBatchCommand, regressionRegistry } from '../../../scripts/goal/regress.ts';
-import { WORK_PROFILE_SEED_BUILD_FILE, OWNER_ERASURE_SOURCE_BUILD_FILE } from '../../../scripts/qa/preparation-selection.ts';
+import { OWNER_ERASURE_SOURCE_BUILD_FILE, RETAINED_SOURCE_BUILD_FILE, WORK_PROFILE_SEED_BUILD_FILE } from '../../../scripts/qa/preparation-selection.ts';
 import { affectedCommands, parseAffectedArgs, runAffected } from '../../../scripts/qa/test.ts';
 
 const edge = (resolved: string, module = resolved) => ({ module, resolved, couldNotResolve: false, coreModule: false });
@@ -674,6 +674,13 @@ test('native module proofs follow the Dockerfile COPY inputs into the owner tier
     expect(result.tests.owner, path).toEqual(nativeProofs);
     expect(formatPlan(result)).toContain(`${nativeModuleCopyInputs}: selected`);
   }
+  // Each registry selection scans authored test files. Sample each unchanged
+  // tier once instead of repeating that scan for every proof in this assertion.
+  const defaultUnit = testArgs('unit');
+  const defaultModel = testArgs('model');
+  const defaultOwner = testArgs('owner');
+  const explicitOwner = testArgs('owner', undefined, { files: nativeProofs });
+  expect(explicitOwner).toEqual(nativeProofs);
   for (const file of nativeProofs) {
     const ownFile = plan([file], { nativeModuleDockerfile: nativeDockerfile, exists });
     expect(routeTest(file)).toEqual({ tier: 'owner' });
@@ -681,10 +688,10 @@ test('native module proofs follow the Dockerfile COPY inputs into the owner tier
     expect(ownFile.tests.unit).toEqual([]);
     expect(unitFilesFromPlan('.', ownFile)).not.toContain(file);
     expect(ownerFilesFromPlan('.', ownFile)).toContain(file);
-    expect(testArgs('unit')).not.toContain(file);
-    expect(testArgs('model')).not.toContain(file);
-    expect(testArgs('owner')).not.toContain(file);
-    expect(testArgs('owner', undefined, { files: [file] })).toEqual([file]);
+    expect(defaultUnit).not.toContain(file);
+    expect(defaultModel).not.toContain(file);
+    expect(defaultOwner).not.toContain(file);
+    expect(explicitOwner).toContain(file);
   }
   const heldReplayOwn = plan([heldReplayNativeTest], { nativeModuleDockerfile: nativeDockerfile, exists });
   expect(routeTest(heldReplayNativeTest)).toEqual({ tier: 'owner' });
@@ -704,7 +711,7 @@ test('native module proofs follow the Dockerfile COPY inputs into the owner tier
   expect(dockerfile.tests.owner).toEqual(nativeProofs);
   expect(affectedCommands(dockerfile).filter(item => item.label === 'owner (1 files)').map(item => item.command[1]))
     .toEqual(nativeProofs.map(file => ['scripts/qa/cli.ts', '--tier', 'owner', '--file', file]));
-  for (const file of inputSelectedNativeTests) expect(testArgs('owner')).not.toContain(file);
+  for (const file of inputSelectedNativeTests) expect(defaultOwner).not.toContain(file);
   expect(dockerfile.tasks[0]!.task).toBe('jena:check');
 });
 
@@ -839,6 +846,14 @@ test('affected selection defers retained seed preparation even when its own file
   expect(routeTest(OWNER_ERASURE_SOURCE_BUILD_FILE)).toEqual({ deferred: reason });
   expect(Object.values(plan([OWNER_ERASURE_SOURCE_BUILD_FILE], { exists: () => true }).tests).flat())
     .not.toContain(OWNER_ERASURE_SOURCE_BUILD_FILE);
+});
+
+test('affected selection defers retained source repair even when its own file changes', () => {
+  const reason = 'Retained source preparation; select its build command explicitly alone';
+  expect(routeTest(RETAINED_SOURCE_BUILD_FILE)).toEqual({ deferred: reason });
+  const result = plan([RETAINED_SOURCE_BUILD_FILE], { exists: () => true });
+  expect(Object.values(result.tests).flat()).not.toContain(RETAINED_SOURCE_BUILD_FILE);
+  expect(result.deferred).toContainEqual({ file: RETAINED_SOURCE_BUILD_FILE, reason });
 });
 
 for (const size of [128, 256]) {

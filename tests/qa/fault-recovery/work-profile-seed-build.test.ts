@@ -2,8 +2,11 @@ import { expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { loadavg } from 'node:os';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { SEED_AXES, SEED_RECIPE, seedCheckpointPlan } from '../support/seed-checkpoint-plan.ts';
+import { SEED_AXES, seedCheckpointPlan } from '../support/seed-checkpoint-plan.ts';
 import { WORK_PROFILE_SEED_BUILD_WALL_MS } from '../../../scripts/qa/preparation-selection.ts';
+import { readRetainedPostgresCollations, type RetainedCollation } from '../../../scripts/fixture/runtime-facts.ts';
+import { seedSpecification } from '../support/seed-specification.ts';
+import { preflightSeedCheckpoints } from '../../../scripts/qa/seed-preflight.ts';
 import { profileRequest, startWorkProfileSink } from '../support/work-profile.ts';
 import { startTelemetry, flushTelemetryTraces, shutdownTelemetry }
   from '../../../packages/observability/src/runtime.ts';
@@ -101,7 +104,7 @@ test('explicit preparation retains one API-built store across six independent po
     let stageBuildMs = 0;
     let stage = seedCheckpointPlan()[0]!;
     const recipe: Recipe = {
-      version: SEED_RECIPE, fixed: stage.fixed,
+      ...seedSpecification, fixed: stage.fixed,
       async initialize(client, key) {
         if (actor) return;
         actor = (await client.command<{ agent: string }>(`${key}:author`, { method: 'POST',
@@ -143,6 +146,7 @@ test('explicit preparation retains one API-built store across six independent po
       stage = planned;
       scale = stage.scale;
       recipe.fixed = stage.fixed;
+      let collations: RetainedCollation[] | undefined;
       measured = [];
       let admissionWaitMs = 0;
       if (ordinal > 0) {
@@ -163,6 +167,9 @@ test('explicit preparation retains one API-built store across six independent po
         resumeSource: false,
         async quiesce(signal) {
           signal.throwIfAborted();
+          const pool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL, connectionTimeoutMillis: 2_000 });
+          try { collations = await readRetainedPostgresCollations(sql => pool.query(sql)); }
+          finally { await pool.end(); }
           await source!.stop(); sourceStopped = true;
           resumeWriter = async resumeSignal => {
             Object.assign(Bun.env, readEnv(join(root, '.temp/stack', `rezics-qa-${sourceRunId}`, 'apps.env')));
@@ -195,7 +202,7 @@ test('explicit preparation retains one API-built store across six independent po
         backupMs: totalMs - stageStartupMs - stageBuildMs, totalMs };
       retained.actor = actor;
       retained.axes[stage.axis].push({ manifest, works: structuredClone(works), posts: structuredClone(posts),
-        population: structuredClone(population!), timing });
+        population: structuredClone(population!), timing, collations });
       console.log('retained seed stage seconds', stage.axis, scale, JSON.stringify(Object.fromEntries(
         Object.entries(timing).map(([key, value]) => [key.replace(/Ms$/, 'Seconds'), value / 1000]))));
       const stageKey = ({ small: '4', medium: '16', large: '64' } as const)[scale];

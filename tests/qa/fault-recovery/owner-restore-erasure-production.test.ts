@@ -147,7 +147,18 @@ test(
       // cut, each with a separately retained current relay.
       fixture.stopOriginal();
       await expect(fixture.native.query('ASK {}')).rejects.toThrow();
-      const good = await fixture.copy();
+      // Only release cases assert physical owner recovery. Start their two isolated
+      // clusters together inside this shard's QA admission. All refusal cases clone
+      // pristine cut databases; their graph/relay/object custody stays isolated.
+      const physical = await Promise.allSettled([
+        fixture.copy({ retainPostgresTemplate: true }),
+        fixture.copy(),
+      ]);
+      for (const result of physical) if (result.status === 'rejected') throw result.reason;
+      const [good, partial] = physical.map(result => {
+        if (result.status !== 'fulfilled') throw new Error('physical copy did not start');
+        return result.value;
+      }) as [Copy, Copy];
       const transactions: { pid: string; txid: string; isolation: string }[] = [];
       const commands: CommandResult[] = [];
       const originalHistorical = ReceiptCustody.prototype.readHistorical;
@@ -370,7 +381,6 @@ test(
         await good.dispose();
       }
 
-      const partial = await fixture.copy();
       const partialCommand = partial.fuseki.commandWithReceipt.bind(partial.fuseki);
       let graphCommitted = false;
       const committed = spyOn(partial.fuseki, 'commandWithReceipt').mockImplementation(
@@ -449,7 +459,7 @@ test(
       }
       // These faults all reject before a held native write. Restore exact
       // captured bytes and rows between attempts so one C0 remains reusable.
-      const shared = await fixture.copy();
+      const shared = await fixture.copy({ postgres: 'template' });
       const sharedMaintenance = shared.resources.erasures!.maintenance;
       const heldCommands = spyOn(sharedMaintenance, 'command');
       const graphCommands = spyOn(shared.fuseki, 'commandWithReceipt');
@@ -884,7 +894,7 @@ test(
         await shared.dispose();
       }
 
-      const newerJournal = await fixture.copy();
+      const newerJournal = await fixture.copy({ postgres: 'template' });
       try {
         await fixture.timing.phase(
           'production.newer-erasure-journal-refusal',
@@ -908,7 +918,7 @@ test(
       }
 
       for (const kind of ['search', 'download'] as const) {
-        const copy = await fixture.copy();
+        const copy = await fixture.copy({ postgres: 'template' });
         let inserted = false;
         const lock = admission.lockAccessRecoveryFenceForRelease;
         const veto = spyOn(admission, 'lockAccessRecoveryFenceForRelease').mockImplementation(

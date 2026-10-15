@@ -134,7 +134,7 @@ export async function commitRealization(env: WorkActivationEnvironment, admissio
     }
     WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . FILTER(?n = ${rows[0].sequence.value}) }
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} { ${iri(record.work)} a <https://schema.org/CreativeWork> .
         ${prior ? `${iri(realization)} a rv:Realization ; rv:work ${iri(record.work)} ; rv:head ${iri(prior)} .
           ${iri(realization)} ?oldPredicate ?oldValue .

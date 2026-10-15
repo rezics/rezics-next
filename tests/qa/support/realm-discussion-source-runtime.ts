@@ -7,6 +7,8 @@ import { migrationInventory, type RetainedOwnerState } from '../../../scripts/fi
 import { dockerEnvironment, postgresImage, projectRunning, removeStoppedContainers, removeVolumes,
   root, run, stream, VOLUME_KINDS } from '../../../scripts/fixture/stack.ts';
 import { loadCompatibility } from '../../../scripts/load/compatibility.ts';
+import { Pool } from 'pg';
+import { recordRetainedPostgresCollations } from '../../../scripts/fixture/runtime-facts.ts';
 import { retainStoppedOwnerBackup, restoreCatalogueBackup } from '../../../scripts/load/catalogue-backup.ts';
 import { stopCorpusSourcePostgres } from '../../../scripts/load/corpus-backup-driver.ts';
 import { RetainedSources, sourceFileDigests } from '../../../scripts/qa/retained-source.ts';
@@ -15,7 +17,7 @@ import { producerModules, retainedVolumeInventory } from '../fault-recovery/owne
 import { personaSessions, retainPersonaRealm, restorePersonaRealms } from './personas.ts';
 import { realmDiscussionSourceAdapter, realmDiscussionSourceSpecification, realmSourceAuthorityLifetimeMs, type RealmSourceRuntime, type RealmSourceSessions } from './realm-discussion-source.ts';
 
-export const realmSourceDirectory = () => join(root, '.temp', 'realm-discussion-sources');
+export const realmSourceDirectory = () => join(Bun.env.REZICS_QA_RETAINED_ROOT ?? root, '.temp', 'realm-discussion-sources');
 const physicalNamespace = sha256(root);
 // Separate local producer custody across worktrees without making a physical
 // path an API corpus input. Cleanup can affect only this checkout's resources.
@@ -38,8 +40,7 @@ async function withEnvironment<T>(environment: Record<string, string>, work: () 
   finally { for (const [key, value] of previous) { if (value === undefined) delete Bun.env[key]; else Bun.env[key] = value; } }
 }
 
-export function realmSourceRuntime(): RealmSourceRuntime {
-  const sourceRunId = Bun.env.REZICS_QA_RUN_ID;
+export function realmSourceRuntime(sourceRunId = Bun.env.REZICS_QA_RUN_ID): RealmSourceRuntime {
   if (!sourceRunId) throw new Error('Realm source requires an admitted integration QA environment');
   const docker = dockerEnvironment();
   return {
@@ -64,6 +65,9 @@ export function realmSourceRuntime(): RealmSourceRuntime {
     },
     retain: retainPersonaRealm,
     async cut(context, metadata) {
+      const pool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL, connectionTimeoutMillis: 2_000 });
+      try { await recordRetainedPostgresCollations(context.backup, sql => pool.query(sql)); }
+      finally { await pool.end(); }
       const signal = AbortSignal.timeout(context.budget.remaining());
       const native = new FusekiClient(Bun.env.FUSEKI_URL!, Bun.env.FUSEKI_MAINTENANCE_TOKEN, Bun.env.FUSEKI_COMMAND_TOKEN);
       const rdf = stable(await native.query('SELECT ?g ?s ?p ?o WHERE { GRAPH ?g { ?s ?p ?o } } ORDER BY ?g ?s ?p ?o'));

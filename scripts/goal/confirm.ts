@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath, UNEXECUTED_FILE_TEST } from '../qa/acceptance.ts';
 import { newRunId } from '../qa/core.ts';
+import { preflightRetainedSources, retainedPreflightSummary, type RetainedPreflight } from '../qa/retained-preflight.ts';
 import { directoryLeaseHeld, readDirectoryLease, releaseDirectoryLease, transferDirectoryLease, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import type { RowOutcomes } from '../qa/cases/outcome-cells.ts';
 import { batchTestResults, cellReadings, confirmationCounts, confirmationRecord, confirmationSummary, latestConfirmation, recordConfirmation } from './confirmed.ts';
@@ -23,6 +24,7 @@ export interface ConfirmationOptions {
   outcomeRegistry?: RegressionOptions['outcomeRegistry'];
   prepare?: RegressionOptions['prepare'];
   runner?: typeof runBatch;
+  retainedPreflight?: typeof preflightRetainedSources;
   /** The pump transfers its reservation to the detached child before the child starts. */
   leaseToken?: string;
 }
@@ -57,7 +59,7 @@ interface RecordedAnswer {
   attempt: string;
 }
 
-export interface ConfirmationManifest extends Manifest { records?: RecordedAnswer[] }
+export interface ConfirmationManifest extends Manifest { records?: RecordedAnswer[]; retainedSources?: RetainedPreflight }
 
 /** Both lexical traversal and existing symlink ancestors must stay inside this checkout's scratch space. */
 function recordDirectory(repo: string, directory: string): string {
@@ -187,6 +189,11 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Con
     manifest.files = files.map(file => ({ file, tier: outcomeTier(file), outcome: 'pending' }));
     manifest.batches = manifest.files.map((file, index) => ({ id: `outcome-${index + 1}`, tier: file.tier as RegressionTier,
       files: [file.file], state: 'pending', attempts: [] }));
+    manifest.retainedSources = await (options.retainedPreflight ?? preflightRetainedSources)(checkout, files, undefined, repo);
+    if (!manifest.retainedSources.ok) {
+      manifest.preflight.ok = false;
+      manifest.preflight.reason = retainedPreflightSummary(manifest.retainedSources);
+    }
     save();
     const runner = options.runner ?? runBatch;
     const execute = async (batch: Batch) => {
@@ -195,8 +202,8 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Con
       const recordSource = recordTarget ? join('.temp', 'confirmation-records', runId, label) : undefined;
       try {
         batch.attempts.push(await runner(checkout!, batch, join(directory, label), 1, slots,
-          regressionBatchQaDirectory(directory, label), recordSource
-            ? { env: { ...process.env, OUTCOME_RECORD_DIR: recordSource } } : undefined));
+          regressionBatchQaDirectory(directory, label), { env: { ...process.env, REZICS_QA_RETAINED_ROOT: repo,
+            ...(recordSource ? { OUTCOME_RECORD_DIR: recordSource } : {}) } }));
       } catch (error) {
         batch.attempts.push({ code: 1, outcomes: {}, artifactPaths: [], queueMs: 0, testMs: 0, totalMs: 0,
           classification: 'infrastructure', evidence: String(error) });
@@ -246,14 +253,15 @@ export function confirmationStatus(stateDir: string, now = Date.now(), runId?: s
   if (runId !== undefined) {
     validateRunId(runId);
     const directory = join(stateDir, 'confirm', runId);
-    const manifest = JSON.parse(readFileSync(join(directory, 'manifest.json'), 'utf8')) as Manifest;
+    const manifest = JSON.parse(readFileSync(join(directory, 'manifest.json'), 'utf8')) as ConfirmationManifest;
     const declarationsPath = join(directory, 'declarations.json');
     const record = manifest.status === 'running' || !latestConfirmation(directory)
       ? confirmationRecord(manifest, existsSync(declarationsPath)
         ? JSON.parse(readFileSync(declarationsPath, 'utf8')) as RowOutcomes[] : [], new Date(now).toISOString())
       : latestConfirmation(directory);
     return [`Confirmation ${runId}: ${manifest.atCommit}; ${manifest.status}; started ${manifest.startedAt}`,
-      `Running: ${manifest.status === 'running' ? 'yes' : 'no'}`, ...confirmationSummary(record)].join('\n');
+      `Running: ${manifest.status === 'running' ? 'yes' : 'no'}`,
+      ...(manifest.retainedSources ? [retainedPreflightSummary(manifest.retainedSources)] : []), ...confirmationSummary(record)].join('\n');
   }
   const record = latestConfirmation(stateDir);
   const counts = confirmationCounts(record);

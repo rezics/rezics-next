@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { SEED_AXES, seedCheckpointPlan } from '../support/seed-checkpoint-plan.ts';
 import { WORK_PROFILE_DIMENSIONS, workProfileDimensions } from '../../../scripts/load/work-profile-corpus.ts';
+import { seedCustodyCuts } from '../../../scripts/qa/seed-preflight.ts';
+import type { RetainedSeed, RetainedSeedCut } from '../support/seed-checkpoints.ts';
 
 test('each retained series grows exactly one axis while all other populations stay fixed', () => {
   const plan = seedCheckpointPlan();
@@ -18,4 +20,24 @@ test('each retained series grows exactly one axis while all other populations st
     expect(workProfileDimensions(next.axis, next.scale, next.fixed))
       .toEqual(workProfileDimensions(previous.axis, previous.scale, previous.fixed));
   }
+});
+
+test('retained custody covers all six series and refuses missing, mixed or substituted cuts', () => {
+  const axes = Object.fromEntries(SEED_AXES.map(axis => [axis, seedCheckpointPlan()
+    .filter(stage => stage.axis === axis).map(stage => ({
+      manifest: { id: `${axis}/${stage.scale}`, dimension: axis, scale: stage.scale },
+    }))])) as RetainedSeed['axes'];
+  const seed = { format: 'seed-checkpoints-v3', sourceRunId: 'fixture', actor: 'fixture',
+    cuts: axes.unrelatedWorks, axes } satisfies RetainedSeed;
+  expect(seedCustodyCuts(seed).map(cut => cut.manifest.id))
+    .toEqual(seedCheckpointPlan().map(stage => `${stage.axis}/${stage.scale}`));
+  const missing = structuredClone(seed);
+  missing.axes.recipeOccurrences.pop();
+  expect(() => seedCustodyCuts(missing)).toThrow('incomplete');
+  const mixed = structuredClone(seed);
+  mixed.axes.recipeOccurrences = mixed.axes.readerShelfEntries;
+  expect(() => seedCustodyCuts(mixed)).toThrow('incomplete');
+  const substituted = structuredClone(seed);
+  substituted.cuts = [{ manifest: { id: 'substituted' } } as RetainedSeedCut, ...seed.cuts.slice(1)];
+  expect(() => seedCustodyCuts(substituted)).toThrow('incomplete');
 });

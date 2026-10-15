@@ -1,9 +1,11 @@
 import { expect } from 'bun:test';
 import { ownerErasureCleanup } from '../../../scripts/qa/owner-erasure-cleanup.ts';
-import { parseVolumeInventory, volumeInventoryScript } from '../../../scripts/qa/volume-inventory.ts';
+import { retainedVolumeInventory } from '../../../scripts/qa/retained-volume.ts';
+import { recordRetainedPostgresCollations } from '../../../scripts/fixture/runtime-facts.ts';
+export { retainedVolumeInventory } from '../../../scripts/qa/retained-volume.ts';
 import { Elysia } from 'elysia';
 import { decodeJwt } from 'jose';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
   appendFileSync,
@@ -21,6 +23,8 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { Client, Pool } from 'pg';
+import { promisify } from 'node:util';
+import { RestoreDatabaseClones } from '../../../scripts/qa/restore-database-clones.ts';
 import { ACCOUNT_RECOVERY_USAGE_EXCLUSIONS } from '../../../services/account/src/recovery-coverage.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import {
@@ -125,7 +129,7 @@ import { erasureRoutes } from '../../../services/main/src/routes/erasures.ts';
 import { ownerRoutes } from '../../../services/main/src/routes/owners.ts';
 import { ratingAccount, restoreRatingAccount, type RetainedRatingAuth } from '../../../tests/qa/support/rating-account.ts';
 import { stable } from '../../../scripts/fixture/corpus.ts';
-import { copyVolume, currentEngines, fixtureProject, postgresImage, removeVolumes, run, volumeExists } from '../../../scripts/fixture/stack.ts';
+import { copyVolume, currentEngines, fixtureProject, removeVolumes, volumeExists } from '../../../scripts/fixture/stack.ts';
 import { repairCopiedPostgresCollations } from '../../../scripts/fixture/postgres-collation.ts';
 import { isRetainedJson, migrationInventory, type RetainedFileIntegrity, type RetainedJson, type RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
 import { fixtureModel } from '../../../scripts/fixture/model.ts';
@@ -552,9 +556,9 @@ async function runOwnerRestoreErasureFixture(options: OwnerRestoreErasureFixture
   };
   const copyGraph = (from: string, to: string) => copyVolume(from, to, qa.dockerEnv);
   let retainedPort: number | undefined;
-  const admin = async (sql: string) => {
+  const adminAt = async (port: number, sql: string) => {
     const client = new Client({
-      connectionString: `postgres://postgres:${encodeURIComponent(qa.composeEnv.POSTGRES_PASSWORD!)}@127.0.0.1:${retainedPort ?? qa.composeEnv.POSTGRES_PORT}/postgres`,
+      connectionString: `postgres://postgres:${encodeURIComponent(qa.composeEnv.POSTGRES_PASSWORD!)}@127.0.0.1:${port}/postgres`,
     });
     await client.connect();
     try {
@@ -563,6 +567,9 @@ async function runOwnerRestoreErasureFixture(options: OwnerRestoreErasureFixture
       await client.end();
     }
   };
+  const admin = (sql: string) => adminAt(Number(retainedPort ?? qa.composeEnv.POSTGRES_PORT), sql);
+  const databaseClones = new RestoreDatabaseClones(adminAt);
+  let postgresTemplate: { port: number; data: string; databases: Record<keyof typeof source, string> } | undefined;
   const pgCtlStatus = (data: string) => {
     if (!existsSync(data)) return 'stopped' as const;
     const result = spawnSync('pg_ctl', ['-D', data, 'status'], {
@@ -614,6 +621,7 @@ async function runOwnerRestoreErasureFixture(options: OwnerRestoreErasureFixture
       for (const value of [...pools])
         actions.push({ resource: 'candidate or source pool', run: () => closePool(value) });
       actions.push(...graphResources.containerCleanupActions());
+      actions.push(...databaseClones.cleanupActions());
       const sourceData = join(directory, 'postgres-source');
       for (const data of pgCopies.filter(data => data !== sourceData))
         actions.push({
@@ -649,6 +657,7 @@ async function runOwnerRestoreErasureFixture(options: OwnerRestoreErasureFixture
         run: () => timing.phase(`fixture.cleanup-resource.${index + 1}`, action.run),
       })));
       const hasOutstandingResources =
+        databaseClones.size > 0 ||
         pools.size > 0 ||
         graphResources.containers.length > 0 ||
         pgCopies.length > 0 ||
@@ -1548,7 +1557,12 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     const state = retained ? await restoreSource() : await produce();
     const { lineage, beforeCutMembershipProof, beforeCutApiSeedResult, coverage, authority, newerCoverage, newerAuthority, generation, laterAdmission, nativeAccessAttachment, original, erased, revisionId, quotedSource, availableBeforeErasure, laterRevisionId, created, retired, backupLabel, historicalManifest, manifest, prepared, principal, actor, published, principalId, leaseTemplates, postgresRecoveryMaxLocks, retainedRelayTemplate, rdfCut, liveVolume, cutVolume, native, live, custody, currentOwnerToken } = state;
     let index = 0;
-    const copy = async () => {
+    const copy = async (copyOptions: { postgres?: 'physical' | 'template'; retainPostgresTemplate?: boolean } = {}) => {
+      const template = copyOptions.postgres === 'template' ? postgresTemplate : undefined;
+      if (copyOptions.postgres === 'template' && !template)
+        throw new Error('physical cut template has not been prepared');
+      if (copyOptions.retainPostgresTemplate && (template || postgresTemplate))
+        throw new Error('physical cut template is already owned');
       if (retained) {
         const verified = await new RetainedSources().select(ownerErasureSourceAdapter(options));
         if (verified.digest !== retained.manifest.digest)
@@ -1576,10 +1590,12 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       relayUrl.pathname = `/${retainedDatabase}`;
       const data = join(directory, `postgres-${ordinal}`);
       const logFile = join(directory, `postgres-${ordinal}.log`);
-      pgCopies.push(data);
-      candidateDirectories.add(data);
-      candidateDirectories.add(logFile);
-      await timing.phase(
+      if (!template) {
+        pgCopies.push(data);
+        candidateDirectories.add(data);
+        candidateDirectories.add(logFile);
+      }
+      if (!template) await timing.phase(
         'candidate.postgres-filesystem-copy',
         () => {
           copyRecoveryTree(pgBackup, data);
@@ -1591,60 +1607,68 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         },
         ordinal,
       );
-      let port = 0;
+      let port = template?.port ?? 0;
+      let ownerDatabases: Record<keyof typeof source, string> | undefined;
+      if (template) {
+        ownerDatabases = await timing.phase('candidate.postgres-database-clone', () =>
+          databaseClones.clone(template.port, template.databases, `qa_owner_erasure_${suffix}_${ordinal}`), ordinal);
+      }
+      const restoredPool = (owner: keyof typeof source) => {
+        const url = new URL(databases.urls[owner]);
+        url.hostname = '127.0.0.1';
+        url.port = String(port);
+        if (ownerDatabases) url.pathname = `/${ownerDatabases[owner]}`;
+        url.username = 'postgres';
+        url.password = qa.composeEnv.POSTGRES_PASSWORD!;
+        return pool(url.toString());
+      };
       let owners!: { account: Pool; access: Pool; content: Pool; relay: Pool };
       await timing.phase(
-        'candidate.postgres-startup-recovery',
+        template ? 'candidate.postgres-clone-binding' : 'candidate.postgres-startup-recovery',
         async () => {
-          port = await freePort();
-          try {
-            execFileSync(
-              'pg_ctl',
-              [
-                '-D',
-                data,
-                '-l',
-                logFile,
-                '-o',
-                `-h 127.0.0.1 -p ${port} -k ${socketDirectory} -c max_locks_per_transaction=${postgresRecoveryMaxLocks}`,
-                '-t',
-                '60',
-                '-w',
-                'start',
-              ],
-              { timeout: 65_000 },
-            );
-          } catch (error) {
-            // Final disposal owns the failed copy; keep its refusal outside that custody.
+          if (!template) {
+            port = await freePort();
             try {
-              const fd = openSync(logFile, 'r');
-              let logs: string;
+              await promisify(execFile)(
+                'pg_ctl',
+                [
+                  '-D',
+                  data,
+                  '-l',
+                  logFile,
+                  '-o',
+                  `-h 127.0.0.1 -p ${port} -k ${socketDirectory} -c max_locks_per_transaction=${postgresRecoveryMaxLocks}`,
+                  '-t',
+                  '60',
+                  '-w',
+                  'start',
+                ],
+                { timeout: 65_000 },
+              );
+            } catch (error) {
+              // Final disposal owns the failed copy; keep its refusal outside that custody.
               try {
-                const size = fstatSync(fd).size;
-                const tail = Buffer.alloc(Math.min(size, 8_000));
-                const bytes = readSync(fd, tail, 0, tail.length, Math.max(0, size - tail.length));
-                logs = tail.subarray(0, bytes).toString('utf8');
-              } finally {
-                closeSync(fd);
-              }
-              for (const [key, secret] of Object.entries(qa.composeEnv)) {
-                if (secret && /(?:PASSWORD|SECRET|TOKEN|KEY)$/.test(key))
-                  logs = logs.replaceAll(secret, '[redacted]');
-              }
-              const evidence = join(artifacts, `copied-postgres-startup-${suffix}-${ordinal}.log`);
-              writeFileSync(evidence, logs.slice(-8_000), { mode: 0o600 });
-              console.error(`copied PostgreSQL startup failed; evidence: ${evidence}\n${logs.slice(-8_000)}`);
-            } catch { /* diagnostics must preserve the startup failure */ }
-            throw error;
+                const fd = openSync(logFile, 'r');
+                let logs: string;
+                try {
+                  const size = fstatSync(fd).size;
+                  const tail = Buffer.alloc(Math.min(size, 8_000));
+                  const bytes = readSync(fd, tail, 0, tail.length, Math.max(0, size - tail.length));
+                  logs = tail.subarray(0, bytes).toString('utf8');
+                } finally {
+                  closeSync(fd);
+                }
+                for (const [key, secret] of Object.entries(qa.composeEnv)) {
+                  if (secret && /(?:PASSWORD|SECRET|TOKEN|KEY)$/.test(key))
+                    logs = logs.replaceAll(secret, '[redacted]');
+                }
+                const evidence = join(artifacts, `copied-postgres-startup-${suffix}-${ordinal}.log`);
+                writeFileSync(evidence, logs.slice(-8_000), { mode: 0o600 });
+                console.error(`copied PostgreSQL startup failed; evidence: ${evidence}\n${logs.slice(-8_000)}`);
+              } catch { /* diagnostics must preserve the startup failure */ }
+              throw error;
+            }
           }
-          const restoredPool = (owner: keyof typeof source) => {
-            const url = new URL(databases.urls[owner]);
-            url.hostname = '127.0.0.1';
-            url.port = String(port);
-            url.username = 'postgres';
-            url.password = qa.composeEnv.POSTGRES_PASSWORD!;
-            return pool(url.toString());
-          };
           owners = {
             account: restoredPool('account'),
             access: restoredPool('access'),
@@ -1662,7 +1686,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
             if (recovering) await Bun.sleep(100);
           }
           expect(recovering).toBe(false);
-          await timing.phase('candidate.postgres-collation', () => repairCopiedPostgresCollations({
+          if (!template) await timing.phase('candidate.postgres-collation', () => repairCopiedPostgresCollations({
             host: '127.0.0.1', port, user: 'postgres', password: qa.composeEnv.POSTGRES_PASSWORD,
           }), ordinal);
           // Recovery connects as postgres while ordinary owner roles stay offline.
@@ -1672,6 +1696,19 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         },
         ordinal,
       );
+      if (copyOptions.retainPostgresTemplate) {
+        // Freeze baseline databases before any replay mutates the physical copy.
+        // Their cluster stays owned by final fixture disposal, independent of this copy's graph.
+        await timing.phase('candidate.postgres-template-snapshot', async () => {
+          for (const owner of Object.values(owners)) await closePool(owner);
+          const originalDatabases = Object.fromEntries(Object.entries(databases.urls).map(([owner, url]) =>
+            [owner, new URL(url).pathname.slice(1)])) as Record<keyof typeof source, string>;
+          const snapshots = await databaseClones.clone(port, originalDatabases, `qa_owner_erasure_${suffix}_template`);
+          postgresTemplate = { port, data, databases: snapshots };
+          owners = { account: restoredPool('account'), access: restoredPool('access'),
+            content: restoredPool('content'), relay: restoredPool('relay') };
+        }, ordinal);
+      }
       let graph!: Awaited<ReturnType<typeof standaloneFuseki>>;
       let restoredVolume: string | undefined;
       await timing.phase(
@@ -1876,7 +1913,10 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         },
         {
           resource: `candidate PostgreSQL ${ordinal}`,
-          run: () => stopPostgres(data),
+          run: async () => {
+            if (ownerDatabases) await databaseClones.dispose(port, ownerDatabases);
+            else if (postgresTemplate?.data !== data) stopPostgres(data);
+          },
         },
         {
           resource: `candidate retained relay database ${ordinal}`,
@@ -1899,7 +1939,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
           resource: `candidate directories ${ordinal}`,
           run: async () => {
             const failures = await attemptRestoreCleanup(
-              [data, logFile, restoredDirectory].map((path) => ({
+              [...(!template && postgresTemplate?.data !== data ? [data, logFile] : []), restoredDirectory].map((path) => ({
                 resource: `candidate directory ${path}`,
                 run: () => removeCandidateDirectory(path),
               })),
@@ -1924,6 +1964,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     };
     const retain = async (context: SourceContext) => {
       if (retained) throw new Error('a restored consumer cannot republish source custody');
+      await recordRetainedPostgresCollations(context.backup, sql => source.access.query(sql));
       await authenticated!.stop();
       const sourceVolumes = retainedSourceVolumes(context.key);
       await timing.phase('source.immutable-publication-copy', async () => {
@@ -2043,16 +2084,6 @@ function retainedSourceVolumes(key: string) {
   return { cut: `${project}_fuseki_cut`, current: `${project}_fuseki_current` };
 }
 
-/** Inventory mounted custody read-only; copyVolume remains the sole volume copier. */
-export function retainedVolumeInventory(volume: string, docker: NodeJS.ProcessEnv): Record<string, RetainedFileIntegrity> {
-  if (!volumeExists(volume, docker)) throw new Error(`retained graph volume is missing: ${volume}`);
-  const output = run('docker', ['run', '--rm', '--network', 'none', '--user', '0:0',
-    '--mount', `type=volume,source=${volume},target=/backup,readonly,volume-nocopy`,
-    '--workdir', '/backup', '--entrypoint', 'sh', postgresImage(), '-ec',
-    volumeInventoryScript], docker, 60_000);
-  return parseVolumeInventory(output);
-}
-
 /** Relative import closure binds the actual producer/helper/service bytes rather than Git HEAD. */
 export function producerModules(root: string, initial: readonly string[]): string[] {
   const paths = new Set<string>();
@@ -2104,9 +2135,9 @@ export function ownerErasureSourceSpecification(root: string, options: OwnerRest
   };
 }
 
-export function ownerErasureSourceAdapter(options: OwnerRestoreErasureFixtureOptions = {}): RetainedSourceAdapter<RetainedOwnerState, Awaited<ReturnType<typeof runOwnerRestoreErasureFixture>>> {
+export function ownerErasureSourceAdapter(options: OwnerRestoreErasureFixtureOptions = {},
+  docker = qaStack(requireFaultTier().runId).dockerEnv): RetainedSourceAdapter<RetainedOwnerState, Awaited<ReturnType<typeof runOwnerRestoreErasureFixture>>> {
   const root = resolve(import.meta.dir, '../../..');
-  const docker = qaStack(requireFaultTier().runId).dockerEnv;
   const engines = currentEngines(docker);
   const specification = ownerErasureSourceSpecification(root, options,
     JSON.parse(JSON.stringify({ engines, selectedNativeImage: pinnedImage(),

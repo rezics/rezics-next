@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
-import { exclusivePreparationWallMs, preparationTestFiles, smallRecoveryFixtureConsumers, WORK_PROFILE_SEED_BUILD_FILE, WORK_PROFILE_SEED_BUILD_WALL_MS,
-  OWNER_ERASURE_SOURCE_BUILD_FILE, OWNER_ERASURE_SOURCE_BUILD_WALL_MS } from '../../../scripts/qa/preparation-selection.ts';
+import { exclusivePreparationWallMs, OWNER_ERASURE_SOURCE_BUILD_FILE, OWNER_ERASURE_SOURCE_BUILD_WALL_MS, needsRealmDiscussionSource, preparationTestFiles, RETAINED_SOURCE_BUILD_FILE, RETAINED_SOURCE_BUILD_WALL_MS, smallRecoveryFixtureConsumers, WORK_PROFILE_SEED_BUILD_FILE, WORK_PROFILE_SEED_BUILD_WALL_MS } from '../../../scripts/qa/preparation-selection.ts';
 
 const restore = 'tests/qa/integration/work-profile-seed-checkpoints.test.ts';
 const ordinary = 'tests/qa/fault-recovery/access-restore.test.ts';
@@ -15,6 +14,21 @@ test('owner source builds are explicit, exclusive and retain both 600-second sta
   expect(() => preparationTestFiles([build, ordinary], [build, ordinary])).toThrow('alone');
   expect(exclusivePreparationWallMs([build])).toBe(OWNER_ERASURE_SOURCE_BUILD_WALL_MS);
   expect(OWNER_ERASURE_SOURCE_BUILD_WALL_MS).toBe(1_320_000);
+});
+
+test('a singleton ranking confirmation prepares its own Realm source without depending on another file', () => {
+  const ranking = 'tests/qa/integration/outcomes/realm/ranking.test.ts';
+  const proof = 'tests/qa/integration/realm-discussion-source.test.ts';
+  expect(needsRealmDiscussionSource([ranking])).toBe(true);
+  expect(needsRealmDiscussionSource([proof])).toBe(true);
+  expect(needsRealmDiscussionSource([ranking, proof])).toBe(true);
+  for (const name of ['closure-rankings', 'closure-search', 'closure-directory']) {
+    const closure = `tests/qa/integration/outcomes/realm/${name}.test.ts`;
+    expect(needsRealmDiscussionSource([closure])).toBe(false);
+    expect(needsRealmDiscussionSource([closure, ranking])).toBe(true);
+  }
+  expect(needsRealmDiscussionSource([])).toBe(false);
+  expect(needsRealmDiscussionSource([ordinary])).toBe(false);
 });
 
 test('retained fixture selection is independent for each consumer and never replaces supplied custody', () => {
@@ -59,4 +73,18 @@ test('a build cannot share its preparation command with other tests', () => {
   expect(() => preparationTestFiles([WORK_PROFILE_SEED_BUILD_FILE, ordinary], [WORK_PROFILE_SEED_BUILD_FILE]))
     .toThrow('alone');
   expect(exclusivePreparationWallMs([WORK_PROFILE_SEED_BUILD_FILE, ordinary])).toBeUndefined();
+});
+
+test('retained source repair is explicit, exclusive and has time for production and backup', () => {
+  const builds = [WORK_PROFILE_SEED_BUILD_FILE, RETAINED_SOURCE_BUILD_FILE];
+  expect(preparationTestFiles([ordinary, ...builds])).toEqual([ordinary]);
+  expect(preparationTestFiles([ordinary, ...builds], ['tests/qa/fault-recovery'])).toEqual([ordinary]);
+  expect(preparationTestFiles([RETAINED_SOURCE_BUILD_FILE])).toEqual([]);
+  expect(preparationTestFiles([RETAINED_SOURCE_BUILD_FILE], [RETAINED_SOURCE_BUILD_FILE]))
+    .toEqual([RETAINED_SOURCE_BUILD_FILE]);
+  expect(exclusivePreparationWallMs([RETAINED_SOURCE_BUILD_FILE])).toBe(2 * 600_000 + 120_000);
+  expect(RETAINED_SOURCE_BUILD_WALL_MS).toBe(1_320_000);
+  expect(() => preparationTestFiles(builds, builds)).toThrow('alone');
+  expect(() => preparationTestFiles([RETAINED_SOURCE_BUILD_FILE, ordinary], [RETAINED_SOURCE_BUILD_FILE]))
+    .toThrow('alone');
 });

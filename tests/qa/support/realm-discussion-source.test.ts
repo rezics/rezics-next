@@ -201,10 +201,17 @@ test('Account diagnostics omit verification credentials without changing the act
 test('complete builder uses 552 public draft/identity/placement commands with exact nested and episode bindings', async () => {
   const f = fixture(), directory = mkdtempSync(join(import.meta.dir, '../../../.temp/realm-corpus-unit-'));
   let graphPublications = 0, maximumGraphPublications = 0, identityPublications = 0;
+  let exactReads = 0, activeExactReads = 0, maximumExactReads = 0;
   for (const person of new Set(Object.values(f.sessions).flatMap(realm => Object.values(realm)
     .filter((value): value is PersonaSession => typeof value === 'object' && value !== null && 'main' in value)))) {
     const call = person.main;
     person.main = async (...args) => {
+      if (args[0] === 'GET' && /^\/v1\/(?:member-replies\/|realms\/[^/]+\/(?:replies|threads)\/)/.test(args[1])) {
+        exactReads++;
+        maximumExactReads = Math.max(maximumExactReads, ++activeExactReads);
+        try { await Promise.resolve(); return await call(...args); }
+        finally { activeExactReads--; }
+      }
       if (!['/v1/realm-replies', '/v1/realm-reply-placements'].includes(args[1])) return call(...args);
       const identity = args[1] === '/v1/realm-replies';
       if (identity) expect(graphPublications).toBe(0);
@@ -220,6 +227,8 @@ test('complete builder uses 552 public draft/identity/placement commands with ex
     const result = await buildRealmDiscussionCorpus(f.runtime, { key: 'unit', directory, backup: join(directory, 'backup'), budget: new FixtureWorkBudget(1_800_000) });
     validateRealmSourceMetadata(result.metadata);
     expect(maximumGraphPublications).toBe(2);
+    expect(exactReads).toBeGreaterThanOrEqual(552 * 3);
+    expect(maximumExactReads).toBeLessThanOrEqual(6);
     expect(f.requests.filter(request => request.path === '/v1/member-reply-drafts')).toHaveLength(552 + 21);
     expect(f.requests.filter(request => request.path === '/v1/realm-replies')).toHaveLength(552 + 21);
     expect(f.requests.filter(request => request.path === '/v1/realm-reply-placements')).toHaveLength(552 + 21);

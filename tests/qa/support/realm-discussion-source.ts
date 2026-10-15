@@ -461,7 +461,9 @@ export async function verifyRealmDiscussionCorpus(sessions: RealmSourceSessions,
     // those immutable bytes. The ranking outcome traverses the complete restored
     // inventory for all six readers; do not hydrate it once more during readiness.
     if (row) continue;
-    for (let start = 0; start < items.length; start += 8) await together(items.slice(start, start + 8).map(async expected => {
+    // Three views per item each need owner read sessions. Keep their combined
+    // demand below the ordinary pool's capacity, including background workers.
+    for (let start = 0; start < items.length; start += 2) await together(items.slice(start, start + 2).map(async expected => {
       // These views read the completed source with no producer writes left.
       const [selected, placed, branch] = await Promise.all([
         answer<RealmSourceReply>(realm.owner.main('GET', `/v1/member-replies/${short(expected.reply)}?${acting(realm.owner)}`)),

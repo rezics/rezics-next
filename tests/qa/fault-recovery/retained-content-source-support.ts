@@ -12,6 +12,7 @@ import { copyVolume, currentEngines, freshPorts, postgresImage, removeVolumes, r
 import { migrateTracked } from '../../../scripts/ops/migrate.ts';
 import { runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { isRetainedSourceInput, RetainedSources, sourceFileDigests, type RetainedSourceAdapter, type SourceInputs } from '../../../scripts/qa/retained-source.ts';
+import { recordRetainedPostgresCollations } from '../../../scripts/fixture/runtime-facts.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
@@ -71,7 +72,7 @@ function producerFiles(root: string): string[] {
 export function retainedContentSourceDirectory(): string {
   // A worker's preparation writes only its own fixture directory. Consumers
   // can pass the accepted custody directory explicitly to this adapter/store.
-  return join(root, '.temp', 'fixture', 'retained-sources');
+  return join(Bun.env.REZICS_QA_RETAINED_ROOT ?? root, '.temp', 'fixture', 'retained-sources');
 }
 
 function sourceResources(directory: string, key: string) {
@@ -182,8 +183,8 @@ export function retainedContentSourceSpecification(root: string, compatibility: 
     inputs: INPUTS, compatibility };
 }
 
-export function retainedContentSourceAdapter(directory = retainedContentSourceDirectory()): RetainedSourceAdapter<RetainedOwnerState, RetainedContentCandidate> {
-  const docker = qaStack(requireFaultTier().runId).dockerEnv;
+export function retainedContentSourceAdapter(directory = retainedContentSourceDirectory(),
+  docker = qaStack(requireFaultTier().runId).dockerEnv): RetainedSourceAdapter<RetainedOwnerState, RetainedContentCandidate> {
   const engines = currentEngines(docker);
   const specification = retainedContentSourceSpecification(root, JSON.parse(JSON.stringify({ engines,
       selectedNativeImage: pinnedImage(), modelGeneration: fixtureModel(root).generation,
@@ -262,6 +263,7 @@ SELECT ?g ?s ?p ?o WHERE {
             unit, input, before, beforeApi, retainedFacts: facts.results?.bindings ?? [], position, rdf };
         });
         await phase('stopped-custody', async () => {
+          await recordRetainedPostgresCollations(context.backup, sql => accessPool.query(sql));
           await Promise.all(pools.map(pool => pool.end()));
           pools.length = 0;
           await retainStoppedContentWriters(stack, async () => {

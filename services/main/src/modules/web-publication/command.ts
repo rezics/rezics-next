@@ -385,7 +385,7 @@ async function commit(
     }
     WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . FILTER(?n = ${rows[0].sequence.value}) }
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} { ${iri(record.publication)} a rv:Release ; rv:work ${iri(record.work)} ;
         rv:releaseKind "web" ; rv:releaseHead ${iri(head)} .
         FILTER NOT EXISTS { ${iri(record.id)} ?existing ?value } }
