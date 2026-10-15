@@ -179,21 +179,99 @@ function ingredientAmount(lexical: string): ParsedAmount | undefined {
   return amount ? { amount, span, amountLexical: lexical.slice(span.start, span.end), remainder } : undefined;
 }
 
-function ingredient(value: string, sourceKey: string): ImportedIngredient {
+const italianNumbers: Readonly<Record<string, number>> = {
+  un: 1, uno: 1, una: 1, due: 2, tre: 3, quattro: 4, cinque: 5, sei: 6,
+  sette: 7, otto: 8, nove: 9, dieci: 10, mezzo: 0.5, mezza: 0.5,
+};
+const italianUnitToken = String.raw`chilogrammi|chilogrammo|decilitri|decilitro|millilitri|millilitro|grammi|grammo|cucchiai|cucchiaio|cucchiaini|cucchiaino|litri|litro|pizzichi|pizzico|prese|presa|gr\.|kg|g|ml|dl|l`;
+const italianUnit = new RegExp(String.raw`^(?:${italianUnitToken})(?=$|[^\p{L}\p{N}])`, 'iu');
+const italianNumberToken = Object.keys(italianNumbers).join('|');
+
+function ingredientUnit(value: string, start: number, language: string) {
+  const local = language.split('-')[0] === 'it' ? italianUnit.exec(value.slice(start)) : undefined;
+  return local ? { start, end: start + local[0].length } : matchRecipeUnit(value, start);
+}
+
+/** Numbers in references are not quantities. Ambiguous counts retain wording alone. */
+function writtenIngredient(value: string, language: string): Partial<ImportedIngredient['qualifier']> | undefined {
+  // Never salvage a later endpoint from an invalid leading quantity.
+  if (/^\s*[-\d¼-¾⅐-⅞]/u.test(value)) return undefined;
+  const italian = language.split('-')[0] === 'it';
+  const candidates: Array<{ parsed: ParsedAmount; unit?: { start: number; end: number }; start: number; end: number }> = [];
+  const unitAt = (start: number) => ingredientUnit(value, start, language);
+  // Parenthetical catalogue/cross references (e.g. Artusi's "vedi N. 323") stay source text.
+  const outside = (start: number) => value.lastIndexOf('(', start) <= value.lastIndexOf(')', start);
+  const numeric = new RegExp(String.raw`(?<![\p{L}\p{N}/⁄.\-])${amountToken}${amountEnd}`, 'gu');
+  for (const match of value.matchAll(numeric)) {
+    const start = match.index;
+    if (!outside(start) || /\bvedi\s+N\.\s*$/iu.test(value.slice(0, start))) continue;
+    const parsed = ingredientAmount(value.slice(start));
+    if (!parsed) return undefined;
+    // A range is one quantity, not two independent candidates.
+    if (candidates.some(candidate => start < candidate.parsed.span.end)) continue;
+    parsed.span = { start, end: start + parsed.span.end };
+    const after = parsed.span.end + (value.slice(parsed.span.end).match(/^\s*/u)?.[0].length ?? 0);
+    const following = unitAt(after);
+    const prefix = value.slice(0, start);
+    const preceding = italian ? new RegExp(String.raw`(?:^|[\s,])(${italianUnitToken}|N\.)\s*$`, 'iu').exec(prefix) : undefined;
+    const unit = following ?? (preceding && preceding[1]!.toLowerCase() !== 'n.'
+      ? { start: start - preceding[0].length + preceding[0].indexOf(preceding[1]!),
+        end: prefix.trimEnd().length } : undefined);
+    const trailingCount = italian && prefix.trim() && /^[\s.]*$/u.test(parsed.remainder);
+    if (!unit && !preceding && !trailingCount) continue;
+    candidates.push({ parsed, unit, start: preceding ? start - preceding[0].length : start,
+      end: following?.end ?? parsed.span.end });
+  }
+  if (candidates.length === 1) {
+    const { parsed, unit, start, end } = candidates[0]!;
+    if (italian && /\b(?:oppure|e)\b/iu.test(value) && new RegExp(String.raw`\b(?:${italianNumberToken})\b`, 'iu').test(value)) {
+      return { amountLexical: value.trim().replace(/\.$/u, '').slice(0, 100), parseStatus: 'partial' };
+    }
+    const before = value.slice(0, start).trim().replace(/[,;:]\s*$/u, '');
+    const after = value.slice(end).trim().replace(/^di\s+/iu, '').replace(/\.$/u, '');
+    return { amount: parsed.amount, ...(parsed.amountUpper ? { amountUpper: parsed.amountUpper } : {}),
+      amountLexical: parsed.amountLexical, ...(unit ? { unitText: value.slice(unit.start, unit.end) } : {}),
+      ...(!after || after === '.' ? { name: before } : !before ? { name: after } : {}), parseStatus: 'partial' };
+  }
+  if (!italian || candidates.length) return undefined;
+  const qualitative = /\b(?:q\.\s*b\.|quanto basta|quanto una noce)\.?/iu.exec(value);
+  if (qualitative) return { amountLexical: qualitative[0], parseStatus: 'partial' };
+  const words = new RegExp(String.raw`\b(${italianNumberToken})(?:\s+o\s+(${italianNumberToken}))?\b`, 'giu');
+  const matches = [...value.matchAll(words)].filter(match => outside(match.index));
+  if (!matches.length) return undefined;
+  const first = matches[0]!;
+  const lexical = matches.length > 1 ? value.slice(first.index).trim().replace(/\.$/u, '') : first[0];
+  // Alternatives and compound counts have wording, but no single scalar quantity.
+  if (matches.length > 1) return { amountLexical: lexical.slice(0, 100), parseStatus: 'partial' };
+  const number = italianNumbers[first[1]!.toLowerCase()]!;
+  const upper = first[2] ? italianNumbers[first[2].toLowerCase()] : undefined;
+  const exact = (n: number): ExactAmount => n === 0.5 ? { numerator: 1, denominator: 2 } : { numerator: n, denominator: 1 };
+  if (upper !== undefined && upper < number) return undefined;
+  const end = first.index + first[0].length;
+  const unit = unitAt(end + (value.slice(end).match(/^\s*/u)?.[0].length ?? 0));
+  const before = value.slice(0, first.index).trim().replace(/[,;:]\s*$/u, '');
+  const after = value.slice(unit?.end ?? end).trim().replace(/^di\s+/iu, '').replace(/\.$/u, '');
+  return { amount: exact(number), ...(upper !== undefined ? { amountUpper: exact(upper) } : {}),
+    amountLexical: lexical, ...(unit ? { unitText: value.slice(unit.start, unit.end) } : {}),
+    ...(!after ? { name: before } : !before ? { name: after } : {}), parseStatus: 'partial' };
+}
+
+function ingredient(value: string, sourceKey: string, language: string): ImportedIngredient {
   const parsed = ingredientAmount(value);
   const afterSpace = (start: number) => {
     while (start < value.length && /\s/u.test(value[start]!)) start++;
     return start;
   };
-  const unitSpan = parsed ? matchRecipeUnit(value, afterSpace(parsed.span.end)) : undefined;
+  const unitSpan = parsed ? ingredientUnit(value, afterSpace(parsed.span.end), language) : undefined;
   const textParts = parsed ? { amount: parsed.span, ...(unitSpan ? { unit: unitSpan } : {}),
     name: { start: afterSpace(unitSpan?.end ?? parsed.span.end), end: value.length } } : undefined;
   const unitText = textParts?.unit ? value.slice(textParts.unit.start, textParts.unit.end) : undefined;
-  return { sourceKey, qualifier: { type: 'ingredient-line', originalText: { value, language: 'en' },
+  const written = !parsed ? writtenIngredient(value, language) : undefined;
+  return { sourceKey, qualifier: { type: 'ingredient-line', originalText: { value, language },
     ...(parsed ? { amountLexical: parsed.amountLexical, textParts } : {}),
     ...(parsed ? { amount: parsed.amount, ...(parsed.amountUpper ? { amountUpper: parsed.amountUpper } : {}) } : {}),
     ...(unitText ? { unitText } : {}), optional: false,
-    scaling: 'linear', substituteFor: [], parseStatus: parsed ? 'partial' : 'unparsed' } };
+    scaling: 'linear', substituteFor: [], parseStatus: parsed ? 'partial' : 'unparsed', ...written } };
 }
 
 function structuredIngredient(value: Record<string, unknown>, sourceKey: string,
@@ -264,11 +342,24 @@ export function importRecipe(value: unknown, sourceKey: string): RecipeImport {
     : root.recipeIngredient && typeof root.recipeIngredient === 'object'
       && Array.isArray((root.recipeIngredient as Record<string, unknown>).itemListElement)
       ? (root.recipeIngredient as { itemListElement: unknown[] }).itemListElement : [];
+  // Native exports also include a text representation for ordinary consumers.
+  // Match multiplicities, so repeated ingredients remain separate occurrences.
+  const pairedText = new Map<string, number>();
+  for (const item of ingredientRows) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const row = item as Record<string, unknown>;
+    if (row['@type'] === 'PropertyValue' && typeof row.text === 'string'
+      && ['parsed', 'partial', 'unparsed'].includes(String(row.parseStatus))) {
+      pairedText.set(row.text, (pairedText.get(row.text) ?? 0) + 1);
+    }
+  }
   const ingredients = ingredientRows.flatMap((item, index) => {
     const pointer = `${sourceKey}#/recipeIngredient/${index}`;
     const direct = originalTextOf(item);
     if (direct) {
-      const imported = ingredient(direct, pointer);
+      const paired = pairedText.get(direct) ?? 0;
+      if (paired) { pairedText.set(direct, paired - 1); return []; }
+      const imported = ingredient(direct, pointer, language);
       imported.qualifier.originalText.language = language;
       return [imported];
     }

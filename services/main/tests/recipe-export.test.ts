@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { exportRecipe, RecipeExportLimit, RECIPE_EXPORT_OCCURRENCE_LIMIT } from '../src/modules/recipe/export.ts';
 import type { OccurrenceRecord } from '../src/modules/structure/format.ts';
 import { checkOccurrenceQualifier } from '../src/modules/structure/format.ts';
+import { parseRecipeFile } from '../src/modules/recipe/file-intake.ts';
+import { recipeSourceSupportCandidates } from '../src/modules/recipe/importer.ts';
 
 test('recipe export enforces its own 1 MiB ceiling independently of synchronous import capacity', () => {
   const records = Array.from({ length: 256 }, (_, index) => ({ ...ingredient(index), role: 'step' as const,
@@ -16,9 +18,10 @@ test('owner-admitted units export unchanged and unsupported exchange units are n
     'https://rezics.com/id/00000000-0000-4000-8000-000000999999']) {
     const record = ingredient(0);
     const qualifier = { ...record.qualifier!, type: 'ingredient-line' as const, unit };
-    record.qualifier = checkOccurrenceQualifier(qualifier);
+    checkOccurrenceQualifier(qualifier);
+    record.qualifier = qualifier;
     const exported = exportRecipe([record], structure);
-    expect(exported.recipe.recipeIngredient[0]?.unitCode).toBe(unit);
+    expect(exported.recipe.recipeIngredient[0]).toHaveProperty('unitCode', unit);
     expect(exported.importability).toEqual(unit.endsWith('/OZ') ? { status: 'importable' }
       : { status: 'not-importable', code: 'recipe_unit_not_registered', unit });
   }
@@ -26,7 +29,11 @@ test('owner-admitted units export unchanged and unsupported exchange units are n
 
 const structure = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 
-function ingredient(index: number): OccurrenceRecord {
+type IngredientRecord = OccurrenceRecord & {
+  qualifier: Extract<NonNullable<OccurrenceRecord['qualifier']>, { type: 'ingredient-line' }>;
+};
+
+function ingredient(index: number): IngredientRecord {
   const suffix = (index + 2).toString(16).padStart(12, '0');
   return {
     occurrence: `https://rezics.com/id/00000000-0000-4000-8000-${suffix}`,
@@ -38,7 +45,7 @@ function ingredient(index: number): OccurrenceRecord {
 
 test('recipe export includes 4,096 occurrences and rejects the next one', () => {
   const records = Array.from({ length: RECIPE_EXPORT_OCCURRENCE_LIMIT }, (_, index) => ingredient(index));
-  expect(exportRecipe(records, structure).recipe.recipeIngredient).toHaveLength(RECIPE_EXPORT_OCCURRENCE_LIMIT);
+  expect(exportRecipe(records, structure).recipe.recipeIngredient).toHaveLength(2 * RECIPE_EXPORT_OCCURRENCE_LIMIT);
   expect(() => exportRecipe([...records, ingredient(records.length)], structure)).toThrow(RecipeExportLimit);
 });
 
@@ -54,5 +61,35 @@ test('recipe export keeps original text separate from exact quantity and its lex
     textParts: { amount: { start: 0, end: 3 }, unit: { start: 4, end: 5 }, name: { start: 6, end: 12 } },
     unitCode: 'https://qudt.org/vocab/unit/GM', unitText: 'g', optional: true,
     parseStatus: 'parsed', inLanguage: 'en',
-  }]);
+  }, '200 g butter']);
+});
+
+test('Schema.org Recipe text readers get each ingredient in order and HowTo projection preserves instruction hierarchy', () => {
+  // Primary vocabulary: https://schema.org/recipeIngredient (Text or PropertyValue)
+  // and https://schema.org/recipeInstructions (HowToStep/HowToSection list).
+  const ingredients = [ingredient(0), ingredient(1), ingredient(2)];
+  ingredients[1]!.qualifier = { ...ingredients[1]!.qualifier,
+    originalText: { value: 'Salt, q.b.', language: 'it' }, amountLexical: 'q.b.', parseStatus: 'partial' };
+  const records: OccurrenceRecord[] = [...ingredients, {
+    ...ingredient(3), role: 'group' as const, qualifier: undefined, labels: [{ value: 'Method', language: 'en' }],
+  }, { ...ingredient(4), parent: ingredient(3).occurrence, role: 'step' as const,
+    qualifier: { type: 'recipe-step' as const, instructionText: { value: 'Mix.', language: 'en' },
+      usesIngredient: [], media: [], scaling: 'linear' as const } }];
+  const { recipe } = exportRecipe(records, structure);
+  expect(recipe['@context']).toBe('https://schema.org');
+  expect(recipe['@type']).toBe('Recipe');
+  const text = recipe.recipeIngredient.filter(item => typeof item === 'string');
+  const carriers = recipe.recipeIngredient.filter(item => typeof item !== 'string');
+  expect(text).toEqual(['water', 'Salt, q.b.', 'water']);
+  expect(carriers.every(item => item['@type'] === 'PropertyValue')).toBe(true);
+  expect(carriers.map(item => item.text)).toEqual(text);
+  expect(recipe.recipeInstructions).toEqual([{ '@type': 'HowToSection', name: 'Method', inLanguage: 'en',
+    itemListElement: [{ '@type': 'HowToStep', text: 'Mix.', inLanguage: 'en' }] }]);
+  const { source, preview } = parseRecipeFile(Buffer.from(JSON.stringify(recipe)), 'application/ld+json');
+  expect(preview.ingredients.map(item => item.qualifier)).toEqual(ingredients.map(item => item.qualifier));
+  expect(recipeSourceSupportCandidates(source, preview).filter(item => item.sourceField === 'recipeIngredient'))
+    .toHaveLength(3);
+  // A foreign mixed list is not deduplicated merely because its wording matches.
+  const foreign = { ...recipe, recipeIngredient: ['water', { '@type': 'PropertyValue', name: 'water' }, 'water'] };
+  expect(parseRecipeFile(Buffer.from(JSON.stringify(foreign)), 'application/ld+json').preview.ingredients).toHaveLength(3);
 });

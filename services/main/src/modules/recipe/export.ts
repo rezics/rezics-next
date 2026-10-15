@@ -142,7 +142,10 @@ export function exportRecipe(records: readonly OccurrenceRecord[], structure: st
     });
   };
   const recipe = { '@context': 'https://schema.org', '@type': 'Recipe',
-    recipeIngredient: ingredients, recipeInstructions: instructions(structure, 0) };
+    // Schema.org accepts Text and PropertyValue. Text-only recipe managers can
+    // consume the original lines; native carriers retain independent facts.
+    recipeIngredient: [...ingredients, ...ingredients.map(line => line.text as string)],
+    recipeInstructions: instructions(structure, 0) };
   const occurrences = ingredients.length + instructionOccurrences;
   const capacity = recipeImportability(occurrences, Buffer.byteLength(JSON.stringify(recipe), 'utf8'),
     measureRecipeJSON(recipe).depth);

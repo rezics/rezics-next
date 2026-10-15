@@ -68,8 +68,14 @@ with an optional UTF-8 charset. It projects only `inLanguage`, ingredients and
 instructions into the import source, after inspecting every field for hostile
 content. No JSON-LD processor, URL fetch or remote context resolution runs.
 
-Foreign ingredient strings remain text. Every native ingredient is a
-`PropertyValue` object with these fields, including lines with no parsed facts:
+Foreign ingredient strings remain text. Export emits each native ingredient as
+an enriched `PropertyValue`, followed by the original lines as text in the same
+order. [Schema.org recipeIngredient](https://schema.org/recipeIngredient) admits
+both types (v30.1, checked 2026-10-15). Text-only consumers can read the text
+entries; REZICS intake pairs them with native carriers by exact text and
+multiplicity, preserving repeated occurrences without importing both forms.
+Foreign objects without native parse status are not paired. The enriched
+carrier has these fields, including lines with no parsed facts:
 
 | Field | Meaning |
 | --- | --- |
@@ -114,13 +120,20 @@ validation permits valid spans without lexical, amount or unit fields, and a
 verbatim name can coexist with them. Supplied fields are neither manufactured
 from spans nor silently omitted because spans are absent.
 
-Free text is parsed only when its leading quantity token ends at whitespace or a
+Free text quantities are parsed when their quantity token ends at whitespace or a
 non-letter boundary. Thus `7up soda`, `3M tape`, `200g butter` and `½cup flour`
-remain unparsed. The written-unit registry matches its complete labels, longest
+remain unparsed. Non-leading numeric quantities require a written unit, an
+Italian count marker (`N.`), or a trailing Italian count; parenthetical cross references are ignored.
+Italian sources also admit units before the number (`grammi 200`), number words
+and lexical quantities such as `q.b.` and `quanto basta`. Qualitative quantities,
+compound counts and alternatives retain wording without inventing a scalar.
+The written-unit registry matches its complete labels, longest
 first, at Unicode token boundaries; it recognizes `克` and `fluid ounces` rather
-than guessing from the first word. Parsing records `textParts` once. For a parsed
-line, parsed `amountLexical` is exactly `text.slice(amount.start, amount.end)`; the food
-name is exactly its recorded name span. An unparsed line retains the whole text
+than guessing from the first word. Leading parsing records `textParts` once.
+For these lines, parsed `amountLexical` is exactly `text.slice(amount.start, amount.end)`;
+the food name is exactly its recorded name span. Non-leading parsing uses the
+existing independent fields, recording a name only when a contiguous source
+substring identifies it, and leaves spans absent. An unparsed line retains the whole text
 only in `originalText`, with no amount or amount lexical. Structured quantities
 do not manufacture a lexical from `value` or interpret numbers in `name`; they
 do retain an independently supplied `amountLexical`, such as `about half`.

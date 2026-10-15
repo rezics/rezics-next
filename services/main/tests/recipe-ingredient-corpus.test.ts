@@ -158,7 +158,7 @@ function assertIndependentFields() {
     fields.forEach((field, index) => { if (mask & (1 << index)) Object.assign(qualifier, field); });
     checkOccurrenceQualifier(qualifier);
     const exported = exchange.exportRecipe([storedLine(qualifier)], root).recipe;
-    expect(exported.recipeIngredient[0]?.amountLexical).toBe(qualifier.amountLexical);
+    expect(exported.recipeIngredient.find(item => typeof item !== 'string')?.amountLexical).toBe(qualifier.amountLexical);
     expect(parseRecipeFile(Buffer.from(JSON.stringify(exported)), 'application/ld+json').preview.ingredients[0]?.qualifier)
       .toEqual(qualifier);
     const doubled = scaleIngredients([storedLine(qualifier)], { numerator: 2n, denominator: 1n })[0]!;
@@ -182,7 +182,7 @@ test('the independent field table kills an exporter that gates lexical wording o
   const mutation = spyOn(exchange, 'exportRecipe').mockImplementation((records, structure) => {
     const result = actualExport(records, structure);
     for (const ingredient of result.recipe.recipeIngredient) {
-      if (!ingredient.textParts) delete ingredient.amountLexical;
+      if (typeof ingredient !== 'string' && !ingredient.textParts) delete ingredient.amountLexical;
     }
     return result;
   });

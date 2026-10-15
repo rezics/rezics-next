@@ -61,7 +61,7 @@ test('recorded name spans do not consume independent quantity wording', () => {
   expect(scaleIngredients([legacy], factor)[0]?.line.endsWith(' flour')).toBe(true);
   const exported = exportRecipe([legacy], structure).recipe.recipeIngredient;
   expect(exported).toMatchObject([{ text: '1½ cups flour', value: '3/2',
-    amountLexical: 'about half' }]);
+    amountLexical: 'about half' }, '1½ cups flour']);
   expect(importRecipe({ recipeIngredient: exported }, 'round-trip').ingredients[0]?.qualifier)
     .toEqual(qualifier);
 });

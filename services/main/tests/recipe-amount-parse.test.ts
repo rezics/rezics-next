@@ -153,18 +153,19 @@ test('Boston cookbook pin parses 46 leading fractions and both ranges; its embed
   for (const [index, line] of lines.entries()) {
     const qualifier = imported.ingredients[index]!.qualifier;
     const tokens = line.trim().split(/\s+/u);
-    const expected = expectedAmounts[tokens[0]!];
+    const inline = tokens[0] === 'Yolks' || tokens[0] === 'Whites';
+    const expected = expectedAmounts[tokens[inline ? 1 : 0]!];
     const isRange = tokens[1] === 'to' || tokens[1] === 'or';
-    expect(qualifier.amountLexical).toBe(expected ? (isRange ? tokens.slice(0, 3).join(' ') : tokens[0]) : undefined);
+    expect(qualifier.amountLexical).toBe(expected ? (isRange ? tokens.slice(0, 3).join(' ') : tokens[inline ? 1 : 0]) : undefined);
     expect(qualifier.amount).toEqual(expected);
-    if (expected) {
+    if (expected && !inline) {
       expect(qualifier.textParts).toBeDefined();
       expect(qualifier.originalText.value.slice(qualifier.textParts!.amount.start, qualifier.textParts!.amount.end))
         .toBe(qualifier.amountLexical!);
     } else expect(qualifier.textParts).toBeUndefined();
     expect(qualifier.parseStatus).toBe(expected ? 'partial' : 'unparsed');
     expect(qualifier.amountUpper).toEqual(isRange ? amount(Number(tokens[2])) : undefined);
-    const writtenUnit = expected ? tokens[isRange ? 3 : 1] : undefined;
+    const writtenUnit = expected ? tokens[isRange ? 3 : inline ? 2 : 1] : undefined;
     expect(qualifier.unitText).toBe(recognizeUnit(writtenUnit) ? writtenUnit : undefined);
     if (expected) parsedCount++;
     if (isRange) rangeCount++;
@@ -174,7 +175,7 @@ test('Boston cookbook pin parses 46 leading fractions and both ranges; its embed
       else embeddedFractions.push(line.trim());
     }
   }
-  expect(parsedCount).toBe(90);
+  expect(parsedCount).toBe(94);
   expect(fractionCount).toBe(pin.fractionCount);
   expect(fractionCount).toBe(47);
   expect(parsedFractionCount).toBe(46);

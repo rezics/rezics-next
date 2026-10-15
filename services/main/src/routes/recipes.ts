@@ -121,7 +121,7 @@ const recipeExportResponse = t.Object({
       textParts: t.Optional(ingredientTextParts), optional: t.Optional(t.Literal(true)),
       parseStatus: t.Union([t.Literal('parsed'), t.Literal('partial'), t.Literal('unparsed')]),
       unitCode: t.Optional(t.String()), unitText: t.Optional(t.String()), inLanguage: t.String(),
-    }, { additionalProperties: false })]), { maxItems: RECIPE_EXPORT_OCCURRENCE_LIMIT }),
+    }, { additionalProperties: false })]), { maxItems: 2 * RECIPE_EXPORT_OCCURRENCE_LIMIT }),
     recipeInstructions: t.Array(recipeExportInstruction(), { maxItems: RECIPE_EXPORT_OCCURRENCE_LIMIT }),
   }, { additionalProperties: false }),
   residuals: t.Array(t.Object({ sourceKey: t.Nullable(t.String()), text: t.String(),

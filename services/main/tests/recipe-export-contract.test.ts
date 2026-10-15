@@ -108,7 +108,7 @@ test('the export contract refuses malformed discriminants, lexical evidence, spa
     { status: 'importable', invented: true }]) {
     expect(violations({ ...valid, importability }), JSON.stringify(importability)).not.toEqual([]);
   }
-  const line = valid.recipe.recipeIngredient[0]!;
+  const line = valid.recipe.recipeIngredient.find(item => typeof item !== 'string')!;
   for (const patch of [{ amountLexical: 1.5 }, { amountLexical: '' }, { amountLexical: 'x'.repeat(101) },
     { textParts: { amount: { start: 0, end: 2 } } },
     { textParts: { amount: { start: -1, end: 2 }, name: { start: 3, end: 5 } } },
@@ -125,7 +125,7 @@ test('the export contract refuses malformed discriminants, lexical evidence, spa
     { ...valid, sourcePosition: { ...valid.sourcePosition, invented: true } },
     { ...valid, cost: { ...valid.cost, invented: true } },
     { ...valid, recipe: { ...valid.recipe, recipeInstructions: [{ ...valid.recipe.recipeInstructions[0], invented: true }] } },
-    { ...valid, recipe: { ...valid.recipe, recipeIngredient: Array(RECIPE_EXPORT_OCCURRENCE_LIMIT + 1).fill(line) } },
+    { ...valid, recipe: { ...valid.recipe, recipeIngredient: Array(2 * RECIPE_EXPORT_OCCURRENCE_LIMIT + 1).fill(line) } },
     { ...valid, recipe: { ...valid.recipe, recipeInstructions: Array(RECIPE_EXPORT_OCCURRENCE_LIMIT + 1).fill(valid.recipe.recipeInstructions[0]) } }]) {
     expect(violations(answer)).not.toEqual([]);
   }

@@ -9,7 +9,7 @@ const destinations = new Map<PersonaName, { prefix: string; recipe: Recipe }[]>(
 let sessions: PersonaSessions;
 const recording = new OutcomeRecorder(exchange);
 type Recipe = { work: string; mainVersion: string; structure: string; revision: string; workHead: string };
-type Export = { revision: string; recipe: { recipeIngredient: Record<string, unknown>[]; recipeInstructions: unknown[] }; sourceObservations: string[]; residuals: unknown[] };
+type Export = { revision: string; recipe: { recipeIngredient: (string | Record<string, unknown>)[]; recipeInstructions: unknown[] }; sourceObservations: string[]; residuals: unknown[] };
 let source: Recipe;
 let retained: Recipe & { observation: string };
 let sourceExport: Export;
@@ -99,8 +99,11 @@ async function exchangeRecipe(name: PersonaName) {
   await answer(sample('selected-schema-org-export', 'GET', `/v1/recipes/${short(source.structure)}/export${query(person)}&revision=${encodeURIComponent(source.revision)}&format=schema-org`));
   expect(exported.revision).toBe(source.revision);
   expect(exported.recipe).toEqual(sourceExport.recipe);
-  expect(exported.recipe.recipeIngredient.map(item => item.value)).toEqual(['3/2', '1/4']);
-  expect(exported.recipe.recipeIngredient.map(item => item.inLanguage)).toEqual(['fr', 'fr']);
+  const carriers = exported.recipe.recipeIngredient.filter(item => typeof item !== 'string');
+  expect(carriers.map(item => item.value)).toEqual(['3/2', '1/4']);
+  expect(carriers.map(item => item.inLanguage)).toEqual(['fr', 'fr']);
+  expect(exported.recipe.recipeIngredient.filter(item => typeof item === 'string'))
+    .toEqual(carriers.map(item => item.text));
   expect(exported.residuals).toHaveLength(2);
   if (name !== 'owner') {
     await answer(sample('peer-file-import-denied', 'POST', importPath(source, person), exported.recipe), 403);
