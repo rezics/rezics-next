@@ -146,6 +146,23 @@ test('SEARCH19: public eligibility rejects forged author proof, missing source a
   expect(graph.commands).toBe(0);
 });
 
+test('SEARCH19: draft owner proof must exist in the current Content epoch', async () => {
+  const { graph, input, admission, env, content, access } = fixture();
+  const retained = await content.readDraftReceipt('fixture');
+  expect(retained).not.toBeNull();
+  content.readDraftReceipt = async () => null;
+  await expect(selectPublicContentSearch(env, content, access, admission, input))
+    .rejects.toBeInstanceOf(ContentEligibilityDenied);
+  content.readDraftReceipt = async () => ({ ...retained!,
+    position: { ...retained!.position, dataEpoch: randomUUID() } });
+  await expect(selectPublicContentSearch(env, content, access, admission, input))
+    .rejects.toBeInstanceOf(ContentEligibilityDenied);
+  content.readDraftReceipt = async () => retained;
+  await expect(selectPublicContentSearch(env, content, access, admission, input))
+    .rejects.toBeInstanceOf(ContentEligibilityProfileUnavailable);
+  expect(graph.commands).toBe(0);
+});
+
 test('SEARCH19/SYS10: stale graph receipt is terminal and cannot become a public release', async () => {
   const { graph, input, admission, env, content, access } = fixture();
   graph.rows = { bindings: [{

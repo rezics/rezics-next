@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { ACCOUNT_LIVE_RETENTION, CONTENT_UPLOAD_RETENTION } from './retention-reasons.ts';
 import { eraseLibraryImportsForPrincipals } from '../library-import/privacy.ts';
 import { recordAccountPreservation } from '../public-report/preservation.ts';
 import { ensureRetentionDomain, markErasureSuppressed, recordErasureInventory,
@@ -6,8 +7,7 @@ import { ensureRetentionDomain, markErasureSuppressed, recordErasureInventory,
 
 export const ACCOUNT_LIVE_DOMAIN = 'account:postgresql:live';
 export const ACCOUNT_WAL_DOMAIN = 'account:postgresql-wal:live';
-export const ACCOUNT_LIVE_RETENTION =
-  'Account PostgreSQL keeps prior credential row versions and WAL until a qualified rewrite';
+export { ACCOUNT_LIVE_RETENTION } from './retention-reasons.ts';
 
 /** Five indexed Account credential probes per subject, with at most one result per subject. */
 export async function accountCredentialsPresent(account: Pool,
@@ -67,7 +67,7 @@ export async function settleAccountErasures(relay: Pool, access: Pool, account: 
     }
     await recordErasureInventory(relay, entry.id,
       { owners: content ? ['account','content'] : ['account'], liveRetentionReason: ACCOUNT_LIVE_RETENTION,
-        liveRetentionReasons: { content: 'Content PostgreSQL keeps prior private upload row versions and WAL until a qualified rewrite' } });
+        liveRetentionReasons: { content: CONTENT_UPLOAD_RETENTION } });
     settled++;
   }
   return settled;

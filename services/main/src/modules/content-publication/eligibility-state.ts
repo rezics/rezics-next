@@ -342,18 +342,11 @@ function publicationProofQuery(ids: readonly string[]): string {
       OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?publication a rv:RevisionAnchor }
         BIND(1 AS ?anchorType) }
       ${optionalFields(GRAPHS.revisions, '?publication', publicationDecisionFields)}
-      # The eligibility receipt also names this publication. Bind only its
-      # complete succeeded publication receipt before aggregating proof fields.
-      OPTIONAL { GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ;
-        rv:outcome rv:Succeeded ; rv:publicationDecision ?publication ;
-        rv:requestDigest ?publicationRequestDigest ; rv:admissionId ?publicationAdmissionId ;
-        rv:authorityEpoch ?publicationAuthorityEpoch ; rv:admittedScope ?publicationScope ;
-        rv:contentPreparation ?publicationPreparation ; rv:contentRevision ?publicationRevision ;
-        rv:variant ?publicationVariant ; rv:resource ?publicationResource ;
-        rv:byteDigest ?publicationDigest ; rv:ownerDataEpoch ?publicationOwnerEpoch ;
-        rv:ownerSequence ?publicationOwnerSequence ; rv:expectedHead ?publicationExpectedHead ;
-        rv:datasetId ?publicationDataset ; rv:dataEpoch ?publicationGraphEpoch ;
-        rv:sequence ?publicationGraphSequence . } }
+      # Eligibility receipts also name this publication, but have no preparation.
+      # Count every publication claimant before validating its proof fields:
+      # an incomplete or failed duplicate must not disappear from the inventory.
+      OPTIONAL { GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:publicationDecision ?publication ;
+        rv:contentPreparation ?publicationPreparation . } }
       OPTIONAL { GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:publicationDecision ?publication ; a rv:OperationReceipt }
         BIND(1 AS ?receiptType) }
       ${optionalFields(GRAPHS.receipts, '?receipt', publicationReceiptFields, 'publication')}

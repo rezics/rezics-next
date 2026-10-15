@@ -9,6 +9,7 @@ import { ErasureConflict, ErasureInvalid, ErasureNotFound, ErasureStale, Erasure
   type ErasureReport } from '../modules/erasure/journal.ts';
 import { ErasureDenied, ErasureNotApplied, readRequestedErasure,
   requestContentErasure } from '../modules/erasure/request.ts';
+import { publicRetentionReason } from '../modules/erasure/retention-reasons.ts';
 import { GraphErasureConflict, GraphErasureUnavailable } from '../modules/erasure/graph.ts';
 import { MediaErasureUnsupported } from '../modules/media/erasure.ts';
 import { MediaFenced, MediaStale, MediaUnavailable } from '../modules/media/store.ts';
@@ -61,7 +62,7 @@ function result(report: ErasureReport, replayed: boolean): Response {
       ({ owner, kind, ref, completionState, completedAt })),
     // Hold bases and per-target diagnostic evidence remain in the owner journal.
     dispositions: report.stage === 'blocked' ? [] : report.dispositions.map(disposition => ({ ...disposition,
-      reason: disposition.reason === null ? null : 'Copy destruction requires verification' })),
+      reason: publicRetentionReason(disposition.reason) })),
     replayed }, { headers: { 'cache-control': 'no-store' } });
 }
 

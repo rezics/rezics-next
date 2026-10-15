@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { withReferenceFence } from './reference-fence.ts';
+import { CONTENT_LIVE_RETENTION, GRAPH_LIVE_RETENTION, GRAPH_COPY_RETENTION } from './retention-reasons.ts';
 import { lockPreservationTarget, withPreservationFence, type PreservationFence } from '../public-report/preservation.ts';
 import { ERASURE_DEFERRED_REASON, ERASURE_TARGET_OWNERS } from './schema.ts';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
@@ -35,10 +36,7 @@ export const CONTENT_ERASURE_PROFILE = 'content-revision-erasure-v1';
 /** Live Content rows lose their bytes, but PostgreSQL keeps prior versions until rewrite. */
 export const CONTENT_LIVE_DOMAIN = 'content:postgresql:live';
 export const CONTENT_WAL_DOMAIN = 'content:postgresql-wal:live';
-export const CONTENT_LIVE_RETENTION =
-  'PostgreSQL keeps prior row versions and WAL until a qualified rewrite and WAL recycling';
-export const GRAPH_LIVE_RETENTION =
-  'TDB2 and Lucene old filesets remain until a verified sanitized cutover and retirement';
+export { CONTENT_LIVE_RETENTION, GRAPH_LIVE_RETENTION } from './retention-reasons.ts';
 
 type ErasureAccess = Pick<AccessAdmissionRegistry,
   'register' | 'claim' | 'recordGraphOutcome' | 'activePrincipalId'>;
@@ -199,9 +197,9 @@ async function completeFencedContentErasure(service: ErasureService, graph: Work
         await ensureRetentionDomain(service.relay, { label, owner: 'graph', store, custody: 'live' }, retentionClient);
       }
       for (const [store, label, holdReason, custody] of [
-        ['snapshot', 'graph:snapshot:unverified', 'Snapshot destruction evidence is required', 'archive'],
-        ['tdb2', 'graph:backup:unverified', 'Backup destruction evidence is required', 'backup'],
-        ['media', 'graph:media:unverified', 'Media destruction evidence is required', 'archive'],
+        ['snapshot', 'graph:snapshot:unverified', GRAPH_COPY_RETENTION.snapshot, 'archive'],
+        ['tdb2', 'graph:backup:unverified', GRAPH_COPY_RETENTION.backup, 'backup'],
+        ['media', 'graph:media:unverified', GRAPH_COPY_RETENTION.media, 'archive'],
       ] as const) {
         await ensureRetentionDomain(service.relay, { label, owner: 'graph', store, custody, holdReason }, retentionClient);
       }
