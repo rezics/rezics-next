@@ -23,8 +23,8 @@ for (const persona of answerPersonas) {
         if (thread) {
           const query = new URL(thread.path, 'https://recorded.invalid').searchParams;
           expect(transport.query.cursor).toBe(query.get('cursor') ?? undefined);
-          expect(transport.query.sort).toBe(query.get('sort'));
-          expect(transport.query.window).toBe(query.get('window'));
+          expect<string | null>(transport.query.sort).toBe(query.get('sort'));
+          expect<string | null>(transport.query.window).toBe(query.get('window'));
         }
       } finally { transport.dispose(); }
     }
