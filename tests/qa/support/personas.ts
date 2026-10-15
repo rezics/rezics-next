@@ -332,9 +332,11 @@ async function applications(options: PersonaOptions) {
     try {
       try {
         try {
-          if (relay?.exitCode === null) relay.kill('SIGTERM');
+          const stoppingRelay = relay?.exitCode === null;
+          if (stoppingRelay) relay!.kill('SIGTERM');
           const code = await relay?.exited;
-          if (code !== undefined && code !== 0) throw new Error(`Main relay exited with ${code}`);
+          if (code !== undefined && code !== 0 && !(stoppingRelay && code === 143))
+            throw new Error(`Main relay exited with ${code}`);
         } finally {
           await lifecycle?.stop();
         }
