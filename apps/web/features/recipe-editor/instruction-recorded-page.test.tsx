@@ -49,6 +49,14 @@ test.each(['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as
       if (editor.kind === 'editor') {
         expect(JSON.stringify(editor.initial.recipe)).toContain('PRIVATE successor');
         expect(editor.initial.recipe.head).not.toBe(page.data.revision);
+        const recording = editor.initial.recipe.instructions?.find(item => item.reference.selector.grain === 'representation');
+        if (!recording || recording.reference.selector.grain !== 'representation') throw new Error('Missing private recording');
+        expect(recording.status).toBe('available');
+        expect(recording.details?.recording?.sha256).toBeTruthy();
+        const query = new URLSearchParams({ actingSubject: visit.actingSubject!, ...(recording.mediaUse ? { use: recording.mediaUse } : {}) });
+        const bytes = await visit.fetcher(`https://recorded.invalid/api/main/v1/media/representations/${recording.reference.selector.representation}/bytes?${query}`);
+        expect(bytes.status).toBe(200);
+        expect(new Uint8Array(await bytes.arrayBuffer())).toEqual(new Uint8Array(await readFile(new URL('../../../../tests/fixtures/recipes/original-tomato-method.wav', import.meta.url))));
       }
       const exported = mainRecipeExportApi(() => visit.main);
       const selection = { structure: visit.page.structure, revision: visit.page.revision, actingSubject: visit.actingSubject ?? '' };

@@ -399,6 +399,13 @@ async function productionVisits(name: PersonaName) {
   if (editor.kind === 'editor') {
     expect(editor.initial.recipe.head).toBe((await preparation!).draftRevision);
     expect(JSON.stringify(editor.initial.recipe)).toContain(privateText);
+    const recording = editor.initial.recipe.instructions?.find(item => item.reference.selector.grain === 'representation');
+    if (!recording || recording.reference.selector.grain !== 'representation') throw new Error('Owner preview has no recording');
+    expect(recording.status).toBe('available');
+    const query = new URLSearchParams({ actingSubject: person.actingSubject!, ...(recording.mediaUse ? { use: recording.mediaUse } : {}) });
+    const bytes = await fetcher(`${origin}${BFF_PREFIX}/v1/media/representations/${recording.reference.selector.representation}/bytes?${query}`);
+    expect(bytes.status).toBe(200);
+    expect(createHash('sha256').update(new Uint8Array(await bytes.arrayBuffer())).digest('hex')).toBe(recording.details?.recording?.sha256);
   }
   phase = 'exchange';
   const exported = mainRecipeExportApi(() => main);

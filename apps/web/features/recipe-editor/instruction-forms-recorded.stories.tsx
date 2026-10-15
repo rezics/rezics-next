@@ -100,6 +100,9 @@ export const PreviewDesktop: Story = { args: { persona: 'owner', surface: 'edito
   const preview = await canvas.findByRole('button', { name: 'Preview' }, { timeout: 10_000 });
   await userEvent.click(preview);
   await canvas.findByText('PRIVATE successor', { exact: false });
+  const recording = await canvas.findByRole('button', { name: englishMessages.openRecording });
+  await userEvent.click(recording);
+  await waitFor(() => expect(canvasElement.querySelector('audio[src^="blob:"]')).not.toBeNull());
   await noMiss(canvasElement);
 } };
 export const PreviewPhone: Story = { ...PreviewDesktop, globals: { viewport: { value: 'phone' } } };
