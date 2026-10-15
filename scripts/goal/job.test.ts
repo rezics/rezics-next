@@ -162,7 +162,7 @@ test('a wave worktree uses main job control to adopt and wake a later parked att
   const store = new JobStore(jobDirectory(wave));
   try {
     // No coordinator rescue: main's detached completion must adopt this newer turn itself.
-    await until(() => store.all()[0]!.phase === 'woken');
+    await until(() => store.all()[0]!.phase === 'woken' && existsSync(f.wakes));
     const job = store.all()[0]!;
     expect(job.attempt).toBe(3); expect(job.resumedAttempt).toBe(4);
     expect(readFileSync(store.log(job.id), 'utf8')).toContain(wave);
