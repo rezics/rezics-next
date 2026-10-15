@@ -58,6 +58,10 @@ console.log(JSON.stringify(loadSettings(${JSON.stringify({ directory: f.director
   });
 
   test.each([
+    [{ codexCompactTokens: { sol: 0, luna: 200000 } }, 'codexCompactTokens.sol'],
+    [{ codexCompactTokens: { sol: 160000.5, luna: 200000 } }, 'codexCompactTokens.sol'],
+    [{ codexCompactTokens: { sol: 160000 } }, 'codexCompactTokens'],
+    [{ codexCompactTokens: { sol: 160000, luna: 200000, other: 1 } }, 'codexCompactTokens.other'],
     [{ qaSlots: 0 }, 'qaSlots'],
     [{ gateLanes: 'many' }, 'gateLanes'],
     [{ unexpected: true }, 'unexpected'],
