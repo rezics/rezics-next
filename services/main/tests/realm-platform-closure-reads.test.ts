@@ -657,7 +657,7 @@ function notificationOwner() {
 
 for (const channel of ['inbox', 'count', 'digest', 'email', 'push'] as const) {
   // Owner-established Work and Realm ancestry at notification delivery is missing.
-  test.failing(`closed-notifications-${channel}: queued Realm content is reclassified at delivery while independent subjects stay available`, async () => {
+  test(`closed-notifications-${channel}: queued Realm content is reclassified at delivery while independent subjects stay available`, async () => {
     const owner = notificationOwner();
     const original = owner.queued.map(subject => subject.result);
     expect(await discloseNotifications(owner.pool, owner.queued, channel)).toEqual(original);
@@ -682,7 +682,7 @@ test('restored-notifications-preserve-reply-fence: Realm restoration cannot rele
 
 for (const channel of ['inbox', 'count', 'digest', 'email', 'push'] as const) {
   // discloseNotifications lacks the owner-established placement Realm adapter after exact subject hydration.
-  test.failing(`closure-during-notifications-${channel}-hydration: a fetched reply subject cannot survive closure before delivery`, async () => {
+  test(`closure-during-notifications-${channel}-hydration: a fetched reply subject cannot survive closure before delivery`, async () => {
     const owner = replyHydrationOwner();
     const notification = notificationOwner();
     configureDisclosurePool(notification.pool, owner.reader);
@@ -729,7 +729,7 @@ test('feed-hydration-fixture-delivers-owner-sources: both Realm-backed and indep
 });
 
 // feedSources lacks the owner-established placement Realm adapter after activity source hydration.
-test.failing('closure-during-feed-source-hydration: a Realm-backed activity drops while an independent publication stays traversable', async () => {
+test('closure-during-feed-source-hydration: a Realm-backed activity drops while an independent publication stays traversable', async () => {
   const owner = feedHydrationOwner();
   const { sources, independent } = owner;
   expect((await visibleFeedSources(owner.session, sources)).map(source => source.id)).toEqual([owner.placement, independent]);
