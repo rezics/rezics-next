@@ -23,6 +23,15 @@ const moduleFile = join(import.meta.dir, 'outcomes.ts');
 const cellsModuleFile = join(import.meta.dir, 'outcome-cells.ts');
 const helperFile = join(root, 'tests/qa/support/outcome-test.ts');
 const directories: string[] = [];
+
+test('every Recipe launch capability names API and browser proofs', () => {
+  for (const row of launchCoverage.filter(row => row.kind === 'recipes')) {
+    for (const surface of ['api', 'browser'] as const) {
+      const proof = row[surface];
+      expect('missing' in proof, `${row.kind}: ${row.capability} (${surface})`).toBe(false);
+    }
+  }
+});
 afterEach(() => {
   for (const directory of directories.splice(0))
     rmSync(directory, { recursive: true, force: true });

@@ -15,6 +15,7 @@ import { readAnimeReaderState } from './anime-hub-recorded-page.ts';
 import { booksEditionReads } from './books-edition-page.read.ts';
 import { messages } from './messages.ts';
 import { recipeWorkFrame, recipeWorkOverview } from './recipe-reading-recorded-page.tsx';
+import { recipePageReader } from './recipe-reading-recorded-page.ts';
 import { shownLine } from './types/recipe.tsx';
 import { RegionSkeleton } from './region.tsx';
 import { EVERYONE, workHref } from './route.ts';
@@ -128,6 +129,7 @@ function RecordedRecipeReading({ persona, locale, phase }: { persona: Persona; l
       anonymous: browserMainApi(window.location.origin, { anonymous: true, fetcher }),
       publicOrigin: window.location.origin,
       publicFetch: fetcher,
+      recipeReadPage: (href: string) => recipePageReader({ main, actingSubject }, href),
       actingSubject,
       signedIn: actingSubject !== null,
     };

@@ -36,6 +36,9 @@ export type RecipeWorkHost = {
   publicOrigin: string;
   publicFetch: typeof fetch;
   recordingFetch?: typeof fetch;
+  /** Browser replay supplies its continuation client here; server hosts leave
+   * this absent so the client component creates its own browser reader. */
+  recipeReadPage?: (href: string) => ReturnType<typeof recipePageReader>;
   actingSubject: string | null;
   signedIn: boolean;
 };
