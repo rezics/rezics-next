@@ -176,7 +176,7 @@ export function commandError(error: unknown): Response {
   if (typed) return typed;
   // An unrecognized error is answered as unavailable; the log carries its class
   // (and a nested checkout's holders) so the 503 can be routed to an owner.
-  logWorkerFault('main.route.dependency_unavailable', error);
+  logWorkerFault('main.route.dependency_unavailable', error, { messages: false });
   return problem(503, 'dependency_unavailable', 'Work operation could not be completed', { 'retry-after': '1' });
 }
 
@@ -185,7 +185,7 @@ export function commandError(error: unknown): Response {
  * callers choose the fallback (route handlers use 503, the app hook uses 500). */
 export function typedRefusal(error: unknown, fault: unknown = error): Response | undefined {
   const refusal = mapTypedRefusal(error);
-  if (refusal && refusal.status >= 500) logWorkerFault('main.route.typed_refusal', fault);
+  if (refusal && refusal.status >= 500) logWorkerFault('main.route.typed_refusal', fault, { messages: false });
   return refusal;
 }
 
