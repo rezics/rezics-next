@@ -175,17 +175,21 @@ test('PostgreSQL counters enforce all classes, concurrent subject budgets, safet
       .post('/v1/claims', () => Response.json({ accepted: true }))
       .listen({ hostname: '127.0.0.1', port: 0 });
     try {
-      for (const [ip, status] of [['1.1.1.1', 200], ['2.2.2.2', 200], ['3.3.3.3', 429]] as const) {
+      for (let attempt = 0; attempt < 128; attempt++) {
         expect((await fetch(`http://127.0.0.1:${network.server!.port}/v1/claims`, {
-          method: 'POST', headers: { 'x-forwarded-for': ip },
-        })).status).toBe(status);
+          method: 'POST', headers: { 'x-forwarded-for': `198.51.100.${attempt}`,
+            'x-rezics-client-ip': `203.0.113.${attempt}` },
+        })).status).toBe(attempt < 2 ? 200 : 429);
       }
       const sweepDeadline = Date.now() + 5000;
       while ((await pool.query('SELECT key FROM access.rate_limit_v1 WHERE key = $1', [expiredProbe])).rowCount
         && Date.now() < sweepDeadline) await Bun.sleep(20);
       expect((await pool.query('SELECT key FROM access.rate_limit_v1 WHERE key = $1', [expiredProbe])).rowCount).toBe(0);
       const peerKey = createHmac('sha256', options.secret).update('anonymous:127.0.0.1').digest('hex');
-      expect((await pool.query("SELECT count FROM access.rate_limit_v1 WHERE key = $1 AND family = 'write'", [peerKey])).rowCount).toBe(1);
+      const retained = await pool.query<{ count: number }>(
+        "SELECT count FROM access.rate_limit_v1 WHERE key = $1 AND family = 'write'", [peerKey]);
+      expect(retained.rowCount).toBe(1);
+      expect(retained.rows[0]!.count).toBe(3);
     } finally { await network.stop(true); }
     // Growing authority inventory cannot cause an unbounded role walk or a
     // guessed trust upgrade. The API reports unavailable when its proof bound

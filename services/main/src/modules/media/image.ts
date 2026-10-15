@@ -10,11 +10,17 @@ export interface VerifiedImage {
 export class ImageFormatRejected extends Error {}
 
 const MAX_DIMENSION = 16_384;
+/** Match the rendition decoder's admitted bitmap budget before any decode. */
+export const MAX_IMAGE_PIXELS = 32 * 1024 * 1024;
+export class ImagePixelLimitExceeded extends ImageFormatRejected {}
 
 function checked(mediaType: ImageMediaType, width: number, height: number): VerifiedImage {
   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1
     || width > MAX_DIMENSION || height > MAX_DIMENSION) {
     throw new ImageFormatRejected('image dimensions are outside the admitted range');
+  }
+  if (width * height > MAX_IMAGE_PIXELS) {
+    throw new ImagePixelLimitExceeded('image total pixels exceed the admitted range');
   }
   return { mediaType, width, height };
 }

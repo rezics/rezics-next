@@ -222,6 +222,24 @@ test('media intake replays activated uploads and repairs the revision stage with
   expect(f.state.writes).toBe(0);
 });
 
+test('a tiny original declaring an oversized bitmap is durably refused before persistence', async () => {
+  const bytes = image.slice();
+  const view = new DataView(bytes.buffer);
+  view.setUint16(6, 16_384, true);
+  view.setUint16(8, 16_384, true);
+  const f = fixture();
+  f.state.row!.sha256 = sha(bytes);
+  const response = await f.app.handle(request(intake([bytes]).body));
+  expect(response.status).toBe(422);
+  expect(await response.json()).toMatchObject({ status: 'rejected', reason: 'format-rejected', representation: null });
+  expect(f.state.writes).toBe(0);
+  expect(f.state.revisions).toBe(0);
+  const retry = intake([], undefined, true, true);
+  expect((await f.app.handle(request(retry.body))).status).toBe(422);
+  expect(retry.pulls()).toBe(0);
+  expect(f.state.settlements).toBe(1);
+});
+
 test('media intake returns 408 and cancels a stalled transfer even if cancellation stalls', async () => {
   const nativeTimeout = globalThis.setTimeout;
   const timer = spyOn(globalThis, 'setTimeout').mockImplementation(((callback: () => void, ms?: number) =>

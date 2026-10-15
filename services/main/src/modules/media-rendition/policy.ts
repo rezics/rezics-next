@@ -1,10 +1,12 @@
+import { MAX_IMAGE_PIXELS } from '../media/image.ts';
+
 /** A versioned encoding profile fixes both width and codec; crops remain Use data. */
 export const RENDITION_WIDTHS = [320, 640, 960, 1280, 1920, 2560] as const;
 export const RENDITION_TYPES = ['image/avif', 'image/webp'] as const;
 export type RenditionType = (typeof RENDITION_TYPES)[number];
 export const RENDITION_LIMITS = {
   bytes: 8 * 1024 * 1024,
-  pixels: 32 * 1024 * 1024,
+  pixels: MAX_IMAGE_PIXELS,
   dimension: 16_384,
   timeoutMs: 30_000,
   leaseMs: 60_000,

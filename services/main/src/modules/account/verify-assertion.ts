@@ -90,6 +90,8 @@ const DEFAULT_TIMEOUT_MS = 3_000;
 // verifier's bounds aligned with Account's signing-key policy.
 const ACCESS_TOKEN_SECONDS = 300;
 const SIGNING_ALLOWANCE_SECONDS = 5;
+export const ACCOUNT_KEY_CACHE_MS = 300_000;
+export const ACCOUNT_KEY_RETRY_MS = 30_000;
 type JwksSource = Exclude<Parameters<typeof verifyJwsAccessToken>[1]['jwksFetch'], string>;
 
 /**
@@ -107,6 +109,7 @@ type JwksSource = Exclude<Parameters<typeof verifyJwsAccessToken>[1]['jwksFetch'
  */
 export class AccountAssertionVerifier {
   private readonly timeoutMs: number;
+  private keys?: { until: number; pending: ReturnType<JwksSource> };
 
   constructor(private readonly config: AccountAssertionConfig) {
     for (const [name, value] of Object.entries(config)) {
@@ -127,12 +130,11 @@ export class AccountAssertionVerifier {
     const token = match[1]!;
     let signed;
     try {
-      // The provider's cache is keyed by this verifier and refetches when a
-      // token names a key it has not seen, so a newly activated key verifies
-      // at once. A retired key may stay cached here for up to five minutes;
-      // Account introspection rejects its tokens from retirement.
+      // Own the refresh clock: the provider's kid-driven cache lets arbitrary
+      // forged key IDs trigger outbound work. Account publishes staged keys
+      // for this cache lifetime before activation; introspection enforces retirement.
       signed = await verifyJwsAccessToken(token, { jwksFetch: () => this.fetchJwks(),
-        jwksCacheKey: this, verifyOptions: { issuer: this.config.issuer, audience: this.config.audience } });
+        verifyOptions: { issuer: this.config.issuer, audience: this.config.audience } });
     } catch (error) {
       if (error instanceof AccountAssertionUnavailable) throw error;
       throw new AccountAssertionDenied('invalid Account assertion');
@@ -175,11 +177,23 @@ export class AccountAssertionVerifier {
       accountScopes: typeof current.scope === 'string' ? current.scope.split(' ').filter(Boolean) : [] };
   }
 
-  private async fetchJwks(): ReturnType<JwksSource> {
-    const body = await this.exchange(this.config.jwksUrl, { method: 'GET' },
-      'Account signing keys are unavailable');
-    if (!Array.isArray(body.keys)) throw new AccountAssertionUnavailable('Account signing keys are unavailable');
-    return body as unknown as Awaited<ReturnType<JwksSource>>;
+  private fetchJwks(): ReturnType<JwksSource> {
+    if (this.keys && Date.now() < this.keys.until) return this.keys.pending;
+    // One shared promise bounds cold-start bursts and failed exchanges too.
+    // No attacker-controlled key IDs are retained.
+    const entry: { until: number; pending: ReturnType<JwksSource> } = {
+      until: Infinity, pending: this.exchange(this.config.jwksUrl, { method: 'GET' },
+        'Account signing keys are unavailable').then(body => {
+        if (!Array.isArray(body.keys)) throw new AccountAssertionUnavailable('Account signing keys are unavailable');
+        entry.until = Date.now() + ACCOUNT_KEY_CACHE_MS;
+        return body as unknown as Awaited<ReturnType<JwksSource>>;
+      }).catch((error: unknown) => {
+        entry.until = Date.now() + ACCOUNT_KEY_RETRY_MS;
+        throw error;
+      }),
+    };
+    this.keys = entry;
+    return entry.pending;
   }
 
   private introspect(token: string): Promise<Record<string, unknown>> {
