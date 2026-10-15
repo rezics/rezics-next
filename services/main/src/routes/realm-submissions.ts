@@ -28,7 +28,7 @@ function errorResponse(error: unknown) {
   return commandError(error);
 }
 export const openApiOperations = {
-  '/v1/realms/{realm}/submissions': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/submissions': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true }, post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
   '/v1/realms/{realm}/submissions/{submission}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
   '/v1/realms/{realm}/submissions/{submission}/decisions': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
   '/v1/realms/{realm}/submissions/{submission}/withdrawals': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
@@ -46,6 +46,14 @@ export function realmSubmissionRoutes(work: MainWorkDependencies) {
     return work.realmSubmissionReads;
   };
   return new Elysia()
+    .get('/v1/realms/:realm/submissions', { params: realmParams,
+      query: t.Object({ ...submissionQuery, work: readId }, { additionalProperties: false }),
+      detail, response: { 200: submissionPage, ...problems } }, async ({ request, params, query }) => {
+      try {
+        const principal = await work.account.verify(request, ['realm:adopt']);
+        return Response.json(await reads().forWork(principal, `https://rezics.com/id/${params.realm}`, query), { headers });
+      } catch (error) { return errorResponse(error); }
+    })
     .get('/v1/realms/:realm/submitted-publications', { params: realmParams,
       query: t.Object({ work: readId, actingSubject: t.Optional(readId),
         limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),

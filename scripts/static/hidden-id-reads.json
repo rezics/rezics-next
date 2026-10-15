@@ -1284,10 +1284,10 @@
   {
     "operation": "GET /v1/my/submissions",
     "ids": [
-      "query:actingSubject"
+      "query:actingSubject",
+      "query:work"
     ],
-    "status": "exempt",
-    "reason": "The only id is the caller's own acting subject."
+    "status": "registered"
   },
   {
     "operation": "GET /v1/onboarding/suggested-follows",
@@ -1890,6 +1890,15 @@
       "query:actingSubject"
     ],
     "status": "unregistered"
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/submissions",
+    "ids": [
+      "path:realm",
+      "query:actingSubject",
+      "query:work"
+    ],
+    "status": "registered"
   },
   {
     "operation": "GET /v1/realms/{realm}/submissions/{submission}",
@@ -2537,6 +2546,14 @@
       "query:actingSubject",
       "query:parent",
       "query:version"
+    ],
+    "status": "registered"
+  },
+  {
+    "operation": "GET /v1/works/{id}/contributions",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
     ],
     "status": "registered"
   },

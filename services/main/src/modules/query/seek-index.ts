@@ -262,6 +262,8 @@ export class TemplateSeekIndex {
     if(limit<1 || limit>256 || keys.length>128) throw new WorkReadUnavailable('Template seek exceeds its bound');
     // Each disjoint branch seeks at most P keys. Their merge sorts only that
     // bounded window; it never sorts the anchor inventory. Hydration is later.
+    // Lateral LIMIT keeps hydration on primary-key probes: a plain join can
+    // choose a hash scan over every entity even for a three-candidate page.
     const found: SeekCandidate[]=[];
     const selected=keys.filter(key=>!filter.kind || (key.type.endsWith('FixedRelease') ? 'release' : 'text-variant')===filter.kind);
     if(selected.length*2>budget) throw new WorkReadLimit('Template root fanout exceeds its lookahead budget');
@@ -275,14 +277,16 @@ export class TemplateSeekIndex {
         SELECT id,key FROM access.template_seek_entry WHERE epoch=$1 AND graph=$2 AND predicate=$3 AND anchor=$4 AND type=$5
         AND key >= $9::text COLLATE "C" AND key <= $10::text COLLATE "C"
         AND (key,id)>($6::text COLLATE "C",$7::text COLLATE "C") ORDER BY key,id LIMIT $8)
-        SELECT c.id,c.key,e.payload FROM candidates c JOIN access.template_seek_entity e ON e.epoch=$1 AND e.graph=$2 AND e.id=c.id
+        SELECT c.id,c.key,e.payload FROM candidates c CROSS JOIN LATERAL (
+          SELECT payload FROM access.template_seek_entity WHERE epoch=$1 AND graph=$2 AND id=c.id LIMIT 1) e
         ORDER BY c.key,c.id`,[epoch,key.graph,key.predicate,key.anchor,key.type,after?.key ?? '',after?.id ?? '',ask+1,
           filter.toYear===undefined?'':invertedPublicationYear(filter.toYear),
           filter.fromYear===undefined?invertedPublicationYear(1):invertedPublicationYear(filter.fromYear)])
         : await (accessClient(this.pool) ?? this.pool).query<{ id:string; key:string; payload: Record<string,string[]> }>(`WITH candidates AS MATERIALIZED (
         SELECT id,key FROM access.template_seek_entry WHERE epoch=$1 AND graph=$2 AND predicate=$3 AND anchor=$4 AND type=$5
         AND (key,id)>($6::text COLLATE "C",$7::text COLLATE "C") ORDER BY key,id LIMIT $8)
-        SELECT c.id,c.key,e.payload FROM candidates c JOIN access.template_seek_entity e ON e.epoch=$1 AND e.graph=$2 AND e.id=c.id
+        SELECT c.id,c.key,e.payload FROM candidates c CROSS JOIN LATERAL (
+          SELECT payload FROM access.template_seek_entity WHERE epoch=$1 AND graph=$2 AND id=c.id LIMIT 1) e
         ORDER BY c.key,c.id`,[epoch,key.graph,key.predicate,key.anchor,key.type,after?.key ?? '',after?.id ?? '',ask+1]);
       const page=rows.rows.slice(0,ask);
       found.push(...page.map(row=>({ id:row.id,key:row.key,root:key.anchor,terms:row.payload })));

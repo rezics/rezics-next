@@ -60,9 +60,18 @@ export const registeredHiddenContentRevisionReads = [
  * draft/missing revisions, including anonymous refusal. It claims response
  * equality, not equal graph/SQL read counts (recipe-export-disclosure.test.ts). */
 export const registeredHiddenRecipeExportReads = ['GET /v1/recipes/{id}/export'] as const;
+/** Work contribution/submission pages compare stranger responses for hidden and
+ * absent Work/Realm inputs in work-contribution-pages.test.ts. This is response
+ * equality coverage, without a claim of equal owner query counts. */
+export const registeredHiddenWorkContributionReads = [
+  'GET /v1/my/submissions',
+  'GET /v1/realms/{realm}/submissions',
+  'GET /v1/works/{id}/contributions',
+] as const;
 export const registeredHiddenIdOperations = [...registeredHiddenIdReads, ...registeredHiddenParentOutputReads,
   ...registeredHiddenContentRevisionReads,
   ...registeredHiddenRecipeExportReads,
+  ...registeredHiddenWorkContributionReads,
   ...registeredHiddenIdWrites].sort();
 
 // The posting contract declares disclosure inputs, separately from its observed

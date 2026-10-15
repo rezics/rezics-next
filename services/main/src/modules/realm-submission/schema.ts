@@ -51,8 +51,8 @@ export const submissionView = t.Object({ id: readUuid, realm: readId, kind: subm
   openedAt: t.String(), updatedAt: t.String() });
 export type SubmissionView = Static<typeof submissionView>;
 export const submissionResult = t.Object({ submission: submissionView, replayed: t.Boolean() });
-export const submissionPage = t.Object({ items: t.Array(submissionView, { maxItems: 20 }), ...pageFields });
-export const submissionQuery = { actingSubject: readId, state: t.Optional(submissionState),
+export const submissionPage = t.Object({ items: t.Array(submissionView, { maxItems: 20 }), ...pageFields, complete: t.Boolean() });
+export const submissionQuery = { actingSubject: readId, work: t.Optional(readId), state: t.Optional(submissionState),
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
   cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) };
 

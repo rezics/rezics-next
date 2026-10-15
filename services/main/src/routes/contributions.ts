@@ -17,9 +17,26 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { authoredBodySchema } from '../api-document.ts';
 import type { DocumentSnapshot } from '@rezics/document';
+import { readWorkContributions } from '../modules/contribution/list.ts';
+import { pageFields, pageQuery, readId, readUuid } from '../modules/work/read-contract.ts';
+import { workRead } from '../modules/work/read-session.ts';
+import { workReadError, workReadProblems } from './work-reads.ts';
 
 export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
+    .get('/v1/works/:id/contributions', {
+      params: t.Object({ id: readUuid }),
+      query: t.Object({ ...pageQuery, actingSubject: readId }, { additionalProperties: false }),
+      response: { 200: t.Object({ items: t.Array(t.Object({ contribution: readId, work: readId,
+        language: t.String(), author: readId, draftHead: readId, publicationHead: t.Nullable(readId) }),
+      { maxItems: 20 }), ...pageFields, complete: t.Boolean() }), ...workReadProblems },
+    }, async ({ request, params, query }) => {
+      try {
+        return Response.json(await workRead(work, request, { ...query, localBasis: true },
+          session => readWorkContributions(session, `https://rezics.com/id/${params.id}`)),
+        { headers: { 'cache-control': 'private, no-store' } });
+      } catch (error) { return workReadError(error); }
+    })
     .get('/v1/contributions/:contribution', {
       params: t.Object({ contribution: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       query: t.Object({ actingSubject: t.String({
@@ -177,6 +194,7 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
 }
 
 export const openApiOperations = {
+  '/v1/works/{id}/contributions': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
   '/v1/contributions/{contribution}/drafts/{revision}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
   '/v1/contributions': { post: { exposure: 'public', rateLimitFamily: 'write' } },
   '/v1/contribution-edits': { post: { exposure: 'public', rateLimitFamily: 'write' } },

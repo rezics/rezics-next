@@ -46,31 +46,53 @@ export class RealmSubmissionReads {
     if (!row) throw new SubmissionMissing('Submissions are unavailable');
   }
 
-  mine(principal: VerifiedPrincipal, options: { actingSubject: string; state?: SubmissionView['state'];
+  mine(principal: VerifiedPrincipal, options: { actingSubject: string; work?: string; state?: SubmissionView['state'];
     limit?: number; cursor?: string }) {
+    return this.page(principal, options);
+  }
+
+  forWork(principal: VerifiedPrincipal, realm: string, options: { actingSubject: string; work: string;
+    state?: SubmissionView['state']; limit?: number; cursor?: string }) {
+    return this.page(principal, options, realm);
+  }
+
+  private page(principal: VerifiedPrincipal, options: { actingSubject: string; work?: string;
+    state?: SubmissionView['state']; limit?: number; cursor?: string }, realm?: string) {
     const limit = options.limit ?? SUBMISSION_COST.pageSize;
     if (!Number.isInteger(limit) || limit < 1 || limit > SUBMISSION_COST.pageSize) {
       throw new WorkReadInvalid('Invalid page size');
     }
     return this.transaction(async (client, recoveryGeneration) => {
-      await this.authority(client, principal, options.actingSubject);
-      await client.query(`INSERT INTO access.realm_submission_author_revision VALUES ($1, 0)
-        ON CONFLICT DO NOTHING`, [options.actingSubject]);
-      const revision = (await client.query<{ revision: string }>(`SELECT revision::text FROM
-        access.realm_submission_author_revision WHERE agent = $1 FOR SHARE`, [options.actingSubject])).rows[0]!.revision;
+      await this.authority(client, principal, options.actingSubject, realm);
+      let revision: string;
+      if (options.work) {
+        const audience = realm ? `realm:${realm}` : `author:${options.actingSubject}`;
+        await client.query(`INSERT INTO access.realm_submission_work_revision (audience, work)
+          VALUES ($1, $2) ON CONFLICT DO NOTHING`, [audience, options.work]);
+        revision = (await client.query<{ revision: string }>(`SELECT revision::text FROM
+          access.realm_submission_work_revision WHERE audience = $1 AND work = $2 FOR SHARE`,
+        [audience, options.work])).rows[0]!.revision;
+      } else {
+        await client.query(`INSERT INTO access.realm_submission_author_revision VALUES ($1, 0)
+          ON CONFLICT DO NOTHING`, [options.actingSubject]);
+        revision = (await client.query<{ revision: string }>(`SELECT revision::text FROM
+          access.realm_submission_author_revision WHERE agent = $1 FOR SHARE`, [options.actingSubject])).rows[0]!.revision;
+      }
       const position = { dataEpoch: `access:${recoveryGeneration}`, sequence: revision };
-      const binding = ['my-realm-submissions', principal, options.actingSubject, options.state ?? null];
+      const binding = ['realm-submissions', principal, options.actingSubject, realm ?? null,
+        options.work ?? null, options.state ?? null];
       const cursor = decodeReadCursor(options.cursor, binding, position);
       const rows = (await client.query<SubmissionRow & { opened_key: string }>(`SELECT *,
         to_char(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS opened_key
-        FROM access.realm_submission WHERE submitting_agent = $1
-          AND ${options.state ? 'state = $2' : '$2::text IS NULL'}
-          AND ($3::timestamptz IS NULL OR (opened_at, id) > ($3::timestamptz, $4::uuid))
-        ORDER BY opened_at, id LIMIT $5`, [options.actingSubject, options.state ?? null,
-        cursor?.after ?? null, cursor?.order ?? null, limit + 1])).rows;
+        FROM access.realm_submission WHERE ${realm ? 'realm' : 'submitting_agent'} = $1
+          ${options.state ? 'AND state = $2' : 'AND $2::text IS NULL'}
+          ${cursor ? 'AND (opened_at, id) > ($3::timestamptz, $4::uuid)' : 'AND $3::timestamptz IS NULL AND $4::uuid IS NULL'}
+          ${options.work ? 'AND work = $6' : 'AND $6::text IS NULL'}
+        ORDER BY opened_at, id LIMIT $5`, [realm ?? options.actingSubject, options.state ?? null,
+        cursor?.after ?? null, cursor?.order ?? null, limit + 1, options.work ?? null])).rows;
       const chosen = rows.slice(0, limit);
       const last = chosen.at(-1);
-      return { items: chosen.map(viewSubmission), sourcePosition: position,
+      return { items: chosen.map(viewSubmission), sourcePosition: position, complete: rows.length <= limit,
         nextCursor: rows.length > limit && last
           ? encodeReadCursor(binding, position, last.opened_key, last.id) : null,
         count: { value: chosen.length, kind: 'exact-page' as const, total: null } };
