@@ -14,6 +14,20 @@ import {
 const root = resolve(import.meta.dir, '../../..');
 const shim = join(dockerShimDirectory(), 'docker');
 
+// A stub must finish writing its response before process.exit: console.log can
+// leave pipe output pending under load, making a successful ps appear empty.
+const dockerOutput = `import { writeSync } from 'node:fs';
+const output = (value) => writeSync(1, String(value) + '\\n');
+`;
+
+async function waitFor(condition: () => boolean, description: string, timeout = 10_000): Promise<void> {
+  const deadline = performance.now() + timeout;
+  while (!condition()) {
+    if (performance.now() >= deadline) throw new Error(`Timed out waiting for ${description}`);
+    await Bun.sleep(20);
+  }
+}
+
 function absentPid(): number {
   for (let pid = 2_000_000_000; pid < 2_000_000_020; pid++) {
     try { readFileSync(`/proc/${pid}/stat`); } catch { return pid; }
@@ -127,18 +141,18 @@ test('the sweep removes dead and reused owners and never lists unlabelled contai
   const log = join(directory, 'calls.jsonl');
   const owners = { dead: `${deadPid}:1`, reused: `${process.pid}:0`, live: `${process.pid}:${start}` };
   writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
-import { appendFileSync } from 'node:fs';
+${dockerOutput}import { appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
 const [command, ...rest] = args;
 if (command === 'ps') {
-  if (!rest.includes(${JSON.stringify(`label=${reapOwnerLabel}`)})) console.log('unlabelled');
-  else console.log('dead\\nreused\\nlive');
+  if (!rest.includes(${JSON.stringify(`label=${reapOwnerLabel}`)})) output('unlabelled');
+  else output('dead\\nreused\\nlive');
   process.exit(0);
 }
 if (command === 'inspect') {
   const owners = ${JSON.stringify(owners)};
-  console.log(owners[rest.at(-1)] ?? '');
+  output(owners[rest.at(-1)] ?? '');
   process.exit(0);
 }
 process.exit(0);
@@ -178,14 +192,14 @@ function dockerStub(directory: string, listed: Record<string, string>): { log: s
   mkdirSync(bin);
   const log = join(directory, 'calls.jsonl');
   writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
-import { appendFileSync } from 'node:fs';
+${dockerOutput}import { appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
 const [command, ...rest] = args;
 if (command === 'ps') {
   const filter = rest[rest.indexOf('--filter') + 1] ?? '';
   const containers = ${JSON.stringify(listed)};
-  if (containers[filter]) console.log(containers[filter]);
+  if (containers[filter]) output(containers[filter]);
   process.exit(0);
 }
 process.exit(0);
@@ -225,11 +239,11 @@ test('a shim run records every scope marker and removal deletes the container an
   const captured = join(directory, 'argv.json');
   const log = join(directory, 'calls.jsonl');
   writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
-import { appendFileSync, writeFileSync } from 'node:fs';
+${dockerOutput}import { appendFileSync, writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 if (process.env.ARGV_FILE) writeFileSync(process.env.ARGV_FILE, JSON.stringify(args));
 appendFileSync(process.env.LOG_FILE, JSON.stringify(args) + '\\n');
-if (args[0] === 'ps') console.log('marked-container');
+if (args[0] === 'ps') output('marked-container');
 process.exit(0);
 `);
   chmodSync(join(bin, 'docker'), 0o755);
@@ -281,7 +295,7 @@ test('an owner exit with no marker makes no Docker call', () => {
   mkdirSync(bin);
   const log = join(directory, 'calls.jsonl');
   writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
-import { appendFileSync } from 'node:fs';
+${dockerOutput}import { appendFileSync } from 'node:fs';
 appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + '\\n');
 process.exit(0);
 `);
@@ -413,7 +427,7 @@ test('a nested runner cancelled by SIGTERM removes its children and keeps ancest
   const hang = join(directory, 'hang.test.ts');
   const runner = join(directory, 'nested-runner.ts');
   writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
-import { appendFileSync } from 'node:fs';
+${dockerOutput}import { appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
 const removed = new Set(String(process.env.REMOVED ?? '').split(',').filter(Boolean));
@@ -430,7 +444,7 @@ if (command === 'ps') {
     : filter.startsWith('label=${reapScopeLabel}.') && !listed[filter]
       ? ['nested']
       : (listed[filter] ?? '').split('\\n');
-  console.log(ids.filter(id => id && !removed.has(id)).join('\\n'));
+  output(ids.filter(id => id && !removed.has(id)).join('\\n'));
   process.exit(0);
 }
 if (command === 'rm') process.env.REMOVED = [...removed, ...rest.slice(1).filter(id => id !== '-f')].join(',');
@@ -463,8 +477,7 @@ await commandAsync(${JSON.stringify(directory)}, 'bun', ['test', ${JSON.stringif
   let stderr = '';
   child.stderr?.on('data', chunk => { stderr += String(chunk); });
   try {
-    const deadline = Date.now() + 10_000;
-    while (!existsSync(ready) && Date.now() < deadline) await Bun.sleep(20);
+    await waitFor(() => existsSync(ready) && existsSync(join(noted, 'extra-child')), 'nested child and scope markers');
     expect(existsSync(ready), stderr).toBe(true);
     child.kill('SIGTERM');
     const closed = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
@@ -499,7 +512,7 @@ test('cancelling a runner removes a container started by a nested runner', async
   const runner = join(directory, 'runner-a.ts');
   writeFileSync(state, JSON.stringify({ containers: [{ id: 'ancestor', labels: [`${reapScopeLabel}.ancestor-scope=1`], removed: false }] }));
   writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+${dockerOutput}import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 appendFileSync(process.env.LOG, JSON.stringify(args) + '\\n');
 const statePath = process.env.STATE;
@@ -517,7 +530,7 @@ if (command === 'ps') {
   const filter = rest[rest.indexOf('--filter') + 1] ?? '';
   const key = filter.startsWith('label=') ? filter.slice('label='.length).split('=')[0] : '';
   const saved = load();
-  console.log(saved.containers.filter(container => !container.removed && container.labels.some(label => label.split('=')[0] === key)).map(container => container.id).join('\\n'));
+  output(saved.containers.filter(container => !container.removed && container.labels.some(label => label.split('=')[0] === key)).map(container => container.id).join('\\n'));
   process.exit(0);
 }
 if (command === 'rm') {
@@ -594,7 +607,7 @@ test('SIGTERM to the dispatcher stops its child and removes that child\'s scope'
   const hang = join(directory, 'hang.test.ts');
   writeFileSync(state, JSON.stringify({ containers: [{ id: 'ancestor', labels: [`${reapScopeLabel}.ancestor-scope=1`], removed: false }] }));
   writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+${dockerOutput}import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 const childState = () => {
   try {
@@ -619,7 +632,7 @@ if (command === 'ps') {
   const filter = rest[rest.indexOf('--filter') + 1] ?? '';
   const key = filter.startsWith('label=') ? filter.slice('label='.length).split('=')[0] : '';
   const saved = load();
-  console.log(saved.containers.filter(container => !container.removed && container.labels.some(label => label.split('=')[0] === key)).map(container => container.id).join('\\n'));
+  output(saved.containers.filter(container => !container.removed && container.labels.some(label => label.split('=')[0] === key)).map(container => container.id).join('\\n'));
   process.exit(0);
 }
 if (command === 'rm') {
@@ -696,7 +709,7 @@ test('a detached grandchild that ignores SIGTERM is killed after its parent exit
   const hang = join(directory, 'hang.test.ts');
   writeFileSync(state, JSON.stringify({ containers: [{ id: 'ancestor', labels: [`${reapScopeLabel}.ancestor-scope=1`], removed: false }] }));
   writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+${dockerOutput}import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 const procState = (file) => {
   try {
@@ -721,7 +734,7 @@ if (command === 'ps') {
   const filter = rest[rest.indexOf('--filter') + 1] ?? '';
   const key = filter.startsWith('label=') ? filter.slice('label='.length).split('=')[0] : '';
   const saved = load();
-  console.log(saved.containers.filter(container => !container.removed && container.labels.some(label => label.split('=')[0] === key)).map(container => container.id).join('\\n'));
+  output(saved.containers.filter(container => !container.removed && container.labels.some(label => label.split('=')[0] === key)).map(container => container.id).join('\\n'));
   process.exit(0);
 }
 if (command === 'rm') {
@@ -828,15 +841,15 @@ test('a stack started through qaStack carries the owner label and a killed owner
   const runId = `own${process.pid.toString(16).slice(0, 6)}${Date.now().toString(16).slice(-4)}`;
   writeFileSync(state, JSON.stringify({ containers: [] }));
   writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+${dockerOutput}import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 appendFileSync(process.env.LOG, JSON.stringify(args) + '\\n');
 const statePath = process.env.STATE;
 const load = () => JSON.parse(readFileSync(statePath, 'utf8'));
 const save = (value) => writeFileSync(statePath, JSON.stringify(value));
 const [command] = args;
-if (command === 'info') { console.log('28.0.0'); process.exit(0); }
-if (command === 'compose' && args.includes('--services')) { console.log('postgres'); process.exit(0); }
+if (command === 'info') { output('28.0.0'); process.exit(0); }
+if (command === 'compose' && args.includes('--services')) { output('postgres'); process.exit(0); }
 if (command === 'compose' && args.includes('config')) process.exit(0);
 if (command === 'compose' && args.includes('up')) {
   let owner = '';
@@ -856,12 +869,12 @@ if (command === 'compose' && args.includes('up')) {
 if (command === 'ps') {
   const filter = args[args.indexOf('--filter') + 1] ?? '';
   if (filter !== 'label=${reapOwnerLabel}') process.exit(0);
-  console.log(load().containers.filter(container => !container.removed).map(container => container.id).join('\\n'));
+  output(load().containers.filter(container => !container.removed).map(container => container.id).join('\\n'));
   process.exit(0);
 }
 if (command === 'inspect') {
   const id = args.at(-1);
-  console.log(load().containers.find(container => container.id === id)?.owner ?? '');
+  output(load().containers.find(container => container.id === id)?.owner ?? '');
   process.exit(0);
 }
 if (command === 'rm') {
