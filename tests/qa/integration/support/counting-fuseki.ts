@@ -1,6 +1,6 @@
 import { FusekiClient, type SparqlResult, type TemplateQueryEnvelope,
   type StatementPublicationNativeRequest, type StatementPublicationNativeResult,
-  type TemplateIndexDelta } from '../../../../services/main/src/infrastructure/fuseki.ts';
+  type LibraryCollectionNativeRequest, type LibraryCollectionNativeResult, type TemplateIndexDelta } from '../../../../services/main/src/infrastructure/fuseki.ts';
 import { runBackgroundOperation } from './operation-cost.ts';
 import { foregroundCounted } from './query-cost-meter.ts';
 import { isRetainedGraphQuery } from '../../../../services/main/src/infrastructure/graph-read-fence.ts';
@@ -33,9 +33,11 @@ export class CountingFuseki extends FusekiClient {
     return super.templateQuery(input,maxBytes);
   }
   override async templateIndex(input:StatementPublicationNativeRequest):Promise<StatementPublicationNativeResult>;
+  override async templateIndex(input:LibraryCollectionNativeRequest):Promise<LibraryCollectionNativeResult>;
   override async templateIndex(input:Parameters<FusekiClient['templateIndex']>[0]):Promise<TemplateIndexDelta>;
-  override async templateIndex(input:StatementPublicationNativeRequest | Parameters<FusekiClient['templateIndex']>[0]) {
+  override async templateIndex(input:LibraryCollectionNativeRequest | StatementPublicationNativeRequest | Parameters<FusekiClient['templateIndex']>[0]) {
     if (foregroundCounted()) this.queries++;
+    if(input.operation==='library-export-page') return super.templateIndex(input);
     if(input.operation==='statement-publication-page') return super.templateIndex(input);
     return super.templateIndex(input);
   }

@@ -101,6 +101,11 @@ test('shelf counts and import progress touch summaries as each reader inventory 
       samples.push(await measured.measure('import-batch', size, async () => {
         expect(await files.pending(agent, file.id)).toHaveLength(FILE_IMPORT_COST.page);
       }));
+      await stack.contentPool.query(`UPDATE reader.library_import_source_row SET resolution='{"choice":"private"}'::jsonb
+        WHERE agent=$1 AND file_id=$2`, [agent, file.id]);
+      const intent = { context: null, language: 'en' };
+      samples.push(await measured.measure('import-seal', size, () => files.seal(agent, file.id, intent)));
+      samples.push(await measured.measure('import-seal-replay', size, () => files.seal(agent, file.id, intent)));
       previousSize = size;
       previousFile = file.id;
     }

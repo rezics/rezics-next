@@ -1,7 +1,8 @@
 import type { Pool } from 'pg';
+import { indexedRead } from '../../infrastructure/indexed-read.ts';
 import { emptyRow, FILE_IMPORT_COST, type CanonicalRow } from '../library-import/formats/contract.ts';
 import { importDigest, type RowMatch } from '../library-import/file-store.ts';
-import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
+import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { WORK_READ_COST } from '../work/read-contract.ts';
@@ -32,6 +33,15 @@ export const retainedLibrarySourcePageSql = `SELECT s.digest AS key,s.source,s.p
 type ExportOptions = { limit?: number; cursor?: string; snapshot?: string };
 const row = (kind: CanonicalRow['kind'], id: string, work: string | null, raw: Record<string, unknown> = {}) =>
   ({ ...emptyRow(id,'',raw),kind,work });
+function ratingAfter(after: string): [string, string] {
+  if (!after) return ['', ''];
+  let key: unknown;
+  try { key = JSON.parse(after); } catch { throw new WorkReadInvalid('Invalid rating export cursor'); }
+  if (!Array.isArray(key) || key.length !== 2 || key.some(value => typeof value !== 'string')) {
+    throw new WorkReadInvalid('Invalid rating export cursor');
+  }
+  return key as [string, string];
+}
 
 /** Heterogeneous owner records prevent request-sized attempt/shelf arrays from
  * becoming library limits. Each phase seeks immutable identity keys. A Content
@@ -161,22 +171,15 @@ export class LibraryBundleExporter {
           resolution: s.resolution,outcome: s.outcome } } }));
     }
     if (phase === 4 || phase === 5) {
-      const member = phase === 5;
-      const result = await session.query(`SELECT ?id ?name ?disclosure ${member ? '?work ?placement' : ''} WHERE {
-        GRAPH ${iri(GRAPHS.current)} {
-          ?id a rv:Collection ; rv:curator ${iri(agent)} ; rv:collectionState rv:Active ;
-            schema:name ?name ; rv:disclosure ?disclosure ; rv:structure ?structure .
-          ?structure rv:selectedGeneration ?generation .
-          ${member ? '?placement a rv:OccurrencePlacement ; rv:generation ?generation ; rv:occurrenceRole rv:MemberRole ; schema:item ?work .' : ''}
-          FILTER NOT EXISTS { ?id rv:protectionHead ?protection }
-        }
-        FILTER(?disclosure IN (rv:Private,rv:Public))
-        FILTER(STR(${member ? '?placement' : '?id'}) > ${lit(after)})
-      } ORDER BY STR(${member ? '?placement' : '?id'}) LIMIT ${limit}`,limit);
-      return result.map(s => ({ key: (member ? s.placement : s.id)!.value,
-        row: { ...row(member ? 'entry' : 'shelf',(member ? s.placement : s.id)!.value,member ? s.work!.value : null,
-          { shelfId: s.id!.value,disclosure: s.disclosure!.value === `${RV}Public` ? 'public' : 'private' }),
-          title: s.name!.value,shelves: [s.name!.value] } }));
+      const result = await session.deps.environment.fuseki.templateIndex({
+        operation: 'library-export-page', agent, phase, after, limit });
+      if (result.position.dataEpoch !== session.position.dataEpoch || result.rows.length > limit) {
+        throw new WorkReadMoved('Library export inventory changed');
+      }
+      return result.rows.map(item => ({ key: item.key, row: item.kind === 'skip' ? null
+        : { ...row(item.kind === 'member' ? 'entry' : 'shelf',
+          item.kind === 'member' ? item.placement! : item.collection!, item.work ?? null,
+          { shelfId: item.collection!, disclosure: item.disclosure! }), title: item.name!, shelves: [item.name!] } }));
     }
     if (phase === 8) {
       const result = await this.content.query<{ id: string; state: CopyState }>(`SELECT id,state FROM reader.library_copy
@@ -197,7 +200,7 @@ export class LibraryBundleExporter {
     const principalId = await session.deps.access.activePrincipalId(principal);
     if (!principalId) throw new WorkReadUnavailable('Library export principal is unavailable');
     if (phase === 7) {
-      const result = await this.access.query<{
+      const result = await indexedRead(this.access, client => client.query<{
         target: string;
         context: string;
         observation: string;
@@ -206,9 +209,10 @@ export class LibraryBundleExporter {
       }>(
         `
         SELECT target,context,observation,revision,context||':'||target AS key FROM access.target_rating_head
-        WHERE principal_id=$1 AND context||':'||target>$2 ORDER BY context,target LIMIT $3`,
-        [principalId, after, limit],
-      );
+        WHERE principal_id=$1 AND (context COLLATE "C",target COLLATE "C")>($2,$3)
+        ORDER BY context COLLATE "C",target COLLATE "C" LIMIT $4`,
+        [principalId, ...ratingAfter(after), limit],
+      ));
       if (result.rows.length) {
         const reader = await session.deps.account.verify(session.request, ['rating:read']);
         if (reader.issuer !== principal.issuer || reader.subject !== principal.subject)
@@ -290,12 +294,13 @@ export class LibraryBundleExporter {
           },
         });
       }
-      return exported;
+      const keys = new Map(result.rows.map(head => [head.key, JSON.stringify([head.context, head.target])]));
+      return exported.map(item => ({ ...item, key: keys.get(item.key)! }));
     }
-    const result = await this.access.query<{ work: string; context: string; observation: string; revision: string; key: string }>(`
+    const result = await indexedRead(this.access, client => client.query<{ work: string; context: string; observation: string; revision: string; key: string }>(`
       SELECT work,context,observation,revision,context||':'||work AS key FROM access.rating_aggregate_head
-      WHERE principal_id=$1 AND target_release IS NULL AND context||':'||work>$2
-      ORDER BY context,work LIMIT $3`,[principalId,after,limit]);
+      WHERE principal_id=$1 AND target_release IS NULL AND (context COLLATE "C",work COLLATE "C")>($2,$3)
+      ORDER BY context COLLATE "C",work COLLATE "C" LIMIT $4`,[principalId,...ratingAfter(after),limit]));
     if (result.rows.length) {
       const reader = await session.deps.account.verify(session.request,['rating:read']);
       if (reader.issuer !== principal.issuer || reader.subject !== principal.subject) throw new WorkReadUnavailable('Rating export principal changed');
@@ -318,7 +323,7 @@ export class LibraryBundleExporter {
       const contextAvailable = min !== null && max !== null;
       // A withdrawn observation has no score to recreate. Keep its private
       // provenance; never invent a predecessor score to satisfy the rating API.
-      rows.push({ key: h.key,row: { ...row(v.value && contextAvailable ? 'entry' : 'retained',`rating:${h.key}`,h.work,{ ratingContext: h.context,
+      rows.push({ key: JSON.stringify([h.context,h.work]),row: { ...row(v.value && contextAvailable ? 'entry' : 'retained',`rating:${h.key}`,h.work,{ ratingContext: h.context,
         ratingScaleMax: max,ratingAvailability: v.availability!.value === `${RV}Available` ? 'available' : 'withdrawn',
         ...(!contextAvailable ? { observationRevision: h.revision, ratingValue: v.value ? Number(v.value.value) : null,
           residuals: [{ kind: 'context_unavailable', path: '/score', detail: { reason: 'RatingContext is unavailable' } }] } : {}) }),

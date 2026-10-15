@@ -29,6 +29,6 @@ test('collection export positions have flat native work and follow every owner m
   const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
   writeFileSync(join(evidence, 'maven.log'), `${stdout}\n${stderr}`);
   expect(code, `Native evidence: ${evidence}/maven.log`).toBe(0);
-  expect(stdout).toContain('Tests run: 2, Failures: 0, Errors: 0');
-  for (const line of stdout.split('\n')) if (line.startsWith('library collection fence')) console.log(line);
+  expect(stdout).toContain('Tests run: 3, Failures: 0, Errors: 0');
+  for (const line of stdout.split('\n')) if (line.startsWith('library collection ')) console.log(line);
 }, 310_000);

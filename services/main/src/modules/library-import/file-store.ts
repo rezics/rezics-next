@@ -98,14 +98,19 @@ export class LibraryFileStore {
   }
   async page(agent: string, id: string, after: number, limit = FILE_IMPORT_COST.page as number) {
     await this.file(agent,id);
-    const result = await contentConnection(this.pool).query<SourceRecord>(`SELECT r.row_number,${sourceView},r.match,r.resolution,r.outcome,r.version::text
-      FROM reader.library_import_source_row r JOIN reader.library_import_source s ON s.agent=r.agent AND s.digest=r.source_digest
-      WHERE r.agent=$1 AND r.file_id=$2 AND r.row_number>$3 ORDER BY r.row_number LIMIT $4`, [agent,id,after,limit+1]);
+    const result = await contentConnection(this.pool).query<SourceRecord>(`WITH candidates AS MATERIALIZED (
+      SELECT * FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2 AND row_number>$3 ORDER BY row_number LIMIT $4)
+      SELECT r.row_number,${sourceView},r.match,r.resolution,r.outcome,r.version::text
+      FROM candidates r CROSS JOIN LATERAL (SELECT source FROM reader.library_import_source
+        WHERE agent=r.agent AND digest=r.source_digest OFFSET 0) s ORDER BY r.row_number`, [agent,id,after,limit+1]);
     return { rows: result.rows.slice(0,limit).map(unpack), more: result.rows.length>limit };
   }
   async saveMatch(agent: string, id: string, index: number, match: RowMatch) {
-    await contentConnection(this.pool).query(`UPDATE reader.library_import_source_row SET match=$4,version=version+1
-      WHERE agent=$1 AND file_id=$2 AND row_number=$3 AND match IS NULL`, [agent,id,index,JSON.stringify(match)]);
+    // Matching and review share the file counter; take the parent lock first.
+    await contentConnection(this.pool).query(`WITH held AS MATERIALIZED (
+      SELECT id FROM reader.library_import_file WHERE agent=$1 AND id=$2 FOR UPDATE)
+      UPDATE reader.library_import_source_row r SET match=$4,version=version+1 FROM held
+      WHERE r.agent=$1 AND r.file_id=held.id AND r.row_number=$3 AND r.match IS NULL`, [agent,id,index,JSON.stringify(match)]);
   }
   async resolve(agent: string, id: string, index: number, version: number, resolution: RowResolution, key: string) {
     const borrowed = contentSessionClient(this.pool);
@@ -150,22 +155,23 @@ export class LibraryFileStore {
   }
   /** Seals inside the caller's transaction, so a command refused later leaves the upload editable. */
   async sealOn(client: PoolClient, agent: string, id: string, intent: ApplyIntent) {
-    const held = await client.query<{ apply_intent: ApplyIntent | null }>(`SELECT apply_intent FROM reader.library_import_file
+    const held = await client.query<{ apply_intent: ApplyIntent | null; unreviewed_count: number }>(`SELECT apply_intent,unreviewed_count FROM reader.library_import_file
       WHERE agent=$1 AND id=$2 AND expires_at>clock_timestamp() FOR UPDATE`, [agent,id]);
     if (!held.rows[0]) throw new LibraryFileMissing('Import file was deleted, expired or is unavailable');
-    if (held.rows[0].apply_intent && importDigest(held.rows[0].apply_intent) !== importDigest(intent)) {
-      throw new ReaderImportConflict('Apply context or language changed');
+    if (held.rows[0].apply_intent) {
+      if (importDigest(held.rows[0].apply_intent) !== importDigest(intent)) throw new ReaderImportConflict('Apply context or language changed');
+      return;
     }
-    const unresolved = await client.query(`SELECT row_number FROM reader.library_import_source_row
-      WHERE agent=$1 AND file_id=$2 AND resolution IS NULL
-        AND (match IS NULL OR match->>'kind' != 'matched') LIMIT 1`, [agent,id]);
-    if (unresolved.rowCount) throw new ReaderImportConflict('Review all rows and resolve or keep ambiguous and missing rows private');
+    if (held.rows[0].unreviewed_count) throw new ReaderImportConflict('Review all rows and resolve or keep ambiguous and missing rows private');
     await client.query(`UPDATE reader.library_import_file SET apply_intent=$3 WHERE agent=$1 AND id=$2`, [agent,id,JSON.stringify(intent)]);
   }
   async pending(agent: string, id: string) {
-    const rows = await contentConnection(this.pool).query<SourceRecord>(`SELECT r.row_number,${sourceView},r.match,r.resolution,r.outcome,r.version::text
-      FROM reader.library_import_source_row r JOIN reader.library_import_source s ON s.agent=r.agent AND s.digest=r.source_digest
-      WHERE r.agent=$1 AND r.file_id=$2 AND r.outcome IS NULL ORDER BY r.row_number LIMIT ${FILE_IMPORT_COST.page}`, [agent,id]);
+    const rows = await contentConnection(this.pool).query<SourceRecord>(`WITH candidates AS MATERIALIZED (
+      SELECT * FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2 AND outcome IS NULL
+        ORDER BY row_number LIMIT ${FILE_IMPORT_COST.page})
+      SELECT r.row_number,${sourceView},r.match,r.resolution,r.outcome,r.version::text
+      FROM candidates r CROSS JOIN LATERAL (SELECT source FROM reader.library_import_source
+        WHERE agent=r.agent AND digest=r.source_digest OFFSET 0) s ORDER BY r.row_number`, [agent,id]);
     return rows.rows.map(unpack);
   }
   async complete(agent: string, id: string, index: number, outcome: NonNullable<StoredSourceRow['outcome']>,token?: string) {

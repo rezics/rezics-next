@@ -387,12 +387,13 @@ final class TemplateIndexService {
             "anchor",key.anchor(),"type",key.type(),"sequence",basis(data,key),"previous",previous.getOrDefault(key,basis(data,key)))).toList());
         return result;
     }
-    private static Map<String,String> position(DatasetGraph data) {
+    static Map<String,String> position(DatasetGraph data) {
         return Map.of("dataEpoch",values(data,CommandPolicy.CONTROL,"urn:rezics:dataset:product",RV+"dataEpoch").getFirst(),
             "sequence",values(data,CommandPolicy.CONTROL,"urn:rezics:dataset:product",RV+"sequence").getFirst());
     }
     static Map<String,Object> read(DatasetGraph data, JsonObject request) {
         String operation=ProfileRegistry.required(request,"operation");
+        if ("library-export-page".equals(operation)) return LibraryCollectionPage.read(data,request);
         if ("statement-publication-page".equals(operation)) return StatementPublicationMembership.read(data,request);
         if ("membership-prepare".equals(operation)) return membershipPrepare(data,request,MembershipProfiles.VALUE);
         if ("membership-status".equals(operation)) return membershipStatus(data);

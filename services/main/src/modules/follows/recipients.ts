@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { indexedRead as indexedRecipientRead } from '../../infrastructure/indexed-read.ts';
 import type { ProposalSubscriptionReason } from '../notification/store.ts';
 
 export interface RelationshipRecipients {
@@ -89,52 +90,6 @@ function validateRecipients(input: RelationshipRecipients) {
     (input.editorial?.proposals.length ?? 0) > RELATIONSHIP_RECIPIENT_COST.proposals
   )
     throw new Error('Relationship recipient input bound exceeded');
-}
-
-/** ORDER/LIMIT alone can still sort a whole audience. Scope the indexed-read
- * plan to this batch, then restore the caller's planner settings. Each source
- * has an ordered index; bitmap scans would materialize its entire range.
- * https://www.postgresql.org/docs/18/runtime-config-query.html
- * https://www.postgresql.org/docs/18/functions-admin.html#FUNCTIONS-ADMIN-SET
- */
-async function indexedRecipientRead<T>(
-  pool: Pool | PoolClient,
-  read: (client: Pick<PoolClient, 'query'>) => Promise<T>,
-): Promise<T> {
-  const scoped = async (client: Pick<PoolClient, 'query'>) => {
-    const previous = (
-      await client.query<{ sequential: string; bitmap: string }>(
-        `SELECT current_setting('enable_seqscan') AS sequential,current_setting('enable_bitmapscan') AS bitmap`,
-      )
-    ).rows[0]!;
-    await client.query(
-      `SELECT set_config('enable_seqscan','off',true),set_config('enable_bitmapscan','off',true)`,
-    );
-    try {
-      return await read(client);
-    } finally {
-      await client
-        .query(
-          `SELECT set_config('enable_seqscan',$1,true),set_config('enable_bitmapscan',$2,true)`,
-          [previous.sequential, previous.bitmap],
-        )
-        .catch(() => {});
-    }
-  };
-  if ('release' in pool) return scoped(pool);
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN READ ONLY');
-    await client.query("SET LOCAL statement_timeout = '5s'");
-    const result = await scoped(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
-    throw error;
-  } finally {
-    client.release();
-  }
 }
 
 /** Realm identity comes from this exact projected alias, never by enumerating

@@ -34,25 +34,29 @@ CREATE TRIGGER library_status_z_counts AFTER INSERT OR UPDATE OR DELETE ON reade
 ALTER TABLE reader.library_import_file
   ADD COLUMN total_count integer NOT NULL DEFAULT 0 CHECK (total_count >= 0),
   ADD COLUMN completed_count integer NOT NULL DEFAULT 0 CHECK (completed_count >= 0),
-  ADD COLUMN issue_count integer NOT NULL DEFAULT 0 CHECK (issue_count >= 0);
-UPDATE reader.library_import_file f SET total_count=s.total,completed_count=s.completed,issue_count=s.issues
+  ADD COLUMN issue_count integer NOT NULL DEFAULT 0 CHECK (issue_count >= 0),
+  ADD COLUMN unreviewed_count integer NOT NULL DEFAULT 0 CHECK (unreviewed_count >= 0);
+UPDATE reader.library_import_file f SET total_count=s.total,completed_count=s.completed,issue_count=s.issues,unreviewed_count=s.unreviewed
 FROM (SELECT agent,file_id,count(*)::integer AS total,count(outcome)::integer AS completed,
-  count(*) FILTER (WHERE jsonb_array_length(outcome->'issues')>0)::integer AS issues
+  count(*) FILTER (WHERE jsonb_array_length(outcome->'issues')>0)::integer AS issues,
+  count(*) FILTER (WHERE resolution IS NULL AND (match IS NULL OR match->>'kind'<>'matched'))::integer AS unreviewed
   FROM reader.library_import_source_row GROUP BY agent,file_id) s WHERE f.agent=s.agent AND f.id=s.file_id;
 
 CREATE FUNCTION reader.advance_library_import_counts() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF TG_OP='UPDATE' AND (OLD.agent,OLD.file_id,OLD.outcome) IS NOT DISTINCT FROM (NEW.agent,NEW.file_id,NEW.outcome) THEN RETURN NULL; END IF;
+  IF TG_OP='UPDATE' AND (OLD.agent,OLD.file_id,OLD.outcome,OLD.match,OLD.resolution) IS NOT DISTINCT FROM (NEW.agent,NEW.file_id,NEW.outcome,NEW.match,NEW.resolution) THEN RETURN NULL; END IF;
   IF TG_OP<>'INSERT' THEN
     UPDATE reader.library_import_file SET total_count=total_count-1,
       completed_count=completed_count-(OLD.outcome IS NOT NULL)::integer,
-      issue_count=issue_count-coalesce((jsonb_array_length(OLD.outcome->'issues')>0)::integer,0)
+      issue_count=issue_count-coalesce((jsonb_array_length(OLD.outcome->'issues')>0)::integer,0),
+      unreviewed_count=unreviewed_count-coalesce((OLD.resolution IS NULL AND (OLD.match IS NULL OR OLD.match->>'kind'<>'matched'))::integer,0)
       WHERE agent=OLD.agent AND id=OLD.file_id;
   END IF;
   IF TG_OP<>'DELETE' THEN
     UPDATE reader.library_import_file SET total_count=total_count+1,
       completed_count=completed_count+(NEW.outcome IS NOT NULL)::integer,
-      issue_count=issue_count+coalesce((jsonb_array_length(NEW.outcome->'issues')>0)::integer,0)
+      issue_count=issue_count+coalesce((jsonb_array_length(NEW.outcome->'issues')>0)::integer,0),
+      unreviewed_count=unreviewed_count+coalesce((NEW.resolution IS NULL AND (NEW.match IS NULL OR NEW.match->>'kind'<>'matched'))::integer,0)
       WHERE agent=NEW.agent AND id=NEW.file_id;
   END IF;
   RETURN NULL;

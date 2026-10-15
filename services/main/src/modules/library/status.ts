@@ -1,3 +1,4 @@
+import { indexedRead } from '../../infrastructure/indexed-read.ts';
 import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
@@ -365,26 +366,28 @@ export class ReaderLibraryStatusStore {
     // Restrict the first scan to nonnull values so either index direction can
     // serve LIMIT without a sort over the whole shelf. Then enter the null tail.
     // https://www.postgresql.org/docs/current/indexes-ordering.html
-    const found: Array<Row & { sort_value: string | null }> = [];
-    if (!after || after.value !== null) {
-      const boundary = after ? `AND (${key},work) ${compare} ($4::${type},$5::text)` : '';
-      const rows = await contentConnection(this.pool).query<Row & { sort_value: string | null }>(`
-        SELECT ${columns}, (${key})::text AS sort_value FROM reader.library_status AS shelf
-        WHERE agent = $1 AND status = $2 AND ${key} IS NOT NULL ${boundary}
-        ORDER BY ${key} ${direction}, work ${direction} LIMIT $3`,
-      [agent, status, limit, ...(after ? [after.value, after.work] : [])]);
-      found.push(...rows.rows);
-    }
-    if (found.length < limit && sort !== 'added') {
-      const nullBoundary = after?.value === null ? `AND work ${compare} $4::text` : '';
-      const rows = await contentConnection(this.pool).query<Row & { sort_value: string | null }>(`
-        SELECT ${columns}, NULL::text AS sort_value FROM reader.library_status AS shelf
-        WHERE agent = $1 AND status = $2 AND ${key} IS NULL ${nullBoundary}
-        ORDER BY work ${direction} LIMIT $3`,
-      [agent, status, limit - found.length, ...(after?.value === null ? [after.work] : [])]);
-      found.push(...rows.rows);
-    }
-    return found.map(row => ({ ...state(row.work, row), sortValue: row.sort_value }));
+    return indexedRead(contentConnection(this.pool), async client => {
+      const found: Array<Row & { sort_value: string | null }> = [];
+      if (!after || after.value !== null) {
+        const boundary = after ? `AND (${key},work) ${compare} ($4::${type},$5::text)` : '';
+        const rows = await client.query<Row & { sort_value: string | null }>(`
+          SELECT ${columns}, (${key})::text AS sort_value FROM reader.library_status AS shelf
+          WHERE agent = $1 AND status = $2 AND ${key} IS NOT NULL ${boundary}
+          ORDER BY ${key} ${direction}, work ${direction} LIMIT $3`,
+        [agent, status, limit, ...(after ? [after.value, after.work] : [])]);
+        found.push(...rows.rows);
+      }
+      if (found.length < limit && sort !== 'added') {
+        const nullBoundary = after?.value === null ? `AND work ${compare} $4::text` : '';
+        const rows = await client.query<Row & { sort_value: string | null }>(`
+          SELECT ${columns}, NULL::text AS sort_value FROM reader.library_status AS shelf
+          WHERE agent = $1 AND status = $2 AND ${key} IS NULL ${nullBoundary}
+          ORDER BY work ${direction} LIMIT $3`,
+        [agent, status, limit - found.length, ...(after?.value === null ? [after.work] : [])]);
+        found.push(...rows.rows);
+      }
+      return found.map(row => ({ ...state(row.work, row), sortValue: row.sort_value }));
+    }, true);
   }
 
   // Continue uses the same indexed added order and timestamp/Work seek as shelves.

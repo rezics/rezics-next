@@ -11,6 +11,7 @@ import org.apache.jena.query.QueryExecutionFactory;
 import org.apache.jena.query.ReadWrite;
 import org.apache.jena.sparql.core.*;
 import org.junit.Test;
+import org.apache.jena.tdb2.TDB2Factory;
 
 public class LibraryCollectionPositionTest {
     private static Node uri(String value) { return NodeFactory.createURI(value); }
@@ -94,5 +95,71 @@ public class LibraryCollectionPositionTest {
             change(data,primary -> primary.deleteAny(CURRENT,COLLECTION,Node.ANY,Node.ANY),"urn:receipt:delete");
             assertTrue(data.contains(CONTROL,OTHER,p("libraryCollectionPosition"),uri("urn:receipt:delete")));
         } finally { data.abort(); data.end(); data.close(); }
+    }
+    @Test public void exportPagesSeekPhysicalWindowsAcrossCollectionsAndLongMemberships() throws Exception {
+        Node agent=uri("https://rezics.com/id/00000000-0000-4000-8000-000000000001");
+        for(int size:new int[]{32,128,512}) {
+            var path=java.nio.file.Files.createTempDirectory("library-export-page-");
+            var store=TDB2Factory.connectDataset(path.toString());
+            var data=store.asDatasetGraph();
+            try {
+                data.begin(ReadWrite.WRITE);
+                Node control=uri(CommandPolicy.CONTROL),dataset=uri("urn:rezics:dataset:product");
+                data.add(control,dataset,p("dataEpoch"),NodeFactory.createLiteralString("epoch"));
+                data.add(control,dataset,p("sequence"),NodeFactory.createLiteralString("1"));
+                for(int i=0;i<=size;i++) {
+                    Node collection=id(100+i),structure=id(10000+i),generation=id(20000+i);
+                    data.add(CURRENT,collection,org.apache.jena.vocabulary.RDF.type.asNode(),p("Collection"));
+                    data.add(CURRENT,collection,p("curator"),agent);
+                    data.add(CURRENT,collection,p("collectionState"),p("Active"));
+                    data.add(CURRENT,collection,p("disclosure"),p("Private"));
+                    data.add(CURRENT,collection,uri("https://schema.org/name"),NodeFactory.createLiteralString("Shelf "+i));
+                    data.add(CURRENT,collection,p("structure"),structure);
+                    data.add(CURRENT,structure,p("selectedGeneration"),generation);
+                }
+                for(int i=0;i<size;i++) {
+                    Node placement=id(30000+i);
+                    data.add(CURRENT,placement,p("generation"),id(20000));
+                    data.add(CURRENT,placement,p("occurrenceRole"),p(i==0?"GroupRole":"MemberRole"));
+                    data.add(CURRENT,placement,uri("https://schema.org/item"),id(40000+i));
+                    if(i==1) data.add(CURRENT,placement,p("removedBy"),id(50000));
+                }
+                data.commit();data.end();
+                var counted=new Counted(data);counted.begin(ReadWrite.READ);
+                try(var execution=QueryExecutionFactory.create("SELECT ?id WHERE { GRAPH <"+CommandPolicy.CURRENT
+                    +"> { ?id <"+p("curator").getURI()+"> <"+agent+"> } } ORDER BY STR(?id) LIMIT 21",DatasetFactory.wrap(counted))) {
+                    var results=execution.execSelect();while(results.hasNext()) results.next();
+                } finally { counted.end(); }
+                assertTrue(counted.rows>=size);
+                long[] firstRows=new long[2];
+                for(int phase:new int[]{4,5}) {
+                    String after="";int delivered=0,pages=0;
+                    var seen=new java.util.HashSet<String>();
+                    while(true) {
+                        var request=CommandService.jsonObject(java.util.Map.of("operation","library-export-page","agent",agent.getURI(),
+                            "phase",phase,"after",after,"limit",21));
+                        var result=LibraryCollectionPage.read(data,request);
+                        @SuppressWarnings("unchecked") var rows=(java.util.List<java.util.Map<String,Object>>)result.get("rows");
+                        int examined=(Integer)result.get("examined");
+                        assertTrue("native RDF rows stay within the requested window",examined<=21*7);
+                        if(pages++==0) firstRows[phase-4]=examined;
+                        for(var row:rows) {
+                            if(!row.get("kind").equals("skip")) { delivered++;assertTrue(seen.add(row.get(phase==4?"collection":"placement").toString())); }
+                        }
+                        if(rows.size()<21) break;
+                        after=rows.getLast().get("key").toString();
+                        assertTrue(pages<1000);
+                    }
+                    assertEquals(phase==4?size+1:size-2,delivered);
+                }
+                System.out.println("library collection page size="+size+" oldSortedRows="+counted.rows
+                    +" shelfRows="+firstRows[0]+" membershipRows="+firstRows[1]);
+            } finally {
+                store.close();
+                try(var paths=java.nio.file.Files.walk(path)) {
+                    for(var item:paths.sorted(java.util.Comparator.reverseOrder()).toList()) java.nio.file.Files.delete(item);
+                }
+            }
+        }
     }
 }
