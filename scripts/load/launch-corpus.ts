@@ -309,6 +309,7 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
   }, signal);
 
   await authorize('work:create:root', 'work.create');
+  await authorize('catalogue:verify:root', 'catalogue.verify');
   await authorize('rights:assess', 'rights.assess');
   await authorize(`submission:submit:${space.realm}`, 'submission.submit');
   await authorize(`publication:adopt:${space.realm}`, 'publication.adopt');
@@ -354,6 +355,11 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
           idempotencyKey: assessmentKey } }, signal);
     }
 
+    await api.command(`${key}:verification:${source.pinId}:${source.recipeId}`, {
+      method: 'POST', path: `/v1/works/${short(work.work)}/catalogue-verifications`, body: {
+        expectedHead: work.workRevision, actingSubject: actor,
+        evidence: `${sourceUrl} sha256:${source.sourceSha256} observation:${imported.sourceObservation}` },
+    }, signal);
     await authorize(`work:publish:${work.work}`, 'work.publish');
     await api.command(`${key}:publication:${source.pinId}:${source.recipeId}`, {
       method: 'POST', path: '/v1/work-publications', body: { profile: 'work-structure-publication-v1', operation: 'publish',
