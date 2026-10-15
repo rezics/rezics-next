@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -181,6 +182,7 @@ test('SEARCH19: same-language variants survive reversed owner settlement, replay
     await expect(queryPublicContentPhrase(env, content, cursor, consumer,
       { phrase: marker, language: 'en' })).rejects.toBeInstanceOf(ContentProjectionUnavailable);
     const dispositions: string[] = [];
+    await deliverFixtureContentEligibility(env, content);
     let firstProjected = false;
     while (BigInt((await cursor.read(consumer)).sequence)
       < BigInt((await content.ownerPosition()).sequence)) {

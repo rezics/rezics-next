@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
@@ -241,6 +242,7 @@ test('PUBLIC-DOMAIN: accepted Work assessment admits sourced text; withdrawal su
     const cursor = new ContentProjectionCursor(contentPool);
     const consumer = `pd-${randomUUID()}`;
     await cursor.initialize(consumer);
+    await deliverFixtureContentEligibility(env, content);
     while (
       BigInt((await cursor.read(consumer)).sequence) <
       BigInt((await content.ownerPosition()).sequence)

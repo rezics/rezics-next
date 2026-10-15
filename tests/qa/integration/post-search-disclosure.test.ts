@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
@@ -24,6 +25,7 @@ for (const nativeBookText of [false, true]) {
 test(`Chapter Post search gates each ${nativeBookText ? 'published' : 'catalogue-only'} Book use and restores hits without reprojecting Content`, async () => {
   const stack = await startMediaStack('post-search-disclosure', { contentProjection: true });
   try {
+    await deliverFixtureContentEligibility(stack.env, stack.content);
     const baseline = await stack.content.ownerPosition();
     await stack.contentCursor.initialize(stack.contentConsumer);
     // Public search counts every eligible variant. This consumer is new, so it
@@ -100,6 +102,7 @@ test(`Chapter Post search gates each ${nativeBookText ? 'published' : 'catalogue
       publicationDecision: publication.decision, expectedEligibilityHead: null, actingSubject: actor.actor,
       rightsBasis: 'original-contribution', disclosure: 'public',
     }), 201);
+    await deliverFixtureContentEligibility(stack.env, stack.content);
     for (let i = 0; i < 20; i++) {
       if (!await relayContentProjectionOnce(stack.env, stack.content, stack.contentCursor, stack.contentConsumer)) break;
       if (i === 19) throw new Error('Content projection exceeded its preparation budget');
