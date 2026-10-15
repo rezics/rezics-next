@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, spyOn, userEvent, waitFor, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import recipes from '../../../../tests/qa/fixtures/outcomes/recipes/read-a-recipe.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
@@ -123,6 +123,8 @@ function RecordedRecipeReading({ persona, locale, phase }: { persona: Persona; l
       }
     }) as typeof fetch;
     const main = browserMainApi(window.location.origin, { anonymous: actingSubject === null, fetcher });
+    // Continuations use the client component's own browser reader, just as the server-rendered page does.
+    const browserFetch = spyOn(window, 'fetch').mockImplementation(fetcher);
     const host = {
       main,
       anonymous: browserMainApi(window.location.origin, { anonymous: true, fetcher }),
@@ -177,6 +179,7 @@ function RecordedRecipeReading({ persona, locale, phase }: { persona: Persona; l
       live = false;
       window.clearInterval(timer);
       replay.dispose();
+      browserFetch.mockRestore();
     };
   }, [persona, locale, phase]);
   if (fault) return <p role="alert" className="whitespace-pre-wrap break-words p-6">{fault}</p>;

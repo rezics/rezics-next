@@ -36,7 +36,7 @@ import { AdoptionRegion } from './adoption.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
 import {
-  loadRecipeIdentity, recipePageReader, recipeReadingReads, type RecipeWorkHost,
+  loadRecipeIdentity, recipeReadingReads, type RecipeWorkHost,
 } from './recipe-reading-recorded-page.ts';
 import { RegionFailure } from './region.tsx';
 import { RecipeExperience, type RecipePageRead } from './types/recipe.tsx';
@@ -166,10 +166,11 @@ export async function recipeRegion({ host, id, work, href, locale, messages }: {
   ]);
   if (!recipe.ok) return <RegionFailure title={messages.recipeMethod} failure={recipe.failure} messages={messages} />;
   const allowed = authority?.ok ? allowedActionsOf(authority.data) : [];
+  // Only data crosses this server/client boundary. RecipeExperience creates its continuation
+  // reader in the browser; a reader closure here cannot be serialized by React Server Components.
   return <RecipeExperience initial={recipe.data} href={href} actingSubject={host.actingSubject}
     edit={mayEdit(allowed) ? { href: recipeEditHref(id), label: recipeEditorCopy(locale).editRecipe } : null}
     text={text.ok ? text.data.body : null}
-    readPage={recipePageReader({ main: host.main, actingSubject: host.actingSubject }, href)}
     locale={locale} messages={messages} />;
 }
 
