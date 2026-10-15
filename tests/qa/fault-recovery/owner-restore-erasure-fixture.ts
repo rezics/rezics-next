@@ -550,6 +550,31 @@ async function runOwnerRestoreErasureFixture(options: OwnerRestoreErasureFixture
   };
   const copyGraph = (from: string, to: string) => copyVolume(from, to, qa.dockerEnv);
   let retainedPort: number | undefined;
+  // Docker's libc can differ from the host running these disposable physical copies.
+  // Rebuild before acknowledging the new collation; refreshing alone leaves stale indexes.
+  const repairCopiedCollations = async (port: number) => {
+    const url = new URL(databases.urls.account);
+    url.hostname = '127.0.0.1'; url.port = String(port);
+    url.username = 'postgres'; url.password = qa.composeEnv.POSTGRES_PASSWORD!;
+    const catalog = new Client({ connectionString: url.toString() });
+    await catalog.connect();
+    try {
+      const mismatches = await catalog.query<{ datname: string }>(
+        `SELECT datname FROM pg_database WHERE datallowconn
+         AND datcollversion IS DISTINCT FROM pg_database_collation_actual_version(oid)`,
+      );
+      for (const { datname } of mismatches.rows) {
+        url.pathname = `/${datname}`;
+        const client = new Client({ connectionString: url.toString() });
+        await client.connect();
+        try {
+          const identifier = `"${datname.replaceAll('"', '""')}"`;
+          await client.query(`REINDEX DATABASE ${identifier}`);
+          await client.query(`ALTER DATABASE ${identifier} REFRESH COLLATION VERSION`);
+        } finally { await client.end(); }
+      }
+    } finally { await catalog.end(); }
+  };
   const admin = async (sql: string) => {
     const client = new Client({
       connectionString: `postgres://postgres:${encodeURIComponent(qa.composeEnv.POSTGRES_PASSWORD!)}@127.0.0.1:${retainedPort ?? qa.composeEnv.POSTGRES_PORT}/postgres`,
@@ -1501,6 +1526,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
           if (recovering) await Bun.sleep(100);
         }
         expect(recovering).toBe(false);
+        await repairCopiedCollations(retainedPort);
       });
       const liveVolume = volume('source-current');
       await copyGraph(retainedSourceVolumes(retained!.context.key).current, liveVolume);
@@ -1654,6 +1680,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
             if (recovering) await Bun.sleep(100);
           }
           expect(recovering).toBe(false);
+          await repairCopiedCollations(port);
           // Recovery connects as postgres while ordinary owner roles stay offline.
           await owners.account.query(
             'ALTER ROLE account NOLOGIN; ALTER ROLE access NOLOGIN; ALTER ROLE content NOLOGIN; ALTER ROLE relay NOLOGIN',
