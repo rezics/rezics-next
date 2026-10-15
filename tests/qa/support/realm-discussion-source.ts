@@ -461,16 +461,19 @@ export async function verifyRealmDiscussionCorpus(sessions: RealmSourceSessions,
     // inventory for all six readers; do not hydrate it once more during readiness.
     if (row) continue;
     for (let start = 0; start < items.length; start += 8) await together(items.slice(start, start + 8).map(async expected => {
-      const selected = await answer<RealmSourceReply>(realm.owner.main('GET', `/v1/member-replies/${short(expected.reply)}?${acting(realm.owner)}`));
+      // These views read the completed source with no producer writes left.
+      const [selected, placed, branch] = await Promise.all([
+        answer<RealmSourceReply>(realm.owner.main('GET', `/v1/member-replies/${short(expected.reply)}?${acting(realm.owner)}`)),
+        answer<{ placement: string; realm: string; reply: string; revisionId: string; author: string; rootTarget: string }>(
+        realm.owner.main('GET', `/v1/realms/${encodeURIComponent(realm.realm)}/replies/${encodeURIComponent(expected.reply)}?${acting(realm.owner)}`)),
+        answer<{ rootRevision: string; items: { reply: string; parent: string | null; revisionId: string }[] }>(
+        realm.owner.main('GET', `/v1/realms/${short(realm.realm)}/threads/${short(expected.reply)}?${acting(realm.owner)}`)),
+      ]);
       for (const field of ['reply', 'variantId', 'revisionId', 'revisionDigest', 'author', 'rootTarget', 'rootRevision', 'body'] as const)
         requireFact(selected[field] === expected[field], `restored exact reply ${field} differs`);
-      const placed = await answer<{ placement: string; realm: string; reply: string; revisionId: string; author: string; rootTarget: string }>(
-        realm.owner.main('GET', `/v1/realms/${encodeURIComponent(realm.realm)}/replies/${encodeURIComponent(expected.reply)}?${acting(realm.owner)}`));
       for (const field of ['placement', 'reply', 'revisionId', 'author', 'rootTarget'] as const)
         requireFact(placed[field] === expected[field], `restored placement ${field} differs`);
       requireFact(placed.realm === realm.realm, 'restored placement Realm differs');
-      const branch = await answer<{ rootRevision: string; items: { reply: string; parent: string | null; revisionId: string }[] }>(
-        realm.owner.main('GET', `/v1/realms/${short(realm.realm)}/threads/${short(expected.reply)}?${acting(realm.owner)}`));
       const focus = branch.items.find(item => item.reply === expected.reply);
       requireFact(branch.rootRevision === expected.rootRevision && focus?.revisionId === expected.revisionId &&
         focus.parent === expected.parentReply, 'restored exact thread binding differs');

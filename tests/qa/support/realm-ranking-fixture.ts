@@ -38,26 +38,29 @@ export async function seedRealmRanking(sessions: PersonaSessions, size: number, 
     context: { kind: 'main-version-default', id: target.mainVersion }, selectionBasis: 'main-maintainer',
     actingSubject: author }), 201);
   const replies: string[] = [];
-  const create = async (index: number) => {
+  const createDraft = async (index: number) => {
     const reply = `https://rezics.com/id/${randomUUID()}`, variantId = `urn:rezics:variant:${randomUUID()}`;
     const draft = await answer<{ revisionId: string; revisionDigest: string }>(command(person, target, '/v1/member-reply-drafts', {
       profile: 'member-reply-draft-v1', reply, variantId, rootTarget: target.work,
       rootRevision: target.workRevision, originRealm: sessions.realm, language: 'en', direction: 'ltr',
       expectedHead: null, body: `Original ${label} thread ${index}\nA synthetic discussion authored for this ranking proof.`,
       actingSubject: author }), 201);
-    await answer(command(person, target, '/v1/realm-replies', {
-      profile: 'realm-reply-identity-v1', reply, variantId, revisionId: draft.revisionId,
+    return { reply, variantId, ...draft };
+  };
+  for (let start = 0; start < size; start += 8) {
+    const drafts = await Promise.all(Array.from({ length: Math.min(8, size - start) }, (_, offset) => createDraft(start + offset)));
+    // Identity root reads must not overlap another graph publication.
+    for (const draft of drafts) await answer(command(person, target, '/v1/realm-replies', {
+      profile: 'realm-reply-identity-v1', reply: draft.reply, variantId: draft.variantId, revisionId: draft.revisionId,
       author, rootTarget: target.work, rootRevision: target.workRevision,
       parentReply: null, parentRevision: null, contextRevision: null }), 201);
-    await answer(command(person, target, '/v1/realm-reply-placements', {
-      profile: 'realm-reply-placement-v1', realm: sessions.realm, reply,
+    for (let offset = 0; offset < drafts.length; offset += 2) await Promise.all(drafts.slice(offset, offset + 2).map(draft =>
+      answer(command(person, target, '/v1/realm-reply-placements', {
+      profile: 'realm-reply-placement-v1', realm: sessions.realm, reply: draft.reply,
       revisionId: draft.revisionId, revisionDigest: draft.revisionDigest,
-      reviewDecisionId: null, expectedHead: null, actingSubject: author }), 201);
-    return reply;
-  };
-  // Identity root reads and placement commands share the native graph writer.
-  // These small cursor inventories must not queue concurrent graph commands.
-  for (let index = 0; index < size; index++) replies.push(await create(index));
+      reviewDecisionId: null, expectedHead: null, actingSubject: author }), 201)));
+    replies.push(...drafts.map(draft => draft.reply));
+  }
   return replies;
 }
 

@@ -201,8 +201,9 @@ test('Account diagnostics omit verification credentials without changing the act
 test('complete builder uses 552 public draft/identity/placement commands with exact nested and episode bindings', async () => {
   const f = fixture(), directory = mkdtempSync(join(import.meta.dir, '../../../.temp/realm-corpus-unit-'));
   let graphPublications = 0, maximumGraphPublications = 0, identityPublications = 0;
-  for (const realm of Object.values(f.sessions)) {
-    const person = realm.owner, call = person.main;
+  for (const person of new Set(Object.values(f.sessions).flatMap(realm => Object.values(realm)
+    .filter((value): value is PersonaSession => typeof value === 'object' && value !== null && 'main' in value)))) {
+    const call = person.main;
     person.main = async (...args) => {
       if (!['/v1/realm-replies', '/v1/realm-reply-placements'].includes(args[1])) return call(...args);
       const identity = args[1] === '/v1/realm-replies';
