@@ -5,9 +5,9 @@ const work = '00000000-0000-4000-8000-000000000001';
 const actingSubject = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
 
 test('a browser progress read recovers a lost transport with the identical actor and credentials', async () => {
-  const requests: Request[] = [];
+  const requests: { url: string; credentials: RequestCredentials | undefined }[] = [];
   const fetcher = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
-    requests.push(new Request(input, init));
+    requests.push({ url: input instanceof Request ? input.url : String(input), credentials: init?.credentials });
     if (requests.length === 1) throw new TypeError('Failed to fetch');
     return Response.json({ standing: 'started', version: 2 });
   }, { preconnect: fetch.preconnect });
