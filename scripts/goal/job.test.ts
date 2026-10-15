@@ -122,7 +122,7 @@ test('a durable final message records the end even while the engine is closing',
   } finally { worker.kill('SIGKILL'); await closed; }
 });
 
-test('a wave worktree runs the main job owner and executor, preserving its command directory', async () => {
+test('a wave worktree uses main job control to adopt and wake a later parked attempt', async () => {
   const f = processFixture();
   expect(spawnSync('git', ['config', 'user.email', 'fixture@example.invalid'], { cwd: f.cwd }).status).toBe(0);
   expect(spawnSync('git', ['config', 'user.name', 'Fixture'], { cwd: f.cwd }).status).toBe(0);
@@ -143,9 +143,23 @@ test('a wave worktree runs the main job owner and executor, preserving its comma
   writeFileSync(join(f.cwd, '.temp/goal-orchestration/ledger.json'), JSON.stringify(ledger));
   const output = await f.execute(`
     import { runJob } from ${JSON.stringify(join(wave, 'scripts/goal/job.ts'))};
-    await runJob([process.execPath, '-e', 'console.log(process.cwd())'], { cwd: ${JSON.stringify(wave)}, inlineMs: 3000 });
+    await runJob([process.execPath, '-e', 'await Bun.sleep(1000); console.log(process.cwd())'],
+      { cwd: ${JSON.stringify(wave)}, inlineMs: 1 });
   `);
-  expect(output).toContain(wave); expect(output).toContain('exit:0');
+  expect(output).toStartWith('PARKED job:');
+  const current = f.ledger(); const task = current.tasks.worker!;
+  task.attempts.push({ ...task.attempts[0]!, n: 2 }, { ...task.attempts[0]!, n: 3 });
+  writeFileSync(join(f.cwd, '.temp/goal-orchestration/ledger.json'), JSON.stringify(current));
+  const store = new JobStore(jobDirectory(wave));
+  try {
+    // No coordinator rescue: main's detached completion must adopt this newer turn itself.
+    await until(() => store.all()[0]!.phase === 'woken');
+    const job = store.all()[0]!;
+    expect(job.attempt).toBe(3); expect(job.resumedAttempt).toBe(4);
+    expect(readFileSync(store.log(job.id), 'utf8')).toContain(wave);
+    expect(f.ledger().tasks.worker!.attempts[3]!.continuedFor).toBe('job');
+    expect(readFileSync(f.wakes, 'utf8').trim().split('\n')).toHaveLength(1);
+  } finally { store.close(); }
 });
 
 test('the default inline bound parks a running command in one 30-second tool call', async () => {
