@@ -205,13 +205,13 @@ async function serverState(fuseki: FusekiClient): Promise<{
 }
 
 export async function assertSameTextInstance(fuseki: FusekiClient,
-  position: PublicTextPosition): Promise<void> {
+  position: PublicTextPosition, graphBasis: 'matching-cut' | 'selected-units' = 'matching-cut'): Promise<void> {
   const state = await serverState(fuseki);
   if (state.instanceId !== position.serverInstanceId) {
     throw new SearchIndexUnavailable('Fuseki restarted during public search');
   }
-  if (state.publicSearchWriteActive
-    || state.publicSearchWriteEpoch !== position.publicSearchWriteEpoch) {
+  if (graphBasis === 'matching-cut' && (state.publicSearchWriteActive
+    || state.publicSearchWriteEpoch !== position.publicSearchWriteEpoch)) {
     throw new SearchSnapshotMoved('public index mutation overlapped search');
   }
 }
@@ -270,11 +270,15 @@ export async function assertQuerySnapshotMoved(fuseki: FusekiClient,
  * deltas. An unavailable proof never falls back to a request-time corpus scan.
  */
 export async function assertPublicTextReady(fuseki: FusekiClient,
-  lineage: GraphLineage): Promise<PublicTextPosition> {
+  lineage: GraphLineage, graphBasis: 'matching-cut' | 'selected-units' = 'matching-cut'): Promise<PublicTextPosition> {
   const known = knownSearchPosition(fuseki, lineage);
   if (known) return known;
   const state = await observeSearchPhase('readiness-arrival-health', () => serverState(fuseki));
-  if (state.publicSearchWriteActive) throw new SearchSnapshotMoved('public index write is in progress');
+  // The native journal captures a qualified committed RDF/Lucene reader while
+  // its next writer runs. Selected-unit consumers close their exact relation;
+  // an unrelated writer must not withdraw that already published checkpoint.
+  const publishedCut = graphBasis === 'selected-units' && state.publicSearchDeltaAvailable;
+  if (state.publicSearchWriteActive && !publishedCut) throw new SearchSnapshotMoved('public index write is in progress');
   let control: SparqlResult;
   try { control = await observeSearchPhase('readiness-control-and-analyzer-probes', () => fuseki.query(`PREFIX rv: <${RV}>
     PREFIX text: <http://jena.apache.org/text#>
@@ -330,13 +334,14 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
     if (error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge) throw error;
     throw new SearchIndexUnavailable('qualified public text generation is unavailable', { cause: error });
   }
-  if (!validDeltaEnvelope(proof, position) || proof.qualifiedPopulation === undefined) {
-    await assertSameTextInstance(fuseki, position);
+  if (!validDeltaEnvelope(proof, position, publishedCut) || proof.qualifiedPopulation === undefined) {
+    await assertSameTextInstance(fuseki, position, graphBasis);
     await assertSnapshotMoved(fuseki, position);
     throw new SearchIndexUnavailable('public text generation has no native qualification');
   }
+  position.publicSearchWriteEpoch = proof.writeEpoch!;
   position.population = count(proof.qualifiedPopulation);
-  await observeSearchPhase('readiness-completion-health', () => assertSameTextInstance(fuseki, position));
+  await observeSearchPhase('readiness-completion-health', () => assertSameTextInstance(fuseki, position, graphBasis));
   return position;
 }
 
@@ -369,11 +374,14 @@ export async function assertPublicTitleReady(fuseki: FusekiClient,
   return position;
 }
 
-function validDeltaEnvelope(proof: SearchDeltaProof, position: PublicTextPosition): boolean {
+function validDeltaEnvelope(proof: SearchDeltaProof, position: PublicTextPosition, publishedCut = false): boolean {
   return proof.available === true && typeof proof.ordinal === 'string' && decimal.test(proof.ordinal)
     && proof.dataEpoch === position.dataEpoch && proof.sequence === position.sequence
     && proof.generation === position.generation
-    && proof.writeEpoch === position.publicSearchWriteEpoch
+    // The HTTP envelope's write epoch observes the running writer, whereas its
+    // qualification and source position belong to the captured committed reader.
+    && (publishedCut ? typeof proof.writeEpoch === 'string' && decimal.test(proof.writeEpoch)
+      : proof.writeEpoch === position.publicSearchWriteEpoch)
     && typeof proof.luceneGeneration === 'string' && decimal.test(proof.luceneGeneration)
     && Array.isArray(proof.deltas);
 }

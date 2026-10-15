@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { FusekiClient, fusekiReadBudget, type SearchDeltaProof } from '../src/infrastructure/fuseki.ts';
-import { assertPublicTextReady, MAX_SEARCH_REQUEST_MS, SearchIndexUnavailable,
+import { assertPublicTextReady, MAX_SEARCH_REQUEST_MS, SearchIndexUnavailable, SearchSnapshotMoved,
   SearchRequestTimedOut, withStableSearchSnapshot } from '../src/modules/work/search-readiness.ts';
 import { readRankedCatalogue } from '../src/modules/search/ranked.ts';
 import { searchGraphSnapshot } from '../src/modules/search/snapshot-state.ts';
@@ -40,6 +40,46 @@ test('a behind or foreign-epoch checkpoint refuses public membership without ret
       () => assertPublicTextReady(fixture.client, lineage))).rejects.toBeInstanceOf(SearchIndexUnavailable);
     expect(fixture.proofs()).toBe(1);
   }
+});
+
+test.each(['2', '3', '5'])('a selected-unit search reads its published checkpoint while native writer epoch %s is observed', async writeEpoch => {
+  const fixture = indexed('25');
+  const health = await fixture.client.commandHealth();
+  fixture.client.commandHealth = async () => ({ ...health,
+    publicSearchWriteEpoch: '3', publicSearchWriteActive: true });
+  const proof = fixture.client.searchDeltaSince.bind(fixture.client);
+  fixture.client.searchDeltaSince = async (...args) => ({ ...await proof(...args), writeEpoch });
+  const result = await withSearchGraphSnapshot(
+    { fuseki: fixture.client, lineage, objectDirectory: '.temp/search-availability-owner' }, async () => {
+      expect(searchGraphSnapshot.getStore()!.position.publicSearchWriteEpoch).toBe(writeEpoch);
+      expect((await fixture.client.commandHealth()).publicSearchWriteActive).toBe(true);
+      return { items: ['published-match'] };
+    }, 'selected-units');
+  expect(result).toEqual({ items: ['published-match'] });
+  expect(fixture.proofs()).toBe(1);
+  // Consumers without an exact selected relation retain their writer fence.
+  await expect(assertPublicTextReady(fixture.client, lineage)).rejects.toBeInstanceOf(SearchSnapshotMoved);
+});
+
+test('selected-unit search never substitutes a stale or unqualified checkpoint for a published cut', async () => {
+  for (const fixture of [indexed('24'), indexed('25', 'old-epoch')]) {
+    const health = await fixture.client.commandHealth();
+    fixture.client.commandHealth = async () => ({ ...health,
+      publicSearchWriteEpoch: '3', publicSearchWriteActive: true });
+    await expect(assertPublicTextReady(fixture.client, lineage, 'selected-units'))
+      .rejects.toBeInstanceOf(SearchIndexUnavailable);
+  }
+});
+
+test('a never-qualified native index refuses before selected-unit matching begins', async () => {
+  const fixture = indexed('25');
+  fixture.client.searchDeltaSince = async () => ({ available: false });
+  let matched = false;
+  await expect(withSearchGraphSnapshot(
+    { fuseki: fixture.client, lineage, objectDirectory: '.temp/search-availability-owner' }, async () => {
+      matched = true;
+    }, 'selected-units')).rejects.toBeInstanceOf(SearchIndexUnavailable);
+  expect(matched).toBe(false);
 });
 
 test('public search cancels unfinished work at its original wall bound without another attempt', async () => {

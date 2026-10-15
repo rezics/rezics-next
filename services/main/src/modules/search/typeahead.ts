@@ -164,6 +164,10 @@ interface TypeaheadItem {
   matchedField: 'title' | 'credit'; matchedText: string; matchedLanguage: string | null;
 }
 
+/** Readiness is this public request returning 200. A never-qualified native
+ * index may answer 503 search_index_unavailable; clients wait at most 120
+ * seconds for readiness, then report failure. Each request retains the search
+ * wall deadline. A qualified published cut remains readable during replay. */
 export async function readPublicTypeahead(work: MainWorkDependencies, request: Request,
   input: { prefix: string; language?: string },
   present: (relation: TypeaheadRelation) => Promise<TypeaheadRelation>) {

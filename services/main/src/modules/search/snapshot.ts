@@ -15,7 +15,7 @@ export async function withSearchGraphSnapshot<T>(env: WorkActivationEnvironment,
   graphBasis: 'matching-cut' | 'selected-units' = 'matching-cut') {
   assertSearchDeadline();
   const position = await observeSearchPhase('index-readiness',
-    () => assertPublicTextReady(env.fuseki, env.lineage)).catch(async (error: unknown) => {
+    () => assertPublicTextReady(env.fuseki, env.lineage, graphBasis)).catch(async (error: unknown) => {
     // Readiness includes admission in its successful proof. On failure, retain
     // the recovery owner's typed hold outcome without taxing successful reads.
     if (error instanceof SearchIndexUnavailable && !(error instanceof SearchSnapshotMoved)) {
