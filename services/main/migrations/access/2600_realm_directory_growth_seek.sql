@@ -19,6 +19,7 @@ CREATE TABLE access.realm_directory_growth (
   PRIMARY KEY (generation,realm,day),
   FOREIGN KEY (generation,realm) REFERENCES access.realm_directory(generation,realm) ON DELETE CASCADE
 );
+CREATE INDEX realm_directory_growth_realm ON access.realm_directory_growth(realm,day);
 CREATE INDEX realm_directory_growth_rank ON access.realm_directory_growth(generation,day,(-growth),realm);
 
 CREATE FUNCTION access.prepare_realm_directory_growth_row(slot smallint, resource text, epoch text)

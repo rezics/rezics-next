@@ -18,7 +18,7 @@ import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 
 test('Realm directory pages use the last built position and perform no graph reads or row locking', async () => {
   const queries: string[] = [];
-  let countRevision = '4';
+  let countRevision = '4', matches = true;
   const query = async (sql: string) => {
     queries.push(sql);
     let rows: object[] = [];
@@ -27,8 +27,8 @@ test('Realm directory pages use the last built position and perform no graph rea
       phase: 'graph', target_sequence: '23', rebuilding: true }];
     else if (sql.includes('FROM access.realm_count_position')) rows = [{ revision: countRevision }];
     else if (sql.includes('FROM access.realm_directory d')) rows = [
-      { realm: 'one', rank: '-7', count_value: '2', count_revision: '4' },
-      { realm: 'two', rank: '-6', count_value: '1', count_revision: '3' },
+      { matches, realm: 'one', rank: '-7', count_value: '2', count_revision: '4' },
+      { matches, realm: 'two', rank: '-6', count_value: '1', count_revision: '3' },
     ];
     return { rows, rowCount: rows.length };
   };
@@ -41,6 +41,11 @@ test('Realm directory pages use the last built position and perform no graph rea
   expect(queries[0]).toBe('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
   expect(queries.some(sql => /FOR (UPDATE|SHARE)|^(INSERT|UPDATE|DELETE)/.test(sql))).toBe(false);
   expect(decodeReadCursor(page.next!, ['realm-directory-v3', 'members', '', null, null], page.sourcePosition)?.after).toBe('one');
+  matches = false;
+  const sparse = await index.page(session, { sort: 'members', q: 'absent', limit: 1 });
+  expect(sparse.rows).toEqual([]);
+  expect(decodeReadCursor(sparse.next!, ['realm-directory-v3','members','absent',null,null], sparse.sourcePosition)?.after).toBe('one');
+  matches = true;
   countRevision = '5';
   await expect(index.page(session, { sort: 'members', q: '', limit: 1, cursor: page.next! })).rejects.toBeInstanceOf(WorkReadMoved);
   await expect(index.page(session, { sort: 'members', q: '', cursor: 'invalid' })).rejects.toBeInstanceOf(WorkReadInvalid);
@@ -58,6 +63,7 @@ test('Realm directory first pages retain their published snapshot while continua
   };
   const index = new RealmDirectoryIndex({ query, connect: async () => ({ query, release() {} }) } as unknown as Pool);
   const session = { options: {} as { cursor?: string }, position: { dataEpoch: 'epoch', sequence: '23' },
+    disclosure: async () => [],
     summaries: async () => { published = '18'; if (changeMembership) revision = '5'; return []; },
     deps: { environment: {}, access: { realmDirectory: index } } } as unknown as WorkReadSession;
   expect((await readRealmDirectory(session, { sort: 'members' })).sourcePosition).toEqual(sourcePosition);

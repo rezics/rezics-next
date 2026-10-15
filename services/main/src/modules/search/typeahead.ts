@@ -207,46 +207,46 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
       const batchEntries = response.entries;
       entries.push(...batchEntries);
       cursor = response.cursor; more = response.more;
-    // Candidate identities, their matched fields, facets and all cards share
-    // one selected dependency set, including across native walk batches.
-    const previouslyDelivered = new Set([...accepted.values()].map(item => item.mainVersion));
-    const visible = await session.selection(`typeahead-presentation:${JSON.stringify(batchEntries)}`, async probe => {
-      const candidates = await queryTypeaheadCandidates(env, input.prefix, batchEntries, work.sourceAuthorNames, probe);
-      const relation = await present({ context: 'main-version-default' as const, sourcePosition: position,
-        total: candidates.length, results: candidates });
-      const seen = new Set(previouslyDelivered);
-      return { ...relation, results: batchEntries.flatMap(entry => {
-        if (seen.has(entry.mainVersion)) return [];
-        const row = relation.results.find(match => match.mainVersion === entry.mainVersion
-          && match.matchUnit === entry.matchUnit && match.matchedField === entry.matchedField);
-        if (!row) return [];
-        seen.add(entry.mainVersion);
-        return [row];
-      }) };
-    }, relation => relation.results);
-    if (visible.results.length) {
-      const types = await phraseWorkTypes(env, visible.results.map(row => ({ work: row.work, language: '' })), position, session);
-      const summaries = await session.summaries(visible.results.map(row => row.work), true);
-      const authorWorks = [...new Set(visible.results.map(row => row.work))];
-      const readAuthors = () => optionalPreview(session, () => searchPageAuthors(session, authorWorks, true));
-      const authors = await readAuthors();
-      session.observeDependency(`typeahead-authors:${JSON.stringify(authorWorks)}`, authors, readAuthors);
-      const after = await session.summaries(visible.results.map(row => row.work), true);
-      if (summaries.some((summary, i) => JSON.stringify({ ...summary, avatar: undefined })
-        !== JSON.stringify({ ...after[i], avatar: undefined }))) {
-        throw new SearchSnapshotMoved('Typeahead disclosure changed during hydration');
+      // Candidate identities, their matched fields, facets and all cards share
+      // one selected dependency set, including across native walk batches.
+      const previouslyDelivered = new Set([...accepted.values()].map(item => item.mainVersion));
+      const visible = await session.selection(`typeahead-presentation:${JSON.stringify(batchEntries)}`, async probe => {
+        const candidates = await queryTypeaheadCandidates(env, input.prefix, batchEntries, work.sourceAuthorNames, probe);
+        const relation = await present({ context: 'main-version-default' as const, sourcePosition: position,
+          total: candidates.length, results: candidates });
+        const seen = new Set(previouslyDelivered);
+        return { ...relation, results: batchEntries.flatMap(entry => {
+          if (seen.has(entry.mainVersion)) return [];
+          const row = relation.results.find(match => match.mainVersion === entry.mainVersion
+            && match.matchUnit === entry.matchUnit && match.matchedField === entry.matchedField);
+          if (!row) return [];
+          seen.add(entry.mainVersion);
+          return [row];
+        }) };
+      }, relation => relation.results);
+      if (visible.results.length) {
+        const types = await phraseWorkTypes(env, visible.results.map(row => ({ work: row.work, language: '' })), position, session);
+        const summaries = await session.summaries(visible.results.map(row => row.work), true);
+        const authorWorks = [...new Set(visible.results.map(row => row.work))];
+        const readAuthors = () => optionalPreview(session, () => searchPageAuthors(session, authorWorks, true));
+        const authors = await readAuthors();
+        session.observeDependency(`typeahead-authors:${JSON.stringify(authorWorks)}`, authors, readAuthors);
+        const after = await session.summaries(visible.results.map(row => row.work), true);
+        if (summaries.some((summary, i) => JSON.stringify({ ...summary, avatar: undefined })
+          !== JSON.stringify({ ...after[i], avatar: undefined }))) {
+          throw new SearchSnapshotMoved('Typeahead disclosure changed during hydration');
+        }
+        accepted = new Map<string, TypeaheadItem>([...accepted, ...visible.results.flatMap<[string, TypeaheadItem]>((row, i) => {
+          const summary = summaries[i], final = after[i];
+          return summary?.status === 'available' && summary.type === 'work' && summary.disclosure === 'public'
+            ? [[`${row.mainVersion}\n${row.matchUnit}\n${row.matchedField}`, {
+              work: row.work, mainVersion: row.mainVersion, title: summary.name,
+              cover: final?.status === 'available' ? final.avatar : summary.avatar,
+              types: types.get(row.work) ?? [], authors: authors?.get(row.work) ?? [],
+              matchedField: row.matchedField as 'title' | 'credit', matchedText: row.matchedText,
+              matchedLanguage: row.matchedLanguage }]] : [];
+        })]);
       }
-      accepted = new Map<string, TypeaheadItem>([...accepted, ...visible.results.flatMap((row, i) => {
-        const summary = summaries[i], final = after[i];
-        return summary?.status === 'available' && summary.type === 'work' && summary.disclosure === 'public'
-          ? [[`${row.mainVersion}\n${row.matchUnit}\n${row.matchedField}`, {
-            work: row.work, mainVersion: row.mainVersion, title: summary.name,
-            cover: final?.status === 'available' ? final.avatar : summary.avatar,
-            types: types.get(row.work) ?? [], authors: authors?.get(row.work) ?? [],
-            matchedField: row.matchedField as 'title' | 'credit', matchedText: row.matchedText,
-            matchedLanguage: row.matchedLanguage }]] : [];
-      })]);
-    }
     } while (more && entries.length < cap && accepted.size < initial.pageSize);
     const items: TypeaheadItem[] = [];
     let examined = 0;

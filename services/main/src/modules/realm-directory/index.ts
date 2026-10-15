@@ -319,17 +319,16 @@ export class RealmDirectoryIndex {
           if (!order || !/^-?\d+$/.test(order)) throw new WorkReadMoved('Realm directory cursor is unavailable');
           rank = order;
         }
-        const rows = (await client.query<DirectoryRow>(`
+        const rows = (await client.query<DirectoryRow & { matches: boolean }>(`
           SELECT d.realm, d.space, d.profile,
-          (${rankColumn})::text AS rank, d.count_value::text, COALESCE(c.revision,0)::text AS count_revision
+          (${rankColumn})::text AS rank, d.count_value::text, COALESCE(c.revision,0)::text AS count_revision,
+          (($3::text = '' OR strpos(d.search_text,$3)>0) AND ($5::text IS NULL OR d.topics @> ARRAY[$5::text])) AS matches
           ${growing ? `FROM access.realm_directory_growth g
             CROSS JOIN LATERAL (SELECT * FROM access.realm_directory candidate
               WHERE candidate.generation=g.generation AND candidate.realm=g.realm LIMIT 1) d`
             : 'FROM access.realm_directory d'}
           LEFT JOIN access.realm_member_count c ON c.realm = d.realm
           WHERE ${cursor ? `(${rankColumn}, ${growing ? 'g' : 'd'}.realm) > ($1::${growing ? 'bigint' : 'numeric'}, $2::text)` : "$1::numeric IS NULL AND $2::text = ''"}
-            AND ($3::text = '' OR strpos(d.search_text, $3) > 0)
-            AND ($5::text IS NULL OR d.topics @> ARRAY[$5::text])
             AND ${growing ? 'g' : 'd'}.generation = ${growing ? '$8' : '$6'}::smallint
             ${growing ? 'AND g.day=$6::date AND g.data_epoch=$7::text' : ''}
           ORDER BY ${rankColumn}, ${growing ? 'g' : 'd'}.realm LIMIT $4`,
@@ -337,9 +336,13 @@ export class RealmDirectoryIndex {
           positionRow.day, sourcePosition.dataEpoch, source.generation]
           : [rank, cursor?.after ?? '', input.q, limit + 1, input.topic ?? null, source.generation])).rows;
         await client.query('COMMIT');
-        const page = rows.slice(0, limit);
-        return { rows: page, position, sourcePosition, next: rows.length > limit && page.length
-          ? encodeReadCursor(binding, sourcePosition, page.at(-1)!.realm, `${position}:${page.at(-1)!.rank}`) : null };
+        // Filter this bounded source window, preserving its continuation even
+        // when every candidate is omitted. Directory clients already support
+        // empty incomplete pages after live disclosure filtering.
+        const examined = rows.slice(0, limit), last = examined.at(-1);
+        const page = examined.filter(row => row.matches).map(({ matches: _, ...row }) => row);
+        return { rows: page, position, sourcePosition, next: rows.length > limit && last
+          ? encodeReadCursor(binding, sourcePosition, last.realm, `${position}:${last.rank}`) : null };
       } catch (error) {
         await client.query('ROLLBACK');
         if (error instanceof WorkReadInvalid || error instanceof WorkReadMoved || error instanceof WorkReadUnavailable) throw error;

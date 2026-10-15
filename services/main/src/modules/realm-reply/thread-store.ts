@@ -256,13 +256,12 @@ export class RealmReplyThreadStore {
     const rows = await this.content.query<{ reply: string; parent: string | null; author: string; origin: string | null;
       root_target: string; root_revision: string; created_at: Date; truncated: boolean }>(`WITH RECURSIVE tree AS (
         SELECT id, parent_reply, author, origin_realm, root_target, root_revision, created_at, 0 AS depth
-          FROM content.reply WHERE id = $1
+          FROM content.discovery_reply($1)
         UNION ALL
         SELECT c.id, c.parent_reply, c.author, c.origin_realm, c.root_target, c.root_revision, c.created_at, t.depth + 1
-          FROM tree t CROSS JOIN LATERAL content.discovery_children(t.id,$4) c WHERE t.depth < $2
+          FROM tree t CROSS JOIN LATERAL content.discovery_children(t.id,$3) c WHERE t.depth < $2
       ) SELECT id AS reply, parent_reply AS parent, author, origin_realm AS origin, root_target, root_revision,
-        created_at, depth = $2 AND EXISTS(SELECT 1 FROM content.reply child
-          WHERE child.parent_reply = tree.id) AS truncated
+        created_at, depth = $2 AND EXISTS(SELECT 1 FROM content.discovery_children(tree.id,1) child) AS truncated
         FROM tree LIMIT $3`, [focus, REALM_THREAD_COST.depth, limit + 1]);
     return rows.rows.map(row => ({ ...node(row), truncated: row.truncated }));
   }

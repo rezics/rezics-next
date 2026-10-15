@@ -74,23 +74,29 @@ test(`${group} Zone catalogue browse and search seeks a bounded page as Works gr
         expect(performance.now() - started, 'Main relay preparation stays below ten minutes').toBeLessThan(600_000);
       }
       const projection = stack.composition.dependencies.zoneBrowse!;
+      // Explicit preparation resumes the owner's bounded recovery passes.
+      // A later test in the same shard may inherit more retained batches than
+      // one pass can verify. Ready projections only consume their new tail.
+      while (projection.recoveryStatus().state !== 'ready') {
+        try { await projection.backfill(); }
+        catch (error) {
+          if (!(error instanceof Error) || error.message !== 'Zone browse reconciliation exceeded its preparation page budget') throw error;
+        }
+        expect(performance.now() - started, 'projection preparation stays below ten minutes').toBeLessThan(600_000);
+      }
       for (let tick = 0; tick < 400; tick++) {
         await projection.catchUp();
         if (await projection.current({ dataEpoch: stack.env.lineage.dataEpoch, sequence: '0' })) break;
       }
       for (const zone of zones) {
         const root = `/v1/realms/${zone.realm.slice(-36)}/modules/browse`;
-        // Readiness is observed before counting, never replaced with an empty page.
-        const ready = new URLSearchParams({ limit: '2', type: zone.type, q: 'growth-unmatched-readiness' });
-        const deadline = performance.now() + 30_000;
-        for (;;) {
-          const response = await stack.call('GET', `${root}?${ready}`);
-          const text = await response.text();
-          expect(response.status, text).toBe(200);
-          if ((JSON.parse(text) as Page).window.complete) break;
-          expect(performance.now(), 'catalogue projection readiness').toBeLessThan(deadline);
-          await Bun.sleep(50);
-        }
+        // An unmatched bounded scan may be incomplete even on a current
+        // projection. Observe current coverage, then actual public cards.
+        expect(await projection.current({ dataEpoch: stack.env.lineage.dataEpoch, sequence: '0' })).toBe(true);
+        const ready = await stack.call('GET', `${root}?${new URLSearchParams({ limit: '2', type: zone.type })}`);
+        const readyText = await ready.text();
+        expect(ready.status, readyText).toBe(200);
+        expect((JSON.parse(readyText) as Page).items).toHaveLength(2);
         for (const mode of ['browse', 'search']) {
           let cursor: string | null = null;
           const seen = new Set<string>();

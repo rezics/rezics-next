@@ -614,26 +614,18 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
       throw new WorkReadUnavailable('Zone browse projection belongs to another data epoch');
     }
     type Row = { work: string; adopted_order: string; updated_at: string | null; word_count: string | null };
-    const read = async (seek: string, values: (string | null)[], limit: number) =>
-      (await this.access.query<Row>(`SELECT work, adopted_order::text,
-        to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at,
-        word_count::text FROM access.zone_browse_entry AS entry WHERE realm = $1 ${seek}
-        ORDER BY ${sort === 'newest' ? 'entry.adopted_order DESC' : 'entry.updated_at DESC NULLS LAST'}, work DESC
-        LIMIT ${limit}`, values)).rows;
+    const read = async (nulls: boolean, key: string | null, work: string | null, limit: number) =>
+      (await this.access.query<Row>('SELECT * FROM access.seek_zone_browse_page($1,$2,$3,$4,$5,$6)',
+        [realm, sort, key, work, nulls, limit])).rows;
     let rows: Row[];
     if (sort === 'newest') {
-      rows = await read(after ? 'AND (adopted_order, work) < ($2::numeric, $3::text)' : '',
-        after ? [realm, after.key, after.work] : [realm], batchSize);
+      rows = await read(false, after?.key ?? null, after?.work ?? null, batchSize);
     } else {
-      // SQL row comparison with null is unknown; seek each index partition
-      // separately, avoiding both a lost null tail and a growing OR scan.
-      // https://www.postgresql.org/docs/current/functions-comparisons.html
-      rows = after?.key === null ? [] : await read('AND updated_at IS NOT NULL'
-        + (after ? ' AND (updated_at, work) < ($2::timestamptz, $3::text)' : ''),
-      after ? [realm, after.key, after.work] : [realm], batchSize);
+      // SQL row comparisons cannot seek a null timestamp. Read the indexed
+      // non-null and null partitions independently, filling one bounded batch.
+      rows = after?.key === null ? [] : await read(false, after?.key ?? null, after?.work ?? null, batchSize);
       if (rows.length < batchSize) {
-        rows.push(...await read('AND updated_at IS NULL' + (after?.key === null ? ' AND work < $2::text' : ''),
-          after?.key === null ? [realm, after.work] : [realm], batchSize - rows.length));
+        rows.push(...await read(true, null, after?.key === null ? after.work : null, batchSize - rows.length));
       }
     }
     return rows.map(row => ({ work: row.work, adoptedOrder: row.adopted_order,

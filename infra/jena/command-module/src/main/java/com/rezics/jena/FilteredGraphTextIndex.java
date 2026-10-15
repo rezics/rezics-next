@@ -563,6 +563,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
             boolean names = scope != null && scope.names() != null;
             boolean catalogue = scope != null && scope.catalogue();
             Query text = body;
+            Query workNameQuery = null;
             if (catalogue) {
                 if (!"body".equals(field)) throw new TextIndexException("catalogue ranking requires the body field");
                 QueryParser titles = new QueryParser("publicTitle", lucene.getQueryAnalyzer());
@@ -573,6 +574,9 @@ public final class FilteredGraphTextIndex implements TextIndex {
                     .map(word -> "\"" + word.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
                     .collect(java.util.stream.Collectors.joining(" "));
                 Query title = parseQuery(titles, words);
+                workNameQuery = new BooleanQuery.Builder()
+                    .add(new org.apache.lucene.search.BoostQuery(new org.apache.lucene.search.ConstantScoreQuery(titleTier(title, "work")), 2_000_000f), BooleanClause.Occur.MUST)
+                    .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), CommandPolicy.PUBLIC_SEARCH)), BooleanClause.Occur.FILTER).build();
                 // Score each matching title once. Complete Work names retain
                 // their higher tier over cached body-unit names and BM25.
                 text = new org.apache.lucene.search.DisjunctionMaxQuery(List.of(
@@ -652,7 +656,17 @@ public final class FilteredGraphTextIndex implements TextIndex {
             // Counting 1000 raw hits before pruning lets tied names walk the
             // population even when only one card was requested. Keep the same
             // score/doc ordering and lookahead, with a page-sized threshold.
-            var top = catalogue ? searcher.search(query,
+            // Complete Work names own the highest fixed tier. If that tier
+            // fills the page and lookahead, opening cached-title/body scorers
+            // cannot affect the result, but does pay population-dependent
+            // conjunction work. Fall back to the full ranking only at its tail.
+            org.apache.lucene.search.TopDocs top = null;
+            if (catalogue && (cursor == null || cursor.score == 2_000_000f)) {
+                top = searcher.search(workNameQuery,
+                    new org.apache.lucene.search.TopScoreDocCollectorManager(size + 1, cursor, 0));
+                if (top.scoreDocs.length <= size) top = null;
+            }
+            if (top == null) top = catalogue ? searcher.search(query,
                 new org.apache.lucene.search.TopScoreDocCollectorManager(size + 1, cursor, 0))
                 : searcher.searchAfter(cursor, query, size + 1);
             boolean more = top.scoreDocs.length > size;
@@ -676,7 +690,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                         if (best.scoreDocs.length != 1 || best.scoreDocs[0].doc != hit.doc
                             || !PublicNameProjection.visibleUnit(data, id)) key = null;
                     }
-                    if (!names && key != null && scope != null && !canonicalGroupHit(data, scope, searcher, query, key,
+                    if (!names && key != null && scope != null && !canonicalGroupHit(data, scope, searcher, catalogue && id.startsWith(PublicNameProjection.PREFIX + "work:") ? workNameQuery : query, key,
                         witness == null ? id : witness, hit.doc, entityField, proof)) key = null;
                     ordered.add(new RankHit(id, hit.score, key, catalogue || names ? hit.doc : null, witness));
                 }

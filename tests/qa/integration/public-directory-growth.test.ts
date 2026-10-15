@@ -30,8 +30,8 @@ test('public directory first and next pages visit a fixed neighbourhood as Realm
       await waitForRealmDirectory(stack.env, () => stack.call('GET', '/v1/realms?limit=2'));
       expect(performance.now() - started, 'fixture preparation stays below ten minutes').toBeLessThan(600_000);
       for (const sort of ['newest', 'activity', 'members', 'growing']) {
-        for (const q of ['', 'Growth']) {
-          const read = `directory/${sort}${q ? '/search' : ''}`;
+        for (const q of ['', 'Growth', 'unmatched-directory']) {
+          const read = `directory/${sort}${q === 'Growth' ? '/search' : q ? '/no-match' : ''}`;
           let cursor: string | null = null;
           const seen = new Set<string>();
           for (let page = 0; page < 2; page++) {
@@ -48,7 +48,7 @@ test('public directory first and next pages visit a fixed neighbourhood as Realm
             const text = await response.text();
             expect(response.status, text).toBe(200);
             const result = JSON.parse(text) as Page;
-            expect(result.items).toHaveLength(2);
+            expect(result.items).toHaveLength(q === 'unmatched-directory' ? 0 : 2);
             for (const item of result.items) {
               expect(seen.has(item.id), 'continuation cannot repeat a Realm').toBe(false);
               seen.add(item.id);

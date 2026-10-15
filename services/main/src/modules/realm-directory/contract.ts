@@ -25,7 +25,8 @@ export const realmDirectoryPage = t.Object({ profile: t.Literal('realm-directory
  * publish, then hydrates this cycle's changes: O(changed), not O(Realms).
  * Each tick copies/clears at most 64 rows; restore/erasure rebuilds and mirrors
  * both generations in bounded batches while the published slot stays readable.
- * Substring search can scan the SQL index relation.
+ * Text/topic Conditions filter the bounded source page. An empty page can
+ * retain its opaque continuation; only a missing continuation means exhaustion.
  * No candidate population ceiling; response and source batch sizes are separate. */
 export const REALM_DIRECTORY_COST = { pageSize: 20, sourceBatch: 32,
   profileBatch: 4, refreshBatches: 2, graphCalls: 163, deadlineMs: 10_000,
