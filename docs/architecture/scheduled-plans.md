@@ -213,7 +213,7 @@ does not reopen the fired logical action.
 Cancellation/revocation linearizes against send admission. If cancellation wins,
 no new send can start. If admission wins, report the already-started/uncertain
 delivery honestly: a provider call cannot be retracted. An in-flight send must
-settle or reconcile before a replacement recipient can receive this action.
+settle or reconcile before admitting an explicitly requested successor reminder.
 Do not claim successful cancellation of a send already in flight. Authority is
 current at the dispatch gate; later revocation cannot recall disclosed bytes.
 Late callbacks do not reopen terminal deliveries. Startup reconciles recovery
