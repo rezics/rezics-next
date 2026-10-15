@@ -1,25 +1,77 @@
 # State
 
-Checkpoint `ebe9a046-77c9-42fe-bcbe-053194927d4c` for [this Goal](GOAL.md),
-carrying forward `checkpoint:6db8221b-509c-414e-8413-6837d8c10502` and recording
+Checkpoint `6bf820fc-9723-4ec8-9256-f05b31f826e1` for [this Goal](GOAL.md),
+carrying forward `checkpoint:ebe9a046-77c9-42fe-bcbe-053194927d4c` and recording
 only these handled events:
 
-- `task:G-2513:2` (routing failure; attempt 3 already running).
-- `task:G-2513:3` (accepted as wave build support; Program notified).
+- `task:G-2248:6` (missing host `pg_config`; prerequisite repair authorized).
+- `task:G-2248:7` (sudo authentication refusal; local credential use authorized).
+- `task:G-2248:8` (unavailable package name; provider discovery authorized).
+- `task:G-2248:11` (matching host tools accepted; missing custody; bounded preparation authorized).
+- `task:G-2248:13` (publication evidence supports qualification; Program had already resumed it).
 
-Both events were acknowledged on 2026-10-14; their turns and this checkpoint
-found no pending Goal mail. Later parallel handoffs are outside
-this checkpoint. It updates state only and authorizes no new work or proof.
+The handled turns acknowledged these events on 2026-10-15; this checkpoint
+found no pending Operations mail. Later parallel handoffs are outside this
+checkpoint. It updates state only and authorizes no new work or proof.
 
 | Field | State |
 | --- | --- |
 | Manager | Enrolled with the coordinator on 2026-10-13 15:34 UTC |
-| Phase | Build on `wave/1`; no QA stack, recording, coverage or physical qualification. Program runs the whole suite in prove and merges the wave to main once through the gate |
+| Phase | Program's 2026-10-15 18:07 UTC decision records wave/2 on main and authorizes G-2248's production/completion physical qualification. Its 18:42 UTC decision authorizes consumption of the newly published worktree-local custody; the earlier wave-build hold is superseded for those two consumers only |
 | Proved on physical fixtures | D108 restore consumption qualifies in two post-fix restores; no physical erasure row or OPS10 pass is proved. These events add no proved row |
-| Fixture | Small `fx-small-180553eb933a` built once in 154.817 active seconds; post-fix restores qualify in 37.620 and 65.559 active seconds. Preserve it and superseded `fx-small-a3a906c1c1b7`; no pruning or repeat build |
-| Measures | Current `task goal -- status` sample: 50/67 rows, 319 proved and 83 pending cells; Operations 61% first attempts (today 50%, 7/14), landed-task median 1, max 4 (G-2248), 102.1M input / 502k output tokens, 14 first / 6 step / 9 fix attempts, seven fixes inferred; zero live workers and seven open tasks. Tokens per proved row remain unavailable. Reported refusal counters are zero, but retained preparation refusals remain evidence and G-2248's cap finding remains. These are cumulative, not wave-only measures, and may include later parallel activity; no weekly efficiency improvement is inferred. Program's waiting/record-task findings remain the wave's named causes. G-2513's first two attempts failed on workspace routing before implementation; both handled decisions avoided duplicate restarts |
+| Fixture | Preserve small `fx-small-180553eb933a` (154.817-second build; 37.620/65.559-second post-fix restores) and superseded `fx-small-a3a906c1c1b7`. G-2248 separately published one completion-default source, 1 build / 0 reuses, with no pruning; preserve its worktree-local custody and all protected historical backups |
+| Measures | Current `task goal -- status` sample: 67/68 rows, 402 proved and 6 pending cells; Operations 50% first attempts (today 0%, 0/5), landed-task median 2, max 15 (G-2248), 110.5M input / 532k output tokens, 14 first / 12 step / 14 fix attempts, seven fixes inferred; two open tasks. The Goal summary says zero live while G-2248's task row says attempt 15 running; this sample establishes no new outcome. Tokens per proved row remain unavailable. Refusal counters are zero, but the retained host and custody refusals below remain evidence. Repeated prerequisite discovery is this event set's cause: missing executable, authentication, an unverified package name, then checkout-local custody. Provider discovery replaced the guessed package command, matching tools were verified, and preparation was separated from consumers. G-2248 remains above the three-attempt cap. These cumulative figures may include parallel activity; no weekly efficiency improvement or proved row follows from this checkpoint |
 
-## Wave build decisions
+## G-2248 qualification decisions and next action
+
+Events 6–8 offered no repository implementation or physical proof. Completion
+QA `20261015t180958-b6354d` refused missing `pg_config` before source selection;
+production did not start. The next job refused at sudo authentication, and the
+authenticated job then found no `postgresql-devel-18.6-1.fc44` package. Decisions
+`62b0be26a`, `8c59dd659` and `5f8d5cd66` resumed the same worker for host repair,
+then provider discovery, without changing the engine or compatibility identity.
+
+Event 11 accepted signed Fedora `postgresql-private-devel` and
+`postgresql-server-devel` 18.6-1.fc44: real `pg_config`, `pg_ctl` and `postgres`
+agree on 18.6. Completion QA `20261015t182635-47a36a` at frozen
+`0e9245e2be624724e094eca07ca0becfb3f12081` then refused missing retained custody
+before physical assertions; production did not start. Decision `76b9c9d5c3`
+resumed only custody inspection and, if absent, one existing producer invocation;
+it stopped automatic continuation to consumers.
+
+Event 13 delivered verified publication at frozen clean
+`76b9c9d5c329b1e5d994bc276b88b445438f4675`, admitted job
+`e468e8f3-5300-4ea9-bd11-9812f1b260c4`: one build, zero reuses, producer 27.178
+active seconds and physical preparation 110.910 active seconds, both with zero
+admission wait and separate unchanged 600-second bounds. Cleanup succeeded,
+protected backups stayed unchanged, and no pruning occurred. Source key:
+`rs-owner-erasure-source-7a2197cc5d1e8a5b563fa91d9b1dd986146b7f8d54923180ef7e2fd4b64917fb`.
+Its manifest, backup and graph volumes are local to
+`.temp/worktrees/g-2248/.temp/fixture/retained-sources`; another checkout's root
+is not equivalent custody. Verified manifest digest:
+`82e23cf0392799ca2a259d4521b43602d826525d5d6de610d58517eb239c8787`;
+integrity digest:
+`594392be5f888e6a3838e65fec306f113d2fb8ca2c608c39bf8938a48262c34c`.
+Evidence: `.temp/worktrees/g-2248/.temp/goal/retained-source-publication-handoff.md`.
+
+Publication supports proceeding but proves no isolated consumer restore,
+disposal immutability, `08007` response/running state, replay/release or final
+consumer erasure. Program had already committed qualification decision
+`8d801db67d` and resumed attempt 14; event 13 therefore made no duplicate resume,
+brief edit or landing. The next action belongs to that existing worker and its
+handoff event, retaining all fault, custody, release and final-erasure assertions,
+separate clocks and unchanged budgets. The original comment drill stays held on
+its separate prerequisites. The host installer/declaration gap is listed only:
+`docs/development/toolchain.md` omits the matching providers, and
+`scripts/dev/cli.ts` does not resolve or check `pg_config`. No repair is
+dispatched by this checkpoint, and there is no implementation to land or task to
+close from these five events.
+
+## Carried wave-build decisions
+
+The following records the earlier build decisions. Their no-stack/no-resume
+directions do not override G-2248's later qualification authorization above;
+this checkpoint supplies no new acceptance for the other tasks.
 
 Program stopped the old workers and dropped the old queue at 06:01 UTC,
 including G-2479. The four Operations build briefs were already committed and
@@ -39,9 +91,10 @@ choice. A tests-only handoff is unfinished. No case-claim tool change is needed.
 | G-2485, scheduled restore drill registration | Attempt 3 accepted as build support on `wave/1` at `fb4b82552ec4fcf6e0c2f7ccaf0fa36d95a2d5f0` under the existing bounded-registration brief. Nine-file review preserves QA slot admission, startup admission and memory leasing; 18 executable drills use singleton serial consumers, retained-only selection and separate active/admission clocks. Handoff reports passing stack-free owner/unit checks, types, lint/AST and post-rebase scripts typecheck. The full guards stopped on upstream registration, later repaired and covered by a targeted inventory test; full batch was not rerun. Generated outputs were restored: Program runs generation and all wave gates before prove, with no waiver. Three independent-restore targets remain absent and unregistered; their obligations remain. Keep open for wave landing after prove; no individual landing, worker resume or brief change |
 | G-2513, independent-restore test recovery | Program's 07:29 UTC request confirms all three absent targets are first-public-scope work; brief committed at `83a0d0c50`. Attempt 2 failed on workspace routing before implementation; attempt 3 was already running, so no duplicate resume. Attempt 3 accepted as build support at `4ce968d7516ef3e5dfff703c1224692d8c9958ad` and `f5afa32e6285738e3c61d759c023d5e5576d5661`, verified on `wave/1`. All three targets are registered in the 21-entry serial plan; handoff reports passing stack-free checks and 80/80 historical assertion call sites preserved. The refusal target exposes original authority missing-custody assertions; no historical target of that name was found. Program notified in `mail:a46c4c3f-7760-4ab2-b03e-4a3fdf1a6a95`. Existing brief permits exact unresolved prerequisites, so no brief change. Keep open for wave landing after prove; no individual landing, close or worker resume. Physical restore, authority, refusal and disposal remain unproved |
 
-## Prove phase and next action
+## Carried prove-phase obligations
 
-Program has the Operations prove-phase list and G-2482's acceptance. No stopped
+At the prior checkpoint, Program had the Operations prove-phase list and
+G-2482's acceptance. No stopped
 qualification worker is resumed during build. Native erasure gaps were
 forwarded to API. G-2480, G-2481, G-2482 and G-2485 stay open to land with the
 wave after prove. G-2513's recovery is also accepted as build support and stays
