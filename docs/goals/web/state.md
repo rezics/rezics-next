@@ -1,5 +1,43 @@
 # State
 
+Checkpoint 1137feff-c674-4bfc-9acf-df819ec2d92f consolidates handled events
+task:G-2462:16 and mail:8b28d8d5-de23-45d0-ad71-5379163eab47. These
+dispositions supersede G-2462's affected holds below; later events retain
+their own decisions.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2462 | Task:G-2462:16 and decision `e363b46e4a` withheld acceptance after landing gate `run-GjmIQv`: contract, types, lint and AST passed, but affected tests stopped after 1166.159s; guards and stories were not reached. Fifteen failures were confirmed on main `bc052f5f67` and excused; the remaining container-reaper cancellation test missed removal of `extra-child` on the candidate. Mail:8b28d8d5 supersedes the classification hold: Program reports 16/16 reaper tests passing three times on main and three times on the branch, no reaper changes by this task, and classifies the failure as timing under load. Program has taken the landing retry; the deciding mail turn confirmed its lock and left the brief untouched. Leave that landing to report its result; do not restart it or resume the worker here. On its result, close verified only when nothing remains of the brief, otherwise resume with the remaining work. Preserve all six persona cells, recording/replay, separate integration proof, 18-story phone/desktop inspection and the complete canonical gate. Passing worker gate `run-LYYkOE`, with initial filtering/continuation/accepted-command scans of 3.282s/2.897s/2.842s and no timeout or retry, remains applicable evidence but replaces no landing gate. No surface harness repair, timeout increase, assertion weakening, waiver or new acceptance. |
+
+G-2674's landing disposition, G-2234's shared-path hold and G-2585's
+Program-owned retained-corpus hold remain as recorded below. This checkpoint
+promotes no API row or persona cell.
+
+The method's measures, current status and latest efficiency report were read.
+Concurrent scope remains 67/68 API rows and 402 proved/6 pending persona cells.
+Web's first-attempt share is 25% overall and 6% today (5 of 82); attempts per
+landed task have median 3 and maximum 25 (G-2237). Recorded input/output
+tokens are 2051.6M/13M, with two sessions unavailable and tokens per proved
+row unavailable. Attempt counts are 71 first, 50 step, 215 fix and 3 capacity;
+11 fixes are inferred from unavailable handoffs. Retained refusals count
+0 outcome, 13 gate, 0 failing-test findings and 18 other. These aggregate
+readings are not costs attributed to these two events; later gate results
+retain their own decisions.
+The latest efficiency report remains dated 2026-10-13 21:49 UTC; it supplies
+no comparable measurement of this repair. These two events identify a shared
+cancellation gate's timing under load as the repeat cause. Program's repeated
+main/branch comparison resolves its classification; retaining the surface's
+applicable proof avoids unchanged capture and inspection work. No efficiency
+gain or successful landing is inferred before the landing result.
+
+The supplied mail was acknowledged in its deciding turn at
+2026-10-15 21:23:58 UTC; that acknowledgement was confirmed here. The task
+event has its recorded brief decision. This checkpoint acknowledges their
+consolidation and supplies no new mail. It changes only this file and starts
+no worker, landing, closure or watcher.
+
+## Retained checkpoint 5d008d59
+
 Checkpoint 5d008d59-27a4-4601-b876-106bd056a646 consolidates handled events
 task:G-2674:12, mail:5e29ae25-a413-4840-9a67-df9d8e344e10,
 task:G-2462:13, mail:4f43dece-2ea5-4f90-861c-c7d15c50ac0b and
