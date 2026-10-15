@@ -5,15 +5,16 @@ import { retainedRequirementKinds, retainedRequirements } from './retained-requi
 export interface RetainedRequirement {
   source: string;
   build: string;
+  preparedByRun?: string;
   check(): Promise<string> | string;
 }
 export interface RetainedPreflight {
   ok: boolean;
   elapsedMs: number;
-  sources: { source: string; key?: string; reason?: string; repair: string; elapsedMs: number }[];
+  sources: { source: string; key?: string; preparedByRun?: string; reason?: string; repair: string; elapsedMs: number }[];
 }
 
-/** All selected sources are checked before the caller starts its first test.
+/** Selected sources must have custody or a declared preparation before shards.
  * A refusal never delegates to a producer or falls back to a different key. */
 export async function preflightRetainedSources(root: string, files: readonly string[],
   requirements?: RetainedRequirement[], custodyRoot = process.env.REZICS_QA_RETAINED_ROOT ?? root): Promise<RetainedPreflight> {
@@ -29,6 +30,11 @@ export async function preflightRetainedSources(root: string, files: readonly str
   const sources: RetainedPreflight['sources'] = [];
   for (const requirement of requirements) {
     const at = performance.now();
+    if (requirement.preparedByRun) {
+      sources.push({ source: requirement.source, preparedByRun: requirement.preparedByRun,
+        repair: requirement.build, elapsedMs: performance.now() - at });
+      continue;
+    }
     try {
       sources.push({ source: requirement.source, key: await requirement.check(),
         repair: requirement.build, elapsedMs: performance.now() - at });
@@ -43,7 +49,8 @@ export async function preflightRetainedSources(root: string, files: readonly str
 export function retainedPreflightSummary(result: RetainedPreflight): string {
   return [`Retained-source preflight: ${result.ok ? 'passed' : 'refused'} (${Math.round(result.elapsedMs)}ms; ${result.sources.length} sources)`,
     ...result.sources.map(source => source.reason
-      ? `${source.source}: ${source.reason}\nBuild/repair: ${source.repair}` : `${source.source}: ${source.key}`)].join('\n');
+      ? `${source.source}: ${source.reason}\nBuild/repair: ${source.repair}`
+      : `${source.source}: ${source.preparedByRun ? `prepared by run: ${source.preparedByRun}` : source.key}`)].join('\n');
 }
 
 export async function assertRetainedSources(root: string, files: readonly string[]): Promise<void> {

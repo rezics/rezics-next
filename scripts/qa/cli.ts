@@ -1021,7 +1021,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
     ? recordedFileDurations([join(root, '.artifacts', 'qa')], tier, 60, 1) : new Map<string, number>();
   const estimates = estimatedDurations(selectedFiles,
     tier === 'fault/recovery' ? new Map([...recorded, ...faultRecoveryBaselineDurations, ...local]) : recorded);
-  // Select retained custody once before shards. Missing custody refuses, never builds.
+  // Prepare the default fixture once before shards, then share its stopped cut.
   const fixtureConsumers = smallRecoveryFixtureConsumers(selectedFiles, process.env);
   if (tier === 'fault/recovery' && Object.values(fixtureConsumers).some(Boolean)) {
     const fixtureRoot = process.env.REZICS_FIXTURE_ROOT ?? join(process.env.REZICS_QA_RETAINED_ROOT ?? root, '.temp', 'fixture');
@@ -1029,7 +1029,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
     const prepared = await withWorkSlot(reserveWork => admit('other', () => withStartupSlot(
       { ...qaStackEnvironment(process.env), REZICS_FIXTURE_ROOT: fixtureRoot },
       (environment, onLine) => commandAsync(root, 'bun',
-        ['scripts/fixture/cli.ts', 'build', '--prepare', '--retained-only', '--profile', 'small', '--evidence', preparationFile],
+        ['scripts/fixture/cli.ts', 'build', '--prepare', '--profile', 'small', '--evidence', preparationFile],
         LOAD_PREPARATION_BUDGET_MS, environment, onLine, { runDeadline }), reserveWork), qaStackEnvironment(process.env)));
     writeFileSync(join(logs, 'fault-recovery-fixture-preparation.log'), prepared.output);
     writeFileSync(join(directory, 'fault-recovery-fixture-selection.json'), JSON.stringify({

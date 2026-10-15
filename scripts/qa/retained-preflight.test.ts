@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { sha256 } from '../fixture/corpus.ts';
 import { retainedRuntimeFacts } from '../fixture/runtime-facts.ts';
 import { preflightRetainedSources, retainedPreflightSummary } from './retained-preflight.ts';
-import { retainedRequirementKinds } from './retained-requirements.ts';
+import { retainedRequirementKinds, retainedRequirements } from './retained-requirements.ts';
 import { RetainedSources, sourceKey, type RetainedSourceAdapter } from './retained-source.ts';
 import { dispatchTest } from './test.ts';
 
@@ -128,3 +128,54 @@ test('all selected sources report failures before dispatch can begin', async () 
   expect(visited).toEqual(['one', 'two']);
   expect(result.sources.map(source => source.reason)).toEqual(['one absent', 'two absent']);
 });
+
+test('run-prepared sources are reported without checking absent custody', async () => {
+  const requirement = retainedRequirements(root, ['tests/qa/fault-recovery/erasure-campaign-qualification.test.ts'])
+    .find(item => item.source === 'fixture-small')!;
+  expect(requirement.preparedByRun).toContain('before fault/recovery shards');
+  let checked = false;
+  const result = await preflightRetainedSources(root, [], [{ ...requirement,
+    check() { checked = true; throw new Error('missing custody'); } }]);
+  expect(result.ok).toBe(true);
+  expect(checked).toBe(false);
+  expect(retainedPreflightSummary(result)).toContain('fixture-small: prepared by run:');
+});
+
+test('the printed owner repair command publishes a synthetic source through the real command', async () => {
+  const f = fixture();
+  const producer = join(f.directory, 'tests/qa/fault-recovery/owner-restore-erasure-fixture.ts');
+  mkdirSync(join(producer, '..'), { recursive: true });
+  writeFileSync(producer, `
+    import { writeFileSync } from 'node:fs';
+    import { join } from 'node:path';
+    import { RetainedSources } from ${JSON.stringify(join(root, 'scripts/qa/retained-source.ts'))};
+    const args = process.argv.slice(2);
+    if (!args.includes('--prepare-retained-source') || args.includes('--retained-only')) throw new Error('not a producer command');
+    const result = await new RetainedSources(${JSON.stringify(f.sources)}).prepare({
+      specification: ${JSON.stringify(f.adapter.specification)},
+      async build(context) {
+        writeFileSync(join(context.backup, 'owners'), 'complete backup');
+        return { metadata: { ready: true }, rdfDigest: ${JSON.stringify(sha256('rdf'))}, ownerState: {},
+          producerRevision: 'frozen-revision', qaIdentity: 'synthetic', phases: {} };
+      },
+      async verify() { return []; }, async restore() { throw new Error('must not restore'); },
+      async dispose() {}, async remove() {},
+    });
+    writeFileSync(args[args.indexOf('--evidence') + 1], JSON.stringify(result));
+  `);
+  // The synthetic checkout supplies only the expensive producer. Task and the
+  // goal command, including its slot selection, execute the production code.
+  writeFileSync(join(f.directory, 'Taskfile.yml'), `version: '3'\ntasks:\n  goal:\n    cmds:\n      - '${process.execPath} ${join(root, 'scripts/goal/goalctl.ts')} {{.CLI_ARGS}}'\n`);
+  const repair = retainedRequirements(root, ['tests/qa/fault-recovery/owner-restore-erasure-production.test.ts'])
+    .find(item => item.source === 'owner')!.build;
+  const refused = await preflightRetainedSources(root, [], [{ source: 'owner', build: repair,
+    check: async () => (await f.store.preflight(f.adapter)).key }]);
+  expect(refused.ok).toBe(false);
+  const command = retainedPreflightSummary(refused).split('Build/repair: ')[1]!.trim();
+  const child = Bun.spawn(command.split(' '), { cwd: f.directory, stdout: 'pipe', stderr: 'pipe',
+    env: { ...process.env, GOAL_IN_SLOT: '1', GOAL_QA_HEAVY_RUN: '0' } });
+  const [code, stdout, stderr] = await Promise.all([child.exited,
+    new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  expect({ code, output: stdout + stderr }).toEqual({ code: 0, output: expect.any(String) });
+  expect((await f.report()).ok).toBe(true);
+}, 30_000);

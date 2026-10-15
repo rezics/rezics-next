@@ -44,6 +44,7 @@ export function retainedRequirements(root: string, files: readonly string[], cus
   const fixtureDirectory = process.env.REZICS_FIXTURE_ROOT ?? join(custodyRoot, '.temp', 'fixture');
   return retainedRequirementKinds(root, files).map(kind => ({
     source: kind,
+    ...(kind === 'fixture-small' ? { preparedByRun: 'small fixture before fault/recovery shards' } : {}),
     build: kind === 'realm' ? 'task goal -- test tests/qa/integration/realm-discussion-source.test.ts'
       : kind === 'seed' ? 'task goal -- test tests/qa/fault-recovery/work-profile-seed-build.test.ts'
       : kind === 'content' ? 'task goal -- test tests/qa/fault-recovery/retained-content-source-preparation.test.ts'
