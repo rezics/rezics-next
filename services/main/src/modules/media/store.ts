@@ -1709,8 +1709,7 @@ export class MediaStore {
       LEFT JOIN media.imported_cover_revision cover_projection ON cover_projection.asset_revision_id = u.asset_revision_id
         AND cover_projection.asset_id = u.asset_id
         AND cover_projection.original_representation_id = CASE WHEN p.kind = 'original' THEN p.id ELSE p.source_id END
-      LEFT JOIN content.revision cover_revision ON cover_revision.id = cover_projection.asset_revision_id
-        AND cover_revision.availability = 'available'
+      LEFT JOIN LATERAL content.discovery_revision(cover_projection.asset_revision_id) cover_revision ON cover_revision.availability = 'available'
       LEFT JOIN media.field_slot n ON n.representation_id = p.id AND n.field = 'nsfw'
       LEFT JOIN media.field_revision nr ON nr.id = n.value_head
       LEFT JOIN media.screen_result legacy ON legacy.source_id = p.id
