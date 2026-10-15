@@ -12,7 +12,7 @@ type Page = {
   items: { reply: string; author: { id: string } | null; work: { id: string }; vote: { score: number } }[];
   nextCursor: string | null; count: { value: number; kind: string; total: null };
 };
-setDefaultTimeout(420_000);
+setDefaultTimeout(120_000);
 let publicRealm: PersonaSessions, privateRealm: PersonaSessions;
 const publicThreads: string[] = [], oldThreads: string[] = [], currentThreads: string[] = [];
 // Admission waits pause the runner's active-work clock, not Bun's hook timer.
