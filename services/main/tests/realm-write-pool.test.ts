@@ -346,7 +346,13 @@ function placement(
             ],
           },
         };
-      if (/SELECT\s+\?placement/.test(sql)) return { results: { bindings: [] } };
+      if (/SELECT\s+\?placement/.test(sql)) return { results: { bindings: terminal?.placement ? [bindings({
+        placement: terminal.placement,
+        revision: `urn:rezics:content:revision:${input.revisionId}`,
+        review: `urn:rezics:realm-review:${preparation.reviewDecisionId}`,
+        root: preparation.rootTarget, rootRevision: preparation.rootRevision,
+        author: actor, preparation: preparation.operationId,
+      })] : [] } };
       if (sql.includes('ASK'))
         return { boolean: !sql.includes('rv:rejectionKind rv:InvalidProfile') };
       throw new Error(`Unexpected Realm graph read: ${sql}`);

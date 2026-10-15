@@ -254,6 +254,8 @@ async function createReplyReportFixture(
         );
       if (query.includes('SELECT ?root WHERE') && query.includes(`<${rootRevision}>`))
         return bindings([{ root: uri(rootRevision) }]);
+      if (query.includes('SELECT ?resource ?head WHERE'))
+        return bindings([{ resource: uri(work), head: uri(rootRevision) }]);
       if (
         query.includes('SELECT ?resource ?head ?manifest') ||
         query.includes('SELECT ?resource ?manifest')
@@ -349,7 +351,10 @@ async function createReplyReportFixture(
       access,
       env,
     );
-    configureFixtureDisclosureAncestry(env, () => undefined);
+    configureFixtureDisclosureAncestry(env, target => target.work ? {
+      resource: target.work, head: rootRevision,
+      ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}),
+    } : undefined);
     configureDisclosure(env, new DisclosureStore(accessPool));
     access.configureBaseline(fuseki);
     const deps: MainWorkDependencies = {
