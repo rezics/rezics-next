@@ -8,9 +8,11 @@ import type { Copy } from './messages.ts';
 import type { NotesSnapshot } from './saves.ts';
 
 /** What a recipe still lacks before it can be read by everyone. */
-export function missingBeforePublishing({ title, ingredients, steps, notes }: { title: string; ingredients: number; steps: number; notes: string }) {
+export function missingBeforePublishing({ title, ingredients, steps, instructions = 0, notes }: {
+  title: string; ingredients: number; steps: number; instructions?: number; notes: string;
+}) {
   void notes;
-  return { title: !title.trim(), ingredients: ingredients === 0, steps: steps === 0, notes: false };
+  return { title: !title.trim(), ingredients: ingredients === 0, steps: steps === 0 && instructions === 0, notes: false };
 }
 
 /**

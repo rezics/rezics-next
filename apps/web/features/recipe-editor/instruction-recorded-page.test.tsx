@@ -6,6 +6,7 @@ import { englishMessages } from '../work-page/messages.ts';
 import { recipeReadingReads } from '../work-page/recipe-reading-recorded-page.ts';
 import { recipeWorkFrame, recipeWorkOverview } from '../work-page/recipe-reading-recorded-page.tsx';
 import { EVERYONE } from '../work-page/route.ts';
+import { mainRelationships } from '../relationships/api.ts';
 import { RecipeContent } from '../work-page/types/recipe.tsx';
 import { loadRecipeAuthoring } from './authoring-page.ts';
 import { mainRecipeExportApi, RecipeExportError } from './export-api.ts';
@@ -21,6 +22,7 @@ test.each(['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as
       const frame = await readRecipeVisitFrame(visit.main, visit.fetcher, { actingSubject: visit.actingSubject,
         locale: 'en', origin: 'https://recorded.invalid' });
       expect(frame.ok).toBe(true);
+      if (visit.actingSubject) await mainRelationships(visit.actingSubject, { fetch: visit.fetcher }).state(visit.header.id);
       const reads = recipeReadingReads({ main: visit.main, actingSubject: visit.actingSubject });
       const header = await reads.readWorkHeader(visit.id);
       expect(header).toMatchObject({ ok: true, data: visit.header });

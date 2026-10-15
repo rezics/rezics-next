@@ -13,6 +13,9 @@ import { instructionVisitTransport } from './instruction-recorded-fixture.ts';
 import { messages } from './messages.ts';
 import { readRecipeVisitFrame } from './recipe-authoring-recorded-page.ts';
 import { RecipeExchange } from './recipe-exchange.tsx';
+import { mainRelationships } from '../relationships/api.ts';
+import { createReaderStore } from '../catalogue/reader-store.ts';
+import { readAnimeReaderState } from '../work-page/anime-hub-recorded-page.ts';
 
 const recordingAsset = new URL('../../../../tests/fixtures/recipes/original-tomato-method.wav', import.meta.url);
 type Surface = 'reading' | 'editor' | 'exchange' | 'loading';
@@ -35,6 +38,10 @@ function RecordedInstructions({ persona, surface }: { persona: AnswerPersona; su
         const frame = await readRecipeVisitFrame(visit.main, visit.fetcher,
           { actingSubject: visit.actingSubject, locale: 'en', origin: window.location.origin });
         if (!frame.ok) throw new Error(frame.detail);
+        const relationships = visit.actingSubject ? mainRelationships(visit.actingSubject, { fetch: visit.fetcher }) : undefined;
+        const seed = visit.actingSubject ? await readAnimeReaderState(visit.main, visit.actingSubject, visit.id) : null;
+        const readerActions = visit.actingSubject ? createReaderStore({ actingSubject: visit.actingSubject,
+          seed: seed ?? {}, main: () => visit.main }) : undefined;
         let body: ReactNode;
         if (surface === 'editor') {
           const view = await loadRecipeAuthoring(visit.main, { id: visit.id, actingSubject: visit.actingSubject, signedIn: persona !== 'visitor' });
@@ -51,7 +58,7 @@ function RecordedInstructions({ persona, surface }: { persona: AnswerPersona; su
           if (surface === 'loading') void pending.catch(note);
         }
         const rendered = await recipeWorkFrame({ host: visit.host, workRef: visit.id, id: visit.id, work: visit.header,
-          locale: 'en', messages: englishMessages, children: body });
+          locale: 'en', messages: englishMessages, children: body, relationships, readerActions });
         if (live) setNode(rendered);
       } catch (error) { note(error); }
     })();
@@ -90,7 +97,8 @@ export const EditorDesktop: Story = { args: { persona: 'owner', surface: 'editor
 export const EditorPhone: Story = { ...EditorDesktop, globals: { viewport: { value: 'phone' } } };
 export const PreviewDesktop: Story = { args: { persona: 'owner', surface: 'editor' }, play: async ({ canvasElement }) => {
   const canvas = within(canvasElement);
-  await userEvent.click(await canvas.findByRole('button', { name: 'Preview' }));
+  const preview = await canvas.findByRole('button', { name: 'Preview' }, { timeout: 10_000 });
+  await userEvent.click(preview);
   await canvas.findByText('PRIVATE successor', { exact: false });
   await noMiss(canvasElement);
 } };

@@ -17,6 +17,7 @@ import { recipeReadingReads } from '../../../../../apps/web/features/work-page/r
 import { recipeWorkFrame, recipeWorkOverview } from '../../../../../apps/web/features/work-page/recipe-reading-recorded-page.tsx';
 import { englishMessages } from '../../../../../apps/web/features/work-page/messages.ts';
 import { EVERYONE } from '../../../../../apps/web/features/work-page/route.ts';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
 import { grantPersonaFixtureAuthority } from '../../../support/persona-fixture-authority.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
@@ -381,6 +382,7 @@ async function productionVisits(name: PersonaName) {
   const frame = await readRecipeVisitFrame(main, fetcher, { actingSubject: person.actingSubject, locale: 'en', origin });
   expect(frame.ok).toBe(true);
   phase = 'reading';
+  if (person.actingSubject) await mainRelationships(person.actingSubject, { fetch: fetcher }).state(recipe.work);
   const reads = recipeReadingReads({ main, actingSubject: person.actingSubject });
   const header = await reads.readWorkHeader(short(recipe.work));
   expect(header.ok).toBe(true);

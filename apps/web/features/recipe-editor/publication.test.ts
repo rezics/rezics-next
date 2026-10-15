@@ -24,6 +24,9 @@ test('a complete recipe publishes its exact structure without inventing a notes 
   expect(missingBeforePublishing({ title: 'Recipe', ingredients: 2, steps: 1, notes: '' })).toEqual({
     title: false, ingredients: false, steps: false, notes: false,
   });
+  expect(missingBeforePublishing({ title: 'Recipe', ingredients: 2, steps: 0, instructions: 1, notes: '' })).toEqual({
+    title: false, ingredients: false, steps: false, notes: false,
+  });
   expect(publisher.snapshot()).toMatchObject({ busy: false, revision: startRecipe.head, failure: null });
 });
 

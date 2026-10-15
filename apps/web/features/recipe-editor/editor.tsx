@@ -98,6 +98,7 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
       : recipe.loadFailure ? t.loadingRestFailed
         : t.loadingRestCount({ count: String(loaded) });
   const missing = missingBeforePublishing({ title: entry.title, ingredients: ingredients(state).length, steps: steps(state).length,
+    instructions: state.nodes.filter(node => node.role === 'instruction').length,
     notes: typedNotes });
   const accessRemoved = recipe.revoked || saved.revoked || written.revoked;
   const common = { store, state, language, t, busy: recipe.busy || importing, closed: accessRemoved };
