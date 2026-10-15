@@ -10,6 +10,7 @@ import { GoalMailStore } from './mail.ts';
 import { coordinatorStartDescriptor, coordinatorStartOptions, managerEvents } from './goalctl.ts';
 import { goalWindows, termspacesSession, turnWindowName, windowTurns, reconcileWindows } from './windows.ts';
 import { freshCoordinatorPass } from './manager-commands.ts';
+import { testAccountSettings } from './fixtures/accounts.ts';
 
 class RecordingLauncher implements IndependentLauncher {
   readonly launches: string[] = [];
@@ -168,6 +169,11 @@ function fixture() {
   const dir = mkdtempSync(join(root, 'case-'));
   mkdirSync(join(dir, 'account'));
   mkdirSync(join(dir, 'other-account'));
+  const previousSettings = process.env.GOAL_SETTINGS_DIRECTORY;
+  process.env.GOAL_SETTINGS_DIRECTORY = testAccountSettings(dir, [
+    { engine: 'codex', home: join(dir, 'other-account') }, { engine: 'sample-b', home: join(dir, 'account') },
+    { engine: 'sample-c', launcher: 'codex' },
+  ]);
   const stateDir = join(dir, 'state');
   const launcher = new RecordingLauncher();
   const coordinators: GoalCoordinator[] = [];
@@ -179,7 +185,7 @@ function fixture() {
       home: process.env.CODEX_HOME, goal: process.env.GOAL_ID }) + '\\n');
     process.exit(Number(process.env.EXIT_CODE ?? 0));`);
   const descriptor: LaunchDescriptor = { goal: 'program', generation: 'handover-1', session: 'throwaway-session',
-    engine: 'codex-1', effort: 'high', cwd: dir, home: join(dir, 'account'), program: process.execPath,
+    engine: 'sample-b', effort: 'high', cwd: dir, home: join(dir, 'account'), program: process.execPath,
     args: [script, '--model', 'gpt-6.1-sol', '--effort', 'high', WAKE_PROMPT, WAKE_LAST_MESSAGE],
     env: { PATH: process.env.PATH ?? '', CODEX_HOME: join(dir, 'account'), GOAL_ID: 'program', CALLS: join(dir, 'calls.jsonl') },
     socket: join(dir, 'unused.socket'), server: processIdentity(process.pid)!,
@@ -211,6 +217,8 @@ function fixture() {
     calls() { return existsSync(join(dir, 'calls.jsonl'))
       ? readFileSync(join(dir, 'calls.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line)) : []; },
     cleanup() { for (const coordinator of coordinators) { try { coordinator.close(); } catch {} }
+      if (previousSettings === undefined) delete process.env.GOAL_SETTINGS_DIRECTORY;
+      else process.env.GOAL_SETTINGS_DIRECTORY = previousSettings;
       rmSync(dir, { recursive: true, force: true }); } };
 }
 
@@ -317,7 +325,7 @@ describe('durable Goal wake coordinator', () => {
     } finally { reader?.kill(); f.cleanup(); }
   });
   test('task exclusions recognize brief filenames and mixed case without treating engine names as tasks', () => {
-    expect(eventTasks({key:'task:G-42:1',body:'See brief-g-42.md and G-43; engine codex-1'})).toEqual(['G-42','G-43']);
+    expect(eventTasks({key:'task:G-42:1',body:'See brief-g-42.md and G-43; engine sample-b'})).toEqual(['G-42','G-43']);
   });
   test('re-enrolling a role preserves a queued checkpoint and its covered-event boundary', async () => {
     const f = fixture();
@@ -813,16 +821,19 @@ describe('durable Goal wake coordinator', () => {
   });
 
   test('start enforces required engine, effort and strict options while accepting model overrides', () => {
-    for (const engine of ['codex','codex-1','claude'] as const) {
-      expect(coordinatorStartOptions(['program','--engine',engine,'--effort','high','--model','chosen-model']))
-        .toEqual({goal:'program',engine,effort:'high',model:'chosen-model'});
-      expect(coordinatorStartOptions(['program','--engine',engine,'--effort','high']).model).toBeTruthy();
-    }
-    for (const args of [[],['program'],['program','--engine','luna','--effort','high'],
-      ['program','--engine','codex'],['program','--engine','codex','--effort','invalid'],
-      ['program','--engine','codex','--effort','high','--previous-owner-pid','1']]) {
-      expect(() => coordinatorStartOptions(args)).toThrow();
-    }
+    const f = fixture();
+    try {
+      for (const engine of ['codex','sample-b','sample-c','claude'] as const) {
+        expect(coordinatorStartOptions(['program','--engine',engine,'--effort','high','--model','chosen-model']))
+          .toEqual({goal:'program',engine,effort:'high',model:'chosen-model'});
+        expect(coordinatorStartOptions(['program','--engine',engine,'--effort','high']).model).toBeTruthy();
+      }
+      for (const args of [[],['program'],['program','--engine','luna','--effort','high'],
+        ['program','--engine','codex'],['program','--engine','codex','--effort','invalid'],
+        ['program','--engine','codex','--effort','high','--previous-owner-pid','1']]) {
+        expect(() => coordinatorStartOptions(args)).toThrow();
+      }
+    } finally { f.cleanup(); }
   });
   test('Goals on different account homes retain independent wakes and launch descriptors across restart', async () => {
     const f = fixture();
@@ -1622,10 +1633,12 @@ describe('independent tmux launcher', () => {
       for (const engine of ['codex','claude']) {
         writeFileSync(join(bin,engine),agent); chmodSync(join(bin,engine),0o755);
       }
-      const homes = {codex:join(f.dir,'first-account'),'codex-1':join(f.dir,'second-account'),claude:join(f.dir,'claude-account')};
+      const homes = {codex:join(f.dir,'first-account'),'sample-b':join(f.dir,'second-account'),claude:join(f.dir,'claude-account')};
       for (const home of Object.values(homes)) mkdirSync(home);
       const env: NodeJS.ProcessEnv = {...process.env,PATH:`${bin}:${process.env.PATH}`,GOAL_TERMSPACES_SOCKET:socket,
-        GOAL_CODEX_HOME:homes.codex,GOAL_CODEX_1_HOME:homes['codex-1'],CLAUDE_CONFIG_DIR:homes.claude,
+        GOAL_SETTINGS_DIRECTORY:testAccountSettings(repository,[
+          {engine:'codex',home:homes.codex},{engine:'sample-b',home:homes['sample-b']},
+        ]),CLAUDE_CONFIG_DIR:homes.claude,
         GOAL_MEMORY_FLOOR_GIB:'0'};
       delete env.GOAL_MAIL_STATE_DIR;
       const invoke = (args: string[]) => spawnSync(process.execPath,[join(import.meta.dir,'goalctl.ts'),'coordinator',...args],
@@ -1639,7 +1652,7 @@ describe('independent tmux launcher', () => {
         pump.stderr!.on('data',chunk=>{ pumpErrors = (pumpErrors + String(chunk)).slice(-8_000); });
         await waitForPump(pumpState,()=>Boolean(pumpState.db.query('SELECT identity FROM pump_owner').get()),'Pump registration');
       } finally { pumpState.close(); }
-      for (const engine of ['codex','codex-1','claude'] as const) {
+      for (const engine of ['codex','sample-b','claude'] as const) {
         const goal = `manager-${engine}`;
         mkdirSync(join(repository,'docs','goals',goal),{recursive:true});
         writeFileSync(join(repository,'docs','goals',goal,'GOAL.md'),`---\nareas: []\n---\n# Synthetic Goal\n`);

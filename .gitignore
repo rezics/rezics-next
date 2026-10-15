@@ -29,6 +29,7 @@ coverage/
 .coverage.*
 
 # Local configuration and disposable research/runtime data
+.goalctl/*.user.json
 .env
 .env.*
 !.env.example

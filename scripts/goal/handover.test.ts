@@ -8,6 +8,7 @@ import { launchCommand } from './launch.ts';
 import { parseCodexUsage } from './usage.ts';
 import type { AccountUsage, Ledger, Task } from './types.ts';
 import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
+import { withTestAccounts } from './fixtures/accounts.ts';
 
 const spawnSync = fixtureSpawns(60_000);
 const cli = join(import.meta.dir, 'goalctl.ts');
@@ -41,7 +42,7 @@ import { execFileSync } from 'node:child_process';
 const args = process.argv.slice(2);
 const refs = Object.fromEntries((existsSync('.temp/ref') ? readdirSync('.temp/ref') : [])
   .map(name => [name, readFileSync(join('.temp/ref', name), 'utf8')]));
-const record = { args, refs, prompt: args.at(-1), account: process.env.CODEX_HOME,
+const record = { args, refs, prompt: args.at(-1), account: process.env.CODEX_HOME, settings: process.env.GOAL_SETTINGS_DIRECTORY,
   head: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() };
 const last = args[args.indexOf('-o') + 1];
 writeFileSync(last, 'RESULT: partial\\nNEXT: fixture step\\n');
@@ -55,10 +56,18 @@ writeFileSync('.temp/record.json', JSON.stringify(record));
   mkdirSync(join(local, 'goal-orchestration'), { recursive: true });
   const ledgerPath = join(local, 'goal-orchestration/ledger.json');
   writeFileSync(ledgerPath, JSON.stringify({ manager: 'recording-manager', tasks: {} }));
+  const settingsDirectory = join(dir, '.goalctl');
+  mkdirSync(settingsDirectory);
+  const accounts = [
+    { engine: 'codex', home: join(local, 'codex'), weight: 1 },
+    { engine: 'sample-b', home: join(local, 'sample-b'), weight: 1 },
+  ];
+  const configure = (configured = accounts) => writeFileSync(join(settingsDirectory, 'settings.user.json'), JSON.stringify({ version: 1, accounts: configured }));
+  configure();
   const env = {
     PATH: `${bin}:${process.env.PATH}`, GOAL_MAX_WORKERS: '25', GOAL_MEMORY_FLOOR_GIB: '0',
     GOAL_USAGE_FILE: join(local, 'usage.json'),
-    GOAL_CODEX_HOME: join(local, 'codex'), GOAL_CODEX_1_HOME: join(local, 'codex-1'),
+    GOAL_CODEX_HOME: join(local, 'codex'),
   };
   const run = (...args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd: dir, encoding: 'utf8', env });
   const ledger = (): Ledger => JSON.parse(readFileSync(ledgerPath, 'utf8')) as Ledger;
@@ -82,9 +91,9 @@ writeFileSync('.temp/record.json', JSON.stringify(record));
       if (Date.now() > deadline) throw new Error(`Recording launcher did not start: ${readFileSync(task.attempts.at(-1)!.output.replace('.json', '.err'), 'utf8')}`);
       await Bun.sleep(10);
     }
-    return JSON.parse(readFileSync(file, 'utf8')) as { args: string[]; refs: Record<string, string>; prompt: string; account: string; head: string };
+    return JSON.parse(readFileSync(file, 'utf8')) as { args: string[]; refs: Record<string, string>; prompt: string; account: string; head: string; settings: string };
   };
-  return { dir, local, run, git, ledger, save, brief, reference, record,
+  return { dir, local, run, git, ledger, save, brief, reference, record, configure,
     dispose: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
@@ -98,6 +107,62 @@ function weeklyUsage(home: string, week: number, fiveHour = 5): void {
 }
 
 describe('worker handover', () => {
+  test('an exhausted account uses the first model permitted past its allowance', () => {
+    const repo = repository();
+    try {
+      const home = join(repo.local, 'sample-c');
+      weeklyUsage(home, 100);
+      withTestAccounts(() => {
+        const [, args] = launchCommand({ id: 'worker', engine: 'sample-c', effort: 'high', session: '', prompt: 'p', resume: false });
+        expect(args[args.indexOf('-m') + 1]).toBe('sample-fallback-model');
+      }, [{ engine: 'sample-c', home, weight: 1, pastAllowance: ['sample-fallback-model', 'other-fallback-model'] }]);
+    } finally { repo.dispose(); }
+  });
+
+  test('a third configured launcher dispatches and resumes on its recorded account after preferences change', async () => {
+    const repo = repository();
+    try {
+      const launcher = join(repo.local, 'third-launcher');
+      writeFileSync(launcher, readFileSync(join(repo.local, 'bin/codex')));
+      chmodSync(launcher, 0o755);
+      const accounts = ['sample-a', 'sample-b', 'sample-c'].map((engine, index) => ({
+        engine, home: join(repo.local, engine), launcher: index === 2 ? launcher : 'codex', weight: index + 1,
+      }));
+      repo.configure(accounts);
+      const result = repo.run('dispatch', repo.brief(), '--engine', 'sample-c');
+      expect(result.status, result.stderr).toBe(0);
+      const first = repo.ledger().tasks['G-001']!;
+      expect(first.engine).toBe('sample-c');
+      const initial = await repo.record(first);
+      expect(initial.account).toBe(accounts[2]!.home);
+      expect(initial.settings).toBe(join(repo.dir, '.goalctl'));
+      const ledger = repo.ledger();
+      ledger.tasks['G-001']!.state = 'exited';
+      ledger.tasks['G-001']!.attempts[0]!.pid = 0;
+      ledger.tasks['G-001']!.attempts[0]!.session = 'recording-session';
+      repo.save(ledger);
+      repo.configure(accounts.map((account, index) => ({ ...account, weight: index === 0 ? 100 : 1 })));
+      rmSync(join(first.worktree, '.temp/record.json'));
+      const resumed = repo.run('resume', 'G-001', '--engine', 'sol', '-m', 'Continue on this account.');
+      expect(resumed.status, resumed.stderr).toBe(0);
+      const current = repo.ledger().tasks['G-001']!;
+      const record = await repo.record(current);
+      expect(current.attempts.map(attempt => attempt.engine)).toEqual(['sample-c', 'sample-c']);
+      expect(record.account).toBe(accounts[2]!.home);
+      expect(record.args.slice(0, 3)).toEqual(['exec', 'resume', 'recording-session']);
+    } finally { repo.dispose(); }
+  });
+
+  test('new work follows configured weights and current usage', () => {
+    const accounts = ['sample-a', 'sample-b', 'sample-c'].map((account, index): AccountUsage => ({
+      account, home: '', engines: [account], weight: index + 1, weekUsed: 10,
+    }));
+    expect(solAccount(accounts)).toBe('sample-c');
+    expect(solAccount(accounts.map(account => ({ ...account, weekUsed: account.account === 'sample-c' ? 95 : 10 })))).toBe('sample-b');
+    expect(solAccount(accounts.map(account => ({ ...account, reached: account.account === 'sample-c' })))).toBe('sample-b');
+    expect(solAccount(accounts.map(account => ({ ...account, weight: account.account === 'sample-a' ? 1 : 0 })))).toBe('sample-a');
+  });
+
   test.each(['verified', 'cancelled'] as const)('dispatch and resume read %s task references from retained artifacts', async outcome => {
     const repo = repository();
     try {
@@ -250,15 +315,15 @@ describe('worker handover', () => {
     const repo = repository();
     try {
       weeklyUsage(join(repo.local, 'codex'), 70, 1);
-      weeklyUsage(join(repo.local, 'codex-1'), 20, 80);
+      weeklyUsage(join(repo.local, 'sample-b'), 20, 80);
       const first = repo.reference('first.txt');
       const dispatched = repo.run('dispatch', repo.brief([`refs: [${first}]`]));
       expect(dispatched.stderr).toBe('');
       expect(dispatched.status).toBe(0);
       const initial = repo.ledger().tasks['G-001']!;
       const recorded = await repo.record(initial);
-      expect(initial.engine).toBe('codex-1');
-      expect(recorded.account).toBe(join(repo.local, 'codex-1'));
+      expect(initial.engine).toBe('sample-b');
+      expect(recorded.account).toBe(join(repo.local, 'sample-b'));
       const ledger = repo.ledger();
       ledger.tasks['G-001']!.state = 'exited';
       ledger.tasks['G-001']!.attempts[0]!.pid = 0;
@@ -268,15 +333,15 @@ describe('worker handover', () => {
       const file = repo.brief([`refs: [${first}, ${second}]`]);
       expect(repo.run('reclaim', 'G-001', file).status).toBe(0);
       weeklyUsage(join(repo.local, 'codex'), 5);
-      weeklyUsage(join(repo.local, 'codex-1'), 85);
+      weeklyUsage(join(repo.local, 'sample-b'), 85);
       rmSync(join(initial.worktree, '.temp/record.json'));
       const resumed = repo.run('resume', 'G-001', '--engine', 'sol', '-m', 'Use the added evidence.');
       expect(resumed.stderr).toBe('');
       expect(resumed.status).toBe(0);
       const current = repo.ledger().tasks['G-001']!;
       const next = await repo.record(current);
-      expect(current.engine).toBe('codex-1');
-      expect(next.account).toBe(join(repo.local, 'codex-1'));
+      expect(current.engine).toBe('sample-b');
+      expect(next.account).toBe(join(repo.local, 'sample-b'));
       expect(next.args.slice(0, 3)).toEqual(['exec', 'resume', 'recording-session']);
       expect(next.refs).toEqual({ 'first.txt': 'private evidence first.txt', 'second.txt': 'private evidence second.txt' });
       expect(next.prompt).toContain(readFileSync(file, 'utf8'));
@@ -354,12 +419,12 @@ describe('worker handover', () => {
     const brief = parseBrief('---\nid: G-001\nkind: tooling\ntitle: Sol\nengine: sol\neffort: ultra\n---\n');
     expect(validateBrief(brief)).toEqual([]);
     const accounts: AccountUsage[] = [
-      { account: 'codex', home: 'one', engines: ['codex'], used: 20, weekUsed: 90 },
-      { account: 'codex-1', home: 'two', engines: ['codex-1'], used: 80, weekUsed: 40 },
+      { account: 'sample-a', home: 'one', engines: ['sample-a'], used: 20, weekUsed: 90 },
+      { account: 'sample-b', home: 'two', engines: ['sample-b'], used: 80, weekUsed: 40 },
     ];
-    expect(solAccount(accounts)).toBe('codex-1');
-    expect(solAccount(accounts.map(account => ({ ...account, weekUsed: 40 })))).toBe('codex');
-    expect(solAccount(accounts.map(account => ({ ...account, weekUsed: undefined })))).toBe('codex');
+    expect(solAccount(accounts)).toBe('sample-b');
+    expect(solAccount(accounts.map(account => ({ ...account, weekUsed: 40 })))).toBe('sample-a');
+    expect(solAccount(accounts.map(account => ({ ...account, weekUsed: undefined })))).toBe('sample-a');
     const now = Date.now();
     const usage = (resets: number) => JSON.stringify({ payload: { rate_limits: {
       primary: { used_percent: 95, window_minutes: 300, resets_at: now / 1000 + 60 },
@@ -375,7 +440,7 @@ describe('worker handover', () => {
         const [, args] = launchCommand({ id: 'G-001', effort: 'high', session: 's', prompt: 'p', engine, resume });
         expect(args.slice(args.indexOf('--disallowedTools'), args.indexOf('--disallowedTools') + 2)).toEqual(['--disallowedTools', 'Agent']);
       }
-      for (const engine of ['codex', 'codex-1', 'luna'] as const) {
+      for (const engine of ['codex', 'luna'] as const) {
         const [, args] = launchCommand({ id: 'G-001', effort: 'high', session: 's', prompt: 'p', engine, resume });
         expect(args).toContain('features.multi_agent=false');
         expect(args).toContain('features.multi_agent_v2=false');

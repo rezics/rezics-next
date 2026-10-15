@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "goalctl settings layer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "accounts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["engine", "weight"],
+        "anyOf": [{ "required": ["launcher"] }, { "required": ["home"] }],
+        "properties": {
+          "engine": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "launcher": { "type": "string", "minLength": 1 },
+          "home": { "type": "string", "minLength": 1 },
+          "weight": { "type": "number", "minimum": 0 },
+          "pastAllowance": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+        }
+      }
+    },
+    "codexServiceTier": { "type": "string", "enum": ["fast", "default", "flex"] },
+    "reviewEngine": { "type": "string", "minLength": 1 },
+    "confirmIntervalMinutes": { "type": "number", "minimum": 0 },
+    "gateLanes": { "type": "integer", "minimum": 1 },
+    "qaSlots": { "type": "integer", "minimum": 1 },
+    "regressLaneCount": { "type": "integer", "minimum": 1 },
+    "unitGateScope": { "type": "string", "enum": ["affected", "changed"] },
+    "unitGateShards": { "type": "integer", "minimum": 1 },
+    "telegramChat": { "type": "string" }
+  }
+}

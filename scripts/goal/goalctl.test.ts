@@ -25,6 +25,7 @@ import { reviewPrompt } from './land.ts';
 import { POSTGRES_SOCKET_LIMIT, postgresSocketPath, postgresSocketRefusal } from './postgres-socket.ts';
 import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
 import { fixtureProcessScope } from './fixtures/process-scope.ts';
+import { withTestAccounts, writeTestAccounts } from './fixtures/accounts.ts';
 
 // These fixtures exercise multiple CLI processes per case. Neither startup nor a whole case
 // has a latency contract; keep the test watchdog beyond the child's hang deadline.
@@ -37,10 +38,52 @@ function cliEnvironment(dir: string): NodeJS.ProcessEnv {
   mkdirSync(local, { recursive: true });
   const meminfo = join(local, 'meminfo');
   writeFileSync(meminfo, 'MemAvailable: 67108864 kB\n');
+  const accounts = [{ engine: 'codex', home: join(local, 'codex') },
+    { engine: 'sample-b', home: join(local, 'sample-b') }];
   return { PATH: process.env.PATH, GOAL_ID: 'alpha', GOAL_MAX_WORKERS: '25', GOAL_MEMORY_FLOOR_GIB: '0',
-    GOAL_MEMINFO_FILE: meminfo, GOAL_CODEX_HOME: join(local, 'codex'), GOAL_CODEX_1_HOME: join(local, 'codex-1'),
+    GOAL_MEMINFO_FILE: meminfo, GOAL_CODEX_HOME: join(local, 'codex'), GOAL_TEST_SECOND_HOME: join(local, 'sample-b'),
+    GOAL_SETTINGS_DIRECTORY: writeTestAccounts(dir, accounts),
     GOAL_USAGE_FILE: join(local, 'usage.json') };
 }
+
+test('config reports effective settings and their layers, refuses invalid fields and falls back after user removal', () => {
+  const scratch = join(import.meta.dir, '../../.temp/config-cli');
+  mkdirSync(scratch, { recursive: true });
+  const root = mkdtempSync(join(scratch, 'case-'));
+  const directory = join(root, '.goalctl');
+  mkdirSync(directory);
+  const sharedFile = join(directory, 'settings.json');
+  const userFile = join(directory, 'settings.user.json');
+  const config = () => spawnSync(process.execPath, [join(import.meta.dir, 'goalctl.ts'), 'config'], {
+    cwd: root, encoding: 'utf8', env: { PATH: process.env.PATH, GOAL_SETTINGS_DIRECTORY: directory },
+  });
+  try {
+    writeFileSync(sharedFile, JSON.stringify({ version: 1, qaSlots: 5 }));
+    writeFileSync(userFile, JSON.stringify({ version: 1, qaSlots: 7, telegramChat: 'synthetic-chat' }));
+    const layered = config();
+    expect(layered.status, layered.stderr).toBe(0);
+    expect(JSON.parse(layered.stdout)).toMatchObject({
+      settings: { version: 1, qaSlots: 7, telegramChat: 'synthetic-chat', accounts: [] },
+      sources: { qaSlots: userFile, telegramChat: userFile, gateLanes: 'built-in', accounts: 'built-in' },
+    });
+    writeFileSync(userFile, JSON.stringify({ version: 1, qaSlots: 'invalid' }));
+    const invalid = config();
+    expect(invalid.status).toBe(1);
+    expect(invalid.stderr).toContain(userFile);
+    expect(invalid.stderr).toContain('settings.qaSlots');
+    rmSync(userFile);
+    const fallback = config();
+    expect(fallback.status, fallback.stderr).toBe(0);
+    expect(JSON.parse(fallback.stdout)).toMatchObject({
+      settings: { qaSlots: 5, telegramChat: '', accounts: [] },
+      sources: { qaSlots: sharedFile, telegramChat: 'built-in', accounts: 'built-in' },
+    });
+    rmSync(sharedFile);
+    const defaults = config();
+    expect(defaults.status, defaults.stderr).toBe(0);
+    expect(JSON.parse(defaults.stdout)).toMatchObject({ settings: { qaSlots: 3 }, sources: { qaSlots: 'built-in' } });
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 test('a hung fixture child that ignores SIGTERM still fails with its command and deadline', () => {
   const hung = fixtureSpawns(100);
@@ -235,7 +278,7 @@ describe('goalctl briefs', () => {
     const parsed = parseBrief(brief.replace('effort: xhigh', 'engine: claude\neffort: ultra').replace('services/main/src/modules/poll/**', '/etc/**')
       .replace('040-044', '044-040'));
     expect(validateBrief(parsed)).toHaveLength(3);
-    expect(validateBrief({ ...parseBrief(brief), engine: 'codex-1', effort: 'ultra' })).toEqual([]);
+    expect(withTestAccounts(() => validateBrief({ ...parseBrief(brief), engine: 'sample-b', effort: 'ultra' }))).toEqual([]);
     expect(validateBrief({ ...parseBrief(brief), engine: 'claude', effort: 'max' })).toEqual([]);
     expect(validateBrief({ ...parseBrief(brief), paths: ['.temp/x'] })).toHaveLength(1);
   });
@@ -2152,7 +2195,7 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
     const previous = process.env.GOAL_CODEX_COMPACT_TOKENS;
     try {
       process.env.GOAL_CODEX_COMPACT_TOKENS = '120000';
-      expect(launchCommand({ id: 'G-081', effort: 'high', session: '', prompt: 'p', resume: false, engine: 'codex-1' })[1])
+      expect(launchCommand({ id: 'G-081', effort: 'high', session: '', prompt: 'p', resume: false, engine: 'codex' })[1])
         .toContain('model_auto_compact_token_limit=120000');
     } finally {
       if (previous === undefined) delete process.env.GOAL_CODEX_COMPACT_TOKENS;
@@ -2160,12 +2203,12 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
     }
   });
 
-  test('runs Sol on the second Codex account with the same flags; its account is chosen by environment', () => {
+  test('runs Sol on a configured Codex account with the same flags', () => withTestAccounts(() => {
     const [program, args] = launchCommand({ id: 'G-101', effort: 'max', session: '', prompt: 'p', resume: false,
-      engine: 'codex-1', worktree: '/w', lastMessage: '/r/a.md' });
+      engine: 'sample-b', worktree: '/w', lastMessage: '/r/a.md' });
     expect(program).toBe('codex');
     expect(args).toEqual(expect.arrayContaining(['-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=max', '-C', '/w']));
-  });
+  }));
 
   test('runs Grok 4.7 through Cursor Agent with the effort in the model ID', () => {
     const [program, args] = launchCommand({ id: 'G-102', effort: 'xhigh', session: 'c', prompt: 'p', resume: true,
@@ -2206,7 +2249,7 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
     expect(validateBrief(brief('claude', 'max'))).toEqual([]);
     expect(validateBrief(brief('fable', 'max'))).toEqual([]);
     expect(validateBrief(brief('sonnet', 'max'))).toEqual([]);
-    expect(validateBrief(brief('codex-1', 'ultra'))).toEqual([]);
+    expect(withTestAccounts(() => validateBrief(brief('sample-b', 'ultra')))).toEqual([]);
     expect(validateBrief(brief('astra', 'high')).join()).toContain('engine must be one of');
     expect(validateBrief(brief('cursor', 'xhigh'))).toEqual([]);
     expect(validateBrief(brief('luna', 'ultra')).join()).toContain('luna effort');
@@ -2612,7 +2655,7 @@ describe('goalctl reclaim', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('reclaim <id> <brief> [--allow-area]');
-    expect(result.stderr).toContain('dispatch <brief.md> [--dry-run] [--force-usage] [--allow-area]');
+    expect(result.stderr).toContain('dispatch <brief.md> [--engine <engine>] [--dry-run] [--force-usage] [--allow-area]');
     expect(result.stderr).toContain('gate <id> [--skip-unit-gate] [--skip-type-gate]');
   });
 });
@@ -2701,12 +2744,12 @@ describe('goalctl shared lifecycle and launch gates', () => {
       mkdirSync(join(dir, 'services/main/src/routes'), { recursive: true });
       writeFileSync(join(dir, 'services/main/src', root), 'export {};\n');
     }
-    writeFileSync(join(dir, '.gitignore'), '.temp/\n');
+    writeFileSync(join(dir, '.gitignore'), '.temp/\n.goalctl/*.user.json\n');
     git('add', '.');
     git('commit', '-qm', 'start');
     mkdirSync(join(dir, '.temp/bin'), { recursive: true });
     const fixture = join(import.meta.dir, 'fixtures/sleep-worker.ts');
-    for (const binary of ['grok', 'claude', 'codex', 'codex-1', 'cursor-agent']) {
+    for (const binary of ['grok', 'claude', 'codex', 'sample-b', 'cursor-agent']) {
       writeFileSync(join(dir, '.temp/bin', binary), `#!/usr/bin/env bun\nimport ${JSON.stringify(fixture)};\n`);
       chmodSync(join(dir, '.temp/bin', binary), 0o755);
     }
@@ -4482,7 +4525,7 @@ process.exit(0);
       expect(memory.status).toBe(1);
       expect(memory.stderr).toContain('Memory floor reached: host MemAvailable');
       expect(memory.stderr).toContain('GOAL_MEMORY_FLOOR_GIB=1000000000');
-      for (const home of [r.env.GOAL_CODEX_HOME!, r.env.GOAL_CODEX_1_HOME!]) {
+      for (const home of [r.env.GOAL_CODEX_HOME!, r.env.GOAL_TEST_SECOND_HOME!]) {
         const sessions = join(home, 'sessions/2026/10/07');
         mkdirSync(sessions, { recursive: true });
         writeFileSync(join(sessions, 'rollout.jsonl'), JSON.stringify({ type: 'event_msg', payload: {
@@ -4490,7 +4533,7 @@ process.exit(0);
             resets_at: Date.now() / 1000 + 3600 } } } }));
       }
       // The second account stays open, so only the manager's own reached account refuses the wake.
-      writeFileSync(join(r.env.GOAL_CODEX_1_HOME!, 'sessions/2026/10/07/rollout.jsonl'), JSON.stringify({
+      writeFileSync(join(r.env.GOAL_TEST_SECOND_HOME!, 'sessions/2026/10/07/rollout.jsonl'), JSON.stringify({
         type: 'event_msg', payload: { type: 'token_count', rate_limits: { primary: { used_percent: 10,
           window_minutes: 10080, resets_at: Date.now() / 1000 + 3600 } } } }));
       for (const engine of ['codex', 'luna']) {
@@ -4499,7 +4542,7 @@ process.exit(0);
         expect(result.stderr).toContain('EXHAUSTED');
         expect(result.stderr).not.toContain('Claude usage is restricted');
       }
-      const other = admitWake(r.dir, { ...r.env, GOAL_MAX_WORKERS: '0' }, 'codex-1');
+      const other = admitWake(r.dir, { ...r.env, GOAL_MAX_WORKERS: '0' }, 'sample-b');
       expect(other.status, other.stderr).toBe(0);
       expect(JSON.parse(other.stdout)).toMatchObject({ live: 0, limit: 0, claude: 'restricted' });
     } finally { r.cleanup(); }
@@ -4683,16 +4726,16 @@ process.exit(0);
       await r.stopFixture('G-001');
       writeFileSync(r.env.GOAL_USAGE_FILE!, JSON.stringify({ at: Date.now() / 1000, rate_limits: {
         five_hour: { used_percentage: 100, resets_at: Date.now() / 1000 + 3600 } } }));
-      for (const home of [r.env.GOAL_CODEX_HOME!, r.env.GOAL_CODEX_1_HOME!]) {
+      for (const home of [r.env.GOAL_CODEX_HOME!, r.env.GOAL_TEST_SECOND_HOME!]) {
         const sessions = join(home, 'sessions/2026/10/07');
         mkdirSync(sessions, { recursive: true });
         writeFileSync(join(sessions, 'rollout.jsonl'), JSON.stringify({ type: 'event_msg', payload: {
           type: 'token_count', rate_limits: { primary: { used_percent: 100, window_minutes: 10080,
             resets_at: Date.now() / 1000 + 3600 } } } }));
       }
-      for (const engine of ['claude', 'sonnet', 'fable', 'codex', 'codex-1', 'luna']) {
+      for (const engine of ['claude', 'sonnet', 'fable', 'codex', 'sample-b', 'luna']) {
         const result = r.run(['resume', 'G-001', '-m', 'continue', '--engine', engine]);
-        const queued = engine.startsWith('codex') || engine === 'luna';
+        const queued = ['codex', 'sample-b', 'luna'].includes(engine);
         expect(result.status).toBe(queued ? 0 : 1);
         expect(queued ? result.stdout : result.stderr).toContain(queued ? 'EXHAUSTED' : 'Claude usage is critical');
         if (queued) expect(r.ledger().tasks['G-001']!.waitingResume).toMatchObject({ engine,
@@ -5248,15 +5291,22 @@ describe('goalctl archive', () => {
   });
 });
 
-test('the QA slot count comes from the file beside the slots unless the environment names one', () => {
+test('QA slot settings migrate once and the environment can override one process', () => {
   const root = mkdtempSync(join(tmpdir(), 'qa-slot-count-'));
   try {
-    const slots = join(root, 'qa-slots');
+    const state = join(root, '.temp/goal-orchestration');
+    mkdirSync(state, { recursive: true });
+    const slots = join(state, 'qa-slots');
     expect(qaSlotCount(slots, {})).toBe(3);
-    writeFileSync(join(root, 'qa-slot-count'), '6\n');
+    writeFileSync(join(state, 'qa-slot-count'), '6\n');
     expect(qaSlotCount(slots, {})).toBe(6);
+    expect(existsSync(join(state, 'qa-slot-count.migrated'))).toBe(true);
     expect(qaSlotCount(slots, { GOAL_QA_SLOTS: '2' })).toBe(2);
-    writeFileSync(join(root, 'qa-slot-count'), 'many\n');
+    writeFileSync(join(state, 'qa-slot-count'), 'many\n');
+    expect(qaSlotCount(slots, {})).toBe(6);
+    writeFileSync(join(root, '.goalctl/settings.user.json'), JSON.stringify({ version: 1, qaSlots: 'many' }));
+    expect(() => qaSlotCount(slots, {})).toThrow('qaSlots');
+    rmSync(join(root, '.goalctl/settings.user.json'));
     expect(qaSlotCount(slots, {})).toBe(3);
     expect(Number.isNaN(qaSlotCount(slots, { GOAL_QA_SLOTS: 'x' }))).toBe(true);
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -5314,7 +5364,9 @@ describe('gate lanes', () => {
 
   test('the lane count comes from the file beside the lanes unless the environment names one', async () => {
     const root = mkdtempSync(join(tmpdir(), 'gate-lane-count-'));
-    const directory = join(root, 'lanes');
+    const state = join(root, '.temp/goal-orchestration');
+    mkdirSync(state, { recursive: true });
+    const directory = join(state, 'gate-lanes');
     const previous = process.env.GOAL_GATE_LANES;
     delete process.env.GOAL_GATE_LANES;
     const waiting = async (): Promise<string> => {
@@ -5336,7 +5388,7 @@ describe('gate lanes', () => {
     };
     try {
       expect(await waiting()).toContain('2/2 gate lanes busy');
-      writeFileSync(join(root, 'gate-lane-count'), '3\n');
+      writeFileSync(join(state, 'gate-lane-count'), '3\n');
       expect(await waiting()).toBe('none waited');
       process.env.GOAL_GATE_LANES = '1';
       expect(await waiting()).toContain('1/1 gate lanes busy');
@@ -6313,9 +6365,12 @@ describe('Goal coordinator enrollment CLI', () => {
 
   test.skipIf(!independentServer)('enrolls two Goals with the engine account homes and preserves the first handover', () => {
     const directory = mkdtempSync(join(import.meta.dir, '../../.temp/coordinator-enrollment-'));
-    const homes = { codex: join(directory, 'codex'), 'codex-1': join(directory, 'codex-1') };
+    const homes = { codex: join(directory, 'codex'), 'sample-b': join(directory, 'sample-b') };
+    const settings = writeTestAccounts(directory, Object.entries(homes).map(([engine, home]) => ({ engine, home })));
+    const previousSettings = process.env.GOAL_SETTINGS_DIRECTORY;
+    process.env.GOAL_SETTINGS_DIRECTORY = settings;
     const env = { ...process.env, CODEX_HOME: '/inherited-worker-account', GOAL_MAIL_STATE_DIR: directory,
-      GOAL_CODEX_HOME: homes.codex, GOAL_CODEX_1_HOME: homes['codex-1'] };
+      GOAL_SETTINGS_DIRECTORY: settings };
     const invoke = (args: string[]) => spawnSync(process.execPath, [join(import.meta.dir, 'goalctl.ts'), 'coordinator', ...args],
       { cwd: join(import.meta.dir, '../..'), env, encoding: 'utf8' });
     const sessions = ['01a114cb-4d63-7f23-bf70-1610b4db2b2b', '01a114cb-4d63-7f23-bf70-1610b4db2b2c'];
@@ -6325,7 +6380,7 @@ describe('Goal coordinator enrollment CLI', () => {
         kernel: { manager: 'kernel-manager', startedAt: '2026-01-01T00:00:00Z' },
       } }));
       const enrolled: LaunchDescriptor[] = [];
-      for (const [index, engine] of (['codex', 'codex-1'] as const).entries()) {
+      for (const [index, engine] of (['codex', 'sample-b'] as const).entries()) {
         const session = sessions[index]!;
         const goal = index === 0 ? 'program' : 'kernel';
         const home = homes[engine];
@@ -6353,7 +6408,11 @@ describe('Goal coordinator enrollment CLI', () => {
       }
       expect(status.attempts).toEqual([]);
       expect(status.wakes).toEqual([]);
-    } finally { rmSync(directory, { recursive: true, force: true }); }
+    } finally {
+      if (previousSettings === undefined) delete process.env.GOAL_SETTINGS_DIRECTORY;
+      else process.env.GOAL_SETTINGS_DIRECTORY = previousSettings;
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   test('a launched worker cannot inherit its manager native session ownership', () => {
@@ -6369,8 +6428,8 @@ describe('Goal coordinator enrollment CLI', () => {
     expect(parent.CODEX_THREAD_ID).toBe('manager-session');
   });
 
-  test('records the named live owner identity and accepts every supported engine', () => {
-    for (const engine of ['codex', 'codex-1', 'luna']) {
+  test('records the named live owner identity and accepts every supported engine', () => withTestAccounts(() => {
+    for (const engine of ['codex', 'sample-b', 'luna']) {
       const options = coordinatorEnrollmentOptions([...enrollment, ...ownerFlag, '--engine', engine, '--tmux-socket', '/socket']);
       expect(options).toMatchObject({ goal: 'program', session: enrollment[2], engine, effort: 'high', cwd: '/manager',
         socket: '/socket', previousOwner: { pid: process.pid } });
@@ -6379,7 +6438,7 @@ describe('Goal coordinator enrollment CLI', () => {
       expect(options.previousOwner.cgroup).toBe(readFileSync(`/proc/${process.pid}/cgroup`, 'utf8').trim());
     }
     expect(coordinatorEnrollmentOptions([...enrollment, ...ownerFlag]).engine).toBe('codex');
-  });
+  }));
 
   test('requires an explicit positive integer PID and refuses a vanished previous owner', () => {
     expect(() => coordinatorEnrollmentOptions(enrollment)).toThrow('--previous-owner-pid <pid>');
@@ -6448,11 +6507,11 @@ describe('Goal mail CLI', () => {
     } finally { rmSync(directory,{recursive:true,force:true}); }
   });
 
-  test('worker launch adapters retain native resume, model, effort and account tier arguments', () => {
+  test('worker launch adapters retain native resume, model, effort and account tier arguments', () => withTestAccounts(() => {
     const prior = process.env.GOAL_CODEX_SERVICE_TIER;
     process.env.GOAL_CODEX_SERVICE_TIER = 'default';
     try {
-      for (const engine of ['codex','codex-1','luna'] as const) {
+      for (const engine of ['codex','sample-b','luna'] as const) {
         const [program,args] = launchCommand({id:'program',engine,effort:'high',session:'native-session',prompt:'mail prompt',
           resume:true,worktree:'/manager',lastMessage:'/manager/last.md'});
         expect(program).toBe('codex');
@@ -6463,7 +6522,7 @@ describe('Goal mail CLI', () => {
         expect(args.slice(-4)).toEqual(['-o','/manager/last.md','--','mail prompt']);
       }
     } finally { if (prior === undefined) delete process.env.GOAL_CODEX_SERVICE_TIER; else process.env.GOAL_CODEX_SERVICE_TIER = prior; }
-  });
+  }));
 });
 
 describe('registered Goal mail lifecycle', () => {

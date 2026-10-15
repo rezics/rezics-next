@@ -10,7 +10,7 @@ import { retryEventDatabase } from './event-store.ts';
 import { ensureTermspacesSession, termspacesSession, missingTermspacesReason, termspacesTarget, goalWindows, newGoalWindow, turnWindowName, windowTurns, windowTmux, followTurn } from './windows.ts';
 import { JobStore, jobDirectory, wakeJobs, type JobPassOptions } from './job.ts';
 import { pidAlive, readLedger, withLedger } from './ledger.ts';
-import { engineOf, programOf, type Ledger } from './types.ts';
+import { engineOf, programOf, isCodex, type Ledger } from './types.ts';
 
 /** A parked command may run for hours. Recording its caller's end must not wait for a wake or settlement. */
 export async function recordWorkerEnds(ledger: Ledger, options: JobPassOptions = {}): Promise<void> {
@@ -157,7 +157,7 @@ export function nativeOwner(_home: string, session: string, previousOwner?: Proc
 }
 
 export interface LaunchDescriptor {
-  goal: string; generation: string; session: string; engine: 'codex' | 'codex-1' | 'luna' | 'claude'; effort: string;
+  goal: string; generation: string; session: string; engine: string; effort: string;
   cwd: string; home: string; program: string; args: string[]; env: Record<string, string>;
   socket: string; server: ProcessIdentity; previousOwner?: ProcessIdentity;
   /** Present only until the first native turn has created its resumable session. */
@@ -210,6 +210,7 @@ the next turn on mail or task exits, so arm no watchers.`;
 }
 
 export function managerSessionExists(descriptor: LaunchDescriptor): boolean {
+  if (!descriptor.home) return false;
   if (descriptor.engine === 'claude') {
     return existsSync(join(descriptor.home, 'projects', claudeProjectKey(descriptor.cwd), `${descriptor.session}.jsonl`));
   }
@@ -438,7 +439,7 @@ export class GoalCoordinator {
     return nativeOwner(descriptor.home, descriptor.session, descriptor.previousOwner, '/proc', descriptor.engine);
   }
   enroll(descriptor: LaunchDescriptor): void {
-    const codex = descriptor.engine === 'codex' || descriptor.engine === 'codex-1' || descriptor.engine === 'luna';
+    const codex = isCodex(descriptor.engine);
     if (!/^[a-z0-9][a-z0-9-]{0,60}$/.test(descriptor.goal) || !descriptor.generation || !descriptor.session
       || (descriptor.engine !== 'claude' && !codex)
       || !descriptor.args.includes(WAKE_PROMPT)

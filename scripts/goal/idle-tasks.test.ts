@@ -47,7 +47,7 @@ function repository() {
     writeFileSync(join(state, 'ledger.json'), JSON.stringify(ledger));
     return spawn(process.execPath, [cli, ...args], { cwd: dir, encoding: 'utf8', env: {
       GOAL_ID: goal, GOAL_MAX_WORKERS: '5', GOAL_USAGE_FILE: join(state, 'usage.json'),
-      GOAL_CODEX_HOME: join(state, 'codex'), GOAL_CODEX_1_HOME: join(state, 'codex-1'),
+      GOAL_CODEX_HOME: join(state, 'codex'),
     } });
   };
   return { task, run, ledger, dispose: () => rmSync(dir, { recursive: true, force: true }) };

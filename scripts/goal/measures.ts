@@ -1,5 +1,5 @@
 import { createReadStream, existsSync, readFileSync, readdirSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { configuredAccounts } from './config.ts';
 import { basename, dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { Attempt, Ledger, Task } from './goalctl.ts';
@@ -63,7 +63,7 @@ async function attemptLog(attempt: Attempt, root: string): Promise<AttemptLog> {
     if (!lastMessage && text) log.handoff = text;
   };
   const path = resolve(root, attempt.output);
-  if (['codex', 'codex-1', 'luna'].includes(attempt.engine ?? '')) await events(path, visit);
+  if (attempt.engine && (attempt.engine === 'luna' || configuredAccounts({ cwd: root }).some(account => account.engine === attempt.engine))) await events(path, visit);
   else { try { visit(JSON.parse(read(path)) as LogEvent); } catch { /* Unfinished or unavailable result. */ } }
   return log;
 }
@@ -112,8 +112,7 @@ async function sessionGrowth(path: string, attempts: Attempt[], nowMs: number): 
 export async function goalMeasures(ledger: Ledger, options: MeasureOptions = {}): Promise<Record<string, GoalMeasures>> {
   const root = options.root ?? process.cwd(), nowMs = options.nowMs ?? Date.now();
   const today = new Date(nowMs).toISOString().slice(0, 10);
-  const homes = options.codexHomes ?? [process.env.GOAL_CODEX_HOME ?? join(homedir(), '.codex'),
-    process.env.GOAL_CODEX_1_HOME ?? join(homedir(), '.codex-1')];
+  const homes = options.codexHomes ?? configuredAccounts({ cwd: root }).flatMap(account => account.home ? [account.home] : []);
   const native = new Map<string, string>();
   for (const home of homes) {
     if (!existsSync(home)) continue;

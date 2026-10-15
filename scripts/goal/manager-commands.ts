@@ -1,6 +1,8 @@
 import { resolve, join } from 'node:path';
 import { stateDir, activeGoals, root, managerOf } from './ledger.ts';
-import { type Ledger, effortsOf, modelOf, engineEnv } from './types.ts';
+import { type Ledger, effortsOf, modelOf, engineEnv, isCodex, launcherOf } from './types.ts';
+import { configuredAccounts, settingsDirectory } from './config.ts';
+import { codexModel } from './usage.ts';
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { GoalMailStore } from './mail.ts';
@@ -94,7 +96,7 @@ export function coordinatorEnrollmentOptions(args: string[]): {
   const goal = args[0] ?? '';
   const flags = namedOptions(args.slice(1), ['--session', '--engine', '--effort', '--cwd', '--model', '--tmux-socket', '--previous-owner-pid']);
   const engine = flags['--engine'] ?? 'codex';
-  if (engine !== 'codex' && engine !== 'codex-1' && engine !== 'luna' && engine !== 'claude') {
+  if (!isCodex(engine) && engine !== 'claude') {
     throw new Error('The coordinator enrolls Codex and Claude managers only');
   }
   const effort = flags['--effort'];
@@ -114,22 +116,23 @@ export function coordinatorEnrollmentOptions(args: string[]): {
   return { goal, session, engine, effort, cwd, model, socket: flags['--tmux-socket'], previousOwner };
 }
 export function coordinatorStartOptions(args: string[]): {
-  goal: string; engine: 'codex' | 'codex-1' | 'claude'; effort: string; model: string;
+  goal: string; engine: string; effort: string; model: string;
 } {
   const goal = args[0] ?? '';
   const flags = namedOptions(args.slice(1), ['--engine', '--effort', '--model']);
   const engine = flags['--engine'];
-  if (!validGoalSlug(goal) || (engine !== 'codex' && engine !== 'codex-1' && engine !== 'claude')) {
-    throw new Error('coordinator start needs <goal> --engine <codex|codex-1|claude> --effort <effort> [--model <id>]');
+  if (!validGoalSlug(goal) || !engine || (!configuredAccounts().some(account => account.engine === engine) && engine !== 'claude')) {
+    throw new Error('coordinator start needs <goal> --engine <engine> --effort <effort> [--model <id>]');
   }
   const effort = flags['--effort'] ?? '';
   if (!effortsOf(engine).includes(effort)) throw new Error(`${engine} effort must be one of ${effortsOf(engine).join(', ')}`);
-  return {goal,engine,effort,model:flags['--model'] ?? modelOf(engine)};
+  return {goal,engine,effort,model:flags['--model'] ?? (isCodex(engine) ? codexModel(engine) : modelOf(engine))};
 }
 export function coordinatorStartDescriptor(options: ReturnType<typeof coordinatorStartOptions>, cwd: string, socket: string): LaunchDescriptor {
   const {goal,engine,effort,model} = options;
   const session = randomUUID();
-  const home = realpathSync(engine === 'claude' ? claudeConfigHome() : engineEnv(engine).CODEX_HOME!);
+  const accountHome = engine === 'claude' ? claudeConfigHome() : engineEnv(engine).CODEX_HOME;
+  const home = accountHome ? realpathSync(accountHome) : '';
   const command = (resume: boolean): [string, string[]] => {
     const [program,args] = launchCommand({id:goal,engine,effort,session,worktree:cwd,resume,
       prompt:WAKE_PROMPT,lastMessage:WAKE_LAST_MESSAGE});
@@ -140,10 +143,10 @@ export function coordinatorStartDescriptor(options: ReturnType<typeof coordinato
   const [program,args] = command(true);
   return {goal,generation:randomUUID(),session,engine,effort,cwd,home,
     program:Bun.which(program) ?? program,args,startArgs:command(false)[1],socket,server:tmuxServer(socket),
-    env:{PATH:process.env.PATH ?? '',HOME:homedir(),GOAL_ID:goal,GOAL_MANAGER:`goal-${goal}`,
-      ...(engine === 'claude' ? (process.env.CLAUDE_CONFIG_DIR ? {CLAUDE_CONFIG_DIR:home} : {}) : {CODEX_HOME:home}),
+    env:{PATH:process.env.PATH ?? '',HOME:homedir(),GOAL_ID:goal,GOAL_MANAGER:`goal-${goal}`,GOAL_SETTINGS_DIRECTORY:settingsDirectory(),
+      ...(engine === 'claude' ? (process.env.CLAUDE_CONFIG_DIR ? {CLAUDE_CONFIG_DIR:home} : {}) : home ? {CODEX_HOME:home} : {}),
       ...Object.fromEntries(['GOAL_MAX_WORKERS','GOAL_MEMORY_FLOOR_GIB','STORYBOOK_MAX_WORKERS','GOAL_CODEX_HOME',
-        'GOAL_CODEX_1_HOME','GOAL_CODEX_SERVICE_TIER'].filter(key=>process.env[key] !== undefined).map(key=>[key,process.env[key]!]))}};
+        'GOAL_CODEX_SERVICE_TIER'].filter(key=>process.env[key] !== undefined).map(key=>[key,process.env[key]!]))}};
 }
 function eventCoordinator(directory: string): GoalCoordinator {
   return new GoalCoordinator({stateDir:directory,
@@ -156,7 +159,9 @@ function eventCoordinator(directory: string): GoalCoordinator {
     admit:descriptor => {
       if (!activeGoals(eventLedger(directory)).includes(descriptor.goal)) throw new Error('Enrolled Goal is no longer active');
       const home = descriptor.engine === 'claude' ? realpathSync(claudeConfigHome()) : engineEnv(descriptor.engine).CODEX_HOME;
-      if (!home || realpathSync(home) !== descriptor.home) throw new Error('Selected engine account home changed; handover required');
+      const program = launcherOf(descriptor.engine);
+      if ((home ? realpathSync(home) : '') !== descriptor.home || (Bun.which(program) ?? program) !== descriptor.program)
+        throw new Error('Selected engine account home or launcher changed; handover required');
       managerWakeGates(descriptor.engine);
     }});
 }
@@ -220,7 +225,7 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
         const socket = termspacesTarget().socket;
         const descriptor: LaunchDescriptor = {goal,generation:randomUUID(),session,engine,effort,cwd,home,previousOwner,
           program:Bun.which('claude') ?? 'claude',args:claudeWakeArgs(session,model!,effort),socket,server:tmuxServer(socket),
-          env:{PATH:process.env.PATH ?? '',HOME:homedir(),GOAL_ID:goal,
+          env:{PATH:process.env.PATH ?? '',HOME:homedir(),GOAL_ID:goal,GOAL_SETTINGS_DIRECTORY:settingsDirectory(),
             GOAL_MANAGER:managerOf(eventLedger(directory),goal),
             ...(process.env.CLAUDE_CONFIG_DIR ? {CLAUDE_CONFIG_DIR:process.env.CLAUDE_CONFIG_DIR} : {}),
             ...(process.env.GOAL_MAIL_STATE_DIR ? {GOAL_MAIL_STATE_DIR:directory} : {}),
@@ -229,7 +234,9 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
         try { coordinator.enroll(descriptor); } finally { coordinator.release(); }
         console.log(JSON.stringify(descriptor,null,2)); return;
       }
-      const home = realpathSync(engineEnv(engine).CODEX_HOME!);
+      const configuredHome = engineEnv(engine).CODEX_HOME;
+      if (!configuredHome) throw new Error('Coordinator enrollment needs the account home to verify its native session');
+      const home = realpathSync(configuredHome);
       nativeSession(home,session,cwd);
       ensureTermspacesSession();
       const socket = termspacesTarget().socket;
@@ -237,11 +244,11 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
         prompt:WAKE_PROMPT,lastMessage:WAKE_LAST_MESSAGE});
       const descriptor: LaunchDescriptor = {goal,generation:randomUUID(),session,engine,effort,cwd,home,previousOwner,
         program:Bun.which(program) ?? program,args:launchArgs,socket,server:tmuxServer(socket),
-        env:{PATH:process.env.PATH ?? '',HOME:homedir(),CODEX_HOME:home,GOAL_ID:goal,
+        env:{PATH:process.env.PATH ?? '',HOME:homedir(),CODEX_HOME:home,GOAL_ID:goal,GOAL_SETTINGS_DIRECTORY:settingsDirectory(),
           GOAL_MANAGER:managerOf(eventLedger(directory),goal),
           ...(process.env.GOAL_MAIL_STATE_DIR ? {GOAL_MAIL_STATE_DIR:directory} : {}),
           ...Object.fromEntries(['GOAL_MAX_WORKERS','GOAL_MEMORY_FLOOR_GIB','STORYBOOK_MAX_WORKERS','GOAL_CODEX_HOME',
-            'GOAL_CODEX_1_HOME','GOAL_CODEX_SERVICE_TIER'].filter(key => process.env[key] !== undefined).map(key=>[key,process.env[key]!]))}};
+            'GOAL_CODEX_SERVICE_TIER'].filter(key => process.env[key] !== undefined).map(key=>[key,process.env[key]!]))}};
       coordinator.acquire();
       try { coordinator.enroll(descriptor); } finally { coordinator.release(); }
       console.log(JSON.stringify(descriptor,null,2)); return;

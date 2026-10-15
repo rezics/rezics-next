@@ -1,4 +1,4 @@
-import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, type Ledger, isClaudeCode, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
+import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, type Ledger, isClaudeCode, isCodex, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
 import { root, withLedger, briefGoal, unlandedChangeConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, preserveTaskOutputs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH, REGENERATION_COMMIT_SUBJECT } from './ledger.ts';
 import { pathToFileURL } from 'node:url';
 import { join, resolve, basename, relative, dirname, posix } from 'node:path';
@@ -74,10 +74,11 @@ export function neededFileWaits(brief: Brief): string[] {
     { cwd: root, encoding: 'utf8' }).status !== 0).map(path => `${brief.id} needs ${path}, which is absent from main`);
 }
 
-export async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
+export async function dispatch(briefPath: string, flags: Set<string>, overrideEngine?: string): Promise<void> {
   const absolute = resolve(briefPath);
   const text = readFileSync(absolute, 'utf8');
   const brief = parseBrief(text);
+  if (overrideEngine !== undefined) brief.engine = overrideEngine;
   const errors = [...validateBrief(brief), ...mechanismSectionErrors(text)];
   if (errors.length) throw new Error(`Invalid brief ${briefPath}:\n  ${errors.join('\n  ')}`);
   const methodErrors = await dispatchMethodErrors(brief, text);
@@ -500,7 +501,7 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
     if (refusal) throw new Error(`${task.id}: ${refusal}`);
     const previousEngine = engineOf(previous);
     const nextEngine = engine === 'sol'
-      ? previousEngine === 'codex' || previousEngine === 'codex-1' ? previousEngine : dispatchEngine(engine)
+      ? isCodex(previousEngine) ? previousEngine : dispatchEngine(engine)
       : engine ?? previousEngine;
     const nextEffort = effort ?? previous.effort;
     if (!effortsOf(nextEngine).includes(nextEffort)) {

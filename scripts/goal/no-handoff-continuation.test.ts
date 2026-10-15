@@ -45,7 +45,7 @@ function fixture(text = progress, state: Task['state'] = 'running') {
   save({ tasks: { [task.id]: task }, goals: { program: { manager: 'fixture-manager', startedAt: attempt.startedAt } } });
   const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, GOAL_ID: 'program', GOAL_MEMORY_FLOOR_GIB: '0',
     GOAL_MAX_WORKERS: '25', GOAL_CODEX_HOME: join(directory, '.temp/codex'),
-    GOAL_CODEX_1_HOME: join(directory, '.temp/codex-1'), GOAL_USAGE_FILE: join(directory, '.temp/usage.json') };
+    GOAL_USAGE_FILE: join(directory, '.temp/usage.json') };
   const execute = async (source: string) => {
     const child = Bun.spawn([process.execPath, '-e', source], { cwd: directory, env, stdout: 'pipe', stderr: 'pipe' });
     const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);

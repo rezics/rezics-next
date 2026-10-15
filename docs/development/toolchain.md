@@ -28,6 +28,19 @@ extra arguments after `--`. Yarn installs dependencies with `task install` or
 `task toolchain:install`; it does not run application commands. The lockfile is
 the source for transitive package versions. Root and workspace package manifests
 use exact direct pins; Compose and Dockerfiles pin external images by digest.
+
+Goal orchestration settings live in `.goalctl/`. The tracked
+`settings.schema.json` defines the versioned format; tracked `settings.json`
+overrides built-in defaults, and ignored `settings.user.json` overrides shared
+values for this computer and operator. Each layer declares `"version": 1` and
+is validated on load. `task goal -- config` shows effective values and their
+sources. Codex account names, launchers or homes, dispatch weights and ordered
+`pastAllowance` model lists belong only in the user layer. Service tier, review
+engine, confirmation interval, QA and gate counts, unit gate scope and shards,
+and Telegram recipient are settings fields too. See
+[Resources](../goals/manager.md#resources) for their names and semantics.
+Legacy one-value configuration under `.temp/goal-orchestration/` migrates once
+to the user layer with a diagnostic; runtime state stays in `.temp/`.
 The locally built Fuseki image has a content-addressed tag derived by
 `scripts/dev/fuseki-image.ts` and checked by `task gen:check`.
 
@@ -738,7 +751,7 @@ measurements.
 - MCP: `http://127.0.0.1:9200/mcp`, registered as `browseros` in every engine.
   The host keeps its shared MCP servers in one list, `~/.agents/mcp.json`, and
   `~/.agents/bin/mcp-sync` writes it through each engine's own configuration:
-  Claude Code (user scope), Codex (`~/.codex` and `~/.codex-1`), Grok and
+  Claude Code (user scope), the configured Codex homes, Grok and
   Cursor. It touches only the servers it lists and leaves each engine's own
   servers alone; `mcp-sync --check` reports drift. New sessions load it; a
   running session needs a restart or `/mcp`.

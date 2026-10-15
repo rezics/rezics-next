@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import { findingsFromText, handoffResult, land, needsReview, reviewBranch, reviewEngine, reviewPrompt } from './land.ts';
 import { parseBrief, validateBrief, type Ledger, type Task } from './goalctl.ts';
+import { testAccountSettings } from './fixtures/accounts.ts';
 
 // A refused review pass is run again after a wait; the tests do not wait.
 process.env.GOAL_REVIEW_RETRY_MS = '1';
@@ -23,7 +24,7 @@ export function repo(options: { result?: string; auto?: boolean; files?: Record<
     mkdirSync(join(dir, path, '..'), { recursive: true });
     writeFileSync(join(dir, path), content);
   };
-  write('.gitignore', '.temp/\n');
+  write('.gitignore', '.temp/\n.goalctl/*.user.json\n');
   write('scripts/goal/dedupe-imports.ts', readFileSync(join(import.meta.dir, 'dedupe-imports.ts'), 'utf8'));
   write('scripts/goal/composition-roots.ts', readFileSync(join(import.meta.dir, 'composition-roots.ts'), 'utf8'));
   for (const file of ['app.ts', 'index.ts', 'composition.ts', 'routes/dependencies.ts']) write(`services/main/src/${file}`, 'export {};\n');
@@ -132,8 +133,12 @@ const child = Bun.spawn(['bun', 'test', ...args.slice(2)], { stdout: 'inherit', 
 process.exit(await child.exited);
 `);
   // The last try of a refused review pass runs on the other account: the same stand-in, never the real CLI.
-  writeFileSync(join(dir, '.temp/bin/codex-1'), readFileSync(join(dir, '.temp/bin/codex')));
-  for (const binary of ['codex', 'codex-1', 'task']) chmodSync(join(dir, '.temp/bin', binary), 0o755);
+  writeFileSync(join(dir, '.temp/bin/sample-b'), readFileSync(join(dir, '.temp/bin/codex')));
+  for (const binary of ['codex', 'sample-b', 'task']) chmodSync(join(dir, '.temp/bin', binary), 0o755);
+  const settingsDirectory = testAccountSettings(dir, [
+    { engine: 'codex', home: join(dir, '.temp/first-home'), launcher: join(dir, '.temp/bin/codex') },
+    { engine: 'sample-b', home: join(dir, '.temp/second-home'), launcher: join(dir, '.temp/bin/sample-b') },
+  ]);
   const log = join(dir, '.temp/reviewer.log');
   write('.temp/land-lane.ts', `import { landTask } from ${JSON.stringify(join(import.meta.dir, 'tasks.ts'))};
 let clock = 0;
@@ -152,7 +157,7 @@ process.exit(result.exitCode);`);
   chmodSync(join(dir, '.temp/bin/git'), 0o755);
   const run = (command = 'land', overrides: NodeJS.ProcessEnv = {}, extraArgs: string[] = []) => {
     const env: NodeJS.ProcessEnv = { ...process.env, GOAL_ID: 'alpha', REVIEW_LOG: log, LEDGER_PATH: ledgerPath,
-      LAND_MAIN: dir, PATH: `${join(dir, '.temp/bin')}:${process.env.PATH}`, ...overrides };
+      LAND_MAIN: dir, GOAL_SETTINGS_DIRECTORY: settingsDirectory, PATH: `${join(dir, '.temp/bin')}:${process.env.PATH}`, ...overrides };
     for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE']) delete env[key];
     return spawnSync('bun', overrides.LANE_TIMEOUT ? [join(dir, '.temp/land-lane.ts'), task.id]
       : [join(import.meta.dir, 'goalctl.ts'), command, task.id, ...extraArgs],
@@ -318,16 +323,26 @@ describe('Goal landing', () => {
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
-  test('the review engine comes from the override, then the program file, then codex', () => {
+  test('the review engine comes from the override, then migrated settings, then codex', () => {
     const directory = mkdtempSync(join(tmpdir(), 'goal-review-engine-'));
-    const file = join(directory, 'review-engine');
+    const file = join(directory, '.temp/goal-orchestration/review-engine');
+    mkdirSync(join(directory, '.temp/goal-orchestration'), { recursive: true });
+    const previousSettings = process.env.GOAL_SETTINGS_DIRECTORY;
+    process.env.GOAL_SETTINGS_DIRECTORY = testAccountSettings(directory, [
+      { engine: 'codex', home: join(directory, 'first-home') },
+      { engine: 'sample-b', home: join(directory, 'second-home') },
+    ]);
     try {
       expect(reviewEngine({}, file)).toBe('codex');
       writeFileSync(file, 'sonnet\n');
       expect(reviewEngine({}, file)).toBe('sonnet');
-      expect(reviewEngine({ GOAL_REVIEW_ENGINE: 'codex-1' }, file)).toBe('codex-1');
+      expect(reviewEngine({ GOAL_REVIEW_ENGINE: 'sample-b' }, file)).toBe('sample-b');
       expect(() => reviewEngine({ GOAL_REVIEW_ENGINE: 'grok' }, file)).toThrow('GOAL_REVIEW_ENGINE');
-    } finally { rmSync(directory, { recursive: true, force: true }); }
+    } finally {
+      if (previousSettings === undefined) delete process.env.GOAL_SETTINGS_DIRECTORY;
+      else process.env.GOAL_SETTINGS_DIRECTORY = previousSettings;
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   test('a reviewer reply may wrap its findings object in prose or a fence', () => {
@@ -357,28 +372,38 @@ cat "${reply}" > "$out"
     const r = repo();
     const bin = mkdtempSync(join(tmpdir(), 'goal-review-bin-'));
     const path = process.env.PATH;
+    const previousSettings = process.env.GOAL_SETTINGS_DIRECTORY;
     try {
-      // `codex` always refuses; `codex-1` answers. Each records that it ran.
+      // `codex` always refuses; `sample-b` answers. Each records that it ran.
       const calls = join(bin, 'calls.log');
       writeFileSync(join(bin, 'codex'), `#!/bin/sh\ncat > /dev/null\necho codex >> "${calls}"\necho "ERROR: Selected model is at capacity." >&2\nexit 1\n`);
-      writeFileSync(join(bin, 'codex-1'), `#!/bin/sh
+      writeFileSync(join(bin, 'sample-b'), `#!/bin/sh
 out=""; prev=""
 for arg in "$@"; do [ "$prev" = "--output-last-message" ] && out="$arg"; prev="$arg"; done
 cat > /dev/null
-echo codex-1 >> "${calls}"
+echo sample-b >> "${calls}"
 echo '{"findings":[]}' > "$out"
 `);
-      for (const name of ['codex', 'codex-1']) chmodSync(join(bin, name), 0o755);
+      for (const name of ['codex', 'sample-b']) chmodSync(join(bin, name), 0o755);
       process.env.PATH = `${bin}:${path}`;
+      process.env.GOAL_SETTINGS_DIRECTORY = testAccountSettings(bin, [
+        { engine: 'codex', launcher: join(bin, 'codex') },
+        { engine: 'sample-b', launcher: join(bin, 'sample-b') },
+      ]);
       const directory = join(r.runDir, 'review-1000-first');
       expect(await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
         base: r.base, head: r.git(r.worktree, 'rev-parse', 'HEAD') }, 'codex')).toEqual([]);
       const ran = readFileSync(calls, 'utf8').trim().split('\n');
       expect(ran.filter(name => name === 'codex')).toHaveLength(2);
-      expect(ran.filter(name => name === 'codex-1')).toHaveLength(1);
+      expect(ran.filter(name => name === 'sample-b')).toHaveLength(1);
       // The refused tries stay in the pass's log.
       expect(readFileSync(join(directory, 'stderr.log'), 'utf8').match(/at capacity/g)).toHaveLength(2);
-    } finally { process.env.PATH = path; rmSync(bin, { recursive: true, force: true }); r.cleanup(); }
+    } finally {
+      process.env.PATH = path;
+      if (previousSettings === undefined) delete process.env.GOAL_SETTINGS_DIRECTORY;
+      else process.env.GOAL_SETTINGS_DIRECTORY = previousSettings;
+      rmSync(bin, { recursive: true, force: true }); r.cleanup();
+    }
   }, 30_000);
 
   test('a step landing accepts a partial handoff, is reviewed as a step and leaves the task open', async () => {

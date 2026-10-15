@@ -67,7 +67,7 @@ function processFixture() {
   chmodSync(join(bin, 'codex'), 0o755);
   const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, GOAL_TASK_ID: f.task.id,
     GOAL_MEMORY_FLOOR_GIB: '0', GOAL_MAX_WORKERS: '25', GOAL_USAGE_FILE: join(f.cwd, '.temp/usage.json'),
-    GOAL_CODEX_HOME: join(f.cwd, '.temp/codex'), GOAL_CODEX_1_HOME: join(f.cwd, '.temp/codex-1') };
+    GOAL_CODEX_HOME: join(f.cwd, '.temp/codex') };
   const execute = async (source: string) => {
     const child = Bun.spawn([process.execPath, '-e', source], { cwd: f.cwd, env, stdout: 'pipe', stderr: 'pipe' });
     const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);

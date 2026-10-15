@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const TOKEN = 'fake-telegram-token-should-never-appear';
@@ -22,7 +22,7 @@ interface Fixture {
 function fixture(): Fixture {
   mkdirSync(scratch, { recursive: true });
   const directory = mkdtempSync(join(scratch, 'case-'));
-  const stateDir = join(directory, 'state');
+  const stateDir = join(directory, '.temp/goal-orchestration');
   const secrets = join(directory, 'fake-bots.json');
   writeFileSync(secrets, JSON.stringify({ telegram: [{ token: TOKEN }] }));
   const requests: Captured[] = [];
@@ -258,7 +258,7 @@ describe('Goal Telegram decisions and notices', () => {
     expectNoSecret(f, { stdout, stderr });
   });
 
-  test('a local state chat file supplies the chat when no environment chat is set', async () => {
+  test('a local state chat file migrates into user settings and supplies the chat', async () => {
     const f = fixture();
     mkdirSync(f.stateDir, { recursive: true });
     writeFileSync(join(f.stateDir, 'telegram-chat'), 'file-chat-31\n');
@@ -274,6 +274,24 @@ describe('Goal Telegram decisions and notices', () => {
     expect(code, stderr).toBe(0);
     expect(stdout).toContain('Sent D-1');
     expect(f.accepted[0]!.payload.chat_id).toBe('file-chat-31');
+    expect(JSON.parse(readFileSync(join(f.directory, '.goalctl/settings.user.json'), 'utf8'))).toMatchObject({
+      version: 1, telegramChat: 'file-chat-31',
+    });
+    expect(stderr).toContain('telegram-chat');
+    expect(existsSync(join(f.stateDir, 'telegram-chat'))).toBe(false);
+  });
+
+  test('user settings supply the chat when no environment chat is set', async () => {
+    const f = fixture();
+    mkdirSync(join(f.directory, '.goalctl'), { recursive: true });
+    writeFileSync(join(f.directory, '.goalctl/settings.user.json'), JSON.stringify({ version: 1, telegramChat: 'settings-chat' }));
+    const child = Bun.spawn([process.execPath, CLI, ...askArgs('Configured chat question?')], {
+      env: { ...process.env, GOAL_MAIL_STATE_DIR: f.stateDir, GOAL_TELEGRAM_SECRETS: f.secrets,
+        GOAL_TELEGRAM_CHAT: '', GOAL_TELEGRAM_API: f.api }, stdout: 'pipe', stderr: 'pipe',
+    });
+    const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+    expect(code, stderr).toBe(0);
+    expect(f.accepted[0]!.payload.chat_id).toBe('settings-chat');
   });
 
   test('field limits are accepted at the boundary and refused above it, with line breaks and code fences', async () => {

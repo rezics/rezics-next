@@ -146,12 +146,57 @@ wording and directions that later ones replaced are in this file's history.
 | Engine (`goalctl`) | Model | Account and readout | Used for |
 | --- | --- | --- | --- |
 | `claude`, `sonnet`, `haiku` | Claude Opus 5.5, Sonnet 5.5, Haiku 5.5 | One Claude subscription shared by every manager; 5-hour and 7-day windows (`goalctl usage`) | Managers only (direction 9) |
-| `codex`, `codex-1`, … | GPT-6.1 Sol | Codex accounts and their policies: `.temp/goal-orchestration/accounts.md` (untracked) | Outcome and implementation tasks that need judgment; the landing review |
-| `luna` | GPT-6 Luna | Shares the `codex` account | Bounded mechanical work, at `max` |
+| Configured Codex engines; `sol` selects an account | GPT-6.1 Sol | Local accounts in `.goalctl/settings.user.json`; `goalctl usage` | Outcome and implementation tasks that need judgment; the landing review |
+| `luna` | GPT-6 Luna | Uses the first configured Codex account | Bounded mechanical work, at `max` |
 | `grok` | Grok 4.7 | Grok Build CLI; no readout, a quota error shows exhaustion | Surface tasks and bounded work whose risk is not assertion integrity |
 | `cursor` | Grok 4.7 | Cursor Agent, a separate quota; no readout | The same |
 
 `fable` is not used: it shares Opus's session limit and does less.
+
+### Settings layers
+
+`.goalctl/settings.schema.json` defines version 1 of the settings format.
+Every file declares `"version": 1`. Built-in defaults are overridden field by
+field by tracked `.goalctl/settings.json`, then ignored
+`.goalctl/settings.user.json`. Arrays replace the earlier array. Keep accounts,
+machine paths, recipients and operational choices in the user file; the shared
+file carries only portable project defaults. `task goal -- config` prints the
+effective settings and each field's source. Invalid layers report their file
+and field. Interactive commands use the current checkout's `.goalctl/`;
+launched workers and coordinator turns inherit the originating settings directory.
+
+`accounts` is a user-layer array. Each entry has a unique `engine` name,
+`launcher` (an executable name or path) or `home` (a Codex home), numeric
+`weight` greater than or equal to zero, and optional `pastAllowance`, an ordered
+array of model IDs permitted after the allowance is exhausted. Its default is
+empty; when exhausted, the first permitted model is used. A home without a
+launcher uses `codex`. Supply a home for native session and usage readouts;
+launcher-only accounts still appear with unavailable usage. Relative paths
+resolve from `.goalctl/`; `~/` resolves from the user's home. Names cannot
+shadow model selectors such as `sol` or `luna`.
+
+For new `sol` work, selection maximizes weight times remaining allowance share
+(weekly usage when available, otherwise current usage; unknown usage starts
+with a full share). Ties retain configuration order, zero weights disable
+automatic dispatch, and exhausted accounts require a nonempty `pastAllowance`.
+A resumed attempt retains its recorded account. With no entries, the default
+is the `codex` launcher. Removing the user file restores shared and built-in
+defaults.
+
+Other fields are `codexServiceTier` (`fast`, `default` or `flex`),
+`reviewEngine` (a configured account, `sol` for selection, or `sonnet`),
+`confirmIntervalMinutes` (zero disables scheduling), `gateLanes`, `qaSlots`,
+`regressLaneCount`, `unitGateScope` (`affected` or `changed`),
+`unitGateShards`, and `telegramChat`. Counts are positive integers. Existing
+environment overrides continue to apply to individual commands.
+
+The first settings load imports legacy one-value settings from
+`.temp/goal-orchestration/` into missing user fields and reports each import.
+Imported files gain a `.migrated` suffix so later loads cannot import them
+again. The legacy names are `codex-service-tier`, `review-engine`,
+`confirm-interval-minutes`, `gate-lane-count`, `qa-slot-count`,
+`regress-lane-count`, `unit-gate-scope`, `unit-gate-shards`, and `telegram-chat`.
+Ledger, run reports, mail, locks and last-start timestamps stay in `.temp/`.
 
 What the logs of earlier Goals showed, to be revised with evidence:
 
@@ -177,7 +222,7 @@ What the logs of earlier Goals showed, to be revised with evidence:
 
 Besides workers, a manager can make a read-only headless call for a second
 opinion, such as
-`codex-1 exec -m gpt-6.1-sol -c model_reasoning_effort=high -s read-only -C <dir> "<question>"`.
+`<launcher> exec -m gpt-6.1-sol -c model_reasoning_effort=high -s read-only -C <dir> "<question>"`.
 
 ## How to run the Goal
 
@@ -223,7 +268,7 @@ A Goal gets a manager once its directory exists, with `GOAL.md` and
 `state.md`. From the repository root, start and register its headless manager:
 
 ```sh
-task goal -- coordinator start <goal> --engine <codex|codex-1|claude> --effort <effort> [--model <id>]
+task goal -- coordinator start <goal> --engine <engine> --effort <effort> [--model <id>]
 ```
 
 The existing independent tmux server must run outside the coordinator service's
@@ -238,7 +283,7 @@ in the maintainer's own terminal.
 ### A manager on Codex
 
 A manager can run on GPT-6.1 Sol when the maintainer chooses so (2026-10-07).
-Choose `--engine codex --effort high` (or `codex-1` for the second account) in
+Choose a configured Codex engine with `--effort high` in
 the start command. The coordinator replaces the foreground `next-event.sh`
 loop: end each turn when nothing is ready, and arm no watcher. It resumes the
 same native session when mail or a task exit arrives.
@@ -262,7 +307,7 @@ fields rather than inventing them.
 
 ### Handing a Codex manager to the coordinator
 
-The coordinator can hold one enrolled manager per Goal, on either Codex account.
+The coordinator can hold one enrolled manager per Goal, on a configured Codex account.
 Hand over explicitly while the interactive owner is still running:
 
 1. Checkpoint the Goal's state and commit coherent progress.
@@ -270,8 +315,8 @@ Hand over explicitly while the interactive owner is still running:
    PID, along with the Goal, engine, effort, working directory and tmux socket.
 3. Program enrolls it with
    `task goal -- coordinator enroll <goal> --session <UUID> --engine <engine> --effort <effort> --cwd <directory> --previous-owner-pid <pid> --tmux-socket <socket>`.
-   The descriptor retains that engine's account home (`codex-1` uses
-   `~/.codex-1`); status reports the wait for the named previous owner to exit.
+   The descriptor retains that engine's configured account home; status reports
+   the wait for the named previous owner to exit.
 4. After Program confirms enrollment, exit the interactive session. The
    coordinator starts finite turns for queued mail and task exits; end each
    turn once nothing is ready.
