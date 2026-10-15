@@ -20,6 +20,7 @@ function mountedRouteModules(): string[] {
 }
 
 test('the local-hook scan sees an Elysia error hook and ignores logging', () => {
+  expect(localErrorHookKinds('new Elysia().onError(({ error }) => error)')).toEqual(['onError']);
   expect(localErrorHookKinds('new Elysia().error(({ error }) => error)')).toEqual(['.error(']);
   expect(localErrorHookKinds('socket.onError(() => undefined)')).toEqual(['onError']);
   expect(localErrorHookKinds('error: ({ error }) => undefined')).toEqual(['error:']);

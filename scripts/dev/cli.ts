@@ -349,7 +349,7 @@ async function install(): Promise<void> {
   if (run('node', ['--version']) !== 'v26.8.2') throw new Error('Node 26.8.2 is required');
   if (run('corepack', ['yarn', '--version']) !== '4.18.0') throw new Error('Yarn 4.18.0 is required');
   if (run('task', ['--version']) !== '3.53.1') throw new Error('Task 3.53.1 is required; see the toolchain lock');
-  if (!run('node', [aspire, '--version']).startsWith('13.5.4+')) throw new Error('Aspire CLI 13.5.4 is required');
+  if (!run('node', [aspire, '--version']).startsWith('13.6.1+')) throw new Error('Aspire CLI 13.6.1 is required');
   const env = runtimeEnv();
   if (!existsSync(composeFile)) throw new Error(`Compose topology is missing: ${composeFile}`);
   const options: StackOptions = { profile: 'dev' };

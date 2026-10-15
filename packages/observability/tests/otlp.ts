@@ -3,7 +3,7 @@ import protobuf from 'protobufjs';
 // Minimal decoder for the public OTLP wire fields exercised here. Field numbers
 // follow https://github.com/open-telemetry/opentelemetry-proto (Apache-2.0).
 const schema = `syntax = "proto3";
-message Value { string stringValue=1; bool boolValue=2; int64 intValue=3; double doubleValue=4; }
+message Value { oneof value { string stringValue=1; bool boolValue=2; int64 intValue=3; double doubleValue=4; } }
 message Attribute { string key=1; Value value=2; }
 message Resource { repeated Attribute attributes=1; }
 message Scope { string name=1; }

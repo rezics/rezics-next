@@ -58,7 +58,7 @@ function fixture(options: { denied?: boolean; own?: boolean; budget?: boolean } 
   } as unknown as MainWorkDependencies;
   // Thrown intake refusals use the shared table. Schema failures use the same
   // 400 the app hook returns; this plugin no longer carries its own error hook.
-  const app = new Elysia().error(({ error }) => typedRefusal(error)
+  const app = new Elysia().onError(({ error }) => typedRefusal(error)
     ?? (error instanceof ValidationError || error instanceof ParseError
       ? problem(400, 'invalid_request', 'Request does not match the Work contract') : undefined))
     .use(rateLimitHook(deps.account,deps.rateLimit)).use(libraryImportsRoutes(deps));

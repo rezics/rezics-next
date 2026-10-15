@@ -16,17 +16,16 @@
     "./schema/*.json": "./schema/*.json"
   },
   "dependencies": {
-    "markdown-it": "14.3.2",
+    "markdown-it": "15.0.2",
     "prosemirror-markdown": "1.13.8",
     "prosemirror-model": "1.25.12",
     "prosemirror-schema-basic": "1.2.5",
     "prosemirror-schema-list": "1.5.1",
     "prosemirror-tables": "1.8.5",
-    "typebox": "1.3.34"
+    "typebox": "1.3.37"
   },
   "devDependencies": {
-    "@types/bun": "1.4.2",
-    "@types/markdown-it": "14.2.0",
+    "@types/bun": "1.4.3",
     "typescript": "7.0.2"
   }
 }

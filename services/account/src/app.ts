@@ -238,7 +238,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       return accountFailure(error);
     } finally { if (!held) client.release(); }
   };
-  const app = new Elysia({ introspect: true })
+  const app = new Elysia()
     .use(httpTelemetry())
     .onRequest(({ request, server }) => {
       const peer = server?.requestIP(request)?.address;
