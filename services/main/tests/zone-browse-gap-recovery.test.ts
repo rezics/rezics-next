@@ -208,8 +208,11 @@ test('preparation verifies more than 128 delivered event batches without spendin
     f.headers.add(sequence);
     f.headerCounts.set(sequence, 1);
     f.actualCounts.set(sequence, 1);
-    f.deliveredEvents.set(sequence, [{ ...event, id: `event-${sequence}`, data: { ...event.data,
-      batchId, relayPosition: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence } } }]);
+    const deliveredEvent = structuredClone(event);
+    deliveredEvent.id = `event-${sequence}`;
+    deliveredEvent.data.batchId = batchId;
+    deliveredEvent.data.relayPosition = { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence };
+    f.deliveredEvents.set(sequence, [deliveredEvent]);
   }
   await f.instance.backfill();
   expect(await f.current()).toBe(true);
