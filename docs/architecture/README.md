@@ -11,6 +11,7 @@
 - [Decision evidence](evidence.md): sources, selected lessons and remaining qualification.
 - [Native API contract pilot](api-contracts.md): precision, ownership and compiler-cost evidence for separating contracts and handlers.
 - [Actionable collections](actionable-collections.md): decided occurrence-based runs and optional ingredient sum/stock offset; contracts and outcome proofs follow.
+- [Private scheduled plans](scheduled-plans.md): proposal for finite private occurrences, cancellation, due notifications and export over existing owners; awaiting program review.
 - [Target architecture](target-architecture.md): the design record of 2026-10-07 (Traditional Chinese) that the Goals build towards; its decisions move into their owner documents as they settle in code.
 
 ## Domain contracts
