@@ -1,27 +1,64 @@
 # State
 
-Checkpoint `9992e78d-8512-462e-b7cc-c27180d39cca` for [this Goal](GOAL.md),
-carrying forward `checkpoint:0cd7b6e8-a3bc-4798-a106-fce61a810553` and recording
+Checkpoint `ffebfab6-6566-44c0-bae5-4cbed4dd5ad2` for [this Goal](GOAL.md),
+carrying forward `checkpoint:9992e78d-8512-462e-b7cc-c27180d39cca` and recording
 only these handled events:
 
-- `task:G-2205:8` (rebased landing check refused missing fixture backup custody; Program notified).
-- `task:G-2248:21` (preflight stopped on current-key absence and conflicting retention protection; Program asked to rule).
-- `mail:1252e320-850b-41b0-b13a-476df99ed67b` (Program supersedes earlier G-2248 decisions and has resumed its worker).
+- `task:G-2248:23` (completion passed; production timed out; Program had already decided and resumed the worker).
+- `task:G-2248:27` (cleanup-clock repair offered as partial; production again timed out; Program asked to decide the partial landing and remaining startup cost).
 
-The task turns acknowledged receipt in their reports to Program. The listed
-mail was acknowledged at 20:02:17 UTC on 2026-10-15; this turn confirmed that
-acknowledgement. Later parallel handoffs and landing results are outside this
-checkpoint. It updates state only and authorizes no new work or proof.
+Both task turns acknowledged receipt in their reports to Program. This
+checkpoint supplies no mail ID; the Operations mail inbox was empty. Later
+parallel decisions, handoffs and landing results are outside this checkpoint.
+It updates state only and authorizes no new work or proof.
 
 | Field | State |
 | --- | --- |
 | Manager | Enrolled with the coordinator on 2026-10-13 15:34 UTC |
-| Phase | Program directly steers G-2248 and G-2205. Its 19:59 UTC ruling supersedes every earlier G-2248 decision: prune superseded custody normally, prepare and verify the current key once, then completion and production serially, once each. G-2248 has resumed; G-2205 rebuilds its own fixture. Operations sends findings to Program and makes no further decisions in either brief |
-| Proved on physical fixtures | D108 restore consumption qualifies in two post-fix restores; no physical erasure row or OPS10 pass is proved. These events add no proved row |
-| Fixture | G-2205's passing handoff used `fx-small-3639021cd088`; its rebased check selected `fx-small-180553eb933a` with no `postgres_data` backup. G-2248's current key at event 21 was `c2b19656…`, absent before preparation. Program permits normal pruning of `7a2197cc…` and all older keys; historical preservation directions below no longer block that task. Manifest hashes alone prove no physical custody |
-| Measures | No new row proved by these events. `task goal -- status` was invoked but returned no figures before yielding; this no-wait turn does not claim refreshed measures. Historical scope sample: 67/68 rows, 402 proved and 6 pending cells. Earlier Operations sample: 50% first attempts (that day 0%, 0/5), landed-task median 2, max 15 (G-2248), 110.5M input / 532k output tokens, 14 first / 12 step / 14 fix attempts and seven inferred fixes. Tokens per proved row remain unavailable. G-2248 event 21 and G-2205 event 8 exceed the three-attempt cap. Repeat work here comes from qualification selecting incompatible or absent fixture custody and protection of superseded keys conflicting with retention. Program's ruling removes the retention stop and assigns each worker its current-key preparation. No efficiency improvement or consumer pass is yet evidenced |
+| Phase | Program directly steers G-2248 and G-2205. Event 23 found Program's cleanup decision `5cdc2e5c92` already committed and attempt 24 started. Event 27 referred partial repair `a5cebfde1064e193080ba70df0658d237609163a` and remaining production restore/startup cost to Program. Operations starts no landing, resume or closure; the authorized rerun is consumed |
+| Proved on physical fixtures | D108 restore consumption qualifies in two post-fix restores. G-2248 completion passed with 103 expect calls on `7aad8d39c3234b06e21fd2ca8ea0f9c9a8826940`, including `08007`, running-state, replay/release and final erasure. It was not rerun on the cleanup repair. Production, full fixture disposal and OPS10 remain unproved; no complete scope row is established by these events |
+| Fixture | G-2248 published current `c2b19656…` once and both consumers reused it, with source/key stability and physical custody verified before and after. Normal retention pruned superseded `7a2197cc…`; historical preservation directions below do not block that task. Event 27 also reports stable source/key and verified immutable custody. G-2205's last carried rebased check still lacked `postgres_data` custody for `fx-small-180553eb933a`; Program assigns it its own rebuild |
+| Measures | No complete row newly proved. `task goal -- status` returned no figures before yielding; this no-wait turn claims no refreshed measures. Historical scope sample: 67/68 rows, 402 proved and 6 pending cells. Earlier Operations sample: 50% first attempts (that day 0%, 0/5), landed-task median 2, max 15 (G-2248), 110.5M input / 532k output tokens, 14 first / 12 step / 14 fix attempts and seven inferred fixes. Tokens per proved row remain unavailable. G-2248 has reached event 27, beyond the three-attempt cap. The repeated failures now isolate production cost: separating cleanup removed the candidate-5 disposal stall, but candidate-6 startup still exhausted 360 seconds. Program has the request to scope that remaining cost; no production improvement or complete outcome is accepted |
 
 ## Handled decisions and next action
+
+Event 23 supplied no implementation to land. Completion QA
+`20261015t200423-eab99f` passed with 103 expect calls on source-stable
+`7aad8d39c3234b06e21fd2ca8ea0f9c9a8826940`. Production QA
+`20261015t201053-9c32cf` timed out at 362.336 seconds against the unchanged
+360-second operation limit; candidate 5 disposal and remaining production
+assertions were unproved. Evidence:
+`.temp/worktrees/g-2248/.temp/goal/final-qualification-handoff.md`.
+Operations acknowledged the event in
+`.temp/goal-orchestration/mail/operations-g2248-event23-program.md`.
+Program's 20:23 UTC decision `5cdc2e5c92` was already committed and attempt 24
+had started, so no duplicate ruling, resume, landing or closure followed.
+
+Event 27 offered cleanup-clock repair
+`a5cebfde1064e193080ba70df0658d237609163a` as `RESULT: partial`, reporting
+12 tests / 78 assertions and selected types, lint and guards passing. It
+separates capped cleanup from operation timing and retains bounded disposal
+diagnostics; CLI overlaps with G-2668/G-2673 remain for merge resolution.
+The one authorized production rerun, QA `20261015t203658-ff0867`, failed at
+360.101 active operation seconds during candidate 6 PostgreSQL startup.
+Candidate 5 disposal completed in 3.972 seconds; excluded cleanup totalled
+20.627 seconds under its separate 120-second bound. The prior disposal stall
+did not recur. Fourteen case-pass observations reached delivering-search-lease,
+but delivering-download-lease, final completion and full fixture disposal
+remain unproved. Completion was not rerun on this repair. Source/key and
+verified immutable custody stayed stable before and after the failed consumer;
+owned processes were stopped, but harness cleanup proves no full disposal.
+Evidence: `.temp/worktrees/g-2248/.temp/goal/disposal-qualification-handoff.md`.
+
+Operations acknowledged event 27 and asked Program whether to accept the
+repair as a partial landing and scope remaining restore/startup cost under
+the unchanged operation bound, in
+`.temp/goal-orchestration/mail/operations-g2248-event27-program.md`
+(`mail:0852d402-89e4-41cb-8170-7bfdce735e19`). No production outcome was
+accepted and no brief edit, further retry, landing, resume or closure was
+initiated. Program owns that next decision; this checkpoint makes none.
+
+## Carried custody decisions
 
 G-2205 event 8 was a failed rebased landing check, not an accepted OPS10
 outcome. QA `20261015t193652-0e862f` refused missing `postgres_data` custody for
@@ -53,7 +90,8 @@ Stop only for a consumer assertion failure or product refusal. Superseded
 evidence protection and G-2205's historical manifest are no longer stop reasons;
 G-2205 rebuilds its own fixture. Program already resumed G-2248. Operations
 awaits the resulting event without starting a wait, worker or landing here.
-These events contain no accepted qualification or successful landing result.
+Those earlier events contained no accepted qualification or successful landing
+result; completion's later pass is recorded above.
 
 ## Earlier G-2248 qualification evidence
 

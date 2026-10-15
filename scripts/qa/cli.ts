@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { createOwnerErasureCleanupClock, ownerErasureCleanupShard } from './owner-erasure-cleanup.ts';
 import { independentRestorePreparationOptions, ownerErasurePreparationOptions } from './retained-source.ts';
 import { realmSourceBuildDeadlineMs } from '../../tests/qa/support/realm-discussion-budget.ts';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -807,7 +808,9 @@ async function runShardWork(
       TOXIPROXY_FUSEKI_URL: `http://127.0.0.1:${compose.TOXIPROXY_FUSEKI_PORT}/rezics/` } : {}),
   });
   let childAdmissionMs = 0;
-  const activeTestMs = () => Date.now() - testStart - childAdmissionMs;
+  let fixtureCleanupMs = 0;
+  const cleanupClock = ownerErasureCleanupShard(files) ? createOwnerErasureCleanupClock(budget) : undefined;
+  const activeTestMs = () => Date.now() - testStart - childAdmissionMs - fixtureCleanupMs;
   const suites: string[] = [];
   const output: string[] = [];
   const fileDurations: Record<string, number> = {};
@@ -878,7 +881,13 @@ async function runShardWork(
     ]);
     const runBatch = (environment: NodeJS.ProcessEnv, onLine: (line: string) => void) => commandAsync(
       root, 'bun', batchArgs,
-      Math.max(1, budget - activeTestMs()), environment, onLine, { runDeadline });
+      Math.max(1, budget - activeTestMs()), environment, line => {
+        cleanupClock?.observe(line);
+        onLine(line);
+      }, { runDeadline, ...(cleanupClock ? { phaseDeadline: (sample: CommandPhaseSample) => {
+        lastSample = sample;
+        return cleanupClock.sample(sample);
+      } } : {}) });
     const campaign = campaignQualificationShard(batch);
     const commandStartedAt = Date.now();
     const evidenceWatch = openCampaignEvidence();
@@ -896,6 +905,16 @@ async function runShardWork(
         { runDeadline, phaseDeadline })
       : await (startupProtocol ? withStartupSlot(testEnvironment(), runBatch, reserve)
         : runBatch(testEnvironment(), noteMemory));
+    if (cleanupClock) {
+      const accepted = cleanupClock.sample({ ...lastSample, activeElapsedMs: result.activeElapsedMs,
+        observedAt: lastSample.commandStartedAt + result.elapsedMs }, true);
+      fixtureCleanupMs = accepted.cleanupMs;
+      if (accepted.reason) commandOk = false;
+      writeFileSync(join(directory, `owner-erasure-cleanup-${label}.json`), `${JSON.stringify({
+        projectRunId, operationBudgetMs: budget, activeElapsedMs: result.activeElapsedMs,
+        admissionWaitMs: result.admissionWaitMs, ...accepted,
+      }, null, 2)}\n`);
+    }
     if (campaign) {
       const sample = { ...lastSample, activeElapsedMs: result.activeElapsedMs, admissionOpen: false, observedAt: Date.now() };
       const accepted = campaignCommandAccepted({
@@ -936,7 +955,8 @@ async function runShardWork(
   const testEnd = Date.now();
   const cleanupFailures = await resetChildStacks(registry);
   if (cleanupFailures.length) writeFileSync(join(logs, `${label}-cleanup.log`), cleanupFailures.join('\n'));
-  record.elapsedMs = testEnd - testStart - childAdmissionMs;
+  record.elapsedMs = testEnd - testStart - childAdmissionMs - fixtureCleanupMs;
+  if (cleanupClock) record.fixtureCleanupMs = fixtureCleanupMs;
   const results = completeFileResults(
     mergeJUnit(suites, record.elapsedMs),
     filesKeptAfterResetFailure(files, resetBlockedFiles),
@@ -973,6 +993,10 @@ function failedTests(run: ShardRun, tier: StackTier): Map<string, string[]> {
 function testWall(runs: ShardRun[]): number {
   const timed = runs.filter(run => run.testStart !== undefined && run.testEnd !== undefined);
   if (!timed.length) return 0;
+  // These consumers run serially, one file per shard. Their disposal is measured
+  // and capped separately by the live command phase clock, including on failure.
+  if (timed.length === 1 && timed[0]!.record.fixtureCleanupMs !== undefined)
+    return timed[0]!.record.elapsedMs!;
   const start = Math.min(...timed.map(run => run.testStart!));
   const end = Math.max(...timed.map(run => run.testEnd!));
   return end - start - admissionIntervalMs(admissionIntervals, start, end);
