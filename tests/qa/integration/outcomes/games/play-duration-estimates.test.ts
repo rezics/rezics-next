@@ -1,16 +1,35 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import declaration from '../../../../../scripts/qa/cases/outcomes/games/play-duration-estimates.ts';
-import type { DurationCohort, SetSessionDurationRequest, SetSessionDurationResponse,
-  SessionDurationObservation } from '../../../../../services/main/src/modules/session/duration-contract.ts';
-import type { ActivityDurationEstimatesRequest, ActivityDurationEstimatesResponse }
-  from '../../../../../services/main/src/modules/rating/duration-contract.ts';
 import { outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions }
   from '../../../support/personas.ts';
 
 setDefaultTimeout(120_000);
 const unit = 'http://qudt.org/vocab/unit/SEC' as const;
+// State the observable wire shape here, independently of owner implementation.
+type DurationCohort = { target: string; metric: string; procedure: string; platform: string | null };
+type DurationResult = { status: 'known'; value: string; unit: typeof unit }
+  | { status: 'unknown'; value: null; unit: typeof unit };
+type SetSessionDurationRequest = DurationCohort & {
+  profile: 'session-duration-observation-v1'; actingSubject: string;
+  expectedSessionVersion: number; expectedRevisionHead: string | null;
+  result: DurationResult; contribution: 'private' | 'public-aggregate' | 'withdrawn';
+};
+type SessionDurationObservation = DurationCohort & {
+  session: string; observationRevision: string; predecessor: string | null;
+  contribution: SetSessionDurationRequest['contribution']; result: DurationResult;
+};
+type SetSessionDurationResponse = { observation: SessionDurationObservation; receipt: string; replayed: boolean };
+type ActivityDurationEstimatesResponse = {
+  profile: 'activity-duration-estimates-v1';
+  cohorts: { cohort: DurationCohort; sources: unknown[]; native: {
+    sampleCount: number;
+    estimate: { status: 'available'; value: { numerator: string; denominator: string } }
+      | { status: 'no-data'; value: null };
+    evidence: { generation: string; revision: string };
+  } }[];
+};
 const metric = 'https://rezics.com/definition/activity-elapsed-v1';
 const main = 'https://rezics.com/definition/active-main-story-v1';
 const extras = 'https://rezics.com/definition/active-completionist-v1';
@@ -102,7 +121,7 @@ beforeAll(async () => {
 afterAll(async () => { await people?.close(); });
 
 async function estimates(person: PersonaSession, selected = cohorts) {
-  const input: ActivityDurationEstimatesRequest = {
+  const input = {
     profile: 'activity-duration-estimates-v1', cohorts: selected, sources: [],
     ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}),
   };
