@@ -225,23 +225,32 @@ export async function readPublicTypeahead(work: MainWorkDependencies, request: R
       }) };
     }, relation => relation.results);
     if (visible.results.length) {
-      const types = await phraseWorkTypes(env, visible.results.map(row => ({ work: row.work, language: '' })), position, session);
-      const summaries = await session.summaries(visible.results.map(row => row.work), true);
       const authorWorks = [...new Set(visible.results.map(row => row.work))];
-      const readAuthors = () => optionalPreview(session, () => searchPageAuthors(session, authorWorks, true));
-      const authors = await readAuthors();
-      session.observeDependency(`typeahead-authors:${JSON.stringify(authorWorks)}`, authors, readAuthors);
-      const after = await session.summaries(visible.results.map(row => row.work), true);
-      if (summaries.some((summary, i) => JSON.stringify({ ...summary, avatar: undefined })
-        !== JSON.stringify({ ...after[i], avatar: undefined }))) {
-        throw new SearchSnapshotMoved('Typeahead disclosure changed during hydration');
-      }
+      // Independent page sections share the request's budget. The summary
+      // owner closes its own selected disclosure/media dependencies; authors
+      // replay the delivered selection once, without also fencing every raw
+      // graph input to that same selection.
+      const summaryRead = session.summaries(visible.results.map(row => row.work), true);
+      const pending = [
+        phraseWorkTypes(env, visible.results.map(row => ({ work: row.work, language: '' })), position, session),
+        summaryRead,
+        session.selection(`typeahead-authors:${JSON.stringify(authorWorks)}`, async probe => {
+          const authors = await optionalPreview(probe, () => searchPageAuthors(probe, authorWorks, true));
+          // Register authors after summaries so the final author replay also
+          // observes name-owner changes made during the summary close.
+          await summaryRead;
+          return authors;
+        }),
+      ] as const;
+      // Finish sibling owner reads before an unsuccessful attempt can restart.
+      await Promise.allSettled(pending);
+      const [types, summaries, authors] = await Promise.all(pending);
       accepted = new Map<string, TypeaheadItem>(visible.results.flatMap((row, i) => {
-        const summary = summaries[i], final = after[i];
+        const summary = summaries[i];
         return summary?.status === 'available' && summary.type === 'work' && summary.disclosure === 'public'
           ? [[`${row.mainVersion}\n${row.matchUnit}\n${row.matchedField}`, {
             work: row.work, mainVersion: row.mainVersion, title: summary.name,
-            cover: final?.status === 'available' ? final.avatar : summary.avatar,
+            cover: summary.avatar,
             types: types.get(row.work) ?? [], authors: authors?.get(row.work) ?? [],
             matchedField: row.matchedField as 'title' | 'credit', matchedText: row.matchedText,
             matchedLanguage: row.matchedLanguage }]] : [];
