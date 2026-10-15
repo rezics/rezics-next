@@ -15,7 +15,8 @@ import { engineOf, programOf, type Ledger } from './types.ts';
 /** A parked command may run for hours. Recording its caller's end must not wait for a wake or settlement. */
 export async function recordWorkerEnds(ledger: Ledger, options: JobPassOptions = {}): Promise<void> {
   const ended = Object.values(ledger.tasks).flatMap(task => task.attempts.filter(attempt => {
-    if (attempt.endedAt) return false;
+    if (attempt.endedAt) return task.attempts.at(-1) === attempt && task.state === 'running'
+      && !pidAlive(attempt.pid, programOf(engineOf(attempt)));
     if (!pidAlive(attempt.pid, programOf(engineOf(attempt)))) return true;
     if (!attempt.lastMessage || !existsSync(attempt.lastMessage)) return false;
     const final = statSync(attempt.lastMessage);

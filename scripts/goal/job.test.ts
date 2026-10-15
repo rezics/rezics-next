@@ -119,6 +119,11 @@ test('a durable final message records the end even while the engine is closing',
     await coordinateWorkerJobs(f.ledger, f.options);
     expect(f.task.attempts[0]!.endedAt).toBeDefined();
     expect(f.task.state).toBe('running');
+    const ended = f.task.attempts[0]!.endedAt;
+    worker.kill('SIGKILL'); await closed;
+    await coordinateWorkerJobs(f.ledger, f.options);
+    expect(f.ledger.tasks.worker!.state).toBe('exited');
+    expect(f.task.attempts[0]!.endedAt).toBe(ended);
   } finally { worker.kill('SIGKILL'); await closed; }
 });
 
