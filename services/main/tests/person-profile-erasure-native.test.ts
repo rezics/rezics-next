@@ -508,7 +508,10 @@ public class AgentProfileErasureCallerContractTest {
         .replace("databases/rezics/tdb2",base.resolve("destination").toAbsolutePath().toString())
         .replace("databases/rezics/lucene",base.resolve("lucene").toAbsolutePath().toString());Files.writeString(assembler,description);
       ErasureTextIndexer.main(new String[]{"--desc="+assembler.toAbsolutePath()});
-      var rebuilt=DatasetFactory.assemble(assembler.toString());
+      var config=RDFDataMgr.loadModel(assembler.toString());
+      var textRoot=config.listSubjectsWithProperty(RDF.type,
+        config.createResource("http://jena.apache.org/text#TextDataset")).next();
+      var rebuilt=DatasetFactory.assemble(textRoot);
       try {rebuilt.begin(ReadWrite.READ);
         DatasetGraph indexed=rebuilt.asDatasetGraph();while(indexed instanceof DatasetGraphWrapper wrapper&&!(indexed instanceof DatasetGraphText))indexed=wrapper.getWrapped();
         var filtered=(FilteredGraphTextIndex)((DatasetGraphText)indexed).getTextIndex();
