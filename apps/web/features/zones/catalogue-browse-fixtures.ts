@@ -2,6 +2,7 @@ import type { AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-
 import books from '../../../../tests/qa/fixtures/outcomes/books/catalogue-browse-and-search-in-its-zone.json';
 import visualNovels from '../../../../tests/qa/fixtures/outcomes/visual-novels/catalogue-browse-and-search-in-its-zone.json';
 import manga from '../../../../tests/qa/fixtures/outcomes/manga/catalogue-browse-and-search-in-its-zone.json';
+import anime from '../../../../tests/qa/fixtures/outcomes/anime/catalogue-browse-and-search-in-its-zone.json';
 import type { ZoneBrowsePage } from '../realm/types.ts';
 import { direction } from '@rezics/main/language';
 import { uuidToSid } from '@rezics/model/address';
@@ -10,8 +11,11 @@ export type CatalogueSlug = 'books' | 'visual-novels' | 'anime' | 'manga' | 'gam
 export const cataloguePersonas = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const;
 export const catalogueRecords: Partial<Record<CatalogueSlug, AnswerRecord>> = {
   books: books as AnswerRecord, 'visual-novels': visualNovels as AnswerRecord, manga: manga as AnswerRecord,
+  anime: anime as AnswerRecord,
 };
 export const catalogueLabels = {
+  anime: { populated: 'page-browse-default', continuation: 'page-browse-default-continuation-1',
+    search: 'page-search-default', empty: 'page-search-no-match' },
   books: { populated: 'browse-newest-0', continuation: 'browse-newest-continuation',
     search: 'search-relevance-0', empty: 'search-no-match', error: 'unsupported-query-shape' },
   'visual-novels': { populated: 'primary-get-realms-modules-browse-1', continuation: 'primary-get-realms-modules-browse-2',

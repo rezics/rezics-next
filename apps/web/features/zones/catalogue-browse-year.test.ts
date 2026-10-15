@@ -210,6 +210,29 @@ test('the real route sends year on both API reads and preserves Next on an empty
   ]);
 });
 
+test('the fallback route preserves combined format, status, title, sort and year on its opaque continuation', async () => {
+  calls.length = 0;
+  const pkg = routeView.pkg;
+  routeView.pkg = null;
+  transport = query => query.cursor ? apiPage([rawWork(301)], 2, null) : apiPage([rawWork(300)], 1, 'opaque-filtered-page');
+  try {
+    const first = await routeModel({ year: '2004', concept: native(42).slice(-36), status: 'completed',
+      q: 'Original animation', sort: 'updated' });
+    const next = new URL(first.next!, 'https://rezics.local');
+    expect(next.searchParams.get('year')).toBe('2004');
+    expect(next.searchParams.get('concept')).toBe(native(42).slice(-36));
+    expect(next.searchParams.get('status')).toBe('completed');
+    expect(next.searchParams.get('q')).toBe('Original animation');
+    expect(next.searchParams.get('sort')).toBe('updated');
+    const second = await routeModel(Object.fromEntries(next.searchParams));
+    expect(second.items.map(work => work.id)).toEqual([native(301)]);
+    expect(calls.map(call => call.query)).toEqual([
+      { publicationYear: '2004', concept: [native(42)], status: ['completed'], q: 'Original animation', sort: 'updated' },
+      { publicationYear: '2004', concept: [native(42)], status: ['completed'], q: 'Original animation', sort: 'updated', cursor: 'opaque-filtered-page' },
+    ]);
+  } finally { routeView.pkg = pkg; }
+});
+
 test('the real all-years route retains the previous publication-year template and ordering', async () => {
   calls.length = 0;
   directoryCalls.length = 0;

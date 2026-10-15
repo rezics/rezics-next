@@ -25,7 +25,7 @@ const zone = (realm: string): ZoneContext => ({
     discussions: realmHref('en', realm, 'discussions'), decisions: realmHref('en', realm, 'decisions'), about: realmHref('en', realm, 'about') },
 });
 
-for (const slug of ['books', 'visual-novels', 'manga'] as const) {
+for (const slug of ['books', 'visual-novels', 'manga', 'anime'] as const) {
   for (const persona of cataloguePersonas) {
     test(`${slug}/${persona}: the typed reader preserves this persona's inventory, credits, counts and continuation`, async () => {
       const record = catalogueRecords[slug]!;

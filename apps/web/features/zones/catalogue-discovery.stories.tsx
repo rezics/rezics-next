@@ -7,7 +7,6 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { spaceHref } from '../address/path.ts';
 import { direction } from '@rezics/main/language';
-import anime from '../../zones/official/anime/index.tsx';
 import manga from '../../zones/official/manga/index.tsx';
 import games from '../../zones/official/games/index.tsx';
 import visualNovels from '../../zones/official/visual-novels/index.tsx';
@@ -31,14 +30,15 @@ import { zoneMessagesFor } from './fixtures.ts';
 import { presetTokens } from './presentation.ts';
 import { cardRenderer } from './zone-home.tsx';
 
-const packages: Record<CatalogueSlug, ZonePackage> = { books, 'visual-novels': visualNovels, anime, manga, games };
+type DiscoverySlug = Exclude<CatalogueSlug, 'anime'>;
+const packages: Record<DiscoverySlug, ZonePackage> = { books, 'visual-novels': visualNovels, manga, games };
 type ContractState = Parameters<typeof catalogueContractSample>[1];
-interface Args { slug: CatalogueSlug; persona: AnswerPersona; label?: string; loading?: boolean;
+interface Args { slug: DiscoverySlug; persona: AnswerPersona; label?: string; loading?: boolean;
   contract?: ContractState; locale: UiLocale }
 
 function source(args: Args) {
-  const contract = args.slug === 'anime' || args.slug === 'games';
-  const sample = contract ? catalogueContractSample(args.slug as 'anime' | 'games', args.contract ?? 'populated')
+  const contract = args.slug === 'games';
+  const sample = contract ? catalogueContractSample('games', args.contract ?? 'populated')
     : catalogueSample(catalogueRecords[args.slug]!, args.persona,
       args.label ?? catalogueLabels[args.slug as keyof typeof catalogueLabels].populated);
   const record: AnswerRecord = contract ? { version: 1, row: `${args.slug}/catalogue-browse-and-search-in-its-zone`,
@@ -150,19 +150,7 @@ export const MangaYearRangePhone: Story = { args: { slug: 'manga', label: 'publi
 export const MangaEmpty: Story = { args: { slug: 'manga', label: catalogueLabels.manga.empty } };
 export const MangaError: Story = { args: { slug: 'manga', label: catalogueLabels.manga.error } };
 export const MangaLoading: Story = { args: { slug: 'manga', loading: true } };
-export const AnimeContract: Story = { args: { slug: 'anime' }, parameters: { docs: { description: {
-  story: 'Contract fixture; no recorded Anime answer. Exact requests/states are exported as missingCatalogueStates.' } } } };
-export const AnimeEmptyContract: Story = { ...AnimeContract, args: { slug: 'anime', contract: 'empty' } };
-export const AnimeStrangerContract: Story = { ...AnimeContract, args: { slug: 'anime', persona: 'stranger' } };
-export const AnimeMemberContract: Story = { ...AnimeContract, args: { slug: 'anime', persona: 'member' } };
-export const AnimeOwnerContract: Story = { ...AnimeContract, args: { slug: 'anime', persona: 'owner' } };
-export const AnimeModeratorContract: Story = { ...AnimeContract, args: { slug: 'anime', persona: 'moderator' } };
-export const AnimeOperatorContract: Story = { ...AnimeContract, args: { slug: 'anime', persona: 'operator' } };
-export const AnimeLaggingContract: Story = { ...AnimeContract, args: { slug: 'anime', contract: 'lagging' } };
-export const AnimeErrorContract: Story = { ...AnimeContract, args: { slug: 'anime', contract: 'error' } };
-export const AnimeLoadingContract: Story = { ...AnimeContract, args: { slug: 'anime', loading: true } };
-export const AnimePhoneContract: Story = { ...AnimeContract, globals: { viewport: { value: 'phone' } } };
-export const GamesContract: Story = { ...AnimeContract, args: { slug: 'games' }, parameters: { docs: { description: {
+export const GamesContract: Story = { args: { slug: 'games' }, parameters: { docs: { description: {
   story: 'Contract fixture; no recorded Games answer. Exact requests/states are exported as missingCatalogueStates.' } } } };
 export const GamesEmptyContract: Story = { ...GamesContract, args: { slug: 'games', contract: 'empty' } };
 export const GamesStrangerContract: Story = { ...GamesContract, args: { slug: 'games', persona: 'stranger' } };
