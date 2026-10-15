@@ -56,6 +56,13 @@ test('SEARCH14: public title and body have independent native text membership', 
 interface Hit { id: string; key: string | null; score: string; document?: number }
 interface Page { hits: Hit[]; more: boolean; commit: string; restart?: boolean }
 
+async function removeProbeUnits(fuseki: FusekiClient, units: readonly string[]) {
+  if (!units.length) return;
+  await fuseki.update(`DELETE { GRAPH <urn:rezics:search:public> { ?unit ?predicate ?value } }
+    WHERE { VALUES ?unit { ${units.map(iri).join(' ')} }
+      GRAPH <urn:rezics:search:public> { ?unit ?predicate ?value } }`);
+}
+
 async function rank(phrase: string, scope: object, after = '') {
   const query = `PREFIX rv: <${RV}> SELECT ?page WHERE {
     BIND(rv:rankedText(rv:searchBody, ${lit(phrase)}, 1, ${lit(after)}, ${lit(JSON.stringify(scope))}) AS ?page)
@@ -76,37 +83,44 @@ test('ranked continuations keep the original scores and candidates through write
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
   const phrase = `continuation${randomUUID().replaceAll('-', '')}`;
   const unit = (n: number) => `urn:rezics:match:${phrase}:${n}`;
-  const add = async (n: number, body: string) => fuseki.update(`INSERT DATA {
+  const seeded: string[] = [];
+  const add = async (n: number, body: string) => {
+    seeded.push(unit(n));
+    await fuseki.update(`INSERT DATA {
     GRAPH <urn:rezics:search:public> { ${iri(unit(n))} <${RV}searchBody> ${lit(body)}@en }
   }`);
-  for (let n = 0; n < 4; n++) await add(n, `${phrase} ${'passage '.repeat(n + 1)}`);
-  const first = (await rank(phrase, {})).page;
-  expect(first.hits).toHaveLength(1);
-  expect(first.more).toBe(true);
-  const original = [...first.hits];
-  let page = first;
-  while (page.more) {
-    page = (await rank(phrase, {}, JSON.stringify({ ...page.hits[0]!, commit: page.commit }))).page;
-    original.push(...page.hits);
-  }
-  expect(original).toHaveLength(4);
-  const traversed = [...first.hits];
-  page = first;
-  for (let index = 0; page.more; index++) {
-    expect(index).toBeLessThan(4);
-    // New matching documents alter scores and rank in the latest index, but
-    // cannot enter this traversal or move an existing hit behind its cursor.
-    await add(10 + index, `${phrase} ${phrase} fresh ${'words '.repeat(index)}`);
-    page = (await rank(phrase, {}, JSON.stringify({ ...page.hits[0]!, commit: page.commit }))).page;
-    expect(page.restart).toBeUndefined();
-    traversed.push(...page.hits);
-  }
-  expect(traversed).toEqual(original);
-  expect(new Set(traversed.map(hit => hit.id)).size).toBe(4);
+  };
+  try {
+    for (let n = 0; n < 4; n++) await add(n, `${phrase} ${'passage '.repeat(n + 1)}`);
+    const first = (await rank(phrase, {})).page;
+    expect(first.hits).toHaveLength(1);
+    expect(first.more).toBe(true);
+    const original = [...first.hits];
+    let page = first;
+    while (page.more) {
+      page = (await rank(phrase, {}, JSON.stringify({ ...page.hits[0]!, commit: page.commit }))).page;
+      original.push(...page.hits);
+    }
+    expect(original).toHaveLength(4);
+    const traversed = [...first.hits];
+    page = first;
+    for (let index = 0; page.more; index++) {
+      expect(index).toBeLessThan(4);
+      // New matching documents alter scores and rank in the latest index, but
+      // cannot enter this traversal or move an existing hit behind its cursor.
+      await add(10 + index, `${phrase} ${phrase} fresh ${'words '.repeat(index)}`);
+      page = (await rank(phrase, {}, JSON.stringify({ ...page.hits[0]!, commit: page.commit }))).page;
+      expect(page.restart).toBeUndefined();
+      traversed.push(...page.hits);
+    }
+    expect(traversed).toEqual(original);
+    expect(new Set(traversed.map(hit => hit.id)).size).toBe(4);
+  } finally { await removeProbeUnits(fuseki, seeded); }
 });
 
 test('cached-title ranking reads a page-sized neighbourhood at 10, 100 and 1000 matches', async () => {
   const stack = await startMediaStack('cached-title-growth');
+  const seeded: string[] = [];
   try {
     const member = await stack.member('cached-title-growth-owner');
     // A real publication binds the native rank metadata owner before probing
@@ -117,8 +131,11 @@ test('cached-title ranking reads a page-sized neighbourhood at 10, 100 and 1000 
     const samples: { population: number; next: number; advance: number; matches: number }[] = [];
     for (const size of [10, 100, 1000]) {
       const rows: string[] = [];
-      while (population < size) rows.push(`${iri(`urn:rezics:match:${phrase}:${population++}`)}
-        <${RV}publicTitle> ${lit(`${phrase} authored name`)}@en .`);
+      while (population < size) {
+        const unit = `urn:rezics:match:${phrase}:${population++}`;
+        seeded.push(unit);
+        rows.push(`${iri(unit)} <${RV}publicTitle> ${lit(`${phrase} authored name`)}@en .`);
+      }
       await stack.fuseki.update(`INSERT DATA { GRAPH <urn:rezics:search:public> { ${rows.join('\n')} } }`);
       const { page, counters } = await rank(phrase, { catalogue: true });
       expect(page.hits).toHaveLength(1);
@@ -137,5 +154,13 @@ test('cached-title ranking reads a page-sized neighbourhood at 10, 100 and 1000 
       expect(sample.advance).toBeLessThanOrEqual(baseline.advance + 128);
       expect(sample.matches).toBeLessThanOrEqual(baseline.matches + 128);
     }
-  } finally { await stack.stop(); }
+  } finally {
+    try {
+      await removeProbeUnits(stack.fuseki, seeded);
+      // Verify the cleaned source through the real public read. Raw QA stacks
+      // intentionally do not advertise the delta-exclusive health capability.
+      const response = await stack.main.handle(new Request('http://main.local/v1/search/catalogue?q=cleanedprobe&limit=1'));
+      expect(response.status, await response.text()).toBe(200);
+    } finally { await stack.stop(); }
+  }
 }, 120_000);
