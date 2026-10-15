@@ -186,7 +186,7 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
       throw new SearchSnapshotMoved('Search card graph position changed');
     }
     const unavailableCredits = new Set<string>();
-    const [summaries, serial, authors, ratings] = await Promise.all([
+    const pending = [
       observeSearchPhase('card-summaries', () => session.summaries(ids, true)),
       observeSearchPhase('card-serial', () => optionalPreview(session, () => searchPageSerial(session, ids, true))),
       observeSearchPhase('card-authors', () => optionalPreview(session, () => searchPageAuthors(session, ids, true, unavailableCredits))),
@@ -197,7 +197,12 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
           throw error;
         }
       })),
-    ]);
+    ] as const;
+    // A failed preview must not leave its sibling summary/authority reads
+    // running under an abandoned attempt while WorkRead starts another one.
+    // The enclosing hydration allocation still bounds this join.
+    await Promise.allSettled(pending);
+    const [summaries, serial, authors, ratings] = await Promise.all(pending);
     const publicCard = (summary: ResourceSummary) => summary.status === 'available'
       && summary.type === 'work' && summary.disclosure === 'public';
     // A Realm may select a public contribution without adopting it globally.

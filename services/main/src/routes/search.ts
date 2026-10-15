@@ -30,6 +30,7 @@ import { enrichSerialSearch } from '../modules/work/summary-serial.ts';
 import { enrichSearchCardPage } from '../modules/search/result-cards.ts';
 import { searchCardWindow } from '../modules/search/card-window.ts';
 import { readRankedCatalogue, RANKED_CATALOGUE_COST } from '../modules/search/ranked.ts';
+import { boundedSearchHydration } from '../modules/search/hydration.ts';
 import { observeSearchPhase } from '../modules/search/operation-evidence.ts';
 import { discloseCatalogueMatches } from '../modules/search/catalogue-disclosure.ts';
 import { withSearchGraphSnapshot } from '../modules/search/snapshot.ts';
@@ -245,15 +246,16 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
               results: await discloseCatalogueMatches(work.environment, rows,
                 fieldOwners().restrictedTitles, query.realm), total: rows.length, sourcePosition: position,
               context: query.realm ? { kind: 'realm-local' as const, id: query.realm } : 'main-version-default' as const,
-            })).results, selection?.generation));
-          const types = await observeSearchPhase('catalogue-types',
-            () => phraseWorkTypes(work.environment, page.results, position));
-          const hydrated = await observeSearchPhase('catalogue-card-hydration', () => enrichSearchCardPage(work, request, { ...page,
-            results: page.results.map(row => ({ ...row, types: types.get(row.work) ?? [] })) }, query.language));
-          if (Buffer.byteLength(JSON.stringify(hydrated)) > MAX_SEARCH_RESPONSE_BYTES) {
+            })).results, selection?.generation, candidate => boundedSearchHydration(async () => {
+              const types = await observeSearchPhase('catalogue-types',
+                () => phraseWorkTypes(work.environment, candidate.results, position));
+              return observeSearchPhase('catalogue-card-hydration', () => enrichSearchCardPage(work, request, { ...candidate,
+                results: candidate.results.map(row => ({ ...row, types: types.get(row.work) ?? [] })) }, query.language));
+            })));
+          if (Buffer.byteLength(JSON.stringify(page)) > MAX_SEARCH_RESPONSE_BYTES) {
             throw new PublicQueryBudgetExceeded('Ranked catalogue page exceeds its byte bound');
           }
-          return hydrated;
+          return page;
         }), undefined, undefined, query.realm);
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) {

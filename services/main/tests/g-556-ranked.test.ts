@@ -114,3 +114,22 @@ test('G-556: changed graph, generation and viewer selection require restart; cha
   await expect(read(() => readRankedCatalogue(env, { ...request, phrase: 'different phrase', continuation: page.next! })))
     .rejects.toBeInstanceOf(InvalidSearchContinuation);
 });
+
+test('deferred catalogue hydration resumes the same first, middle and terminal page without counting undelivered matches', async () => {
+  const { env, read } = fixture(45);
+  let continuation: string | undefined;
+  const works: string[] = [];
+  for (let pageNumber = 0; pageNumber < 3; pageNumber++) {
+    const selected = { ...request, continuation };
+    const deferred = await read(() => readRankedCatalogue(env, selected, undefined, undefined, async () => null));
+    expect(deferred.results).toEqual([]);
+    expect(deferred.count).toEqual({ value: works.length, precision: 'lower-bound' });
+    expect(deferred.next).not.toBeNull();
+    const page = await read(() => readRankedCatalogue(env, { ...request, continuation: deferred.next! }));
+    works.push(...page.results.map(row => row.work));
+    expect(page.count).toEqual({ value: works.length, precision: pageNumber === 2 ? 'exact' : 'lower-bound' });
+    continuation = page.next ?? undefined;
+  }
+  expect(continuation).toBeUndefined();
+  expect(works).toEqual(Array.from({ length: 45 }, (_, n) => id(n)));
+});

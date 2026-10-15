@@ -19,7 +19,10 @@ export async function withPublicRealmSearch<T>(env: WorkActivationEnvironment, r
     if (decisions[0] !== 'visible') throw new PublicRealmUnavailable('Realm is unavailable');
   };
   await assertVisible();
-  const result = await read();
-  await assertVisible();
-  return result;
+  try { return await read(); }
+  finally {
+    // A graph/card consistency failure must not skip revocation and retry a
+    // Realm that closed while the failed attempt was hydrating its answer.
+    await assertVisible();
+  }
 }
