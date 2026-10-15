@@ -72,6 +72,7 @@ function fixture(s: Scenario = {}) {
   } } as unknown as Pool;
   const deps = {
     access: {
+      activePrincipalId: async () => 'reader',
       assertRecoveryOpen: async () => {},
       realmReadProof: async () => s.admitted ? 'member:1' : null,
       realmHistoryFloor: async () => {

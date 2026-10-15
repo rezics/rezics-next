@@ -166,7 +166,7 @@ async function fixture(count: number, options: { distinct?: boolean; hidden?: (i
     if (query.includes('SELECT ?owner')) return rows([{ owner: zone }]);
     if (query.includes('SELECT ?manifest ?predecessor')) return rows([{ manifest: `urn:rezics:sha256:${digest}`,
       count: String(count), epoch: 'epoch', sequence: '1' }]);
-    if (query.includes('SELECT ?resource WHERE')) {
+    if (query.includes('SELECT ?resource WHERE') || query.includes('SELECT ?resource ?publicCollection WHERE')) {
       const requested = resourcesIn(query);
       if (query.includes('a schema:CreativeWork') && !query.includes('rv:RevisionAnchor')) {
         const result = requested.filter(resource => works.has(resource)).map(resource => ({ resource }));

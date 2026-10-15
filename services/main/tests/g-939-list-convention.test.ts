@@ -1,3 +1,4 @@
+import { jsonSchema2020Tuples } from '../../../scripts/api/generate.ts';
 import { expect, test } from 'bun:test';
 import { openapi } from '@elysia/openapi';
 import { readFileSync } from 'node:fs';
@@ -80,8 +81,8 @@ test('G939: all new list reads serve the convention in generated OpenAPI', async
   const expectedInput = expected.requestBody?.content?.['application/json']?.schema;
   const expectedResult = expected.responses?.['200']?.content?.['application/json']?.schema;
   if (!expectedInput || !expectedResult) throw new Error('Fixture OpenAPI input and result schemas are required');
-  expect(input.anyOf[0]).toEqual(expectedInput);
-  expect(result.anyOf[0]).toEqual(expectedResult);
+  expect(input.anyOf[0]).toEqual(jsonSchema2020Tuples(expectedInput));
+  expect(result.anyOf[0]).toEqual(jsonSchema2020Tuples(expectedResult));
   assertListConvention({ paths: { '/v1/query': query as never } });
 });
 

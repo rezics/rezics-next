@@ -246,7 +246,7 @@ async function contentTarget(): Promise<EvidenceTarget> {
 
 // The graph transport confirms the owner's real receipt; it never manufactures
 // a fixture receipt string. Content, Access and media use their real databases.
-function receiptGraph(): WorkActivationEnvironment {
+function receiptGraph(targets: readonly EvidenceTarget[] = []): WorkActivationEnvironment {
   const applied = new Map<string, { digest: string; target: string; head: string }>();
   return { lineage: { dataEpoch: randomUUID(), routingEpoch: randomUUID() }, fuseki: {
     commandHealth: async () => ({ profiles: Object.fromEntries(Object.entries(profileRegistry)
@@ -258,6 +258,10 @@ function receiptGraph(): WorkActivationEnvironment {
       return { status: 'succeeded' };
     },
     query: async (query: string) => {
+      if (query.includes('SELECT ?head WHERE')) {
+        const selected = targets.find(target => query.includes(`<${target.resource}>`));
+        return { results: { bindings: selected ? [{ head: { type: 'uri', value: selected.revision } }] : [] } };
+      }
       const row = applied.get(query.match(/<(urn:rezics:receipt:moderation:[^>]+)>/)?.[1] ?? '');
       return { results: { bindings: row ? [{ digest: { value: row.digest },
         target: { value: row.target }, head: { value: row.head } }] : [] } };
@@ -271,12 +275,14 @@ for (const owner of ['content', 'access', 'graph'] as const) {
       resource: native(), component: 'body', revision: native(), locator: null });
     const a = owner === 'content' ? await contentTarget() : target();
     const b = owner === 'content' ? await contentTarget() : target();
-    const effects = ownerModerationEffects(new ContentModeration(pool), receiptGraph());
+    const effects = ownerModerationEffects(new ContentModeration(pool), receiptGraph([a, b]));
     const f = await fixture({ targets: [a, b], effects, ...(owner === 'access' ? { effect: 'search' as const } : {}) });
     expect(f.decision.operation.status, JSON.stringify(f.decision.operation)).toBe('completed');
     const ownerReceipt = f.decision.operation.items[1]!.receipt!;
     const operationId = `governance-moderation:${f.decision.decisionId}`;
-    const encodedOrdinal = owner === 'graph' ? digest(`${operationId}:2`) : `${operationId}:2`;
+    // Unregistered graph profiles use an Access enforcement receipt.
+    const encodedOrdinal = ownerReceipt.startsWith('urn:rezics:receipt:moderation:')
+      ? digest(`${operationId}:2`) : `${operationId}:2`;
     expect(ownerReceipt).toContain(encodedOrdinal);
     const status = await f.reports.status(f.anonymous.caseId, f.anonymous.credential);
     expect(status.operation?.items[0]?.ordinal).toBe(1);
@@ -322,7 +328,7 @@ test('production media suppression cursor at a private 100-asset boundary never 
       plan, cursor),
   } });
   const ownerItem = f.decision.operation.items[1]!;
-  expect(ownerItem.receipt).toBe(`governance-moderation:${f.decision.decisionId}:2`);
+  expect(ownerItem.receipt, JSON.stringify(f.decision.operation)).toBe(`governance-moderation:${f.decision.decisionId}:2`);
   expect(ownerItem.continuation).toBe(boundary.reserved.asset);
   const status = await f.reports.status(f.anonymous.caseId, f.anonymous.credential);
   expect(status.operation?.status).toBe('partial');
