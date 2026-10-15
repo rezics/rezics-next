@@ -16,10 +16,11 @@ const target = iri(5), actor = iri(6), selection = uuid(7);
 const payload = new Uint8Array([1, 2, 3]), digest = 'a'.repeat(64), etag = `"${digest}"`;
 const term = (value: string) => ({ type: 'literal', value });
 const uri = (value: string) => ({ type: 'uri', value });
-type Surface = 'bare' | 'exact' | 'use' | 'avatar' | 'private' | 'original' | 'owner';
+type Surface = 'bare' | 'exact' | 'use' | 'avatar' | 'agent-avatar' | 'private' | 'unattached' | 'original' | 'owner';
 
 function fixture(surface: Surface) {
-  const state = { hidden: false, closed: false, reads: 0, opening: 0, closing: 0, fallback: false };
+  const state = { hidden: false, closed: false, reads: 0, opening: 0, closing: 0, fallback: false,
+    afterOpening: () => {} };
   let entered!: () => void, resume!: () => void;
   const reading = new Promise<void>(resolve => { entered = resolve; });
   const resumed = new Promise<void>(resolve => { resume = resolve; });
@@ -39,7 +40,10 @@ function fixture(surface: Surface) {
     if (query.includes('SELECT ?resource ?head')) return { results: { bindings: refs('resource').map(reference => ({
       resource: uri(reference), head: uri(reference),
     })) } };
-    if (query.includes('SELECT ?avatar') || query.includes('SELECT ?epoch ?hold ?context'))
+    if (query.includes('SELECT ?avatar')) return { results: { bindings: surface === 'agent-avatar'
+      ? [{ avatar: term(selection) }] : [] } };
+    if (query.includes('SELECT ?agent')) return { results: { bindings: [{ agent: uri(target) }] } };
+    if (query.includes('SELECT ?epoch ?hold ?context'))
       return { results: { bindings: [] } };
     if (query.includes('SELECT ?epoch ?sequence ?hold WHERE')) return { results: { bindings: [
       { epoch: term('epoch'), sequence: term('1') },
@@ -61,8 +65,10 @@ function fixture(surface: Surface) {
       token: createHash('sha256').update(JSON.stringify(item)).digest('hex') };
     selected.set(relationshipBasis.token, item);
     const readableIndependent = item.occurrence?.resource === iri(4) || item.resource === iri(4);
+    const realm = { owner: 'graph' as const, kind: 'realm' as const, resource: iri(8), head: iri(8), relationshipBasis };
     return { resource: item.resource, resourceKind: 'other', relationshipBasis, status: 'complete',
-      parents: readableIndependent ? [] : [{ owner: 'graph', kind: 'realm', resource: iri(8), head: iri(8), relationshipBasis }] };
+      parents: readableIndependent ? [] : item.work ? [{ owner: 'graph', kind: 'work', resource: item.work,
+        head: item.work, relationshipBasis }, realm] : [realm] };
   };
   configureDisclosureAncestrySource(environment, 'media', {
     read: async items => items.map(evidence),
@@ -74,10 +80,10 @@ function fixture(surface: Surface) {
       || state.closed && item.ancestry?.parents.some(parent => parent.kind === 'realm' && parent.resource === iri(8))
       ? 'hidden' : 'visible');
   }));
-  const privateRead = surface === 'private' || surface === 'original' || surface === 'owner';
+  const privateRead = surface === 'private' || surface === 'unattached' || surface === 'original' || surface === 'owner';
   const metadata = (reference: MetadataRef): MetadataBasis | null => {
     if ('representation' in reference && !reference.use && state.fallback) return null;
-    return { owner: actor, actor, target: privateRead ? target : null, context: DEFAULT_MEDIA_CONTEXT,
+    return { owner: actor, actor, target: privateRead && surface !== 'unattached' ? target : null, context: DEFAULT_MEDIA_CONTEXT,
       disclosure: privateRead ? 'private' : 'public', objectNamespace: 'media', byteLength: payload.length,
       metadata: { asset, representation, use: 'representation' in reference ? reference.use ?? null : use,
         sha256: digest, mediaType: 'image/png', controls: { nsfw: {}, ageRating: {}, conceal: null } },
@@ -90,9 +96,10 @@ function fixture(surface: Surface) {
   const finished: string[] = [];
   const deps = { environment,
     account: { verify: async () => ({ issuer: 'account', subject: 'reader' }) },
-    access: { canManageMedia: async () => surface === 'private' || surface === 'owner',
+    access: { canManageMedia: async () => surface === 'private' || surface === 'unattached' || surface === 'owner',
       canReadAsBaselineMember: async () => false, canReadWork: async () => true,
-      canActAsPlatformAdministrator: async () => false, activePrincipalId: async () => 'principal' },
+      canActAsPlatformAdministrator: async () => true, activePrincipalId: async () => 'principal',
+      canProtectMedia: async () => { state.afterOpening(); return false; } },
     media: { store: { presentation: { metadata: async (refs: MetadataRef[]) => refs.map(metadata),
       representationUses: async () => [use, independent] }, itemDelivery: async () => delivery,
       avatarDelivery: async () => delivery, assetDelivery: async () => delivery },
@@ -101,12 +108,13 @@ function fixture(surface: Surface) {
       finish: async (_id: string, outcome: string) => { finished.push(outcome); } },
   } as unknown as MainWorkDependencies;
   const app = mediaRoutes(graph, deps);
-  const path = surface === 'avatar' ? `/v1/media/avatars/${selection}`
+  const path = surface === 'avatar' || surface === 'agent-avatar' ? `/v1/media/avatars/${selection}`
     : surface === 'use' ? `/v1/media/uses/${use}`
     : surface === 'original' || surface === 'owner' ? `/v1/media/assets/${asset}/bytes?target=${target}&actingSubject=${actor}`
-    : `/v1/media/representations/${representation}/bytes${surface === 'bare' ? '' : `?use=${use}`}${surface === 'private' ? `&actingSubject=${actor}` : ''}`;
-  const get = (validator?: string, url = path) => app.handle(new Request(`http://main.local${url}`, { headers: {
-    ...(privateRead ? { authorization: 'Bearer reader' } : {}), ...(validator ? { 'if-none-match': validator } : {}),
+    : `/v1/media/representations/${representation}/bytes${surface === 'bare' ? '' : `?use=${use}`}${surface === 'private' || surface === 'unattached' ? `&actingSubject=${actor}` : ''}`;
+  const get = (validator?: string, url = path, signed = false) => app.handle(new Request(`http://main.local${url}${signed
+    ? `${url.includes('?') ? '&' : '?'}actingSubject=${actor}` : ''}`, { headers: {
+    ...(privateRead || signed ? { authorization: 'Bearer reader' } : {}), ...(validator ? { 'if-none-match': validator } : {}),
   } }));
   return { state, get, reading, resume, finished };
 }
@@ -118,7 +126,7 @@ async function absent(response: Response) {
   expect(new Uint8Array(await response.arrayBuffer())).not.toEqual(payload);
 }
 
-for (const surface of ['bare', 'exact', 'use', 'avatar', 'private', 'original', 'owner'] as const) {
+for (const surface of ['bare', 'exact', 'use', 'avatar', 'agent-avatar', 'private', 'unattached', 'original', 'owner'] as const) {
   for (const revocation of ['asset', 'realm'] as const) {
     test(`${surface} discards buffered bytes after ${revocation} disclosure is revoked`, async () => {
       const f = fixture(surface);
@@ -162,5 +170,16 @@ for (const surface of ['bare', 'exact', 'use', 'avatar'] as const) {
     expect(response.headers.get('etag')).toBe(etag);
     expect(await response.text()).toBe('');
     expect(f.state.reads).toBe(1);
+  });
+}
+
+for (const surface of ['bare', 'exact', 'use'] as const) {
+  test(`${surface} discards a matching validator when disclosure is revoked after the opening decision`, async () => {
+    const f = fixture(surface);
+    // Editorial controls are assembled after opening disclosure. Revoke while
+    // that owner lookup awaits, when a 304 will skip object retrieval entirely.
+    f.state.afterOpening = () => { f.state.hidden = true; };
+    await absent(await f.get(etag, undefined, true));
+    expect(f.state.reads).toBe(0);
   });
 }
