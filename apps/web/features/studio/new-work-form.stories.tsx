@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fn, userEvent, within, screen } from 'storybook/test';
+import { expect, fn, userEvent, within, screen, waitFor } from 'storybook/test';
 import { agents } from './fixtures.ts';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
@@ -52,7 +52,7 @@ export const OpensCreatedRecipe: Story = {
     await chooseOption(screen, 'English');
     await userEvent.click(canvas.getByRole('button', { name: /^Create as / }));
     await expect(accepted).toHaveBeenCalledTimes(1);
-    await expect(navigate).toHaveBeenCalledWith(destination);
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(destination));
     await expect(canvas.getByRole('textbox', { name: 'Title' })).toHaveValue('Tomato soup');
     await expect(canvas.getByRole('radio', { name: /^Recipe/ })).toBeChecked();
     await expect(canvas.getByRole('combobox', { name: 'Language you’ll write in' })).toHaveTextContent('English');
