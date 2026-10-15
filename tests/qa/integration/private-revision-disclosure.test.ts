@@ -127,45 +127,53 @@ for (const name of personaNames) {
     expect(Object.hasOwn(publicPage, 'placementCount')).toBe(false);
   });
 
-  test(`${name}: Work and Post Content drafts, comment quotes and derivation references require exact authority`, async () => {
-    const person = sessions[name], permitted = name === 'owner';
-    for (const fixture of contents) {
+  for (const [index, grain] of ['Work', 'Post'].entries()) {
+    for (const probe of ['retired revision', 'draft head', 'derivations', 'validator', 'reference',
+      'comment', 'comment page', 'comment continuation'] as const) {
+      test(`${name}: ${grain} private Content ${probe} requires exact authority`, async () => {
+      const person = sessions[name], permitted = name === 'owner', fixture = contents[index]!;
       const exactPath = `/v1/content-revisions/${fixture.draft.revisionId}`;
-      for (const suffix of ['', '/derivations']) {
-        const response = await person.main('GET', exactPath + suffix + query(person));
-        expect(response.status, await response.clone().text()).toBe(permitted ? 200 : 404);
-        if (!permitted) {
-          const missing = await person.main('GET', `/v1/content-revisions/${randomUUID()}${suffix}${query(person)}`);
-          expect(missing.status).toBe(404);
-          expect(comparableBody(await response.text())).toBe(comparableBody(await missing.text()));
-        }
+      if (probe === 'reference') {
+        const reference = { target: fixture.resource, selector: { grain: 'content', variantId: fixture.variant,
+          revision: fixture.draft.revisionId } };
+        const resolved = await answer<{ items: { status: string }[] }>(person.main('POST', '/v1/resource-reference-resolutions', {
+          references: [reference], ...actor(person),
+        }));
+        expect(resolved.items[0]!.status).toBe(permitted ? 'available' : 'unavailable');
+        if (!permitted) expect(JSON.stringify(resolved)).not.toContain(secret);
+        return;
       }
-      const head = await person.main('GET', `/v1/content-revisions/${fixture.privateHead.revisionId}${query(person)}`);
-      expect(head.status).toBe(permitted ? 200 : 404);
-      if (!permitted) expect(await head.text()).not.toContain(secret);
-      const cached = await person.main('GET', exactPath + query(person), undefined, undefined,
-        { headers: { 'if-none-match': `"${fixture.draft.byteDigest}"` } });
-      expect(cached.status).toBe(permitted ? 200 : 404);
-      expect(cached.headers.get('etag')).toBeNull();
-      const reference = { target: fixture.resource, selector: { grain: 'content', variantId: fixture.variant,
-        revision: fixture.draft.revisionId } };
-      const resolved = await answer<{ items: { status: string }[] }>(person.main('POST', '/v1/resource-reference-resolutions', {
-        references: [reference], ...actor(person),
-      }));
-      expect(resolved.items[0]!.status).toBe(permitted ? 'available' : 'unavailable');
-      if (!permitted) expect(JSON.stringify(resolved)).not.toContain(secret);
-      for (const path of [
-        `/v1/content-comments/${short(fixture.comment)}`,
-        `${exactPath}/comments`,
-        `${exactPath}/comments?cursor=${encodeURIComponent(fixture.cursor)}&pageSize=1`,
-      ]) {
-        const url = new URL(path, 'http://main.local');
+      const comment = probe.startsWith('comment');
+      const suffix = probe === 'derivations' ? '/derivations' : comment ? '/comments' : '';
+      const path = probe === 'comment' ? `/v1/content-comments/${short(fixture.comment)}`
+        : probe === 'draft head' ? `/v1/content-revisions/${fixture.privateHead.revisionId}` : exactPath + suffix;
+      const url = new URL(path, 'http://main.local');
+      if (person.actingSubject || comment) {
         // Required identity syntax must not turn a signed-out probe into validation-only coverage.
         url.searchParams.set('actingSubject', person.actingSubject ?? sessions.owner.actingSubject!);
-        const response = await person.main('GET', url.pathname + url.search);
-        expect(response.status, `${path}: ${await response.clone().text()}`).toBe(permitted ? 200 : name === 'visitor' ? 401 : 404);
-        if (!permitted) expect(await response.text()).not.toContain(secret);
       }
+      if (probe === 'comment continuation') {
+        url.searchParams.set('cursor', fixture.cursor); url.searchParams.set('pageSize', '1');
+      }
+      const response = await person.main('GET', url.pathname + url.search, undefined, undefined,
+        probe === 'validator' ? { headers: { 'if-none-match': `"${fixture.draft.byteDigest}"` } } : undefined);
+      expect(response.status, `${path}: ${await response.clone().text()}`).toBe(permitted ? 200 : name === 'visitor' && comment ? 401 : 404);
+      if (probe === 'validator') expect(response.headers.get('etag')).toBeNull();
+      if (!permitted) {
+        expect(await response.clone().text()).not.toContain(secret);
+        const missingPath = probe === 'comment' ? `/v1/content-comments/${randomUUID()}`
+          : `/v1/content-revisions/${randomUUID()}${suffix}`;
+        const missing = await person.main('GET', missingPath + url.search);
+        expect(missing.status).toBe(response.status);
+        expect(comparableBody(await response.text())).toBe(comparableBody(await missing.text()));
+      }
+      });
+    }
+  }
+
+  test(`${name}: the selected public Work and Post Content stays readable after drafts`, async () => {
+    const person = sessions[name];
+    for (const fixture of contents) {
       const published = await answer<{ reference: { revisionId: string } }>(person.main('GET',
         `/v1/content-revisions/${fixture.source.revisionId}${query(person)}`));
       expect(published.reference.revisionId).toBe(fixture.source.revisionId);
@@ -180,6 +188,16 @@ for (const name of personaNames) {
     }));
     expect(search.total).toBe(0); expect(search.results).toEqual([]);
     expect(JSON.stringify(search)).not.toContain(secret);
+    for (const profile of ['public-content-phrase-v1', 'public-main-phrase-v1']) {
+      const matches = await answer<{ total: number; results: unknown[] }>(person.main('POST', '/v1/queries', {
+        profile, phrase: secret, language: 'en',
+      }));
+      expect(matches.total).toBe(0); expect(matches.results).toEqual([]);
+      expect(JSON.stringify(matches)).not.toContain(secret);
+    }
+    const suggestions = await answer<{ items: unknown[]; hasMore: boolean }>(person.main('GET',
+      `/v1/search/typeahead?${new URLSearchParams({ prefix: secret, language: 'en' })}`));
+    expect(suggestions.items).toEqual([]); expect(suggestions.hasMore).toBe(false);
     const inbox = await person.main('GET', '/v1/me/notifications');
     expect(inbox.status).toBe(name === 'visitor' ? 401 : 200);
     const body = await inbox.text();
