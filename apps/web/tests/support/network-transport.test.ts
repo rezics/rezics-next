@@ -17,6 +17,10 @@ test('closing a journey cancels and drains page and context route reads before r
       const started = new Promise<void>(done => { entered = done; });
       let finished = false;
       const owner = scope === 'context' ? context : page;
+      const registration = await owner.route('**/*', route => route.abort());
+      await registration.dispose();
+      await page.goto(server.url.origin);
+      expect(await page.title()).toBe('Journey');
       await owner.route('**/*', async route => {
         entered();
         try { await route.fetch(); }

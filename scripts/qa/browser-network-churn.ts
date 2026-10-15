@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { preserveReapEnvironment } from './container-reaper.ts';
 
 // Opt-in evidence for loopback browser transport under real stack lifecycle
 // churn. This is a separate tiny stack: it never restarts the journey's backend.
@@ -16,7 +17,7 @@ let stopping = false;
 let wake: (() => void) | undefined;
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => { stopping = true; wake?.(); });
 async function command(commandArgs: string[]) {
-  const child = spawn('docker', [...args, ...commandArgs], { stdio: 'inherit' });
+  const child = spawn('docker', [...args, ...commandArgs], { stdio: 'inherit', env: preserveReapEnvironment(process.env) });
   await new Promise<void>((done, reject) => {
     child.once('error', reject);
     child.once('close', code => code === 0 ? done() : reject(new Error(`Network churn Compose exited ${code}`)));

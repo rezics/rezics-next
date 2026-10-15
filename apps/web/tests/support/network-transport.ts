@@ -18,7 +18,7 @@ function trackRoutes(owner: BrowserContext | Page, pending: Set<Promise<unknown>
       };
       handlers.set(handler, tracked);
     }
-    await route(url, tracked, options);
+    return await route(url, tracked, options);
   };
   owner.unroute = async (url, handler) => { await unroute(url, handler ? handlers.get(handler) ?? handler : undefined); };
 }
