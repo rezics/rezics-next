@@ -427,7 +427,7 @@ for (const state of states) describe(state, () => {
     // Realm Governance closure/restoration and direct Realm read gates are missing.
     for (const surface of surfaces) {
       // Realm Zone entry selection cannot distinguish the same-Space Zone from cross-Space attachments.
-      const surfaceTest = surface === 'zone' ? test.failing : acceptanceTest;
+      const surfaceTest = acceptanceTest;
       surfaceTest(`${state}-${surface}-${reader}`, async () => {
       ready();
       if (state === 'closed') {
@@ -483,7 +483,7 @@ for (const state of states) describe(state, () => {
     });
     // Reply-target media delivery and its current Realm occurrence fence are missing.
     for (const surface of ['use', 'representation', 'representation-bytes'] as const) {
-      test.failing(`${state}-reply-media-${surface}-${reader}`, async () => {
+      acceptanceTest(`${state}-reply-media-${surface}-${reader}`, async () => {
         ready();
         const route = (missing = false) => surface === 'use'
           ? `/v1/media/uses/${missing ? randomUUID() : replyImage.use}`
