@@ -249054,6 +249054,16 @@
           },
           {
             "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -249069,6 +249079,9 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "complete": {
+                      "type": "boolean"
+                    },
                     "items": {
                       "items": {
                         "properties": {
@@ -249365,6 +249378,14 @@
                       },
                       "maxItems": 6,
                       "type": "array"
+                    },
+                    "nextCursor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "profile": {
                       "const": "home-continue-v1",
@@ -484504,10 +484525,15 @@
                           "parameters": {
                             "additionalProperties": false,
                             "properties": {
+                              "filter": {},
                               "fromYear": {
                                 "maximum": 9999,
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
                               },
                               "toYear": {
                                 "maximum": 9999,
@@ -485270,10 +485296,15 @@
                           "parameters": {
                             "additionalProperties": false,
                             "properties": {
+                              "filter": {},
                               "fromYear": {
                                 "maximum": 9999,
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
                               },
                               "toYear": {
                                 "maximum": 9999,
@@ -486036,10 +486067,15 @@
                           "parameters": {
                             "additionalProperties": false,
                             "properties": {
+                              "filter": {},
                               "fromYear": {
                                 "maximum": 9999,
                                 "minimum": 1,
                                 "type": "integer"
+                              },
+                              "realm": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
                               },
                               "toYear": {
                                 "maximum": 9999,
