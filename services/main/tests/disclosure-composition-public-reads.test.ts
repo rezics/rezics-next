@@ -94,6 +94,6 @@ test('composed typeahead uses constant graph reads for one-batch and five-batch 
     }
     console.info('typeahead graph reads [50 one, 50 five, 100 one, 100 five]:', counts);
     expect(new Set(counts).size).toBe(1);
-    expect(counts).toEqual([18, 18, 18, 18]);
+    expect(counts).toEqual([16, 16, 16, 16]);
   } finally { stack.fuseki.prefixWalk = nativeWalk; await stack.stop(); }
 }, 120_000);
