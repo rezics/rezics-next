@@ -25,6 +25,7 @@ import { selectRealmLocal, realmSelectionDigest }
   from '../../../services/main/src/modules/work/select-realm.ts';
 import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
 import { callerEvidence } from './realm-browse-caller-evidence.ts';
+import { configureDisclosure, DisclosureStore } from '../../../services/main/src/modules/disclosure/read.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const book = 'https://schema.org/Book';
@@ -44,6 +45,7 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     objectDirectory: join(state, 'objects') });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
+  configureDisclosure(env, new DisclosureStore(accessPool));
   const zoneBrowse = new ZoneBrowseProjection(accessPool, relayPool, env);
   const app = createMainApp(fuseki, { environment: env,
     zoneBrowse,

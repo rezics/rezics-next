@@ -777,22 +777,25 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
         denied = new Set(args[1]);
         return rows;
       };
-      const revoked = await measured('disclosure-revoked-during-preview', {
+      const revoked = await call({
         ...base,
         q: undefined,
         sort: 'newest',
       });
-      expect(revoked.items).toHaveLength(0);
-      expect(revoked.complete).toBe(false);
-      expect(revoked.count).toEqual({ kind: 'at-least', value: 0 });
+      // The selected summary dependency changes on every retry. The current
+      // final fence refuses this unstable cut rather than completing a page.
+      expect(revoked.status).toBe(503);
+      const refusal = await revoked.text();
+      expect(JSON.parse(refusal)).toMatchObject({ code: 'work_read_unavailable' });
+      for (const work of denied) expect(refusal).not.toContain(work);
       // Shared Discover previews use resourceCards' default page mode. They
       // need the same post-preview revocation fence as the enclosing Query.
       denied = new Set();
-      const { publicWorkRead } =
+      const { publicWorkRead, WorkReadUnavailable } =
         await import('../../../services/main/src/modules/work/read-session.ts');
       const { resourceCards } =
         await import('../../../services/main/src/modules/query/resources.ts');
-      const cards = await publicWorkRead(
+      await expect(publicWorkRead(
         deps,
         new Request('http://main.internal/g1032-cards'),
         {},
@@ -800,8 +803,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
           resourceCards(session, [
             { id: works[0]!.work, summary: works[0]!.work, kind: 'work', order: '' },
           ]),
-      );
-      expect(cards).toHaveLength(0);
+      )).rejects.toBeInstanceOf(WorkReadUnavailable);
       projection.resourceCardPayloads = payloads;
     }
     expect((await call({ ...base, cursor: beforeWrite.nextCursor! }, reader.token)).status).toBe(

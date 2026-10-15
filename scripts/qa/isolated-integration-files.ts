@@ -10,6 +10,8 @@ import { integrationGateFiles } from './integration-gate-files.ts';
 export const isolatedIntegrationFileList = [
   // Query cost evidence owns its catalogue and must not inherit another file's population.
   'tests/qa/integration/g-1032-query-cost.test.ts',
+  // Studio's native head and disclosure plan probes require an independent owner history.
+  'tests/qa/integration/studio-heads.test.ts',
   // Restarts storage owners and retains its own delivery history across process reconstruction.
   'tests/qa/integration/restart-resilience.test.ts',
   // Closure owns its Realm and platform governance fixture for all six personas.
