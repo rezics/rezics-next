@@ -246,8 +246,23 @@ async function grow(sessions: PersonaSessions, work: RealmSourceWork, bodies: st
 }
 
 async function createWork(sessions: PersonaSessions, title: string) {
-  const work = await answer<RealmSourceWork>(sessions.owner.main('POST', '/v1/works', {
+  const work = await answer<RealmSourceWork & { mainVersion: string }>(sessions.owner.main('POST', '/v1/works', {
     profile: 'metadata-only-v1', title, language: 'en', authoring: 'own-work', actingSubject: sessions.owner.actingSubject }), 201);
+  // Discussion disclosure follows the root's publication as well as Realm
+  // membership. Metadata alone leaves non-author members with no visible roots.
+  const author = sessions.owner.actingSubject;
+  const contribution = await answer<{ contribution: string; draftRevision: string }>(sessions.owner.main('POST', '/v1/contributions', {
+    profile: 'text-contribution-v1', work: work.work, language: 'en',
+    body: `An original essay about ${title}.`, actingSubject: author }), 201);
+  const publication = await answer<{ publicationDecision: string }>(sessions.owner.main('POST', '/v1/contribution-publications', {
+    profile: 'text-publication-v1', contribution: contribution.contribution,
+    expectedDraftHead: contribution.draftRevision, expectedPublicationHead: null,
+    rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: author }), 201);
+  await answer(sessions.owner.main('POST', '/v1/publication-selections', {
+    profile: 'main-default-selection-v1', work: work.work, contribution: contribution.contribution,
+    publicationDecision: publication.publicationDecision, expectedSelectionHead: null,
+    context: { kind: 'main-version-default', id: work.mainVersion }, selectionBasis: 'main-maintainer',
+    actingSubject: author }), 201);
   await authority(sessions.owner, work);
   return work;
 }
@@ -408,7 +423,8 @@ export async function verifyRealmDiscussionCorpus(sessions: RealmSourceSessions,
     requireFact(new Set(replies).size === replies.length, 'thread inventory repeats');
     return replies.sort();
   };
-  const same = (actual: string[], expected: RealmSourceReply[]) => requireFact(stable(actual) === stable(expected.map(item => item.reply).sort()), 'complete API thread inventory differs');
+  const same = (actual: string[], expected: RealmSourceReply[]) => requireFact(stable(actual) === stable(expected.map(item => item.reply).sort()),
+    `complete API thread inventory differs: expected ${expected.length}, read ${actual.length}`);
   same(await collect(sessions.rankingPublic, 'owner'), metadata.ranking.public);
   for (const role of ['owner', 'moderator', 'member'] as const) same(await collect(sessions.rankingPrivate, role),
     role === 'member' ? metadata.ranking.current : [...metadata.ranking.retained, ...metadata.ranking.current]);

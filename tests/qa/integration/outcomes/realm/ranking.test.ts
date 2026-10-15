@@ -108,14 +108,6 @@ beforeAll(async () => {
   publicThreads.push(...inventory.public.map(item => item.reply));
   oldThreads.push(...inventory.retained.map(item => item.reply));
   currentThreads.push(...inventory.current.map(item => item.reply));
-  // Restore the original identities and admission episodes. Publishing their
-  // metadata-only roots adds public content without rebuilding any thread.
-  for (const [sessions, work] of [[publicRealm, inventory.publicWork],
-    [privateRealm, inventory.retainedWork], [privateRealm, inventory.currentWork]] as const) {
-    const selected = await answer<{ mainVersion: string }>(sessions.owner.main('GET',
-      `/v1/works/${short(work.work)}?${acting(sessions.owner)}`));
-    await publishRoot(sessions, { ...work, mainVersion: selected.mainVersion });
-  }
   await recording.prepare();
   const founder = publicRealm.stranger;
   for (const state of ['empty', 'moved'] as const) {

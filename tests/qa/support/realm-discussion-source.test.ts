@@ -29,8 +29,11 @@ function fixture(options: { retryIdentity?: boolean; denyIdentity?: boolean } = 
           const url = new URL(path, 'http://fixture.test'), body = input as Record<string, unknown>;
           if (method !== 'GET') requests.push({ path: url.pathname, body, key });
           if (url.pathname === '/v1/works' && method === 'POST') {
-            const work = { work: id(), workRevision: id() }; works.set(work.work, work); return Response.json(work, { status: 201 });
+            const work = { work: id(), workRevision: id(), mainVersion: id() }; works.set(work.work, work); return Response.json(work, { status: 201 });
           }
+          if (url.pathname === '/v1/contributions') return Response.json({ contribution: id(), draftRevision: id() }, { status: 201 });
+          if (url.pathname === '/v1/contribution-publications') return Response.json({ publicationDecision: id() }, { status: 201 });
+          if (url.pathname === '/v1/publication-selections') return Response.json({}, { status: 201 });
           if (/^\/v1\/works\//.test(url.pathname)) {
             const work = works.get(`https://rezics.com/id/${url.pathname.split('/').at(-1)}`)!;
             return Response.json({ id: work.work, revision: work.workRevision });
@@ -175,6 +178,9 @@ test('complete builder uses 552 public draft/identity/placement commands with ex
     expect(f.requests.filter(request => request.path === '/v1/member-reply-drafts')).toHaveLength(552);
     expect(f.requests.filter(request => request.path === '/v1/realm-replies')).toHaveLength(552);
     expect(f.requests.filter(request => request.path === '/v1/realm-reply-placements')).toHaveLength(552);
+    expect(f.requests.filter(request => request.path === '/v1/publication-selections')).toHaveLength(5);
+    expect(f.requests.filter(request => request.path === '/v1/contribution-publications')
+      .every(request => request.body.disclosure === 'public')).toBe(true);
     expect(f.requests.filter(request => request.path === '/v1/realm-replies').every(request => Boolean(request.key))).toBe(true);
     const corrupted = structuredClone(result.metadata);
     corrupted.discussion.nested[20]!.parentRevision = randomUUID();
