@@ -148,6 +148,16 @@ test('the explicit preparation entry imports outside the Bun test runner without
   expect(code, stderr).toBe(0);
 }, 30_000);
 
+test('the source cost contract imports in the QA planner without registering persona hooks', async () => {
+  const child = Bun.spawn(['bun', '-e', "import('./tests/qa/support/realm-discussion-source.ts')"], {
+    cwd: join(import.meta.dir, '../../..'),
+    env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: undefined },
+    stdout: 'pipe', stderr: 'pipe', signal: AbortSignal.timeout(20_000),
+  });
+  const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(0);
+}, 30_000);
+
 test('the preparation entry reaches admission without awaiting its own dynamic import', async () => {
   const child = Bun.spawn(['bun', 'tests/qa/support/realm-discussion-source-runtime.ts', '--prepare'], {
     cwd: join(import.meta.dir, '../../..'),

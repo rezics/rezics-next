@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { PersonaSession, PersonaSessions } from './personas.ts';
-import { publishClosureOriginals, type ClosureOriginal } from '../integration/outcomes/realm/closure-original-credit-setup.ts';
+import type { ClosureOriginal } from '../integration/outcomes/realm/closure-original-credit-setup.ts';
 
 type Work = { work: string; workRevision: string; mainVersion: string };
 const short = (id: string) => id.slice(-36);
@@ -66,6 +66,9 @@ export async function seedRealmRanking(sessions: PersonaSessions, size: number, 
 }
 
 export async function prepareRealmRankingStates(sessions: PersonaSessions) {
+  // The QA planner imports the source's cost contract outside Bun's test
+  // runner; load helpers with test hooks only when actually building data.
+  const { publishClosureOriginals } = await import('../integration/outcomes/realm/closure-original-credit-setup.ts');
   const founder = sessions.stranger;
   const realms: string[] = [];
   for (const state of ['empty', 'moved']) {
