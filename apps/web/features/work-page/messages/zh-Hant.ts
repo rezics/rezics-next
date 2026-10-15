@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  openRecording: "開啟錄製內容",
+  recordingMasked: "此錄製內容已遮蔽。開啟後即可播放。",
   instructionTransformation: "轉換",
   instructionTransformationNotice: "轉換署名不代表原始作者身分或重用許可。",
   authorNote: "作者的話",

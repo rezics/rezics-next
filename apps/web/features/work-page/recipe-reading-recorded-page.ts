@@ -35,6 +35,7 @@ export type RecipeWorkHost = {
    */
   publicOrigin: string;
   publicFetch: typeof fetch;
+  recordingFetch?: typeof fetch;
   actingSubject: string | null;
   signedIn: boolean;
 };

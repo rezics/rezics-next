@@ -317,6 +317,11 @@ describe('Main typed route contracts', () => {
           expect(result.content).toBeUndefined();
           continue;
         }
+        if (path === '/v1/media/representations/{representation}/bytes' && status === '200') {
+          expect(Object.keys(result.content).sort()).toEqual(['audio/wav', 'image/gif', 'image/jpeg', 'image/png', 'image/webp', 'video/mp4']);
+          for (const media of Object.values(result.content)) expect(media.schema).toEqual({ type: 'string', format: 'binary' });
+          continue;
+        }
         const mediaType = Number(status) >= 400 ? 'application/problem+json' : 'application/json';
         expect(result.content[mediaType]?.schema).toBeDefined();
       }

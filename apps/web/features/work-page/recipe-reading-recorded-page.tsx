@@ -167,6 +167,7 @@ export async function recipeRegion({ host, id, work, href, locale, messages }: {
   if (!recipe.ok) return <RegionFailure title={messages.recipeMethod} failure={recipe.failure} messages={messages} />;
   const allowed = authority?.ok ? allowedActionsOf(authority.data) : [];
   return <RecipeExperience initial={recipe.data} href={href} actingSubject={host.actingSubject}
+    recordingFetch={host.recordingFetch}
     edit={mayEdit(allowed) ? { href: recipeEditHref(id), label: recipeEditorCopy(locale).editRecipe } : null}
     text={text.ok ? text.data.body : null}
     readPage={recipePageReader({ main: host.main, actingSubject: host.actingSubject }, href)}

@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  openRecording: "Abrir grabación",
+  recordingMasked: "Esta grabación está oculta. Ábrela para reproducirla.",
   instructionTransformation: "Transformación",
   instructionTransformationNotice: "El crédito de transformación no acredita la autoría original ni el permiso de reutilización.",
   authorNote: "Nota del autor",

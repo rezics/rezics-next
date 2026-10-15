@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  openRecording: "녹음·동영상 열기",
+  recordingMasked: "이 녹음·동영상은 가려져 있습니다. 열어서 재생하세요.",
   instructionTransformation: "변환",
   instructionTransformationNotice: "변환 기여 표시는 원저자임이나 재사용 허가를 의미하지 않습니다.",
   authorNote: "작가의 말",

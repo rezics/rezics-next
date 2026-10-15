@@ -148,6 +148,19 @@ interface Document {
   paths?: Record<string, Record<string, Operation>>;
 }
 
+/** The plugin currently overwrites standard authored response content with its runtime-schema inference. */
+export function overlayAuthoredResponses(document: Document, routes: readonly {
+  method: string; path: string; hooks?: { detail?: { responses?: unknown } };
+}[]): void {
+  for (const route of routes) {
+    const authored = route.hooks?.detail?.responses;
+    if (!authored || typeof authored !== 'object' || Array.isArray(authored)) continue;
+    const path = route.path.replace(/:([^/]+)/g, '{$1}');
+    const operation = document.paths?.[path]?.[route.method.toLowerCase()];
+    if (operation) operation.responses = { ...operation.responses, ...authored };
+  }
+}
+
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value !== null && typeof value === 'object') {
@@ -218,6 +231,7 @@ export async function buildMainOpenApi(): Promise<string> {
   const response = await app.handle(new Request('http://localhost/openapi/json'));
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
+  overlayAuthoredResponses(document, app.routes);
   assertRouteExposures(app.routes.filter(route => !route.path.startsWith('/openapi')));
   const paths = Object.entries(document.paths ?? {});
   // HTTP conditional-read responses have no representation body.

@@ -44,7 +44,7 @@ test('reading and private preview retain exact selections and render only the se
 
 test('the same selected procedure remains two ordered uses across continuation, adoption and removal', () => {
   const duplicate = { ...instruction, occurrence: iri(5) };
-  const first = { ...page, ingredients: [], next: 'opaque' };
+  const first: RecipePageLike & { ingredients: [] } = { ...page, ingredients: [], next: 'opaque' };
   const second = { ...page, ingredients: [], next: undefined,
     instructions: [duplicate], occurrences: [{ ...page.occurrences[0]!, occurrence: duplicate.occurrence }] };
   const complete = appendRecipePage(first, second);

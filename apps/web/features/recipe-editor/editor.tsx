@@ -45,6 +45,7 @@ export interface RecipeEditorProps {
   messages: RecipeEditorMessages;
   /** Stories pass a stand-in Main; the app uses the browser client through the BFF. */
   main?: () => MainClient;
+  recordingFetch?: typeof fetch;
   /** When set, file import uses this client. Production keeps the browser fetch. */
   importApi?: RecipeImportApi;
   /** A deterministic command-key source for control stories. */
@@ -53,7 +54,7 @@ export interface RecipeEditorProps {
   saveExport?: (exported: RecipeExport, contentLanguage?: string, recipeName?: string) => void;
 }
 
-export function RecipeEditor({ work, mainVersion, language, actingSubject, workHref, initial, locale, messages: catalog, main,
+export function RecipeEditor({ work, mainVersion, language, actingSubject, workHref, initial, locale, messages: catalog, main, recordingFetch,
   importApi, newImportId, saveExport }: RecipeEditorProps) {
   const t = useMemo(() => materializeData(catalog, { locale }), [catalog, locale]);
   const client = main ?? browserMain;
@@ -191,7 +192,7 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
       </div>
       <aside className={cn('min-w-0 lg:sticky lg:top-28 lg:self-start', view === 'edit' && 'hidden lg:block')}>
         <Preview state={state} title={entry.title} description={entry.description} notes={typedNotes} language={language} t={t}
-          messages={workPageMessages[locale]} />
+          messages={workPageMessages[locale]} recordingFetch={recordingFetch} />
       </aside>
     </div>
   </div>;

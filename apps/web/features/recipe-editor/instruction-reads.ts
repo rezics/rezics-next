@@ -7,7 +7,9 @@ type Derivations = NonNullable<Awaited<ReturnType<ReturnType<MainClient['v1']['c
 type Resolutions = NonNullable<Awaited<ReturnType<MainClient['v1']['resource-reference-resolutions']['post']>>['data']>;
 type Recording = NonNullable<Awaited<ReturnType<ReturnType<MainClient['v1']['media']['representations']>['get']>>['data']>;
 export interface InstructionDetails {
+  actingSubject?: string;
   author?: string;
+  creditNames?: Record<string, string>;
   derivations?: Derivations;
   references?: Resolutions['items'];
   recording?: Recording;
@@ -31,10 +33,22 @@ function referencesIn(document: DocumentSnapshot): Reference[] {
   return references;
 }
 
+async function readReferences(main: MainClient, references: Reference[], query: { actingSubject?: string },
+  refusals: InstructionDetails['refusals']): Promise<Resolutions['items']> {
+  const resolved: Resolutions['items'] = [];
+  for (let offset = 0; offset < references.length; offset += 16) {
+    const page = await main.v1['resource-reference-resolutions'].post({ ...query, references: references.slice(offset, offset + 16) });
+    if (page.error || page.status !== 200) refusals.push({ status: page.status, problem: page.error?.value ?? page.data });
+    else if (page.data) resolved.push(...page.data.items);
+  }
+  return resolved;
+}
+
 /** Production page and editor reads use the caller's cached persona client, including every refusal. */
 export async function readInstructionDetails(main: MainClient, instructions: readonly Instruction[], actingSubject?: string | null): Promise<ReadInstruction[]> {
   const query = { ...(actingSubject ? { actingSubject } : {}) };
   const content = new Map<string, Promise<InstructionDetails>>();
+  const agents = new Map<string, ReturnType<ReturnType<MainClient['v1']['agents']>['get']>>();
   return Promise.all(instructions.map(async instruction => {
     if (instruction.status !== 'available') return instruction;
     const selector = instruction.reference.selector;
@@ -42,7 +56,7 @@ export async function readInstructionDetails(main: MainClient, instructions: rea
     let pending = content.get(key);
     if (!pending) {
       pending = (async () => {
-        const details: InstructionDetails = { refusals: [] };
+        const details: InstructionDetails = { ...query, refusals: [], creditNames: {} };
         const keep = <T>(answer: { data: T | null; error: { status: number; value?: unknown } | null; status: number }) => {
           if (answer.error || answer.status !== 200) {
             details.refusals.push({ status: answer.status, problem: answer.error?.value ?? answer.data });
@@ -56,16 +70,18 @@ export async function readInstructionDetails(main: MainClient, instructions: rea
           const derivations = await main.v1['content-revisions']({ revision: selector.revision }).derivations.get({
             query: { ...query, limit: 20 },
           });
+          const credits = [details.author, ...(derivations.data?.items.map(record =>
+            typeof record.responsibleAgent === 'string' ? record.responsibleAgent : undefined) ?? [])];
+          await Promise.all(credits.map(async agent => {
+            if (!agent) return;
+            let request = agents.get(agent);
+            if (!request) { request = main.v1.agents({ id: agent.slice(-36) }).get({ query }); agents.set(agent, request); }
+            const profile = keep(await request);
+            if (profile) details.creditNames![agent] = profile.displayName;
+          }));
           const document = instructionDocument(instruction);
           const references = document ? referencesIn(document) : [];
-          const resolved: Resolutions['items'] = [];
-          for (let offset = 0; offset < references.length; offset += 16) {
-            const page = keep(await main.v1['resource-reference-resolutions'].post({
-              ...query, references: references.slice(offset, offset + 16),
-            }));
-            if (page) resolved.push(...page.items);
-          }
-          details.references = resolved;
+          details.references = await readReferences(main, references, query, details.refusals);
           return { ...details, derivations: keep(derivations) ?? undefined };
         } else {
           details.recording = keep(await main.v1.media.representations({ representation: selector.representation }).get({

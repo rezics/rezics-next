@@ -169,8 +169,10 @@ function linkedLines(step: ReadableOccurrence, page: ReadableRecipe, units: Unit
   });
 }
 
-function Steps({ page, units, messages: t }: { page: ReadableRecipe; units: Units; messages: WorkPageMessages }) {
-  if (page.instructions?.length) return <InstructionReading instructions={page.instructions} messages={t} />;
+function Steps({ page, units, messages: t, recordingFetch }: {
+  page: ReadableRecipe; units: Units; messages: WorkPageMessages; recordingFetch?: typeof fetch;
+}) {
+  if (page.instructions?.length) return <InstructionReading instructions={page.instructions} messages={t} recordingFetch={recordingFetch} />;
   const steps = page.occurrences.filter(item => item.role === 'step' && item.qualifier?.type === 'recipe-step');
   return <ol className="grid gap-5">{steps.map((step, index) => {
     const instruction = step.qualifier?.type === 'recipe-step' ? step.qualifier.instructionText?.value ?? '' : '';
@@ -250,10 +252,11 @@ function CookMode({ page, messages: t, units, onClose }: {
 }
 
 /** Yield, times, ingredients and method, shared by the Work page and the editor's preview. */
-export function RecipeContent({ page, units, messages: t, notes, controls, columns = true }: {
+export function RecipeContent({ page, units, messages: t, notes, controls, columns = true, recordingFetch }: {
   page: ReadableRecipe; units: Units; messages: WorkPageMessages; notes?: string | null; controls?: ReactNode;
   /** Side by side from the `md` viewport. A narrow preview stacks instead. */
   columns?: boolean;
+  recordingFetch?: typeof fetch;
 }) {
   const measures = page.measures;
   const total = measures.find(item => item.kind === 'total-duration');
@@ -273,7 +276,7 @@ export function RecipeContent({ page, units, messages: t, notes, controls, colum
       <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.ingredients}</h3>
         <IngredientList page={page} units={units} messages={t} /></section>
       <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.method}</h3>
-        <Steps page={page} units={units} messages={t} /></section>
+        <Steps page={page} units={units} messages={t} recordingFetch={recordingFetch} /></section>
     </div>
     {notes ? <section className="grid gap-2"><h3 className="font-semibold">{t.recipeNotes}</h3>
       <p className="whitespace-pre-wrap leading-7">{notes}</p></section> : null}
@@ -292,13 +295,14 @@ function wholeServings(page: RecipeWorkPage | null): number | null {
   return Number.isInteger(amount) && amount >= 1 && amount <= 100 ? amount : null;
 }
 
-export function RecipeExperience({ initial, href, actingSubject, text, edit, locale, messages: t, readPage, exportApi, saveExport }: {
+export function RecipeExperience({ initial, href, actingSubject, text, edit, locale, messages: t, readPage, exportApi, saveExport, recordingFetch }: {
   exportApi?: RecipeExportApi; saveExport?: (value: RecipeExport) => void;
   initial: RecipeWorkPage | null; /** The recipe section's link in the Work's page projection. */ href: string;
   actingSubject: string | null; /** The way into the recipe editor, for a viewer who may edit it. */ edit?: { href: string; label: string } | null;
   text: string | null; locale: UiLocale; messages: WorkPageMessages;
   /** Stories answer a later page without the network. Showing more reads that one page. */
   readPage?: RecipePageRead;
+  recordingFetch?: typeof fetch;
 }) {
   const [page, setPage] = useState(initial);
   const [servings, setServings] = useState(() => wholeServings(initial) ?? 1);
@@ -422,7 +426,7 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
   return <Region id="recipe-experience" title={t.recipeMethod}>
     {page ? <>
       <div aria-busy={busy || continuing || undefined} className="grid gap-4">
-        <RecipeContent page={page} units={units} messages={t} notes={text} controls={<>
+        <RecipeContent page={page} units={units} messages={t} notes={text} recordingFetch={recordingFetch} controls={<>
           {controls}
           {error ? <p role="alert" className="text-destructive text-sm">{t.scaleFailed}</p> : null}
         </>} />

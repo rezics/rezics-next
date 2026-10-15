@@ -9,6 +9,8 @@ import zhHans from './messages/zh-Hans.ts';
 import zhHant from './messages/zh-Hant.ts';
 
 const en = {
+  openRecording: "Open recording",
+  recordingMasked: "This recording is masked. Open it to play.",
   authorNote: "Author’s note",
   loading: 'Loading the Work…', loadingRegion: 'Loading…',
   notFoundTitle: 'Work not found',

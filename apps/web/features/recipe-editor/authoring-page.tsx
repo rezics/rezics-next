@@ -24,6 +24,7 @@ export function RecipeAuthoringBody({
   importApi,
   newImportId,
   saveExport,
+  recordingFetch,
 }: {
   view: RecipeAuthoringMapped;
   locale: UiLocale;
@@ -31,6 +32,7 @@ export function RecipeAuthoringBody({
   workHref: string;
   signInHref: string;
   main?: () => MainClient;
+  recordingFetch?: typeof fetch;
   importApi?: RecipeImportApi;
   newImportId?: () => string;
   saveExport?: (exported: RecipeExport, contentLanguage?: string, recipeName?: string) => void;
@@ -81,6 +83,7 @@ export function RecipeAuthoringBody({
       locale={locale}
       messages={messages[locale]}
       main={main}
+      recordingFetch={recordingFetch}
       importApi={importApi}
       newImportId={newImportId}
       saveExport={saveExport}

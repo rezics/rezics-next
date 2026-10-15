@@ -2,10 +2,10 @@
 
 import { checkDocument, type DocumentSnapshot } from '@rezics/document';
 import { DocumentBody } from '@rezics/ui/document-body';
-import { BFF_PREFIX } from '../api/browser.ts';
 import { directionOf } from '../studio/types.ts';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import { instructionDocument, procedureDefinition, type Instruction, type ProcedureItem } from './instructions.ts';
+import { InstructionRecording } from './instruction-recording.tsx';
 
 function Procedure({ items }: { items: ProcedureItem[] }) {
   return <ol className="grid gap-4">{items.map(item => <li key={item.id} data-procedure-item={item.id}>
@@ -24,32 +24,31 @@ function InstructionDocument({ document }: { document: DocumentSnapshot }) {
 }
 
 /** Each occurrence stays visible in Structure order; selected sources and transformations have separate credit. */
-export function InstructionReading({ instructions, messages: t }: { instructions: readonly Instruction[]; messages: WorkPageMessages }) {
+export function InstructionReading({ instructions, messages: t, recordingFetch }: {
+  instructions: readonly Instruction[]; messages: WorkPageMessages; recordingFetch?: typeof fetch;
+}) {
   return <ol className="grid min-w-0 gap-6">{instructions.map(item => {
     const document = instructionDocument(item);
-    const selector = item.reference.selector;
     const recording = item.details?.recording;
-    const query = new URLSearchParams(item.mediaUse ? { use: item.mediaUse } : {});
-    const mediaUrl = selector.grain === 'representation'
-      ? `${BFF_PREFIX}/v1/media/representations/${selector.representation}/bytes?${query}${selector.fragment ? `#${selector.fragment}` : ''}` : null;
     return <li key={item.occurrence} data-instruction-occurrence={item.occurrence} className="grid min-w-0 gap-3 break-words">
       {item.status !== 'available' ? <p role="status">{t.contentsUnavailable}</p>
         : document && checkDocument(document) ? <InstructionDocument document={document} />
           : item.text !== undefined ? <p className="whitespace-pre-wrap">{item.text}</p>
-            : recording && mediaUrl ? recording.mediaType.startsWith('video/')
-              ? <video controls preload="metadata" src={mediaUrl} className="w-full" />
-              : <audio controls preload="metadata" src={mediaUrl} className="w-full" />
+            : recording ? <InstructionRecording key={JSON.stringify([recording, item.details?.actingSubject])}
+              instruction={item} messages={t} fetcher={recordingFetch} />
               : <p role="status">{t.contentsUnavailable}</p>}
-      {item.details?.author ? <p className="text-xs text-muted-foreground">{t.author}: <span className="break-all">{item.details.author}</span></p> : null}
+      {item.details?.author ? <p className="text-xs text-muted-foreground">{t.author}: {item.details.creditNames?.[item.details.author] ?? t.creditsUnavailable}</p> : null}
       {item.details?.derivations?.items.map(record => <div key={record.derivation} className="grid gap-1 text-xs text-muted-foreground">
-        <p>{t.instructionTransformation}: {typeof record.responsibleAgent === 'string' ? record.responsibleAgent : t.creditsUnavailable}</p>
+        <p>{t.instructionTransformation}: {typeof record.responsibleAgent === 'string'
+          ? item.details?.creditNames?.[record.responsibleAgent] ?? t.creditsUnavailable : t.creditsUnavailable}</p>
         <p>{t.instructionTransformationNotice}</p>
       </div>)}
       {item.details?.derivations?.nextCursor ? <p>{t.moreCredits}</p> : null}
-      {item.details?.references?.length ? <ul className="grid gap-1 text-xs text-muted-foreground">{item.details.references.map((reference, index) =>
+      {item.details?.references?.length ? <details className="text-xs text-muted-foreground"><summary>{t.fullFacts}</summary>
+        <ul className="grid gap-1">{item.details.references.map((reference, index) =>
         <li key={index}>{reference.status === 'unavailable' ? t.contentsUnavailable
           : <span className="break-all">{reference.reference.target} · {reference.reference.selector.grain}
-            {'revision' in reference.reference.selector ? ` · ${reference.reference.selector.revision}` : ''}</span>}</li>)}</ul> : null}
+            {'revision' in reference.reference.selector ? ` · ${reference.reference.selector.revision}` : ''}</span>}</li>)}</ul></details> : null}
       {item.details?.refusals.map((refusal, index) => <p key={index} role="alert" data-status={refusal.status}>
         {t.contentsUnavailable} ({refusal.status})</p>)}
     </li>;

@@ -8,8 +8,9 @@ import type { WorkPageMessages } from '../work-page/messages.ts';
 import { RecipeContent } from '../work-page/types/recipe.tsx';
 
 /** How the recipe reads on its page, from what the editor holds now. The page's own component draws it. */
-export function Preview({ state, title, description, notes, language, t, messages }: {
+export function Preview({ state, title, description, notes, language, t, messages, recordingFetch }: {
   state: RecipeState; title: string; description: string; notes: string; language: string; t: Copy; messages: WorkPageMessages;
+  recordingFetch?: typeof fetch;
 }) {
   const lang = { lang: language, dir: directionOf(language) } as const;
   const body = notes.trim();
@@ -22,7 +23,7 @@ export function Preview({ state, title, description, notes, language, t, message
     {empty ? <p className="text-muted-foreground text-sm">{t.previewEmpty}</p> : <div {...lang} className="grid gap-5">
       {title ? <h3 className="font-semibold font-work-title text-2xl/tight">{title}</h3> : null}
       {description ? <p className="whitespace-pre-wrap text-pretty text-muted-foreground">{description}</p> : null}
-      <RecipeContent page={readingOf(state)} units="written" messages={messages} notes={body || null} columns={false} />
+      <RecipeContent page={readingOf(state)} units="written" messages={messages} notes={body || null} columns={false} recordingFetch={recordingFetch} />
     </div>}
   </article>;
 }
