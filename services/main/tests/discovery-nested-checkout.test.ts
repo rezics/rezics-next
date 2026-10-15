@@ -62,7 +62,9 @@ let copies = 0;
 
 beforeAll(async () => {
   setNestedPoolCheckoutMode('throw');
-  const running = await startPostgresCluster();
+  // This fixture proves transaction ownership and rollback, not power-loss
+  // durability. Template copies must not wait on host-wide fsync congestion.
+  const running = await startPostgresCluster({ serverSettings: 'fsync = off\nsynchronous_commit = off' });
   cluster = running;
   const config = { ...running.connection, max: 1 };
   admin = new Pool(config);
