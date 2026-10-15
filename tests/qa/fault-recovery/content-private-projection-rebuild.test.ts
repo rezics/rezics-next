@@ -372,7 +372,11 @@ test('SEARCH19/SEARCH20/OPS16: private publication, later approval and frozen re
         const member = Reflect.get(target, key);
         return typeof member === 'function' ? member.bind(target) : member;
       } });
-      expect((await relayContentProjectionOnce({ ...env, fuseki: racingFuseki }, content, cursor, stale))?.disposition).toBe('deferred');
+      // The tick retries pending work before scanning its next source event.
+      // The interleaved replacement makes that source obsolete, so its proved
+      // supersession is acknowledged even when the retried native write loses.
+      expect(await relayContentProjectionOnce({ ...env, fuseki: racingFuseki }, content, cursor, stale))
+        .toMatchObject({ sourceSequence: oldApproval.position.sequence, disposition: 'superseded' });
       expect(staleStatus).toBe('guard-unmatched');
       if (!p3) throw new Error('Newer publication was not interleaved');
       await drain(cursor, stale);
