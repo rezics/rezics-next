@@ -50,6 +50,8 @@ test('the merge Task command executes mixed unit and owner files and retains gua
     mkdirSync(join(fixture, 'scripts/qa'), { recursive: true });
     for (const file of ['repository-guards.ts', 'integration-gate-files.ts'])
       copyFileSync(join(root, 'scripts/qa', file), join(fixture, 'scripts/qa', file));
+    mkdirSync(join(fixture, 'scripts/lib'), { recursive: true });
+    copyFileSync(join(root, 'scripts/lib/repository-files.ts'), join(fixture, 'scripts/lib/repository-files.ts'));
     const unit = 'tests/qa/unit/operation.test.ts';
     const guard = 'scripts/inventory.test.ts';
     for (const file of [unit, guard]) {

@@ -73,9 +73,10 @@ test('Realm directory drops a record closed during summary hydration', async () 
 
 test('resource-list successor gates Realm records while retaining independent Work name heads', () => {
   expect(resourceDisclosureTarget({ id: closed, kind: 'realm', head: id(20) }))
-    .toEqual({ owner: 'graph', resource: closed, component: 'record' });
+    .toEqual({ owner: 'graph', resource: closed, component: 'record', nameOwnerResolved: true });
   expect(resourceDisclosureTarget({ id: live, kind: 'work', head: id(21) }))
-    .toEqual({ owner: 'graph', resource: live, component: 'name', work: live, workRevision: id(21), revision: id(21) });
+    .toEqual({ owner: 'graph', resource: live, component: 'name', nameOwnerResolved: true,
+      work: live, workRevision: id(21), revision: id(21) });
 });
 
 test('closure search and directory outcomes are included in the recursive integration tier', () => {

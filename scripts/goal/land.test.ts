@@ -29,6 +29,7 @@ export function repo(options: { result?: string; auto?: boolean; files?: Record<
   for (const file of ['app.ts', 'index.ts', 'composition.ts', 'routes/dependencies.ts']) write(`services/main/src/${file}`, 'export {};\n');
   for (const [path, content] of Object.entries(options.files ?? {})) write(path, content);
   if (options.surface) {
+    write('scripts/lib/repository-files.ts', readFileSync(join(import.meta.dir, '../lib/repository-files.ts'), 'utf8'));
     for (const file of ['outcomes.ts', 'outcome-cells.ts']) write(`scripts/qa/cases/${file}`,
       readFileSync(join(import.meta.dir, '../qa/cases', file), 'utf8'));
     write('scripts/qa/cases/launch-coverage.ts', `export interface LaunchCoverage { kind: string; capability: string; hardCase?: string }
