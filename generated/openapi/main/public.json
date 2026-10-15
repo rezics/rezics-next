@@ -78017,6 +78017,9 @@
                       "maxLength": 512,
                       "type": "string"
                     },
+                    "family": {
+                      "type": "string"
+                    },
                     "status": {
                       "const": 429,
                       "type": "number"
@@ -272821,6 +272824,9 @@
                       "maxLength": 512,
                       "type": "string"
                     },
+                    "family": {
+                      "type": "string"
+                    },
                     "status": {
                       "const": 429,
                       "type": "number"
@@ -277411,6 +277417,9 @@
                     },
                     "detail": {
                       "maxLength": 512,
+                      "type": "string"
+                    },
+                    "family": {
                       "type": "string"
                     },
                     "status": {
@@ -448717,6 +448726,9 @@
                       "maxLength": 512,
                       "type": "string"
                     },
+                    "family": {
+                      "type": "string"
+                    },
                     "status": {
                       "const": 429,
                       "type": "number"
@@ -529738,6 +529750,9 @@
                     },
                     "detail": {
                       "maxLength": 512,
+                      "type": "string"
+                    },
+                    "family": {
                       "type": "string"
                     },
                     "status": {
@@ -669842,6 +669857,9 @@
                       "maxLength": 512,
                       "type": "string"
                     },
+                    "family": {
+                      "type": "string"
+                    },
                     "status": {
                       "const": 429,
                       "type": "number"
@@ -670991,6 +671009,9 @@
                     },
                     "detail": {
                       "maxLength": 512,
+                      "type": "string"
+                    },
+                    "family": {
                       "type": "string"
                     },
                     "status": {
@@ -680611,6 +680632,9 @@
                       "maxLength": 512,
                       "type": "string"
                     },
+                    "family": {
+                      "type": "string"
+                    },
                     "status": {
                       "const": 429,
                       "type": "number"
@@ -682436,6 +682460,9 @@
                       "maxLength": 512,
                       "type": "string"
                     },
+                    "family": {
+                      "type": "string"
+                    },
                     "status": {
                       "const": 429,
                       "type": "number"
@@ -683456,6 +683483,9 @@
                     },
                     "detail": {
                       "maxLength": 512,
+                      "type": "string"
+                    },
+                    "family": {
                       "type": "string"
                     },
                     "status": {
@@ -760219,6 +760249,9 @@
                     },
                     "detail": {
                       "maxLength": 512,
+                      "type": "string"
+                    },
+                    "family": {
                       "type": "string"
                     },
                     "status": {
