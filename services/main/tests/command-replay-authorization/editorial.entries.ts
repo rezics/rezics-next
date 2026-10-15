@@ -814,6 +814,15 @@ export const moduleOwners = ["work", "content-publication", "editorial-review", 
 export const replayEntries = entries;
 export const coveredOperations = [...new Set(replayEntries.map(entry => entry.operation))];
 export const uncoveredOperations: string[] = [
+  // recordContentDerivation checks live content.draft and agent.control authority
+  // around ContentDerivations.record. content-adoption.test.ts (integration) and
+  // content-derivation-checkout.test.ts witness its owner boundary, but the shared
+  // expired/revoked command replay controls have no registered scenario yet.
+  "POST /v1/content-derivations",
+  // authorPost registers work.create and saves an admitted Content draft. No
+  // executed owner/replay witness is registered for this new route; name that
+  // gap rather than borrowing identification or ordinary draft coverage.
+  "POST /v1/posts",
   // Fresh reference resolution takes no idempotency key and retains no saved result.
   // The tracer reaches the generic owner helper through the live Zone content.draft
   // authority check; tests/qa/integration/content-adoption.test.ts witnesses public
