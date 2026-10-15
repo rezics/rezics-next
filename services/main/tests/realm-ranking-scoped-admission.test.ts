@@ -1002,6 +1002,63 @@ test('admission SQL and visited rows stay bounded as unrelated dirty inventory g
     .toBeLessThanOrEqual(10);
 });
 
+test('publication trigger probes touch one reply as public and private ranking inventories grow', async () => {
+  const realm = native(), work = native();
+  const costs: { size: number; before: number[]; after: number[] }[] = [];
+  let previous = 0;
+  for (const size of [100, 1600]) {
+    await access.query(`INSERT INTO access.realm_thread_reference
+      (data_epoch,realm,reply,placement,parent,thread,work,occurred_at,activity_at,active,concepts)
+      SELECT $1,$2,id,id,NULL,id,$3,clock_timestamp(),clock_timestamp(),true,'{}'
+      FROM (SELECT 'https://rezics.com/id/'||gen_random_uuid() AS id FROM generate_series(1,$4::integer)) refs`,
+    [epoch, realm, work, size - previous]);
+    await access.query(`INSERT INTO access.realm_thread_population
+      (data_epoch,realm,population,floor_epoch,floor_sequence,ready)
+      SELECT data_epoch,realm,reply,$1,0,true FROM access.realm_thread_reference WHERE data_epoch=$1 AND realm=$2
+      ON CONFLICT DO NOTHING`, [epoch, realm]);
+    await access.query(`INSERT INTO access.realm_thread_population_admission
+      SELECT data_epoch,realm,reply,reply,true FROM access.realm_thread_reference WHERE data_epoch=$1 AND realm=$2
+      ON CONFLICT DO NOTHING`, [epoch, realm]);
+    await access.query(`INSERT INTO access.realm_thread_private_order
+      SELECT data_epoch,realm,reply,sort,period,reply,placement,rank_key,time_key,expires_at,concept
+      FROM access.realm_thread_order WHERE data_epoch=$1 AND realm=$2 ON CONFLICT DO NOTHING`, [epoch, realm]);
+    await access.query('ANALYZE access.realm_thread_order; ANALYZE access.realm_thread_private_order');
+    const missing = native();
+    // These are the two exact predicates used by refresh_realm_thread_order
+    // and its private-order trigger. Empty probes still have physical work.
+    const statements = [
+      'DELETE FROM access.realm_thread_order WHERE data_epoch=$1 AND realm=$2 AND reply=$3',
+      "DELETE FROM access.realm_thread_private_order WHERE data_epoch=$1 AND realm=$2 AND reply=$3 AND sort='top' AND period='all' AND concept=''",
+    ];
+    const client = await access.connect();
+    const probes = async () => {
+      const buffers: number[] = [];
+      for (const sql of statements) {
+        const result = await client.query(`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) ${sql}`, [epoch, realm, missing]);
+        const plan = result.rows[0]['QUERY PLAN'][0].Plan;
+        buffers.push(plan['Shared Hit Blocks'] + plan['Shared Read Blocks']);
+      }
+      return buffers;
+    };
+    try {
+      // Negative control measures the pre-migration access paths on identical
+      // seeded rows. Transactional DDL restores the indexes before qualification.
+      await client.query('BEGIN');
+      await client.query('DROP INDEX access.realm_thread_order_reply; DROP INDEX access.realm_thread_private_order_reply');
+      const before = await probes();
+      await client.query('ROLLBACK');
+      const after = await probes();
+      costs.push({ size, before, after });
+      expect(Math.max(...after)).toBeLessThanOrEqual(16);
+    } finally { await client.query('ROLLBACK'); client.release(); }
+    previous = size;
+  }
+  writeFileSync(join(root, '.temp', 'realm-ranking-publication-growth.json'), JSON.stringify(costs, null, 2));
+  console.info(JSON.stringify({ capability: 'realm-ranking-publication-probes', costs }));
+  expect(costs[1]!.before.every((value, index) => value > costs[1]!.after[index]! * 4)).toBe(true);
+  expect(costs[1]!.after.every((value, index) => value <= costs[0]!.after[index]! + 4)).toBe(true);
+});
+
 
 test('deferred thread removals do not hold another bounded page but close their selected page', async () => {
   const realm = native(), root = await reference(realm);

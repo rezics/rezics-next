@@ -221,11 +221,7 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   }
   if (target.kind === 'realm-reply') {
     const member = !!await realmApprovedProof(client, target.id, principalId, actingSubject);
-    return (await graph.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(target.id)} a rv:Realm ; rv:realmState rv:Active ;
-        rv:space ?space . ?space rv:realmCapability ${iri(target.id)} ; rv:disclosure ?disclosure .
-        ${member ? '' : `${iri(target.id)} rv:reviewMode "open" . FILTER(?disclosure = rv:Public)`} }
-    }`, 1024)).boolean === true;
+    return realmReplyTargetAllowed(graph, target.id, member);
   }
   if (target.kind === 'maintainer') {
     if (!relatedWork || !native.test(relatedWork)
@@ -287,6 +283,19 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   return await authorWorkGeneration(client, graph, principalId, actingSubject, target.id) !== null;
 }
 
+/** Use the participation proof already read under this owner's locks for both
+ * the graph decision and the saved episode. A second lookup can select another
+ * mandate and needlessly repeats every membership/owner point probe. */
+async function realmReplyTargetAllowed(graph: Pick<FusekiClient, 'query'> | undefined,
+  realm: string, member: boolean): Promise<boolean> {
+  if (!graph) return false;
+  return (await graph.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} a rv:Realm ; rv:realmState rv:Active ;
+      rv:space ?space . ?space rv:realmCapability ${iri(realm)} ; rv:disclosure ?disclosure .
+      ${member ? '' : `${iri(realm)} rv:reviewMode "open" . FILTER(?disclosure = rv:Public)`} }
+  }`, 1024)).boolean === true;
+}
+
 /** Type policy applies to creation and retyping; the owner binds it in its digest. */
 export function baselineWorkTypesAllowed(request: Pick<AdmissionRequest, 'workSemanticTypes'>): boolean {
   return !request.workSemanticTypes?.some(type =>
@@ -340,15 +349,18 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
     request.actingSubject, target.id, request.baselineContribution ?? null) : null;
   const withdrawal = target.kind === 'submission-withdraw'
     ? await authorWithdrawalProof(client, request.actingSubject, target.id, request.baselineContribution ?? null) : null;
+  const realmMembership = target.kind === 'realm-reply'
+    ? await realmApprovedProof(client, target.id, principalId, request.actingSubject) : null;
   const allowed = avatarControl !== null || (authorWork ? authorGeneration !== null
     : target.kind === 'submission' ? !!submission
       : target.kind === 'submission-withdraw' ? !!withdrawal
+      : target.kind === 'realm-reply' ? await realmReplyTargetAllowed(graph, target.id, realmMembership !== null)
       : await baselineTargetAllowed(client, graph, principalId, request.actingSubject,
         target, request.baselineCollectionCreate === true, request.baselineRelatedWork ?? null,
         request.baselineSourceRevision ?? null, request.baselineContribution ?? null, replyRootDecision));
   if (!allowed) return null;
   return { ...proof, realm_membership: target.kind === 'realm-reply'
-    ? await realmApprovedProof(client, target.id, principalId, request.actingSubject) ?? 'open' : null,
+    ? realmMembership ?? 'open' : null,
     collection_create: request.baselineCollectionCreate === true,
     related_work: request.baselineRelatedWork ?? null, source_revision: request.baselineSourceRevision ?? null,
     submission_contribution: request.baselineContribution ?? null,
@@ -381,9 +393,11 @@ export async function baselineProofCurrent(client: PoolClient, graph: Pick<Fusek
   if (target.kind === 'maintainer' && (!saved.related_work
     || saved.maintainer_generation !== await maintainerGeneration(client, target.id,
       saved.related_work, admission.acting_subject))) return false;
-  if (target.kind === 'realm-reply' && saved.realm_membership !== 'open' && (!saved.realm_membership
-    || saved.realm_membership !== await realmApprovedProof(client, target.id, admission.principal_id,
-      admission.acting_subject))) return false;
+  if (target.kind === 'realm-reply') {
+    const membership = await realmApprovedProof(client, target.id, admission.principal_id, admission.acting_subject);
+    if (saved.realm_membership !== 'open' && (!saved.realm_membership || saved.realm_membership !== membership)) return false;
+    return realmReplyTargetAllowed(graph, target.id, membership !== null);
+  }
   if (target.kind === 'avatar') {
     if (saved.avatar_control_id) {
       const control = await avatarControllerProof(client, graph, admission.principal_id,
