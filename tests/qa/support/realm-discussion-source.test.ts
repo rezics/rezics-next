@@ -28,6 +28,12 @@ function fixture(options: { retryIdentity?: boolean; denyIdentity?: boolean } = 
         main: async (method, path, input, key) => {
           const url = new URL(path, 'http://fixture.test'), body = input as Record<string, unknown>;
           if (method !== 'GET') requests.push({ path: url.pathname, body, key });
+          if (url.pathname === '/v1/spaces' && method === 'POST') return Response.json({ realm: id() }, { status: 201 });
+          if (url.pathname.endsWith('/role-impact')) return Response.json({ digest: sha256('role') });
+          if (url.pathname.endsWith('/role-changes')) return Response.json({}, { status: 201 });
+          if (url.pathname.endsWith('/progress')) return Response.json({});
+          if (url.pathname.endsWith('/agent-credits')) return Response.json({
+            items: [{ id: id(), agent: actor, role: 'author' }], nextCursor: null });
           if (url.pathname === '/v1/works' && method === 'POST') {
             const work = { work: id(), workRevision: id(), mainVersion: id() }; works.set(work.work, work); return Response.json(work, { status: 201 });
           }
@@ -58,7 +64,8 @@ function fixture(options: { retryIdentity?: boolean; denyIdentity?: boolean } = 
           }
           if (url.pathname === '/v1/realm-reply-placements') {
             const reply = replies.get(String(body.reply))!, placement = id(); reply.placement = placement;
-            placements.set(realm, [...placements.get(realm) ?? [], reply.reply]);
+            const placementRealm = String(body.realm);
+            placements.set(placementRealm, [...placements.get(placementRealm) ?? [], reply.reply]);
             if (name === 'rankingPrivate' && episode === 'old') oldPrivate.add(reply.reply);
             return Response.json({ placement, replayed: false }, { status: 201 });
           }
@@ -177,10 +184,10 @@ test('complete builder uses 552 public draft/identity/placement commands with ex
   try {
     const result = await buildRealmDiscussionCorpus(f.runtime, { key: 'unit', directory, backup: join(directory, 'backup'), budget: new FixtureWorkBudget(1_800_000) });
     validateRealmSourceMetadata(result.metadata);
-    expect(f.requests.filter(request => request.path === '/v1/member-reply-drafts')).toHaveLength(552);
-    expect(f.requests.filter(request => request.path === '/v1/realm-replies')).toHaveLength(552);
-    expect(f.requests.filter(request => request.path === '/v1/realm-reply-placements')).toHaveLength(552);
-    expect(f.requests.filter(request => request.path === '/v1/publication-selections')).toHaveLength(5);
+    expect(f.requests.filter(request => request.path === '/v1/member-reply-drafts')).toHaveLength(552 + 21);
+    expect(f.requests.filter(request => request.path === '/v1/realm-replies')).toHaveLength(552 + 21);
+    expect(f.requests.filter(request => request.path === '/v1/realm-reply-placements')).toHaveLength(552 + 21);
+    expect(f.requests.filter(request => request.path === '/v1/publication-selections')).toHaveLength(5 + 1 + 24);
     expect(f.requests.filter(request => request.path === '/v1/contribution-publications')
       .every(request => request.body.disclosure === 'public')).toBe(true);
     expect(f.requests.filter(request => request.path === '/v1/realm-replies').every(request => Boolean(request.key))).toBe(true);
@@ -229,7 +236,7 @@ test('lawful read-basis retry retains the logical command key, body, author and 
   try {
     await buildRealmDiscussionCorpus(f.runtime, { key: 'unit', directory, backup: join(directory, 'backup'), budget: new FixtureWorkBudget(1_800_000) });
     const identities = f.requests.filter(request => request.path === '/v1/realm-replies');
-    expect(identities).toHaveLength(553);
+    expect(identities).toHaveLength(553 + 21);
     expect(identities[1]!.key).toBe(identities[0]!.key);
     expect(identities[1]!.body).toEqual(identities[0]!.body);
     expect(identities[1]!.body.author).toBe(f.sessions.rankingPublic.owner.actingSubject!);

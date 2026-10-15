@@ -5,6 +5,7 @@ import { stable } from '../../../scripts/fixture/corpus.ts';
 import type { RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
 import { RetainedSources, type RetainedSourceAdapter, type SourceContext, type SourceInputs } from '../../../scripts/qa/retained-source.ts';
 import type { PersonaName, PersonaSession, PersonaSessions, RetainedPersonaRealm } from './personas.ts';
+import { prepareRealmRankingStates } from './realm-ranking-fixture.ts';
 
 export const realmSourcePopulation = Object.freeze({ publicRanking: 261, retainedPrivate: 21,
   currentPrivate: 21, roots: 21, siblings: 193, nested: 34, privateRoots: 1 });
@@ -105,6 +106,7 @@ export type RealmSourceMetadata = {
     privateAccountId: string | null; privateActingSubject: string | null;
   }>>;
   ranking: { publicWork: RealmSourceWork; retainedWork: RealmSourceWork; currentWork: RealmSourceWork;
+    states: { emptyRealm: string; movedRealm: string };
     public: RealmSourceReply[]; retained: RealmSourceReply[]; current: RealmSourceReply[];
     admission: { before: RetainedOwnerState; after: RetainedOwnerState; settings: RetainedOwnerState } };
   discussion: { publicWork: RealmSourceWork; privateWork: RealmSourceWork; roots: RealmSourceReply[];
@@ -152,6 +154,9 @@ export function validateRealmSourceMetadata(metadata: RealmSourceMetadata, now =
   requireFact(stable(metadata.population) === stable(realmSourcePopulation), 'populations differ');
   requireFact(metadata.startingStatesValidUntil > now, 'original moderation starting states have expired');
   const { ranking, discussion } = metadata;
+  requireFact(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(ranking.states?.emptyRealm)
+    && /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(ranking.states?.movedRealm)
+    && ranking.states.emptyRealm !== ranking.states.movedRealm, 'ranking state Realms differ');
   const collections = [ranking.public, ranking.retained, ranking.current, discussion.roots,
     discussion.siblings, discussion.nested, [discussion.privateOpener]];
   const counts = Object.values(realmSourcePopulation);
@@ -367,6 +372,7 @@ export async function buildRealmDiscussionCorpus(runtime: RealmSourceRuntime, co
     });
     const privateOpener = await phase('discussion-private-opener', async () => (await grow(live.discussionPrivate, privateWork,
       ['Private garden\nAn original contribution in a private Realm.']))[0]!);
+    const rankingStates = await phase('ranking-chart-and-cursor-states', () => prepareRealmRankingStates(live.rankingPublic));
     const realms = Object.fromEntries(Object.entries(live).map(([name, value]) => [name, runtime.retain(value)])) as RealmSourceMetadata['realms'];
     const authoritySnapshots = await phase('starting-authority-snapshots', async () => Object.fromEntries(await together(
       Object.entries(live).map(async ([name, realm]) => [name, await realmAuthoritySnapshot(realm)] as const))) as RealmSourceMetadata['authoritySnapshots']);
@@ -379,7 +385,7 @@ export async function buildRealmDiscussionCorpus(runtime: RealmSourceRuntime, co
     })) as RealmSourceMetadata['sequenceStarts'];
     const metadata: RealmSourceMetadata = { contract: 'realm-discussion-source-v1', population: realmSourcePopulation,
       realms, authoritySnapshots, startingStatesValidUntil: startedAt + realmSourceAuthorityLifetimeMs, sequenceStarts,
-      ranking: { publicWork, retainedWork, currentWork, public: pub, retained, current, admission },
+      ranking: { publicWork, retainedWork, currentWork, public: pub, retained, current, admission, states: rankingStates },
       discussion: { publicWork: discussionWork, privateWork, roots, siblings, nested, privateOpener },
       measurements: realmSourceMeasurements(requests, intervals) };
     await phase('verify-complete-source', () => verifyRealmDiscussionCorpus(live, metadata));
@@ -446,6 +452,10 @@ export async function verifyRealmDiscussionCorpus(sessions: RealmSourceSessions,
   for (const [realm, work, items] of inventories) {
     if (row && realm !== sessions.rankingPublic && realm !== sessions.rankingPrivate) continue;
     await authority(realm.owner, work);
+    // The producer proves every exact revision, and physical custody binds
+    // those immutable bytes. The ranking outcome traverses the complete restored
+    // inventory for all six readers; do not hydrate it once more during readiness.
+    if (row) continue;
     for (let start = 0; start < items.length; start += 8) await together(items.slice(start, start + 8).map(async expected => {
       const selected = await answer<RealmSourceReply>(realm.owner.main('GET', `/v1/member-replies/${short(expected.reply)}?${acting(realm.owner)}`));
       for (const field of ['reply', 'variantId', 'revisionId', 'revisionDigest', 'author', 'rootTarget', 'rootRevision', 'body'] as const)
