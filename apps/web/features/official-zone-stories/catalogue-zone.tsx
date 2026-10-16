@@ -12,6 +12,12 @@ import { zoneMessagesFor } from '../zones/fixtures.ts';
 import { presetTokens } from '../zones/presentation.ts';
 import { cardRenderer } from '../zones/zone-home.tsx';
 
+declare module 'vitest/browser' {
+  interface BrowserCommands {
+    captureStoryScreenshot: (exportName: string) => Promise<void>;
+  }
+}
+
 const text = (value: string, lang: string): ZoneText => ({ value, lang, dir: direction(lang, value) });
 const iri = (name: string) => `https://rezics.com/id/00000000-0000-4000-8000-${name.padStart(12, '0')}`;
 
