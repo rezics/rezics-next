@@ -1,5 +1,45 @@
 # State
 
+Checkpoint d29d4b33-2294-413e-ab10-e198fb9979be consolidates handled events
+task:G-2377:25, mail:efb4f11f-51c0-4619-b67c-f6e5527ea699,
+mail:077063e4-f1db-4571-ae53-489f6ee9d717 and task:G-2226:19.
+These decisions supersede affected dispositions below. Later repair landings,
+worker attempts and recovery results retain their own events.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2377 | Task:G-2377:25, committed as `8eb5209984`, accepts the creation-to-attachment cut through `58918f1334` for partial landing. Retain production entry, attachment transition, existing-Realm management entry and lost-response recovery with stable command keys; both six-persona outcomes, answer validation, 17 mapping tests, seven zero-miss stories and final phone/desktop inspection passed. Complete worker gate `run-mg6QhB` passed without waivers. Mail:efb4f11f reports that `land G-2377 --step` failed before merging: after passing web types and the unit gate with two nonblocking isolated guard passes, worker-check rejected the story declaration although the brief names `realm-site-creation.stories.tsx`. Program received correction and safe recovery question mail:4b35af7b-eb35-4f42-ae27-0b577ff1fb60. Keep the worker exited and preserve partial acceptance; no duplicate landing, unchanged gate retry, closure or waiver. The task remains open for actual Browse/Works opening at the canonical Zone address after G-2333 publication and G-2381 routing supply the behavior and evidence. Preserve recorded `realm: null`; attachment alone completes neither surface outcome. |
+| G-2226 | Program mail:077063e4 accepts production-only proof, recorded in `f98c526073` and actionable design-note correction `8411154167`. The five admitted production/consumer paths remain in scope; five tooling/test paths must match main. Program does not adopt `5896afede2`, `2dadd65f27` or `45aa2436b2`; G-2724–G-2726 own shared corrections. Attempt 19 resumed, refreshed to `ab9e855799`, then returned partial without edits or another gate. At its comparison main `41b61fd228`, `container-reaper.test.ts:502` still shares production reaper state and `memory-admission.test.ts:143` still times out restoring timing state; host-admission was corrected by `60d4c8668c`. Keep exited for G-2726's required isolation repairs and Program notification, then finish canonical affected proof and applicable final screenshots. Program received exact prerequisites in mail:bb877b89-e279-4ca8-ab41-9fa5b3b51609. Retain six-persona run `20261016t144612-094eb4` (6 tests/845 assertions), 26 mapping tests/2305 assertions, zero-miss replay, four answer-record guard tests and 26 inspected stories `20261016t143650-b45b34`. Retained-preflight refusal remains unverified. No unchanged shared-gate retry, tooling patch, exclusion or complete-gate/landing acceptance. |
+| G-2331, G-2461 | Program owns shared selection, shard adjudication and harness failures through G-2724–G-2726. Committed holds `fccac03571` and `52827a2049` retain recordings, stories and guard evidence. Keep exited; Program rebases and resumes for the complete gate after G-2724 and G-2725 land. Repeat no gate before then. |
+| G-2338 | Program rebased and began another merge; a further guard timeout requires waiting for G-2725, with no waiver. The deciding turn recorded that condition in the brief. This checkpoint claims no landing result and starts no duplicate landing. |
+| G-2475, G-2330 | Program's lint repair `05a3fa438b` and G-2720's story fixes remove the prior prerequisites. Commit `41b61fd228` withdraws G-2475's four story exclusions; Program rebased and began merging with every story included. G-2330's existing 13:00 ruling remains: Program rebases and resumes it after G-2475 lands. Landing results belong to their own events. |
+| G-2466 | Program reclaimed and merged, encountered a page-filtering timeout attributed to G-2725, then began another merge. Its landing lock prevented any brief edit during the ruling. No success, closure or duplicate landing is inferred. |
+| G-2319 | Commit `bb814fd9bc` records Program's hold until G-2704 lands its Realm/conditions forwarding for publication-year queries. The continuation ratchet is valid and receives no exception. Program then rebases; changed functions must forward opaque cursors unchanged without client length checks or paging. Rerun footer stories once and report the first remaining failure with file:line. |
+| G-2327 | Verified closure stands. Program identified finalization's false failure as draining three obsolete manager snapshots, moved those snapshots out of the drain and assigned class repair G-2727. No worker continuation, snapshot retry, brief change or duplicate closure remains. |
+
+Both supplied mails were acknowledged by their deciding turns: mail:efb4f11f
+at 2026-10-16 15:16:12 UTC and mail:077063e4 at 15:23:44 UTC; the latter was
+confirmed again while deciding task:G-2226:19. Task events supplied no new
+mail. This checkpoint acknowledges their consolidation and supplies no new
+mail to acknowledge.
+
+The method's measures were read. Retained scope is 68/68 API rows proved,
+408 proved and zero pending persona cells; these events add no API row or
+completed surface. Current status reads encountered a locked event store or
+supplied no fresh measures during the bounded read. Preceding attempt, token
+and refusal readings remain historical, not costs attributed to these events.
+The latest efficiency report remains 2026-10-13 21:49 UTC; no current
+tokens-per-proved-row comparison or efficiency improvement is established.
+Program identified registry-reference over-selection, last-block JUnit parsing
+and load/shared-state harness tests as common causes and assigned G-2724–G-2727.
+Retain passing product evidence and stop unchanged retries while those owners
+supply canonical corrections; no assertion, story or guard is waived.
+
+Only this file changes; this checkpoint starts no brief, worker, landing,
+closure, watcher or wait.
+
+## Retained checkpoint c5672745
+
 Checkpoint c5672745-bd50-42a6-a534-b526c5e5d1f1 consolidates handled events
 task:G-2377:18, task:G-2327:14, task:G-2226:16, task:G-2331:14,
 mail:4582488c-9097-40f1-868e-89a25da75074 and task:G-2226:18.
