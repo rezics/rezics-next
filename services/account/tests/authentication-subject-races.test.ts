@@ -345,7 +345,14 @@ test(`${operation} retires its actual session despite one swallowed provider loo
   try {
     const member = await f.signup('native-retirement@example.test');
     let totpSecret: string | undefined;
-    if (operation === 'disable-totp' || operation === 'password-challenge') await enroll(f, member);
+    if (operation === 'disable-totp' || operation === 'password-challenge') {
+      const secret = await enroll(f, member);
+      if (operation === 'disable-totp') {
+        // Factor removal requires a fresh proof of the enrolled authenticator.
+        expect((await f.request('/api/account/reauthenticate', { password: member.password,
+          totpCode: await createOTP(secret).totp() }, member.cookie)).status).toBe(200);
+      }
+    }
     if (operation === 'enroll-totp') {
       expect((await f.request('/api/auth/two-factor/enable', { password: member.password }, member.cookie)).status).toBe(200);
       totpSecret = await symmetricDecrypt({ key: f.secret,
