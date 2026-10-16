@@ -9,11 +9,11 @@ import { ZoneHomeContent } from '../zone-editor/home-content.tsx';
 import { ZoneSiteRoute } from '../zones/site-route.tsx';
 import { messages } from './messages.ts';
 import type { RealmReadClient } from './read.ts';
-import { RealmDecisionsRoute, RealmHomeRoute } from './routes.tsx';
+import { RealmBrowseRoute, RealmDecisionsRoute, RealmHomeRoute } from './routes.tsx';
 import { RealmNotFound } from './states.tsx';
 
 const origin = 'https://recorded.invalid';
-export const directEntries = ['home', 'decisions', 'exact-decision', 'private-teaser', 'zone-entry'] as const;
+export const directEntries = ['home', 'adoptions', 'decisions', 'exact-decision', 'private-teaser', 'zone-entry'] as const;
 export type DirectEntry = typeof directEntries[number];
 export function directSample(record: AnswerRecord, persona: AnswerPersona, label: string) {
   const sample = record.personas[persona].find(item => item.label === label);
@@ -65,6 +65,7 @@ export async function directRoute(record: AnswerRecord, persona: AnswerPersona, 
     const decision = directSample(record, persona, 'closed-realm-decision').path.split('/decisions/')[1]!.split('?')[0]!;
     const props = { params: Promise.resolve({ locale: 'en', realm: key }),
       searchParams: Promise.resolve(entry === 'exact-decision' ? { decision } : {}) };
+    if (entry === 'adoptions') return await RealmBrowseRoute(props, undefined, client);
     return await (entry.includes('decision') ? RealmDecisionsRoute(props, client) : RealmHomeRoute(props, client));
   } catch (error) {
     if (!(error instanceof Error) || !/NEXT_HTTP_ERROR_FALLBACK;404|notFound\(\) is not available in stories/.test(error.message)) throw error;

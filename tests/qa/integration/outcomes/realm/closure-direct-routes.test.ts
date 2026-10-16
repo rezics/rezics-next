@@ -448,6 +448,7 @@ async function productionVisit(name: PersonaName) {
       }
     }
     await entry('home', short(closed.realm));
+    await entry('adoptions', short(closed.realm));
     await entry('decisions', short(closed.realm));
     await entry('exact-decision', short(closed.realm));
     await entry('zone-entry', short(closed.zone), true);

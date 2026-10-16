@@ -3,6 +3,8 @@ import '../../tests/support/official-package-fixture.ts';
 import { isValidElement, type ReactNode } from 'react';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import fixture from '../../../../tests/qa/fixtures/outcomes/realm/closure-direct-routes.json';
+import { mapZoneSiteHome } from '../zones/zone-site-recorded-page.ts';
+import type { ZonePresentationRead } from './types.ts';
 import { ZoneFrame } from '../zones/zone-frame.tsx';
 import { RealmNotFound } from './states.tsx';
 import { directEntries, directReplay, directRoute, directSample } from './realm-closure-direct-recorded-page.tsx';
@@ -47,6 +49,9 @@ for (const persona of personas) {
         expect(shown?.zone.name.value).toBe('Outcome Realm site');
         expect(JSON.stringify(page)).toContain('An original published home for the Realm entry control.');
         expect(JSON.stringify(page)).toContain('original-contribution');
+        const home = mapZoneSiteHome(directSample(record, persona, 'zone-entry-presentation').answer as ZonePresentationRead);
+        if (home.kind !== 'published' || !home.credit) throw new Error('Recorded original credit is missing');
+        expect(JSON.stringify(page)).toContain(home.credit.author);
         expect(shown?.members).toBeNull();
       } else {
         expect(isValidElement(page) && page.type).toBe(RealmNotFound);
