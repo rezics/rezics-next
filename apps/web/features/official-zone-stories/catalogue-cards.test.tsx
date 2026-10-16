@@ -16,6 +16,18 @@ import { catalogueFacts, catalogueWork, catalogueZone } from './catalogue-zone.t
 const Link = ((props: ZoneLinkProps) => createElement('a', props)) as ComponentType<ZoneLinkProps>;
 const draw = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
 
+test.each(['anime', 'manga'] as const)('%s attribution links remain distinguishable without colour', ref => {
+  const footer = ref === 'anime' ? AnimeFooter : MangaFooter;
+  const html = draw(createElement(footer, { zone: catalogueZone(ref, 'en'), Link, fallback: null,
+    credit: { sourceHref: 'https://bgm.tv', licenceHref: 'https://creativecommons.org/licenses/by-sa/3.0/' } }));
+  const links = [...html.matchAll(/<a\b[^>]*>/g)].map(match => match[0]);
+  for (const href of ['https://bgm.tv', 'https://creativecommons.org/licenses/by-sa/3.0/']) {
+    const link = links.find(tag => tag.includes(`href="${href}"`));
+    expect(link).toBeDefined();
+    expect(link?.match(/class="([^"]*)"/)?.[1]?.split(/\s+/)).toContain('underline');
+  }
+});
+
 test('an anime card keeps recorded facts and leaves unrecorded ones off the grid', () => {
   const zone = catalogueZone('anime', 'en');
   const partial = draw(createElement(AnimeCard, {

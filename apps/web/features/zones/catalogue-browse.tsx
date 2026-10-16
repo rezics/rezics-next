@@ -71,8 +71,8 @@ export function catalogueYearScope(realm: string, state: ReturnType<typeof parse
 }
 
 /**
- * Stamps the year onto the browse model the route already built, and fills the header slot's year
- * control. The route has already loaded the view and the first browse page.
+ * Fills the header slot's year control and preserves all-years directory links.
+ * Selected-year Conditions belong to the shared browse model the route already built.
  * A selected year keeps the route's API items, counts and continuation.
  * The year query owns membership; hydration follows only its returned IDs.
  */
@@ -88,20 +88,21 @@ export async function applyCatalogueYear({ view, search, model }: {
   const base = view.zone.links.browse;
   const state = parseBrowseState(search);
   const listing = year !== null || directory;
-  const stamp = (href: string) => withFlags(href, year, directory);
-  model.action = stamp(model.action);
-  model.clearHref = model.clearHref ? stamp(model.clearHref) : null;
-  model.next = model.next ? stamp(model.next) : null;
-  model.first = model.first ? stamp(model.first) : null;
-  for (const group of model.groups) for (const value of group.values) {
-    value.href = stamp(value.href);
-    if (value.excludeHref) value.excludeHref = stamp(value.excludeHref);
+  if (directory) {
+    const stamp = (href: string) => withFlags(href, null, true);
+    model.action = stamp(model.action);
+    model.clearHref = model.clearHref ? stamp(model.clearHref) : null;
+    model.next = model.next ? stamp(model.next) : null;
+    model.first = model.first ? stamp(model.first) : null;
+    for (const group of model.groups) for (const value of group.values) {
+      value.href = stamp(value.href);
+      if (value.excludeHref) value.excludeHref = stamp(value.excludeHref);
+    }
+    for (const item of model.chosen) item.href = stamp(item.href);
+    for (const item of model.sorts) item.href = stamp(item.href);
+    for (const item of model.views) item.href = stamp(item.href);
+    model.kept = [...model.kept, { name: 'years', value: '1' }];
   }
-  for (const item of model.chosen) item.href = stamp(item.href);
-  for (const item of model.sorts) item.href = stamp(item.href);
-  for (const item of model.views) item.href = stamp(item.href);
-  if (year !== null) model.kept = [...model.kept, { name: 'year', value: String(year) }];
-  else if (directory) model.kept = [...model.kept, { name: 'years', value: '1' }];
   const kept = [...model.kept.filter(item => item.name !== 'year' && item.name !== 'years'),
     ...(state.text ? [{ name: 'q', value: state.text }] : []),
     ...(state.sort ? [{ name: 'sort', value: state.sort }] : [])];

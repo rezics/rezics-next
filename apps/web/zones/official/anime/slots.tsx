@@ -95,9 +95,9 @@ export function AnimeBrowseHeader({ zone, year, Link }: BrowseHeaderSlotProps) {
 /** Bangumi, and the CC BY-SA 3.0 deed, at the addresses the host supplies. */
 function SourceCredit({ t, credit }: { t: Strings; credit: ZoneSlotProps['credit'] }) {
   const source = credit?.sourceHref
-    ? <a href={credit.sourceHref} rel="noreferrer noopener">{t.sourceName}</a> : t.sourceName;
+    ? <a className="underline" href={credit.sourceHref} rel="noreferrer noopener">{t.sourceName}</a> : t.sourceName;
   const licence = credit?.licenceHref
-    ? <a href={credit.licenceHref} rel="noreferrer noopener">{t.licenceName}</a> : t.licenceName;
+    ? <a className="underline" href={credit.licenceHref} rel="noreferrer noopener">{t.licenceName}</a> : t.licenceName;
   return <p className="anime-source">
     {t.attributionBefore}{source}{t.attributionBetween}{licence}{t.attributionAfter}
   </p>;

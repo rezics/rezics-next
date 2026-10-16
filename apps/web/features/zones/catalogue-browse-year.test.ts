@@ -3,13 +3,13 @@ import { afterAll, expect, test } from 'bun:test';
 import '../../tests/support/official-package-fixture.ts';
 import { createElement, isValidElement, type ReactNode, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ZoneBrowse } from './browse.tsx';
+import { BrowseSearch, ZoneBrowse } from './browse.tsx';
 import { fictionZone } from './fixtures.ts';
 import type { BrowseModel } from './browse-view.ts';
 import type { RealmView } from '../realm/realm-page.tsx';
 import { applyCatalogueYear, catalogueBrowseQuery } from './catalogue-browse.tsx';
 import { browseModel } from './browse-view.ts';
-import { parseBrowseState } from './browse-state.ts';
+import { chosenCount, parseBrowseState } from './browse-state.ts';
 import { messages } from './messages.ts';
 import { readPublicationYearWorks } from './catalogue-facts.ts';
 
@@ -20,6 +20,53 @@ const view = {
   zoneMessages: messages,
   pkg: null,
 } as unknown as Extract<RealmView, { kind: 'view' }>;
+
+test.each(['1995', '1995-2001'])('%s Conditions survive the composed catalogue model', async year => {
+  const search = { year, q: 'Lantern title', status: ['completed', 'ongoing'], length: '0-99999',
+    sort: 'updated', view: 'grid', cursor: 'opaque/+ cursor=%2F==' };
+  const state = parseBrowseState(search);
+  const model = browseModel({ base: '/browse', zoneName: 'Manga', state, locale: 'en', messages,
+    admitted: new Map(), page: { items: [], facets: { type: [], concept: [],
+      status: [{ value: 'completed', count: 2 }, { value: 'ongoing', count: 1 }],
+      length: [{ value: '0-99999', count: 2 }] },
+    matches: { value: 3, kind: 'exact' }, window: { scanned: 3, complete: true },
+    tags: 'current', nextCursor: 'next/+ cursor=%3D==', sort: 'updated' } });
+  await applyCatalogueYear({ view, search, model });
+  const fromHref = (href: string) => {
+    const params = new URL(href, 'https://rezics.local').searchParams;
+    return parseBrowseState(Object.fromEntries([...params.keys()].map(key => [key, params.getAll(key)])));
+  };
+
+  expect(model.action).toBe('/browse');
+  expect(model.kept.filter(item => item.name === 'year')).toEqual([{ name: 'year', value: year }]);
+  const form = renderToStaticMarkup(createElement(BrowseSearch, { action: model.action,
+    label: model.searchLabel, placeholder: model.placeholder, value: state.text, kept: model.kept,
+    submit: messages.search }));
+  expect(form.match(/name="year"/g)).toHaveLength(1);
+  const submitted = new URLSearchParams(model.kept.map(item => [item.name, item.value]));
+  submitted.set('q', 'Another title');
+  expect(fromHref(`${model.action}?${submitted}`)).toEqual({ ...state, text: 'Another title', sort: null, cursor: null });
+
+  const removeYear = model.chosen.find(item => item.key === 'publicationYear')!;
+  const { publicationYear: _year, ...withoutYear } = state;
+  expect(fromHref(removeYear.href)).toEqual({ ...withoutYear, cursor: null });
+  for (const condition of model.chosen.filter(item => item.key !== 'publicationYear')) {
+    const removed = fromHref(condition.href);
+    expect(removed).toMatchObject({ publicationYear: year, text: state.text, sort: state.sort,
+      view: state.view, cursor: null });
+    expect(chosenCount(removed)).toBe(chosenCount(state) - 1);
+  }
+  expect(fromHref(model.clearHref!)).toEqual({ text: state.text, sort: state.sort, view: state.view,
+    filter: {}, cursor: null });
+  expect(fromHref(model.next!)).toEqual({ ...state, cursor: 'next/+ cursor=%3D==' });
+  expect(fromHref(model.first!)).toEqual({ ...state, cursor: null });
+  for (const group of model.groups) for (const value of group.values) {
+    expect(fromHref(value.href)).toMatchObject({ publicationYear: year, cursor: null });
+    if (value.excludeHref) expect(fromHref(value.excludeHref)).toMatchObject({ publicationYear: year, cursor: null });
+  }
+  for (const sort of model.sorts) expect(fromHref(sort.href)).toEqual({ ...state, sort: sort.sort, cursor: null });
+  for (const layout of model.views) expect(fromHref(layout.href)).toEqual({ ...state, view: layout.view });
+});
 
 test('a year view preserves the API second page, response counts and year-filtered Facets', async () => {
   // These members would be beyond the former ten 20-item member pages.
