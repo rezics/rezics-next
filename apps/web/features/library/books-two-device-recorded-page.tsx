@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { materializeData } from 'native-i18n';
 import type { AnswerPersona } from '../../../../scripts/api/answer-record.ts';
 import { createReaderStore } from '../catalogue/reader-store.ts';
 import { mainLibraryApi } from './api.ts';
@@ -25,7 +26,7 @@ export function BooksTwoDeviceRecorded({ persona, phase = 'winning', loading = f
     return () => { active = false; replay.dispose(); };
   }, [persona, phase, loading]);
   if (!visit || visit.persona !== persona || visit.phase !== phase || visit.loading !== loading)
-    return <p role="status">Loading…</p>;
+    return <p role="status">{materializeData(messages, { locale: 'en' }).loading}</p>;
   const { replay, page } = visit;
   const subject = deviceOwner();
   return <LibraryPage key={`${persona}/${phase}/${loading}`} state={twoDeviceState} {...page} now={0}
