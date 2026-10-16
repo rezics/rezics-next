@@ -54,7 +54,8 @@ test('G-526: empty publication reads one exact revision and creates no admission
   const env = { lineage: { dataEpoch: randomUUID(), routingEpoch: randomUUID() },
     fuseki: { query: async (query: string) => query.includes('SELECT DISTINCT ?type')
       ? currentWorkType : { boolean: true } } } as unknown as WorkActivationEnvironment;
-  const access = { canReadWork: async () => true, register: () => { throw new Error('empty body created an admission'); } } as unknown as AccessAdmissionRegistry;
+  const access = { canReadWork: async () => true, canPreviewWork: async () => true,
+    register: () => { throw new Error('empty body created an admission'); } } as unknown as AccessAdmissionRegistry;
   await expect(publishAdmittedContent(env, content,
     { verify: async () => ({ issuer: 'https://account.test', subject: randomUUID() }) }, access,
     new Request('http://main.local'), { ...input, actingSubject: actor, idempotencyKey: randomUUID() }))
@@ -63,14 +64,14 @@ test('G-526: empty publication reads one exact revision and creates no admission
 });
 
 
-test('G-526: non-readers cannot load private bodies or create a publication admission', async () => {
+test('G-526: Work readers without preview authority cannot load private bodies or create a publication admission', async () => {
   const env = { lineage: { dataEpoch: randomUUID(), routingEpoch: randomUUID() },
     fuseki: { query: async (query: string) => {
       if (query.includes('SELECT DISTINCT ?type')) return currentWorkType;
       if (query.includes('SELECT')) throw new Error('non-reader looked up a Contribution revision');
       return { boolean: true };
     } } } as unknown as WorkActivationEnvironment;
-  const access = { canReadWork: async () => false, canReadContributionDraft: async () => false,
+  const access = { canReadWork: async () => true, canPreviewWork: async () => false, canReadContributionDraft: async () => false,
     register: () => { throw new Error('non-reader created an admission'); } } as unknown as AccessAdmissionRegistry;
   const content = { owningResourceForRevision: () => { throw new Error('non-reader looked up a Content revision'); },
     readExactBatch: () => { throw new Error('non-reader loaded Content bytes'); } } as unknown as ContentCore;
@@ -100,11 +101,11 @@ test('G-526: an empty Content revision must match the exact publication intent',
 });
 
 
-test('G-526: readable Work authority does not disclose a foreign Content revision', async () => {
+test('G-526: Work preview authority does not disclose a foreign Content revision', async () => {
   const env = { lineage: { dataEpoch: randomUUID(), routingEpoch: randomUUID() },
     fuseki: { query: async (query: string) => query.includes('SELECT DISTINCT ?type')
       ? currentWorkType : { boolean: true } } } as unknown as WorkActivationEnvironment;
-  const access = { canReadWork: async () => true,
+  const access = { canReadWork: async () => true, canPreviewWork: async () => true,
     register: () => { throw new Error('foreign revision created an admission'); } } as unknown as AccessAdmissionRegistry;
   const content = { owningResourceForRevision: async () => actor,
     readExactBatch: () => { throw new Error('foreign private bytes were read'); } } as unknown as ContentCore;

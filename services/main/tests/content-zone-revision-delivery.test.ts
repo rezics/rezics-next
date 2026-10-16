@@ -84,7 +84,8 @@ function fixture(input: { published?: boolean; phase?: 'rights' | 'delivery'; po
     } },
     access: {
       activePrincipalId: async () => randomUUID(),
-      canReadWork: async (_principal: unknown, subject: string, resource: string) => {
+      canReadWork: async () => { throw new Error('private bytes used public Work readability'); },
+      canPreviewWork: async (_principal: unknown, subject: string, resource: string) => {
         probes.work++;
         return state.authority && subject === actor && resource === id;
       },
@@ -178,16 +179,26 @@ for (const fence of ['rights', 'recovery', 'erased', 'restore'] as const) {
   });
 }
 
-test('native Post exact reads remain private and retain their original Work authority path', async () => {
+test('native Post exact reads remain private and recheck their Work preview authority', async () => {
   const f = fixture({ post: true, published: false });
   const response = await f.read();
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ serializedJson: f.exact.serializedJson });
-  expect(f.probes.work).toBe(1);
+  expect(f.probes.work).toBe(2);
   expect(f.probes.authority).toBe(0);
   expect((await f.read(false)).status).toBe(404);
   f.state.authority = false;
   expect((await f.read()).status).toBe(404);
+});
+
+test('a native Post preview withdrawn during exact-byte loading cannot deliver', async () => {
+  const f = fixture({ post: true, published: false, phase: 'delivery' });
+  const pending = f.read();
+  try { await f.wait(pending); f.state.authority = false; } finally { f.release(); }
+  const response = await pending;
+  expect(response.status).toBe(404);
+  expect(await response.text()).not.toContain(f.text);
+  expect(f.probes.work).toBe(2);
 });
 
 test('public Zone exact bytes accept optional bearer; an unpublished Zone never gains anonymous preview', async () => {
