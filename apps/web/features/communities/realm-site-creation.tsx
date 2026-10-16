@@ -56,8 +56,8 @@ function RealmSiteCreationForm({ actingSubject, locale, client }: RealmSiteCreat
         const created = await api.current.create(chosen.body, chosen.createKey);
         if (!created.ok) {
           setFailure(created.title ?? copy.failed);
-          // A terminal refusal permits a new intent. Transport uncertainty retains both keys.
-          if (!['unavailable', 'pending'].includes(created.failure)) { attempt.current = null; setLocked(false); }
+          // A refusal after an uncertain response cannot prove that no Space was created.
+          // Keep this intent and both command keys until its receipt is recovered.
           return;
         }
         chosen.receipt = created.data;
