@@ -5,6 +5,7 @@ import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer
 import rulesRecord from '../../../../tests/qa/fixtures/outcomes/realm/rules.json';
 import { isUiLocale, type UiLocale } from '../../i18n/define.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
+import { realmHref } from '../realm/route.ts';
 import { messages } from './messages.ts';
 import { accessMessages } from './settings-messages.ts';
 import { RealmRulesRecordedPage } from './realm-rules-recorded-page.tsx';
@@ -250,7 +251,7 @@ function publicPage(persona: AnswerPersona, scope: 'public' | 'private', held = 
     args: { persona, page: 'rules', realm: key, actingSubject: persona === 'visitor' ? ''
       : actorOf(persona, `${scope}-page-management-header`), selections: pageSelections(persona, scope, held),
       principal: `recorded-rules-${scope}-${persona}` },
-    parameters: { route: { pathname: `/en/r/${key}/rules` } },
+    parameters: { route: { pathname: realmHref('en', key, 'rules') } },
     play: held ? loadingPlay : async ({ canvasElement, globals }) => {
       const canvas = within(canvasElement);
       const label = scope === 'private' && persona !== 'visitor' ? 'private-page-rules-header' : `${scope}-page-frame-realm-header`;
