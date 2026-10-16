@@ -44,7 +44,7 @@ function directoryParam(value: string | string[] | undefined): boolean {
 /** The publication-year cursor the year view resumes from, or null at the start of the read. */
 function yearCursorOf(value: string | string[] | undefined): string | null {
   const raw = Array.isArray(value) ? value[0] : value;
-  return raw && raw.length <= 2048 ? raw : null;
+  return raw ?? null;
 }
 
 function yearHref(href: string, cursor: string | null): string {
@@ -151,13 +151,11 @@ export async function applyCatalogueYear({ view, search, model }: {
     }
     // Every match on a page this request read stays on the screen, so the read leaves nothing
     // unshown. Next carries the cursor where the read stopped when a further page remains.
-    // The same cursor again would re-read this page. A screen with no match still links forward
-    // when the read advanced, so this Zone's Works further on stay reachable.
+    // A screen with no match still links forward when the owner has a continuation.
     const started = yearCursorOf(search.yearCursor);
-    const resume = nextCursor && nextCursor !== started ? nextCursor : null;
     const listedHref = withFlags(plain, year, directory);
     model.items = found;
-    model.next = resume ? yearHref(listedHref, resume) : null;
+    model.next = nextCursor ? yearHref(listedHref, nextCursor) : null;
     model.first = started ? listedHref : null;
     const t = materializeData(view.zoneMessages, { locale: view.context.locale });
     const open = nextCursor !== null;

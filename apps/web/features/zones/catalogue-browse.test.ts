@@ -161,6 +161,19 @@ test('the selected year and existing Conditions go together to Zone browse', () 
   });
 });
 
+test('the year directory forwards opaque cursors without inspecting their size or equality', async () => {
+  const token = `opaque:+/%?=&雪${'x'.repeat(2048)}`;
+  const publicationYears: typeof readPublicationYears = async (_parameters, cursor) => {
+    expect(cursor).toBe(token);
+    return { ok: true, data: { items: [], nextCursor: token } };
+  };
+  const page = model();
+  await applyCatalogueYear({ view, search: { years: '1', yearCursor: token }, model: page },
+    { publicationYears, works });
+  expect(new URL(page.next!, 'https://rezics.local').searchParams.get('yearCursor')).toBe(token);
+  expect(page.complete).toBe(false);
+});
+
 test('the all-years flag leaves the previous directory source unchanged; a selected year wins', () => {
   expect(catalogueBrowseQuery({ years: '1' })).toEqual({});
   expect(catalogueBrowseQuery({ year: '2001', years: '1' })).toEqual({ publicationYear: '2001' });
