@@ -72,6 +72,19 @@ const repositoryIndexReads = ['tools/repo-index/**', 'scripts/lib/repo-index*.ts
 /** Inventory guards read beyond their import graph. Gate selection uses these
  * inventories; main-wide runs retain the complete registry. */
 export const repositoryGuards = [
+  ...[
+    'scripts/goal/deployment-canaries.test.ts',
+    'scripts/goal/dependencies.test.ts',
+    'scripts/qa/retained-preflight.test.ts',
+    'scripts/qa/retained-source-inputs.test.ts',
+  ].map(file => ({
+    file,
+    reads: ['scripts/goal/**', 'scripts/qa/**', '.goalctl/**', '**/{yarn.lock,package-lock.json,pnpm-lock.yaml,bun.lock,bun.lockb}',
+      'scripts/fixture/{manifest.ts,model.ts,owners/**}', 'scripts/load/{compatibility.ts,work-profile-corpus.ts}',
+      'tests/qa/support/{realm-discussion-source*,seed-checkpoints*,seed-specification.ts}',
+      'tests/qa/fault-recovery/{*source*,independent-restore-support.ts,owner-restore-erasure-fixture.ts}'],
+    reason: 'Tooling deployments preserve older worktrees, installed dependencies, fixture preparation, executable repairs and retained keys.',
+  })),
   {
     file: 'scripts/qa/cases/outcomes.test.ts',
     reads: ['tests/qa/integration/outcomes/**', 'scripts/qa/cases/outcomes/**',

@@ -7,6 +7,8 @@ import { preflightRetainedSources, retainedPreflightSummary } from './retained-p
 import { retainedRequirementKinds, retainedRequirements } from './retained-requirements.ts';
 import { RetainedSources, sourceKey, type RetainedSourceAdapter } from './retained-source.ts';
 import { dispatchTest } from './test.ts';
+import { needsRealmDiscussionSource, smallRecoveryFixtureConsumers } from './preparation-selection.ts';
+import { spawnSync } from 'node:child_process';
 
 const root = resolve(import.meta.dir, '../..');
 const temporary: string[] = [];
@@ -158,16 +160,75 @@ test('a standalone ranking confirmation declares its source preparation before c
   expect(retainedPreflightSummary(result)).toContain('realm: prepared by run:');
 });
 
-test('the printed owner repair command publishes a synthetic source through the real command', async () => {
+const selectedFiles = [...new Bun.Glob('tests/qa/{integration,fault-recovery}/**/*.test.ts').scanSync({ cwd: root })].sort();
+
+test('every run-prepared fixture passes preflight without pre-existing custody', async () => {
+  const covered = new Set<string>();
+  for (const file of selectedFiles) {
+    const sources = [
+      ...(Object.values(smallRecoveryFixtureConsumers([file], {})).some(Boolean) ? ['fixture-small'] : []),
+      ...(needsRealmDiscussionSource([file]) ? ['realm'] : []),
+    ];
+    for (const source of sources) {
+      const requirement = retainedRequirements(root, [file]).find(item => item.source === source);
+      // A producer selected alone needs no retained data at all.
+      if (!requirement && file === 'tests/qa/integration/realm-discussion-source.test.ts') continue;
+      expect(requirement, `${file}: ${source}`).toBeDefined();
+      expect(requirement!.preparedByRun, `${file}: ${source}`).toBeTruthy();
+      let checks = 0;
+      const report = await preflightRetainedSources(root, [file], [{ ...requirement!,
+        check() { checks++; throw new Error('no custody exists before the run prepares it'); } }]);
+      expect(report.ok, retainedPreflightSummary(report)).toBe(true);
+      expect(checks).toBe(0);
+      covered.add(source);
+    }
+  }
+  expect([...covered].sort()).toEqual(['fixture-small', 'realm']);
+});
+
+// Only the expensive corpus producer is replaced. Task, CLI parsing and
+// admission run unchanged, and publication/preflight use the real custody API.
+const repairProducers: Record<string, { file: string; args: string[] }> = {
+  owner: { file: 'tests/qa/fault-recovery/owner-restore-erasure-fixture.ts',
+    args: ['--prepare-retained-source', '--evidence', '.temp/retained-source-owner.json'] },
+  'owner-later': { file: 'tests/qa/fault-recovery/owner-restore-erasure-fixture.ts',
+    args: ['--prepare-retained-source', '--evidence', '.temp/retained-source-owner-later.json', '--later-api-admission'] },
+  'independent-recipe': { file: 'tests/qa/fault-recovery/independent-restore-support.ts',
+    args: ['--prepare-retained-source', '--evidence', '.temp/retained-source-independent-recipe.json', '--recipe'] },
+  'independent-authority': { file: 'tests/qa/fault-recovery/independent-restore-support.ts',
+    args: ['--prepare-retained-source', '--evidence', '.temp/retained-source-independent-authority.json'] },
+  'fixture-small': { file: 'scripts/fixture/cli.ts', args: ['build', '--profile', 'small'] },
+  realm: { file: 'scripts/qa/test.ts', args: ['tests/qa/integration/realm-discussion-source.test.ts'] },
+  seed: { file: 'scripts/qa/test.ts', args: ['tests/qa/fault-recovery/work-profile-seed-build.test.ts'] },
+  content: { file: 'scripts/qa/test.ts', args: ['tests/qa/fault-recovery/retained-content-source-preparation.test.ts'] },
+};
+const repairRequirements = new Map(selectedFiles.flatMap(file => retainedRequirements(root, [file]))
+  .map(requirement => [requirement.source, requirement]));
+
+test('every retained source repair route has an executable canary', () => {
+  expect([...repairRequirements.keys()].sort()).toEqual(Object.keys(repairProducers).sort());
+});
+
+for (const [source, producer] of Object.entries(repairProducers)) test(`printed ${source} repair runs and publishes ready custody`, async () => {
   const f = fixture();
-  const producer = join(f.directory, 'tests/qa/fault-recovery/owner-restore-erasure-fixture.ts');
-  mkdirSync(join(producer, '..'), { recursive: true });
-  writeFileSync(producer, `
+  const producerPath = join(f.directory, producer.file);
+  mkdirSync(join(producerPath, '..'), { recursive: true });
+  expect(spawnSync('git', ['init', '-q', f.directory]).status).toBe(0);
+  mkdirSync(join(f.directory, '.goalctl'));
+  writeFileSync(join(f.directory, '.goalctl/settings.user.json'), '{"version":1}');
+  if (producer.file !== 'scripts/qa/test.ts') {
+    mkdirSync(join(f.directory, 'scripts/qa'), { recursive: true });
+    writeFileSync(join(f.directory, 'scripts/qa/test.ts'), `
+      import { dispatchTest } from ${JSON.stringify(join(root, 'scripts/qa/test.ts'))};
+      process.exitCode = await dispatchTest(process.argv.slice(2));
+    `);
+  }
+  writeFileSync(producerPath, `
     import { writeFileSync } from 'node:fs';
     import { join } from 'node:path';
     import { RetainedSources } from ${JSON.stringify(join(root, 'scripts/qa/retained-source.ts'))};
     const args = process.argv.slice(2);
-    if (!args.includes('--prepare-retained-source') || args.includes('--retained-only')) throw new Error('not a producer command');
+    if (JSON.stringify(args) !== ${JSON.stringify(JSON.stringify(producer.args))}) throw new Error('not the expected producer command: ' + JSON.stringify(args));
     const result = await new RetainedSources(${JSON.stringify(f.sources)}).prepare({
       specification: ${JSON.stringify(f.adapter.specification)},
       async build(context) {
@@ -178,19 +239,19 @@ test('the printed owner repair command publishes a synthetic source through the 
       async verify() { return []; }, async restore() { throw new Error('must not restore'); },
       async dispose() {}, async remove() {},
     });
-    writeFileSync(args[args.indexOf('--evidence') + 1], JSON.stringify(result));
+    if (args.includes('--evidence')) writeFileSync(args[args.indexOf('--evidence') + 1], JSON.stringify(result));
   `);
   // The synthetic checkout supplies only the expensive producer. Task and the
   // goal command, including its slot selection, execute the production code.
   writeFileSync(join(f.directory, 'Taskfile.yml'), `version: '3'\ntasks:\n  goal:\n    cmds:\n      - '${process.execPath} ${join(root, 'scripts/goal/goalctl.ts')} {{.CLI_ARGS}}'\n`);
-  const repair = retainedRequirements(root, ['tests/qa/fault-recovery/owner-restore-erasure-production.test.ts'])
-    .find(item => item.source === 'owner')!.build;
-  const refused = await preflightRetainedSources(root, [], [{ source: 'owner', build: repair,
+  const repair = repairRequirements.get(source)!.build;
+  const refused = await preflightRetainedSources(root, [], [{ source, build: repair,
     check: async () => (await f.store.preflight(f.adapter)).key }]);
   expect(refused.ok).toBe(false);
   const command = retainedPreflightSummary(refused).split('Build/repair: ')[1]!.trim();
   const child = Bun.spawn(command.split(' '), { cwd: f.directory, stdout: 'pipe', stderr: 'pipe',
-    env: { ...process.env, GOAL_IN_SLOT: '1', GOAL_QA_HEAVY_RUN: '0' } });
+    env: { ...process.env, GOAL_SETTINGS_DIRECTORY: join(f.directory, '.goalctl'),
+      GOAL_TURN_TOKEN: '', GOAL_TURN_STATE_DIR: '', GOAL_TASK_ID: '', GOAL_IN_SLOT: '1', GOAL_QA_HEAVY_RUN: '0' } });
   const [code, stdout, stderr] = await Promise.all([child.exited,
     new Response(child.stdout).text(), new Response(child.stderr).text()]);
   expect({ code, output: stdout + stderr }).toEqual({ code: 0, output: expect.any(String) });

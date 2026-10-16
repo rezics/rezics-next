@@ -37,6 +37,24 @@ afterEach(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
+test('tooling checks run deployment canaries without brief tests and propagate their failures', async () => {
+  const f = fixture();
+  const canaries = ['scripts/goal/deployment-canaries.test.ts', 'scripts/goal/dependencies.test.ts',
+    'scripts/qa/retained-preflight.test.ts', 'scripts/qa/retained-source-inputs.test.ts'];
+  for (const file of canaries) {
+    mkdirSync(join(f.cwd, file, '..'), { recursive: true });
+    writeFileSync(join(f.cwd, file), 'export {};\n');
+  }
+  const runner: CheckRunner = async command => {
+    f.commands.push([...command]);
+    return { code: command.includes(canaries[0]!) ? 1 : 0, output: 'error: planted deployment regression' };
+  };
+  const result = await workerCheck({ ...f, runner, changed: ['.goalctl/settings.json'], tests: [], only: ['guards'] });
+  expect(result.code).toBe(1);
+  for (const file of canaries) expect(f.commands.flat()).toContain(file);
+  expect(f.lines.join('\n')).toContain('planted deployment regression');
+});
+
 test('one passing invocation prints five ok lines and retains every command output on disk', async () => {
   const f = fixture();
   const result = await workerCheck(f);
