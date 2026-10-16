@@ -161,7 +161,7 @@ async function authorAndRealm(session: WorkReadSession, resource: string, work: 
     GRAPH ${iri(GRAPHS.current)} {
       { ${iri(resource)} rv:author ?author }
       UNION { ?credit a rv:NativeAgentCredit ; rv:work ${iri(work ?? resource)} ;
-        rv:agent ?author . }
+        rv:agent ?author . FILTER NOT EXISTS { ?credit rv:retiredBy ?retirement } }
       UNION { ${iri(resource)} a rv:Agent . BIND(${iri(resource)} AS ?author) }
       UNION { ${iri(resource)} a rv:Realm ; rv:space ?space . ?space rv:owner ?author }
       UNION { ${iri(resource)} a rv:Space ; rv:owner ?author }

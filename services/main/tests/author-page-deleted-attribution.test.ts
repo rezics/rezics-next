@@ -12,8 +12,22 @@ const term = (value: string) => ({ type: 'literal', value });
 const proof: DeletedPersonAttributionProof = { accountErasureId: id(8), erasureId: id(9), erasureEpoch: '12' };
 
 function fixture(tombstone = true) {
+  const query = async (body: string): Promise<ReadRow[]> => {
+    if (body.includes('SELECT DISTINCT ?id ?main')) return [{ id: term(work), main: term(id(20)), head: term(id(21)) }];
+    if (body.includes('SELECT ?work ?head')) return [{ work: term(work) }];
+    if (body.includes('SELECT ?work ?id ?key ?ordinal ?agent')) return [
+      { work: term(work), id: term(id(10)), agent: term(deleted) },
+      { work: term(work), id: term(id(11)), agent: term(live) },
+    ];
+    if (body.includes('SELECT ?agent ?displayName')) return [
+      { agent: term(live), displayName: term('Continuing author') },
+    ];
+    if (body.includes('SELECT ?context') || body.includes('SELECT ?work ?type')) return [];
+    throw new Error(`Unexpected author-page query: ${body}`);
+  };
   const deps = {
-    environment: { fuseki: { query: async () => ({ results: { bindings: [] } }) } },
+    environment: { fuseki: { query: async (body: string) => ({ results: { bindings: await query(body) } }) } },
+    access: { assertRecoveryOpen: async () => undefined },
     personPreferences: { visibleNameOwners: async (agents: readonly string[]) =>
       new Set(agents.filter(agent => agent === live)) },
     agentHandles: { current: async () => 'continuing-author' },
@@ -22,19 +36,7 @@ function fixture(tombstone = true) {
   } as unknown as MainWorkDependencies;
   const session = new WorkReadSession(deps, new Request('http://main.invalid/v1/authors/open-library/OL1A'),
     {}, { dataEpoch: 'epoch:1', sequence: '42' });
-  session.query = async (body: string): Promise<ReadRow[]> => {
-    if (body.startsWith('SELECT DISTINCT ?id ?main')) return [{ id: term(work), main: term(id(20)) }];
-    if (body.startsWith('SELECT ?work ?head')) return [{ work: term(work) }];
-    if (body.startsWith('SELECT ?work ?id ?key ?ordinal ?agent')) return [
-      { work: term(work), id: term(id(10)), agent: term(deleted) },
-      { work: term(work), id: term(id(11)), agent: term(live) },
-    ];
-    if (body.startsWith('SELECT ?agent ?displayName')) return [
-      { agent: term(live), displayName: term('Continuing author') },
-    ];
-    if (body.startsWith('SELECT ?context') || body.startsWith('SELECT ?work ?type')) return [];
-    throw new Error(`Unexpected author-page query: ${body}`);
-  };
+  session.query = query;
   session.summaries = async () => [{ reference: work, status: 'available', type: 'work', disclosure: 'public',
     name: { value: 'Surviving Work', language: 'en', direction: 'ltr', basis: 'fallback' },
     avatar: { kind: 'fallback', policy: 'work-cover-v1', key: 'work', resourceType: 'work' } }] as unknown as

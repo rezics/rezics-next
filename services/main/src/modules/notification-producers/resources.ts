@@ -65,7 +65,9 @@ async function interestTargets(graph: Pick<FusekiClient, 'query'>, target: strin
         `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT ?agent ?key WHERE { { GRAPH ${iri(GRAPHS.current)} { ?credit rv:work ${iri(work)} ; schema:roleName "author" .
       { ?credit a rv:NativeAgentCredit ; rv:agent ?agent }
-      UNION { ?credit a rv:AuthorCredit ; rv:externalProvider "open-library" ; rv:externalKey ?key ; rv:editControl rv:HumanConfirmed }
+      UNION { ?credit a rv:AuthorCredit ; rv:externalProvider "open-library" ; rv:externalNamespace "author" ;
+        rv:externalKey ?key ; rv:editControl rv:HumanConfirmed }
+      FILTER NOT EXISTS { ?credit rv:retiredBy ?retirement }
     } } UNION { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:mainVersion ?main . ?main rv:selectionHead ?selection .
       ?contribution a rv:TextContribution ; rv:work ${iri(work)} ; rv:author ?agent ; rv:publicationHead ?decision }
       GRAPH ${iri(GRAPHS.revisions)} { ?selection rv:contribution ?contribution ; rv:publicationDecision ?decision }

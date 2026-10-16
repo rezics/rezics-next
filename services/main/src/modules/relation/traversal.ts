@@ -132,6 +132,7 @@ export async function relationCandidates(
         BIND("occurrence" AS ?kind) }
       UNION { GRAPH ${iri(GRAPHS.current)} {
         ?relation a rv:AuthorCredit ; rv:work ${iri(resource)} ; rv:creditRevision ?creditHead .
+        FILTER NOT EXISTS { ?relation rv:retiredBy ?retirement }
       } BIND("author-credit" AS ?kind) }
       UNION { GRAPH ${iri(GRAPHS.revisions)} {
         { ?relation rv:targetWork ${iri(resource)} } UNION { ?relation rv:sourceWork ${iri(resource)} }
@@ -187,8 +188,10 @@ async function resolveCandidate(
   if (candidate.kind === 'author-credit') {
     if (!(await canRead(resource))) return null;
     const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?revision WHERE {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(candidate.relation)} rv:creditRevision ?revision } } LIMIT 2`);
+      GRAPH ${iri(GRAPHS.current)} { ${iri(candidate.relation)} rv:creditRevision ?revision .
+        FILTER NOT EXISTS { ${iri(candidate.relation)} rv:retiredBy ?retirement } } } LIMIT 2`);
     const rows = result.results?.bindings ?? [];
+    if (!rows.length) return null;
     if (rows.length !== 1) throw new RevisionCorrupt('author credit head is ambiguous');
     const credit = await readAuthorCredit(env, candidate.relation, rows[0]!.revision!.value);
     const meaning = await definition('credit-author', true);

@@ -16,7 +16,8 @@ type WorkType = typeof types[number];
 // proofs alone confer Studio authority; a recipient never needs creator credits.
 const writerCreditPattern = (work: string, writer: string) => `
   GRAPH ${iri(GRAPHS.current)} { ?credit a rv:NativeAgentCredit ; rv:work ${work} ;
-    rv:agent ${writer} ; schema:roleName "author" ; rv:creditRevision ?creditHead . }
+    rv:agent ${writer} ; schema:roleName "author" ; rv:creditRevision ?creditHead .
+    FILTER NOT EXISTS { ?credit rv:retiredBy ?retirement } }
   GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:NativeAgentCreditRevision ;
     rv:component ?credit ; rv:work ${work} ; rv:agent ${writer} .
     FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } }`;

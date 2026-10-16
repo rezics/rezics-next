@@ -25,7 +25,8 @@ export class TranslationBasisRequired extends Error {
 function sourceAuthorPattern(source: string, actor: string): string {
   return `GRAPH ${iri(GRAPHS.current)} {
     ?basisCredit a rv:NativeAgentCredit ; rv:work ${source} ; rv:agent ${actor} ;
-      <https://schema.org/roleName> "author" ; rv:creditRevision ?basisCreditRevision . }
+      <https://schema.org/roleName> "author" ; rv:creditRevision ?basisCreditRevision .
+    FILTER NOT EXISTS { ?basisCredit rv:retiredBy ?basisRetirement } }
     GRAPH ${iri(GRAPHS.revisions)} {
       ?basisCreditRevision a rv:NativeAgentCreditRevision ; rv:component ?basisCredit ;
         rv:work ${source} ; rv:agent ${actor} ; <https://schema.org/roleName> "author" .

@@ -61,6 +61,7 @@ export async function newestAuthorWorks(session: WorkReadSession,
         rv:creditRevision ?creditHead ; schema:roleName "author" . }
       GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:NativeAgentCreditRevision ; rv:component ?credit ;
         rv:agent ?agent ; rv:work ?id . FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?credit rv:retiredBy ?retirement } }
       ${publicWork('?id', '?main')}
 
       # A chapter placed in a book is the book's, as the profile's Works list reads it.

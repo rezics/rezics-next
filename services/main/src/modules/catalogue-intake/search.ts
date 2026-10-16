@@ -210,6 +210,7 @@ async function hydrateCandidates(
       rv:agent ?agent ; schema:roleName "author" }
     GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:NativeAgentCreditRevision ; rv:component ?credit .
       FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?credit rv:retiredBy ?retirement } }
     ${publicAgent('?agent')} } LIMIT 512`,
     512,
   );

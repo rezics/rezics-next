@@ -177,9 +177,11 @@ export function graphNoticeParticipants(env: WorkActivationEnvironment): Pick<Mo
       ? `${iri(realm.realm)} a rv:Realm . ${iri(realm.space)} rv:owner ?author`
       : `
         { ${iri(target.resource)} rv:author ?author }
-        UNION { ?credit a rv:NativeAgentCredit ; rv:work ${iri(target.resource)} ; rv:agent ?author }
+        UNION { ?credit a rv:NativeAgentCredit ; rv:work ${iri(target.resource)} ; rv:agent ?author .
+          FILTER NOT EXISTS { ?credit rv:retiredBy ?retirement } }
         UNION { ?contribution a rv:TextContribution ; rv:work ${iri(target.resource)} ; rv:author ?author }
-        UNION { ${iri(target.resource)} rv:work ?work . ?credit a rv:NativeAgentCredit ; rv:work ?work ; rv:agent ?author }
+        UNION { ${iri(target.resource)} rv:work ?work . ?credit a rv:NativeAgentCredit ; rv:work ?work ; rv:agent ?author .
+          FILTER NOT EXISTS { ?credit rv:retiredBy ?retirement } }
         UNION { ${iri(target.resource)} rv:owner ?author }
         UNION { ${iri(target.resource)} a rv:Agent . BIND(${iri(target.resource)} AS ?author) }`;
     const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?author WHERE {

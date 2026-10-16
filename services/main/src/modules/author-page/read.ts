@@ -38,7 +38,8 @@ export function creditedPublicWorks(keys: readonly string[],
   return `{ VALUES ?key { ${keys.map(lit).join(' ')} }
       GRAPH ${iri(GRAPHS.current)} { ?credit a rv:AuthorCredit ; rv:work ?id ; rv:creditRevision ?creditHead ;
         schema:roleName "author" ; rv:externalProvider "open-library" ; rv:externalNamespace "author" ;
-        rv:externalKey ?key ; rv:editControl rv:HumanConfirmed . }
+        rv:externalKey ?key ; rv:editControl rv:HumanConfirmed .
+        FILTER NOT EXISTS { ?credit rv:retiredBy ?retirement } }
       GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:AuthorCreditRevision ; rv:component ?credit ;
         rv:work ?id ; rv:externalKey ?key . FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } } }
     ${reported.length ? `UNION { VALUES (?id ?key) { ${reported.map(([work, key]) => `(${iri(work)} ${lit(key)})`)
@@ -101,6 +102,7 @@ async function workAuthors(session: WorkReadSession, key: string, works: readonl
         rv:agent ?agent ; schema:roleName "author" . }
       GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:NativeAgentCreditRevision ; rv:component ?id ; rv:work ?work ;
         rv:agent ?agent ; schema:roleName "author" . FILTER NOT EXISTS { ?revision a rv:ErasedRevision } } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?id rv:retiredBy ?retirement } }
   } LIMIT ${probe + 1}`, probe + 1) : [];
   const reported = await sourceReportedCredits(session, works, AUTHOR_PAGE_COST.creditsPerWork);
   const self = { agent: null, key, ordinal: -1 };

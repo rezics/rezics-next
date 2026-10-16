@@ -117,7 +117,7 @@ function nativeAuthorFixture() {
   f.work.personPreferences = { visibleNameOwners: async () => new Set(publicName ? [agent] : []) } as never;
   f.fuseki.query = async query => {
     if (query.includes('SELECT ?work ?id ?key ?ordinal ?agent')) return { results: { bindings: [{
-      work: row.work!, id: value(credit), agent: value(agent),
+      work: row.work!, id: value(credit), agent: value(agent), role: value('author'),
     }] } };
     if (query.includes('SELECT ?agent ?displayName ?handle')) return { results: { bindings: [{
       agent: value(agent), displayName: value('Healthy native author'),

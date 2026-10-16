@@ -33,10 +33,12 @@ test('search card batch selects localized serial metadata and the matching graph
 test('search credit batch caps each card while retaining later Works in the same page', async () => {
   const one = id(1), two = id(2);
   const session = { query: async (_body: string, limit: number) => {
-    expect(limit).toBe(192);
+    expect(limit).toBe(6);
     return [1, 2, 3, 4].map(n => ({ work: field(one), id: field(id(n + 2)),
-      key: field(`/authors/OL${n}A`), ordinal: field(String(n)) }))
-      .concat([{ work: field(two), id: field(id(9)), key: field('/authors/OL9A'), ordinal: field('1') }]).reverse();
+      key: field(`/authors/OL${n}A`), ordinal: field(String(n)), role: field('author'),
+      provider: field('open-library'), namespace: field('author') }))
+      .concat([{ work: field(two), id: field(id(9)), key: field('/authors/OL9A'), ordinal: field('1'),
+        role: field('author'), provider: field('open-library'), namespace: field('author') }]).reverse();
   }, deps: {} } as unknown as WorkReadSession;
   const cards = await searchPageCredits(session, [one, two]);
   expect(cards.get(one)).toHaveLength(3);

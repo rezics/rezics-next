@@ -183,6 +183,18 @@ public class PrefixWalkTest {
             assertTrue(walk(fixture,"ze","en",10).stream().noneMatch(entry->!bool(entry,"rejected")));
         }
     }
+    @Test public void retiredCreditNamesDisappearOnRefreshAndRebuildWithoutWithdrawingTheWork(){
+        try(var fixture=new Fixture()){
+            var owner=fixture.owner(1000,"Unrelated title","en");fixture.credit(owner,9000,"Book Author");fixture.committed();
+            assertEquals(1,walk(fixture,"bo","en",10).stream().filter(entry->!bool(entry,"rejected")).count());
+            fixture.data.begin(ReadWrite.WRITE);set(fixture.data,CURRENT,id(9000),p("retiredBy"),id(9100));
+            PublicNameProjection.refresh(fixture.data,id(9000));PublicNameProjection.refresh(fixture.data,id(9000));fixture.committed();
+            assertTrue(walk(fixture,"bo","en",10).stream().noneMatch(entry->!bool(entry,"rejected")));
+            assertEquals(1,walk(fixture,"un","en",10).stream().filter(entry->!bool(entry,"rejected")).count());
+            fixture.data.begin(ReadWrite.WRITE);PublicNameProjection.rebuildPrefix(fixture.data);fixture.committed();
+            assertTrue(walk(fixture,"bo","en",10).stream().noneMatch(entry->!bool(entry,"rejected")));
+        }
+    }
     @Test public void rawRenameInvalidatesQualificationUntilTheProjectionRebuilds(){
         try(var fixture=new Fixture()){
             var owner=fixture.owner(1000,"Book original","en");fixture.committed();

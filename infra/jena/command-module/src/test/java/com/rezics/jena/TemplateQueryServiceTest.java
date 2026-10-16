@@ -131,7 +131,7 @@ public class TemplateQueryServiceTest {
                     String id="urn:credit:"+i,revision="urn:revision:"+i,key="OL"+i+"A";
                     String update="PREFIX rv: <https://rezics.com/vocab/> PREFIX schema: <https://schema.org/> INSERT DATA {"
                         +"GRAPH <"+GRAPH+"> { <"+id+"> a rv:AuthorCredit ; rv:work <urn:root> ; rv:creditRevision <"+revision+"> ; schema:roleName \"author\" ; rv:externalProvider \"open-library\" ; rv:externalNamespace \"author\" ; rv:externalKey \""+key+"\" ; schema:position "+i+" ; rv:editControl rv:HumanConfirmed . }"
-                        +"GRAPH <urn:rezics:graph:revisions> { <"+revision+"> a rv:AuthorCreditRevision ; rv:component <"+id+"> ; rv:work <urn:root> ; rv:externalKey \""+key+"\" ; schema:position "+i+" . }}";
+                        +"GRAPH <urn:rezics:graph:revisions> { <"+revision+"> a rv:AuthorCreditRevision ; rv:component <"+id+"> ; rv:work <urn:root> ; schema:roleName \"author\" ; rv:externalProvider \"open-library\" ; rv:externalNamespace \"author\" ; rv:externalKey \""+key+"\" ; schema:position "+i+" . }}";
                     org.apache.jena.update.UpdateAction.parseExecute(update,data);
                 }
                 data.commit();

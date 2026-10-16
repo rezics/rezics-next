@@ -81,7 +81,7 @@ export async function searchPageSerial(session: WorkReadSession, works: readonly
 export async function searchPageCredits(session: WorkReadSession, works: readonly string[], preview = false,
   unavailable = new Set<string>()) {
   if (works.length > SEARCH_CARD_COST.works) throw new WorkReadUnavailable('Search credit page exceeds its bound');
-  const read = () => primaryDiscoveryCreditBatch(session, works);
+  const read = () => primaryDiscoveryCreditBatch(session, works, preview, unavailable);
   const credits = preview ? await optionalPreview(session, read) : await read();
   if (!credits) {
     for (const work of works) unavailable.add(work);

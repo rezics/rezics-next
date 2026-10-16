@@ -13,7 +13,8 @@ import { optionalPreview } from '../query/optional-preview.ts';
 export const DISCOVERY_CREDIT_BATCH_COST = { works: 64, queries: 1, rows: 192 } as const;
 /** Each Work retains its own ordered three-credit seek. Literal Work keys keep
  * the graph joins local; source-reported attributions share one owner batch. */
-export async function primaryDiscoveryCreditBatch(session: WorkReadSession, works: readonly string[]) {
+export async function primaryDiscoveryCreditBatch(session: WorkReadSession, works: readonly string[],
+  preview = false, unavailable = new Set<string>()) {
   const unique = [...new Set(works)];
   if (unique.length > DISCOVERY_CREDIT_BATCH_COST.works) throw new WorkReadUnavailable('Discovery credit batch is out of bounds');
   const result = new Map<string, ProjectedWork['primaryCredits']>();
@@ -39,13 +40,17 @@ export async function primaryDiscoveryCreditBatch(session: WorkReadSession, work
   if (all.some(row => !row.work || !unique.includes(row.work.value))) {
     throw new WorkReadUnavailable('Discovery credit Work is incomplete');
   }
-  const reports = await sourceReportedCredits(session, unique);
+  const readReports = () => sourceReportedCredits(session, unique, DISCOVERY_COST.primaryCredits, preview);
+  const reports = preview ? await optionalPreview(session, readReports) : await readReports();
+  // A failed optional Source lookup does not withdraw a confirmed attribution.
+  if (!reports) for (const work of unique) unavailable.add(work);
   for (const work of unique) {
     const rows = all.filter(row => row.work?.value === work);
     if (rows.some(row => !row.id || !row.role || !isNativeCreditRole(row.role.value)
       || (!row.agent && (!row.provider || !row.namespace)) || (!row.agent && (!row.key || !/^\d+$/.test(row.ordinal?.value ?? '')
       || !Number.isSafeInteger(Number(row.ordinal?.value)))) || (row.agent && (row.key || row.ordinal)))
       || new Set(rows.map(row => row.id!.value)).size !== rows.length) {
+      if (preview) { unavailable.add(work); continue; }
       throw new WorkReadUnavailable('Discovery credits are ambiguous');
     }
     const confirmed: ProjectedWork['primaryCredits'] = rows.map(row => row.agent
@@ -54,7 +59,7 @@ export async function primaryDiscoveryCreditBatch(session: WorkReadSession, work
       : ({ id: row.id!.value, role: row.role!.value as NativeCreditRole, participantKind: 'external-reference',
       provider: row.provider!.value, namespace: row.namespace!.value, key: row.key!.value, ordinal: Number(row.ordinal!.value),
       agent: null, displayName: null, handle: null }));
-    const reported = reports.get(work) ?? [];
+    const reported = reports?.get(work) ?? [];
     const confirmedKeys = new Set(confirmed.map(credit => creditIdentity(credit)));
     result.set(work, [...confirmed, ...reported.filter(credit =>
       credit.participantKind === 'external-reference' && !confirmedKeys.has(creditIdentity(credit)))]

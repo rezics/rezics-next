@@ -40,8 +40,10 @@ test('G1012: a lagging serial projection withholds counts and reports unknown ra
 
 test('G1012: damaged credit facts affect only their Work, while relation budgets remain required', async () => {
   const reader = session({ query: async () => [
-    { work: field(id(1)), id: field(id(11)), key: field('/authors/OL1A'), ordinal: field('broken') },
-    { work: field(id(2)), id: field(id(12)), key: field('/authors/OL2A'), ordinal: field('0') },
+    { work: field(id(1)), id: field(id(11)), key: field('/authors/OL1A'), ordinal: field('broken'),
+      role: field('author'), provider: field('open-library'), namespace: field('author') },
+    { work: field(id(2)), id: field(id(12)), key: field('/authors/OL2A'), ordinal: field('0'),
+      role: field('author'), provider: field('open-library'), namespace: field('author') },
   ] });
   const credits = await searchPageCredits(reader, [id(1), id(2)], true);
   expect(credits.has(id(1))).toBe(false);

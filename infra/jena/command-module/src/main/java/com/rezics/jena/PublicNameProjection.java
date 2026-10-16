@@ -1478,6 +1478,7 @@ final class PublicNameProjection {
             if (productResource(agent)) prefixDependency(data, agent, work);
             prefixDependency(data, credit, work);
             if (revision == null || agent == null || !publicCreditAgent(data, agent)
+                || data.contains(CURRENT, credit, p("retiredBy"), Node.ANY)
                 || !data.contains(REVISIONS, revision, RDF.type.asNode(), p("NativeAgentCreditRevision"))
                 || !data.contains(REVISIONS, revision, p("component"), credit)
                 || !data.contains(REVISIONS, revision, p("agent"), agent)

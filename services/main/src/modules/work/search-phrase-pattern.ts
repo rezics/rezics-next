@@ -75,7 +75,8 @@ export function phraseMatchPattern(input: PublicMainPhraseQuery & { context?: { 
             : 'BIND("main-fallback" AS ?reason)'}
           ${input.author ? `GRAPH ${iri(GRAPHS.current)} {
             ?bookCredit a rv:NativeAgentCredit ; rv:work ?resultWork ; rv:agent ${iri(input.author)} ;
-              <https://schema.org/roleName> "author" . }` : ''}
+              <https://schema.org/roleName> "author" .
+            FILTER NOT EXISTS { ?bookCredit rv:retiredBy ?retirement } }` : ''}
           BIND(?resultMain AS ?phraseMain)
           BIND(?phraseWork AS ?contribution)
           BIND(?contentRevision AS ?revision)

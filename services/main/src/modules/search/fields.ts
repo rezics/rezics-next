@@ -90,6 +90,7 @@ export async function querySearchFields(env: WorkActivationEnvironment,
       rv:externalNamespace "author" ; rv:externalKey ?key ; schema:roleName "author" . }
     GRAPH ${iri(GRAPHS.revisions)} { ?creditRevision a rv:AuthorCreditRevision ; rv:component ?credit ;
       rv:externalKey ?key . FILTER NOT EXISTS { ?creditRevision a rv:ErasedRevision } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?credit rv:retiredBy ?retirement } }
     BIND("credit" AS ?field)
   }` : '';
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
@@ -134,6 +135,7 @@ export async function querySearchFields(env: WorkActivationEnvironment,
         rv:creditRevision ?creditRevision ; rv:agent ?agent ; schema:roleName "author" . }
         GRAPH ${iri(GRAPHS.revisions)} { ?creditRevision a rv:NativeAgentCreditRevision ;
           rv:component ?credit ; rv:agent ?agent . FILTER NOT EXISTS { ?creditRevision a rv:ErasedRevision } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?credit rv:retiredBy ?retirement } }
         ${publicAgent('?agent')} BIND(?displayName AS ?text)
         FILTER(CONTAINS(LCASE(STR(?text)), ${lit(term)})) BIND("credit" AS ?field) }
       ${sourceBranch}

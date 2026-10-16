@@ -76,6 +76,7 @@ export async function queryTypeaheadCandidates(env: WorkActivationEnvironment, p
               rv:agent ?agent ; schema:roleName "author" . }
           GRAPH ${iri(GRAPHS.revisions)} { ?creditRevision a rv:NativeAgentCreditRevision ;
             rv:component ?credit ; rv:agent ?agent . FILTER NOT EXISTS { ?creditRevision a rv:ErasedRevision } }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?credit rv:retiredBy ?retirement } }
           ${publicAgent('?agent')} BIND(?displayName AS ?text) BIND("label" AS ?kind) }
         UNION { BIND("credit" AS ?field) GRAPH ${iri(GRAPHS.current)} {
             ?credit a rv:AuthorCredit ; rv:work ?work ; rv:creditRevision ?creditRevision ;
@@ -83,6 +84,7 @@ export async function queryTypeaheadCandidates(env: WorkActivationEnvironment, p
               rv:externalKey ?key ; schema:roleName "author" . }
           GRAPH ${iri(GRAPHS.revisions)} { ?creditRevision a rv:AuthorCreditRevision ;
             rv:component ?credit ; rv:externalKey ?key . FILTER NOT EXISTS { ?creditRevision a rv:ErasedRevision } }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?credit rv:retiredBy ?retirement } }
           BIND("source" AS ?kind) }
       }
     } LIMIT ${SEARCH_FIELD_COST.candidates + 1}`, SEARCH_FIELD_COST.responseBytes, SEARCH_FIELD_COST.candidates + 1);
