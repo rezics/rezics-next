@@ -199,7 +199,7 @@ for (const persona of ['stranger', 'member', 'owner', 'moderator', 'operator'] a
   test(`${persona}: the actual route preserves its recorded authoring and attachment authority`, async () => {
     const frameLabels = ['management-address', 'management-configuration', 'management-zone', 'management-editor'];
     const selections = creation.personas[persona].filter(item => frameLabels.includes(item.label) || item.label === 'attachment-route-configuration' || item.label === 'attachment-route-name');
-    const replay = recordedFetch(creation, persona, selections.map(item => ({ label: item.label, state: item.status >= 400 ? 'error' : 'populated' })), { pathPrefix: BFF_PREFIX });
+    const replay = recordedFetch(creation, persona, selections.map(item => ({ label: item.label, state: item.status >= 400 ? 'error' : 'populated' })), { pathPrefix: BFF_PREFIX, sequence: true });
     try {
       const main = browserMainApi('https://record.invalid', { fetcher: replay.fetcher });
       const query = new URL(selections.find(item => item.label === 'management-address')!.path, 'https://record.invalid').searchParams;
@@ -228,10 +228,12 @@ test('an existing Realm reopens the same production controls without creation an
     'creation-attached-route-configuration', 'creation-attached-route-name'];
   const replay = recordedFetch(creation, 'owner', labels.map(label => ({ label, state: 'populated' })), { pathPrefix: BFF_PREFIX, sequence: true });
   const calls: Request[] = [];
+  const credentials: (RequestCredentials | undefined)[] = [];
   const misses: unknown[] = [];
   const fetcher = (async (input, init) => {
     const request = new Request(input, init);
     calls.push(request);
+    credentials.push(init?.credentials);
     try { return await replay.fetcher(request); }
     catch (error) { misses.push(error); throw error; }
   }) as typeof fetch;
@@ -249,7 +251,7 @@ test('an existing Realm reopens the same production controls without creation an
       attachedName: (sample('creation-attached-route-name').answer as { name: { value: string } }).name.value });
     expect(calls).toHaveLength(6);
     expect(calls.every(call => call.method === 'GET')).toBe(true);
-    expect(calls.at(-1)!.credentials).toBe('omit');
+    expect(credentials.at(-1)).toBe('omit');
     expect(new URL(calls.at(-1)!.url).searchParams.has('actingSubject')).toBe(false);
     expect(misses).toEqual([]);
   } finally { replay.dispose(); }

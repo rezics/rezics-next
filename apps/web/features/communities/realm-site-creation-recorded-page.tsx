@@ -51,7 +51,7 @@ export function RealmSiteCreationRecordedPage({ record, locale, existing = false
       if (profile.id !== intent.actingSubject) throw new Error('Recorded identity differs from the command actor');
       if (active) setView(zoneManagementShell({ space, frame, locale, actingSubject: intent.actingSubject,
         agent: { iri: profile.id, label: profile.displayName, handle: null, kind: 'person', path: 'direct-principal' },
-        manageMessages: manageMessages[locale], children: content }));
+        manageMessages, children: content }));
     }
     void open().catch(value => { if (active) setError(value); });
     return () => { active = false; };
