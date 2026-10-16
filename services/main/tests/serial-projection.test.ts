@@ -17,8 +17,7 @@ test('serial projection reads numeric batch 9 before 10 and advances its checkpo
   let advanced = '';
   const relay = { query: async (sql: string, args?: unknown[]) => {
     if (sql.includes('max(sequence)')) {
-      expect(sql).toContain('stream_scope = $1');
-      expect(sql).toContain('data_epoch = $2');
+      expect(sql).toMatch(/WHERE stream_scope\s*=\s*\$1 AND data_epoch\s*=\s*\$2/u);
       expect(args).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch']);
       return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: '10' }] };
     }
