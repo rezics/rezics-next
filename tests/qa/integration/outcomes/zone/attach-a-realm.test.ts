@@ -12,7 +12,7 @@ import {
 
 setDefaultTimeout(90_000);
 let sessions: PersonaSessions;
-const recording = new OutcomeRecorder(attachment);
+const recording = new OutcomeRecorder(attachment, { directory: `.temp/realm-site-recording/${process.env.REZICS_QA_RUN_ID ?? 'local'}` });
 let currentPersona: PersonaName | null = null;
 let requestNumber = 0;
 async function reached(person: PersonaSession, ...args: Parameters<PersonaSession['main']>) {
@@ -161,7 +161,8 @@ async function resourceMandate(action: string, scopeId: string) {
   return answer(Promise.resolve(response));
 }
 afterAll(async () => {
-  await sessions?.close();
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
 });
 
 import attachment from '../../../../../scripts/qa/cases/outcomes/zone/attach-a-realm.ts';

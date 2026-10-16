@@ -66,21 +66,21 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   return JSON.parse(raw) as T;
 }
 const visitAnswers: { persona: PersonaName; label: string; method: string; path: string; body?: unknown; key?: string; status: number; answer: unknown }[] = [];
-const fixtures = new Map<PersonaName, { sessions: PersonaSessions; site: Site }>();
+const fixtures = new Map<PersonaName, { sessions: PersonaSessions; site: Site | null }>();
 beforeAll(async () => {
   await recording.prepare();
   validator = new AnswerRecordValidator(JSON.parse(await readFile('generated/openapi/main/public.json', 'utf8')) as AnswerContract);
   for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
     sessions = await personaSessions('public');
-    fixtures.set(name, { sessions, site: await createSite() });
+    fixtures.set(name, { sessions, site: name === 'owner' ? null : await createSite() });
   }
 }, 420_000);
 afterAll(async () => {
   try {
     await mkdir('.temp/standalone-zone-visit', { recursive: true });
     await writeFile(`.temp/standalone-zone-visit/${process.env.REZICS_QA_RUN_ID ?? 'local'}.json`, JSON.stringify(visitAnswers, null, 2));
-    if (process.env.OUTCOME_RECORD_DIR && completedVisits.size === answerPersonas.length) {
-      const directory = resolve(process.env.OUTCOME_RECORD_DIR);
+    if (completedVisits.size === answerPersonas.length) {
+      const directory = resolve(process.env.OUTCOME_RECORD_DIR ?? `.temp/realm-site-recording/${process.env.REZICS_QA_RUN_ID ?? 'local'}`);
       if (!directory.startsWith(`${resolve('.temp')}/`)) throw new Error('Recording must stay under .temp/');
       const record = answerRecord(independent.rowId, captured);
       validator.validate(record);
@@ -94,6 +94,7 @@ function fixture(name: PersonaName) {
   persona = name;
   const context = fixtures.get(name)!;
   sessions = context.sessions;
+  if (!context.site) throw new Error('Persona site has not been created');
   return context.site;
 }
 const path = (site: Site) => `/v1/zones/${short(site.zone)}`;
@@ -112,12 +113,12 @@ async function configuration(site: Site, person = sessions.owner, label?: string
   return answer<{ revision: string; configuration: { defaultRealm: string | null } }>(
     main('GET', `${path(site)}/configuration?${acting(person)}`));
 }
-async function createSite(): Promise<Site> {
-  const created = await answer<{ zone: string; zoneRevision: string; navigationRevision: string }>(
+async function createSite(recordCreation = false): Promise<Site> {
+  const created = recordCreation ? await creationVisit(sessions.owner) : await answer<{ zone: string; zoneRevision: string; navigationRevision: string }>(
     settledWrite(sessions.owner.main, 'POST', '/v1/spaces', { profile: 'space-zone-v1', name: 'Independent original site',
       language: 'en', capabilities: ['zone'], actingSubject: sessions.owner.actingSubject }), 201);
   const root = `/v1/zones/${short(created.zone)}`;
-  await answer(settledWrite(sessions.owner.main, 'PUT', `${root}/configuration`, {
+  if (!recordCreation) await answer(settledWrite(sessions.owner.main, 'PUT', `${root}/configuration`, {
     expectedHead: created.zoneRevision, prepareHomeDocument: true, actingSubject: sessions.owner.actingSubject }));
   const editor = await answer<{ configuration: { homeDocument: string }; draft: { variantId: string }; preview: { navigation: { revision: string } } }>(
     sessions.owner.main('GET', `${root}/showcase-editor?${acting(sessions.owner)}`));
@@ -227,8 +228,11 @@ outcomeTest(independent, 'visitor', () => qualify('visitor', () => reader('visit
 outcomeTest(independent, 'stranger', () => qualify('stranger', () => reader('stranger')), recording);
 outcomeTest(independent, 'member', () => qualify('member', () => reader('member')), recording);
 async function ownerProof() {
+  persona = 'owner';
+  const context = fixtures.get('owner')!;
+  sessions = context.sessions;
+  context.site = await createSite(true);
   const site = fixture('owner'), owner = sessions.owner;
-  await creationVisit(owner);
   expect((await configuration(site, owner, 'standalone-configuration')).configuration.defaultRealm ?? null).toBeNull();
   expect(await answer(sample(owner, 'unpublished-home', 'GET', `${path(site)}/routes?path=%2F`))).not.toHaveProperty('page');
   await answer(sample(sessions.visitor, 'unpublished-content-hidden', 'GET', exactPath(site.saved)), 404);
@@ -268,7 +272,7 @@ async function creationVisit(person: PersonaSession) {
   const creator = realmSiteCreationClient(main);
   const created = await creator.create({ profile: 'space-zone-v1', name: 'Independent original site', language: 'en',
     capabilities: ['zone'], actingSubject: person.actingSubject! }, randomUUID());
-  if (!created.ok) throw new Error(`Production creation failed: ${created.failure}`);
+  if (!created.ok) throw new Error(`Production creation failed: ${JSON.stringify(created)}`);
   label = 'creation-home';
   const prepared = await creator.prepare(created.data, person.actingSubject!, randomUUID());
   if (!prepared.ok) throw new Error(`Production home preparation failed: ${prepared.failure}`);
@@ -288,6 +292,7 @@ async function creationVisit(person: PersonaSession) {
     return readZoneManagementFrame(management, ref, 'en', person.actingSubject!);
   });
   if (frame.authoring.kind !== 'ready') throw new Error(`Created Zone cannot open attachment management: ${frame.authoring.kind}`);
+  return created.data;
 }
 outcomeTest(independent, 'owner', () => qualify('owner', ownerProof), recording);
 outcomeTest(independent, 'moderator', () => qualify('moderator', () => reader('moderator')), recording);
@@ -329,7 +334,7 @@ async function qualify(name: PersonaName, proof: () => Promise<void>) {
     await within(60_000, 'API proof', proof);
     proofMs = Date.now() - started;
     visitStarted = Date.now();
-    await within(120_000, 'production visit', () => productionVisit(fixtures.get(name)!.site, sessions[name]));
+    await within(120_000, 'production visit', () => productionVisit(fixtures.get(name)!.site!, sessions[name]));
     completedVisits.add(name);
     if (name === 'operator' && independent.cells.operator?.state === 'pending' && operatorZoneRefused)
       throw new Error('Exact-mandated operator: showcase-editor 200, Zone read 404; production stops before editor authority');
