@@ -79,8 +79,8 @@ export async function AboutFacts({ id, locale, messages, client }: Common & { id
       <ChevronDownIcon aria-hidden="true" className="size-4 transition-transform group-open:rotate-180" />
     </summary>
     <div className="grid gap-5 pb-6">
-      {client ? StatementsSection({ section, cursor: undefined, hrefFor: standaloneHrefFor({}, entityHref(id)),
-        locale, t, messages, client }) : <StatementsSection section={section} cursor={undefined}
+      {client ? StatementsSection({ section, hrefFor: standaloneHrefFor({}, entityHref(id)),
+        locale, t, messages, client }) : <StatementsSection section={section}
         hrefFor={standaloneHrefFor({}, entityHref(id))} locale={locale} t={t} messages={messages} />}
       <ProposeCorrectionSlot work={id} locale={locale} messages={messages} />
     </div>
@@ -137,10 +137,10 @@ export async function DiscussionHub({ workRef, id, locale, messages, client }: C
   const discussion = workHref(workRef, 'discussion');
   const hrefFor = standaloneHrefFor({}, entityHref(id));
   return <div className="grid gap-4" data-discussion-hub>
-    {client ? DiscussionSection({ section, cursor: undefined, resource: page.data.target.resource,
+    {client ? DiscussionSection({ section, resource: page.data.target.resource,
       registry: page.data.registry, signedIn, preview: 3, anchor: 'work-discussion',
       hrefFor: link => link.kind === 'continue' ? discussion : hrefFor(link), locale, t: entityCopy(locale),
-      messages, client }) : <DiscussionSection section={section} cursor={undefined} resource={page.data.target.resource}
+      messages, client }) : <DiscussionSection section={section} resource={page.data.target.resource}
       registry={page.data.registry} signedIn={signedIn} preview={3} anchor="work-discussion"
       hrefFor={link => link.kind === 'continue' ? discussion : hrefFor(link)} locale={locale} t={entityCopy(locale)}
       messages={messages} />}

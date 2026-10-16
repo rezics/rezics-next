@@ -18,7 +18,7 @@ import { getMessages } from '../../i18n/server.ts';
 // the answer to the view of the same name (views.tsx), which stories and tests draw without Main.
 
 export async function StatementsSection({ section, cursor, position, frame, projection = false, ownName, client, ...rest }: SectionProps
-  & { cursor: string | undefined; client?: SuppliedClient; ownName?: string; position?: string; frame?: readonly string[];
+  & { cursor?: string; client?: SuppliedClient; ownName?: string; position?: string; frame?: readonly string[];
     /** A place's facts: those covered by its coordinates, most specific first, each saying how far it reaches. */
     projection?: boolean }) {
   const page = await readStatements(section, cursor, position, frame, client);
@@ -58,7 +58,7 @@ export async function DiscussionSection({ section, cursor, resource, registry, s
   client?: SuppliedClient;
   /** What the resource is called in a sentence, where the type registry's word is not one a reader knows (a place). */
   noun?: string;
-  cursor: string | undefined; resource: string; registry: EntityProjection['registry']; signedIn: boolean;
+  cursor?: string; resource: string; registry: EntityProjection['registry']; signedIn: boolean;
   /** Show only the first few replies and no paging, for a host that links to the full list (the Work hub). */
   preview?: number;
 }) {
