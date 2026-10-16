@@ -1,5 +1,48 @@
 # State
 
+Checkpoint 144df2a3-084e-48ce-b280-a974044bb352 consolidates handled events
+mail:0c4251b4-faa8-49c3-b801-27a0e482dd18,
+mail:4a19f3df-3f8d-444c-9b26-7a0037fedcbf, task:G-2461:11,
+mail:6e068bda-9e2d-4981-9029-edce5e49c656,
+mail:901b07ca-2b21-4ac7-b50b-c52d4f3c0d69,
+mail:e835f7a1-b96f-44bb-8cfe-a693df295c02,
+mail:2c871233-f240-4d2f-9a4c-92ffc2473416 and
+mail:cd0fcdb8-b3b4-4c34-84a2-41441a335fd6.
+These decisions supersede affected dispositions below; later worker and
+landing results retain their own events.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2724–G-2727 | Program mail:0c4251b4 confirms selection, shard adjudication, harness isolation and conflict-landing scope repairs landed. Main also supplies 60-second whole-source guard budgets and the corrected host-admission expectation. Earlier shared-repair holds are superseded; no web harness patch or duplicate continuation is needed. |
+| G-2465, G-2466, G-2475, G-2338 | Program confirms these surfaces merged. This status mail needs no brief edit or new web action; it does not itself establish verified closure. |
+| G-2377 | Program confirms its accepted cut merged, superseding the earlier failed-landing hold. Retain the partial acceptance and existing proof; the remaining actual Browse/Works opening at the canonical Zone address still belongs to the brief and its G-2333/G-2381 prerequisites. No complete-outcome or closure inference. |
+| G-2226, G-2331, G-2468 | Program resumed G-2226 and G-2331 on fresh sessions after the shared repairs; G-2226 owns its rebase under the 15:49 UTC decision because G-2475 changed browse reads. G-2468 is dispatched. Finish each existing brief's proof; no duplicate web resume or shared-gate waiver. |
+| G-2330 | Mail:4a19f3df, committed as `76025e0568`, admits the minimal production Work reader injection/delegation in `work-page/read.ts`; claims were reclaimed and attempt 10 resumed without another rebase. Mail:6e068bda admits four actual descendants: entity sections/predicate labels, wiki views/read and rating-question-conditional review targets. Claims were reclaimed and the brief synced to the active worker; a duplicate resume was refused. Mail:901b07ca completes the seven-file correction with Work-level previews/readers and cached platform access, committed as `aa05ae91d9`; the worker was stopped and resumed as attempt 11 with updated claims, without rebase. Carry the same optional client through existing production mappings and cached inputs, preserving anonymous/persona authority, sorted scalar cache inputs, exact/conditional requests and the actual platform read even for Books. Finish whole consistent recording, every existing assertion, zero-miss replay, the complete gate including affected consumers, eight locales and final phone/desktop inspection. No substitute reader/frame, skipped read, partial acceptance or waived check. |
+| G-2461 | Task:G-2461:11 returned partial: gate `run-DUEkDa` passed contract/types/lint/AST/affected units, then four changed exception fingerprints failed the continuation guard at `web-continuations.test.ts:14` and `:56`; stories were not reached. Retain prior recording, guard, 19 stories and inspected images. Program received mail:e531476f; the manager's proposed hold snapshot conflicted with Program's newer brief and did not land. Mail:e835f7a1 resolves the question: Program's 16:03 UTC brief ruling allows only the four reviewed `context` fingerprints to refresh for `RealmDiscussionsRoute`, `standaloneSite` and `ZoneSiteRoute` where production-client injection is the sole function change. Keep `path`, `consumer`, `rule` and `expression` byte-identical; new or changed expressions must meet the guard, with no new entry. Program lends the inventory, rebased and resumed the worker, and refreshed its staged brief copy. Landing review checks context-only changes; finish the complete canonical gate. No duplicate resume, obsolete hold-snapshot retry, landing acceptance or waiver. |
+| G-2330 job notices | Mails:2c871233 and cd0fcdb8 concern replaced attempt 9 job `21463e31-93ef-435f-b8b4-21ebf8392513`. The coordinator already released its continuation and marked it `reported`; attempt 11 was running with a new parked check job. Its old log's 32 passing stories and answer guard, with five failed status assertions, supply no complete-gate acceptance. The scope correction was already committed and acknowledged. Both notices needed acknowledgement only, with no bookkeeping bypass, duplicate resume or brief change. |
+| G-2464, G-2467, G-2319 | Program's status retains G-2464's dependency on G-2226's Realm reader claim, G-2467's dependency on the Zone attachment-withdrawal record now owned by G-2728 after the earlier recorder's cancellation, and G-2319's G-2704 prerequisite. No new web action is needed from this status mail. |
+
+All seven supplied mails are acknowledged in durable delivery history by their
+deciding turns, from 2026-10-16 15:56:44 through 16:24:16 UTC. The task event
+supplied no incoming mail. This checkpoint acknowledges their consolidation;
+there is no new mail delivery to acknowledge.
+
+The method's measures and current status were read. Scope remains 68/68 API
+rows proved, with 408 proved and zero pending, not-applicable or missing
+persona cells. These events add no API row proof. The bounded status read
+provided no fresh first-attempt share, attempts-per-landed-task distribution,
+refusal classification or tokens-per-proved-row comparison. The latest
+efficiency report remains 2026-10-13 21:49 UTC; its historical costs are not
+attributed to these events and establish no current efficiency improvement.
+Program's landed shared corrections remove the previously identified common
+harness causes. The remaining decisions admit actual production descendants
+and a reviewed context-only refresh while retaining all proof requirements.
+
+Only this file changes. This checkpoint starts no brief, worker, landing,
+closure, watcher or wait; later deliveries remain for their own event turns.
+
+## Retained checkpoint d29d4b33
+
 Checkpoint d29d4b33-2294-413e-ab10-e198fb9979be consolidates handled events
 task:G-2377:25, mail:efb4f11f-51c0-4619-b67c-f6e5527ea699,
 mail:077063e4-f1db-4571-ae53-489f6ee9d717 and task:G-2226:19.
