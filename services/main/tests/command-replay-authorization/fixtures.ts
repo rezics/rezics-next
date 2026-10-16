@@ -91,7 +91,7 @@ export function initializeReplayFixtures() {
         ['stack:reset', '--', '--profile', 'qa', '--run-id', selfHostedRun], 60_000);
       for (const name of Object.keys(process.env)) if (!(name in savedEnvironment)) delete process.env[name];
       Object.assign(process.env, savedEnvironment);
-      if (!stopped.ok) throw new Error('Replay owner stack cleanup failed');
+      if (!stopped.ok) throw new Error(`Replay owner stack cleanup failed: ${stopped.output.slice(-4000)}`);
     }
   // Stack reset has its own 60-second bound, in addition to owner teardown.
   }, 120_000);
