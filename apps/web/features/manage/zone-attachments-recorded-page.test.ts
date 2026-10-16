@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import answers from '../../../../tests/qa/fixtures/outcomes/zone/list-attached-zones.json';
+import { addressPath } from '../address/path.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { recordedManagementAgent } from '../realm/realm-membership-recorded-page.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
@@ -34,7 +35,9 @@ for (const [persona, visit] of [['owner', 'inventory'], ['operator', 'inventory'
       expect(result.data.complete).toBe(result.data.nextCursor === null);
       for (const item of result.data.items) {
         expect(item.withdraw).toEqual({ method: 'POST', path: `/v1/zones/${item.zone.slice(-36)}/realm-attachment-withdrawals` });
-        expect(item.address.prefix).toBe('/z/');
+        expect(addressPath(`${item.address.prefix}${item.address.key}`)).toMatchObject({
+          lookup: { scope: 'space', key: item.address.key }, surface: 'site', tail: [],
+        });
         seen.push(item.zone);
       }
       cursor = result.data.nextCursor;
