@@ -539,7 +539,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | vinext | 1.0.0-beta.13 | apps/accounts, apps/web |
 | vite | 8.3.4 | apps/about, apps/accounts, apps/web |
 | vitest | 5.0.4 | apps/accounts, apps/web |
-| vscode-jsonrpc | 9.0.3 | apphost |
+| vscode-jsonrpc | 8.2.0 | apphost |
 | webpack | 5.111.1 | apps/accounts, apps/web |
 | wrangler | 4.151.0 | apps/about, apps/accounts, apps/web |
 
@@ -659,6 +659,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task accounts:e2e` | Run the Accounts Playwright journeys against a running Accounts app (ACCOUNTS_URL, default http://127.0.0.1:3004). |
 | `task about:dev` | Run the about site with Astro on 127.0.0.1:4321 (pass -- --port <n>), with a local D1 for the notify form. |
 | `task about:build` | Build the about site into apps/about/dist, the assets directory of its Worker. |
+| `task about:typecheck` | Generate Astro content types and check the about site's Astro and TypeScript sources. |
 | `task about:check` | Check the about site's types (Astro, TypeScript), lint, format and unit tests. |
 | `task about:e2e` | Build the about site, serve it with its Worker and a local D1 on 127.0.0.1:4322, and run the Playwright smoke and axe tests. |
 | `task ui:typecheck` | Type-check Rezics UI. |
