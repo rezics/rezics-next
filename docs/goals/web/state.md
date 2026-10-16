@@ -1,5 +1,39 @@
 # State
 
+Checkpoint 0c519e56-ff59-4d63-8641-fa802e31dd61 consolidates handled events
+task:G-2377:10, task:G-2461:9 and task:G-2338:12. These decisions supersede
+the affected dispositions below; later attempts, rulings and landing results
+retain their own events.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2377 | Task:G-2377:10, committed on main as `b868c084f0`, admits `communities/create-page.tsx`, `i18n/catalogs.ts` and the four exact outcome test/record paths. Claims were reclaimed and attempt 11 resumed. Retain seven implementation commits through `ce6cc89034`, six-persona capture `20261016t123615-eed122`, stories `20261016t132537-a24b34` and gate `run-nrtzq1` as partial evidence; its two reported base guard failures grant no waiver. Integrate the existing production creation entry and eight-locale catalog; prove transition through existing attachment controls, canonical Zone address, existing-Realm entry and uncertain-result recovery with stable keys and no duplicate creation. Record remaining reached requests for all six personas locally, preserve assertions and authority, inspect final phone/desktop stories and finish answer-records validation, zero-miss replay and the complete affected gate including entry/catalog consumers. G-2333 retains publication and G-2381 routing ownership. No surface completion or landing was accepted. Current status already shows later attempt 17 exited; its disposition belongs to its own event, not a duplicate resume here. |
+| G-2461 | Task:G-2461:9 follows the bounded diagnosis in task:G-2461:7: all eight isolated harness files passed in job `bfbc3eb8-cab4-431f-8828-c9e0dfe5c683`, steps 1–8, but complete gate `run-0e9mku` failed after 275.9 seconds of tests and 0.5 seconds of slot wait at `tests/qa/unit/core.test.ts:786`: the QA lease-release test's readiness file was absent. Its automatic isolated retry passed. Program received exact evidence and the correction/continuation question in mail:5fabb069-bc9d-40c4-8530-d650035dbec6. Keep attempt 9 exited pending that ruling; retain recording, answer guard, mapping, 19 stories and applicable inspected images. Existing production claims, canonical selection and separate integration proof remain. No shared harness repair, further gate repetition, exclusion or landing is authorized by this event. |
+| G-2338 | Task:G-2338:12 retains the accepted handoff but establishes no successful landing. Landing gate `run-LShfsn` passed contract/types/lint/AST and selected units, then timed out `web-page-filtering.test.ts` at 7.803 seconds in an eight-process guard batch before stories. The unchanged isolated rerun passed all 14 tests in 3.686 seconds; no product correction is established. Retain the worker's reported 16 passing, inspected stories without treating them as a complete landing gate. Program received guard-scheduling and landing-recovery question mail:4d265129-c729-4bfe-9d8b-e01e1cfd40b6. No lock remained at the decision; current status is conflict. Preserve the brief and quality bar; no duplicate landing, worker rerun, merge, closure or timeout/guard waiver. Program's recovery ruling/result gets its own event. |
+
+All three task events are handled in coordinator history and supplied no mail
+to acknowledge. This checkpoint supplies no new mail; the two Program mails
+above were sent by the deciding turns and are not incoming acknowledgements.
+
+The method's measures and current status were read. Scope remains 68/68 API
+rows proved, with 408 proved and zero pending persona cells; these events
+accept no new completed surface. Web first-attempt share is 58% (82/142),
+today 73% (11/15); attempts per landed task median 3, maximum 25 (G-2237).
+Web tokens are 2161.3M input and 13.5M output, with two sessions unavailable;
+tokens per proved row is unavailable. Status reports 60 fix attempts,
+47 harness job wakes and 238 unclassified findings; retained refusals are
+0 outcome, 14 gate, 0 failing-test finding and 20 other. These are aggregate
+readings, not costs attributable to these three events. The latest efficiency
+report is still 2026-10-13 21:49 UTC, so no current comparison or efficiency
+gain is inferred. Shared QA harness and guard scheduling are the repeated
+causes here: their Program referrals retain passing evidence and stop unchanged
+full-gate/landing retries. Production integration remains G-2377's bounded work.
+
+Only this file changes; this checkpoint starts no brief, worker, landing,
+closure, watcher or wait.
+
+## Retained checkpoint 5e7710ac
+
 Checkpoint 5e7710ac-404a-4beb-bf08-a9f732ca794c consolidates handled events
 task:G-2465:11, task:G-2319:11, task:G-2466:9,
 mail:14bea458-1aae-42f3-96e8-b02c6f6ac544, task:G-2475:8,
