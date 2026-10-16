@@ -23,10 +23,6 @@ Design documents do not claim that a capability or deployment is complete.
 ## Goal protocols and state
 
 - [Goal program](goals/README.md) — Goal ownership, shared-host coordination and convergence; read for orchestration.
-- [API Goal](goals/api/GOAL.md) — API outcome and boundaries; read when working for that Goal.
-- [Later](goals/api/later.md) — Api deferred findings; read before promoting or briefing a related defect.
-- [Retained population checkpoint rebuild](goals/api/seed-rebuild.md) — Retained population checkpoint rebuild; read when its retained preparation or evidence is needed.
-- [API checkpoint](goals/api/state.md) — Api retained decisions and unproved obligations; read for continuation, then check live ledger status.
 - [Goal manager charter](goals/manager.md) — Manager authority and standing policy; read when managing a Goal.
 - [How work is defined, proved and landed](goals/method.md) — Outcome rows and landing criteria; read when defining or proving work.
 - [Program Goal](goals/program/GOAL.md) — Program outcome and boundaries; read when working for that Goal.

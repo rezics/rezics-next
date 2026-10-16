@@ -32,7 +32,7 @@ Change this boundary **before Recipes open publicly**, while retaining the
 current useful behaviour and task APIs where they still earn their existence.
 The implementation should be commissioned as bounded owner changes after its contracts are specified. Opening should depend on replacement API proofs, not merely a new shape
 or successful data conversion. Recipes are first-public-scope work under
-[the API Goal](../goals/api/GOAL.md) and [target architecture §13](target-architecture.md#release-choices-and-unresolved-qualification).
+[target architecture §13](target-architecture.md#release-choices-and-unresolved-qualification).
 
 ## What exists, and what is missing
 

@@ -4,7 +4,11 @@ Use `task goal -- status`, `coordinator status`, `planning` and the current
 briefs for live task disposition and scope. This page retains decisions and
 unverified obligations; it is not an operational run log.
 
-Waves 1 to 3 are on main, and the operations Goal is closed. The program's
+Waves 1 to 3 are on main, and the operations and api Goals are closed. Main's
+confirmation passed all 408 launch cells on 2026-10-16. The api Goal's deferred
+findings and its retained-population checkpoint rebuild procedure are archived
+on `archive/goals` with the Goal. That rebuild is still blocked before a fresh
+checkpoint, and it gates growth checks only, not any row. The program's
 completion still needs these, each owned by an open task in the ledger:
 
 - main's confirmation passes every launch row, including the Realm, Visual Novel

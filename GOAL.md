@@ -17,7 +17,6 @@ the [goal page](docs/product/goal.md) and the
 | Goal | Outcome | Starts |
 | --- | --- | --- |
 | [Program](docs/goals/program/GOAL.md) | Supermanager: the scope, the method and the tool that enforces it, the shared host | Running since 2026-10-13 09:39 UTC |
-| [API](docs/goals/api/GOAL.md) | Every row of the first public scope is proved through the API, for each persona | Running since 2026-10-13 11:11 UTC |
 | [Web](docs/goals/web/GOAL.md) | Every proved row has its surface | Running since 2026-10-13 15:34 UTC: Books is proved, so surfaces start |
 
 `task goal -- status` shows each running Goal's manager session and live tasks.
