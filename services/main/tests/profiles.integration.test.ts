@@ -209,6 +209,7 @@ test('G238: native Agent profiles, credits and library enforce disclosure, autho
       && item.rating.count === 2 && item.rating.mean === 3)).toBe(true);
     expect(authored.items.every(item => Array.isArray(item.types)
       && item.tagline === null && item.completionStatus === null)).toBe(true);
+    const initialRatingAuthority = await deps.profiles.libraryFence(a.principal, person.agent, 'rating.observation.read');
     const ratingReadsBefore = stack.fuseki.queries;
     const ratings = await json<Page<{ value: number; scope: string; id: string; revision: string;
       mainVersion: string; work: { id: string } }>>(await read('/v1/me/ratings?limit=1'));
@@ -241,6 +242,8 @@ test('G238: native Agent profiles, credits and library enforce disclosure, autho
       expectedRevisionHead: rating.revision, value: null, actingSubject: person.agent }, a.token), 201);
     expect((await json<Page<{ id: string; value: number | null; availability: string }>>(await read('/v1/me/ratings'))).items
       .find(item => item.id === rating.id)).toMatchObject({ value: null, availability: 'withdrawn' });
+    // Updating a rating changes its inventory, not this reader's authority.
+    expect(await deps.profiles.libraryFence(a.principal, person.agent, 'rating.observation.read')).toEqual(initialRatingAuthority);
     expect(await json<{ code: string }>(await read(`/v1/me/ratings?cursor=${ratings.nextCursor}`), 409))
       .toMatchObject({ code: 'read_basis_changed' });
     await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {

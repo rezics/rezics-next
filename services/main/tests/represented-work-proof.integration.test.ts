@@ -74,6 +74,13 @@ test('IAM33 partial: represented Work proof binds mandate, grant, actor and gene
     expect(saved.rows[0]).toEqual({ represented_representation_id: repOne,
       represented_grant_id: grantOne, represented_subject_generation: '0',
       represented_principal_epoch: '0' });
+    // The export inventory counter shares this row but grants no authority.
+    // Advancing it must preserve an already admitted unrelated Work command.
+    await pool.query(`UPDATE access.principal
+      SET library_rating_version = library_rating_version + 1 WHERE id = $1`, [principalId]);
+    expect((await pool.query(`SELECT enforcement_epoch, library_rating_version
+      FROM access.principal WHERE id = $1`, [principalId])).rows[0])
+      .toEqual({ enforcement_epoch: '0', library_rating_version: '1' });
     expect(await access.register(original)).toEqual({ ...first, replayed: true });
     expect((await access.claim(first.id, first.requestDigest)).state).toBe('claimed');
     expect((await access.claim(first.id, first.requestDigest)).replayed).toBe(true);
@@ -167,7 +174,9 @@ test('IAM33 partial: represented Work proof binds mandate, grant, actor and gene
     await pool.query('UPDATE access.authority_subject SET active = true WHERE id = $1', [actor]);
     await denyClaim(oldSubject.id, oldSubject.requestDigest);
     const oldPrincipal = await access.register(request());
-    await pool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
+    // Combining a counter update with an authority change cannot skip revocation.
+    await pool.query(`UPDATE access.principal SET active = false,
+      library_rating_version = library_rating_version + 1 WHERE id = $1`, [principalId]);
     await pool.query('UPDATE access.principal SET active = true WHERE id = $1', [principalId]);
     await denyClaim(oldPrincipal.id, oldPrincipal.requestDigest);
 
