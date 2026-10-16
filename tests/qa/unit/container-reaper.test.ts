@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { command } from '../../../scripts/qa/core.ts';
@@ -58,6 +59,7 @@ writeFileSync(process.env.ARGV_FILE, JSON.stringify(['pinned', ...process.argv.s
   const run = (args: string[], labels?: { owner?: string; scope?: string },
     path = `${stubDir}:${dockerShimDirectory()}:${pinnedDir}:${process.env.PATH ?? ''}`) => {
     const env: NodeJS.ProcessEnv = { ...process.env, PATH: path, ARGV_FILE: captured, REZICS_REAL_DOCKER: join(pinnedDir, 'docker') };
+    env.REZICS_REAP_STATE = join(directory, 'state');
     delete env.REZICS_REAP_OWNER;
     delete env.REZICS_REAP_SCOPE;
     delete env.REZICS_REAP_SCOPES;
@@ -232,8 +234,10 @@ test('removing a scope with no marker makes no Docker call', () => {
 
 test('a shim run records every scope marker and removal deletes the container and the marker', () => {
   const directory = mkdtempSync(join(root, '.temp', 'reap-marked-'));
-  const state = reapStateDirectory('9:8');
-  if (!state) throw new Error('owner 9:8 is not a state directory name');
+  // Fake dead owners must not share the orphan sweep's state directory.
+  const state = join(directory, 'state');
+  const parent = randomUUID();
+  const child = randomUUID();
   const bin = join(directory, 'bin');
   mkdirSync(bin);
   const captured = join(directory, 'argv.json');
@@ -243,47 +247,51 @@ ${dockerOutput}import { appendFileSync, writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 if (process.env.ARGV_FILE) writeFileSync(process.env.ARGV_FILE, JSON.stringify(args));
 appendFileSync(process.env.LOG_FILE, JSON.stringify(args) + '\\n');
-if (args[0] === 'ps') output('marked-container');
+if (args[0] === 'ps' && args.at(-1).startsWith('label=rezics.reap-scope.')) output('marked-container');
 process.exit(0);
 `);
   chmodSync(join(bin, 'docker'), 0o755);
   const savedPath = process.env.PATH;
   const savedState = process.env.REZICS_REAP_STATE;
+  const savedLog = process.env.LOG_FILE;
   try {
     const env: NodeJS.ProcessEnv = {
       ...process.env, PATH: `${bin}:${dockerShimDirectory()}:${process.env.PATH ?? ''}`,
-      ARGV_FILE: captured, LOG_FILE: log, REZICS_REAP_OWNER: '9:8', REZICS_REAP_SCOPES: 'parent,shard-a',
+      ARGV_FILE: captured, LOG_FILE: log, REZICS_REAP_OWNER: '9:8', REZICS_REAP_SCOPES: `${parent},${child}`,
       REZICS_REAP_STATE: state,
     };
     delete env.REZICS_REAP_SCOPE;
     const run = spawnSync(shim, ['run', '--rm', 'alpine'], { env, encoding: 'utf8' });
     expect(run.status, run.stderr).toBe(0);
     expect(JSON.parse(readFileSync(captured, 'utf8'))).toEqual(['run', '--label', `${reapOwnerLabel}=9:8`,
-      '--label', `${reapScopeLabel}.parent=1`, '--label', `${reapScopeLabel}.shard-a=1`, '--rm', 'alpine']);
-    expect(readFileSync(join(state, 'parent'), 'utf8')).toBe('');
-    expect(readFileSync(join(state, 'shard-a'), 'utf8')).toBe('');
+      '--label', `${reapScopeLabel}.${parent}=1`, '--label', `${reapScopeLabel}.${child}=1`, '--rm', 'alpine']);
+    expect(readFileSync(join(state, parent), 'utf8')).toBe('');
+    expect(readFileSync(join(state, child), 'utf8')).toBe('');
     expect(existsSync(join(state, '.owner'))).toBe(true);
     process.env.PATH = `${bin}:${savedPath ?? ''}`;
     process.env.REZICS_REAP_STATE = state;
     process.env.LOG_FILE = log;
-    expect(removeScopedContainers('parent')).toBe(true);
+    expect(removeScopedContainers(parent)).toBe(true);
+    // Other harness processes sweep while this scope waits for dockerd.
+    sweepOrphanContainers();
     settleReap();
-    expect(removeScopedContainers('parent')).toBe(false);
-    expect(removeScopedContainers('shard-a')).toBe(true);
+    expect(removeScopedContainers(parent)).toBe(false);
+    expect(removeScopedContainers(child)).toBe(true);
     settleReap();
-    expect(removeScopedContainers('shard-a')).toBe(false);
+    expect(removeScopedContainers(child)).toBe(false);
     const calls = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as string[]);
     expect(calls.filter(call => call[0] === 'rm')).toEqual([
       ['rm', '-f', 'marked-container'], ['rm', '-f', 'marked-container'],
       ['rm', '-f', 'marked-container'], ['rm', '-f', 'marked-container'],
     ]);
-    expect(existsSync(join(state, 'parent'))).toBe(false);
-    expect(existsSync(join(state, 'shard-a'))).toBe(false);
+    expect(existsSync(join(state, parent))).toBe(false);
+    expect(existsSync(join(state, child))).toBe(false);
   } finally {
     process.env.PATH = savedPath;
     if (savedState === undefined) delete process.env.REZICS_REAP_STATE;
     else process.env.REZICS_REAP_STATE = savedState;
-    delete process.env.LOG_FILE;
+    if (savedLog === undefined) delete process.env.LOG_FILE;
+    else process.env.LOG_FILE = savedLog;
     rmSync(directory, { recursive: true, force: true });
     rmSync(state, { recursive: true, force: true });
   }
@@ -318,27 +326,31 @@ process.exit(0);
 
 test('a timed-out child removes only its scope and leaves a sibling container', () => {
   const directory = mkdtempSync(join(root, '.temp', 'reap-scope-'));
-  const state = reapStateDirectory('9:8');
-  if (!state) throw new Error('owner 9:8 is not a state directory name');
+  const state = join(directory, 'state');
+  const scope = randomUUID();
+  const savedState = process.env.REZICS_REAP_STATE;
   mkdirSync(state, { recursive: true });
-  writeFileSync(join(state, 'shard-a'), '');
+  writeFileSync(join(state, scope), '');
   const stub = dockerStub(directory, {
-    [`label=${reapScopeLabel}.shard-a`]: 'timed-out',
+    [`label=${reapScopeLabel}.${scope}`]: 'timed-out',
     [`label=${reapScopeLabel}.shard-b`]: 'live-sibling',
     [`label=${reapOwnerLabel}=9:8`]: 'timed-out\nlive-sibling',
   });
   try {
+    process.env.REZICS_REAP_STATE = state;
     stub.use(() => {
-      reapChildScope({ REZICS_REAP_OWNER: '9:8', REZICS_REAP_SCOPE: 'shard-a' });
+      reapChildScope({ REZICS_REAP_OWNER: '9:8', REZICS_REAP_SCOPE: scope });
       const calls = readFileSync(stub.log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as string[]);
-      expect(calls.filter(call => call[0] === 'ps')).toEqual([['ps', '-aq', '--filter', `label=${reapScopeLabel}.shard-a`]]);
+      expect(calls.filter(call => call[0] === 'ps')).toEqual([['ps', '-aq', '--filter', `label=${reapScopeLabel}.${scope}`]]);
       expect(calls.filter(call => call[0] === 'rm')).toEqual([['rm', '-f', 'timed-out']]);
       expect(calls.flat()).not.toContain('live-sibling');
       settleReap();
-      reapChildScope({ REZICS_REAP_OWNER: '9:8', REZICS_REAP_SCOPE: 'shard-a' });
+      reapChildScope({ REZICS_REAP_OWNER: '9:8', REZICS_REAP_SCOPE: scope });
     });
-    expect(existsSync(join(state, 'shard-a'))).toBe(false);
+    expect(existsSync(join(state, scope))).toBe(false);
   } finally {
+    if (savedState === undefined) delete process.env.REZICS_REAP_STATE;
+    else process.env.REZICS_REAP_STATE = savedState;
     rmSync(directory, { recursive: true, force: true });
     rmSync(state, { recursive: true, force: true });
   }
