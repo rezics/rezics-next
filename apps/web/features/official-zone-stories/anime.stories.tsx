@@ -90,7 +90,7 @@ export const EnglishDesktop: Story = {
       panelNames: ['Format not recorded', 'Year not recorded', 'Episode count not recorded', 'Status not recorded'],
       sibling: 'Open the Manga Zone',
     });
-    await captureCatalogueStory(canvasElement, 'anime-en-desktop');
+    await captureCatalogueStory('EnglishDesktop');
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'Clear year' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Newest years' })).toBeVisible();
@@ -106,7 +106,7 @@ export const EnglishPhone: Story = {
       panelNames: ['Format not recorded', 'Year not recorded', 'Episode count not recorded', 'Status not recorded'],
       sibling: 'Open the Manga Zone',
     });
-    await captureCatalogueStory(canvasElement, 'anime-en-phone');
+    await captureCatalogueStory('EnglishPhone');
   },
 };
 
@@ -121,7 +121,7 @@ export const JapaneseDesktop: Story = {
       panelNames: ['形式は記録されていません', '年は記録されていません', '話数は記録されていません', '状態は記録されていません'],
       sibling: '漫画ゾーンを開く',
     });
-    await captureCatalogueStory(canvasElement, 'anime-ja-desktop');
+    await captureCatalogueStory('JapaneseDesktop');
   },
 };
 
@@ -136,7 +136,7 @@ export const JapanesePhone: Story = {
       panelNames: ['形式は記録されていません', '年は記録されていません', '話数は記録されていません', '状態は記録されていません'],
       sibling: '漫画ゾーンを開く',
     });
-    await captureCatalogueStory(canvasElement, 'anime-ja-phone');
+    await captureCatalogueStory('JapanesePhone');
   },
 };
 
@@ -148,6 +148,6 @@ export const BoundedYear: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByText(/first 200 Works in the current order/)).toBeVisible();
     await fits();
-    await captureCatalogueStory(canvasElement, 'anime-bounded');
+    await captureCatalogueStory('BoundedYear');
   },
 };

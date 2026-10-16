@@ -68,22 +68,14 @@ export function CatalogueZoneFrame({ slug, pkg, locale, children }: {
 
 export const catalogueLink = LocalizedLink;
 
-/** Saves the settled story under the worktree `.temp/` for screen review. The path is relative to the story file. */
-export async function captureCatalogueStory(canvas: HTMLElement, name: string) {
-  const { page } = await import('vitest/browser');
+/** Use the Node command for optional review evidence, with the same export name as the gate. */
+export async function captureCatalogueStory(exportName: string) {
+  const { commands } = await import('vitest/browser');
   await document.fonts.ready;
-  const shot = async (element: Element, suffix: string) => {
-    element.scrollIntoView({ block: 'center', inline: 'nearest' });
-    await page.screenshot({
-      element,
-      path: `../../../../.temp/anime-manga-zones/stories/${name}${suffix}.png`,
-    });
-  };
-  await shot(canvas, '');
-  const card = canvas.querySelector('[data-catalogue-card]');
-  const panel = canvas.querySelector('[data-catalogue-panel]');
-  const footer = canvas.querySelector('footer');
-  if (card) await shot(card, '-card');
-  if (panel) await shot(panel, '-panel');
-  if (footer) await shot(footer, '-footer');
+  try {
+    await commands.captureStoryScreenshot(exportName);
+  } catch (error) {
+    // Evidence transport is optional, like the Node command's filesystem writes.
+    console.warn(`Warning: story screenshot ${exportName}: ${String(error).replaceAll(/[\r\n]+/g, ' ')}`);
+  }
 }
