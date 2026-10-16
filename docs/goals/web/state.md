@@ -1,5 +1,40 @@
 # State
 
+Checkpoint c5672745-bd50-42a6-a534-b526c5e5d1f1 consolidates handled events
+task:G-2377:18, task:G-2327:14, task:G-2226:16, task:G-2331:14,
+mail:4582488c-9097-40f1-868e-89a25da75074 and task:G-2226:18.
+These decisions supersede the affected dispositions below; later attempts,
+rulings and landing results retain their own events.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2377 | Task:G-2377:18, committed as `61210f03a3`, admits the exact production attachment route to share its existing reader-to-controls composition. Claims were reclaimed and attempt 19 resumed. Retain fifteen implementation commits through `1aada3d33e`, outcome runs `20261016t135941-0ddd7d` and `20261016t141115-58361f`, answer validation, ten mapping tests, 32 stories, i18n checks and inspected phone/desktop captures as partial evidence. Complete gate `run-iGv4pl` passed through 120 affected units, then timed out in page-filtering; isolated pass `20261016t142841-47dbd1` supplies no waiver. Prove transition into the actual attachment controls, canonical Zone address, existing-Realm entry and supported stable-key recovery without duplicate creation. Preserve recorded `realm: null`: it proves no published Browse/Works completion; G-2333/G-2381 retain publication/routing ownership. Finish reached six-persona recording, answer validation, zero-miss replay, final inspection and complete affected canonical gate including route consumers. This event accepted no landing; the currently running later landing belongs to its own event and must not be restarted. |
+| G-2327 | Task:G-2327:14, committed as `b092f7f917`, admitted nine exact production/recording/structural-evidence paths, reclaimed claims and accepted the handoff through `b15d50b2f1` for gated landing with review. Preserve concurrent G-2331/G-2704 inventory entries, production identities/disclosure/problems, assertions and eight locales; integration remains separate six-persona proof outside the surface selector. Mail:4582488c confirms the accepted head `0d8b10bdb1` is on main and the ledger is verified and closed at 2026-10-16 14:49:32 UTC. Integrated gate `run-s4TfYy` passed all stages with only the reproduced main host-admission failure nonblocking. The failure mail and repeated `close G-2327 verified` command arose after verification while rebasing obsolete G-2475 brief commit `494adbcc5b`; closure is established by the ledger, not a successful finalization command. Program received repair request mail:599bbd66-494b-4e90-935d-0493f28a83fa. No worker continuation, duplicate landing, obsolete snapshot retry or brief change remains for this task. |
+| G-2226 | Task:G-2226:16, committed as `6c99078199`, admitted five exact web paths, corrected surface selection and resumed attempt 17 to remove five out-of-claim tooling changes. Task:G-2226:18 confirms cleanup `1f4160f796` matches current-main tooling and leaves the worker exited, partial, under the existing brief. Program received adoption question mail:cca858e3-5d47-4908-b721-e57cdd248059 and exact unchanged blockers in mail:499e063e-a7a7-4ecd-90a8-9d1e610dc95b. Canonical gate `run-jxB62P` passed contract/types/lint/AST, then failed container-reaper nested SIGTERM output, memory-admission restore timeout and host-admission's added `cpu: false` (also on pinned main); guards/stories were not reached. The prior retained-preflight wide-QA refusal remains visible. Retain recording `20261016t124601-4e6a0b`, six-persona run `20261016t144612-094eb4` (6 tests/845 assertions), 26 mapping tests/2305 assertions with exact refusal and zero-miss replay, answer validation, passing shared consumers and prior 26-story inspection `20261016t143650-b45b34` as partial evidence. Candidate-tooling gate `run-XIEkDt` is not canonical acceptance. Await Program's tooling resolution/direction, then finish the complete current-main affected gate and resulting final inspection; no unchanged retry, shared-tooling patch, assertion waiver or landing. |
+| G-2331 | Task:G-2331:14, committed as `12fc47a39c`, admits exact outcome recording paths and only this page's scope-link metadata projection entry in the continuation inventory. Preserve concurrent entries and unchanged answers/assertions; integration remains separate from surface selection. Retain six commits through `d0fdc594d1`, capture `20261016t121254-a4f07a`, 17 mapping tests, 36 inspected phone/desktop stories across eight locales `20261016t135640-fa1e06`, targeted guards and guard-only `run-rUF7dM` as partial evidence. Complete gate `run-z5DE3a` failed memory-admission startup clearance at line 270 (child exit 1 rather than 0); tests used 302.470 seconds and 0.399 seconds slot wait, while the main comparison passed. Program received correction/scheduling question mail:f98fedc2-2d9b-4e17-b979-4847ab2abe31. Keep exited until Program supplies correction and continuation; then finish the complete canonical affected gate. No unchanged full-gate retry, harness edit, affinity bypass, relaxed timeout/assertion, exclusion or landing. |
+
+All six events are handled in coordinator history. The supplied mail was
+acknowledged by its deciding turn at 2026-10-16 14:52:07 UTC; its durable
+acknowledgement result was confirmed here. The task events supplied no mail,
+and this checkpoint supplies no new mail to acknowledge.
+
+The method's measures and available current status were read. Scope remains
+68/68 API rows proved, with 408 proved and zero pending persona cells;
+G-2327's verified surface adds no API row. Fresh attempt/token/refusal measures
+were not supplied during the bounded status read. Retain the preceding
+checkpoint's aggregate readings as historical, not costs of these events.
+The latest efficiency report remains 2026-10-13 21:49 UTC; it supplies no
+current tokens-per-proved-row comparison or demonstrated efficiency gain.
+Repeated work here comes from shared test admission/lifecycle tooling and
+post-merge finalization, with bounded production integration still required
+in G-2377. The decisions refer shared causes to Program, preserve applicable
+passing evidence and stop unchanged retries without waiving canonical gates.
+
+Only this file changes; this checkpoint starts no brief, worker, landing,
+closure, watcher or wait.
+
+## Retained checkpoint 0c519e56
+
 Checkpoint 0c519e56-ff59-4d63-8641-fa802e31dd61 consolidates handled events
 task:G-2377:10, task:G-2461:9 and task:G-2338:12. These decisions supersede
 the affected dispositions below; later attempts, rulings and landing results
