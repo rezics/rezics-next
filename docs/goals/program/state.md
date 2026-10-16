@@ -16,8 +16,12 @@ completion criteria are met. The program stays open for the maintainer's
 acceptance findings rather than closing at once.
 
 Efficiency readings on 2026-10-16: 13.16 M worker input per main landing for
-03:00–15:00, then 7.65 M after the gate, harness and watcher repairs landed
-(15:45–19:00), with failed landing surface gates down from six to none.
+03:00–15:00, 7.65 M after the gate, harness and watcher repairs landed
+(15:45–19:00), and 3.57 M while closing (19:00–22:00). Failed landing surface
+gates fell from six to none. The largest remaining cost was discovering stale
+test premises one run at a time, so workers now fix independent failures from
+one run together. Confirmation stacks that lose a dependency service mid-run
+left six catalogue cells unrun twice; that repair is open.
 
 Shared capabilities are implemented once ([platform thesis](../../product/platform-thesis.md)).
 The program inventories, across every in-scope vertical and source, the shared
