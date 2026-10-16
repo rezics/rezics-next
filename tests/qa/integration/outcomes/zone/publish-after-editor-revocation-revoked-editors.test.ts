@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { readRevokedEditor, readRevokedPreview, readRevokedPublic } from '../../../../../apps/web/features/zone-editor/zone-revoked-editor-recorded-page.ts';
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
 import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
 import { readManagementAddress, suppliedManagementSite, zoneAuthoringFromAddress, zoneLifecycleFromAddress, zoneManagementFrameFromReads } from '../../../../../apps/web/features/zone-editor/authoring-reads.ts';
@@ -112,7 +113,38 @@ function fixture(name: PersonaName) {
   sessions = context.sessions;
   return context.site;
 }
+let currentPersona: PersonaName;
+const visitCounts = new Map<string, number>();
+async function recordedEditorVisit(site: Site, person: PersonaSession, subject: string, prefix: string) {
+  const key = `${currentPersona}-${prefix}`;
+  const count = visitCounts.get(key) ?? 0; visitCounts.set(key, count + 1);
+  prefix = count ? `${prefix}-${count}` : prefix;
+  const parts = new Map<string, number>();
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    const path = url.pathname.replace(/^\/api\/main/, "") + url.search;
+    const part = path.includes("addresses/resolve") ? "address" : path.includes("showcase-editor") ? "editor"
+      : path.includes("navigation") ? "navigation" : path.includes("configuration") ? "configuration" : "zone";
+    const seen = parts.get(part) ?? 0; parts.set(part, seen + 1);
+    return recording.session(currentPersona, person)(`${prefix}-${part}${seen ? `-${seen}` : ""}`, init?.method ?? "GET", path);
+  }) as typeof fetch;
+  const main = browserMainApi("https://record.invalid", { fetcher });
+  const frame = await readRevokedEditor(main, site.zone.slice(-36), subject);
+  await readRevokedPreview(main, frame, subject);
+}
 async function deny(site: Site, person: PersonaSession, subject: string, status = 403) {
+  if (person.actingSubject) await recordedEditorVisit(site, person, subject, 'revoked');
+  if (person.accountId === sessions[currentPersona].accountId) {
+    const key = `${currentPersona}-prior`, count = visitCounts.get(key) ?? 0; visitCounts.set(key, count + 1);
+    const transport = (anonymous: boolean): typeof fetch => (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input)), path = url.pathname.replace(/^\/api\/main/, '') + url.search;
+      const part = path.includes('addresses/resolve') ? 'address' : path.includes('showcase-editor') ? 'editor'
+        : path.includes('/routes') ? 'route' : anonymous ? 'presentation' : 'personal-presentation';
+      return recording.session(currentPersona, anonymous ? sessions.visitor : person)(`prior${count ? `-${count}` : ''}-${part}`, init?.method ?? 'GET', path);
+    }) as typeof fetch;
+    await readRevokedPublic(browserMainApi('https://record.invalid', { anonymous: true, fetcher: transport(true) }),
+      browserMainApi('https://record.invalid', { fetcher: transport(false) }), site.space.slice(-36), person.actingSubject ?? undefined);
+  }
   const readStatus = person.actingSubject ? 404 : 401;
   await answer(person.main('GET', `/v1/content-revisions/${site.later.revisionId}?${acting(subject)}`), readStatus);
   await answer(person.main('GET', `${site.root}/showcase-editor?${acting(subject)}`), readStatus);
@@ -132,6 +164,7 @@ async function previewRetained(site: Site, person: PersonaSession, subject: stri
   return exact.reference.provenance;
 }
 async function recoveredEditor(site: Site, person: PersonaSession, subject: string) {
+  await recordedEditorVisit(site, person, subject, 'restored');
   const editor = await answer<{ draft: { revisionId: string; document: DocumentSnapshot } }>(
     person.main('GET', `${site.root}/showcase-editor?${acting(subject)}`));
   expect(editor.draft).toMatchObject({ revisionId: site.later.revisionId, document: site.laterDocument });
@@ -153,6 +186,7 @@ async function competingPublication(site: Site, owner: PersonaSession, subject: 
   // Both commands select the same observed head. Delivering the second after
   // the winner proves stale refusal through HTTP; the owner regression controls
   // the separate post-pin ordering without relying on network timing.
+  await recordedEditorVisit(site, owner, subject, 'stale');
   const staleBody = await publicationBody(site, subject), staleKey = randomUUID(), winnerKey = randomUUID();
   const winnerBody = { ...staleBody, pages: [{ page: site.page, variantId, revisionId: competing.revisionId,
     byteDigest: competing.byteDigest, contentEpoch: competing.sourcePosition.dataEpoch }] };
@@ -160,7 +194,7 @@ async function competingPublication(site: Site, owner: PersonaSession, subject: 
     'POST', `${site.root}/site-publications`, winnerBody, winnerKey), 201);
   expect(winner.replayed).toBe(false);
   expect(winner.revision).not.toBe(staleBody.expectedHead);
-  await answer(owner.main('POST', `${site.root}/site-publications`, staleBody, staleKey), 409)
+  await answer(recording.session(currentPersona, owner)('stale-publication', 'POST', `${site.root}/site-publications`, staleBody, staleKey), 409)
     .then(problem => expect(problem).toMatchObject({ code: 'stale_zone_head' }));
   const bundle = await answer<{ page: { reference: Exact['reference']; document: DocumentSnapshot } }>(
     sessions.visitor.main('GET', `${site.root}/routes?path=%2F`));
@@ -181,9 +215,9 @@ async function competingPublication(site: Site, owner: PersonaSession, subject: 
 
   const recoveryBody = await publicationBody(site, subject), recoveryKey = randomUUID();
   expect(recoveryBody.expectedHead).toBe(winner.revision);
-  const recovery = await answer<{ revision: string; receipt: string; replayed: boolean }>(owner.main(
-    'POST', `${site.root}/site-publications`, recoveryBody, recoveryKey), 201);
-  const retry = await answer(owner.main('POST', `${site.root}/site-publications`, recoveryBody, recoveryKey));
+  const recovery = await answer<{ revision: string; receipt: string; replayed: boolean }>(recording.session(currentPersona, owner)(
+    'restored-publication', 'POST', `${site.root}/site-publications`, recoveryBody, recoveryKey), 201);
+  const retry = await answer(recording.session(currentPersona, owner)('restored-publication-retry', 'POST', `${site.root}/site-publications`, recoveryBody, recoveryKey));
   expect(retry).toEqual({ ...recovery, replayed: true });
   const final = await answer<{ page: { reference: Exact['reference']; document: DocumentSnapshot } }>(
     sessions.visitor.main('GET', `${site.root}/routes?path=%2F`));
@@ -326,6 +360,7 @@ async function within<T>(milliseconds: number, part: string, run: () => Promise<
 }
 
 async function qualify(name: PersonaName, proof: () => Promise<void>) {
+  currentPersona = name;
   const started = Date.now();
   let proofMs = 0, visitStarted = 0;
   try {
