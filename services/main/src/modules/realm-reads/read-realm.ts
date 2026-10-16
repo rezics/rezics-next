@@ -14,7 +14,9 @@ export interface RealmBasis { id: string; space: string; revision: string;
   visibility: RealmVisibility; reviewMode: RealmReviewMode; policyRevision: string | null;
   history: RealmHistory }
 
-async function readRealmDisclosure(session: WorkReadSession, realm: string, revision: string) {
+// Container reads select their head; a join teaser also carries profile fields
+// and retains the whole-record disclosure check when no revision is selected.
+async function readRealmDisclosure(session: WorkReadSession, realm: string, revision?: string) {
   if (!hasDisclosure(session.deps.environment)) throw new WorkReadUnavailable('Realm disclosure is unavailable');
   const read = async () => (await discloseInventory(session.deps.environment,
     [{ owner: 'graph', resource: realm, component: 'record', revision }], session.viewer, 'read'))[0];
