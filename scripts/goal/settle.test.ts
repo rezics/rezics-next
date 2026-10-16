@@ -16,45 +16,55 @@ const fixtures: { directory: string; scope: ReturnType<typeof fixtureProcessScop
 
 test('pump confirmation requires a newer non-document commit, the interval, and no live run; zero disables it', () => {
   const f = fixture();
-  const now = Date.parse('2026-10-13T12:00:00Z');
-  let starts = 0;
-  const options = { repo: f.directory, stateDir: f.state, now, spawn: () => { starts++; return process.pid; } };
-  const confirmed = { version: 1, runId: 'baseline', atCommit: f.task.base,
-    startedAt: new Date(now - 91 * 60_000).toISOString(), recordedAt: new Date(now - 90 * 60_000).toISOString(), outcomes: [] };
-  writeFileSync(join(f.state, 'confirmed.json'), JSON.stringify(confirmed));
-  const git = (...args: string[]) => {
-    const result = spawnSync('git', args, { cwd: f.directory, encoding: 'utf8' });
-    expect(result.status, result.stderr).toBe(0);
-    return result.stdout.trim();
-  };
-  expect(scheduleConfirmation(options)).toBe(false);
-  mkdirSync(join(f.directory, 'docs'));
-  writeFileSync(join(f.directory, 'docs/readme.md'), 'Documentation\n');
-  git('add', 'docs'); git('commit', '-qm', 'Documentation only');
-  expect(scheduleConfirmation(options)).toBe(false);
-  writeFileSync(join(f.directory, 'code.ts'), 'export const value = 1;\n');
-  git('add', 'code.ts'); git('commit', '-qm', 'Code');
-  writeFileSync(join(f.state, 'confirm-last-start'), new Date(now - 89 * 60_000).toISOString());
-  expect(scheduleConfirmation(options)).toBe(false);
-  writeFileSync(join(f.state, 'confirm-last-start'), new Date(now - 91 * 60_000).toISOString());
-  writeFileSync(join(f.state, 'confirm-interval-minutes'), '0\n');
-  expect(scheduleConfirmation(options)).toBe(false);
-  writeFileSync(join(f.state, 'confirm-interval-minutes'), '120\n');
-  expect(scheduleConfirmation(options)).toBe(false);
-  writeFileSync(join(f.state, 'confirm-interval-minutes'), '30\n');
-  expect(scheduleConfirmation(options)).toBe(true);
-  expect(starts).toBe(1);
-  expect(scheduleConfirmation({ ...options, now: now + 120 * 60_000 })).toBe(false);
-  const lock = join(f.state, 'confirm.lock');
-  releaseDirectoryLease(lock, readDirectoryLease(lock)!.token!, process.pid);
-  mkdirSync(lock);
-  writeFileSync(join(lock, 'identity.json'), JSON.stringify({ pid: 2147483647, token: 'dead' }));
-  // A dead run does not defeat the interval or block a later eligible pass.
-  expect(scheduleConfirmation({ ...options, now: now + 31 * 60_000 })).toBe(true);
-  expect(starts).toBe(2);
-  releaseDirectoryLease(lock, readDirectoryLease(lock)!.token!, process.pid);
-  writeFileSync(join(f.state, 'confirmed.json'), JSON.stringify({ ...confirmed, atCommit: git('rev-parse', 'main') }));
-  expect(scheduleConfirmation({ ...options, now: now + 120 * 60_000 })).toBe(false);
+  const previousSettings = process.env.GOAL_SETTINGS_DIRECTORY;
+  process.env.GOAL_SETTINGS_DIRECTORY = join(f.directory, '.goalctl');
+  const interval = (minutes: number) => writeFileSync(join(f.directory, '.goalctl/settings.user.json'),
+    JSON.stringify({ version: 1, confirmIntervalMinutes: minutes }));
+  try {
+    interval(90);
+    const now = Date.parse('2026-10-13T12:00:00Z');
+    let starts = 0;
+    const options = { repo: f.directory, stateDir: f.state, now, spawn: () => { starts++; return process.pid; } };
+    const confirmed = { version: 1, runId: 'baseline', atCommit: f.task.base,
+      startedAt: new Date(now - 91 * 60_000).toISOString(), recordedAt: new Date(now - 90 * 60_000).toISOString(), outcomes: [] };
+    writeFileSync(join(f.state, 'confirmed.json'), JSON.stringify(confirmed));
+    const git = (...args: string[]) => {
+      const result = spawnSync('git', args, { cwd: f.directory, encoding: 'utf8' });
+      expect(result.status, result.stderr).toBe(0);
+      return result.stdout.trim();
+    };
+    expect(scheduleConfirmation(options)).toBe(false);
+    mkdirSync(join(f.directory, 'docs'));
+    writeFileSync(join(f.directory, 'docs/readme.md'), 'Documentation\n');
+    git('add', 'docs'); git('commit', '-qm', 'Documentation only');
+    expect(scheduleConfirmation(options)).toBe(false);
+    writeFileSync(join(f.directory, 'code.ts'), 'export const value = 1;\n');
+    git('add', 'code.ts'); git('commit', '-qm', 'Code');
+    writeFileSync(join(f.state, 'confirm-last-start'), new Date(now - 89 * 60_000).toISOString());
+    expect(scheduleConfirmation(options)).toBe(false);
+    writeFileSync(join(f.state, 'confirm-last-start'), new Date(now - 91 * 60_000).toISOString());
+    interval(0);
+    expect(scheduleConfirmation(options)).toBe(false);
+    interval(120);
+    expect(scheduleConfirmation(options)).toBe(false);
+    interval(30);
+    expect(scheduleConfirmation(options)).toBe(true);
+    expect(starts).toBe(1);
+    expect(scheduleConfirmation({ ...options, now: now + 120 * 60_000 })).toBe(false);
+    const lock = join(f.state, 'confirm.lock');
+    releaseDirectoryLease(lock, readDirectoryLease(lock)!.token!, process.pid);
+    mkdirSync(lock);
+    writeFileSync(join(lock, 'identity.json'), JSON.stringify({ pid: 2147483647, token: 'dead' }));
+    // A dead run does not defeat the interval or block a later eligible pass.
+    expect(scheduleConfirmation({ ...options, now: now + 31 * 60_000 })).toBe(true);
+    expect(starts).toBe(2);
+    releaseDirectoryLease(lock, readDirectoryLease(lock)!.token!, process.pid);
+    writeFileSync(join(f.state, 'confirmed.json'), JSON.stringify({ ...confirmed, atCommit: git('rev-parse', 'main') }));
+    expect(scheduleConfirmation({ ...options, now: now + 120 * 60_000 })).toBe(false);
+  } finally {
+    if (previousSettings === undefined) delete process.env.GOAL_SETTINGS_DIRECTORY;
+    else process.env.GOAL_SETTINGS_DIRECTORY = previousSettings;
+  }
 });
 
 function fixture(result = 'done', kind: Task['kind'] = 'tooling') {
@@ -93,7 +103,9 @@ function fixture(result = 'done', kind: Task['kind'] = 'tooling') {
       startedAt: new Date().toISOString() }] };
   const ledgerPath = join(state, 'ledger.json');
   // Settlement fixtures exercise landing; scheduled confirmation has its own fixture below.
-  writeFileSync(join(state, 'confirm-interval-minutes'), '0\n');
+  const settings = join(directory, '.goalctl');
+  mkdirSync(settings);
+  writeFileSync(join(settings, 'settings.user.json'), JSON.stringify({ version: 1, confirmIntervalMinutes: 0 }));
   const save = (ledger: Ledger) => writeFileSync(ledgerPath, JSON.stringify(ledger));
   save({ tasks: { [task.id]: task }, goals: { program: { manager: 'fixture-manager', startedAt: new Date().toISOString() } } });
   const bin = join(directory, '.temp/bin');
@@ -129,7 +141,7 @@ function fixture(result = 'done', kind: Task['kind'] = 'tooling') {
   writeFileSync(join(run, 'review-000/findings.json'), JSON.stringify({ findings: [] }));
   const env = { ...process.env, ...scope.env, PATH: `${bin}:${process.env.PATH}`, GOAL_ID: 'program', GOAL_MEMORY_FLOOR_GIB: '0',
     GOAL_MAX_WORKERS: '25', GOAL_CODEX_HOME: join(directory, '.temp/codex'), GOAL_MEMINFO_FILE: join(directory, '.temp/meminfo'),
-    GOAL_USAGE_FILE: join(directory, '.temp/usage.json'), GOAL_UNIT_GATE_SCOPE: 'affected', GOAL_GATE_LANES: '25' };
+    GOAL_USAGE_FILE: join(directory, '.temp/usage.json'), GOAL_UNIT_GATE_SCOPE: 'affected', GOAL_GATE_LANES: '25', GOAL_SETTINGS_DIRECTORY: settings };
   writeFileSync(env.GOAL_MEMINFO_FILE, 'MemAvailable: 67108864 kB\n');
   const execute = async (args: string[], source = false) => {
     const child = Bun.spawn([process.execPath, ...source ? ['-e', args[0]!] : [join(import.meta.dir, 'goalctl.ts'), ...args]],

@@ -1,6 +1,7 @@
 import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, type Ledger, isClaudeCode, isCodex, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
 import { root, withLedger, briefGoal, briefClaimConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, preserveTaskOutputs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH, REGENERATION_COMMIT_SUBJECT } from './ledger.ts';
 import { pathToFileURL } from 'node:url';
+import { drainManagerCommits } from './manager-commit.ts';
 import { join, resolve, basename, relative, dirname, posix } from 'node:path';
 import { readFileSync, existsSync, mkdirSync, writeFileSync, readdirSync, readlinkSync, renameSync } from 'node:fs';
 import { parseBrief, validateBrief, mechanismSectionErrors, areaConflicts, validGoalSlug, goalFile, GOALS_DIR, HISTORY_EXEMPT, nextTaskId, goalBriefFile } from './briefs.ts';
@@ -718,6 +719,7 @@ export async function closeTasks(ids: string[], outcome: string): Promise<void> 
     await withLedger(current => {
       for (const note of archiveClosedBriefs(current, ids.map(id => taskOf(current, id)))) console.log(note);
     });
+    await drainManagerCommits(root, stateDir, process.env.GOAL_ID);
   }
 }
 
@@ -795,13 +797,22 @@ export async function startGoal(slug: string, args: string[]): Promise<void> {
 export async function closeGoal(slug: string, flags: Set<string>): Promise<number> {
   const caller = process.env.GOAL_ID;
   if (caller && caller !== slug) throw new Error(`Goal ${slug} is not this manager's (GOAL_ID is ${caller})`);
-  return withLedger(ledger => {
+  if (!flags.has('--dry-run')) {
+    await withLedger(ledger => {
+      const goal = ledger.goals?.[slug];
+      if (!goal || goal.closedAt) throw new Error(`Goal ${slug} is not active`);
+      const tasks = Object.values(ledger.tasks).filter(task => task.goal === slug);
+      if (tasks.every(task => ['verified', 'cancelled'].includes(task.state)))
+        for (const note of archiveClosedBriefs(ledger, tasks)) console.log(note);
+    });
+    await drainManagerCommits(root, stateDir, slug);
+  }
+  const result = await withLedger(ledger => {
     const goal = ledger.goals?.[slug];
     if (!goal || goal.closedAt) throw new Error(`Goal ${slug} is not active`);
     const tasks = Object.values(ledger.tasks).filter(task => task.goal === slug);
     const problems = tasks.filter(task => !['verified', 'cancelled'].includes(task.state))
       .map(task => `${task.id} is ${task.state}; merge and close or cancel it`);
-    if (!problems.length && !flags.has('--dry-run')) for (const note of archiveClosedBriefs(ledger, tasks)) console.log(note);
     const dir = `${GOALS_DIR}/${slug}`;
     const tasksDir = join(root, dir, 'tasks');
     problems.push(...(existsSync(tasksDir) ? readdirSync(tasksDir) : []).map(name => `${dir}/tasks/${name} remains`));
@@ -831,6 +842,8 @@ export async function closeGoal(slug: string, flags: Set<string>): Promise<numbe
     console.log(`Goal ${slug} closed; ${ARCHIVE_BRANCH}:${archive}/ holds its directory, briefs, handoffs and ledger`);
     return 0;
   });
+  if (!flags.has('--dry-run')) await drainManagerCommits(root, stateDir, slug);
+  return result;
 }
 
 /** Reserves the next task ID for a Goal and writes its brief skeleton, so two managers never take the same number. */
@@ -884,4 +897,5 @@ export async function tidy(args: string[]): Promise<void> {
     const notes = archiveClosedBriefs(ledger, tasks, valueOf(args, '--legacy'));
     console.log(notes.length ? notes.join('\n') : 'Nothing to tidy');
   });
+  await drainManagerCommits(root, stateDir, caller);
 }

@@ -14,6 +14,7 @@ import { classifyLandingRefusal } from './refusal.ts';
 import { pumpQueue, type QueueLedger } from './queue.ts';
 import { scheduleConfirmation, type ScheduleConfirmationOptions } from './confirm.ts';
 import { parkedOnJob } from './job.ts';
+import { pumpManagerCommits } from './manager-commit.ts';
 
 type Settlement = NonNullable<Task['settlement']>;
 type SpawnSettlement = (task: Task, token: string) => Settlement['owner'];
@@ -216,6 +217,7 @@ export async function settleTask(id: string, options: { capacityWaitMs?: number 
 
 /** One quick pass over every active Goal, including Goals without enrolled managers. */
 export async function settlePass(options: { spawn?: SpawnSettlement; confirmation?: ScheduleConfirmationOptions } = {}): Promise<void> {
+  pumpManagerCommits(root, stateDir);
   const ledger = readLedger();
   const goals = activeGoals(ledger);
   if (recoverDiedPreparations(structuredClone(ledger) as QueueLedger).length) {

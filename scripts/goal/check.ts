@@ -15,6 +15,7 @@ import { withSlot, type SlotRunOptions, type GateLaneOptions } from './qa-slots.
 import { selectSurface, runSurfaceGate } from './surface-gate.ts';
 import { prepareCheckTree, worktreeBase } from './tree-currency.ts';
 import { inferenceGateCommand, needsInferenceGate } from '../api/inference-cost.ts';
+import { trainEvent, type TrainEvent } from './merge-train.ts';
 
 export type CheckGroup = 'types' | 'lint' | 'tests' | 'guards';
 export type CheckName = CheckGroup | 'ast' | 'contract' | 'stories' | 'selection' | 'currency' | 'inference';
@@ -84,6 +85,7 @@ export function checkFailureLines(output: string): string[] {
 }
 
 export interface CheckOptions {
+  timing?: { directory: string } & Pick<TrainEvent, 'id' | 'token' | 'revision' | 'position' | 'after'>;
   cwd?: string;
   /** The CLI prepares and restarts before loading the updated harness. */
   treePrepared?: boolean;
@@ -193,7 +195,7 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
   const completedFiles = new Set(options.completed?.testFiles ?? []);
   let qaEnv = process.env;
 
-  async function check(name: CheckName, commands: string[][], note?: string, testFiles: readonly string[] = []): Promise<void> {
+  async function runCheck(name: CheckName, commands: string[][], note?: string, testFiles: readonly string[] = []): Promise<void> {
     const start = now();
     const outputs: string[] = [];
     let code = 0;
@@ -269,6 +271,21 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
     print(summary);
     appendFileSync(log, `${summary}\n`);
     if (code !== 0) for (const line of checkFailureLines(outputs.join('\n'))) print(line);
+  }
+
+  async function check(name: CheckName, commands: string[][], note?: string, testFiles: readonly string[] = []): Promise<void> {
+    const started = now();
+    const timing = options.timing;
+    const record = timing && { id: timing.id, token: timing.token, revision: timing.revision,
+      position: timing.position, after: timing.after, gate: name };
+    if (timing && record) trainEvent(timing.directory, { ...record, event: 'check-start' });
+    let passed = false;
+    try {
+      await runCheck(name, commands, note, testFiles);
+      passed = checks.at(-1)?.code === 0;
+    } finally {
+      if (timing && record) trainEvent(timing.directory, { ...record, event: 'check-end', passed, seconds: (now() - started) / 1000 });
+    }
   }
 
   // The gate owns workspace and guard selection. Heavy compiler/lint processes share one serial lane.

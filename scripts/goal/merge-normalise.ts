@@ -231,11 +231,11 @@ function migrationNumberContexts(number: number): RegExp[] {
 }
 
 /** Plan every rewrite before mutating: uncertainty leaves a clean branch for manual renumbering. */
-export function normalizeMigrations(worktree: string, branch: string): string | MigrationRename[] {
+export function normalizeMigrations(worktree: string, branch: string, base = 'main'): string | MigrationRename[] {
   // https://git-scm.com/docs/git-diff documents the A filter; existing main migrations may not move.
-  const added = git(worktree, ['diff', '--find-renames', '--diff-filter=A', '--name-only', `main..${branch}`])
+  const added = git(worktree, ['diff', '--find-renames', '--diff-filter=A', '--name-only', `${base}..${branch}`])
     .split('\n').filter(path => migrationPath.test(path));
-  const listMain = (directory: string) => git(worktree, ['ls-tree', '--name-only', 'main', `${directory}/`])
+  const listMain = (directory: string) => git(worktree, ['ls-tree', '--name-only', base, `${directory}/`])
     .split('\n').filter(Boolean).map(path => basename(path));
   const directories = new Set(added.map(path => dirname(path)));
   const renames: MigrationRename[] = [];
@@ -260,7 +260,7 @@ export function normalizeMigrations(worktree: string, branch: string): string | 
   const plannedPaths = new Map(renames.map(rename => [rename.from, rename.to]));
   const early = migrationsBelowMain(added.map(path => plannedPaths.get(path) ?? path), listMain);
   if (early.length) return `planned migrations still fall below main:\n  ${early.join('\n  ')}`;
-  const changed = new Set(git(worktree, ['diff', '--name-only', `main..${branch}`]).split('\n').filter(Boolean));
+  const changed = new Set(git(worktree, ['diff', '--name-only', `${base}..${branch}`]).split('\n').filter(Boolean));
   const files = git(worktree, ['ls-files', '-z']).split('\0').filter(Boolean);
   const writes = new Map<string, string>();
   const numbers = new Set(renames.map(rename => rename.number));

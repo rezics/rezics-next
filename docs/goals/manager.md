@@ -68,8 +68,9 @@ operating procedures. Prefer a bounded architecture over reducing API count:
 operation cost must not grow with total population, and a new vertical should
 be configuration of shared owners.
 
-Managers work locally and commit on main. Do not push, deploy, provision paid
-services or send repository data to other services without explicit authorization.
+Managers work locally and send commits to main through
+`task goal -- commit -m <message> -- <paths...>`. Do not push, deploy, provision
+paid services or send repository data to other services without explicit authorization.
 Workers follow their worktree and branch protocol instead.
 
 Account configuration and resource policies belong in ignored
@@ -146,6 +147,9 @@ reports effective settings and field sources.
 Use the [Goal management skill](../../.agents/skills/goal-management/SKILL.md)
 for startup, event handling, checkpoints, enrollment, handover and closure.
 The charter defines decisions; the skill owns their operating procedure.
+
+Manager commits and archival commits join the same ordered merge train as
+worker landings.
 
 ## Starting a manager
 

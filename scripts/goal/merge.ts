@@ -2,7 +2,7 @@ import { ensureDependencies } from './dependencies.ts';
 import { type RecordedMerge, unitFilesFromPlan, mergeUnitFiles, ownerFilesFromPlan, mergeOwnerFiles, streamUnitBaseline, preMergeUnitGate, preMergeSurfaceGate } from './unit-gate.ts';
 import { join } from 'node:path';
 import { stateDir, git, REGENERATION_COMMIT_SUBJECT, assertOwner, root, regenerationOnlyFiles, scopeViolations, landScopeRefusal, withLedger, retryGitIndexLock } from './ledger.ts';
-import { existsSync, readFileSync, appendFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, appendFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { type MergeEvent } from './regress.ts';
 import { type AffectedPlan, affectedPlanForChanges, typecheckWorkspaces } from '../qa/affected.ts';
 import { spawn, spawnSync } from 'node:child_process';
@@ -17,6 +17,7 @@ import { withGateLane, type GateLaneOptions } from './qa-slots.ts';
 import { advanceLandingReview, finishLandingRebase, startLandingRebase } from './land.ts';
 import { readDirectoryLease, tryAcquireDirectoryLease, type AcquiredDirectoryLease } from '../qa/process/lease.ts';
 import { type CheckOptions } from './check.ts';
+import { runMergeTrain, trainEvent, type TrainContext } from './merge-train.ts';
 
 export function readMergeEvents(): RecordedMerge[] {
   const eventPath = join(stateDir, 'merges.jsonl');
@@ -24,7 +25,7 @@ export function readMergeEvents(): RecordedMerge[] {
   return readFileSync(eventPath, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as RecordedMerge);
 }
 
-function writeMergeEvent(event: MergeEvent, files: readonly string[]): void {
+export function writeMergeEvent(event: MergeEvent, files: readonly string[]): void {
   appendFileSync(join(stateDir, 'merges.jsonl'), `${JSON.stringify({ ...event, files: [...new Set(files)].sort() })}\n`);
 }
 
@@ -74,7 +75,7 @@ function resetGeneratedWorktree(worktree: string): void {
 /** Regenerates outputs, commits whatever the generator changed, then verifies with `--check`.
  * A fixture without `scripts/generate.ts` skips. Land, merge and refresh exempt exactly the files
  * this commit wrote, including after main advances and prepareMerge runs again. */
-function regenerateGeneratedOutputs(merge: PreparedMerge): string | undefined {
+export function regenerateGeneratedOutputs(merge: PreparedMerge): string | undefined {
   if (!existsSync(join(merge.worktree, 'scripts/generate.ts'))) return undefined;
   const generated = spawnSync('bun', ['scripts/generate.ts'], { cwd: merge.worktree, encoding: 'utf8', timeout: 180_000 });
   if (generated.status !== 0) {
@@ -93,7 +94,7 @@ function regenerateGeneratedOutputs(merge: PreparedMerge): string | undefined {
   const check = spawnSync('bun', ['scripts/generate.ts', '--check'], { cwd: merge.worktree, encoding: 'utf8', timeout: 180_000 });
   if (check.status !== 0) return `generated artifacts are stale after regeneration; run task gen\n${generatorOutput(check).slice(-4_000)}`;
   merge.after = git(merge.worktree, ['rev-parse', 'HEAD']);
-  merge.committed = git(merge.worktree, ['diff', '--name-only', 'main...HEAD'], true).split('\n').filter(Boolean);
+  merge.committed = git(merge.worktree, ['diff', '--name-only', `${merge.before}...HEAD`], true).split('\n').filter(Boolean);
   return undefined;
 }
 
@@ -107,12 +108,12 @@ export interface PreparedMerge {
 
 /** Load the rebased tree's check owner in a fresh process, including its newly landed dependencies. */
 export async function preMergeWorkerCheck(merge: PreparedMerge, completed: CheckOptions['completed'],
-  skipTypes = false, skipUnits = false): Promise<string | undefined> {
+  skipTypes = false, skipUnits = false, timing?: CheckOptions['timing']): Promise<string | undefined> {
   const harness = 'scripts/goal/check.ts';
   // Small fixture repositories without a worker harness still exercise the legacy gates.
   if (!existsSync(join(merge.worktree, harness)) && !existsSync(join(root, harness))) return;
   const options: CheckOptions = { cwd: merge.worktree, treePrepared: true, changed: merge.committed,
-    tests: merge.tests, completed };
+    tests: merge.tests, completed, timing };
   const code = await new Promise<number>(resolveExit => {
     const child = spawn(process.execPath, ['-e',
       `const { workerCheck, parseCheckArgs } = await import('./${harness}');
@@ -273,11 +274,78 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
   finally { for (const lease of leases) lease.release(); }
 }
 
+/** One shared gate owner for task and manager candidates; the train adds no selection or budget. */
+export async function gateTrainCandidate(merge: PreparedMerge, id: string, flags: Set<string> = new Set(),
+  gateLane: GateLaneOptions = {}, onWait?: (error: unknown) => Promise<void>, context?: TrainContext): Promise<string | undefined> {
+  const gatedFiles = new Set<string>();
+  const skipTypes = flags.has('--skip-type-gate');
+  const skipUnits = flags.has('--skip-unit-gate');
+  const laneCommand = `merge ${id}`;
+  const timing = { id, token: context?.token ?? laneCommand, revision: context?.revision,
+    position: context?.position, after: merge.after };
+  const timed = async <T>(name: string, work: () => Promise<T>): Promise<T> => {
+    const started = Date.now();
+    trainEvent(stateDir, { ...timing, event: 'component-start', gate: name });
+    try { return await work(); }
+    finally { trainEvent(stateDir, { ...timing, event: 'component-end', gate: name, seconds: (Date.now() - started) / 1000 }); }
+  };
+  const typecheck = (merge: PreparedMerge, only?: readonly string[]) =>
+    timed('types', () => preMergeTypecheckGate(merge.worktree, root, merge.before, merge.committed, skipTypes, only));
+  const unitGate = (merge: PreparedMerge) =>
+    timed('units', () => preMergeUnitGate(merge.worktree, root, merge.before, merge.sharers, skipUnits, gatedFiles));
+  // Regeneration stays outside the lane. Type check and unit work share one lease, and each side's
+  // budget starts inside that work, after the wait.
+  const onLane = async <T>(work: () => Promise<T>): Promise<T> => {
+    let entered = false;
+    const started = Date.now();
+    trainEvent(stateDir, { ...timing, event: 'lock-wait-start', lock: 'gate lane' });
+    try {
+      return await withGateLane(() => {
+        entered = true;
+        trainEvent(stateDir, { ...timing, event: 'lock-wait-end', lock: 'gate lane', seconds: (Date.now() - started) / 1000 });
+        return work();
+      }, { ...gateLane, command: laneCommand });
+    } catch (error) {
+      if (!entered) trainEvent(stateDir, { ...timing, event: 'lock-wait-end', lock: 'gate lane',
+        seconds: (Date.now() - started) / 1000, reason: String(error) });
+      if (!entered) await onWait?.(error);
+      throw error;
+    }
+  };
+  const gate = async (merge: PreparedMerge): Promise<string | undefined> => {
+    gatedFiles.clear();
+    const surface = merge.surface;
+    if (surface) return timed('surface', () => preMergeSurfaceGate(merge.worktree, merge.before, surface, merge.committed, gatedFiles, {
+      generate: async () => undefined,
+      evidenceDirectory: join(stateDir, 'merges/surface-gate'),
+    }));
+    const run = async () => {
+      const refusal = await typecheck(merge) ?? await unitGate(merge);
+      if (refusal) return refusal;
+      return timed('worker', () => preMergeWorkerCheck(merge, {
+        typeWorkspaces: skipTypes ? [] : typecheckWorkspaces(merge.committed, merge.worktree),
+        testFiles: [...gatedFiles],
+      }, skipTypes, skipUnits, { directory: stateDir, ...timing }));
+    };
+    return skipTypes && skipUnits ? run() : onLane(run);
+  };
+  return gate(merge);
+}
+
 async function mergeUnderLease(id: string, flags: Set<string>, expectedHead?: string,
   reviewGuard?: (task: Task) => void, landPermittedFiles?: readonly string[], gateOnly = false,
   gateLane: GateLaneOptions = {}): Promise<void> {
   const landing = landPermittedFiles !== undefined;
   const runDir = join(stateDir, 'runs', id);
+  let trainBase = git(root, ['rev-parse', 'main']);
+  let originalHead: string | undefined;
+  let originalBase: string | undefined;
+  let candidateHead: string | undefined;
+  const sourcePath = join(runDir, 'train-source.json');
+  const saveSource = (candidate: string, attempt?: number) => {
+    writeFileSync(`${sourcePath}.tmp`, JSON.stringify({ head: originalHead, base: originalBase, candidate, attempt }));
+    renameSync(`${sourcePath}.tmp`, sourcePath);
+  };
   const refuse = (task: Task, message: string, kind: NonNullable<Task['mergeStop']>['kind'] = 'task') =>
     recordRefusal(task, message, gateOnly, kind, landing);
   const recoverLanding = (ledger: Ledger, task: Task, patches = true): boolean => {
@@ -335,8 +403,18 @@ async function mergeUnderLease(id: string, flags: Set<string>, expectedHead?: st
       for (const sharer of sharers) { sharer.state = 'merged'; sharer.mergedCommit = commit; clearRefusal(sharer); }
     };
     if (git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main') throw new Error('Main checkout is not on main');
-    const { committed, dirty, ahead } = changedFiles(task);
+    const { dirty, ahead } = changedFiles(task);
     if (dirty.length) throw new Error(`${task.id} worktree has uncommitted files:\n  ${dirty.join('\n  ')}`);
+    if (!originalHead && existsSync(sourcePath)) {
+      const source = JSON.parse(readFileSync(sourcePath, 'utf8')) as { head: string; base: string; candidate: string; attempt?: number };
+      if (source.candidate === git(task.worktree, ['rev-parse', 'HEAD']) && source.attempt === task.attempts.at(-1)?.n) {
+        originalHead = source.head;
+        originalBase = source.base;
+      }
+    }
+    const committed = originalHead && originalBase
+      ? git(task.worktree, ['diff', '--name-only', '--no-renames', `${originalBase}...${originalHead}`]).split('\n').filter(Boolean)
+      : changedFiles(task).committed;
     if (flags.has('--landed')) {
       // The manager already landed this work on main by hand (a cherry-pick, often with a conflict resolved).
       const commit = git(root, ['rev-parse', 'HEAD']);
@@ -360,6 +438,10 @@ async function mergeUnderLease(id: string, flags: Set<string>, expectedHead?: st
     }
     // Single-task branches may append to union registries without a claim; shared branches use their full claim union.
     const migrationOrigins = Object.assign({}, ...sharers.map(sharer => sharer.migrationOrigins ?? {})) as Record<string, string>;
+    if (originalHead) for (const file of Object.keys(migrationOrigins)) {
+      if (spawnSync('git', ['cat-file', '-e', `${originalHead}:${file}`], { cwd: task.worktree }).status !== 0)
+        delete migrationOrigins[file];
+    }
     const regenerated = regenerationOnlyFiles(task.worktree);
     // A file lent by `loan` lands like a claimed one here too, as it does in `land`.
     const lent = new Set(sharers.flatMap(sharer => sharer.loans ?? []));
@@ -374,13 +456,19 @@ async function mergeUnderLease(id: string, flags: Set<string>, expectedHead?: st
     if (history.length) {
       throw new Error(`${task.id} names tasks in the tree; task IDs belong in commit messages:\n  ${history.join('\n  ')}`);
     }
-    if (landing) startLandingRebase(runDir, task, git(root, ['rev-parse', 'main']));
+    originalHead ??= git(task.worktree, ['rev-parse', 'HEAD']);
+    originalBase ??= git(task.worktree, ['merge-base', originalHead, 'main']);
+    saveSource(originalHead, task.attempts.at(-1)?.n);
+    // Rebuild from the submitted head, never from a previous cumulative candidate: a removed
+    // predecessor must not survive in this branch's replayed history.
+    if (git(task.worktree, ['rev-parse', 'HEAD']) !== originalHead) git(task.worktree, ['reset', '--hard', originalHead]);
+    if (landing) startLandingRebase(runDir, task, trainBase);
     // A branch that already resolved main by merging (a wave) would replay every commit under a linear
     // rebase and meet conflicts its merges settled; it takes main by merge instead.
-    const merging = git(task.worktree, ['rev-list', '--merges', '--count', 'main..HEAD']) !== '0';
+    const merging = git(task.worktree, ['rev-list', '--merges', '--count', `${originalBase}..HEAD`]) !== '0';
     const rebase = merging
-      ? spawnSync('git', ['-c', 'core.editor=true', 'merge', '--no-edit', 'main'], { cwd: task.worktree, encoding: 'utf8' })
-      : spawnSync('git', ['rebase', 'main'], { cwd: task.worktree, encoding: 'utf8' });
+      ? spawnSync('git', ['-c', 'core.editor=true', 'merge', '--no-edit', trainBase], { cwd: task.worktree, encoding: 'utf8' })
+      : spawnSync('git', ['rebase', '--onto', trainBase, originalBase], { cwd: task.worktree, encoding: 'utf8' });
     if (rebase.status !== 0) {
       const conflicted = git(task.worktree, ['diff', '--name-only', '--diff-filter=U'], true);
       git(task.worktree, merging ? ['merge', '--abort'] : ['rebase', '--abort'], true);
@@ -433,7 +521,7 @@ async function mergeUnderLease(id: string, flags: Set<string>, expectedHead?: st
       git(task.worktree, ['commit', '-q', '-am', 'Normalize Main composition roots after rebase (goalctl)']);
     }
     let normalization: string | MigrationRename[];
-    try { normalization = normalizeMigrations(task.worktree, task.branch); }
+    try { normalization = normalizeMigrations(task.worktree, task.branch, trainBase); }
     catch (error) { normalization = error instanceof Error ? error.message : String(error); }
     if (typeof normalization === 'string') {
       const message = `${task.id} migration normalization refused; not merging:\n  ${normalization}`;
@@ -444,16 +532,16 @@ async function mergeUnderLease(id: string, flags: Set<string>, expectedHead?: st
         migrationOrigins[rename.to] = migrationOrigins[rename.from] ?? rename.from;
         delete migrationOrigins[rename.from];
       }
-      task.migrationOrigins = migrationOrigins;
     }
-    const before = git(root, ['rev-parse', 'HEAD']);
+    if (normalization.length || task.migrationOrigins) task.migrationOrigins = migrationOrigins;
+    const before = trainBase;
     const after = git(root, ['rev-parse', task.branch]);
     if (landing) advanceLandingReview(runDir, after);
     const eventPath = join(stateDir, 'merges.jsonl');
     const events = existsSync(eventPath) ? readFileSync(eventPath, 'utf8').split('\n').filter(Boolean)
       .map(line => JSON.parse(line) as MergeEvent) : [];
     const baseline = streamUnitBaseline(events, sharers.map(sharer => sharer.id), before);
-    const committedNow = changedFiles(task).committed;
+    const committedNow = git(task.worktree, ['diff', '--name-only', '--no-renames', `${before}...HEAD`]).split('\n').filter(Boolean);
     const exempt = new Set(regenerationOnlyFiles(task.worktree));
     const scopeFiles = committedNow.filter(file => !exempt.has(file));
     const briefs = sharers.flatMap(sharer => {
@@ -468,158 +556,101 @@ async function mergeUnderLease(id: string, flags: Set<string>, expectedHead?: st
       sharers: sharers.map(sharer => sharer.id).sort(), committed: committedNow, scopeFiles, surface,
       tests: [...new Set(briefs.flatMap(brief => brief.tests ?? []))] };
   };
-  let preparedMerge = await withLedger(prepareMerge);
-  // The reviewed head may be rewritten by our own rebase/normalization on a busy main.
-  expectedHead = undefined;
-  if (typeof preparedMerge === 'string') throw new Error(preparedMerge);
-  if (!preparedMerge) return;
-  // The gate runs without the ledger lock. A busy main can advance safely when its new commits
-  // do not touch the task's changes or selected tests; only an overlap consumes the one re-gate.
-  const gatedFiles = new Set<string>();
-  let regated = false;
-  let retyped = false;
-  let typeRechecks = 0;
-  const skipTypes = flags.has('--skip-type-gate');
-  const skipUnits = flags.has('--skip-unit-gate');
-  const laneCommand = `${landPermittedFiles !== undefined ? 'land' : gateOnly ? 'gate' : 'merge'} ${id}`;
-  const typecheck = (merge: PreparedMerge, only?: readonly string[]) =>
-    preMergeTypecheckGate(merge.worktree, root, merge.before, merge.committed, skipTypes, only);
-  const unitGate = (merge: PreparedMerge) =>
-    preMergeUnitGate(merge.worktree, root, merge.before, merge.sharers, skipUnits, gatedFiles);
-  // Regeneration stays outside the lane. Type check and unit work share one lease, and each side's
-  // budget starts inside that work, after the wait.
-  const onLane = async <T>(work: () => Promise<T>): Promise<T> => {
-    let entered = false;
-    try {
-      return await withGateLane(() => { entered = true; return work(); }, { ...gateLane, command: laneCommand });
-    } catch (error) {
-      if (!entered && landing) await withLedger(ledger => {
-        const task = taskOf(ledger, id);
-        if (!recoverLanding(ledger, task)) refuse(task, error instanceof Error ? error.message : String(error), 'wait');
-      });
-      throw error;
-    }
-  };
-  const gate = async (merge: PreparedMerge): Promise<string | undefined> => {
-    gatedFiles.clear();
-    const regenerate = () => {
-      const failure = regenerateGeneratedOutputs(merge);
-      if (!failure && landing) advanceLandingReview(runDir, merge.after);
-      return failure;
-    };
-    const installed = reinstallStaleDependencies(merge.worktree);
-    if (installed) return installed;
-    const unbuilt = missingPinnedImage(merge.worktree, root);
-    if (unbuilt) return unbuilt;
-    if (merge.surface) return preMergeSurfaceGate(merge.worktree, merge.before, merge.surface, merge.committed, gatedFiles, {
-      generate: async () => regenerate() ?? missingPinnedImage(merge.worktree, root),
-      evidenceDirectory: join(stateDir, 'merges/surface-gate'),
-    });
-    const generated = regenerate();
-    if (generated) return generated;
-    // Again after the regeneration: the pin is derived from the generated model, so a shape change moves it
-    // in that commit and not in the worker's. Checked only before it, a recipe shape change put a pin
-    // without an image on main for fifty minutes on 2026-10-12.
-    const unbuiltAfterRegeneration = missingPinnedImage(merge.worktree, root);
-    if (unbuiltAfterRegeneration) return unbuiltAfterRegeneration;
-    const run = async () => {
-      const refusal = await typecheck(merge) ?? await unitGate(merge);
-      if (refusal) return refusal;
-      return preMergeWorkerCheck(merge, {
-        typeWorkspaces: skipTypes ? [] : typecheckWorkspaces(merge.committed, merge.worktree),
-        testFiles: [...gatedFiles],
-      }, skipTypes, skipUnits);
-    };
-    return skipTypes && skipUnits ? run() : onLane(run);
-  };
-  let gateFailure = await gate(preparedMerge);
-  for (;;) {
-    const current: PreparedMerge = preparedMerge;
-    const outcome = await withLedger((ledger): string | { rerun: PreparedMerge; workspaces?: string[] } | undefined => {
+  const gate = (merge: PreparedMerge, context: TrainContext) => gateTrainCandidate(merge, id, flags, gateLane, async error => {
+    if (landing) await withLedger(ledger => {
       const task = taskOf(ledger, id);
-      assertOwner(task);
-      // A stale failed gate must never overwrite a successful landing. Check before
-      // review/drift guards, which may themselves require the now-removed worktree.
-      if (recoverLanding(ledger, task, !!gateFailure)) return;
-      reviewGuard?.(task);
-      const sharers = Object.values(ledger.tasks).filter(other => other.worktree === task.worktree && HOLDING.includes(other.state));
-      // Classify the gate's result when recording the stop, never on a later land command.
-      if (gateFailure) return refuse(task, `${task.id} ${gateFailure}`,
-        gateFailure.startsWith('unit gate remains inconclusive') && !gateFailure.includes('introduced unit failures; not merging:') ? 'inconclusive' : 'task');
-      const drifted = task.worktree !== current.worktree || task.branch !== current.branch
-        || git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main'
-        || git(root, ['rev-parse', task.branch]) !== current.after
-        || git(task.worktree, ['rev-parse', 'HEAD']) !== current.after
-        || changedFiles(task).dirty.length
-        || sharers.map(sharer => sharer.id).sort().join(',') !== current.sharers.join(',')
-        || sharers.some(sharer => sharer.state === 'starting' || sharer.goal !== task.goal || sharer.branch !== task.branch || (!gateOnly && running(sharer)))
-        || (!gateOnly && !['exited', 'conflict', 'stopped', 'merged'].includes(task.state));
-      if (drifted) {
-        return refuse(task, `${task.id} main, task branch or sharers changed during the unit gate; retry merge to rebase, normalize and test again`, 'main-moved');
-      }
-      if (landPermittedFiles !== undefined) {
-        const refusal = landScopeRefusal(ledger, task, sharers, current.scopeFiles ?? changedFiles(task).committed,
-          landPermittedFiles, regenerationOnlyFiles(task.worktree));
-        if (refusal) return refuse(task, refusal);
-      }
-      const advance = fastForwardMain({
-        head: () => git(root, ['rev-parse', 'HEAD']),
-        isAncestor: (ancestor, descendant) => spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd: root }).status === 0,
-        mergeBase: (a, b) => git(root, ['merge-base', a, b]),
-        touched: (from, to) => git(root, ['log', '--format=', '--name-only', '--no-renames', '-m', `${from}..${to}`]).split('\n').filter(Boolean),
-        changed: (from, to) => git(root, ['diff', '--name-only', '--no-renames', `${from}..${to}`]).split('\n').filter(Boolean),
-        refresh: () => prepareMerge(ledger),
-        fastForward: after => {
-          const result = retryGitIndexLock(() => spawnSync('git', ['merge', '--ff-only', after], { cwd: root, encoding: 'utf8' }));
-          if (result.status === 0) ensureDependencies(root);
-          return result;
-        },
-      }, current, { gatedFiles, regated, retyped, typechecked: current.surface ? ['web'] : skipTypes ? [] : typecheckWorkspaces(current.committed),
-        workerChecks: !current.surface && existsSync(join(current.worktree, 'scripts/goal/check.ts')) }, console.log, gateOnly);
-      if (advance.kind === 'stopped') {
-        if (advance.conflict && advance.message) {
-          return refuse(task, `${task.id} ${advance.message}`, 'main-moved');
-        }
-        if (advance.conflict && !gateOnly) task.state = 'conflict';
-        return advance.message;
-      }
-      const prepared = advance.prepared;
-      if (advance.kind === 'regate') return { rerun: prepared };
-      if (advance.kind === 'retypecheck') return { rerun: prepared, workspaces: advance.workspaces };
-      if (advance.kind === 'passed') {
-        // A gate leaves state and the refusal field untouched. Merge still clears a refusal when it lands.
-        if (!gateOnly) {
-          clearRefusal(task);
-          if (task.state !== 'merged') task.state = 'exited';
-        }
-        console.log(`${task.id} pre-merge gate passed at ${prepared.after.slice(0, 12)}; not merged`);
-        return undefined;
-      }
-      writeMergeEvent({ before: prepared.before, after: prepared.after, goal: task.goal ?? 'program',
-        taskIds: prepared.sharers, at: new Date().toISOString() }, prepared.committed);
-      for (const sharer of sharers) { sharer.state = 'merged'; sharer.mergedCommit = prepared.after; clearRefusal(sharer); }
-      console.log(`${sharers.map(sharer => sharer.id).join(', ')} merged at ${task.mergedCommit!.slice(0, 12)}; ${prepared.committed.length} file(s):`);
-      console.log(`  ${prepared.committed.join('\n  ')}`);
-      return undefined;
+      if (!recoverLanding(ledger, task)) refuse(task, error instanceof Error ? error.message : String(error), 'wait');
     });
-    if (typeof outcome === 'string') throw new Error(outcome);
-    if (!outcome) return;
-    preparedMerge = outcome.rerun;
-    // A type check takes seconds. A busy workspace may be rechecked several times before the merge gives up;
-    // a rerun of the unit gate is still allowed once.
-    typeRechecks++;
-    retyped = typeRechecksSpent(typeRechecks);
-    if (outcome.workspaces && !outcome.rerun.surface) {
-      const workspaces = outcome.workspaces;
-      const rerun = () => {
-        ensureDependencies(outcome.rerun.worktree);
-        return typecheck(outcome.rerun, workspaces);
-      };
-      gateFailure = skipTypes ? await rerun() : await onLane(rerun);
-    }
-    else {
-      regated = true;
-      gateFailure = await gate(outcome.rerun);
-    }
+  }, context);
+  const submitted = await withLedger(ledger => taskOf(ledger, id));
+  try {
+    await runMergeTrain({
+      directory: stateDir, id, advance: !gateOnly,
+      handoffAt: submitted.attempts.at(-1)?.endedAt,
+      head: () => git(root, ['rev-parse', 'main']),
+      prepare: async base => {
+        trainBase = base;
+        const merge = await withLedger(prepareMerge);
+        expectedHead = undefined;
+        if (typeof merge === 'string') throw new Error(merge);
+        if (!merge) return;
+        const installed = reinstallStaleDependencies(merge.worktree);
+        const failure = installed ?? missingPinnedImage(merge.worktree, root)
+          ?? regenerateGeneratedOutputs(merge) ?? missingPinnedImage(merge.worktree, root);
+        if (failure) {
+          await withLedger(ledger => refuse(taskOf(ledger, id), failure));
+          throw new Error(failure);
+        }
+        if (landing) advanceLandingReview(runDir, merge.after);
+        candidateHead = merge.after;
+        saveSource(candidateHead, submitted.attempts.at(-1)?.n);
+        return merge;
+      },
+      gate,
+      finish: async (current, gateFailure) => {
+        const outcome = await withLedger((ledger): string | undefined => {
+          const task = taskOf(ledger, id);
+          assertOwner(task);
+          // A stale failed gate must never overwrite a successful landing. Check before
+          // review/drift guards, which may themselves require the now-removed worktree.
+          if (recoverLanding(ledger, task, !!gateFailure)) return;
+          reviewGuard?.(task);
+          const sharers = Object.values(ledger.tasks).filter(other => other.worktree === task.worktree && HOLDING.includes(other.state));
+          // Classify the gate's result when recording the stop, never on a later land command.
+          if (gateFailure) return refuse(task, `${task.id} ${gateFailure}`,
+            gateFailure.startsWith('unit gate remains inconclusive') && !gateFailure.includes('introduced unit failures; not merging:') ? 'inconclusive' : 'task');
+          const drifted = task.worktree !== current.worktree || task.branch !== current.branch
+            || git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main'
+            || git(root, ['rev-parse', task.branch]) !== current.after
+            || git(task.worktree, ['rev-parse', 'HEAD']) !== current.after
+            || changedFiles(task).dirty.length
+            || sharers.map(sharer => sharer.id).sort().join(',') !== current.sharers.join(',')
+            || sharers.some(sharer => sharer.state === 'starting' || sharer.goal !== task.goal || sharer.branch !== task.branch || (!gateOnly && running(sharer)))
+            || (!gateOnly && !['exited', 'conflict', 'stopped', 'merged'].includes(task.state));
+          if (drifted) {
+            return refuse(task, `${task.id} main, task branch or sharers changed during the unit gate; retry merge to rebase, normalize and test again`, 'main-moved');
+          }
+          if (landPermittedFiles !== undefined) {
+            const refusal = landScopeRefusal(ledger, task, sharers, current.scopeFiles ?? changedFiles(task).committed,
+              landPermittedFiles, regenerationOnlyFiles(task.worktree));
+            if (refusal) return refuse(task, refusal);
+          }
+          if (git(root, ['rev-parse', 'main']) !== current.before)
+            return refuse(task, `${task.id} main changed outside the merge train; retry merge`, 'main-moved');
+          const prepared = current;
+          if (gateOnly) {
+            console.log(`${id} pre-merge gate passed at ${current.after.slice(0, 12)}; not merged`);
+            return;
+          }
+          const merged = retryGitIndexLock(() => spawnSync('git', ['merge', '--ff-only', current.after], { cwd: root, encoding: 'utf8' }));
+          if (merged.status !== 0) throw new Error(`Fast-forward failed in the main checkout:\n${merged.stderr}`);
+          ensureDependencies(root);
+          writeMergeEvent({ before: prepared.before, after: prepared.after, goal: task.goal ?? 'program',
+            taskIds: prepared.sharers, at: new Date().toISOString() }, prepared.committed);
+          for (const sharer of sharers) { sharer.state = 'merged'; sharer.mergedCommit = prepared.after; clearRefusal(sharer); }
+          console.log(`${sharers.map(sharer => sharer.id).join(', ')} merged at ${task.mergedCommit!.slice(0, 12)}; ${prepared.committed.length} file(s):`);
+          console.log(`  ${prepared.committed.join('\n  ')}`);
+          return undefined;
+        });
+        if (typeof outcome === 'string') throw new Error(outcome);
+      },
+    });
+  } catch (error) {
+    // A refused cumulative candidate must not become a worker's next submission with a
+    // failed predecessor accidentally included. Do not overwrite later edits or a landing.
+    await withLedger(ledger => {
+      const task = taskOf(ledger, id);
+      if (originalHead && candidateHead && existsSync(task.worktree) && task.state !== 'merged' && task.state !== 'verified'
+        && spawnSync('git', ['merge-base', '--is-ancestor', trainBase, 'main'], { cwd: root }).status !== 0
+        && git(task.worktree, ['rev-parse', 'HEAD']) === candidateHead && !changedFiles(task).dirty.length) {
+        git(task.worktree, ['reset', '--hard', originalHead]);
+        for (const sharer of Object.values(ledger.tasks).filter(other => other.worktree === task.worktree)) {
+          if (sharer.migrationOrigins) sharer.migrationOrigins = Object.fromEntries(Object.entries(sharer.migrationOrigins)
+            .filter(([file]) => existsSync(join(task.worktree, file))));
+        }
+        if (landing) advanceLandingReview(runDir, originalHead);
+      }
+    });
+    throw error;
   }
 }
