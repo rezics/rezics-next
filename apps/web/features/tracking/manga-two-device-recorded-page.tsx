@@ -73,6 +73,7 @@ export function MangaTwoDeviceRecordedPage({ persona, locale = 'en', state = 'un
   const frame = ready?.frame, header = frame?.header.ok ? frame.header.data : null;
   const t = messages[locale];
   const facet = frame?.facets.ok ? classificationFacet(frame.facets.data) : null;
+  // Scope-link metadata only: AdoptionRegion below receives the full answer and shows its nextCursor.
   const view = { workRef: mangaWorkId(persona), scope: { kind: 'global' as const }, realms: frame?.adoptions.ok
     ? frame.adoptions.data.items.map(item => {
       const id = idOf(item.realm);
