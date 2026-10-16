@@ -141,10 +141,12 @@ async function pageSession(name: Exclude<PersonaName, 'visitor'>) {
 async function refused(name: PersonaName) {
   const person = sessions[name],
     status = name === 'visitor' ? 401 : 403;
+  // Private management reads conceal the Realm from ungranted nonmembers.
+  const readStatus = ['stranger', 'operator'].includes(name) ? 404 : status;
   const sample = recording.session(name, person);
   await Promise.all([
-    answer(sample('roles-denied', 'GET', `${root()}/roles?${acting(person)}`), status),
-    answer(sample('members-denied', 'GET', `${root()}/members?${acting(person)}`), status),
+    answer(sample('roles-denied', 'GET', `${root()}/roles?${acting(person)}`), readStatus),
+    answer(sample('members-denied', 'GET', `${root()}/members?${acting(person)}`), readStatus),
     answer(
       sample('realm-header', 'GET', name === 'visitor' ? root() : `${root()}?${acting(person)}`),
       ['member', 'moderator'].includes(name) ? 200 : 404,
@@ -235,7 +237,7 @@ async function ownerProof() {
   const roles = await answer<Roles>(stranger.main('GET', `${root()}/roles?${acting(stranger)}`));
   expect(roles.roles.length).toBeGreaterThan(0);
   for (const role of roles.roles) expect(role).toMatchObject({ holders: null, moreHolders: null });
-  await answer(stranger.main('GET', `${root()}/members?${acting(stranger)}`), 403);
+  await answer(stranger.main('GET', `${root()}/members?${acting(stranger)}`), 404);
   await answer(stranger.main('GET', `${root()}?${acting(stranger)}`), 404);
   const roster = await answer<{
     items: { member: string; state: string; joinedAt: string | null; roles: { id: string }[] }[];
@@ -258,7 +260,7 @@ async function ownerProof() {
     stranger,
   );
   await answer(stranger.main('POST', `${root()}/role-changes`, delegated.command), 201);
-  await answer(sessions.operator.main('GET', `${root()}/roles?${acting(stranger)}`), 403);
+  await answer(sessions.operator.main('GET', `${root()}/roles?${acting(stranger)}`), 404);
 
   const independentRole = randomUUID();
   await change({
@@ -278,7 +280,19 @@ async function ownerProof() {
     { member: stranger.actingSubject, gained: [], lost: ['realm.roles.manage'],
       jurisdictions: [{ targetScope: null, gained: [], lost: ['realm.roles.manage'] }] },
   ]);
-  await answer(stranger.main('GET', `${root()}/roles?${acting(stranger)}`), 403);
+  await answer(stranger.main('GET', `${root()}/roles?${acting(stranger)}`), 404);
+
+  // The independent members grant also admits its management read without
+  // joining, while roles and ordinary private Realm reads remain concealed.
+  const memberRole = randomUUID();
+  await change({ kind: 'role', roleId: memberRole, name: 'Delegated member managers',
+    permissions: ['realm.members.manage'] });
+  await change(assignment(memberRole, stranger.actingSubject!));
+  await answer(stranger.main('GET', `${root()}/members?${acting(stranger)}`));
+  await answer(stranger.main('GET', `${root()}/roles?${acting(stranger)}`), 404);
+  await answer(stranger.main('GET', `${root()}?${acting(stranger)}`), 404);
+  await change(assignment(memberRole, stranger.actingSubject!, false));
+  await answer(stranger.main('GET', `${root()}/members?${acting(stranger)}`), 404);
 
   const race = await preview({
     kind: 'role',
@@ -323,7 +337,7 @@ async function moderatorProof() {
 async function operatorProof() {
   expectQaPlatformAccess(await answer(recording.session('operator', sessions.operator)('platform-access', 'GET', '/v1/me/platform-access')));
   await refused('operator');
-  await answer(sessions.operator.main('GET', `${root()}/roles?${acting(sessions.owner)}`), 403);
+  await answer(sessions.operator.main('GET', `${root()}/roles?${acting(sessions.owner)}`), 404);
 }
 
 // Bundle the real browser hook and adapter: only the HTTP boundary is injected.
