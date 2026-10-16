@@ -94,6 +94,12 @@ the failing command and bounded errors. If all pass, the one completion wake
 contains a result and log path for each command. A lost owner fails the sequence
 and remaining commands do not start. Plain jobs retain their existing behavior.
 
+Each wake re-reads your whole session, so put consecutive commands in one job:
+generation followed by checks is one sequence, not one job per command. Use
+`--then` instead of your own Taskfile or script that runs several checks. A
+wrapper that continues after a failure exits 0 and hides it. Rerun a failed
+broad check only after a change that addresses its failure.
+
 The whole sequence runs inline for up to 20 seconds. Set the tool call's
 `yield_time_ms` to exactly `30000` (30 seconds), including an orchestration
 wrapper's yield when using one: one call returns the result or `PARKED`, with
