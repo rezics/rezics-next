@@ -135,9 +135,10 @@ test('installed Main numeric literal unions retain their authoritative sets at e
       });
     }
   }
-  expect(locations).toHaveLength(36);
-  expect(literalMembers).toBe(83);
-  expect(operations.size).toBe(18);
+  // Rating scales are now bounded decimals rather than literal 5/10 unions.
+  expect(locations).toHaveLength(8);
+  expect(literalMembers).toBe(27);
+  expect(operations.size).toBe(6);
 });
 
 function record(method: string, path: string, answer: unknown, body?: unknown): AnswerRecord {
@@ -161,9 +162,9 @@ test('recorded feed vote answers retain numeric values and reject strings and ou
   }
 });
 
-test('recorded rating contexts retain numeric scale maxima and reject every other primitive value', () => {
+test('recorded rating contexts retain bounded numeric scale maxima and reject other primitive values', () => {
   const authored = Compile(ratingContextsPage);
-  for (const max of [5, 10, '5', '10', 0, 6, 5.5, null, true]) {
+  for (const max of [0, 5, 10, 6, 5.5, 1_000_000, -1, 1_000_001, '5', '10', '5.5', null, true]) {
     const answer = { profile: 'standing-rating-contexts-v1', scope: { kind: 'global', realm: null },
       items: [{ context: id, revision: id, question: 'Overall quality', language: 'en',
         displayQuestion: { value: 'Overall quality', language: 'en', direction: 'ltr', basis: 'requested',
@@ -172,7 +173,7 @@ test('recorded rating contexts retain numeric scale maxima and reject every othe
       nextCursor: null, sourcePosition: { dataEpoch: 'fixture', sequence: '1' },
       count: { value: 1, kind: 'exact-page', total: null } };
     const input = record('GET', '/v1/rating-contexts', answer);
-    if (typeof max === 'number' && [5, 10].includes(max)) {
+    if (typeof max === 'number' && max >= 0 && max <= 1_000_000) {
       expect(authored.Check(answer)).toBe(true);
       expect(validator.validate(input)).toEqual(input);
     } else {
