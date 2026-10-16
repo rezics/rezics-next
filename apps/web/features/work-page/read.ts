@@ -1,3 +1,4 @@
+import { readAnimeRelationsRatings, readAnimeRelationsStats } from './anime-relations-recorded-page.ts';
 import { cookies, headers } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { cache } from 'react';
@@ -25,7 +26,7 @@ import { type ContentsQuery, idOf, iriOf, mainScope, parseWorkRef, postPlaceHref
   type VersionQuery, type WorkRef, type WorkScope, workHref } from './route.ts';
 import type { EditionPreference, ProgressSummary } from '../tracking/types.ts';
 import type { AdoptionPage, AgentCreditPage, AgentWorksPage, AlsoEnjoyedPage, ChapterRead, ClassificationPage,
-  ContentsPage, CreditPage, DiscussionPage, HistoryKind, HistoryPage, Loaded, Progress, RatingContextPage, RatingRead,
+  ContentsPage, CreditPage, DiscussionPage, HistoryKind, HistoryPage, Loaded, Progress, RatingRead,
   ReadFailure, RealmHeader, Reviewer, ReviewPage, ReviewQuery, RecipeWorkPage, HubWorkPage,
   VersionPage, WorkHeader, WorkStats }
   from './types.ts';
@@ -242,14 +243,7 @@ export const readRatings = cache(async (id: string, scope: WorkScope, contextId:
   Promise<Loaded<RatingRead>> => {
   const { main, actingSubject, failure } = await scopeReader(scope);
   if (failure) return { ok: false, failure };
-  const contexts = await settle<RatingContextPage>(() => main.v1.resources({ resource: id })['rating-contexts'].get({
-    query: { actingSubject, ...mainScope(scope) } }));
-  if (!contexts.ok) return contexts;
-  const items = contexts.data.items;
-  const context = items.find(item => item.context === (contextId && iriOf(contextId))) ?? items[0] ?? null;
-  const summary = await settle(() => main.v1.resources({ resource: id }).ratings.get({
-    query: { actingSubject, ...mainScope(scope), context: context?.context } }));
-  return summary.ok ? { ok: true, data: { contexts: items, context, summary: summary.data } } : summary;
+  return readAnimeRelationsRatings({ main, actingSubject }, id, scope, contextId);
 });
 
 export async function readVersions(id: string, _locale: UiLocale, filter: VersionQuery): Promise<Loaded<VersionPage>> {
@@ -289,8 +283,7 @@ export const readAgentWorks = cache(async (agent: string, _locale: UiLocale): Pr
  * rating question the header shows.
  */
 export const readWorkStats = cache(async (id: string, context: string | undefined): Promise<Loaded<WorkStats>> => {
-  const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id })['reader-stats'].get({ query: { actingSubject, context } }));
+  return readAnimeRelationsStats(await reader(), id, context);
 });
 
 /**

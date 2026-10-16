@@ -58,19 +58,20 @@ export async function readWorkShowcase(
 }
 
 /** A Work page reads the Work's own art, with no Zone or Realm context to override it. */
-export function readOwnWorkShowcase(work: string): Promise<ReadonlyMap<string, WorkShowcase>> {
-  return readShowcaseBatch([work]);
+export function readOwnWorkShowcase(work: string, main?: MainClient): Promise<ReadonlyMap<string, WorkShowcase>> {
+  return readShowcaseBatch([work], undefined, main);
 }
 
 async function readShowcaseBatch(
   targets: readonly string[],
   context?: string,
+  client?: MainClient,
 ): Promise<ReadonlyMap<string, WorkShowcase>> {
   const wanted = showcaseTargets(targets);
   if (!wanted.length) return new Map();
   try {
-    const { mainApiWithToken } = await import('./main.ts');
-    const { data, error } = await mainApiWithToken(undefined).v1.resources.showcase.post({
+    const main = client ?? (await import('./main.ts')).mainApiWithToken(undefined);
+    const { data, error } = await main.v1.resources.showcase.post({
       profile: 'work-showcase-batch-v1',
       targets: wanted,
       ...(context ? { context } : {}),

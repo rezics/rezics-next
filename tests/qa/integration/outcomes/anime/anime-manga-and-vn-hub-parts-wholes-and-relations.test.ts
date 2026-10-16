@@ -3,14 +3,17 @@ import { randomUUID } from 'node:crypto';
 import hub from '../../../../../scripts/qa/cases/outcomes/anime/anime-manga-and-vn-hub-parts-wholes-and-relations.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
-import { readDatedAnimeHub, readWorkParts, readWorkWholes } from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
-import { readSuppliedContents } from '../../../../../apps/web/features/work-page/games-hub-recorded-page.ts';
+import { readDatedAnimeHub } from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
+import { readSuppliedContents, readSuppliedStart } from '../../../../../apps/web/features/work-page/games-hub-recorded-page.ts';
 import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
-import { animeRelationsReads, readAnimeRelationsConnections } from '../../../../../apps/web/features/work-page/anime-relations-recorded-page.ts';
+import { animeRelationsReads, readAnimeRelationsConnections, readAnimeRelationsRatings, readAnimeRelationsStats, readAnimeRelationsPreview } from '../../../../../apps/web/features/work-page/anime-relations-recorded-page.ts';
 import { booksEditionReads, readBooksEditionStatus } from '../../../../../apps/web/features/work-page/books-edition-page.read.ts';
 import { mainRelationships, RelationshipError } from '../../../../../apps/web/features/relationships/api.ts';
 import { seedTypes, typeEntry } from '../../../../../apps/web/features/catalogue/types.ts';
 import { progressControl } from '../../../../../apps/web/features/tracking/medium-progress.tsx';
+import { EVERYONE } from '../../../../../apps/web/features/work-page/route.ts';
+import { workExperience } from '../../../../../apps/web/features/entity-page/experience.ts';
+import { readOwnWorkShowcase } from '../../../../../apps/web/features/api/showcase.ts';
 import { standingOf } from '../../../../../apps/web/features/tracking/episodes.ts';
 import {
   personaSessions,
@@ -333,10 +336,26 @@ async function visit(name: PersonaName) {
     const page = await readDatedAnimeHub(main, host.actingSubject, id);
     if (faults.length) throw faults[0];
     if (!page.header.ok) return;
+    const publicSample = recording.session(name, sessions.visitor);
+    const publicMain = browserMainApi('http://record.invalid', { anonymous: true, fetcher: (async (input, init) => {
+      const url = new URL(String(input));
+      try { return await publicSample(`visit-${index + 1}-${++request}`, init?.method ?? 'GET',
+        url.pathname.slice(BFF_PREFIX.length) + url.search,
+        init?.body === undefined ? undefined : JSON.parse(String(init.body))); }
+      catch (error) { faults.push(error); throw error; }
+    }) as typeof fetch });
+    const experience = workExperience(page.projection.ok ? page.projection.data : null, page.header.data.types);
     await Promise.all([
+      readAnimeRelationsRatings(host, id, EVERYONE).then(ratings =>
+        readAnimeRelationsStats(host, id, ratings.ok ? ratings.data.context?.context : undefined)),
+      readOwnWorkShowcase(work.work, publicMain),
+      experience.kind === 'book' ? readSuppliedStart(host, id, work.work, async () => {
+        if (!page.header.ok) throw new Error('Missing Work header');
+        if (!page.header.data.selectedLanguage) throw new Error(`Unrecorded text versions for ${work.work}`);
+        return page.header.data.selectedLanguage;
+      }) : null,
       readAnimeRelationsConnections(animeRelationsReads(host), id, { grain: 'series' }),
-      readWorkParts(main, host.actingSubject, id, { limit: 7 }),
-      readWorkWholes(main, host.actingSubject, id, { limit: 3 }),
+      readAnimeRelationsPreview(animeRelationsReads(host), id),
       readSuppliedContents(host, id, {}),
       readBooksEditionStatus(booksEditionReads(host), id, 'en'),
       host.actingSubject ? mainRelationships(host.actingSubject, {

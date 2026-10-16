@@ -1,3 +1,4 @@
+import { readAnimeRelationsPreview } from '../work-page/anime-relations-recorded-page.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import { copyOf } from './messages.ts';
@@ -5,7 +6,6 @@ import {
   ConnectionsPreviewView,
   EditionsPreviewView,
   PartsPreviewView,
-  PREVIEW_COUNTS,
 } from './previews.tsx';
 import {
   namesOf,
@@ -30,21 +30,7 @@ interface Embedded {
 
 export async function PartsPreview({ id, workRef, locale, pageMessages }: Embedded) {
   const t = copyOf(locale);
-  // Each result starts its dependent name read while it still has page budget.
-  // A stalled composition must not spend the successful whole's deadline.
-  const [partResult, wholeResult] = await Promise.all([
-    readParts(id, { limit: PREVIEW_COUNTS.parts + 1 }).then(async (parts) => ({
-      parts,
-      names: await namesOf(parts.ok ? parts.data.parts.flatMap((part) => part.work ?? []) : []),
-    })),
-    readWholes(id, { limit: PREVIEW_COUNTS.wholes }).then(async (wholes) => ({
-      wholes,
-      names: await namesOf(wholes.ok ? wholes.data.wholes.map((whole) => whole.work) : []),
-    })),
-  ]);
-  const { parts } = partResult;
-  const { wholes } = wholeResult;
-  const names = new Map([...partResult.names, ...wholeResult.names]);
+  const { parts, wholes, names } = await readAnimeRelationsPreview({ readParts, readWholes, namesOf }, id);
   return (
     <PartsPreviewView
       parts={parts}

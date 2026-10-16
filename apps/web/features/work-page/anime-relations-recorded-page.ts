@@ -1,12 +1,15 @@
 import type { MainClient } from '../discover/types.ts';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
+import { PREVIEW_COUNTS } from '../work-levels/previews.tsx';
 import type { Franchise } from '../work-levels/connections.tsx';
 import { agentsOf, franchisesOf, relationRows } from '../work-levels/relation-rows.ts';
 import type { ConnectionsQuery } from '../work-levels/route.ts';
 import type { CollectionMember, CollectionMembers, Loaded, Names, PartsPage, People, RelationEntry, Summary } from '../work-levels/types.ts';
 import { readWorkParts, readWorkWholes, readWorkRelations } from './anime-hub-recorded-page.ts';
 import { settle } from './books-edition-page.read.ts';
+import { iriOf, mainScope, type WorkScope } from './route.ts';
+import type { Loaded as WorkLoaded, RatingContextPage, RatingRead } from './types.ts';
 
 type Host = { main: MainClient; actingSubject?: string; signedIn?: boolean };
 
@@ -153,4 +156,34 @@ export function recordedAnimeRelationsVisit(record: AnswerRecord, persona: Answe
       : sample.status === 202 ? 'pending' : 'populated' });
   }
   return { id, actingSubject, header, selections };
+}
+
+/** Frame reads use the same client boundary as the request-cached server readers. */
+export async function readAnimeRelationsRatings({ main, actingSubject }: Host, id: string,
+  scope: WorkScope, contextId?: string): Promise<WorkLoaded<RatingRead>> {
+  const contexts = await settle<RatingContextPage>(() => main.v1.resources({ resource: id })['rating-contexts'].get({
+    query: { actingSubject, ...mainScope(scope) } }));
+  if (!contexts.ok) return contexts;
+  const items = contexts.data.items;
+  const context = items.find(item => item.context === (contextId && iriOf(contextId))) ?? items[0] ?? null;
+  const summary = await settle(() => main.v1.resources({ resource: id }).ratings.get({
+    query: { actingSubject, ...mainScope(scope), context: context?.context } }));
+  return summary.ok ? { ok: true, data: { contexts: items, context, summary: summary.data } } : summary;
+}
+export function readAnimeRelationsStats({ main, actingSubject }: Host, id: string, context?: string) {
+  return settle(() => main.v1.works({ id })['reader-stats'].get({ query: { actingSubject, context } }));
+}
+
+/** The hub preview and full connections view use their own production page sizes. */
+export async function readAnimeRelationsPreview(reads: Pick<AnimeRelationsReads, 'readParts' | 'readWholes' | 'namesOf'>, id: string) {
+  const [partResult, wholeResult] = await Promise.all([
+    reads.readParts(id, { limit: PREVIEW_COUNTS.parts + 1 }).then(async parts => ({
+      parts, names: await reads.namesOf(parts.ok ? parts.data.parts.flatMap(part => part.work ?? []) : []),
+    })),
+    reads.readWholes(id, { limit: PREVIEW_COUNTS.wholes }).then(async wholes => ({
+      wholes, names: await reads.namesOf(wholes.ok ? wholes.data.wholes.map(whole => whole.work) : []),
+    })),
+  ]);
+  return { parts: partResult.parts, wholes: wholeResult.wholes,
+    names: new Map([...partResult.names, ...wholeResult.names]) };
 }
