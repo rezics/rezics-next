@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { localizedPath } from '../../i18n/locale.ts';
 import { workHref } from '../work-page/route.ts';
 import { BooksTwoDeviceRecorded } from './books-two-device-recorded-page.tsx';
 import { deviceBook } from './books-two-device-recorded-page.ts';
@@ -18,7 +19,7 @@ async function ownerPosition(canvasElement: HTMLElement, recovered: boolean) {
   const canvas = within(canvasElement);
   await expect(await canvas.findByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
   await expect(canvas.getByRole('heading', { level: 3, name: 'Original outcome volume' })).toBeVisible();
-  await expect(canvas.getByRole('link', { name: 'Original outcome volume' })).toHaveAttribute('href', workHref(deviceBook()));
+  await expect(canvas.getByRole('link', { name: 'Original outcome volume' })).toHaveAttribute('href', localizedPath(workHref(deviceBook()), 'en'));
   await expect(canvas.getByRole('link', { name: 'Currently reading 1' })).toBeVisible();
   await userEvent.click(canvas.getByText('Your progress', { exact: false }));
   const chapters = within(await canvas.findByRole('region', { name: 'Chapters' }));
