@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordJapaneseReads } from '../../../support/recorded-locale-visit.ts';
+import { browserMainApi, BFF_PREFIX } from '../../../../../apps/web/features/api/browser.ts';
+import { readRealmHeader, readZoneAttachments, settle } from '../../../../../apps/web/features/manage/read.ts';
+import { readManagementAccess } from '../../../../../apps/web/features/manage/settings-api.ts';
+import { realmEditSite } from '../../../../../apps/web/features/manage/realm-site.ts';
+import { readShowcaseEditor } from '../../../../../apps/web/features/zone-editor/edit-site-link.tsx';
 import {
   personaSessions,
   type PersonaName,
@@ -145,10 +151,63 @@ async function resourceMandate(action: string, scopeId: string) {
   return answer(Promise.resolve(response));
 }
 afterAll(async () => {
+  await recording.publish();
   await sessions?.close();
 });
 
 import inventory from '../../../../../scripts/qa/cases/outcomes/zone/list-attached-zones.ts';
+const recording = recordJapaneseReads(new OutcomeRecorder(inventory));
+
+/** The host/session client boundary, preserving the requests made by production readers. */
+function pageTransport(name: PersonaName, prefix: string) {
+  let index = 0;
+  const sample = recording.session(name, sessions[name]);
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    const raw = await request.text();
+    return sample(`${prefix}-${index++}`, request.method,
+      url.pathname.replace(new RegExp(`^${BFF_PREFIX}`), '') + url.search,
+      raw ? JSON.parse(raw) as unknown : undefined, request.headers.get('idempotency-key') ?? undefined,
+      // The persona session supplies its own credentials and opaque session key.
+      { headers: Object.fromEntries([...request.headers].filter(([key]) =>
+        !['authorization', 'cookie', 'x-session-key'].includes(key))), settle: false });
+  }) as typeof fetch;
+  return { fetcher, main: browserMainApi('https://recorded.invalid', { fetcher }) };
+}
+
+async function recordPage(name: Exclude<PersonaName, 'visitor'>, prefix = 'inventory', after: string | null = null) {
+  const person = sessions[name], realm = short(sessions.realm), actor = person.actingSubject!;
+  if (prefix === 'inventory') {
+    // These are readSession's requests. Its server-only incoming-header cache
+    // is absent in the outcome runner, so supply the session's typed host client.
+    const { main } = pageTransport(name, 'session');
+    const responses = await Promise.all([
+      main.v1.me['acting-contexts'].get({ query: { task: 'work.create' } }),
+      main.v1.me.agents.get({ query: { languages: 'en' } }),
+      main.v1.me['session-agent'].get({ headers: { 'x-session-key': '00000000-0000-4000-8000-000000000001' } }),
+      main.v1.me['person-preferences'].get({ query: { actingSubject: actor } }),
+    ]);
+    for (const response of responses) if (response.error) throw new Error('Management session recording failed');
+    await main.v1.agents({ id: short(actor) }).get({ query: { actingSubject: actor } });
+    await Promise.all([
+      readRealmHeader(pageTransport(name, 'frame-header').main, realm, 'en', actor),
+      readManagementAccess(pageTransport(name, 'frame-access').main, realm, actor),
+      realmEditSite({
+        zone: () => settle(() => pageTransport(name, 'frame-zone').main.v1.realms({ realm }).zone.get({ query: { actingSubject: actor } })),
+        editor: async zoneId => (await readShowcaseEditor(pageTransport(name, 'frame-editor').main, zoneId, actor)).loaded,
+      }),
+    ]);
+  }
+  const { main } = pageTransport(name, prefix);
+  let cursor = after;
+  let firstCursor: string | null = null;
+  do {
+    const page = await readZoneAttachments(main, realm, actor, cursor);
+    cursor = page.ok ? page.data.nextCursor : null;
+    firstCursor ??= cursor;
+  } while (cursor);
+  return firstCursor;
+}
 type Page = {
   items: { zone: string; withdraw: { method: string; path: string } }[];
   nextCursor: string | null;
@@ -159,6 +218,7 @@ const zones: string[] = [];
 let small: PersonaSessions;
 let zoneOnly: Site;
 beforeAll(async () => {
+  await recording.prepare();
   sessions = await personaSessions('public');
   small = await personaSessions('public');
   zones.push(sessions.zone);
@@ -226,23 +286,26 @@ beforeAll(async () => {
   }
   expect(zones).toHaveLength(50);
 }, 480_000);
-function list(person: PersonaSession, realm: string, limit: number, cursor?: string) {
+function list(person: PersonaSession, realm: string, limit: number, cursor?: string, sample?: string) {
   const query = new URLSearchParams({
     limit: String(limit),
     ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}),
     ...(cursor ? { cursor } : {}),
   });
-  return person.main('GET', `/v1/realms/${short(realm)}/zone-attachments?${query}`);
+  const path = `/v1/realms/${short(realm)}/zone-attachments?${query}`;
+  return sample ? recording.session('visitor', person)(sample, 'GET', path) : person.main('GET', path);
 }
 async function concealed(name: PersonaName) {
   const person = sessions[name],
     missing = `https://rezics.com/id/${randomUUID()}`;
   // The one-item fixture has its own owner: these sessions hold no stewardship in either Realm.
-  const unavailable = await answer<{ code: string }>(list(person, missing, 1), 404);
+  const unavailable = await answer<{ code: string }>(list(person, missing, 1, undefined,
+    name === 'visitor' ? 'concealed-missing' : undefined), 404);
   expect(unavailable.code).toBe('realm_unavailable');
   for (const realm of [small.realm, sessions.realm]) {
     for (const limit of [1, 50])
-      expect(await answer(list(person, realm, limit), 404)).toEqual(unavailable);
+      expect(await answer(list(person, realm, limit, undefined,
+        name === 'visitor' ? `concealed-${realm === small.realm ? 'one' : 'fifty'}-${limit}` : undefined), 404)).toEqual(unavailable);
   }
 }
 async function traverse(person: PersonaSession, limit: number) {
@@ -305,12 +368,13 @@ async function traverseBeyondMaximumPage(person: PersonaSession) {
     zones.splice(zones.indexOf(zoneOnly.zone), 1);
   }
 }
-outcomeTest(inventory, 'visitor', () => concealed('visitor'));
-outcomeTest(inventory, 'stranger', () => concealed('stranger'));
+outcomeTest(inventory, 'visitor', () => concealed('visitor'), recording);
+outcomeTest(inventory, 'stranger', async () => { await concealed('stranger'); await recordPage('stranger'); }, recording);
 outcomeTest(inventory, 'member', async () => {
   expect((await head(zoneOnly.zone, sessions.member)).zone).toBe(zoneOnly.zone);
   await concealed('member');
-});
+  await recordPage('member');
+}, recording);
 outcomeTest(inventory, 'owner', async () => {
   const one = await answer<Page>(list(small.owner, small.realm, 50));
   const fifty = await answer<Page>(list(sessions.owner, sessions.realm, 50));
@@ -323,13 +387,17 @@ outcomeTest(inventory, 'owner', async () => {
   await traverse(sessions.owner, 24);
   await traverse(sessions.owner, 50);
   await traverseBeyondMaximumPage(sessions.owner);
-});
+  await recordPage('owner');
+}, recording);
 outcomeTest(inventory, 'moderator', async () => {
   await concealed('moderator');
+  await recordPage('moderator');
   const roleId = await role(sessions.moderator, true);
   let cursor: string | null = null;
+  let recordedCursor: string | null = null;
   try {
     await traverse(sessions.moderator, 24);
+    recordedCursor = await recordPage('moderator', 'delegated');
     await traverseBeyondMaximumPage(sessions.moderator);
     cursor = (await answer<Page>(list(sessions.moderator, sessions.realm, 1))).nextCursor;
     expect(cursor).not.toBeNull();
@@ -337,9 +405,12 @@ outcomeTest(inventory, 'moderator', async () => {
     await role(sessions.moderator, false, roleId);
   }
   await answer(list(sessions.moderator, sessions.realm, 1, cursor!), 404);
-});
+  await recordPage('moderator', 'revoked', recordedCursor);
+}, recording);
 outcomeTest(inventory, 'operator', async () => {
   await concealed('operator');
+  await recordPage('operator', 'bare');
   await resourceMandate('realm.attach', `realm:attach:${sessions.realm}`);
   await traverse(sessions.operator, 24);
-});
+  await recordPage('operator');
+}, recording);
