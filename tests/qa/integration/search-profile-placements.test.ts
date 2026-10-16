@@ -59,8 +59,8 @@ test('an Anime section list finds each searchable Content placement through comp
           selection: { mode: 'fixed-revision', revision: draft.revisionId,
             selector: { grain: 'content', variantId, revision: draft.revisionId } } })),
       }));
-    // Public search consumes the same explicitly published Structure root as
-    // the anonymous composition reader, rather than its editable draft head.
+    // Search consumes an explicitly published Structure root rather than
+    // the editable draft head, with target admission supplied by its reader.
     await actor.grant(`work:publish:${owner.work}`, 'work.publish');
     const heads = (await stack.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
       SELECT ?head WHERE { GRAPH <urn:rezics:graph:current> { <${owner.work}> rv:head ?head } }`)).results!.bindings;
@@ -82,8 +82,17 @@ test('an Anime section list finds each searchable Content placement through comp
       }
     };
     await relay();
-    const query = () => stack.call('POST', '/v1/queries/page', { body: {
-      profile: 'public-main-phrase-page-v1', phrase, language: null, pageSize: 10 } });
+    const input = { profile: 'public-main-phrase-page-v1', phrase, language: null, pageSize: 10 };
+    const outline = await json<{ occurrences: Array<{ occurrence: string }> }>(
+      await actor.read(`/v1/compositions/${short(structure.structure)}`));
+    expect(outline.occurrences.map(item => item.occurrence)).toEqual(changed.occurrences);
+    const visitorOutline = await json<{ occurrences: unknown[] }>(
+      await stack.call('GET', `/v1/compositions/${short(structure.structure)}`));
+    expect(visitorOutline.occurrences).toEqual([]);
+    const visitorPage = await json<{ results: Array<{ matchedPlacements?: unknown[] }> }>(
+      await stack.call('POST', '/v1/queries/page', { body: input }));
+    expect(visitorPage.results.flatMap(hit => hit.matchedPlacements ?? [])).toEqual([]);
+    const query = () => actor.send('POST', '/v1/queries/page', input);
     const before = stack.fuseki.queries;
     const page = await json<{ total: number; results: Array<{ work: string; revision: string;
       matchedPlacements?: Array<{ resource: string; work: string; occurrence: string; profile: string }> }> }>(await query());
