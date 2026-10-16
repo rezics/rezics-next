@@ -1,7 +1,7 @@
 import { InvalidJudgmentScale } from '../modules/rating/scale.ts';
 import { logWorkerFault } from '@rezics/observability/log';
 import { problem as nativeProblem } from 'elysia';
-import { dependencyUnavailable, legacyFailureResponse, type ProblemSet } from '../modules/problem.ts';
+import { dependencyUnavailable, legacyFailureResponse, problemDefinition, type ProblemSet } from '../modules/problem.ts';
 import { accountFailure } from '../modules/account/problems.ts';
 import { scalarFailure } from '../modules/work/scalar-problems.ts';
 import type { SessionChanges, SessionState } from '../modules/session/contract.ts';
@@ -164,6 +164,15 @@ export function problem(status: number, code: string, title: string, headers?: H
   return Response.json({ type: options?.type ?? `https://rezics.com/problems/${code}`, title, status, code, ...details }, {
     status, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store', ...headers },
   });
+}
+
+/** Native hook refusals retain their status in the inferred API contract;
+ * a raw Response in a global hook would also widen every success body. */
+export function problemStatus<const Status extends number, const Code extends string>(
+  status: Status, code: Code, title: string, set: ProblemSet,
+) {
+  set.headers['cache-control'] = 'no-store';
+  return nativeProblem(problemDefinition(status, code, title).body);
 }
 
 export function commandError(error: unknown): Response {

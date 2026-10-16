@@ -1,6 +1,6 @@
 import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t, type Context } from 'elysia';
-import { problem } from './problems.ts';
+import { problemStatus } from './problems.ts';
 import { BackpressureSaturated, BackpressureUnavailable,
   type AdmissionLease, type LeaseOutcome } from '../operations/admission-budget.ts';
 import { contentProjectionPositions, OperationsBackpressure,
@@ -36,14 +36,11 @@ const backpressureResult = t.Object({ profile: t.String({ pattern: '^[a-z][a-z0-
 
 function refusal(error: unknown, set: Context['set']) {
   if (error instanceof BackpressureSaturated) {
-    set.headers['cache-control'] = 'no-store';
     set.headers['retry-after'] = String(error.retryAfterSeconds);
-    return problem(503, 'backpressure_saturated', `The ${error.lane} budget is saturated; retry later`,
-      { 'retry-after': String(error.retryAfterSeconds) });
+    return problemStatus(503, 'backpressure_saturated', `The ${error.lane} budget is saturated; retry later`, set);
   }
   if (error instanceof BackpressureUnavailable) {
-    set.headers['cache-control'] = 'no-store';
-    return problem(503, 'backpressure_unavailable', `The ${error.lane} budget cannot be observed`);
+    return problemStatus(503, 'backpressure_unavailable', `The ${error.lane} budget cannot be observed`, set);
   }
   return undefined;
 }
