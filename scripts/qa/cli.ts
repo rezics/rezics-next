@@ -4,6 +4,7 @@ import { createOwnerErasureCleanupClock, ownerErasureCleanupShard } from './owne
 import { assertRetainedSources } from './retained-preflight.ts';
 import { independentRestorePreparationOptions, ownerErasurePreparationOptions } from './retained-source.ts';
 import { realmSourceBuildDeadlineMs } from '../../tests/qa/support/realm-discussion-budget.ts';
+import { activeTestWallMs } from './test-wall.ts';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { redactCommandOutput } from '../fixture/command-output.ts';
@@ -1036,9 +1037,7 @@ function testWall(runs: ShardRun[]): number {
   // and capped separately by the live command phase clock, including on failure.
   if (timed.length === 1 && timed[0]!.record.fixtureCleanupMs !== undefined)
     return timed[0]!.record.elapsedMs!;
-  const start = Math.min(...timed.map(run => run.testStart!));
-  const end = Math.max(...timed.map(run => run.testEnd!));
-  return end - start - admissionIntervalMs(admissionIntervals, start, end);
+  return activeTestWallMs(timed.map(run => ({ start: run.testStart!, end: run.testEnd! })), admissionIntervals);
 }
 
 // Integration and fault/recovery files run in parallel QA projects sized from
