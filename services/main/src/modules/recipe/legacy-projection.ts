@@ -1,7 +1,8 @@
+import { checkRecipeQualifier } from './occurrence-validation.ts';
 import { createHash } from 'node:crypto';
 import { GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import { checkOccurrenceQualifier, InvalidStructureObject, type OccurrenceRecord } from '../structure/format.ts';
+import { InvalidStructureObject, type OccurrenceRecord } from '../structure/format.ts';
 import type { PlacementState } from '../structure/graph.ts';
 
 // Exact pre-adoption projections remain readable; new admissions use standard Recipe facts.
@@ -123,7 +124,7 @@ export async function hydrateLegacy(env: WorkActivationEnvironment, state: Place
         : status.endsWith('Unparsed') ? 'unparsed' : 'parsed',
       ...(one('residual') ? { residual: one('residual')!.value.replace('urn:rezics:', '') } : {}),
     };
-    return checkOccurrenceQualifier(qualifier);
+    return checkRecipeQualifier(qualifier);
   }
   if (rdfType?.endsWith('RecipeStep')) {
     const instructionText = text('instructionText');

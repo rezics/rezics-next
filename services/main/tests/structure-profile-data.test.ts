@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Value } from 'typebox/value';
-import { OccurrenceRecord, checkOccurrenceRecord } from '../src/modules/structure/format.ts';
+import { OccurrenceRecord, checkOccurrenceQualifier, checkOccurrenceRecord } from '../src/modules/structure/format.ts';
 import { roleFromIri, roleIri } from '../src/modules/structure/graph.ts';
 import { discoverStructureProfiles, structureProfileFor } from '../src/modules/structure/profiles.ts';
 import type { PlacementState } from '../src/modules/structure/graph.ts';
@@ -28,4 +28,21 @@ test('a structure profile document is the allowlist', async () => {
   expect(roleFromIri(roleIri('entry'))).toBe('entry');
   expect(roleFromIri(roleIri('section'))).toBe('section');
   expect(roleFromIri(roleIri('chapter'))).toBe('chapter');
+});
+
+test('Recipe relational checks belong to its profile, beyond the shared qualifier envelope', () => {
+  const qualifier = { type: 'ingredient-line' as const, originalText: { value: '1 cup flour', language: 'en' },
+    amountUpper: { numerator: 2, denominator: 1 }, optional: false, scaling: 'linear' as const,
+    substituteFor: [], parseStatus: 'parsed' as const };
+  const record = { occurrence: id(), state: 'active' as const, parent: id(), segmentKey: 'a', orderKey: 'a',
+    role: 'ingredient', labels: [], introducedBy: id(), qualifier };
+  expect(checkOccurrenceQualifier(qualifier)).toEqual(qualifier);
+  expect(() => checkOccurrenceRecord(record, 'recipe-composition')).toThrow('lower bound');
+  const amount = { numerator: 1, denominator: 1 };
+  const valid = { ...record, qualifier: { ...qualifier, amount } };
+  expect(() => checkOccurrenceRecord(valid, 'recipe-composition')).not.toThrow();
+  const badSpans = { ...valid, qualifier: { ...valid.qualifier,
+    textParts: { amount: { start: 0, end: 3 }, name: { start: 2, end: 20 } } } };
+  expect(checkOccurrenceQualifier(badSpans.qualifier)).toEqual(badSpans.qualifier);
+  expect(() => checkOccurrenceRecord(badSpans, 'recipe-composition')).toThrow('retained source');
 });

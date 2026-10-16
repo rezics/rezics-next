@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import { OccurrenceRecord, checkOccurrenceRecord, type OccurrenceRecord as Record } from '../src/modules/structure/format.ts';
 import { derivedId } from '../src/modules/structure/graph.ts';
-import { planBookRefresh, sourceCorrespondence } from '../src/modules/structure/refresh.ts';
+import { planStructureRefresh, sourceCorrespondence } from '../src/modules/structure/refresh.ts';
 
 const sourceStructure = derivedId('refresh-source');
 const localStructure = derivedId('refresh-local');
@@ -25,7 +25,7 @@ test('BOOK07: refresh carries source edits and removal while preserving human pl
   const source = [row(sourceStructure, 'A', 1, 'revised'), row(sourceStructure, 'C', 2)];
   const human = row(localStructure, 'human', 2);
   const local = [localCopy('A', 1), human, localCopy('B', 3)];
-  const plan = planBookRefresh({ source: { structure: sourceStructure, records: source },
+  const plan = planStructureRefresh({ profile: 'book-composition', source: { structure: sourceStructure, records: source },
     base: { structure: sourceStructure, records: base },
     local: { structure: localStructure, records: local }, revision });
   expect(plan.conflicts).toEqual([]);
@@ -46,7 +46,7 @@ test('BOOK07: refresh carries source edits and removal while preserving human pl
 
 test('BOOK07: concurrent source and local content edits return a specific conflict', () => {
   const base = row(sourceStructure, 'A', 1);
-  const plan = planBookRefresh({ source: { structure: sourceStructure,
+  const plan = planStructureRefresh({ profile: 'book-composition', source: { structure: sourceStructure,
     records: [row(sourceStructure, 'A', 1, 'source edit')] },
   base: { structure: sourceStructure, records: [base] },
   local: { structure: localStructure, records: [localCopy('A', 1, 'local edit')] },
@@ -60,7 +60,7 @@ test('BOOK07: refresh rejects duplicate correspondence and unknown child mapping
   const duplicate = row(sourceStructure, 'A', 2);
   duplicate.occurrence = derivedId('different-source-occurrence');
   const child = { ...row(sourceStructure, 'child', 3), parent: duplicate.occurrence };
-  const plan = planBookRefresh({ source: { structure: sourceStructure,
+  const plan = planStructureRefresh({ profile: 'book-composition', source: { structure: sourceStructure,
     records: [row(sourceStructure, 'A', 1), duplicate, child] },
   local: { structure: localStructure, records: [] }, revision });
   expect(plan.records).toEqual([]);
@@ -73,7 +73,7 @@ test('BOOK07: refresh comparison count grows with bounded records', () => {
   const base = Array.from({ length: 256 }, (_, index) =>
     row(sourceStructure, `source-${index}`, index + 1));
   const local = base.map((item, index) => localCopy(item.sourceKey!, index + 1));
-  const plan = planBookRefresh({ source: { structure: sourceStructure, records: base },
+  const plan = planStructureRefresh({ profile: 'book-composition', source: { structure: sourceStructure, records: base },
     base: { structure: sourceStructure, records: base },
     local: { structure: localStructure, records: local }, revision });
   expect(plan.conflicts).toEqual([]);
@@ -103,7 +103,7 @@ const outline = (records: readonly Record[]) => {
 test('BOOK07: a first import keeps the source volumes, their divisions and chapters', () => {
   const one = group(sourceStructure, 'Volume 1', 1);
   const extras = group(sourceStructure, 'Extras', 2, 'extras');
-  const plan = planBookRefresh({ source: { structure: sourceStructure, records: [one, extras,
+  const plan = planStructureRefresh({ profile: 'book-composition', source: { structure: sourceStructure, records: [one, extras,
     inGroup(row(sourceStructure, 'A', 1), one), inGroup(row(sourceStructure, 'B', 2), one),
     inGroup(row(sourceStructure, 'X', 1), extras)] },
   local: { structure: localStructure, records: [] }, revision });
@@ -126,7 +126,7 @@ test('BOOK07: a local move between volumes survives a source that adds a chapter
   // Locally, B was moved to the start of volume 2.
   const local = [localOne, localTwo, inGroup(localCopy('A', 1), localOne), inGroup(localCopy('B', 0), localTwo),
     inGroup(localCopy('C', 1), localTwo)];
-  const plan = planBookRefresh({ source: { structure: sourceStructure, records: source },
+  const plan = planStructureRefresh({ profile: 'book-composition', source: { structure: sourceStructure, records: source },
     base: { structure: sourceStructure, records: base },
     local: { structure: localStructure, records: local }, revision });
   expect(plan.conflicts).toEqual([]);
@@ -140,7 +140,7 @@ test('BOOK07: moving one chapter to different volumes on both sides is an order 
   const a = row(sourceStructure, 'A', 1);
   const base = [one, two, inGroup(a, one)];
   const localOne = localGroup('Volume 1', 1), localTwo = localGroup('Volume 2', 2);
-  const plan = planBookRefresh({ source: { structure: sourceStructure, records: [one, two, inGroup(a, two)] },
+  const plan = planStructureRefresh({ profile: 'book-composition', source: { structure: sourceStructure, records: [one, two, inGroup(a, two)] },
     base: { structure: sourceStructure, records: base },
     local: { structure: localStructure, records: [localOne, localTwo, localCopy('A', 3)] }, revision });
   expect(plan.records).toEqual([]);
@@ -150,9 +150,33 @@ test('BOOK07: moving one chapter to different volumes on both sides is an order 
 test('BOOK07: a Book source nested deeper than one group level has no correspondence', () => {
   const one = group(sourceStructure, 'Volume 1', 1);
   const nested = inGroup(group(sourceStructure, 'Part A', 1), one);
-  const plan = planBookRefresh({ source: { structure: sourceStructure, records: [one, nested,
+  const plan = planStructureRefresh({ profile: 'book-composition', source: { structure: sourceStructure, records: [one, nested,
     inGroup(row(sourceStructure, 'A', 1), nested)] }, local: { structure: localStructure, records: [] }, revision });
   expect(plan.records).toEqual([]);
   expect(plan.conflicts.map(item => item.reason)).toEqual(['unknown-child-correspondence',
     'unknown-child-correspondence']);
+});
+
+test('profile refresh retains exact measures and evidence and refuses divergent retained facts', () => {
+  const measure = { kind: 'servings' as const, value: { numerator: 2, denominator: 3 },
+    basis: 'whole-recipe' as const, coverage: 'unknown' as const, provenance: 'source-stated' as const,
+    evidence: 'https://example.test/recipe' };
+  const manifest = { profile: 'recipe-composition', measures: [measure] };
+  const source = { structure: sourceStructure, records: [], manifest };
+  const local = { structure: localStructure, records: [] };
+  const first = planStructureRefresh({ profile: manifest.profile, source, local, revision });
+  expect(first.conflicts).toEqual([]);
+  expect(first.measures).toEqual([measure]);
+  const localMeasures = [{ ...measure, value: { numerator: 1, denominator: 3 } }];
+  const edited = { ...local, manifest: { ...manifest, measures: localMeasures } };
+  expect(planStructureRefresh({ profile: manifest.profile, source, base: source, local: edited, revision }).measures)
+    .toEqual(localMeasures);
+  const concurrent = { ...source, manifest: { ...manifest,
+    measures: [{ ...measure, value: { numerator: 4, denominator: 3 } }] } };
+  expect(planStructureRefresh({ profile: manifest.profile, source: concurrent, base: source, local: edited, revision }).conflicts)
+    .toEqual([{ sourceKey: '@measures', reason: 'local-and-source-edit' }]);
+  const completion = { status: 'unknown' as const, evidence: [] };
+  expect(planStructureRefresh({ profile: 'book-composition',
+    source: { ...source, manifest: { profile: 'book-composition', measures: [], completion } }, local, revision }).completion)
+    .toEqual(completion);
 });

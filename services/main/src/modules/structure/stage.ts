@@ -8,7 +8,7 @@ import { checkOccurrenceRecord, checkStructureManifest, checkStructurePage,
   STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
   STRUCTURE_INDEXED_MANIFEST_FORMAT,
   STRUCTURE_RECORD_PAGE_FORMAT,
-  type OccurrenceRecord, type OrderEntry } from './format.ts';
+  type OccurrenceRecord, type OrderEntry, type StructureManifest } from './format.ts';
 import { newCost } from './tree.ts';
 import { deepestLevel, isContainerRole, structureProfileFor } from './profiles.ts';
 import { createQualifierKeyIndex } from './qualifier-index.ts';
@@ -167,7 +167,7 @@ export class StructureStageStore {
 
   async seal(input: { id: string; principalId: string; structure: string; mainVersion: string;
     holder: string; fence: string; canReadTarget: (target: string) => Promise<boolean>;
-    profile?: string }):
+    profile?: string; measures?: StructureManifest['measures']; completion?: StructureManifest['completion'] }):
     Promise<StructureStage> {
     const stage = await this.read(input.id, input.principalId, input.structure);
     if (stage.status === 'sealed') return stage;
@@ -197,6 +197,9 @@ export class StructureStageStore {
     // Activation makes a fresh decision so revocation between requests is seen.
     const readableTargets = new Set<string>();
     const sealed = structureProfileFor(input.profile ?? 'book-composition');
+    if (input.measures?.length && !sealed.measures || input.completion && !sealed.completion) {
+      throw new StructureStageInvalid('stage facts are not admitted by this profile');
+    }
     for (const record of records) {
       checkOccurrenceRecord(record, sealed.id, sealed.catalogTargetTypes,
         sealed.selectionRequiredRoles ?? sealed.targetRoles, sealed.selectionOptionalRoles);
@@ -213,7 +216,7 @@ export class StructureStageStore {
         parent = owner.parent;
       }
       if (chain.size > deepestLevel(sealed, record.role)) {
-        throw new StructureStageInvalid('stage nests deeper than a Book allows');
+        throw new StructureStageInvalid('stage nests deeper than its profile allows');
       }
       if (record.target && !readableTargets.has(record.target)) {
         if (!await input.canReadTarget(record.target)) throw new StructureStageUnavailable('staged target is undisclosed');
@@ -242,7 +245,8 @@ export class StructureStageStore {
     const manifest = { format: STRUCTURE_MANIFEST_FORMAT, structure: stage.structure,
       structureOf: input.mainVersion, profile: sealed.id,
       generation: stage.generation, pageFormat: STRUCTURE_PAGE_FORMAT,
-      records: recordRoot, order: orderRoot, topGroups: groupRoot, placementCount: order.size, measures: [],
+      records: recordRoot, order: orderRoot, topGroups: groupRoot, placementCount: order.size,
+      measures: input.measures ?? [], ...(input.completion ? { completion: input.completion } : {}),
       ...(stage.sourceRef && stage.sourceRevision && stage.mappingPolicy
         ? { source: { ref: stage.sourceRef, revision: stage.sourceRevision,
           mappingPolicy: stage.mappingPolicy } } : {}),

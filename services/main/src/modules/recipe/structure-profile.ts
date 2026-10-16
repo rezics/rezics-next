@@ -4,6 +4,7 @@ import type { StructureProfileRegistration } from '../structure/profiles.ts';
 import { InvalidStructureObject } from '../structure/format.ts';
 import { checkExactInstructionSelection } from '../structure/selection.ts';
 import { CompositionUnavailable } from '../structure/unavailable.ts';
+import { checkRecipeQualifier } from './occurrence-validation.ts';
 import { ingredientReferences } from './references.ts';
 
 /** Recipe work owns a Main Version Structure whose revisions retain each line occurrence. */
@@ -68,6 +69,7 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   catalogTargetTypes: ['https://schema.org/Recipe', 'https://schema.org/HowToStep',
     'https://schema.org/HowToSection', 'https://schema.org/Thing'],
   roles: ['group', 'ingredient', 'step', 'instruction', 'equipment'],
+  containerRoles: ['group'], readingRoles: ['ingredient', 'step', 'instruction', 'equipment'],
   localReferences: ingredientReferences,
   mixedOperationKinds: [['update', 'remove']],
   targetRoles: ['instruction'],
@@ -76,6 +78,7 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   selectionOptionalRoles: ['step'],
   selectionSelectorRoles: ['instruction', 'step'],
   checkOccurrence(record) {
+    if (record.qualifier) checkRecipeQualifier(record.qualifier);
     if (record.role !== 'instruction' && record.role !== 'step') return;
     if (record.target) {
       if (record.qualifier || record.selection?.mode !== 'fixed-revision') {

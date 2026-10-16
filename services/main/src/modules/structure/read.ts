@@ -325,6 +325,8 @@ export async function readStructureMeasures(env: WorkActivationEnvironment, inpu
 /** Exact revision reads begin at the immutable root, never at today's projection. */
 export async function readCompositionPage(env: WorkActivationEnvironment, input: {
   structure: string; revision?: string; parent?: string; occurrence?: string; after?: string; limit: number;
+  /** Internal sibling position from an already selected immutable snapshot. Public callers use `after`. */
+  afterKey?: string;
   canReadTarget: (target: string) => Promise<boolean>; outline?: boolean;
   /** An authorized exact owner cut may disclose a selected use independently of its moving target. */
   canReadOccurrence?: (record: OccurrenceRecord) => Promise<boolean>;
@@ -419,8 +421,9 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
   const cursorPosition = sourcePosition;
   const cursorBinding = { structure: input.structure, revision, parent,
     ...(input.reverse ? { reverse: true } : {}) };
-  let after = input.after;
-  if (profile.withholdUnreadableTargets) {
+  if (input.afterKey && !input.snapshot) throw new CompositionUnavailable('immutable sibling anchor needs a snapshot');
+  let after = input.afterKey ?? input.after;
+  if (profile.withholdUnreadableTargets && !input.afterKey) {
     try { after = decodeReadCursor(input.after, cursorBinding, cursorPosition)?.after; }
     catch { throw new CompositionUnavailable('composition cursor is invalid or its head changed'); }
   }

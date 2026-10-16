@@ -5,8 +5,8 @@ import { orderTree, recordTree, structureObjects } from '../structure/change.ts'
 import { seekChapter } from '../structure/reading-order.ts';
 import { ReadingOrderIndex } from '../reading-position/immutable-order.ts';
 import { checkOccurrenceRecord, InvalidStructureObject, type OccurrenceRecord } from '../structure/format.ts';
-import { isCatalogTarget, structureProfileFor } from '../structure/profiles.ts';
-import { compositionWorkBatchReader } from '../composition/visible-targets.ts';
+import { isCatalogTarget, isContainerRole, structureProfileFor } from '../structure/profiles.ts';
+import { compositionTargetBatchReader } from '../composition/disclosure-read.ts';
 import { orderTreeKey } from '../structure/graph.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../structure/tree.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
@@ -143,10 +143,6 @@ export function assertContentsCompositionMapping(header: CompositionHeader | nul
   }
 }
 
-function contentsRole(role: OccurrenceRecord['role']) {
-  if (role === 'group' || role === 'chapter' || role === 'part') return role;
-  throw new WorkReadUnavailable('Contents roles are unavailable');
-}
 
 type Division = 'volume' | 'part' | 'extras';
 /** A group without a stated division reads as a titled part. */
@@ -258,9 +254,8 @@ export async function readContents(session: WorkReadSession, work: string,
     session.options.localBasis = true;
     const { basis, header } = await composition(session, work, options.version);
     const profile = structureProfileFor(header.profile);
-    for (const role of profile.roles) contentsRole(role);
     const chapters = profile.roles.includes('chapter');
-    const partTargets = profile.roles.includes('part') ? compositionWorkBatchReader(session) : null;
+    const partTargets = !chapters ? compositionTargetBatchReader(session, profile) : null;
     const snapshot = await neighbourhood(session, header);
     const cursorPosition = { ...session.position, dependencyToken: readDependencyToken([
       basis.dependencyToken, header.head, header.generation, header.manifest]) };
@@ -303,16 +298,17 @@ export async function readContents(session: WorkReadSession, work: string,
           variant: selected.variant, language });
       }
       return { occurrence: record.occurrence, parent: record.parent,
-        role: contentsRole(record.role), label, division: chapters ? recordDivision(record) : null,
+        role: record.role, label, division: chapters ? recordDivision(record) : null,
         number: numbered.get(record.occurrence) ?? null,
-        childCount: record.role === 'group' ? page.childCounts?.[record.occurrence] ?? null : null,
+        childCount: isContainerRole(profile, record.role) ? page.childCounts?.[record.occurrence] ?? null : null,
         target: record.target?.startsWith('https://rezics.com/id/') ? record.target : null,
         selectedRevision: selected?.revision ?? null,
         progress: selected ? { composition: header.structure, occurrence: record.occurrence,
           selectedRevision: selected.revision } : null,
         ...(record.qualifier?.type === 'work-part' ? { displayLabel: record.qualifier.displayLabel,
           inclusion: record.qualifier.inclusion } : {}),
-        availability: record.role === 'group' || record.role === 'part' && record.target || selected
+        availability: isContainerRole(profile, record.role) || !chapters
+          && (!!record.target || !profile.targetRoles.includes(record.role)) || selected
           ? 'available' as const : 'unavailable' as const };
     }));
     const derived = await legacyChapterLabels(session, legacy);

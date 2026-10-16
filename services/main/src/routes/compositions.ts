@@ -19,7 +19,7 @@ import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/s
 import { InvalidStructureObject, type OccurrenceRecord } from '../modules/structure/format.ts';
 import { StructureStageConflict, StructureStageInvalid, StructureStageUnavailable }
   from '../modules/structure/stage.ts';
-import { planBookRefresh, readBookStructureSnapshot, StructureRefreshInvalid }
+import { planStructureRefresh, readStructureSnapshot, StructureRefreshInvalid }
   from '../modules/structure/refresh.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
@@ -417,22 +417,22 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
         const structure = `https://rezics.com/id/${params.id}`;
         const { header, proof, principal } = await context(request, structure, body.actingSubject);
         if (body.sourceStructure === structure) {
-          throw new StructureRefreshInvalid('a Book cannot refresh from itself');
+          throw new StructureRefreshInvalid('a Structure cannot refresh from itself');
         }
         const sourceHeader = await readCompositionHeader(work.environment, body.sourceStructure);
-        if (!sourceHeader || sourceHeader.profile !== 'book-composition'
+        if (!sourceHeader || sourceHeader.profile !== header.profile
           || !await work.access.canReadWork(principal, body.actingSubject, sourceHeader.owner)) {
-          throw new CompositionUnavailable('Book source is unavailable');
+          throw new CompositionUnavailable('Structure source is unavailable');
         }
-        const local = await readBookStructureSnapshot(work.environment, structure, body.expectedHead);
+        const local = await readStructureSnapshot(work.environment, structure, body.expectedHead);
         const priorSource = local.manifest.source;
         if (priorSource && (priorSource.ref !== body.sourceStructure
           || priorSource.mappingPolicy !== 'source-key')) {
-          throw new StructureRefreshInvalid('Book source correspondence differs from retained basis');
+          throw new StructureRefreshInvalid('Structure source correspondence differs from retained basis');
         }
-        const source = await readBookStructureSnapshot(work.environment,
+        const source = await readStructureSnapshot(work.environment,
           body.sourceStructure, body.sourceRevision);
-        const base = priorSource ? await readBookStructureSnapshot(work.environment,
+        const base = priorSource ? await readStructureSnapshot(work.environment,
           body.sourceStructure, priorSource.revision) : undefined;
         let stage = await store().create({ principalId: proof.principalId,
           idempotencyKey: `refresh:${idempotencyKey}`, scope: proof.scope, structure,
@@ -447,7 +447,7 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
           throw new StaleCompositionHead('refresh basis is stale');
         }
         if (stage.status === 'staging') {
-          const plan = planBookRefresh({ source, ...(base ? { base } : {}), local,
+          const plan = planStructureRefresh({ profile: header.profile, source, ...(base ? { base } : {}), local,
             revision: stage.revision });
           if (plan.conflicts.length) {
             await store().cancel(stage.id, proof.principalId, structure);
@@ -464,6 +464,7 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
           stage = await store().seal({ id: stage.id, principalId: proof.principalId,
             structure, mainVersion: header.mainVersion, holder: stage.holder!, fence: stage.fence,
             profile: header.profile,
+            measures: plan.measures, completion: plan.completion,
             canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
               environment: work.environment, access: work.access, principal, actingSubject: body.actingSubject, target,
               targetReader: resourceTargetReader(work, request, body.actingSubject) }) });

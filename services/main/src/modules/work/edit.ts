@@ -1,3 +1,4 @@
+import { structureTypeRemovalGuard } from '../structure/profiles.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
@@ -317,15 +318,10 @@ async function editWorkRevision(env: WorkActivationEnvironment,
     || JSON.stringify(prior.semanticTypes) !== JSON.stringify(semanticTypes)) {
     throw new RevisionCorrupt('Work graph differs from its retained head');
   }
-  const removesBook = change.kind === 'types'
-    && semanticTypes.includes('https://schema.org/Book')
-    && !change.types.includes('https://schema.org/Book');
-  if (removesBook) {
-    const composition = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
-      ?structure a rv:Structure ; rv:structureOf ${iri(main)} ;
-        rv:structureProfile rv:BookComposition . } }`, 1024);
-    if (composition.boolean) throw new WorkTypeConflict('Book type is required by an existing composition');
-  }
+  const typeGuard = change.kind === 'types'
+    ? structureTypeRemovalGuard(intent.work, ['https://schema.org/CreativeWork', ...change.types]) : '';
+  const typeDependency = async () => typeGuard && !(await env.fuseki.query(`ASK { ${typeGuard} }`, 4096)).boolean;
+  if (await typeDependency()) throw new WorkTypeConflict('An attached Structure profile requires its owner type');
   const revision = ID + Bun.randomUUIDv7();
   const validations = await workMetadataValidations(env, intent.work, main);
   if (change.kind === 'types') validations.push(...await profileValidations(env.fuseki, 'work-type-v3', [
@@ -392,8 +388,7 @@ async function editWorkRevision(env: WorkActivationEnvironment,
         OPTIONAL { ${iri(intent.work)} <${SCALAR_PREDICATE}> ?oldScalar }
         ${change.kind === 'types' ? `OPTIONAL { ${iri(intent.work)} a ?oldType .
           FILTER(?oldType != <https://schema.org/CreativeWork>) }` : ''} }
-      ${removesBook ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-        ?structure a rv:Structure ; rv:structureOf ${iri(main)} ; rv:structureProfile rv:BookComposition . } }` : ''}
+      ${typeGuard}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
@@ -412,10 +407,6 @@ async function editWorkRevision(env: WorkActivationEnvironment,
   }
   const stale = await sealStaleHead(env, intent, digest);
   if (stale) return checkedTerminal(stale, intent, digest);
-  if (removesBook && (await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-    GRAPH ${iri(GRAPHS.current)} { ?structure a rv:Structure ;
-      rv:structureOf ${iri(main)} ; rv:structureProfile rv:BookComposition . } }`, 1024)).boolean) {
-    throw new WorkTypeConflict('Book type is required by an existing composition');
-  }
+  if (await typeDependency()) throw new WorkTypeConflict('An attached Structure profile requires its owner type');
   throw new PendingActivation('Work edit guard did not match');
 }

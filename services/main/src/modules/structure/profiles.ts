@@ -85,6 +85,8 @@ export interface StructureProfileRegistration {
   /** These roles may omit a target; all other non-target roles forbid it. */
   optionalTargetRoles?: readonly OccurrenceRole[];
   targetRoles: readonly OccurrenceRole[];
+  /** Leaves selected by navigation; omitted means all declared non-container roles. */
+  readingRoles?: readonly OccurrenceRole[];
   /** Target roles selecting Content require an explicit/follow-context revision policy. */
   selectionRequiredRoles?: readonly OccurrenceRole[];
   /** Owner shapes replace only Structure/placement checks when extending kernel enums. */
@@ -129,6 +131,25 @@ export function deepestLevel(profile: StructureProfileRegistration, role: Occurr
 export function isContainerRole(profile: StructureProfileRegistration | string, role: string): boolean {
   const registration = typeof profile === 'string' ? structureProfileFor(profile) : profile;
   return (registration.containerRoles ?? ['group']).includes(role);
+}
+
+export function isReadingRole(profile: StructureProfileRegistration, role: string): boolean {
+  return (profile.readingRoles ?? profile.roles.filter(item => !isContainerRole(profile, item))).includes(role);
+}
+
+/** Attached profiles own their type prerequisites, including profiles added after Work shipped. */
+export function structureTypeRemovalGuard(work: string, retainedTypes: readonly string[]): string {
+  const required = [...profiles.values()].filter(profile => !retainedTypes.includes(profile.ownerType));
+  if (!required.length) return '';
+  return `FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> {
+    ${required.map(profile => `{
+      ?dependentStructure a <https://rezics.com/vocab/Structure> ;
+        <https://rezics.com/vocab/structureProfile> <${profile.graphProfile}> ;
+        <https://rezics.com/vocab/structureOf> ${profile.componentPredicate ? '?dependentComponent' : `<${work}>`} .
+      ${profile.componentPredicate ? `<${work}> <${profile.componentPredicate}> ?dependentComponent .` : ''}
+      ${profile.structurePredicate ? `<${work}> <${profile.structurePredicate}> ?dependentStructure .` : ''}
+    }`).join(' UNION ')}
+  } }`;
 }
 
 function validUri(value: unknown): value is string {
@@ -188,6 +209,9 @@ export async function discoverStructureProfiles(directory = join(import.meta.dir
         || profile.optionalTargetRoles !== undefined && !Array.isArray(profile.optionalTargetRoles)
         || profile.selectionRequiredRoles !== undefined && !Array.isArray(profile.selectionRequiredRoles)
         || profile.selectionOptionalRoles !== undefined && !Array.isArray(profile.selectionOptionalRoles)
+        || profile.readingRoles !== undefined && (!Array.isArray(profile.readingRoles)
+          || profile.readingRoles.some(role => !profile.roles?.includes(role) || containers.includes(role))
+          || new Set(profile.readingRoles).size !== profile.readingRoles.length)
         || !containers.length || containers.some(role => !profile.roles?.includes(role))
         || new Set(profile.roles).size !== profile.roles.length
         || new Set(profile.targetRoles).size !== profile.targetRoles.length

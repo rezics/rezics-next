@@ -1,6 +1,7 @@
+import { checkRecipeQualifier } from './occurrence-validation.ts';
 import { createHash } from 'node:crypto';
 import type { OccurrenceRecord } from '../structure/format.ts';
-import { isStructureUnitReference, checkOccurrenceQualifier, checkIngredientTextParts } from '../structure/format.ts';
+import { isStructureUnitReference, checkIngredientTextParts } from '../structure/format.ts';
 import { matchRecipeUnit, type RecipeUnitImportability } from './display.ts';
 
 export interface ImportedIngredient {
@@ -307,7 +308,7 @@ function structuredIngredient(value: Record<string, unknown>, sourceKey: string,
       : value.parseStatus === 'parsed'
       || value.parseStatus === 'partial' || value.parseStatus === 'unparsed'
       ? value.parseStatus : parsed ? 'partial' : 'unparsed' };
-  return { sourceKey, qualifier: checkOccurrenceQualifier(qualifier) as ImportedIngredient['qualifier'] };
+  return { sourceKey, qualifier: checkRecipeQualifier(qualifier) as ImportedIngredient['qualifier'] };
 }
 
 function instruction(value: unknown): string | undefined {

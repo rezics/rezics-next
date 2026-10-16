@@ -1,7 +1,8 @@
+import { deepestLevel, isContainerRole, structureProfileFor, type StructureProfileRegistration } from './profiles.ts';
 import { createHash } from 'node:crypto';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
-import { checkStructureManifest, InvalidStructureObject, STRUCTURE_LIMITS,
+import { checkOccurrenceRecord, checkStructureManifest, InvalidStructureObject, STRUCTURE_LIMITS,
   type OccurrenceRecord, type StructureManifest } from './format.ts';
 import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, derivedId,
   readCompositionHeader } from './graph.ts';
@@ -17,30 +18,31 @@ export function sourceCorrespondence(sourceStructure: string, sourceKey: string)
 }
 
 type Record = OccurrenceRecord;
-type Snapshot = { structure: string; records: readonly Record[] };
-export interface BookStructureSnapshot extends Snapshot {
+type Snapshot = { structure: string; records: readonly Record[];
+  manifest?: Pick<StructureManifest, 'profile' | 'measures' | 'completion'> };
+export interface StructureSnapshot extends Snapshot {
   revision: string;
   manifest: StructureManifest;
 }
 
-/** Read one complete, bounded Book state from its exact immutable revision root. */
-export async function readBookStructureSnapshot(env: WorkActivationEnvironment,
-  structure: string, revision: string): Promise<BookStructureSnapshot> {
+/** Read one complete, bounded Structure state from its exact immutable revision root. */
+export async function readStructureSnapshot(env: WorkActivationEnvironment,
+  structure: string, revision: string): Promise<StructureSnapshot> {
   if (!NATIVE_ID.test(structure) || !NATIVE_ID.test(revision)) {
-    throw new CompositionUnavailable('Book source identity is invalid');
+    throw new CompositionUnavailable('Structure source identity is invalid');
   }
   const header = await readCompositionHeader(env, structure);
-  if (!header || header.profile !== 'book-composition') {
-    throw new CompositionUnavailable('Book source is unavailable');
+  if (!header) {
+    throw new CompositionUnavailable('Structure source is unavailable');
   }
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest WHERE {
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:StructureRevision ;
       rv:component ${iri(structure)} ; rv:manifest ?manifest . } } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   const reference = rows[0]?.manifest?.value;
-  if (!rows.length) throw new CompositionUnavailable('Book source revision is unavailable');
+  if (!rows.length) throw new CompositionUnavailable('Structure source revision is unavailable');
   if (rows.length !== 1 || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(reference ?? '')) {
-    throw new CompositionCorrupt('Book source revision is ambiguous');
+    throw new CompositionCorrupt('Structure source revision is ambiguous');
   }
   const objects = structureObjects(env);
   let manifest: StructureManifest;
@@ -54,12 +56,19 @@ export async function readBookStructureSnapshot(env: WorkActivationEnvironment,
   }
   if (manifest.structure !== structure || manifest.structureOf !== header.component
     || manifest.profile !== header.profile || manifest.records.count > STRUCTURE_LIMITS.stageRecords) {
-    throw new StructureObjectCorrupt('Book source revision exceeds the refresh bound');
+    throw new StructureObjectCorrupt('Structure source revision exceeds the refresh bound');
   }
   const records = await recordTree(objects).range(manifest.records, '', '\uffff',
     STRUCTURE_LIMITS.stageRecords + 1, newCost());
   if (records.length !== manifest.records.count) {
-    throw new StructureObjectCorrupt('Book source record count differs');
+    throw new StructureObjectCorrupt('Structure source record count differs');
+  }
+  const profile = structureProfileFor(header.profile);
+  try {
+    for (const record of records) checkOccurrenceRecord(record, profile.id, profile.catalogTargetTypes);
+  } catch (error) {
+    if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+    throw error;
   }
   return { structure, revision, manifest, records };
 }
@@ -68,6 +77,8 @@ export interface RefreshConflict { sourceKey: string; reason: 'ambiguous-key' | 
 export interface RefreshPlan {
   records: Record[];
   conflicts: RefreshConflict[];
+  measures?: StructureManifest['measures'];
+  completion?: StructureManifest['completion'];
   cost: { sourceRecords: number; baseRecords: number; localRecords: number; comparisons: number };
 }
 
@@ -77,24 +88,35 @@ function content(record: Record): string {
     selection: record.selection ?? null, labels: record.labels, qualifier: record.qualifier ?? null });
 }
 
-/** A record's place in its Book: the correspondence key of its group, or null at the top level. */
+/** Parent correspondence, or null at the Structure root. */
 type Parent = string | null;
 interface Mapped { record: Record; parent: Parent }
 
-/**
- * Source uses by correspondence key. A Book nests one level: a group stands at
- * the top level and a chapter under the top level or one such group.
- */
-function mapSource(snapshot: Snapshot, conflicts: RefreshConflict[]): Map<string, Mapped> {
+/** The same declared containers and depth apply to imported and locally edited topology. */
+function validTopology(record: Record, snapshot: Snapshot, byId: Map<string, Record>,
+  profile: StructureProfileRegistration): boolean {
+  if (!profile.roles.includes(record.role)) return false;
+  const seen = new Set([record.occurrence]);
+  let parent = record.parent, depth = 1;
+  while (parent !== snapshot.structure) {
+    const owner = byId.get(parent);
+    if (!owner || seen.has(parent) || !isContainerRole(profile, owner.role)
+      || record.state === 'active' && owner.state !== 'active'
+      || ++depth > deepestLevel(profile, record.role)) return false;
+    seen.add(parent);
+    parent = owner.parent;
+  }
+  return depth <= deepestLevel(profile, record.role);
+}
+
+function mapSource(snapshot: Snapshot, conflicts: RefreshConflict[], profile: StructureProfileRegistration): Map<string, Mapped> {
   const found = new Map<string, Mapped>();
   const byOccurrence = new Map(snapshot.records.map(record => [record.occurrence, record]));
   for (const record of snapshot.records) {
     if (record.state === 'removed') continue;
     const key = sourceCorrespondence(snapshot.structure, sourceKey(record));
     const owner = record.parent === snapshot.structure ? null : byOccurrence.get(record.parent);
-    if (record.role !== 'chapter' && record.role !== 'group'
-      || record.parent !== snapshot.structure && (record.role === 'group' || owner?.state !== 'active'
-        || owner.role !== 'group' || owner.parent !== snapshot.structure)) {
+    if (!validTopology(record, snapshot, byOccurrence, profile)) {
       conflicts.push({ sourceKey: key, reason: 'unknown-child-correspondence' });
       continue;
     }
@@ -104,23 +126,33 @@ function mapSource(snapshot: Snapshot, conflicts: RefreshConflict[]): Map<string
   return found;
 }
 
-/** Active uses in reading order: the top level in order, each group's chapters where it stands. */
+/** Active uses in depth-first sibling order at every declared level. */
 function readingOrder(rows: readonly Record[], structure: string): Record[] {
   const active = rows.filter(row => row.state === 'active')
     .sort((a, b) => a.segmentKey!.localeCompare(b.segmentKey!) || a.orderKey!.localeCompare(b.orderKey!));
   const children = new Map<string, Record[]>();
   for (const row of active) children.set(row.parent, [...children.get(row.parent) ?? [], row]);
-  return (children.get(structure) ?? []).flatMap(row => [row, ...children.get(row.occurrence) ?? []]);
+  const result: Record[] = [];
+  const pending = [...children.get(structure) ?? []].reverse();
+  const seen = new Set<string>();
+  while (pending.length) {
+    const row = pending.pop()!;
+    if (seen.has(row.occurrence)) throw new StructureRefreshInvalid('refresh topology repeats an occurrence');
+    seen.add(row.occurrence);
+    result.push(row);
+    for (const child of [...children.get(row.occurrence) ?? []].reverse()) pending.push(child);
+  }
+  return result;
 }
 const same = (left: readonly string[], right: readonly string[]) =>
   left.length === right.length && left.every((item, index) => item === right[index]);
 
 /**
  * Bounded three-way merge; ambiguous child or simultaneous divergent edits return
- * explicit conflicts. Order includes each use's group, so moving a chapter into
- * another volume is an order change on the side that moved it.
+ * explicit conflicts. Order includes each use's parent, so moving between
+ * containers is an order change on the side that moved it.
  */
-export function planBookRefresh(input: { source: Snapshot; base?: Snapshot; local: Snapshot;
+export function planStructureRefresh(input: { profile: string; source: Snapshot; base?: Snapshot; local: Snapshot;
   revision: string }): RefreshPlan {
   if (input.source.records.length > STRUCTURE_LIMITS.stageRecords
     || (input.base?.records.length ?? 0) > STRUCTURE_LIMITS.stageRecords
@@ -128,9 +160,24 @@ export function planBookRefresh(input: { source: Snapshot; base?: Snapshot; loca
     || input.base && input.base.structure !== input.source.structure) {
     throw new StructureRefreshInvalid('refresh exceeds the bounded stage or changes source identity');
   }
+  const profile = structureProfileFor(input.profile);
+  if ([input.source, input.base, input.local].some(snapshot => snapshot?.manifest
+    && snapshot.manifest.profile !== profile.id)) throw new StructureRefreshInvalid('refresh profile differs from retained basis');
   const conflicts: RefreshConflict[] = [];
-  const source = mapSource(input.source, conflicts);
-  const base = input.base ? mapSource(input.base, conflicts) : new Map<string, Mapped>();
+  const mergeFact = <K extends 'measures' | 'completion'>(field: K, fallback: StructureManifest[K]) => {
+    const incoming = input.source.manifest?.[field] ?? fallback;
+    const prior = input.base?.manifest?.[field] ?? fallback;
+    const current = input.local.manifest?.[field] ?? fallback;
+    const sameFact = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
+    if (!sameFact(incoming, prior) && !sameFact(current, prior) && !sameFact(incoming, current)) {
+      conflicts.push({ sourceKey: `@${field}`, reason: 'local-and-source-edit' });
+    }
+    return sameFact(incoming, prior) ? current : incoming;
+  };
+  const measures = mergeFact('measures', []);
+  const completion = mergeFact('completion', undefined);
+  const source = mapSource(input.source, conflicts, profile);
+  const base = input.base ? mapSource(input.base, conflicts, profile) : new Map<string, Mapped>();
   const localStructure = input.local.structure;
   const localById = new Map(input.local.records.map(record => [record.occurrence, record]));
   /** A local use's key: its source correspondence, or its own identity for a human use. */
@@ -140,9 +187,7 @@ export function planBookRefresh(input: { source: Snapshot; base?: Snapshot; loca
   const human: Record[] = [];
   for (const record of input.local.records) {
     const owner = record.parent === localStructure ? null : localById.get(record.parent);
-    if (record.role !== 'chapter' && record.role !== 'group'
-      || record.parent !== localStructure && (record.role === 'group' || owner?.role !== 'group'
-        || owner.parent !== localStructure)) {
+    if (!validTopology(record, input.local, localById, profile)) {
       conflicts.push({ sourceKey: record.sourceKey ?? record.occurrence,
         reason: 'unknown-child-correspondence' });
       continue;
@@ -207,7 +252,7 @@ export function planBookRefresh(input: { source: Snapshot; base?: Snapshot; loca
       result.set(key, { ...withoutOrder, state: 'removed', removedBy: input.revision });
     }
   }
-  // Order is compared as the reading sequence of the uses all three sides share, each with its group.
+  // Order is compared as the reading sequence of the uses all three sides share, each with its parent.
   const sequence = (snapshot: Snapshot) => readingOrder(snapshot.records, snapshot.structure)
     .map(row => sourceCorrespondence(input.source.structure, sourceKey(row)));
   const placedIn = (mapped: Map<string, Mapped>, key: string) => `${mapped.get(key)?.parent ?? ''}>${key}`;
@@ -229,7 +274,7 @@ export function planBookRefresh(input: { source: Snapshot; base?: Snapshot; loca
   const cost = { sourceRecords: input.source.records.length, baseRecords: input.base?.records.length ?? 0,
     localRecords: input.local.records.length, comparisons };
   if (conflicts.length) return { records: [], conflicts, cost };
-  // The arrangement: each kept use with the key of the group it stands in.
+  // The arrangement: each kept use with the key of its parent.
   const arrangement: { key: string; row: Record; parent: Parent }[] = [];
   const seen = new Set<string>();
   const place = (key: string, parent: Parent) => {
@@ -255,12 +300,12 @@ export function planBookRefresh(input: { source: Snapshot; base?: Snapshot; loca
   if (arrangement.length > STRUCTURE_LIMITS.stageRecords) {
     throw new StructureRefreshInvalid('refresh result exceeds the bounded stage');
   }
-  // A use follows its group; one whose group did not survive the merge has no place to stand.
+  // A use whose container did not survive the merge has no place to stand.
   const destination = new Map(arrangement.map(item => [item.key, item.row]));
   const children = new Map<string, Record[]>();
   for (const item of arrangement) {
     const owner = item.parent === null ? null : destination.get(item.parent);
-    if (item.parent !== null && owner?.role !== 'group') {
+    if (item.parent !== null && (!owner || !isContainerRole(profile, owner.role))) {
       return { records: [], conflicts: [{ sourceKey: item.key, reason: 'unknown-child-correspondence' }], cost };
     }
     const parent = owner?.occurrence ?? localStructure;
@@ -276,6 +321,10 @@ export function planBookRefresh(input: { source: Snapshot; base?: Snapshot; loca
         orderKey: evenKeys(count)[index % STRUCTURE_LIMITS.segmentMembers]! };
     });
   });
+  const byId = new Map(positioned.map(row => [row.occurrence, row]));
+  if (positioned.some(row => !validTopology(row, { structure: localStructure, records: positioned }, byId, profile))) {
+    return { records: [], conflicts: [{ sourceKey: '*', reason: 'unknown-child-correspondence' }], cost };
+  }
   const removed = [...result.values(), ...human].filter(row => row.state === 'removed');
-  return { records: [...positioned, ...removed], conflicts, cost };
+  return { records: [...positioned, ...removed], measures, ...(completion ? { completion } : {}), conflicts, cost };
 }

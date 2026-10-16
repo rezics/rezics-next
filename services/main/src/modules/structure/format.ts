@@ -447,18 +447,6 @@ export function checkOccurrenceQualifier(value: unknown): NonNullable<Occurrence
   if (checked.type === 'work-part' && /[\u0000-\u001f\u007f]/u.test(checked.displayLabel)) {
     throw new InvalidStructureObject('a Work part requires its display label and inclusion');
   }
-  if (checked.type === 'ingredient-line' && checked.amountUpper !== undefined && checked.amount === undefined) {
-    throw new InvalidStructureObject('an amount range needs its lower bound');
-  }
-  if (checked.type === 'ingredient-line' && checked.textParts) {
-    const parts = checked.textParts, source = checked.originalText.value;
-    const spans = [parts.amount, parts.name, ...(parts.unit ? [parts.unit] : [])];
-    if (spans.some(span => span.start > span.end || span.end > source.length)
-      || parts.amount.start === parts.amount.end || parts.amount.end > (parts.unit?.start ?? parts.name.start)
-      || (parts.unit?.end ?? parts.amount.end) > parts.name.start) {
-      throw new InvalidStructureObject('ingredient text spans differ from their retained source');
-    }
-  }
   return checked;
 }
 

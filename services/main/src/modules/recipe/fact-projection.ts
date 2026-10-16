@@ -1,7 +1,8 @@
+import { checkRecipeQualifier } from './occurrence-validation.ts';
 import { createHash } from 'node:crypto';
 import { GRAPHS, RV, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import { checkOccurrenceQualifier, InvalidStructureObject, type OccurrenceRecord, type RecipeMeasure } from '../structure/format.ts';
+import { InvalidStructureObject, type OccurrenceRecord, type RecipeMeasure } from '../structure/format.ts';
 import type { PlacementState } from '../structure/graph.ts';
 import { semanticValueRdf } from '../semantic/value.ts';
 import { exactRational } from './quantity.ts';
@@ -156,7 +157,7 @@ export async function hydrateRecipeFacts(env: WorkActivationEnvironment, state: 
       optional: one(id, `${SCHEMA}valueRequired`)?.value === 'false', scaling: scale, substituteFor: values(`${RV}substituteFor`) };
   } else result = { type: 'recipe-step', instructionText: text(id, `${SCHEMA}text`),
     usesIngredient: values(`${SCHEMA}mentions`), media: values(`${SCHEMA}associatedMedia`), scaling: scale };
-  return checkOccurrenceQualifier(result);
+  return checkRecipeQualifier(result);
 }
 
 export async function recipeFactValidations(env: WorkActivationEnvironment, states: readonly PlacementState[]) {

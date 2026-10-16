@@ -297892,6 +297892,95 @@
                                   "inclusion"
                                 ],
                                 "type": "object"
+                              },
+                              {
+                                "properties": {
+                                  "availability": {
+                                    "enum": [
+                                      "available",
+                                      "unavailable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "childCount": {
+                                    "~elyTyp": 7,
+                                    "minimum": 0,
+                                    "nullable": true,
+                                    "type": [
+                                      "integer",
+                                      "null"
+                                    ]
+                                  },
+                                  "division": {
+                                    "type": "null"
+                                  },
+                                  "label": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "language": {
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "language"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "number": {
+                                    "type": "null"
+                                  },
+                                  "occurrence": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "parent": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "progress": {
+                                    "type": "null"
+                                  },
+                                  "role": {
+                                    "maxLength": 32,
+                                    "minLength": 1,
+                                    "pattern": "^(?!(group|chapter|part)$)[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+                                    "type": "string"
+                                  },
+                                  "selectedRevision": {
+                                    "type": "null"
+                                  },
+                                  "target": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "occurrence",
+                                  "parent",
+                                  "role",
+                                  "label",
+                                  "division",
+                                  "number",
+                                  "childCount",
+                                  "target",
+                                  "selectedRevision",
+                                  "progress",
+                                  "availability"
+                                ],
+                                "type": "object"
                               }
                             ]
                           },
@@ -921260,6 +921349,95 @@
                               "availability",
                               "displayLabel",
                               "inclusion"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "availability": {
+                                "enum": [
+                                  "available",
+                                  "unavailable"
+                                ],
+                                "type": "string"
+                              },
+                              "childCount": {
+                                "~elyTyp": 7,
+                                "minimum": 0,
+                                "nullable": true,
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "division": {
+                                "type": "null"
+                              },
+                              "label": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "properties": {
+                                  "language": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "value",
+                                  "language"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "number": {
+                                "type": "null"
+                              },
+                              "occurrence": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "parent": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "progress": {
+                                "type": "null"
+                              },
+                              "role": {
+                                "maxLength": 32,
+                                "minLength": 1,
+                                "pattern": "^(?!(group|chapter|part)$)[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+                                "type": "string"
+                              },
+                              "selectedRevision": {
+                                "type": "null"
+                              },
+                              "target": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "occurrence",
+                              "parent",
+                              "role",
+                              "label",
+                              "division",
+                              "number",
+                              "childCount",
+                              "target",
+                              "selectedRevision",
+                              "progress",
+                              "availability"
                             ],
                             "type": "object"
                           }

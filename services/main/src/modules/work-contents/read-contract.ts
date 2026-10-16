@@ -35,7 +35,11 @@ const workPartItem = t.Object({ ...textContentsItem.properties, role: t.Literal(
   selectedRevision: t.Null(), progress: t.Null(), availability: t.Literal('available'),
   displayLabel: t.String(),
   inclusion: t.Union([t.Literal('required'), t.Literal('optional'), t.Literal('extra')]) });
-export const contentsItem = t.Union([textContentsItem, workPartItem]);
+/** Declared roles share the same bounded contents envelope without inventing chapter semantics. */
+const declaredContentsItem = t.Object({ ...textContentsItem.properties,
+  role: t.String({ minLength: 1, maxLength: 32, pattern: '^(?!(group|chapter|part)$)[a-z][a-z0-9]*(-[a-z0-9]+)*$' }),
+  division: t.Null(), number: t.Null(), selectedRevision: t.Null(), progress: t.Null() });
+export const contentsItem = t.Union([textContentsItem, workPartItem, declaredContentsItem]);
 export const contentsPage = t.Object({ profile: t.Literal('work-contents-v1'), work: readId,
   version: readId, composition: readId, compositionRevision: readId,
   language: t.Nullable(readLanguage), items: t.Array(contentsItem, { maxItems: 20 }), ...pageFields });

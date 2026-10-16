@@ -1,10 +1,11 @@
+import { readHierarchyPage, type StructureWalkFrame } from '../structure/reading-order.ts';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { fenceWorkBasis, readWorkBasis, structureRevisionDisclosureVisible } from '../work/read-header.ts';
 import type { WorkReadSession } from '../work/read-session.ts';
 import { WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable }
   from '../work/read-session.ts';
-import { CompositionUnavailable, compositionForMainVersion, orderTreeKey, readCompositionHeader }
+import { CompositionUnavailable, compositionForMainVersion, readCompositionHeader }
   from '../structure/graph.ts';
 import { readCompositionPage, readStructureMeasures, selectWorkCompositionRevision } from '../structure/read.ts';
 import { STRUCTURE_LIMITS, type OccurrenceRecord, type RecipeMeasure } from '../structure/format.ts';
@@ -46,16 +47,7 @@ function recipeCursorKey(): Buffer {
   return createHmac('sha256', Buffer.from(capability, 'hex')).update(RECIPE_CURSOR_DOMAIN).digest();
 }
 
-interface CursorFrame { parent: string; after?: string }
-/**
- * Cursor frame plus the unread tail of the child page fetched during this call.
- * The cursor does not carry the tail; a continuation reads again from `after`.
- */
-interface WalkFrame extends CursorFrame {
-  pending?: OccurrenceRecord[];
-  at?: number;
-  more?: boolean;
-}
+type CursorFrame = StructureWalkFrame;
 interface RecipeCursor {
   v: 1;
   structure: string;
@@ -176,7 +168,7 @@ export async function readRecipeHierarchyPage(input: {
   readMeasures?: () => Promise<{ measures: readonly RecipeMeasure[]; pagesRead: number }>;
   cursor?: string;
 } & RecipeHierarchyRead) {
-  let stack: WalkFrame[];
+  let stack: StructureWalkFrame[];
   let factor: ExactRational;
   let pinnedServings: number | null;
   if (input.cursor) {
@@ -198,9 +190,6 @@ export async function readRecipeHierarchyPage(input: {
   }
   let measures = [...(input.measures ?? [])];
   let measureReads = 0;
-  let parentReads = 0;
-  let emptyReads = 0;
-  let dataReads = 0;
   let pagesRead = 0;
   if (input.readMeasures) {
     const measured = await input.readMeasures();
@@ -212,65 +201,12 @@ export async function readRecipeHierarchyPage(input: {
     throw new WorkReadUnavailable('Recipe measures exceed 64');
   }
   if (!input.cursor) factor = servingsFactor(measures, input.servings);
-  // Child pages share one pool. Depth + 1 covers a shallow recipe; the walk stops rather than exceeding it.
-  const childReadLimit = STRUCTURE_LIMITS.maxDepth + 1;
-  const charge = (kind: 'parent' | 'empty' | 'data') => {
-    if (kind === 'parent') parentReads += 1;
-    else if (kind === 'empty') emptyReads += 1;
-    else dataReads += 1;
-    if (measureReads > 1 || parentReads > STRUCTURE_LIMITS.maxDepth
-      || emptyReads + dataReads > childReadLimit) {
-      throw new WorkReadLimit('Recipe page exceeds its read bound');
-    }
-  };
-  for (let index = 1; index < stack.length; index += 1) {
-    charge('parent');
-    const found = await input.readParent(stack[index]!.parent);
-    pagesRead += found.pagesRead;
-    const record = found.record;
-    if (!record || record.state !== 'active' || record.role !== 'group'
-      || record.parent !== stack[index - 1]!.parent) {
-      throw new WorkReadUnavailable('Recipe cursor parent is not in this revision');
-    }
-  }
-  const taken: OccurrenceRecord[] = [];
-  while (stack.length > 0) {
-    const frame = stack.at(-1)!;
-    const consumed = frame.at ?? 0;
-    if (!frame.pending || consumed >= frame.pending.length) {
-      // Pop a frame whose page is finished without another read, including after the occurrence cap,
-      // so the cursor is not left on an exhausted parent.
-      if (frame.pending && !frame.more) {
-        stack.pop();
-        continue;
-      }
-      if (taken.length >= RECIPE_WORK_PAGE_OCCURRENCES || emptyReads + dataReads >= childReadLimit) break;
-      const page = await input.readChildren({ parent: frame.parent, ...(frame.after ? { after: frame.after } : {}),
-        limit: RECIPE_WORK_PAGE_OCCURRENCES });
-      pagesRead += page.pagesRead;
-      const batch = page.occurrences.slice(0, RECIPE_WORK_PAGE_OCCURRENCES);
-      frame.pending = batch;
-      frame.at = 0;
-      frame.more = page.next != null || page.occurrences.length > RECIPE_WORK_PAGE_OCCURRENCES;
-      charge(batch.length === 0 ? 'empty' : 'data');
-      continue;
-    }
-    if (taken.length >= RECIPE_WORK_PAGE_OCCURRENCES) break;
-    const item = frame.pending[consumed]!;
-    if (!item.segmentKey || !item.orderKey || item.parent !== frame.parent) {
-      throw new WorkReadUnavailable('Recipe occurrence has no order');
-    }
-    frame.at = consumed + 1;
-    taken.push(item);
-    frame.after = orderTreeKey({ parent: item.parent, segmentKey: item.segmentKey, orderKey: item.orderKey });
-    if (item.state === 'active' && item.role === 'group') {
-      if (stack.length > STRUCTURE_LIMITS.maxDepth) {
-        throw new WorkReadUnavailable('Recipe sections exceed depth 16');
-      }
-      stack.push({ parent: item.occurrence });
-    }
-  }
-  const occurrences = taken.filter(item => item.state === 'active');
+  const walked = await readHierarchyPage({ structure: input.structure,
+    profile: structureProfileFor('recipe-composition'), stack,
+    limit: RECIPE_WORK_PAGE_OCCURRENCES, childReadLimit: STRUCTURE_LIMITS.maxDepth + 1,
+    readChildren: input.readChildren, readParent: input.readParent });
+  const { occurrences, parentReads, emptyReads, dataReads } = walked;
+  pagesRead += walked.pagesRead;
   const next = stack.length > 0 ? encodeCursor({ v: 1, structure: input.structure, revision: input.revision,
     servings: pinnedServings, factor, stack }) : undefined;
   const result = { profile: 'recipe-work-page-v1' as const, structure: input.structure, revision: input.revision,

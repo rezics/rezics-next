@@ -61,17 +61,6 @@ relation (`work/instruction-adoption.ts`, `content-publication/public-selection.
 the dependency relation should be owner-neutral, with Recipe semantics projected
 by its profile. Proof: a non-Recipe structured profile publishes from a source.
 
-Structure traversal and refresh encode Book topology: chapter seeking, three-way
-refresh and Work contents allow only group, chapter and part roles, and Recipe
-keeps its own walker (`structure/reading-order.ts`, `structure/refresh.ts`,
-`work-contents/read.ts`, `recipe/work-page.ts`). The shared codec also validates
-Recipe ingredient ranges (`structure/format.ts`). Traversal should follow
-declared container roles and depth, and relational checks should run through
-profile validation hooks. Work type rules mix interest grouping with structural
-invariants, and only Book has a dependency guard (`work/activate.ts`,
-`work/edit.ts`); required types should derive from attached profiles. Proof: a
-section-list composition navigates, refreshes and guards its type.
-
 ## Discovery, exchange and release
 
 Phrase search reaches a Work from Content only through Book chapter placement

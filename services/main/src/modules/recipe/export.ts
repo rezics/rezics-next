@@ -1,5 +1,5 @@
+import { checkRecipeQualifier } from './occurrence-validation.ts';
 import type { OccurrenceRecord, RecipeMeasure } from '../structure/format.ts';
-import { checkOccurrenceQualifier } from '../structure/format.ts';
 import { MAX_RECIPE_SECTION_DEPTH, measureRecipeJSON, RecipeNotImportable, recipeImportability } from './importer.ts';
 import { RECIPE_UNIT_DEFINITIONS, RecipeUnitNotRegistered } from './display.ts';
 import type { RecipeInstruction } from './instructions.ts';
@@ -76,7 +76,7 @@ export function exportRecipe(records: readonly OccurrenceRecord[], structure: st
     if (source?.startsWith('https://rezics.com/id/')) sourceObservations.add(source);
     if (record.role !== 'ingredient' || record.qualifier?.type !== 'ingredient-line') continue;
     const line = record.qualifier;
-    checkOccurrenceQualifier(line);
+    checkRecipeQualifier(line);
     const pointer = `/occurrences/${recordIndex}/qualifier`;
     if (line.substituteFor.length) losses.push({ occurrence: record.occurrence,
       code: 'reference-not-representable', pointer: `${pointer}/substituteFor` });

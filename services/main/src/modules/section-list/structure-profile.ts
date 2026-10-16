@@ -20,6 +20,7 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   authorizeTarget: authorizeWorkTarget, targetGuard: workTargetGuard,
   withholdUnreadableTargets: true,
   roles: ['section', 'entry'], containerRoles: ['section'], targetRoles: ['entry'],
+  readingRoles: ['entry'],
   selectionRequiredRoles: [],
   qualifiers: { entry: { type: 'fields', required: true, fieldId: 'entry', textFields: ['note'] } },
   projectQualifier: (state, generation) => projectQualifierFields(entryNote, state, generation),

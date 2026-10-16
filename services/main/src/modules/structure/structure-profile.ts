@@ -11,7 +11,8 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   targetReadPermission: 'work:read',
   targetDisclosure: 'resource',
   catalogTargetTypes: ['https://schema.org/Book', 'https://schema.org/DigitalDocument'],
-  roles: ['group', 'chapter'], targetRoles: ['chapter'], selectionRequiredRoles: ['chapter'],
+  roles: ['group', 'chapter'], containerRoles: ['group'], readingRoles: ['chapter'],
+  targetRoles: ['chapter'], selectionRequiredRoles: ['chapter'],
   qualifiers: { group: { type: 'book-group', required: false } },
   // Volumes, parts and extras sit directly under the book; chapters under the book or one group.
   maxDepth: 2,

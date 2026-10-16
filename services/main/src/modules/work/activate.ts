@@ -11,7 +11,8 @@ import type { OwnerPartitionRoutes } from '../partition/route.ts';
 import { discardUnpublishedWorkObjects, stagedWorkObjectCandidates,
   type StagedWorkObjectCandidates } from './object-gc.ts';
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
-import { workKinds, workSemanticTypes } from './work-kinds.ts';
+import { workSemanticTypes } from './work-kinds.ts';
+import { nativeWorkTypesCompatible } from './type-compatibility.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
 import { catalogueTitleKey } from '../catalogue-intake/title-keys.ts';
 import { workTypeAdmitted } from '../types/registry.ts';
@@ -145,9 +146,7 @@ export function normalizeWorkSemanticTypes(types: readonly string[] = [], retain
 }
 
 export function assertNativeWorkTypeCombination(types: readonly string[]): void {
-  const interests = new Set(types.map(type => workKinds[type as keyof typeof workKinds].interest).filter(Boolean));
-  if (interests.size > 1 || types.includes('https://rezics.com/vocab/SkillPackage')
-    && types.includes('https://rezics.com/vocab/PromptTemplate')) {
+  if (!nativeWorkTypesCompatible(types)) {
     throw new InvalidWorkSemanticTypes('conflicting Work semantic types');
   }
 }
