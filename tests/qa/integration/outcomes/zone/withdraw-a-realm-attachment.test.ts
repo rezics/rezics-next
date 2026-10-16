@@ -177,15 +177,14 @@ beforeAll(async () => {
   await answer(configure(sessions.owner, created.zone, created.zoneRevision, sessions.realm));
   for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const)
     sites[name] = created;
-  for (const name of ['stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
-    const editor = name === 'member' || name === 'owner' ? sessions.member : sessions.owner;
-    visits[name] = await site(editor);
-    const delegated = editor === sessions.member ? await role(editor, true) : null;
-    try { await answer(configure(editor, visits[name].zone, visits[name].zoneRevision, sessions.realm)); }
-    finally { if (delegated) await role(editor, false, delegated); }
-  }
+  for (const name of ['stranger', 'owner', 'moderator', 'operator'] as const) visits[name] = created;
+  visits.member = await site(sessions.member);
+  const delegated = await role(sessions.member, true);
+  try { await answer(configure(sessions.member, visits.member.zone, visits.member.zoneRevision, sessions.realm)); }
+  finally { await role(sessions.member, false, delegated); }
   // The moderator ends created; the later operator refusal uses the retained fixture attachment.
   sites.operator = { ...created, zone: sessions.zone };
+  visits.operator = { ...sites.operator, space: sessions.space };
 }, 180_000);
 
 type Published = { revision: string; realm: string | null };
@@ -269,6 +268,7 @@ outcomeTest(withdrawal, 'stranger', () => qualify('stranger', () => denied('stra
 outcomeTest(withdrawal, 'member', () => qualify('member', () => denied('member', 403)), recording);
 outcomeTest(withdrawal, 'owner', () => qualify('owner', async () => {
   const zoneOnly = await site(sessions.member);
+  visits.owner = zoneOnly;
   const roleId = await role(sessions.member, true);
   try {
     await answer(configure(sessions.member, zoneOnly.zone, zoneOnly.zoneRevision, sessions.realm));
@@ -427,6 +427,14 @@ async function productionVisit(name: PersonaName) {
   if (name === 'visitor') return;
   const { main, fetcher } = productionTransport(name), actor = sessions[name].actingSubject!;
   const realm = short(sessions.realm), target = visits[name];
+  // Restore the proof's final detached fixture without adding requests to the visit.
+  if (name === 'owner') {
+    const delegated = await role(sessions.member, true);
+    try { await answer(configure(sessions.member, target.zone, (await head(target.zone, sessions.member)).revision, sessions.realm)); }
+    finally { await role(sessions.member, false, delegated); }
+  } else if (name === 'moderator' || name === 'operator') {
+    await answer(configure(sessions.owner, target.zone, (await head(target.zone)).revision, sessions.realm));
+  }
   // readSession's server-only cookie/cache wrapper is unavailable here. Its typed Main
   // client sends these discovery reads together, then reads the selected Agent profile.
   await named('session-language-selection', () => readMainSessionAgent('recorded', '00000000-0000-4000-8000-000000000001', fetcher));
