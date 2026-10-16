@@ -1,5 +1,6 @@
-import { qaStartupTestTimeout, runQaAdmissionChildAsync, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
+import { admitIntegrationWorkScope, qaStartupTestTimeout, runQaAdmissionChildAsync, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
+import { exclusiveWorkScopeAssembler } from '../../../scripts/qa/stack-environment.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, rmSync } from 'node:fs';
@@ -26,14 +27,17 @@ import { readNativeChildRetirement } from '../../../services/main/src/modules/so
 const root = resolve(import.meta.dir, '../../..');
 async function stack(action: 'stack:up' | 'stack:reset', runId: string) {
   const args = [action, '--profile', 'qa', '--run-id', runId];
+  // The author fixture prepares the native Work-name directory, which requires
+  // the same exclusive command endpoint used by the product integration stack.
+  const environment = { ...Bun.env, REZICS_FUSEKI_ASSEMBLER: exclusiveWorkScopeAssembler };
   const result = action === 'stack:up'
-    ? await runQaStartupChildAsync(root, args, 180_000)
-    : await runQaAdmissionChildAsync(root, 'bun', ['scripts/dev/cli.ts', ...args], 180_000);
+    ? await runQaStartupChildAsync(root, args, 180_000, environment)
+    : await runQaAdmissionChildAsync(root, 'bun', ['scripts/dev/cli.ts', ...args], 180_000, environment);
   if (result.status !== 0 || result.error) throw new Error(`${action}: ${(result.stderr || result.stdout).slice(-2000)}`);
   return result.admissionWaitMs;
 }
 
-test('LIVE04: native subject child and human retirement survive held graph recovery', async () => {
+test.each(['open-library', 'bangumi'])('LIVE04: %s native child and human retirement survive held graph recovery', async provider => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the fault/recovery tier');
   const nonce = randomUUID().slice(0, 12), liveId = `child-${nonce}-l`, restoredId = `child-${nonce}-r`;
   const directory = join(root, '.temp', `child-restore-${nonce}`), started: string[] = [];
@@ -53,20 +57,40 @@ test('LIVE04: native subject child and human retirement survive held graph recov
       }
     }
     await access.end();
+    const liveFuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
+    await liveFuseki.resetDataset();
+    await initializeFreshGraph(liveFuseki, { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: '1' });
+    await admitIntegrationWorkScope({ root, projectRunId: liveId, fusekiUrl: apps.FUSEKI_URL!,
+      maintenanceToken: apps.FUSEKI_MAINTENANCE_TOKEN, environment: Bun.env });
     h = await authorCreditFixture({ ...apps, MAIN_ROUTING_EPOCH: '1' }, directory);
-    await initializeFreshGraph(h.env.fuseki, h.env.lineage);
     expect(Date.now() - start - admissionWaitMs).toBeLessThan(600_000);
     const consumer = `child:${nonce}`;
     await initializeRelayCheckpoint(relay, consumer, h.env.lineage.dataEpoch);
-    const proposal = await h.propose('OL991899W', [author('/authors/OL1A')],
-      'Recover child', undefined, ['river', 'river']);
+    const proposal = provider === 'open-library'
+      ? await h.propose('OL991899W', [author('/authors/OL1A')], 'Recover child', undefined, ['river', 'river'])
+      : await (async () => {
+        const captured = await h!.intake.submit(h!.principalId, randomUUID(), {
+          provider: 'bangumi', namespace: 'subject', externalId: '26991', sourceRevision: 'exact-recovery-v1',
+          mediaType: 'application/json', retention: 'retained',
+          rawBytesBase64: Buffer.from(JSON.stringify({ id: 26991, type: 4, name: 'Recover child',
+            summary: 'Retained synopsis', tags: [{ name: 'river' }, { name: 'river' }] })).toString('base64'),
+          coverage: { scope: 'bangumi-subject-response-v1', complete: true, omittedFields: [] },
+          rightsEvidence: { basis: 'unknown', note: 'Recovery grants no reuse rights' },
+        });
+        const converted = await h!.conversions.convertMapped(h!.principalId,
+          shortId(captured.observation.observation), 'bangumi-subject-map-v1');
+        const conversion = shortId(converted!.conversion.conversion);
+        await h!.graph.project(h!.principalId, conversion);
+        return (await h!.proposals.propose(h!.principalId, conversion))!.proposal;
+      })();
+    const field = provider === 'open-library' ? 'subjects' : 'tags';
     const work = await h.adoptWork(proposal);
     await h.grant(`work:edit:${work.work}`, 'work.edit');
     await h.grant(`work:read:${work.work}`, 'work.read');
     const input = { profile: 'source-native-child-adoption-v1' as const,
-      field: 'subjects' as const, proposal: proposal.proposal,
+      field, proposal: proposal.proposal,
       conversion: proposal.conversion,
-      occurrence: sourceChildOccurrence(proposal.observation, 'subjects', 1), sourceOrdinal: 1,
+      occurrence: sourceChildOccurrence(proposal.observation, field, 1), sourceOrdinal: 1,
       confirmedSourceKey: 'river', nativeOrdinal: 1, expectedHead: work.workRevision,
       actingSubject: h.actor, baseSupport: null, correspondence: null,
       confirmedUse: 'factual-reference-only' as const };
@@ -85,6 +109,7 @@ test('LIVE04: native subject child and human retirement survive held graph recov
     const coverage = await relayCoverage(relay, consumer);
     const restoredFuseki = new FusekiClient(restoredApps.FUSEKI_URL!, restoredApps.FUSEKI_MAINTENANCE_TOKEN!,
       restoredApps.FUSEKI_COMMAND_TOKEN!);
+    await restoredFuseki.resetDataset();
     await initializeFreshGraph(restoredFuseki, h.env.lineage);
     const next = { dataEpoch: randomUUID(), routingEpoch: String(BigInt(h.env.lineage.routingEpoch) + 1n) };
     await cutoverRestoredGraphLineage(restoredFuseki, { prior: { ...h.env.lineage, sequence: '0' }, next });

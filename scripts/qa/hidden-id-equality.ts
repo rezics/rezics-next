@@ -37,12 +37,15 @@ export const registeredHiddenIdReads = [
 ] as const;
 
 /** Writes have their own outcome proofs; they do not run in the read-only equality fixture.
- * About-posts covers hidden/absent targets (404) and hidden/absent openers (ordinary posting). */
+ * About-posts covers hidden/absent targets (404) and hidden/absent openers (ordinary posting).
+ * source-mapped-adoption proves response equality for another editor's observation
+ * and a missing observation; this does not claim equal owner query counts. */
 export const registeredHiddenIdWrites = [
   'POST /v1/realms/{realm}/about-posts',
   // Retained collection resume compares another Person's file with an absent
   // file in native-exchange-disclosure.test.ts, without dispatching any row.
   'POST /v1/recipes/file-imports',
+  'POST /v1/sources/observations/{observation}/conversions',
 ] as const;
 /** Parent-output equality, proved at the owner tier in realm-reply-threads,
  * realm-reply-profile and realm-reply-parent-disclosure tests. These cases

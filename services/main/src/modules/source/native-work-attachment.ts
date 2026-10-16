@@ -211,32 +211,44 @@ export class SourceNativeWorkAttachmentStore {
 
   async read(principalId: string, work: string): Promise<NativeWorkSupportCollection | null> {
     if (!UUID.test(principalId) || !NATIVE.test(work)) throw new SourceAdoptionInvalid('invalid support identity');
+    // Resolve graph/object evidence before taking a Content connection. The
+    // locked head below certifies that this evidence still names the same support.
+    const original = await this.adoptions.readSupport(principalId, work);
+    if (!original) return null;
     const client = await this.pool.connect();
+    let row: AttachmentRow | undefined;
+    let withdrawn: WithdrawalRow | undefined;
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL transaction_timeout = '15s'");
-      const locked = await client.query(`SELECT h.binding_id FROM source.native_work_support_head h
+      const locked = await client.query<{ binding_id: string; application_id: string | null;
+        withdrawal_id: string | null }>(`SELECT h.binding_id, h.application_id, w.id AS withdrawal_id
+        FROM source.native_work_support_head h
         JOIN source.native_work_binding b ON b.id = h.binding_id
+        LEFT JOIN source.native_work_support_withdrawal w ON w.binding_id = b.id
         WHERE b.work = $1 AND b.principal_id = $2 FOR SHARE OF h`, [work, principalId]);
-      if (!locked.rowCount) { await client.query('COMMIT'); return null; }
-      const row = (await client.query<AttachmentRow>(`SELECT * FROM source.native_work_support_attachment
-        WHERE work = $1 AND principal_id = $2 FOR SHARE`, [work, principalId])).rows[0];
-      const original = await this.adoptions.readSupport(principalId, work);
-      if (!original) throw new SourceAdoptionUnavailable('original support is unavailable');
-      const supports: NativeWorkSupportEntry[] = [{ kind: 'adoption', support: original }];
-      if (row) {
-        const attachment = await this.receipt(row, original.binding);
-        const withdrawn = await this.withdrawalRow(client, row.id, principalId);
-        supports.push({ kind: 'attachment', support: { profile: 'native-work-source-title-support-v2',
-          state: withdrawn ? 'withdrawn' : 'recorded', attachment, currentHead: original.currentHead,
-          verifiedRevisionIsHead: row.work_revision === original.currentHead,
-          withdrawal: withdrawn ? this.withdrawal(withdrawn, attachment) : null } });
+      const head = locked.rows[0];
+      if (!head || url(head.binding_id) !== original.binding
+        || (head.application_id ? url(head.application_id) : null) !== (original.latestApplication?.application ?? null)
+        || (head.withdrawal_id ? url(head.withdrawal_id) : null) !== (original.withdrawal?.withdrawal ?? null)) {
+        throw new SourceAdoptionConflict('source support head changed during read');
       }
+      row = (await client.query<AttachmentRow>(`SELECT * FROM source.native_work_support_attachment
+        WHERE work = $1 AND principal_id = $2 FOR SHARE`, [work, principalId])).rows[0];
+      withdrawn = row ? await this.withdrawalRow(client, row.id, principalId) : undefined;
       await client.query('COMMIT');
-      return { profile: 'native-work-source-supports-v2', work, currentHead: original.currentHead, supports };
     } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
     finally { client.release(); }
+    const supports: NativeWorkSupportEntry[] = [{ kind: 'adoption', support: original }];
+    if (row) {
+      const attachment = await this.receipt(row, original.binding);
+      supports.push({ kind: 'attachment', support: { profile: 'native-work-source-title-support-v2',
+        state: withdrawn ? 'withdrawn' : 'recorded', attachment, currentHead: original.currentHead,
+        verifiedRevisionIsHead: row.work_revision === original.currentHead,
+        withdrawal: withdrawn ? this.withdrawal(withdrawn, attachment) : null } });
+    }
+    return { profile: 'native-work-source-supports-v2', work, currentHead: original.currentHead, supports };
   }
 
   async readBinding(principalId: string, work: string, binding: string): Promise<NativeWorkSupportEntry | null> {

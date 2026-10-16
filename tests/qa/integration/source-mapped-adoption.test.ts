@@ -82,6 +82,14 @@ test('mapped evidence adopts a non-Book Work, ordered children and synopsis with
       return { observation, conversion, proposal };
     };
     const initial = await propose(raw, 'exact-v1');
+    const privateConversion = await stranger.send('POST',
+      `/v1/sources/observations/${short(initial.observation.observation)}/conversions`,
+      { profile: 'bangumi-subject-map-v1' });
+    const absentConversion = await stranger.send('POST',
+      `/v1/sources/observations/${randomUUID()}/conversions`, { profile: 'bangumi-subject-map-v1' });
+    expect(privateConversion.status).toBe(404);
+    expect(absentConversion.status).toBe(404);
+    expect(await privateConversion.json()).toEqual(await absentConversion.json());
     expect(initial.observation.rawBytesBase64).toBe(Buffer.from(JSON.stringify(raw)).toString('base64'));
     const conversionPath = `/v1/sources/conversions/${short(initial.conversion.conversion)}`;
     expect((await stranger.send('GET', conversionPath)).status).toBe(404);

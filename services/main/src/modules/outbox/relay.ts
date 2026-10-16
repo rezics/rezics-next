@@ -13,6 +13,7 @@ import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { GLOBAL_TARGET_CONTEXT_SCOPE, GLOBAL_TARGET_CONTEXT_PROFILE } from '../rating/target-context-authority.ts';
 import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from './relay-position.ts';
 import { CLASSIFICATION_CONTEXT_PROFILE, CLASSIFICATION_CONTEXT_V2_PROFILE } from '../classification/context.ts';
+import { MAPPING_REVISION } from '../source/mapped-values.ts';
 
 const SOURCE = 'https://rezics.com/services/main';
 
@@ -487,7 +488,7 @@ export interface SourceBoundaryCloudEvent {
     sequence: string }; routingEpoch: string; ordinal: number; receipt: {
       id: string; action: 'source.project'; outcome: 'succeeded';
       requestDigest: string; record: string; observation: string;
-      conversion: string; byteDigest: string; mappingRevision: 'open-library-work-map-v1';
+      conversion: string; byteDigest: string; mappingRevision: string;
     } };
 }
 
@@ -1266,7 +1267,7 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
     const mappingRevision = value('sourceMappingRevision');
     if (action !== 'source.project' || outcome !== `${RV}Succeeded`
       || !receiptId || !requestDigest || !record || !observation || !conversion
-      || !byteDigest || mappingRevision !== 'open-library-work-map-v1'
+      || !byteDigest || !mappingRevision || !MAPPING_REVISION.test(mappingRevision)
       || value('eventSourceConversion') !== conversion
       || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence
       || admissionId || authorityEpoch || scope
@@ -1278,7 +1279,7 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
     const graph = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <urn:rezics:graph:source> {
       ${iri(conversion)} a rv:SourceConversion ; rv:sourceObservation ${iri(observation)} ;
         rv:sourceByteDigest ${lit(byteDigest)} ;
-        rv:sourceMappingRevision "open-library-work-map-v1" .
+        rv:sourceMappingRevision ${lit(mappingRevision)} .
       ${iri(observation)} a rv:SourceObservation ; rv:sourceRecord ${iri(record)} ;
         rv:sourceByteDigest ${lit(byteDigest)} .
     } }`);

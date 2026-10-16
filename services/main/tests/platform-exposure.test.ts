@@ -260,7 +260,9 @@ test('every served Main route, including transports, has a reviewed exposure', (
   const closedOperations = matrix
     .filter((entry) => entry.exposure !== 'public')
     .map((entry) => exposureOperationId(entry.method, entry.path));
-  expect(closedOperations).toHaveLength(248);
+  expect(closedOperations).toHaveLength(249);
+  expect(matrix.find(entry => entry.path === '/v1/sources/observations/{observation}/conversions'
+    && entry.method === 'post')).toMatchObject({ exposure: 'platform:catalogue-import', rateLimitFamily: 'write' });
   expect(closedOperations).toContain('postV1RealmsByRealmAbout-posts');
   expect(closedOperations).toContain('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal');
   expect(closedOperations).toContain('postV1RealmsByRealmMember-receiptsByReceiptIdAppeal');
