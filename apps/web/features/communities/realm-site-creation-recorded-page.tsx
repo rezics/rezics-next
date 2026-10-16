@@ -8,6 +8,7 @@ import { localizedPath } from '../../i18n/locale.ts';
 import { addressKey } from '../address/path.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
 import { browserMainApi } from '../api/browser.ts';
+import { settle } from '../manage/read.ts';
 import { messages as manageMessages } from '../manage/messages.ts';
 import { readZoneManagementFrame } from '../zone-editor/authoring-reads.ts';
 import { zoneEditorDraftKey } from '../zone-editor/draft-state.ts';
@@ -45,7 +46,7 @@ export function RealmSiteCreationRecordedPage({ record, locale, existing = false
       const created = sample('creation-space').answer as { zone: string };
       sessionStorage.removeItem(zoneEditorDraftKey(created.zone.slice(-36), intent.actingSubject, 'attachment'));
       const frame = await readZoneManagementFrame(main, space, locale, intent.actingSubject);
-      const content = await zoneRealmAttachmentView({ main, anonymous, locale, actingSubject: intent.actingSubject,
+      const content = await zoneRealmAttachmentView({ main, readRealm: realm => settle(() => anonymous.v1.realms({ realm: realm.slice(-36) }).get({ query: {} })), locale, actingSubject: intent.actingSubject,
         signInHref: localizedPath('/sign-in', locale), loadAuthoring: async () => frame.authoring });
       const profile = sample('page-agent-profile').answer as { id: string; displayName: string };
       if (profile.id !== intent.actingSubject) throw new Error('Recorded identity differs from the command actor');

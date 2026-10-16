@@ -1,3 +1,4 @@
+import { settle } from '../manage/read.ts';
 import { isValidElement } from 'react';
 import { zoneRealmAttachmentView as routeView } from '../../app/[locale]/manage/z/[space]/realm/page.tsx';
 import { RealmAttachmentEditor } from '../zone-editor/realm-attachment.tsx';
@@ -185,7 +186,7 @@ test('the production attachment route shares its exact composition with recorded
     const main = browserMainApi('https://record.invalid', { fetcher: replay.fetcher });
     const canonical = (sample('creation-address').answer as { canonical: CanonicalAddress }).canonical;
     const frame = await readZoneManagementFrame(main, addressKey(canonical), 'en', body.actingSubject);
-    const view = await zoneRealmAttachmentView({ main, anonymous: browserMainApi('https://record.invalid', { anonymous: true, fetcher: replay.fetcher }),
+    const view = await zoneRealmAttachmentView({ main, readRealm: realm => settle(() => browserMainApi('https://record.invalid', { anonymous: true, fetcher: replay.fetcher }).v1.realms({ realm: realm.slice(-36) }).get({ query: {} })),
       actingSubject: body.actingSubject, locale: 'en', signInHref: '/en/sign-in', loadAuthoring: async () => frame.authoring });
     expect(isValidElement(view)).toBe(true);
     if (!isValidElement<{ zoneId: string; attachedRealm: string | null; actingSubject: string }>(view)) throw new Error('Missing route controls');
@@ -207,7 +208,7 @@ for (const persona of ['stranger', 'member', 'owner', 'moderator', 'operator'] a
       const entry = selections.find(item => item.label === 'management-configuration')!.path.split('/')[3]!;
       const frame = await readZoneManagementFrame(main, entry, 'en', actor);
       expect(frame.authoring.kind).toBe(persona === 'owner' || persona === 'operator' ? 'ready' : 'failure');
-      const view = await zoneRealmAttachmentView({ main, anonymous: browserMainApi('https://record.invalid', { anonymous: true, fetcher: replay.fetcher }),
+      const view = await zoneRealmAttachmentView({ main, readRealm: realm => settle(() => browserMainApi('https://record.invalid', { anonymous: true, fetcher: replay.fetcher }).v1.realms({ realm: realm.slice(-36) }).get({ query: {} })),
         actingSubject: actor, locale: 'en', signInHref: '/en/sign-in', loadAuthoring: async () => frame.authoring });
       if (!isValidElement<{ failure: string; actingSubject: string }>(view)) throw new Error('Missing route result');
       if (frame.authoring.kind === 'failure') {
@@ -243,7 +244,7 @@ test('an existing Realm reopens the same production controls without creation an
     const anonymous = browserMainApi('https://record.invalid', { anonymous: true, fetcher });
     const address = (sample('creation-address').answer as { canonical: CanonicalAddress }).canonical;
     const frame = await readZoneManagementFrame(main, addressKey(address), 'en', body.actingSubject);
-    const view = await zoneRealmAttachmentView({ main, anonymous, locale: 'en', actingSubject: body.actingSubject,
+    const view = await zoneRealmAttachmentView({ main, readRealm: realm => settle(() => anonymous.v1.realms({ realm: realm.slice(-36) }).get({ query: {} })), locale: 'en', actingSubject: body.actingSubject,
       signInHref: '/en/sign-in', loadAuthoring: async () => frame.authoring });
     if (!isValidElement<{ attachedRealm: string; attachedName: string; zoneHead: string }>(view)) throw new Error('Missing attachment controls');
     expect(view.type).toBe(RealmAttachmentEditor);

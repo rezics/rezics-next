@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { settle } from '../../../../../../features/manage/read.ts';
 import { manager } from '../../../../../../features/manage/server.ts';
 import { messages } from '../../../../../../features/zone-editor/messages.ts';
 import { zoneRealmAttachmentView } from '../../../../../../features/communities/realm-site-creation-attachment.tsx';
@@ -15,6 +16,7 @@ export default async function ZoneRealmPage({ params }: { params: Promise<{ spac
   const { space } = await params;
   const locale = await requestLocale();
   const { actingSubject, main, anonymous, signInHref } = await manager(locale, zoneRealmPath(space));
-  return zoneRealmAttachmentView({ main, anonymous, actingSubject, locale, signInHref,
+  return zoneRealmAttachmentView({ main, actingSubject, locale, signInHref,
+    readRealm: realm => settle(() => anonymous.v1.realms({ realm: realm.slice(-36) }).get({ query: {} })),
     loadAuthoring: () => loadZoneAuthoring(main, space, locale, actingSubject) });
 }
