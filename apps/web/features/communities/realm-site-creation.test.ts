@@ -1,3 +1,8 @@
+import { isValidElement } from 'react';
+import { zoneRealmAttachmentView as routeView } from '../../app/[locale]/manage/z/[space]/realm/page.tsx';
+import { RealmAttachmentEditor } from '../zone-editor/realm-attachment.tsx';
+import { ZoneAuthoringFailure } from '../zone-editor/states.tsx';
+import { zoneRealmAttachmentView } from './realm-site-creation-attachment.tsx';
 import { expect, test } from 'bun:test';
 import type { CanonicalAddress } from '@rezics/model/address';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
@@ -169,3 +174,48 @@ test('an independent Zone attaches an existing Realm through the production clie
     expect(misses).toEqual([]);
   } finally { replay.dispose(); }
 });
+
+
+test('the production attachment route shares its exact composition with recorded controls', async () => {
+  expect(routeView).toBe(zoneRealmAttachmentView);
+  const labels = ['creation-management-address', 'creation-management-configuration', 'creation-management-zone',
+    'creation-management-editor', 'creation-attachment-configuration'];
+  const replay = recordedFetch(creation, 'owner', labels.map(label => ({ label, state: 'populated' })), { pathPrefix: BFF_PREFIX, sequence: true });
+  try {
+    const main = browserMainApi('https://record.invalid', { fetcher: replay.fetcher });
+    const canonical = (sample('creation-address').answer as { canonical: CanonicalAddress }).canonical;
+    const frame = await readZoneManagementFrame(main, addressKey(canonical), 'en', body.actingSubject);
+    const view = await zoneRealmAttachmentView({ main, anonymous: browserMainApi('https://record.invalid', { anonymous: true, fetcher: replay.fetcher }),
+      actingSubject: body.actingSubject, locale: 'en', signInHref: '/en/sign-in', loadAuthoring: async () => frame.authoring });
+    expect(isValidElement(view)).toBe(true);
+    if (!isValidElement<{ zoneId: string; attachedRealm: string | null; actingSubject: string }>(view)) throw new Error('Missing route controls');
+    expect(view.type).toBe(RealmAttachmentEditor);
+    expect(view.props).toMatchObject({ zoneId: (sample('creation-space').answer as { zone: string }).zone.slice(-36),
+      attachedRealm: null, actingSubject: body.actingSubject });
+  } finally { replay.dispose(); }
+});
+
+for (const persona of ['stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
+  test(`${persona}: the actual route preserves its recorded authoring and attachment authority`, async () => {
+    const frameLabels = ['management-address', 'management-configuration', 'management-zone', 'management-editor'];
+    const selections = creation.personas[persona].filter(item => frameLabels.includes(item.label) || item.label === 'attachment-route-configuration' || item.label === 'attachment-route-name');
+    const replay = recordedFetch(creation, persona, selections.map(item => ({ label: item.label, state: item.status >= 400 ? 'error' : 'populated' })), { pathPrefix: BFF_PREFIX });
+    try {
+      const main = browserMainApi('https://record.invalid', { fetcher: replay.fetcher });
+      const query = new URL(selections.find(item => item.label === 'management-address')!.path, 'https://record.invalid').searchParams;
+      const actor = query.get('actingSubject')!;
+      const frame = await readZoneManagementFrame(main, query.get('key')!, 'en', actor);
+      const view = await zoneRealmAttachmentView({ main, anonymous: browserMainApi('https://record.invalid', { anonymous: true, fetcher: replay.fetcher }),
+        actingSubject: actor, locale: 'en', signInHref: '/en/sign-in', loadAuthoring: async () => frame.authoring });
+      if (!isValidElement<{ failure: string; actingSubject: string }>(view)) throw new Error('Missing route result');
+      if (frame.authoring.kind === 'failure') {
+        expect(view.type).toBe(ZoneAuthoringFailure);
+        expect(view.props.failure).toBe(frame.authoring.failure);
+      } else {
+        expect(frame.authoring.kind).toBe('ready');
+        expect(view.type).toBe(RealmAttachmentEditor);
+        expect(view.props.actingSubject).toBe(actor);
+      }
+    } finally { replay.dispose(); }
+  });
+}

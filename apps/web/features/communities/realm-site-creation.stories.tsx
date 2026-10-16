@@ -6,7 +6,8 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { forgetReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
-import { CreateCommunityPage } from './create-page.tsx';
+import { RealmSiteCreationRecordedPage } from './realm-site-creation-recorded-page.tsx';
+import { messages as attachmentMessages } from '../zone-editor/messages.ts';
 import type { RealmSiteCreationIntent } from './realm-site-creation-api.ts';
 import { realmSiteCreationMessages } from './realm-site-creation-messages.ts';
 
@@ -15,11 +16,11 @@ const command = record.personas.owner.find(item => item.label === 'creation-spac
 const body = command.body as RealmSiteCreationIntent;
 const requests: { method: string; path: string; key: string | null; body: unknown }[] = [];
 const misses: unknown[] = [];
-const meta = { title: 'Communities/Independent site creation', component: CreateCommunityPage,
-  args: { locale: 'en', signedIn: true, actingSubject: body.actingSubject },
+const meta = { title: 'Communities/Independent site creation', component: RealmSiteCreationRecordedPage,
+  args: { locale: 'en', record },
   parameters: { route: { pathname: '/en/r/new' } },
-  render: (args, { globals }) => <CreateCommunityPage {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
-} satisfies Meta<typeof CreateCommunityPage>;
+  render: (args, { globals }) => <RealmSiteCreationRecordedPage {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
+} satisfies Meta<typeof RealmSiteCreationRecordedPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -28,7 +29,10 @@ function recordedStory(mode: 'created' | 'loading' | 'recovery' = 'created'): St
     beforeEach() {
       requests.length = 0; misses.length = 0; forgetReadingLanguages();
       const labels = ['creation-page-preferences', 'creation-page-concepts', 'creation-space', ...(mode === 'recovery' ? ['creation-space-replay'] : []),
-        'creation-home', ...(mode === 'recovery' ? ['creation-home-replay'] : []), 'creation-address'];
+        'creation-home', ...(mode === 'recovery' ? ['creation-home-replay'] : []), 'creation-address',
+        ...(mode === 'loading' ? [] : ['creation-management-address', 'creation-management-configuration',
+          'creation-management-zone', 'creation-management-editor', 'creation-attachment-configuration',
+          'creation-attachment-resolve', 'creation-attachment-resolve-realm', 'creation-attachment-save'])];
       const replay = recordedFetch(record, 'owner', labels.map(label => ({
         label, state: mode === 'loading' && label === 'creation-space' ? 'loading' : 'populated',
       })), { pathPrefix: BFF_PREFIX, sequence: true });
@@ -92,6 +96,23 @@ function recordedStory(mode: 'created' | 'loading' | 'recovery' = 'created'): St
         await expect(new Set(writes().filter(item => item.method === 'POST').map(item => item.key)).size).toBe(1);
         await expect(writes().find(item => item.method === 'PUT')!.key).not.toBe(writes()[0]!.key);
         await expect(requests).toHaveLength(labelsFor(mode));
+        await userEvent.click(attachment);
+        const editorCopy = attachmentMessages[locale];
+        const editor = within(await page.findByRole('region', { name: editorCopy.realmTitle }));
+        const identity = record.personas.owner.find(item => item.label === 'page-agent-profile')!.answer as { displayName: string };
+        await expect(page.getByText(identity.displayName, { exact: true })).toBeVisible();
+        await expect(editor.getByText(editorCopy.realmHelp)).toBeVisible();
+        await expect(editor.getByText(editorCopy.realmNone)).toBeVisible();
+        const resolve = record.personas.owner.find(item => item.label === 'creation-attachment-resolve')!;
+        const handle = new URL(resolve.path, 'https://record.invalid').searchParams.get('key')!;
+        await userEvent.type(editor.getByRole('textbox', { name: editorCopy.realmHandle }), handle);
+        await userEvent.click(editor.getByRole('button', { name: editorCopy.realmAttach, exact: true }));
+        await expect(await editor.findByRole('status')).toHaveTextContent(editorCopy.realmSaved);
+        const named = record.personas.owner.find(item => item.label === 'creation-attachment-resolve-realm')!.answer as { name: { value: string } };
+        await expect(editor.getByText(named.name.value, { exact: true })).toBeVisible();
+        await expect(writes().at(-1)!.body).toEqual(record.personas.owner.find(item => item.label === 'creation-attachment-save')!.body);
+        await expect(requests).toHaveLength(labelsFor(mode) + 8);
+        await expect(new Set(writes().filter(item => item.method === 'POST').map(item => item.key)).size).toBe(1);
       }
       await expect(misses).toEqual([]);
       await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);

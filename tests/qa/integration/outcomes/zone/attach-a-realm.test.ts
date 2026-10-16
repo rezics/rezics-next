@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { uuidToSid } from '@rezics/model/address';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { readZoneManagementFrame } from '../../../../../apps/web/features/zone-editor/authoring-reads.ts';
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
 import { browserZoneRealmAttachment } from '../../../../../apps/web/features/zone-editor/api.ts';
 import {
@@ -283,6 +284,7 @@ async function attachmentVisit(person: PersonaSession, target: Site) {
   const client = browserZoneRealmAttachment(main);
   // A signed-out route stops at sign-in; all signed-in people reach the reader boundary.
   if (!person.actingSubject) return;
+  await readZoneManagementFrame(main, uuidToSid(short(target.space)), 'en', person.actingSubject);
   const attached = await client.readConfiguration(short(target.zone), person.actingSubject);
   if (!attached.ok) return;
   // The native canonical key also identifies Realms created before the independent-site entry.
@@ -293,6 +295,14 @@ async function attachmentVisit(person: PersonaSession, target: Site) {
   }, randomUUID());
   if (!changed.ok) return;
   await client.readConfiguration(short(target.zone), person.actingSubject);
+  // Reopening the production route names the configured Realm through its anonymous reader.
+  const anonymous = browserMainApi('https://record.invalid', { anonymous: true, fetcher: (async (input, init) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    return reached(sessions.visitor, request.method, url.pathname.replace(/^\/api\/main/, '') + url.search);
+  }) as typeof fetch });
+  const named = await anonymous.v1.realms({ realm: short(found.data.realm) }).get({ query: {} });
+  expect(named.error).toBeNull();
   const presentation = await main.v1.zones({ id: short(target.zone) }).presentation.get({ query: { actingSubject: person.actingSubject } });
   if (presentation.error) throw new Error(`Production attached presentation failed: ${presentation.error.status}`);
   const address = await main.v1.addresses.resolve.get({ query: { scope: 'space', key: short(target.space), actingSubject: person.actingSubject } });

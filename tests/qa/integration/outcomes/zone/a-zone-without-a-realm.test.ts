@@ -332,6 +332,28 @@ async function creationVisit(person: PersonaSession) {
   const reopened = await attachment.readConfiguration(short(created.data.zone), person.actingSubject!);
   if (!reopened.ok) throw new Error(`Production attached configuration failed: ${reopened.failure}`);
   expect(reopened.data.realm).toBe(sessions.realm);
+  await requestLabels.run(managementLabel('management'), async () => {
+    const reopenedMain = browserMainApi('https://record.invalid', { fetcher: (async (input, init) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      const requestPath = url.pathname.replace(/^\/api\/main/, '') + url.search;
+      return capture('owner', person, `creation-attached-${requestLabels.getStore()!(request.method, requestPath)}`,
+        request.method, requestPath);
+    }) as typeof fetch });
+    const attachedFrame = await readZoneManagementFrame(reopenedMain, ref, 'en', person.actingSubject!);
+    expect(attachedFrame.authoring.kind).toBe('ready');
+  });
+  label = 'creation-attached-route-configuration';
+  const routeConfiguration = await main.v1.zones({ id: short(created.data.zone) }).configuration.get({ query: { actingSubject: person.actingSubject! } });
+  expect(routeConfiguration.error).toBeNull();
+  label = 'creation-attached-route-name';
+  const anonymous = browserMainApi('https://record.invalid', { anonymous: true, fetcher: (async (input, init) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    return capture('owner', sessions.visitor, label, request.method, url.pathname.replace(/^\/api\/main/, '') + url.search);
+  }) as typeof fetch });
+  const realmName = await anonymous.v1.realms({ realm: short(existing.data.realm) }).get({ query: {} });
+  expect(realmName.error).toBeNull();
   label = 'creation-attached-presentation';
   const presentation = await zonePresentationReads(main, person.actingSubject!).readPresentation(short(created.data.zone));
   if (!presentation.ok) throw new Error(`Production attached presentation failed: ${presentation.failure}`);
@@ -471,6 +493,15 @@ async function productionVisit(site: Site, person: PersonaSession) {
   const zoneStatus = (prefix: string) => visitAnswers.find(item => item.persona === currentPersona && item.label === `${prefix}-zone`)?.status;
   if (currentPersona === 'operator' && (['management', 'saved-preview'] as const).some(prefix => editorStatus(prefix) === 200 && zoneStatus(prefix) === 404))
     operatorZoneRefused = true;
+  // The Realm route reuses the layout's cached authoring read, then reads its current attachment basis.
+  if (opened.authoring.kind === 'ready') {
+    const zoneId = opened.authoring.model.zoneId;
+    const attachment = await named('attachment-route-configuration', () => main.v1.zones({ id: zoneId })
+      .configuration.get({ query: { actingSubject: subject } }));
+    expect(attachment.error).toBeNull();
+    const realm = attachment.data?.configuration.defaultRealm;
+    if (realm) await named('attachment-route-name', () => publicMain.v1.realms({ realm: short(realm) }).get({ query: {} }));
+  }
   if (opened.authoring.kind !== 'ready' || preview.authoring.kind !== 'ready') return;
   const frame = await loadSavedPreviewFrame({
     authoring: async () => preview.authoring,
