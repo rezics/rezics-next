@@ -47,8 +47,8 @@ The [checkpoint](state.md) records retained prerequisites.
 ## Cut lines
 
 - No row's surface, no browser test, no story: that is the [web](../web/GOAL.md) Goal.
-- No physical erasure proof, restore drill or deployment step: that is
-  [operations](../operations/GOAL.md).
+- No physical erasure proof, restore drill or deployment step: those are
+  proved and maintained under the [operations runbooks](../../operations/README.md).
 - A defect that no row's persona meets goes to the [later list](later.md).
 - Nothing is built for one source or one vertical that the engine could carry
   as configuration ([decisions](../../product/decisions.md)).

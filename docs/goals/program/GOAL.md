@@ -35,7 +35,7 @@ decisions; the ledger supplies live status.
 | --- | --- |
 | [API](../api/GOAL.md) | Every launch row is proved through the API for each persona. |
 | [Web](../web/GOAL.md) | Every proved row has a surface. |
-| [Operations](../operations/GOAL.md) | Erasure and restore are proved on physical fixtures; deployment is prepared. |
+| Operations (closed 2026-10-16) | Erasure and restore are proved on physical fixtures and deployment is prepared; see the [operations runbooks](../../operations/README.md). |
 
 Start ready work independently: restore, drills and release packaging need not
 wait for the whole API Goal. Erasure qualification waits for its changing
