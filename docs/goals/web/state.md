@@ -1,5 +1,38 @@
 # State
 
+Checkpoint e45d1203-4006-4f72-a114-dc1c8268662d consolidates handled events
+mail:f2893db9-5cad-4c14-a4fc-f90abeedfcba and task:G-2585:15.
+Program's committed restore-harness ruling supersedes G-2585's one-retry
+continuation below; other tasks and later events retain their own authority.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2585 | Mail:f2893db9, task:G-2585:15 and brief decision `6065a1d2b4` leave the worker exited until Program's shared restore-harness correction G-2697 lands. QA `20261016t054119-a9c68e` failed before persona capture because restored membership, role or disclosure starting state differed at `realm-discussion-source.ts:424`; this is a shared harness fault, not accepted surface proof. Program owns the subsequent rebase and resume. Retain the transport corrections and reduced state visits; change no shared source harness. After Program's resume, finish the complete six-persona production visit, answer-records, zero-miss replay, inspected phone/desktop screenshots and complete affected surface gate, then hand off `RESULT: done`. The passing transport unit supplies no capture or gate acceptance. Start no duplicate resume or landing. |
+
+The mail's deciding turn verified Program's committed ruling and acknowledged
+it at 2026-10-16 05:48:23 UTC; durable acknowledgement was confirmed here.
+The task turn applied the same existing decision and had no mail to acknowledge.
+Neither event needed a brief edit or granted landing, closure or row acceptance.
+
+The method's measures and available current status were read. Scope remains
+67/68 API rows proved and 402 proved/6 pending persona cells; these events
+promote none. Status supplied no fresh attempt/token/refusal measures before
+this bounded checkpoint ended its read. The preceding checkpoint's readings
+remain historical: first-attempt share 23% overall and 0% that day (0 of 14),
+attempts per landed task median 3 and maximum 25 (G-2237), 2063.5M input/13.1M
+output tokens, two sessions unavailable and tokens per proved row unavailable;
+71 first, 51 step, 235 fix and 3 capacity attempts, with 11 fixes inferred;
+retained refusals 0 outcome, 12 gate, 0 failing-test findings and 18 other.
+These are not costs attributed to these events. The retained efficiency report
+is dated 2026-10-13 21:49 UTC; no comparable continuation measurement or
+efficiency gain is established. Repeated work now comes from shared restore
+integrity; Program's G-2697 removes that prerequisite before another capture.
+No successful capture or complete gate is inferred.
+
+Only this file changes; no worker, landing, closure, watcher or wait is started.
+
+## Retained checkpoint 44156100
+
 Checkpoint 44156100-5b77-41fc-9fa9-487722eb8852 consolidates handled event
 mail:5318967b-e106-4027-8691-3fc6c8fb6bef. Program's committed ruling
 supersedes G-2585's producer-prerequisite hold from checkpoint 22c3429a;
