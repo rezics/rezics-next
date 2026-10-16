@@ -50,6 +50,11 @@ export interface TypeRegistryDefinition {
   id: 'types-v1';
   /** Presentation fallbacks, not additional types admitted by a write operation. */
   defaults: Readonly<Record<(typeof typeBases)[number], Term>>;
+  /** Native type admission is independent of discovery interests and presentation. */
+  nativeCompatibility?: {
+    neutral: readonly Term[];
+    combinations: readonly (readonly Term[])[];
+  };
   types: Readonly<Record<Term, TypeMetadata>>;
 }
 
@@ -117,12 +122,30 @@ export function compileTypes(
   workType: ProfileDefinition,
 ) {
   if (definition.id !== 'types-v1') throw new Error('Unsupported Type registry profile');
-  knownFields(definition, ['id', 'defaults', 'types'], definition.id);
+  knownFields(definition, ['id', 'defaults', 'nativeCompatibility', 'types'], definition.id);
   knownFields(definition.defaults, typeBases, 'defaults');
   const defaults = new Map(typeBases.map((base) => [base, iri(definition.defaults[base])]));
   if (new Set(defaults.values()).size !== defaults.size)
     throw new Error('Type bases need distinct defaults');
   const workTypes = profileWorkTypes(workKind);
+  if (definition.nativeCompatibility) {
+    const policy = definition.nativeCompatibility;
+    knownFields(policy, ['neutral', 'combinations'], 'native compatibility');
+    const checked = (terms: readonly Term[]) => {
+      const values = terms.map(iri);
+      if (new Set(values).size !== values.length || values.some(type =>
+        !workTypes.includes(type) || type === defaults.get('work'))) {
+        throw new Error('Native compatibility needs distinct admitted specific Work types');
+      }
+      return values;
+    };
+    const neutral = checked(policy.neutral);
+    for (const combination of policy.combinations) {
+      if (combination.length < 2 || checked(combination).some(type => neutral.includes(type))) {
+        throw new Error('Native compatibility combinations need at least two non-neutral types');
+      }
+    }
+  }
   const creatable = profileWorkTypes(workType).filter(
     (type) => type !== iri('schema:CreativeWork'),
   );
@@ -245,6 +268,10 @@ export function renderTypeRegistry(
     '/** Owner profile order, retained by Main admission enums and catalogue consumers. */\n' +
     `export const workSemanticTypeOrder = ${JSON.stringify(profileWorkTypes(workKind).filter((type) => type !== iri('schema:CreativeWork')))} as const;\n` +
     `export const creatableWorkTypeOrder = ${JSON.stringify(profileWorkTypes(workType).filter((type) => type !== iri('schema:CreativeWork')))} as const;\n` +
+    `export const nativeWorkTypeCompatibility = ${JSON.stringify({
+      neutral: definition.nativeCompatibility?.neutral.map(iri) ?? [],
+      combinations: definition.nativeCompatibility?.combinations.map(group => group.map(iri)) ?? [],
+    })} as const;\n` +
     '/** Every admitted type once; Main serves this registry at GET /v1/types. */\n' +
     `export const typeRegistry = ${body} as const;\n` +
     'export type AdmittedType = keyof typeof typeRegistry;\n' +

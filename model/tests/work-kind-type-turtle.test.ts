@@ -126,7 +126,7 @@ test('All six Work Turtle profiles preserve source pins, focus roles and the imp
   expect(editableTypes).toContain(schema + 'VideoGame');
   expect(editableTypes).not.toContain(schema + 'BookSeries');
   expect(digest(readFileSync(join(root, 'packages/model/src/generated/types.ts'), 'utf8'))).toBe(
-    '21979e70a03a6950adae46170c7fdf75833a715b73ce92cb7c4e08c8bb5c60ab',
+    '8ceb8a52be92261483e7980be23b316650e0e56411bfd0b04f1d88115de42d7c',
   );
 });
 

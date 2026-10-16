@@ -72,4 +72,21 @@ test('the generated registry carries each frame dimension and the projection bas
   expect(generated).toContain('"base": "projection"');
   expect(generated).toContain('"frameDimension": "continuity"');
   expect(generated).toContain('"frameDimension": "event"');
+  expect(generated).toContain('export const nativeWorkTypeCompatibility = ');
+});
+
+test('native compatibility only declares admitted specific Work types, independently of interests', () => {
+  const withPolicy = (nativeCompatibility: TypeRegistryDefinition['nativeCompatibility']) =>
+    ({ ...typesV1, nativeCompatibility });
+  expect(() => compile(withPolicy({ neutral: ['rv:Realm'], combinations: [] }))).toThrow('admitted specific Work types');
+  expect(() => compile(withPolicy({ neutral: ['schema:CreativeWork'], combinations: [] }))).toThrow('admitted specific Work types');
+  expect(() => compile(withPolicy({ neutral: [], combinations: [['schema:Book', 'schema:Book']] })))
+    .toThrow('distinct admitted specific Work types');
+  expect(() => compile(withPolicy({ neutral: ['schema:Book'], combinations: [['schema:Book', 'schema:BookSeries']] })))
+    .toThrow('non-neutral types');
+  expect(() => compile(withPolicy({ neutral: [], combinations: [['schema:Book']] })))
+    .toThrow('at least two');
+  expect(() => compile({ ...typesV1, types: { ...typesV1.types,
+    'schema:BookSeries': { ...typesV1.types['schema:BookSeries'], interest: 'software' },
+  } })).not.toThrow();
 });

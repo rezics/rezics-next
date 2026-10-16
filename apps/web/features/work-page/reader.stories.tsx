@@ -331,7 +331,7 @@ const volumeIri = (n: number) => `https://rezics.com/id/b5c7d9e1-f3a5-4b7c-9d1e-
 const volumeOne = volumeIri(1), volumeTwo = volumeIri(2), extras = volumeIri(3);
 type ContentsItem = ContentsPage['items'][number];
 const baseContents = (fixture.contents as { ok: true; data: ContentsPage }).data;
-const baseChapter = baseContents.items.find((item): item is Exclude<ContentsItem, { role: 'part' }> => item.role === 'chapter');
+const baseChapter = baseContents.items.find((item): item is Extract<ContentsItem, { role: 'chapter' | 'group' }> => item.role === 'chapter');
 if (!baseChapter) throw new Error('Reader fixture has no chapter');
 const partTarget = 'https://rezics.com/id/b5c7d9e1-f3a5-4b7c-9d1e-000000000777';
 const workPart: ContentsItem = { occurrence: volumeIri(7), parent: baseContents.composition, role: 'part',

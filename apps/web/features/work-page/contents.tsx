@@ -118,7 +118,7 @@ function ContentsGroup({ item, workRef, query, initial, loadGroup, locale, t }: 
       <CollapsibleContent>
         <div className="border-border/60 border-s ps-4 ms-2">
           {page.status === 'loaded' ? page.items.length ? <ol className="grid divide-y divide-border/60">
-            {page.items.map(child => child.role === 'part'
+            {page.items.map(child => child.role === 'part' && 'displayLabel' in child
               ? <PartEntry key={child.occurrence} item={child} t={t} />
               : child.role === 'group' ? <ContentsGroup key={child.occurrence} item={child} workRef={workRef}
                 query={query} initial={null} loadGroup={loadGroup} locale={locale} t={t} />
@@ -244,7 +244,7 @@ export function ContentsRegion({ contents, workRef, id, query, oneText = null, o
             </span>
             <ChevronRightIcon aria-hidden="true" className="size-4 text-muted-foreground rtl:rotate-180" /></Link>
         </li>
-        : item.role === 'part' ? <PartEntry key={item.occurrence} item={item} t={t} />
+        : item.role === 'part' && 'displayLabel' in item ? <PartEntry key={item.occurrence} item={item} t={t} />
           : <ChapterEntry key={item.occurrence} item={item} workRef={workRef} language={query.language} t={t} />)}
     </ol> : <EmptyState icon={ListTreeIcon} headingLevel={3} title={t.noContents} />}
     {query.cursor || nextCursor ? <nav aria-label={t.pagination} className="flex flex-wrap justify-between gap-2">

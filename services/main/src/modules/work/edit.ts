@@ -1,4 +1,5 @@
 import { structureTypeRemovalGuard } from '../structure/profiles.ts';
+import { genericWorkType } from './work-kinds.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
@@ -319,7 +320,7 @@ async function editWorkRevision(env: WorkActivationEnvironment,
     throw new RevisionCorrupt('Work graph differs from its retained head');
   }
   const typeGuard = change.kind === 'types'
-    ? structureTypeRemovalGuard(intent.work, ['https://schema.org/CreativeWork', ...change.types]) : '';
+    ? structureTypeRemovalGuard(intent.work, [genericWorkType, ...change.types]) : '';
   const typeDependency = async () => typeGuard && !(await env.fuseki.query(`ASK { ${typeGuard} }`, 4096)).boolean;
   if (await typeDependency()) throw new WorkTypeConflict('An attached Structure profile requires its owner type');
   const revision = ID + Bun.randomUUIDv7();

@@ -43,6 +43,15 @@ export const typesV1 = {
     record: 'rv:Record',
     projection: 'rv:Projection',
   },
+  nativeCompatibility: {
+    neutral: ['schema:DigitalDocument'],
+    combinations: [
+      ['schema:Book', 'schema:BookSeries'],
+      ['schema:SoftwareApplication', 'schema:SoftwareSourceCode', 'rv:ModPackage'],
+      ['schema:VideoGame', 'schema:Movie', 'schema:TVSeries', 'schema:VideoObject',
+        'schema:AudioObject', 'schema:MusicRecording', 'schema:MusicAlbum'],
+    ],
+  },
   types: {
     'schema:Book': {
       base: 'work',

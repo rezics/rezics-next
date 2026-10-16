@@ -267,7 +267,7 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
    */
   const startDrag = (event: ReactPointerEvent<HTMLElement>, item: ContentsItem) => {
     const role = item.role;
-    if (role === 'part' || busy !== null || event.button !== 0) return;
+    if ((role !== 'chapter' && role !== 'group') || busy !== null || event.button !== 0) return;
     event.preventDefault();
     const origin = { x: event.clientX, y: event.clientY };
     let at: Drop | null = null;
