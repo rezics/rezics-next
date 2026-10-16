@@ -277,7 +277,12 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
     await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [aggoEdit]);
     expect((await occurrence('credit-illustrator', { work: aggo.work, contributor: web.work })).status).toBe(403);
     await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [bunkoEdit]);
-    expect(await f.json<Derivation>(await derive(bunko, web, 'rewrite', replayKey), 200)).toMatchObject({ replayed: true });
+    // docs/contracts/commands.md requires today's authority before receipt
+    // disclosure, while preserving the original result for authorized replay.
+    expect((await derive(bunko, web, 'rewrite', replayKey)).status).toBe(403);
+    await f.grant(`work:edit:${bunko.work}`, 'work.edit');
+    expect(await f.json<Derivation>(await derive(bunko, web, 'rewrite', replayKey), 200))
+      .toMatchObject({ derivation: rewrite.derivation, replayed: true });
     expect(commands.length).toBeGreaterThanOrEqual(4);
     expect(commands.every(command => command.bytes < 24 * 1024 && command.focuses === 1)).toBe(true);
     const persisted = await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?kind WHERE { GRAPH ${iri(GRAPHS.revisions)} {

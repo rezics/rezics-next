@@ -212,9 +212,9 @@ test('G238: native Agent profiles, credits and library enforce disclosure, autho
     const ratingReadsBefore = stack.fuseki.queries;
     const ratings = await json<Page<{ value: number; scope: string; id: string; revision: string;
       mainVersion: string; work: { id: string } }>>(await read('/v1/me/ratings?limit=1'));
-    // Three version probes (request-fence-cost.test.ts), receipt, two summary
-    // graph reads and the semantic-type batch; attribution uses SQL only.
-    expect(stack.fuseki.queries - ratingReadsBefore).toBe(7);
+    // Three version probes (request-fence-cost.test.ts), receipt, one retained
+    // summary graph read and the semantic-type batch; attribution uses SQL only.
+    expect(stack.fuseki.queries - ratingReadsBefore).toBe(6);
     expect(ratings.items).toMatchObject([{ value: 5, scope: 'global' }]);
     const ratingsNext = await json<Page<{ value: number }>>(await read(`/v1/me/ratings?limit=1&cursor=${ratings.nextCursor}`));
     expect(ratingsNext.items).toMatchObject([{ value: 5 }]);
