@@ -23,7 +23,7 @@ type LifecycleIntent = { expectedHead: string; action: ZoneLifecycleAction };
 
 /** Retire or recover a saved site while retaining an explicit review after a stale head. */
 export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initial, signInHref, returnAddress, api,
-  onRetired }: {
+  onRetired, onCompleted }: {
   zoneId: string;
   actingSubject: string;
   locale: UiLocale;
@@ -34,6 +34,7 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
   api?: ZoneLifecycleClient;
   /** Stories keep the confirmation on screen instead of navigating away. */
   onRetired?: () => void;
+  onCompleted?: () => void;
 }) {
   const admitted = useMemo(() => initialZoneLifecycleState(initial), [initial]);
   const [state, setState] = useZoneEditorDraft('lifecycle', admitted, () => false, isLifecycleEditorState, reopenAuthoringNotice);
@@ -112,6 +113,7 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
   }
 
   function finishLifecycle(action: ZoneLifecycleAction) {
+    if (onCompleted) { onCompleted(); return; }
     if (action === 'retire') {
       if (onRetired) onRetired();
       else requestExit(() => window.location.replace(localizedPath(zoneLifecyclePath(zoneId, returnAddress), locale)));
@@ -153,6 +155,8 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
         ? <p className="text-pretty text-muted-foreground text-sm">{copy.lifecycleRetiredBody}</p>
         : null}
     </div>
+
+    <p className="break-all font-mono text-xs text-muted-foreground">{state.expectedHead}</p>
 
     <LifecycleNotice state={state} copy={copy} signInHref={signInHref} busy={busy} onReview={() => void review()} />
 

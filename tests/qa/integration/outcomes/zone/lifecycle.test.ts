@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { readLifecyclePreview, readLifecyclePublic } from '../../../../../apps/web/features/zone-editor/zone-lifecycle-recorded-page.ts';
 import { browserZoneLifecycle } from '../../../../../apps/web/features/zone-editor/api.ts';
 import { readManagementAddress, readZoneRecoveryReturnAddress, suppliedManagementSite,
   zoneAuthoringFromAddress, zoneLifecycleFromAddress, zoneManagementFrameFromReads } from '../../../../../apps/web/features/zone-editor/authoring-reads.ts';
@@ -211,11 +212,11 @@ async function qualify(name: PersonaName, proof: () => Promise<void>) {
 }
 
 async function productionVisit(name: PersonaName, site: Site, person: PersonaSession) {
-  // manager sends the signed-out visitor to sign-in before any Main read.
-  if (!person.actingSubject) return;
-  const actingSubject = person.actingSubject, zoneId = site.zone.slice(-36);
+  const zoneId = site.zone.slice(-36);
+  const space = (await answer<{ configuration: { space: string } }>(sessions.owner.main('GET', `${site.root}/configuration?${acting(sessions.owner)}`))).configuration.space.slice(-36);
+  const actingSubject = person.actingSubject ?? undefined;
   const recorded = recording.session(name, person);
-  const client = () => browserMainApi('https://record.invalid', { fetcher: (async (input, init) => {
+  const client = (anonymous = false) => browserMainApi('https://record.invalid', { anonymous, fetcher: (async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
     const method = init?.method ?? 'GET';
@@ -223,8 +224,21 @@ async function productionVisit(name: PersonaName, site: Site, person: PersonaSes
     if (!label) throw new Error(`Production request has no label: ${method} ${path}`);
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
     const key = new Headers(init?.headers).get('idempotency-key') ?? undefined;
-    return recorded(label, method, path, body, key);
+    return (anonymous ? recording.session(name, sessions.visitor) : recorded)(label, method, path, body, key);
   }) as typeof fetch });
+  async function publicPage(prefix: string) {
+    return requestLabels.run((_method, path) => `${prefix}-${path.startsWith('/v1/addresses/') ? 'address'
+      : path.includes('/showcase-editor') ? 'editor' : path.includes('/presentation') ? 'presentation' : path.endsWith('/join-page') ? 'private-landing' : 'private-space'}`,
+      () => readLifecyclePublic(client(true), client(), (async input => {
+        const url = new URL(String(input));
+        const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
+        return recording.session(name, path.includes('actingSubject=') ? person : sessions.visitor)(
+          requestLabels.getStore()!('GET', path), 'GET', path);
+      }) as typeof fetch, space, actingSubject));
+  }
+  await publicPage('public');
+  // manager sends the signed-out visitor to sign-in before any management read.
+  if (!actingSubject) return;
   const main = client();
   const named = <T,>(label: string, run: () => Promise<T>) => requestLabels.run(() => label, run);
   const lifecycleClient = browserZoneLifecycle(main);
@@ -257,6 +271,8 @@ async function productionVisit(name: PersonaName, site: Site, person: PersonaSes
       named(`${prefix}-lifecycle-configuration`, () => zoneLifecycleFromAddress(main, key, actingSubject, address)),
     ]);
     const loaded = await zoneManagementFrameFromReads(main, key, actingSubject, authoring, lifecycleRead, null);
+    if (loaded.authoring.kind === 'ready') await requestLabels.run((_method, path) => `${prefix}-preview-${path.split('?')[0]!.split('/').slice(2).join('-')}`,
+      () => readLifecyclePreview(main, loaded, 'en', actingSubject!));
     if (loaded.lifecycle.kind !== 'ready') return null;
     const lifecycle = loaded.lifecycle;
     // The lifecycle page validates its return address after the shared frame.
@@ -266,9 +282,12 @@ async function productionVisit(name: PersonaName, site: Site, person: PersonaSes
   }
   const opened = await render('lifecycle');
   if (!opened) return;
-  const retired = await named('lifecycle-retire', () => lifecycleClient.retire(zoneId,
-    { expectedHead: opened.revision, actingSubject }, randomUUID()));
+  const retireBody = { expectedHead: opened.revision, actingSubject }, retireKey = randomUUID();
+  const retired = await named('lifecycle-retire', () => lifecycleClient.retire(zoneId, retireBody, retireKey));
+  await named('lifecycle-retire-replay', () => lifecycleClient.retire(zoneId, retireBody, retireKey));
+  await named('lifecycle-stale', () => lifecycleClient.retire(zoneId, retireBody, randomUUID()));
   if (!retired.ok) return;
+  await publicPage('retired-public');
   // Retirement replaces the page with the stable UUID lifecycle entry.
   const retained = await render('retired');
   if (!retained) return;
@@ -277,6 +296,7 @@ async function productionVisit(name: PersonaName, site: Site, person: PersonaSes
   if (!recovered.ok) return;
   // Recovery replaces the page with the bound Space's home editor.
   await render('recovered', retained.returnAddress);
+  await publicPage('recovered-public');
 }
 
 outcomeTest(lifecycle, 'visitor', () => qualify('visitor', () => reader('visitor')), recording);
