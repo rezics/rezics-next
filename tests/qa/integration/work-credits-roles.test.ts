@@ -16,7 +16,7 @@ test('a Work reads author, director, artist and animation studio through the cre
     const head = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(created.work)} rv:head ?head } }`)).results!.bindings[0]!.head!.value;
     const author = native();
-    const sourceKey = `/authors/OL${Date.now()}A`;
+    const sourceKey = `/authors/OL${parseInt(randomUUID().slice(0, 8), 16) + 1}A`;
     const adopted = await adoptAuthorCredit(stack.env, {
       verify: async () => member.principal,
     }, stack.access, new Request('http://main.local/credits', {

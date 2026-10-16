@@ -53,9 +53,11 @@ test('LIVE04/LIVE05/MODEL06/OPS03: native credit, field proof and withdrawals su
       schemaFiles(root, 'relay'));
     // The restore protocol uses monotonic decimal epochs; stack config defaults
     // to opaque UUID epochs, so this isolated lineage starts at the protocol's 1.
+    // Fixture construction prepares its template directory against this lineage.
+    await initializeFreshGraph(new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!,
+      apps.FUSEKI_COMMAND_TOKEN!), { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: '1' });
     fixture = await authorCreditFixture({ ...apps, MAIN_ROUTING_EPOCH: '1' }, directory);
     const { env, call, json, propose, adoptWork, input, grant, pool, accessPool } = fixture;
-    await initializeFreshGraph(env.fuseki, env.lineage);
     expect(Date.now() - start - admissionWaitMs).toBeLessThan(600_000);
     const consumer = `credit:${nonce}`;
     await initializeRelayCheckpoint(relay, consumer, env.lineage.dataEpoch);
