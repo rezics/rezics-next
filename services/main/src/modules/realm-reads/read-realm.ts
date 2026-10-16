@@ -14,10 +14,10 @@ export interface RealmBasis { id: string; space: string; revision: string;
   visibility: RealmVisibility; reviewMode: RealmReviewMode; policyRevision: string | null;
   history: RealmHistory }
 
-async function readRealmDisclosure(session: WorkReadSession, realm: string) {
+async function readRealmDisclosure(session: WorkReadSession, realm: string, revision: string) {
   if (!hasDisclosure(session.deps.environment)) throw new WorkReadUnavailable('Realm disclosure is unavailable');
   const read = async () => (await discloseInventory(session.deps.environment,
-    [{ owner: 'graph', resource: realm, component: 'record' }], session.viewer, 'read'))[0];
+    [{ owner: 'graph', resource: realm, component: 'record', revision }], session.viewer, 'read'))[0];
   const decision = await read();
   // Closure must become the ordinary missing answer before selected-dependency
   // tracking can classify the newly hidden record as a cursor-basis change.
@@ -30,7 +30,9 @@ export async function readRealmBasis(session: WorkReadSession, realm: string): P
   const read = async () => {
   const policy = await session.realm(realm);
   if (!policy.realmRevision) throw new WorkReadUnavailable('Realm basis is incomplete');
-  await readRealmDisclosure(session, realm);
+  // The container uses its own head; a restricted public-profile revision
+  // must not close otherwise readable Works, threads or membership routes.
+  await readRealmDisclosure(session, realm, policy.realmRevision);
   return { id: realm, space: policy.space, revision: policy.realmRevision,
     visibility: policy.visibility, reviewMode: policy.reviewMode, policyRevision: policy.revision,
     history: policy.history };

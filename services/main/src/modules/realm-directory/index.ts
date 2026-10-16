@@ -139,10 +139,10 @@ export class RealmDirectoryIndex {
             changed.push(...ids);
             if (!ids.length) { complete = true; break; }
           }
-          const batchCandidates = await directorySource(session, after, ids);
-          candidates.push(...batchCandidates);
-          after = ids?.at(-1) ?? batchCandidates.at(-1)?.id ?? after;
-          if ((ids?.length ?? batchCandidates.length) < REALM_DIRECTORY_COST.sourceBatch) { complete = true; break; }
+          const source = await directorySource(session, after, ids);
+          candidates.push(...source.candidates);
+          after = ids?.at(-1) ?? source.after;
+          if (ids ? ids.length < REALM_DIRECTORY_COST.sourceBatch : source.complete) { complete = true; break; }
         }
         // `target` is the cut this pass already read. A later sequence waits for
         // the next pass; dropping the page would leave the directory unpublished.

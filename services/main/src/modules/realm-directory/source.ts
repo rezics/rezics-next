@@ -30,7 +30,7 @@ function ranked(sequenceValue: string | undefined, epochOrder: string | undefine
 export async function directorySource(session: WorkReadSession,
   after: string, ids?: string[]) {
   const lineage = await readEpochOrder(session);
-  const rows = await session.query(`SELECT ?realm ?space ?created ?epochOrder ?profileHead ?label WHERE {
+  const rows = await session.query(`SELECT ?realm ?space ?head ?created ?epochOrder ?profileHead ?label WHERE {
     ${lineage}
     ${ids ? `VALUES ?realm { ${ids.map(iri).join(' ')} }` : ''}
     GRAPH ${iri(GRAPHS.current)} {
@@ -57,6 +57,16 @@ export async function directorySource(session: WorkReadSession,
     candidates.set(id, { id, space: row.space.value, created, activity: created, profile: null,
       label: row.label?.value ?? '', search: '', topics: [] });
     if (row.profileHead) heads.set(id, row.profileHead.value);
+  }
+  // A moderation receipt can change reachability without changing the Realm
+  // graph. Rebuild the projection from the same live policy as directory reads.
+  const decisions = await session.disclosure(rows.map(row => ({ owner: 'graph' as const,
+    resource: row.realm!.value, component: 'record' as const, revision: row.head?.value })), 'search');
+  if (decisions.length !== rows.length) throw new WorkReadUnavailable('Realm directory disclosure is incomplete');
+  for (const [ordinal, row] of rows.entries()) {
+    if (decisions[ordinal] === 'visible') continue;
+    candidates.delete(row.realm!.value);
+    heads.delete(row.realm!.value);
   }
   if (candidates.size) {
     const topics = await session.query(`SELECT ?realm ?topic WHERE {
@@ -133,5 +143,8 @@ export async function directorySource(session: WorkReadSession,
       ...Object.values(profile.description.labels)] : [candidate.label])
       .join('\n').normalize('NFKC').toLowerCase();
   }
-  return [...candidates.values()];
+  // Advance over every examined Realm, including closed ones. Filtering must
+  // neither end a rebuild early nor revisit a page containing only hidden rows.
+  return { candidates: [...candidates.values()], after: rows.at(-1)?.realm?.value ?? after,
+    complete: rows.length < REALM_DIRECTORY_COST.sourceBatch };
 }

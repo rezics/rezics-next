@@ -11,6 +11,7 @@ import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved }
   from '../src/modules/work/read-session.ts';
 import type { WorkReadSession } from '../src/modules/work/read-session.ts';
 import { RealmDirectoryIndex } from '../src/modules/realm-directory/index.ts';
+import { directorySource } from '../src/modules/realm-directory/source.ts';
 import { prepareRealmHistoryAdmission, recordRealmHistoryAdmission, RealmHistoryAdmissionStale }
   from '../src/modules/realm-admin/history.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
@@ -122,6 +123,37 @@ test('Realm directory search handles contiguous Han and Unicode compatibility ch
   expect(searchText('一起阅读。', '阅读')).toBe(true);
   expect(searchText('读者公会', '图书')).toBe(false);
 });
+
+for (const visible of [0, 1]) {
+  test(`Realm directory rebuild advances a full source page with ${visible} disclosed candidates`, async () => {
+    const native = (value: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(value).padStart(12, '0')}`;
+    const rows = Array.from({ length: REALM_DIRECTORY_COST.sourceBatch }, (_, index) => ({
+      realm: { value: native(index + 1) }, space: { value: native(index + 100) },
+      head: { value: native(index + 200) }, created: { value: '1' }, epochOrder: { value: '0' },
+      // Hidden profiles must never reach profile hydration.
+      ...(index < visible ? {} : { profileHead: { value: native(index + 300) } }),
+    }));
+    const session = { position: { dataEpoch: 'epoch', sequence: '17' }, restorePriors: new Map(),
+      query: async (sql: string) => {
+        if (sql.includes('SELECT ?realm ?space ?head ?created')) return rows;
+        if (sql.includes('rv:profilePayload')) throw new Error('Hydrated an undisclosed Realm profile');
+        return [];
+      },
+      disclosure: async (targets: { resource: string; revision: string }[], channel: string) => {
+        expect(targets.map(target => [target.resource, target.revision])).toEqual(
+          rows.map(row => [row.realm.value, row.head.value]));
+        expect(channel).toBe('search');
+        return rows.map((_, index) => index < visible ? 'visible' : 'hidden');
+      },
+    } as unknown as WorkReadSession;
+    const page = await directorySource(session, '');
+    expect(page.candidates.map(candidate => candidate.id)).toEqual(rows.slice(0, visible).map(row => row.realm.value));
+    expect(page.after).toBe(rows.at(-1)!.realm.value);
+    expect(page.complete).toBe(false);
+    rows.splice(2);
+    expect((await directorySource(session, '')).complete).toBe(true);
+  });
+}
 
 test('Realm directory cursor binds search, order, language and graph position', () => {
   const position = { dataEpoch: 'epoch', sequence: '17' };
