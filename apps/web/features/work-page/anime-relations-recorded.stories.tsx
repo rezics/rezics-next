@@ -73,7 +73,7 @@ const visit: Story['play'] = async ({ canvasElement, args }) => {
     await expect(canvas.findAllByText('Outcome owner', { exact: true })).resolves.not.toHaveLength(0);
     if (args.entry <= 3) {
       const type = ['TV series', 'Book', 'Game'][args.entry - 1]!;
-      await expect(canvas.getAllByText(type, { exact: true }).length).toBeGreaterThan(0);
+      await expect(canvas.getByText(`${type} · English`, { exact: true })).toBeVisible();
       if (args.view === 'contents') {
         await expect(canvas.findByRole('link', { name: /Part 2/ })).resolves.toBeVisible();
         await expect(canvas.findByRole('link', { name: /Part 3/ })).resolves.toBeVisible();
