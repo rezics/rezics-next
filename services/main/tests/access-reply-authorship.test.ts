@@ -229,9 +229,9 @@ test('Person reply proof selection revalidates while ordinary and Zone drafts re
   await pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
     VALUES ($1,$2,$3,'agent.control','infinity')`, [randomUUID(), replacementPrincipalId, person.agent]);
   await pool.query('UPDATE access.representation SET active = false WHERE id = $1', [person.controlId]);
-  expect(await person.access.register(draft)).toMatchObject({ id: personReply.id, replayed: true });
-  expect(await person.access.register(pendingDraft)).toMatchObject({ id: pendingReply.id,
-    dispatchEligible: false, replayed: true });
+  // Current authority gates receipt disclosure for terminal and pending replies.
+  await expect(person.access.register(draft)).rejects.toBeInstanceOf(AdmissionDenied);
+  await expect(person.access.register(pendingDraft)).rejects.toBeInstanceOf(AdmissionDenied);
   await expect(person.access.claim(pendingReply.id, pendingDraft.requestDigest, identity))
     .rejects.toBeInstanceOf(AdmissionDenied);
 
@@ -317,7 +317,7 @@ test('explicit draft and create grants cannot replace Person proof for Org or le
   await expect(person.access.register(malformed)).rejects.toBeInstanceOf(AdmissionDenied);
 });
 
-test('a pending Org reply draft with saved administrator proof stays nondispatchable on replay', async () => {
+test('a pending Org reply draft cannot disclose its saved administrator proof without Person authority', async () => {
   const identity = principal();
   const organization = await actor(identity, 'organization');
   const rootTarget = nativeId();
@@ -329,9 +329,11 @@ test('a pending Org reply draft with saved administrator proof stays nondispatch
     input.action, input.scope);
   const id = await legacyAdministratorAdmission(input, organization.principalId);
 
-  expect(await organization.access.register(input)).toMatchObject({
-    id, state: 'registered', dispatchEligible: false, replayed: true,
-  });
+  await expect(organization.access.register(input)).rejects.toBeInstanceOf(AdmissionDenied);
+  await expect(organization.access.register({ ...input, idempotencyKey: randomUUID() }))
+    .rejects.toBeInstanceOf(AdmissionDenied);
+  expect((await pool.query('SELECT state FROM access.admission WHERE id = $1', [id])).rows)
+    .toEqual([{ state: 'registered' }]);
 });
 
 test('a Person with platform administrator and resource grants still saves the baseline reply proof', async () => {
