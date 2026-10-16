@@ -7,6 +7,10 @@ import devices from '../../../../../scripts/qa/cases/outcomes/books/continue-pro
 import loans from '../../../../../scripts/qa/cases/outcomes/books/loans.ts';
 import expired from '../../../../../scripts/qa/cases/outcomes/books/return-an-expired-loan-expired-loans.ts';
 import { signIn } from '../../../../../scripts/lib/oauth-client.ts';
+import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { loadBooksLibrary } from '../../../../../apps/web/features/library/books-library-recorded-page.ts';
+import { parseLibraryState } from '../../../../../apps/web/features/library/state.ts';
+import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
 import { OutcomeRecorder, outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSessions } from '../../../support/personas.ts';
 
@@ -211,6 +215,7 @@ async function deniedDevices(name: PersonaName) {
   expect(replies.map(reply => ({ status: reply.status,
     ...(reply.status === expected ? {} : { raw: reply.raw }) }))).toEqual([{ status: expected }, { status: expected }]);
   for (const reply of replies) expect(reply.raw).not.toContain('private owner bookmark');
+  await deviceLibraryReads(name, 'refused');
   if (name === 'member') {
     const actor = `actingSubject=${encodeURIComponent(person.actingSubject!)}`;
     expect(await json(sample('empty-chapter-progress', 'GET', `${progressPath()}?${actor}`)))
@@ -221,6 +226,48 @@ async function deniedDevices(name: PersonaName) {
       .toMatchObject({ profile: 'reading-positions-v1', work: book.work, resolved: 'start',
         items: [chapterPosition(0), chapterPosition(1)], complete: true, nextCursor: null });
   }
+}
+
+/** Capture requests made by the production reader, including its conditional reads, without guessing shelf order. */
+async function deviceLibraryReads(name: PersonaName, phase: 'winning' | 'recovered' | 'refused') {
+  const recording = recordings.devices;
+  let index = 0;
+  const client = (person: PersonaSessions['owner'], lane: 'personal' | 'anonymous') => {
+    const sample = recording.session(name, person);
+    return browserMainApi('https://record.invalid', { anonymous: lane === 'anonymous', fetcher: (async (input, init) => {
+      const request = new Request(input, init), url = new URL(request.url);
+      expect(url.pathname.startsWith(`${BFF_PREFIX}/`)).toBe(true);
+      expect(request.method).toBe('GET');
+      return sample(`${phase}-${lane}-${++index}`, request.method,
+        url.pathname.slice(BFF_PREFIX.length) + url.search, undefined, undefined,
+        { headers: Object.fromEntries(request.headers.entries()), settle: false });
+    }) as typeof fetch });
+  };
+  const main = client(people[name], 'personal'), anonymous = client(people.visitor, 'anonymous');
+  const frame = recording.session(name, people[name]);
+  const session = await frame(`${phase}-session-agent`, 'GET', '/v1/me/session-agent');
+  expect(session.status).toBe(name === 'visitor' ? 401 : 200);
+  if (name !== 'visitor') await json(frame(`${phase}-person-preferences`, 'GET',
+    `/v1/me/person-preferences?actingSubject=${encodeURIComponent(people[name].actingSubject!)}`));
+  const reader = name === 'visitor' ? null : { main, anonymous, actingSubject: subject() };
+  const year = new Date().getUTCFullYear();
+  const page = await loadBooksLibrary(reader, { state: parseLibraryState({}), locale: 'en', year, first: true });
+  expect(page.overview.ok).toBe(name === 'owner');
+  if (name !== 'owner') {
+    expect(page.overview).toMatchObject({ ok: false, failure: 'sign-in' });
+    return;
+  }
+  const shelf = await loadBooksLibrary(reader, { state: parseLibraryState({ shelf: 'read', view: 'grid' }),
+    locale: 'en', year, first: false });
+  expect(shelf.view.ok && shelf.view.data.rows.some(row => row.work.id === book.work)).toBe(true);
+  const media = mainTrackingApi(subject(), () => main).media!;
+  expect(await media.types(book.work)).toMatchObject({ ok: true, data: ['https://schema.org/Book'] });
+  expect((await media.standing(book.work)).ok).toBe(true);
+  expect((await media.positions(book.work)).ok).toBe(true);
+  expect(await media.progress({ structure: chapters.structure, occurrence: chapters.occurrences[1]! }))
+    .toMatchObject({ ok: true, data: phase === 'winning'
+      ? { completed: true, position: 'device one paragraph', version: 2 }
+      : { completed: false, position: null, version: 3 } });
 }
 async function deniedLoans(name: PersonaName) {
   const person = people[name], expected = name === 'visitor' ? 401 : 403;
@@ -460,6 +507,7 @@ outcomeTest(devices, 'owner', async () => {
   expect(await json(deviceSample('device-two-series-resume', 'GET', `/v1/reading-positions/${short(series.work)}?${query()}&position=mine&limit=1`)))
     .toMatchObject({ resolved: chapters.occurrences[1], profile: 'reading-positions-v1', work: series.work,
       items: [chapterPosition(1)], complete: true, nextCursor: null });
+  await deviceLibraryReads('owner', 'winning');
   await json(deviceSample('device-two-stale-save-refused', 'PUT', path, { ...own(), expectedVersion: stale.version, completed: false, position: null }), 409);
   const fresh = await json<Progress>(deviceSample('device-two-conflict-current', 'GET', `${path}?${query()}`));
   expect(fresh).toMatchObject({ structure: chapters.structure, occurrence: chapters.occurrences[1],
@@ -467,6 +515,7 @@ outcomeTest(devices, 'owner', async () => {
   await json(deviceSample('device-two-recovered-save', 'PUT', path, { ...own(), expectedVersion: fresh.version, completed: false, position: null }));
   expect(await json(sample('device-one-sees-recovery', 'GET', `${path}?${query()}`))).toMatchObject({ completed: false, version: fresh.version + 1,
     structure: chapters.structure, occurrence: chapters.occurrences[1], position: null });
+  await deviceLibraryReads('owner', 'recovered');
   await progressRenderReads(sample);
 }, recordings.devices);
 outcomeTest(loans, 'visitor', () => deniedLoans('visitor'), recordings.loans);
