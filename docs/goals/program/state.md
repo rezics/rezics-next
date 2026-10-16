@@ -10,14 +10,10 @@ shared-capability exception in the inventory is repaired. The api and web Goals'
 deferred findings, and the api Goal's retained-population checkpoint rebuild
 procedure, are archived on `archive/goals` with their Goals. That rebuild is
 still blocked before a fresh checkpoint; it gates growth checks only, not any
-row. The program's completion still needs these, each owned by an open task in
-the ledger:
-
-- the paged-read basis repair covers every cursor owner, and main's integration
-  failures found on 2026-10-16 are fixed;
-- a committed review or proof test reaches its assertion before it blocks a
-  landing. Premise churn was the largest remaining waste in the 07:00–19:00
-  window.
+row. Every program task has landed, and main's final confirmation at `eedd958e26`
+passed all 408 launch cells on 2026-10-16 with none failed or not run. The
+completion criteria are met. The program stays open for the maintainer's
+acceptance findings rather than closing at once.
 
 Efficiency readings on 2026-10-16: 13.16 M worker input per main landing for
 03:00–15:00, then 7.65 M after the gate, harness and watcher repairs landed
