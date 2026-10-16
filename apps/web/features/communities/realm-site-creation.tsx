@@ -7,7 +7,6 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { LanguageSelect } from '../content-language/language-select.tsx';
 import { textAttributes, UNSPECIFIED } from '../content-language/writing-language.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { communityText } from './messages.ts';
 import { realmSiteCreationClient, type RealmSiteCreationClient, type RealmSiteCreationIntent,
   type RealmSiteCreationReceipt, type RealmSiteDestination } from './realm-site-creation-api.ts';
 import { realmSiteCreationMessages } from './realm-site-creation-messages.ts';
@@ -89,7 +88,7 @@ function RealmSiteCreationForm({ actingSubject, locale, client }: RealmSiteCreat
           {...textAttributes(language ?? UNSPECIFIED, name)} onChange={event => setName(event.currentTarget.value)} />
       </div>
       <LanguageSelect value={language} onChange={setLanguage} locale={locale} disabled={locked}
-        label={communityText.nameLanguage[locale]} />
+        label={copy.nameLanguage} />
       {failure ? <p role="alert" className="text-pretty text-sm">{failure}</p> : null}
       <Button type="submit" disabled={busy || !language || !name.trim()}>{busy ? copy.creating : copy.create}</Button>
     </form>}
