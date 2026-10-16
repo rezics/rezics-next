@@ -23,8 +23,18 @@ export const rankingChart: PresentationModule = { id: 'realm-ranking', type: 'ra
 /** The supplied session is a transport; the shared page resolves its acting Person. */
 export function rankingVisitHost(fetcher: typeof fetch, signedIn: boolean): RealmReplay {
   const origin = 'https://recorded.invalid';
-  return { origin, signedIn, token: signedIn ? 'recorded' : undefined, fetch: fetcher,
-    personal: browserMainApi(origin, { fetcher }),
+  // The shared address reader uses Main paths; browser clients already use the BFF.
+  const send = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.origin === origin && url.pathname.startsWith('/v1/')) {
+      url.pathname = `${BFF_PREFIX}${url.pathname}`;
+      return fetcher(new Request(url, { ...init, headers: request.headers, method: request.method,
+        signal: request.signal, credentials: 'omit' }));
+    }
+    return fetcher(input, init);
+  }) as typeof fetch;
+  return { origin, signedIn, token: signedIn ? 'recorded' : undefined, fetch: send,
+    personal: browserMainApi(origin, { fetcher: send }),
     read: (path, personal = false) => fetcher(new URL(`${BFF_PREFIX}${path}`, origin), {
       credentials: personal ? 'same-origin' : 'omit',
     }),

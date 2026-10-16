@@ -77,6 +77,7 @@ async function captureVisit(sessions: PersonaSessions, name: PersonaName, label:
   const page = await rankingVisit({ replay: rankingVisitHost(fetcher, name !== 'visitor'),
     ref: short(sessions.realm), locale, query, ...(chart ? { module: rankingChart } : {}) });
   expect(page).not.toBeNull();
+  expect(ordinal, `${name}/${label} must reach the production transport`).toBeGreaterThan(0);
   // The shared relationship control refreshes unknown follow levels on mount.
   if (refreshFollow && sessions[name].actingSubject) await mainRelationships(sessions[name].actingSubject!, {
     origin: 'https://recorded.invalid', fetch: fetcher,
