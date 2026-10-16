@@ -4,6 +4,7 @@ import games from '../../../../tests/qa/fixtures/outcomes/games/catalogue-browse
 import { isValidElement, type ComponentProps, type ReactElement, type ReactNode } from 'react';
 import { materializeData } from 'native-i18n';
 import { uiLocales, type UiLocale } from '../../i18n/define.ts';
+import { spaceHref } from '../address/path.ts';
 import { RealmBrowseRoute } from '../realm/routes.tsx';
 import { RealmMembership } from '../realm/membership.tsx';
 import { mainRelationships } from '../relationships/api.ts';
@@ -78,7 +79,7 @@ for (const persona of personas) {
     const page = await readZoneBrowse(realm, 'en', query, client);
     expect(page).toEqual({ ok: false, failure: 'invalid', status: sample.status, problem: sample.answer });
     if (page.ok) throw new Error('The recorded unsupported query must fail');
-    const mapped = buildBrowsePage({ page, facets: await readFacets(client), base: '/en/z/games/browse',
+    const mapped = buildBrowsePage({ page, facets: await readFacets(client), base: spaceHref('games', 'site', ['browse']),
       zoneName: 'Games', state: parseBrowseState({ sort: 'relevance' }),
       context: { realm, ref: realm, locale: 'en' }, locale: 'en', messages: zoneMessagesFor('en') });
     expect(mapped).toBe(page);
