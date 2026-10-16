@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { stable } from '../../../scripts/fixture/corpus.ts';
-import type { RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
+import type { RetainedJson, RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
 import { RetainedSources, type RetainedSourceAdapter, type SourceContext, type SourceInputs } from '../../../scripts/qa/retained-source.ts';
 import type { PersonaName, PersonaSession, PersonaSessions, RetainedPersonaRealm } from './personas.ts';
 import { prepareRealmRankingStates } from './realm-ranking-fixture.ts';
@@ -377,7 +377,10 @@ export async function buildRealmDiscussionCorpus(runtime: RealmSourceRuntime, co
     });
     const privateOpener = await phase('discussion-private-opener', async () => (await grow(live.discussionPrivate, privateWork,
       ['Private garden\nAn original contribution in a private Realm.']))[0]!);
-    const rankingStates = await phase('ranking-chart-and-cursor-states', () => prepareRealmRankingStates(live.rankingPublic));
+    // The catalogue editor is part of the retained members/roles snapshots too;
+    // its assignment must survive the same source lifetime as the moderators.
+    const rankingStates = await phase('ranking-chart-and-cursor-states', () => prepareRealmRankingStates(live.rankingPublic,
+      new Date(startedAt + realmSourceAuthorityLifetimeMs).toISOString()));
     const realms = Object.fromEntries(Object.entries(live).map(([name, value]) => [name, runtime.retain(value)])) as RealmSourceMetadata['realms'];
     const authoritySnapshots = await phase('starting-authority-snapshots', async () => Object.fromEntries(await together(
       Object.entries(live).map(async ([name, realm]) => [name, await realmAuthoritySnapshot(realm)] as const))) as RealmSourceMetadata['authoritySnapshots']);
@@ -416,13 +419,35 @@ async function realmAuthoritySnapshot(realm: PersonaSessions) {
     settings: await answer<RetainedOwnerState>(owner.main('GET', `/v1/spaces/${short(realm.space)}/settings?${query}`)) };
 }
 
+/** Keep restore failures actionable without dumping the complete authority roster. */
+function authorityDifferences(expected: RetainedJson | undefined, actual: RetainedJson | undefined,
+  path = '$', differences: string[] = []): string[] {
+  if (differences.length >= 8 || expected === actual) return differences;
+  if (expected !== null && actual !== null && typeof expected === 'object' && typeof actual === 'object'
+    && Array.isArray(expected) === Array.isArray(actual)) {
+    const before = expected as Record<string, RetainedJson>, after = actual as Record<string, RetainedJson>;
+    for (const key of [...new Set([...Object.keys(before), ...Object.keys(after)])].sort()) {
+      const child = Array.isArray(expected) ? `[${key}]` : /^[A-Za-z_$][\w$]*$/.test(key) ? `.${key}` : `[${JSON.stringify(key)}]`;
+      authorityDifferences(Object.hasOwn(before, key) ? before[key] : undefined,
+        Object.hasOwn(after, key) ? after[key] : undefined, path + child, differences);
+      if (differences.length >= 8) break;
+    }
+  } else differences.push(`${path}: expected ${expected === undefined ? '<missing>' : stable(expected)}, actual ${actual === undefined ? '<missing>' : stable(actual)}`);
+  return differences;
+}
+
 /** Complete API inventory, including exact authored revisions and concealed
  * historical/private resources. This is custody readiness, not the twelve row proofs. */
 export async function verifyRealmDiscussionCorpus(sessions: RealmSourceSessions, metadata: RealmSourceMetadata, row?: 'ranking') {
   validateRealmSourceMetadata(metadata);
-  for (const [name, realm] of Object.entries(sessions).filter(([name]) => !row || name.startsWith(row)))
-    requireFact(stable(await realmAuthoritySnapshot(realm)) === stable(metadata.authoritySnapshots[name as keyof RealmSourceSessions]),
-      'restored membership, role or disclosure starting state differs');
+  for (const [name, realm] of Object.entries(sessions).filter(([name]) => !row || name.startsWith(row))) {
+    const actual = await realmAuthoritySnapshot(realm), expected = metadata.authoritySnapshots[name as keyof RealmSourceSessions];
+    const answers = (['members', 'roles', 'settings'] as const).flatMap(answer => {
+      const differences = authorityDifferences(expected[answer], actual[answer]);
+      return differences.length ? [`${answer} answer (first ${differences.length} differing JSON paths):\n${differences.join('\n')}`] : [];
+    });
+    requireFact(answers.length === 0, `Realm ${name} (${realm.realm}) restored membership, role or disclosure starting state differs:\n${answers.join('\n')}`);
+  }
   const collect = async (realm: PersonaSessions, role: PersonaName) => {
     const person = realm[role], query = acting(person); query.set('sort', 'new'); query.set('limit', '20');
     const replies: string[] = [], cursors = new Set<string>();

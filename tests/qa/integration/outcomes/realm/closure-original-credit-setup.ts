@@ -101,7 +101,8 @@ export function createClosureCreditEvidence(
   return { record, phase, observe, requests };
 }
 
-export async function publishClosureOriginals(sessions: PersonaSessions, publications: Publication[], phrase: string, count = 3) {
+export async function publishClosureOriginals(sessions: PersonaSessions, publications: Publication[], phrase: string, count = 3,
+  authorityValidUntil = new Date(Date.now() + 3_600_000).toISOString()) {
   const owner = sessions.owner;
   const root = `/v1/realms/${short(sessions.realm)}`;
   const roleId = randomUUID();
@@ -109,7 +110,7 @@ export async function publishClosureOriginals(sessions: PersonaSessions, publica
     { kind: 'role', roleId, name: 'Original catalogue editors', permissions: ['publication.adopt'] },
     {
       kind: 'assignment', roleId, member: owner.actingSubject, assigned: true,
-      validUntil: new Date(Date.now() + 3_600_000).toISOString(),
+      validUntil: authorityValidUntil,
     },
   ]) {
     const roles = await answer<{ generation: string }>(owner.main('GET', `${root}/roles?${acting(owner)}`));

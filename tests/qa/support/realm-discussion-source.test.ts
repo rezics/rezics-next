@@ -7,7 +7,7 @@ import { sha256, stable } from '../../../scripts/fixture/corpus.ts';
 import { RetainedSources, sourceKey } from '../../../scripts/qa/retained-source.ts';
 import type { PersonaSession, RetainedPersonaRealm } from './personas.ts';
 import { buildRealmDiscussionCorpus, realmDiscussionSourceAdapter, realmDiscussionSourceSpecification,
-  realmSourceBuildDeadlineMs, realmSourceMeasurements, realmSourcePopulation, realmSourceRoles, validateRealmSourceMetadata,
+  realmSourceBuildDeadlineMs, realmSourceMeasurements, realmSourcePopulation, realmSourceRoles, validateRealmSourceMetadata, verifyRealmDiscussionCorpus,
   type RealmSourceReply, type RealmSourceRequest, type RealmSourceRuntime, type RealmSourceSessions } from './realm-discussion-source.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
@@ -236,6 +236,11 @@ test('complete builder uses 552 public draft/identity/placement commands with ex
     expect(f.requests.filter(request => request.path === '/v1/contribution-publications')
       .every(request => request.body.disclosure === 'public')).toBe(true);
     expect(f.requests.filter(request => request.path === '/v1/realm-replies').every(request => Boolean(request.key))).toBe(true);
+    const assignments = f.requests.filter(request => request.path.endsWith('/role-changes'))
+      .map(request => request.body.change as { kind: string; validUntil?: string })
+      .filter(change => change.kind === 'assignment');
+    expect(assignments).toHaveLength(1);
+    expect(Date.parse(assignments[0]!.validUntil!)).toBeGreaterThanOrEqual(result.metadata.startingStatesValidUntil);
     const corrupted = structuredClone(result.metadata);
     corrupted.discussion.nested[20]!.parentRevision = randomUUID();
     expect(() => validateRealmSourceMetadata(corrupted)).toThrow('nested chain');
@@ -272,6 +277,50 @@ test('existing lifecycle retains once, isolates descriptor copies, and refuses c
     expect(f.counts().builds).toBe(1);
     expect(f.counts().restores).toBe(2);
     expect(readFileSync(join(prepared.manifest.provenance.manifestPath), 'utf8')).toContain('realm-discussion-source-v1');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('restore failure names the Realm, every changed authority answer and bounded JSON paths with both values', async () => {
+  const f = fixture(), directory = mkdtempSync(join(import.meta.dir, '../../../.temp/realm-authority-unit-'));
+  mkdirSync(join(directory, 'backup'));
+  try {
+    const { metadata } = await buildRealmDiscussionCorpus(f.runtime, { key: 'unit', directory,
+      backup: join(directory, 'backup'), budget: new FixtureWorkBudget(1_800_000) });
+    const owner = f.sessions.rankingPrivate.owner, main = owner.main;
+    owner.main = async (...args) => {
+      const response = await main(...args);
+      if (args[0] !== 'GET') return response;
+      const body = await response.json();
+      if (args[1].includes('/members?')) {
+        body.items[0].membershipGeneration = 'changed-episode';
+        body.removed = null;
+      }
+      if (args[1].includes('/roles?')) body.roles[0] = 'changed-permission';
+      if (args[1].includes('/settings?')) body.settings.visibility = 'public';
+      return Response.json(body);
+    };
+    let failure = '';
+    try { await verifyRealmDiscussionCorpus(f.sessions, metadata, 'ranking'); }
+    catch (error) { failure = (error as Error).message; }
+    expect(failure).toContain(`Realm rankingPrivate (${f.sessions.rankingPrivate.realm})`);
+    expect(failure).toContain('members answer');
+    expect(failure).toContain('$.items[0].membershipGeneration: expected "current", actual "changed-episode"');
+    expect(failure).toContain('$.removed: expected <missing>, actual null');
+    expect(failure).toContain('roles answer');
+    expect(failure).toContain('$.roles[0]: expected "moderate", actual "changed-permission"');
+    expect(failure).toContain('settings answer');
+    expect(failure).toContain('$.settings.visibility: expected "private", actual "public"');
+
+    // A missing inventory is different from an empty one; report only the first
+    // eight paths when a response has many changes.
+    owner.main = main;
+    const members = metadata.authoritySnapshots.rankingPrivate.members;
+    members.items = [];
+    for (let index = 0; index < 12; index++) members[`field${index}`] = index;
+    await expect(verifyRealmDiscussionCorpus(f.sessions, metadata, 'ranking')).rejects.toThrow('members answer (first 8 differing JSON paths)');
+    members.items = null;
+    for (let index = 0; index < 12; index++) delete members[`field${index}`];
+    await expect(verifyRealmDiscussionCorpus(f.sessions, metadata, 'ranking')).rejects.toThrow('$.items: expected null, actual [{');
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
