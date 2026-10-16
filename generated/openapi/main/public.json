@@ -251262,7 +251262,10 @@
                             "type": "object"
                           },
                           "kind": {
-                            "const": "vndb-concept-run",
+                            "enum": [
+                              "source-run",
+                              "vndb-concept-run"
+                            ],
                             "type": "string"
                           },
                           "reference": {
@@ -251725,7 +251728,10 @@
                             "type": "object"
                           },
                           "kind": {
-                            "const": "vndb-concept-run",
+                            "enum": [
+                              "source-run",
+                              "vndb-concept-run"
+                            ],
                             "type": "string"
                           },
                           "reference": {
@@ -252188,7 +252194,10 @@
                             "type": "object"
                           },
                           "kind": {
-                            "const": "vndb-concept-run",
+                            "enum": [
+                              "source-run",
+                              "vndb-concept-run"
+                            ],
                             "type": "string"
                           },
                           "reference": {

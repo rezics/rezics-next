@@ -114,7 +114,7 @@ export async function readAuthorizedExport(deps: ExportDependencies, request: Re
   const profile = saved.plan.targetProfile;
   const assessment = saved.plan.members[1];
   const selected = profile === 'rezics-verification-v1' ? assessment
-    : profile === 'rezics-vndb-concept-source-v1' ? saved.plan.members.at(-1) : first;
+    : ['rezics-source-run-v1', 'rezics-vndb-concept-source-v1'].includes(profile) ? saved.plan.members.at(-1) : first;
   const data = selected?.data;
   const reference = profile === 'rezics-projection-v1' ? data?.revision
     : ['rezics-rating-aggregate-v1', 'rezics-rating-rollup-v1'].includes(profile) ? data?.context
@@ -122,7 +122,7 @@ export async function readAuthorizedExport(deps: ExportDependencies, request: Re
     : profile === 'rezics-verification-v1' ? assessment?.exactRef
       : profile === 'rezics-composition-v1' ? data?.seal
         : profile === 'rezics-semantic-values-v1' ? data?.revision
-          : profile === 'rezics-vndb-concept-source-v1' ? data?.run
+          : ['rezics-source-run-v1', 'rezics-vndb-concept-source-v1'].includes(profile) ? data?.run
             : profile === 'rezics-wiki-v1' ? data?.resource : null;
   const actor = data?.exportActor;
   if (typeof reference !== 'string' || typeof actor !== 'string' || !selected) {
@@ -147,6 +147,8 @@ export async function readAuthorizedExport(deps: ExportDependencies, request: Re
       ...(typeof data.after === 'string' ? { after: data.after } : {}) };
   } else if (profile === 'rezics-semantic-values-v1' && typeof data?.resource === 'string') {
     selection = { kind: 'semantic-revision', reference, resource: data.resource, expectedPosition };
+  } else if (profile === 'rezics-source-run-v1') {
+    selection = { kind: 'source-run', reference, expectedPosition };
   } else if (profile === 'rezics-vndb-concept-source-v1') {
     selection = { kind: 'vndb-concept-run', reference, expectedPosition };
   } else if (profile === 'rezics-wiki-v1' && data?.revisions && typeof data.revisions === 'object') {

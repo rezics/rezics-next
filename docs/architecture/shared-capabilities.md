@@ -61,7 +61,7 @@ relation (`work/instruction-adoption.ts`, `content-publication/public-selection.
 the dependency relation should be owner-neutral, with Recipe semantics projected
 by its profile. Proof: a non-Recipe structured profile publishes from a source.
 
-## Discovery, exchange and release
+## Discovery
 
 Phrase search reaches a Work from Content only through Book chapter placement
 (`post/patterns.ts`, `work/search-public.ts`, `content-publication/search.ts`).
@@ -71,11 +71,6 @@ and should read the served type registry. The year directory intersects with a
 ten-page Realm roster (`apps/web/features/zones/catalogue-browse.tsx`) and should
 pass Realm and conditions to the publication-year query. Proof: an Anime Work is
 found by phrase, filtered in discovery and listed past the roster.
-
-Fixed releases and sealed exports accept only VNDB evidence shapes
-(`work/fixed-release.ts`, `export/readers.ts`, `export/operations.ts`); Source
-should verify a provider-neutral external release reference. Proof: a non-VNDB
-release link seals and exports.
 
 ## Acceptance evidence
 

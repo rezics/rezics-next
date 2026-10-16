@@ -14,8 +14,9 @@ import { readComponentState, readWorkComponentState, RevisionCorrupt,
   RevisionNotFound, RevisionUnavailable } from './history.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import type { SourceRunStore } from '../source/acquisition-run.ts';
-import { readVndbConceptRun, VndbConceptRunInvalid, VndbConceptRunUnavailable }
-  from '../source/vndb-concept-run.ts';
+import { SourceRunInvalid, SourceRunUnavailable } from '../source/acquisition-run.ts';
+import { isExternalEvidenceReference, readExternalReleaseRunEvidence, verifyExternalReleaseReference }
+  from '../source/external-release.ts';
 
 const PROFILE = 'https://rezics.com/definition/fixed-native-text-release-v1';
 /** A sealed native text release is a closed REZICS fixed release. Its v1 manifest
@@ -94,8 +95,8 @@ export function fixedReleaseDigest(input: FixedReleaseInput): string {
       || new Set(input.externalReleases.map(link =>
         `${link.run}\0${link.release}\0${link.sourceClaim}`)).size !== input.externalReleases.length
       || input.externalReleases.some(link => !nativeId.test(link.run)
-        || !/^vndb:release:r[1-9][0-9]{0,11}$/.test(link.release)
-        || !/^urn:rezics:source-occurrence:[0-9a-f]{64}$/.test(link.sourceClaim)
+        || !isExternalEvidenceReference(link.release)
+        || !isExternalEvidenceReference(link.sourceClaim)
         || !/^[0-9a-f]{64}$/.test(link.expectedPosition?.dataEpoch ?? '')
         || link.expectedPosition?.sequence !== '0')))) {
     throw new InvalidFixedRelease('invalid fixed release intent');
@@ -118,33 +119,33 @@ async function verifyExternalReleases(input: readonly ExternalReleaseInput[],
   Promise<SealedExternalRelease[]> {
   if (!input.length) return [];
   if (!source) throw new FixedReleaseUnavailable('source-run owner is unavailable');
-  const snapshots = new Map<string, Awaited<ReturnType<typeof readVndbConceptRun>>>();
+  const snapshots = new Map<string, Awaited<ReturnType<typeof readExternalReleaseRunEvidence>>>();
   const links: SealedExternalRelease[] = [];
   for (const link of input) {
     let snapshot = snapshots.get(link.run);
     if (!snapshot) {
-      try { snapshot = await readVndbConceptRun(source.runs, source.principalId,
+      try { snapshot = await readExternalReleaseRunEvidence(source.runs, source.principalId,
         link.run.split('/').at(-1)!); }
       catch (error) {
-        if (error instanceof VndbConceptRunInvalid || error instanceof VndbConceptRunUnavailable) {
+        if (error instanceof SourceRunInvalid || error instanceof SourceRunUnavailable) {
           throw new FixedReleaseUnavailable('exact external release evidence is unavailable');
         }
         throw error;
       }
       snapshots.set(link.run, snapshot);
     }
-    const claim = snapshot.projection.claims.find(item => item.key === link.sourceClaim
-      && item.kind === 'appearance' && item.release === link.release);
-    const capture = snapshot.captures.find(item => item.surface === 'character');
-    if (snapshot.run !== link.run || snapshot.position.dataEpoch !== link.expectedPosition.dataEpoch
-      || snapshot.position.sequence !== link.expectedPosition.sequence || !claim || !capture
-      || claim.captureDigest !== capture.digest) {
-      throw new FixedReleaseUnavailable('external release does not match frozen source position');
+    let evidence;
+    try { evidence = verifyExternalReleaseReference(snapshot, link); }
+    catch (error) {
+      if (error instanceof SourceRunUnavailable) {
+        throw new FixedReleaseUnavailable('external release does not match frozen source position');
+      }
+      throw error;
     }
     links.push({ run: link.run, release: link.release, sourceClaim: link.sourceClaim,
       expectedPosition: { dataEpoch: link.expectedPosition.dataEpoch,
         sequence: link.expectedPosition.sequence }, sourcePrincipalId: source.principalId,
-      observation: capture.observation, captureDigest: capture.digest });
+      observation: evidence.observation, captureDigest: evidence.captureDigest });
   }
   return links;
 }
@@ -501,8 +502,8 @@ export async function readFixedRelease(env: WorkActivationEnvironment, release: 
       || !nativeId.test(link.run) || !nativeId.test(link.observation)
       || !/^[0-9a-f]{64}$/.test(link.captureDigest)
       || !/^[0-9a-f-]{36}$/.test(link.sourcePrincipalId)
-      || !/^vndb:release:r[1-9][0-9]{0,11}$/.test(link.release)
-      || !/^urn:rezics:source-occurrence:[0-9a-f]{64}$/.test(link.sourceClaim)
+      || !isExternalEvidenceReference(link.release)
+      || !isExternalEvidenceReference(link.sourceClaim)
       || !/^[0-9a-f]{64}$/.test(link.expectedPosition?.dataEpoch ?? '')
       || link.expectedPosition?.sequence !== '0')) {
     throw new RevisionCorrupt('fixed release external links are invalid');

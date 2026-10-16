@@ -12,11 +12,15 @@ import { unverifiedWorks } from '../catalogue-intake/store.ts';
 import { readAssessment, readClaimRevisions } from '../verification/graph.ts';
 import type { VerificationStore } from '../verification/store.ts';
 import type { SourceRunStore } from '../source/acquisition-run.ts';
+import { SourceRunInvalid, SourceRunUnavailable } from '../source/acquisition-run.ts';
+import { readSourceRunEvidence } from '../source/run-evidence.ts';
+import { readExternalReleaseRunEvidence, verifyExternalReleaseReference } from '../source/external-release.ts';
 import { readVndbConceptRun, VndbConceptRunInvalid, VndbConceptRunUnavailable } from '../source/vndb-concept-run.ts';
 import { attachRightsIdentities, canonicalExport, InvalidExportPlan, planExport,
   type ExportLoss, type ExportPlan, type ExportRightsIdentity, type LicenseScopeHook,
   type PortableValue, type VerifiedExportMember } from './planner.ts';
 import { planVndbSourceExport } from './vndb-source.ts';
+import { sourceRunExport } from './source-run.ts';
 import { readWikiExport } from './wiki.ts';
 import type { WikiRevisionSet } from '../wiki/delta.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
@@ -64,7 +68,7 @@ export type ExportSelection =
   | { kind: 'projection-revision'; reference: string; resource: string; expectedPosition: OwnerPosition }
   | { kind: 'rating-aggregate'; reference: string; target: string; expectedPosition: OwnerPosition }
   | { kind: 'rating-rollup'; reference: string; targets: string[]; formula: import('../rating/rollup.ts').RollupFormula; expectedPosition: OwnerPosition }
-  | { kind: 'vndb-concept-run'; reference: string; expectedPosition: OwnerPosition };
+  | { kind: 'source-run' | 'vndb-concept-run'; reference: string; expectedPosition: OwnerPosition };
 
 export interface ExportReaderDependencies {
   platformAccess?: Pick<AccessExposure, 'require'>;
@@ -85,7 +89,7 @@ export function exportProfileExposure(profile: ExportPlan['targetProfile']): Exp
   switch (profile) {
     case 'rezics-projection-v1': case 'rezics-rating-aggregate-v1': case 'rezics-rating-rollup-v1':
     case 'rezics-composition-v1': case 'rezics-verification-v1': case 'rezics-wiki-v1':
-    case 'rezics-vndb-concept-source-v1': return 'public';
+    case 'rezics-source-run-v1': case 'rezics-vndb-concept-source-v1': return 'public';
     default: return 'platform:dataset-dumps';
   }
 }
@@ -327,12 +331,25 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
     return readWikiExport(deps.wiki, principal, actingSubject, selection.reference, selection.revisions,
       selection.expectedPosition, useScope, deps.rights ?? unknownRights, selection.scope);
   }
-  if (selection.kind === 'vndb-concept-run') {
+  if (selection.kind === 'source-run' || selection.kind === 'vndb-concept-run') {
     const runId = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/.exec(selection.reference)?.[1];
     const principalId = await deps.principalIdOf?.(principal);
     if (!runId || !principalId || !deps.sourceRuns) {
       throw new ExportSourceUnavailable('source run owner is unavailable');
     }
+    if (selection.kind === 'source-run') {
+      let snapshot;
+      try { snapshot = await readSourceRunEvidence(deps.sourceRuns, principalId, runId); }
+      catch (error) {
+        if (error instanceof SourceRunInvalid || error instanceof SourceRunUnavailable) {
+          throw new ExportSourceUnavailable('exact source-run evidence is unavailable');
+        }
+        throw error;
+      }
+      pinned(snapshot.position, selection.expectedPosition, snapshot.position.dataEpoch, 'source run');
+      return planFromOwner(sourceRunExport(snapshot, actingSubject, useScope), deps.rights);
+    }
+    // Historical selections keep their exact projection and digest for saved manifests.
     let snapshot;
     try { snapshot = await readVndbConceptRun(deps.sourceRuns, principalId, runId); }
     catch (error) {
@@ -362,28 +379,30 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
       detail: { reason: 'Exact body was checked but this export has no body-use assessment' } }];
     if (!links.length) residuals.push({ memberOrdinal: null, kind: 'missing_member',
       path: '/externalReleases', detail: { reason: 'No external release was sealed with this fixed release' } });
-    const snapshots = new Map<string, Awaited<ReturnType<typeof readVndbConceptRun>>>();
+    const snapshots = new Map<string, Awaited<ReturnType<typeof readExternalReleaseRunEvidence>>>();
     for (const [index, link] of links.entries()) {
       if (!deps.sourceRuns) throw new ExportSourceUnavailable('source-run owner is unavailable');
       let snapshot = snapshots.get(link.run);
       if (!snapshot) {
-        try { snapshot = await readVndbConceptRun(deps.sourceRuns, link.sourcePrincipalId,
+        try { snapshot = await readExternalReleaseRunEvidence(deps.sourceRuns, link.sourcePrincipalId,
           link.run.split('/').at(-1)!); }
         catch (error) {
-          if (error instanceof VndbConceptRunInvalid || error instanceof VndbConceptRunUnavailable) {
+          if (error instanceof SourceRunInvalid || error instanceof SourceRunUnavailable) {
             throw new ExportSourceUnavailable('linked external release evidence is unavailable');
           }
           throw error;
         }
         snapshots.set(link.run, snapshot);
       }
-      const claim = snapshot.projection.claims.find(item => item.key === link.sourceClaim
-        && item.kind === 'appearance' && item.release === link.release);
-      const capture = snapshot.captures.find(item => item.surface === 'character');
-      if (snapshot.run !== link.run || snapshot.position.dataEpoch !== link.expectedPosition.dataEpoch
-        || snapshot.position.sequence !== link.expectedPosition.sequence || !claim || !capture
-        || capture.observation !== link.observation || capture.digest !== link.captureDigest
-        || claim.captureDigest !== capture.digest) {
+      let evidence;
+      try { evidence = verifyExternalReleaseReference(snapshot, link); }
+      catch (error) {
+        if (error instanceof SourceRunUnavailable) {
+          throw new ExportSourceUnavailable('linked external release differs from sealed evidence');
+        }
+        throw error;
+      }
+      if (evidence.observation !== link.observation || evidence.captureDigest !== link.captureDigest) {
         throw new ExportSourceUnavailable('linked external release differs from sealed evidence');
       }
       const data = { provider: snapshot.provider, run: snapshot.run, release: link.release,

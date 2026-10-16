@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { SourceRunStore } from './acquisition-run.ts';
+import { SourceRunUnavailable } from './acquisition-run.ts';
+import type { SourceRunEvidence } from './run-evidence.ts';
+import type { ExternalReleaseEvidence } from './external-release.ts';
 import { projectVndbConceptCaptures, VndbConceptInvalid, type VndbConceptProjection } from './field-vndb.ts';
 
 /** A bounded QA conformance profile over a frozen four-surface Kana-shaped capture set. */
@@ -33,6 +36,29 @@ export interface VndbConceptRunSnapshot {
   projection: VndbConceptProjection;
   captures: VndbConceptRunCapture[];
   work: { captures: number; bytes: number; concepts: number; claims: number; fields: number };
+}
+
+/** VNDB's appearance and character-capture semantics stay at its provider boundary. */
+export function vndbExternalReleases(snapshot: SourceRunEvidence): ExternalReleaseEvidence[] | null {
+  if (snapshot.provider !== VNDB_CONCEPT_FIXTURE_PROVIDER
+    || snapshot.acquisitionProfile !== VNDB_CONCEPT_FIXTURE_PROFILE) return null;
+  if (snapshot.surfaces.length !== SURFACES.length || SURFACES.some(surface => {
+    const view = snapshot.surfaces.find(item => item.surface === surface);
+    return !view?.required || view.outcome?.outcome !== 'qualified' || view.captures.length !== 1;
+  })) throw new SourceRunUnavailable('VNDB release evidence is incomplete');
+  let projection: VndbConceptProjection;
+  try {
+    projection = projectVndbConceptCaptures(snapshot.captures.map(capture => ({
+      kind: capture.surface as typeof SURFACES[number], bytes: capture.bytes, digest: capture.digest, complete: true,
+    })));
+  } catch (error) {
+    if (error instanceof VndbConceptInvalid) throw new SourceRunUnavailable(error.message);
+    throw error;
+  }
+  const capture = snapshot.captures.find(item => item.surface === 'character')!;
+  return projection.claims.filter(claim => claim.kind === 'appearance' && claim.release !== null
+    && claim.captureDigest === capture.digest).map(claim => ({ release: claim.release!, sourceClaim: claim.key,
+    observation: capture.observation, captureDigest: capture.digest }));
 }
 
 /**

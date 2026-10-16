@@ -38,7 +38,7 @@ const selection = t.Union([
     structure: groupAgent, expectedPosition: position, after: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
   t.Object({ kind: t.Literal('semantic-revision'), reference: groupAgent,
     resource: groupAgent, expectedPosition: position }, { additionalProperties: false }),
-  t.Object({ kind: t.Literal('vndb-concept-run'), reference: groupAgent,
+  t.Object({ kind: t.Union([t.Literal('source-run'), t.Literal('vndb-concept-run')]), reference: groupAgent,
     expectedPosition: position }, { additionalProperties: false }),
 ]);
 const body = t.Object({ profile: t.Literal('export-create-v1'), actingSubject: groupAgent,
