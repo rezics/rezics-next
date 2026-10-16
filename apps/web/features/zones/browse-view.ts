@@ -118,6 +118,11 @@ export function browseModel({ base, zoneName, state, page, admitted, locale, mes
     chosen.push({ key: `exclude:${value}`, label: `${messages.exclude}: ${label}`,
       remove: t.removeExclusion({ label }), href: browseHref(base, toggledExcludedConcept(state, value)) });
   }
+  if (state.publicationYear) {
+    const label = state.publicationYear;
+    chosen.push({ key: 'publicationYear', label, remove: t.removeFilter({ label }),
+      href: browseHref(base, { ...state, publicationYear: undefined, cursor: null }) });
+  }
   const sorts = (state.text ? ['relevance', 'newest', 'updated'] as const : ['newest', 'updated'] as const)
     .map(sort => ({ sort, current: page.sort === sort,
       label: { relevance: messages.sortRelevance, newest: messages.sortNewest, updated: messages.sortUpdated }[sort],
@@ -134,6 +139,7 @@ export function browseModel({ base, zoneName, state, page, admitted, locale, mes
   const kept = browseFacets.flatMap(facet => (state.filter[facet] ?? []).map(value =>
     ({ name: facetParams[facet], value: urlValue(facet, value) })));
   kept.push(...(state.excludedConcepts ?? []).map(value => ({ name: 'exclude', value: urlValue('concept', value) })));
+  if (state.publicationYear) kept.push({ name: 'year', value: state.publicationYear });
   return { title: t.browseTitle({ zone: zoneName }), searchLabel: t.searchLabel({ zone: zoneName }),
     placeholder: t.searchPlaceholder({ zone: zoneName }), action: base,
     kept: [...kept, ...state.view === 'grid' ? [{ name: 'view', value: 'grid' }] : []],

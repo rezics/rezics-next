@@ -1,4 +1,5 @@
 import { isUuid, type SearchParams } from '../discover/scope.ts';
+import { catalogueYearCondition } from './catalogue-year.ts';
 
 // A Zone's browse page as its URL states it, and the links that change it.
 // Values within a Facet match any and Facets match all, as Main's
@@ -60,6 +61,8 @@ export interface BrowseState {
   filter: Partial<Record<BrowseFacet, string[]>>;
   /** Concept values to exclude after the included Conditions. */
   excludedConcepts?: string[];
+  /** Main's exact publication year or inclusive bounded range, written as `year` in the URL. */
+  publicationYear?: string;
   cursor: string | null;
 }
 
@@ -70,6 +73,7 @@ export function parseBrowseState(params: SearchParams): BrowseState {
   const text = list(params.q)[0]?.trim().slice(0, 100) || null;
   const sort = list(params.sort)[0];
   const cursor = list(params.cursor)[0];
+  const publicationYear = catalogueYearCondition(list(params.year)[0]);
   const filter: BrowseState['filter'] = {};
   for (const facet of browseFacets) {
     const values = [...new Set(list(params[facetParams[facet]]).flatMap(value => mainValue(facet, value) ?? []))]
@@ -82,6 +86,7 @@ export function parseBrowseState(params: SearchParams): BrowseState {
     ? sort as BrowseSort : null,
   view: list(params.view)[0] === 'grid' ? 'grid' : 'list', filter,
   ...excludedConcepts.length ? { excludedConcepts } : {},
+  ...publicationYear ? { publicationYear } : {},
   cursor: cursor && cursor.length <= 2048 ? cursor : null };
 }
 
@@ -91,6 +96,7 @@ export function mainBrowseQuery(state: BrowseState) {
     status?: (typeof statuses)[number][] };
   return { ...state.text ? { q: state.text } : {}, ...state.sort ? { sort: state.sort } : {},
     ...state.cursor ? { cursor: state.cursor } : {},
+    ...state.publicationYear ? { publicationYear: state.publicationYear } : {},
     ...filter.type ? { type: filter.type } : {}, ...filter.concept ? { concept: filter.concept } : {},
     ...filter.status ? { status: filter.status } : {}, ...filter.length ? { length: filter.length[0] } : {},
     ...state.excludedConcepts?.length ? { excludeConcept: state.excludedConcepts } : {} };
@@ -100,6 +106,7 @@ export function mainBrowseQuery(state: BrowseState) {
 export function browseHref(base: string, state: Omit<BrowseState, 'cursor'> & { cursor?: string | null }): string {
   const query = new URLSearchParams();
   if (state.text) query.set('q', state.text);
+  if (state.publicationYear) query.set('year', state.publicationYear);
   for (const facet of browseFacets) {
     for (const value of state.filter[facet] ?? []) query.append(facetParams[facet], urlValue(facet, value));
   }
@@ -131,12 +138,13 @@ export function toggledExcludedConcept(state: BrowseState, value: string): Brows
     ? chosen.filter(item => item !== value) : [...chosen, value].slice(0, MAX_VALUES), cursor: null };
 }
 
-export const cleared = (state: BrowseState): BrowseState => ({ ...state, filter: {}, excludedConcepts: [], cursor: null });
+export const cleared = (state: BrowseState): BrowseState =>
+  ({ ...state, filter: {}, excludedConcepts: [], publicationYear: undefined, cursor: null });
 
 /** How many Conditions the state applies, for a "Filters (2)" label. */
 export const chosenCount = (state: BrowseState) =>
   browseFacets.reduce((total, facet) => total + (state.filter[facet]?.length ?? 0),
-    state.excludedConcepts?.length ?? 0);
+    (state.excludedConcepts?.length ?? 0) + (state.publicationYear ? 1 : 0));
 
 /** A home chip: the browse page filtered by one value. */
 export function chipHref(base: string, facet: BrowseFacet, value: string): string {
