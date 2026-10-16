@@ -44,6 +44,7 @@ const nativeProofs = [erasureCampaignNativeTest, nativeIntegerPreservationTest, 
   'infra/jena/tests/occurrence-label-growth.test.ts',
   'infra/jena/tests/prefix-walk-native.test.ts',
   'infra/jena/tests/search-journal-restart.test.ts',
+  'services/main/tests/library-collection-position-native.test.ts',
   'services/main/tests/read-snapshot-native.test.ts',
 ].sort();
 const plan = (changed: string[], extra: Partial<Parameters<typeof planAffected>[0]> = {}) =>
