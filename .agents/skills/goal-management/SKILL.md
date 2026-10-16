@@ -38,9 +38,21 @@ capacity defaults, read [settings](references/settings.md).
 6. Checkpoint. Keep `state.md` short and current: rows proved, rows in
    work, the measures, the next action. After compaction or a restart, rebuild
    from `goalctl status`, `state.md` and `git log`. Commit only your own paths
-   (`git commit --only <paths>`), and never amend or rebase a commit on `main`:
-   landings can rebase onto it at any moment. A correction is a new commit. Name a brief in `state.md` by its ID, without a link: the brief
+   (`task goal -- commit -m <message> -- <paths...>`), and never amend or rebase a commit on `main`:
+   the train gates cumulative trees before advancing it. A correction is a new commit. Name a brief in `state.md` by its ID, without a link: the brief
    leaves the tree when its task closes.
+
+   The commit command snapshots only the named paths, restores them in the main
+   checkout while gating, and preserves peer staging. A failed snapshot remains
+   at `refs/goal-manager/<manager-id>` with its error under
+   `.temp/goal-orchestration/manager-commits/`; inspect it before
+   `task goal -- commit --retry <manager-id>`. Retry gates the same snapshot;
+   a content correction is a new commit.
+
+   `task goal -- train` reports observed landings, discarded gate-seconds and
+   p95 handoff-to-main seconds from `train-events.jsonl` in that directory.
+   The journal timestamps gate components, admission waits and train positions.
+   An empty observation window reports a null latency.
 7. Close. When the outcome holds, fold what the Goal decided into its
    owners, remove its row from the root `GOAL.md` and run `goal close <goal>`
    ([convergence](../../../docs/goals/README.md#convergence)).
