@@ -63,7 +63,8 @@ test('explicit preparation retains one API-built store across six independent po
           && costMarkdownFiles.every(name => readFileSync(join(seedDirectory, name), 'utf8')
             .includes(`Build run ID: ${saved.sourceRunId}`));
         if (Object.values(saved.axes).flat().every(cut => compatibleLoadStorage(cut.manifest.compatibility, loadCompatibility(root)))
-          && costEvidenceComplete) {
+          && costEvidenceComplete && saved.custody) {
+          preflightSeedCheckpoints(root);
           console.log('Reusing completed retained seed checkpoints', retainedSeedPath);
           console.log('seed command-cost report paths', JSON.stringify(commandCostReportPaths));
           return;
