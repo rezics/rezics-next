@@ -29,6 +29,7 @@ tasks:
     desc: Install the pinned workspace dependencies from the lockfile.
     cmds:
       - corepack yarn install --immutable
+      - bun scripts/goal/dependencies.ts
 
   toolchain:bun-check:
     desc: Refuse a Bun older than 1.4.3, which has no built-in type checker.

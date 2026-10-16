@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { independentRestoreSourceSpecification } from '../../tests/qa/fault-recovery/independent-restore-support.ts';
 import { ownerErasureSourceSpecification, producerModules } from '../../tests/qa/fault-recovery/owner-restore-erasure-fixture.ts';
@@ -8,6 +8,11 @@ import { realmSourceInputs } from '../../tests/qa/support/realm-discussion-sourc
 import { fusekiBuildInputs } from '../dev/fuseki-image.ts';
 import { loadCompatibility } from '../load/compatibility.ts';
 import { isRetainedSourceInput, RETAINED_SOURCE_EXCLUDED_ROOTS, sourceFileDigests, sourceKey, type SourceInputs } from './retained-source.ts';
+import { fixtureCorpus } from '../fixture/corpus.ts';
+import { manifestCore, manifestIdentity } from '../fixture/manifest.ts';
+import { fixtureOwners } from '../fixture/owners/index.ts';
+import { WORK_PROFILE_SCALES, workProfileCorpusId } from '../load/work-profile-corpus.ts';
+import { seedSpecification } from '../../tests/qa/support/seed-specification.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const compatibility = { native: 'fixed-for-source-byte-check' };
@@ -16,6 +21,8 @@ const compatibility = { native: 'fixed-for-source-byte-check' };
 const adapters = [
   { name: 'owner-erasure-source', producer: 'tests/qa/fault-recovery/owner-restore-erasure-fixture.ts',
     specification: (directory: string) => ownerErasureSourceSpecification(directory, {}, compatibility) },
+  { name: 'owner-erasure-source', variant: 'owner-later', producer: 'tests/qa/fault-recovery/owner-restore-erasure-fixture.ts',
+    specification: (directory: string) => ownerErasureSourceSpecification(directory, { laterApiAdmission: true }, compatibility) },
   { name: 'independent-recipe-source', producer: 'tests/qa/fault-recovery/independent-restore-support.ts',
     specification: (directory: string) => independentRestoreSourceSpecification(directory, true, compatibility) },
   { name: 'independent-authority-source', producer: 'tests/qa/fault-recovery/independent-restore-support.ts',
@@ -40,7 +47,7 @@ test('the shared exclusion rule names orchestration roots and respects path boun
   }
 });
 
-for (const adapter of adapters) test(`${adapter.name}: orchestration never changes the key; data inputs do`, async () => {
+for (const adapter of adapters) test(`${'variant' in adapter ? adapter.variant : adapter.name}: orchestration never changes the key; data inputs do`, async () => {
   const original = await adapter.specification(root);
   expect(original.producer).toBe(adapter.name);
   const temp = join(root, '.temp');
@@ -95,4 +102,41 @@ for (const adapter of adapters) test(`${adapter.name}: orchestration never chang
   } finally {
     rmSync(copy, { recursive: true, force: true });
   }
+}, 30_000);
+
+test('small fixture and every seed cut keep their keys across tooling-only changes', () => {
+  const engines = {
+    fuseki: { image: 'fixed-fuseki', id: 'fixed-fuseki-digest' },
+    postgres: { image: 'fixed-postgres', id: 'fixed-postgres-digest' },
+    rustfs: { image: 'fixed-rustfs', id: 'fixed-rustfs-digest' },
+  };
+  const corpus = fixtureCorpus('small');
+  const original = manifestCore(root, corpus, fixtureOwners, engines);
+  const keys = (directory: string) => ({
+    fixtureSmall: manifestIdentity(manifestCore(directory, corpus, fixtureOwners, engines)).id,
+    seed: WORK_PROFILE_SCALES.map(scale => workProfileCorpusId(seedSpecification, 'unrelatedWorks', scale, loadCompatibility(directory))),
+  });
+  const copy = mkdtempSync(join(root, '.temp/retained-storage-inputs-'));
+  try {
+    const paths = new Set(['generated/model/manifest.json', ...fusekiBuildInputs(root), ...Object.keys(original.migrations),
+      ...Object.keys(original.account), ...Object.keys(loadCompatibility(root).files),
+      ...Object.values(original.owners).flatMap(owner => Object.keys(owner.inputs))]);
+    for (const path of paths) if (existsSync(join(root, path)) && statSync(join(root, path)).isFile()) {
+      mkdirSync(dirname(join(copy, path)), { recursive: true });
+      cpSync(join(root, path), join(copy, path));
+    }
+    const before = keys(root);
+    expect(keys(copy)).toEqual(before);
+    for (const path of ['.goalctl/settings.json', ...RETAINED_SOURCE_EXCLUDED_ROOTS.map(path =>
+      path.endsWith('/') ? `${path}new-tool.ts` : path)]) {
+      mkdirSync(dirname(join(copy, path)), { recursive: true });
+      writeFileSync(join(copy, path), '// tooling-only change\n');
+    }
+    expect(keys(copy)).toEqual(before);
+    const migration = Object.keys(original.migrations).find(path => path.startsWith('services/account/'))!;
+    writeFileSync(join(copy, migration), readFileSync(join(copy, migration), 'utf8') + '\n-- changed storage input\n');
+    const changed = keys(copy);
+    expect(changed.fixtureSmall).not.toBe(before.fixtureSmall);
+    for (const [index, key] of changed.seed.entries()) expect(key).not.toBe(before.seed[index]);
+  } finally { rmSync(copy, { recursive: true, force: true }); }
 }, 30_000);

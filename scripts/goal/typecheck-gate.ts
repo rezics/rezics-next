@@ -1,7 +1,9 @@
+import { ensureDependencies } from './dependencies.ts';
+export { dependencyInstallIsStale } from './dependencies.ts';
 import { spawn, spawnSync } from 'node:child_process';
 import { UNIT_GATE_OUTPUT_CAP, stopProcessGroup, unitGateBudgetMs } from './unit-gate.ts';
 import { git } from './ledger.ts';
-import { mkdirSync, existsSync, statSync, readdirSync, readFileSync, utimesSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { typecheckWorkspaces } from '../qa/affected.ts';
@@ -113,17 +115,6 @@ export function addGateWorktree(mainRoot: string, directory: string, commit: str
   mkdirSync(join(directory, '.temp'), { recursive: true });
 }
 
-/** True when the lockfile or a dependency patch is newer than the worktree's last install: a rebase rewrote them. */
-export function dependencyInstallIsStale(worktree: string): boolean {
-  const state = join(worktree, 'node_modules', '.yarn-state.yml');
-  if (!existsSync(state)) return false;
-  const installedAt = statSync(state).mtimeMs;
-  const patches = join(worktree, '.yarn', 'patches');
-  const inputs = [join(worktree, 'yarn.lock'),
-    ...(existsSync(patches) ? readdirSync(patches).map(name => join(patches, name)) : [])];
-  return inputs.some(file => existsSync(file) && statSync(file).mtimeMs > installedAt);
-}
-
 /** A branch that moves the pinned Fuseki image must not reach main before that image exists on this host.
  * Every stack started from main in between tries to build it inside its own run and fails: on 2026-10-12
  * browser runs could not start for half an hour after a pin landed. */
@@ -143,16 +134,8 @@ export function missingPinnedImage(worktree: string, mainRoot: string,
 /** A rebase past a dependency change leaves the worktree's installed packages behind the tree it now holds,
  * and the gate would test new code against old packages. Install again before any gate runs. */
 export function reinstallStaleDependencies(worktree: string): string | undefined {
-  if (!dependencyInstallIsStale(worktree)) return;
-  console.log('Pre-merge install: the lockfile or a dependency patch changed under this branch; running task install');
-  const install = spawnSync('task', ['install'], { cwd: worktree, encoding: 'utf8', timeout: 300_000 });
-  if (install.status === 0) {
-    // Yarn leaves its state file alone when nothing changed; mark the install as current either way.
-    const now = new Date();
-    utimesSync(join(worktree, 'node_modules', '.yarn-state.yml'), now, now);
-    return;
-  }
-  return `Dependency install failed in ${worktree}; not merging:\n${`${install.stdout ?? ''}\n${install.stderr ?? ''}`.trim().slice(-2000)}`;
+  try { ensureDependencies(worktree); }
+  catch (error) { return `${String(error)}; not merging`; }
 }
 
 /** Type-checks the workspaces the branch touched before the unit gate, within the unit gate's per-side budget.

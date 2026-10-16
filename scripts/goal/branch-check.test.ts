@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, symlinkSync, realpathSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { branchCheck } from './branch-check.ts';
 import { type CheckRunner } from './check.ts';
@@ -33,14 +33,14 @@ test('branch validation checks an immutable tip with full types, type-aware lint
   const first = await branchCheck('wave/1', f);
   expect(first.code).toBe(0); expect(first.commit).toBe(f.git('rev-parse', 'wave/1'));
   expect(f.commands).toEqual([
-    ['task', 'gen'], ['task', 'main:typecheck'], ['task', 'web:typecheck'],
+    ['task', 'install'], ['task', 'gen'], ['task', 'main:typecheck'], ['task', 'web:typecheck'],
     ['node_modules/.bin/oxlint', '--type-aware', 'apps', 'packages', 'services', 'scripts', 'tests', 'apphost',
       '--ignore-pattern', 'tests/fixtures/static-boundaries/lint-failing/**',
       '--ignore-pattern', 'tests/fixtures/static-boundaries/promise-failing/**'],
     ['task', 'ast-grep', '--', 'scan'], ['task', 'guards'],
   ]);
   expect(f.trees.every(tree => !existsSync(tree))).toBe(true);
-  expect(await branchCheck('HEAD', f)).toEqual(first); expect(f.commands).toHaveLength(6);
+  expect(await branchCheck('HEAD', f)).toEqual(first); expect(f.commands).toHaveLength(7);
   expect(f.git('status', '--porcelain')).toBe(status);
 });
 
@@ -50,17 +50,17 @@ test('failures are recorded and a new commit runs independently', async () => {
     await f.runner(command, cwd, log); return { code: command[1] === 'main:typecheck' ? 1 : 0, output: 'error: bad type' };
   };
   const failed = await branchCheck('HEAD', { ...f, runner }); expect(failed.code).toBe(1);
-  expect(await branchCheck('HEAD', f)).toEqual(failed); expect(f.commands).toHaveLength(6);
+  expect(await branchCheck('HEAD', f)).toEqual(failed); expect(f.commands).toHaveLength(7);
   f.write('services/main/new.ts', 'export {};'); f.git('add', '.'); f.git('commit', '-qm', 'next');
   const next = await branchCheck('HEAD', f); expect(next.code).toBe(0); expect(next.commit).not.toBe(failed.commit);
-  expect(f.commands).toHaveLength(12);
+  expect(f.commands).toHaveLength(14);
 });
 
 test('simultaneous requests for the same tip share one validation', async () => {
   const f = fixture();
   const runner: CheckRunner = async (...args) => { await Bun.sleep(10); return f.runner(...args); };
   const [a, b] = await Promise.all([branchCheck('wave/1', { ...f, runner }), branchCheck('HEAD', { ...f, runner })]);
-  expect(a).toEqual(b); expect(f.commands).toHaveLength(6);
+  expect(a).toEqual(b); expect(f.commands).toHaveLength(7);
 });
 
 test('invalid refs refuse without a result and generation failure cannot certify later checks', async () => {
@@ -69,11 +69,12 @@ test('invalid refs refuse without a result and generation failure cannot certify
   expect(result.code).toBe(1); expect(result.checks.map(check => check.name)).toEqual(['contract']);
 });
 
-test('workspace dependency symlinks point at the checked snapshot', async () => {
+test('snapshot dependencies are installed before checks instead of borrowed from the caller', async () => {
   const f = fixture(); mkdirSync(join(f.cwd, 'node_modules/@rezics'), { recursive: true });
   symlinkSync('../../services/main', join(f.cwd, 'node_modules/@rezics/main'));
   await branchCheck('HEAD', { ...f, runner: async (command, tree, log) => {
-    expect(realpathSync(join(tree, 'node_modules/@rezics/main'))).toBe(join(tree, 'services/main'));
+    expect(existsSync(join(tree, 'node_modules/@rezics/main'))).toBe(false);
+    if (f.commands.length === 0) expect(command).toEqual(['task', 'install']);
     return f.runner(command, tree, log);
   } });
 });
@@ -82,7 +83,7 @@ test('an abandoned lock is recovered without trusting a partial result', async (
   const f = fixture(); const commit = f.git('rev-parse', 'HEAD');
   f.write(`.temp/goal/branch-check/${commit}.lock`, '2147483647');
   f.write(`.temp/goal/branch-check/${commit}.json`, '{');
-  expect((await branchCheck('HEAD', f)).code).toBe(0); expect(f.commands).toHaveLength(6);
+  expect((await branchCheck('HEAD', f)).code).toBe(0); expect(f.commands).toHaveLength(7);
 });
 
 test('guard reports survive snapshot cleanup and cached results keep their evidence', async () => {
@@ -106,7 +107,7 @@ test('Git-aware tools see the snapshot inventory and ordinary dependency directo
     const tracked = spawnSync('git', ['ls-files'], { cwd: tree, encoding: 'utf8' });
     expect(tracked.status).toBe(0); expect(tracked.stdout).toContain('services/main/value.ts');
     expect(tracked.stdout).not.toContain('node_modules');
-    expect(readFileSync(join(tree, 'services/main/node_modules/.bin/tool'), 'utf8')).toContain('exit 0');
+    expect(existsSync(join(tree, 'services/main/node_modules/.bin/tool'))).toBe(false);
     return f.runner(command, tree, log);
   } });
 });

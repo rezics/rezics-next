@@ -23,7 +23,7 @@ function createFixture() {
   git('config', 'user.email', 'landing@example.invalid');
   mkdirSync(join(directory, 'scripts/goal'), { recursive: true });
   for (const file of ['dedupe-imports.ts', 'composition-roots.ts']) copyFileSync(join(import.meta.dir, file), join(directory, 'scripts/goal', file));
-  writeFileSync(join(directory, '.gitignore'), '.temp/\n');
+  writeFileSync(join(directory, '.gitignore'), '.temp/\nnode_modules/\n');
   git('add', '.'); git('commit', '-qm', 'Initial fixture');
   const base = git('rev-parse', 'HEAD');
   const worktree = join(directory, '.temp/tree');
@@ -218,3 +218,16 @@ for (const first of ['settlement', 'merge']) test(`${first} holds the landing lo
   expect(f.ledger().tasks[f.task.id]!.state).toBe(first === 'settlement' ? 'verified' : 'merged');
   expect(existsSync(join(f.run, 'land.lock'))).toBe(false);
 }, 60_000);
+
+test('landing a lockfile installs main dependencies before reporting the merge', async () => {
+  const f = fixture();
+  writeFileSync(join(f.task.worktree, 'yarn.lock'), 'new lockfile');
+  f.git('-C', f.task.worktree, 'add', 'yarn.lock');
+  f.git('-C', f.task.worktree, 'commit', '-qm', 'Upgrade dependencies');
+  const ledger = f.ledger(); ledger.tasks[f.task.id]!.paths.push('yarn.lock'); f.save(ledger);
+  const result = await f.start(['merge', f.task.id, '--skip-unit-gate', '--skip-type-gate']).result;
+  expect(result.code, result.stdout + result.stderr).toBe(0);
+  expect(existsSync(join(f.directory, 'node_modules/.rezics-dependencies'))).toBe(true);
+  expect(result.stdout).toContain(`Dependencies changed in ${f.directory}; running task install`);
+  expect(f.ledger().tasks[f.task.id]!.state).toBe('merged');
+});

@@ -1,5 +1,43 @@
 # State
 
+Checkpoint 242c3f69-d01c-4978-9592-de02381bf472 consolidates handled events
+task:G-2462:22 and mail:c25572a9-1a6c-46f3-a83d-782c23f05262. Program's
+classification and landing disposition supersede G-2462's earlier hold;
+later result events retain their own authority.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2462 | Task:G-2462:22 withheld acceptance after canonical gate `run-Tqn5Bz`: contract, types, lint and AST passed, but affected tests failed after 1184.324s with 0.258s slot wait. Ten failures were confirmed on main `46629cc2bb` and excused; the reaper marker-removal test missed `rm -f marked-container` on the candidate at 2.118s and passed on main at 2.159s. Guards and stories were not reached. The deciding turn referred classification to Program in mail:0c181bcf. Mail:c25572a9 resolves it: the branch lacked G-2686 and ran the old timing-dependent test because workers do not rebase themselves. Program rebased the branch and started its landing merge, whose gate runs on the rebased tree; web needs no further canonical run. Leave that landing to its result event; start no duplicate resume or landing. Close verified on that result only when nothing remains of the brief, otherwise resume the remainder. Preserve all six personas, recording/replay, separate integration proof, the 11 entry tests/21 assertions, 19 roster tests/198 assertions and applicable 18-story phone/desktop inspection evidence. Every assertion, scope limit, existing budget and initial/retry guard timing report remains required; the classification supplies no complete-gate pass or acceptance. |
+
+G-2234's shared-path hold and G-2585's Program-owned retained-corpus hold
+remain as recorded below. G-2674's later landing/result disposition belongs
+to its own event. This checkpoint promotes no API row or persona cell.
+
+The method's measures, available current status and latest efficiency report
+were read. Scope remains 67/68 API rows proved and 402 proved/6 pending
+persona cells. Status had not emitted fresh attempt/token/refusal measures
+when this no-wait checkpoint was written. The preceding checkpoint's readings
+remain historical: first-attempt share 24% overall and 6% that day (5 of 87);
+attempts per landed task median 3, maximum 25 (G-2237); 2053M input/13M output
+tokens, two sessions unavailable and tokens per proved row unavailable;
+71 first, 50 step, 220 fix and 3 capacity attempts, with 11 fixes inferred;
+retained refusals 0 outcome, 12 gate, 0 failing-test findings and 18 other.
+They are not fresh measurements or costs attributed to these events. The
+latest efficiency report remains dated 2026-10-13 21:49 UTC and supplies no
+comparable measurement of this correction. Repeated work here came from
+running a candidate without its landed harness prerequisite. Program's rebase
+puts that repair into the landing gate; retaining applicable surface evidence
+avoids unchanged recording and inspection work. No successful gate or
+efficiency gain is inferred before its result is decided.
+
+The supplied mail was acknowledged by its deciding turn at
+2026-10-15 23:50:37 UTC; acknowledgement was confirmed here. The task turn
+found a concurrent landing lock, restored its attempted brief edit exactly
+and notified Program; it left no brief change or commit. This checkpoint
+changes only this file and starts no worker, landing, closure or watcher.
+
+## Retained checkpoint 36d38e9a
+
 Checkpoint 36d38e9a-240a-441f-8630-2013ac43a6b2 consolidates handled event
 task:G-2462:18. Its decision supersedes G-2462's earlier landing disposition;
 later Program decisions and result events retain their own authority.

@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { WORKER_TYPE_PROJECTS } from '../qa/worker-types.ts';
 import { checkFailureLines, runCheckCommand, type CheckRunner, type CheckResult } from './check.ts';
 
@@ -77,28 +77,12 @@ export async function branchCheck(ref: string, options: BranchCheckOptions = {})
     const snapshotCommit = git(tree, ['-c', 'user.name=Branch check', '-c', 'user.email=branch-check@example.invalid',
       'commit-tree', snapshotTree, '-m', `Snapshot of ${commit}`]);
     git(tree, ['update-ref', 'refs/heads/main', snapshotCommit]);
-    // Workspace links must resolve to the certified snapshot, never the caller's dirty sources.
-    const linkDependencies = (original: string, destination: string) => {
-      if (!existsSync(original)) return;
-      mkdirSync(destination, { recursive: true });
-      for (const entry of readdirSync(original)) {
-        const path = join(original, entry);
-        const target = join(destination, entry);
-        if (entry.startsWith('@') || entry === '.bin') { linkDependencies(path, target); continue; }
-        const local = lstatSync(path).isSymbolicLink() ? resolve(original, readlinkSync(path)) : path;
-        const location = relative(cwd, local);
-        symlinkSync(location && !location.startsWith('..') && !location.split('/').includes('node_modules')
-          ? join(tree, location) : path, target);
-      }
-    };
-    linkDependencies(join(cwd, 'node_modules'), join(tree, 'node_modules'));
-    for (const { root: prefix } of WORKER_TYPE_PROJECTS)
-      linkDependencies(join(cwd, prefix, 'node_modules'), join(tree, prefix, 'node_modules'));
     writeFileSync(log, `Branch ${ref} at ${commit}\n`);
     const run = options.runner ?? runCheckCommand;
     const checks: CheckResult[] = [];
     // Regenerate this snapshot's ignored contracts; never borrow another tip's generated code.
     const commands: [CheckResult['name'], string[], string?][] = [
+      ['contract', ['task', 'install']],
       ['contract', ['task', 'gen']],
       ...WORKER_TYPE_PROJECTS.filter(project => existsSync(join(tree, project.project)))
         .map(project => project.workspace === 'about'

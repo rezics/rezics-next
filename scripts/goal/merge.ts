@@ -1,3 +1,4 @@
+import { ensureDependencies } from './dependencies.ts';
 import { type RecordedMerge, unitFilesFromPlan, mergeUnitFiles, ownerFilesFromPlan, mergeOwnerFiles, streamUnitBaseline, preMergeUnitGate, preMergeSurfaceGate } from './unit-gate.ts';
 import { join } from 'node:path';
 import { stateDir, git, REGENERATION_COMMIT_SUBJECT, assertOwner, root, regenerationOnlyFiles, scopeViolations, landScopeRefusal, withLedger, retryGitIndexLock } from './ledger.ts';
@@ -568,7 +569,11 @@ async function mergeUnderLease(id: string, flags: Set<string>, expectedHead?: st
         touched: (from, to) => git(root, ['log', '--format=', '--name-only', '--no-renames', '-m', `${from}..${to}`]).split('\n').filter(Boolean),
         changed: (from, to) => git(root, ['diff', '--name-only', '--no-renames', `${from}..${to}`]).split('\n').filter(Boolean),
         refresh: () => prepareMerge(ledger),
-        fastForward: after => retryGitIndexLock(() => spawnSync('git', ['merge', '--ff-only', after], { cwd: root, encoding: 'utf8' })),
+        fastForward: after => {
+          const result = retryGitIndexLock(() => spawnSync('git', ['merge', '--ff-only', after], { cwd: root, encoding: 'utf8' }));
+          if (result.status === 0) ensureDependencies(root);
+          return result;
+        },
       }, current, { gatedFiles, regated, retyped, typechecked: current.surface ? ['web'] : skipTypes ? [] : typecheckWorkspaces(current.committed),
         workerChecks: !current.surface && existsSync(join(current.worktree, 'scripts/goal/check.ts')) }, console.log, gateOnly);
       if (advance.kind === 'stopped') {
@@ -606,7 +611,10 @@ async function mergeUnderLease(id: string, flags: Set<string>, expectedHead?: st
     retyped = typeRechecksSpent(typeRechecks);
     if (outcome.workspaces && !outcome.rerun.surface) {
       const workspaces = outcome.workspaces;
-      const rerun = () => typecheck(outcome.rerun, workspaces);
+      const rerun = () => {
+        ensureDependencies(outcome.rerun.worktree);
+        return typecheck(outcome.rerun, workspaces);
+      };
       gateFailure = skipTypes ? await rerun() : await onLane(rerun);
     }
     else {

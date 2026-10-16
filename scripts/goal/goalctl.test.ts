@@ -18,7 +18,7 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   addGateWorktree, branchOnlyRefusal, classifyBranchOnlyFailures, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, gateTreeRefusal, infrastructureStep, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal, REGENERATION_COMMIT_SUBJECT,
   planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate as measuredUnitGate, runUnitSide as measuredUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_GATE_FILE_CAP, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
-  dependencyInstallIsStale, missingPinnedImage, gateLaneStatus, gateLaneWaiters, qaSlotCount, withGateLane,
+  missingPinnedImage, gateLaneStatus, gateLaneWaiters, qaSlotCount, withGateLane,
   dispatchMethodErrors, resumeDecisionError, mailCommand, mechanismSectionErrors, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, typeRechecksSpent, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
@@ -5325,25 +5325,6 @@ test('a branch that moves the pinned image does not merge before the image is bu
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('a worktree whose lockfile or patch is newer than its last install is stale', () => {
-  const root = mkdtempSync(join(tmpdir(), 'stale-install-'));
-  try {
-    expect(dependencyInstallIsStale(root)).toBe(false);
-    mkdirSync(join(root, 'node_modules'), { recursive: true });
-    mkdirSync(join(root, '.yarn', 'patches'), { recursive: true });
-    const state = join(root, 'node_modules', '.yarn-state.yml');
-    const lock = join(root, 'yarn.lock');
-    const patch = join(root, '.yarn', 'patches', 'one.patch');
-    for (const file of [lock, patch, state]) writeFileSync(file, 'x');
-    const at = (file: string, seconds: number) => utimesSync(file, seconds, seconds);
-    at(lock, 1000); at(patch, 1000); at(state, 2000);
-    expect(dependencyInstallIsStale(root)).toBe(false);
-    at(lock, 3000);
-    expect(dependencyInstallIsStale(root)).toBe(true);
-    at(lock, 1000); at(patch, 3000);
-    expect(dependencyInstallIsStale(root)).toBe(true);
-  } finally { rmSync(root, { recursive: true, force: true }); }
-});
 
 describe('gate lanes', () => {
   const pass = (files: readonly string[]): UnitShardResult => ({
