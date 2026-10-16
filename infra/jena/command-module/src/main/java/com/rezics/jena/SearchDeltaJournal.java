@@ -676,6 +676,9 @@ final class SearchDeltaJournal {
     static void migrateLegacyContentReceipt(DatasetGraph data, TextIndexLucene lucene, String unit) {
         if (!contentUnit(unit) || !plainStoredContentDocument(lucene, unit)
             || !legacyUnpinnedContentReceipt(data, unit)) return;
+        // Rank migration runs before startup qualification. Older stores can
+        // predate the journal as well as the pins; use startup's empty baseline.
+        if (!data.contains(GRAPH, STATE, ORDINAL, Node.ANY)) initialize(data);
         verifyContentSubject(data, lucene, unit);
         Node projection = one(data, PUBLIC, uri(unit), uri(RV + "projection"));
         var receipts = data.find(uri(CommandPolicy.RECEIPTS), Node.ANY, uri(RV + "projection"), projection);

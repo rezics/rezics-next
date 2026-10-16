@@ -339,8 +339,15 @@ public class SearchDeltaJournalStartupTest {
     }
 
     @Test public void rankSchemaMigrationPinsOnlyAVerifiedHistoricalBodyBeforeReplacingIt() {
-        try (Fixture fixture = new Fixture(true)) {
+        for (boolean journal : List.of(false, true)) try (Fixture fixture = new Fixture(true)) {
             seedMigrationContent(fixture, CONTENT_BODY, false);
+            if (!journal) {
+                fixture.data.begin(ReadWrite.WRITE);
+                try {
+                    fixture.data.deleteAny(uri("urn:rezics:graph:search-delta"), Node.ANY, Node.ANY, Node.ANY);
+                    fixture.data.commit();
+                } finally { fixture.data.end(); }
+            }
             assertTrue(OccurrenceTextSchema.rebuildIfIncompatible(fixture.data));
             assertFalse(OccurrenceTextSchema.incompatible((FilteredGraphTextIndex) fixture.data.getTextIndex()));
             fixture.data.begin(ReadWrite.READ);
