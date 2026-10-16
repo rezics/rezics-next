@@ -4,24 +4,24 @@ Use `task goal -- status`, `coordinator status`, `planning` and the current
 briefs for live task disposition and scope. This page retains decisions and
 unverified obligations; it is not an operational run log.
 
-Waves 1 to 3 are on main, and the operations, api and web Goals are closed. Main's
-confirmation passed all 408 launch cells on 2026-10-16. The api and web Goals' deferred
-findings and its retained-population checkpoint rebuild procedure are archived
-on `archive/goals` with the Goal. That rebuild is still blocked before a fresh
-checkpoint, and it gates growth checks only, not any row. The program's
-completion still needs these, each owned by an open task in the ledger:
+Waves 1 to 3 are on main, and the operations, api and web Goals are closed.
+Main's confirmation passed all 408 launch cells on 2026-10-16, and every
+shared-capability exception in the inventory is repaired. The api and web Goals'
+deferred findings, and the api Goal's retained-population checkpoint rebuild
+procedure, are archived on `archive/goals` with their Goals. That rebuild is
+still blocked before a fresh checkpoint; it gates growth checks only, not any
+row. The program's completion still needs these, each owned by an open task in
+the ledger:
 
-- main's confirmation passes every launch row, including the Realm, Visual Novel
-  browse and Recipe cells that the cleanup race, read-basis and load failures
-  stopped; then the api Goal closes;
-- the remaining web surfaces land, and the web Goal closes;
-- the shared-capability repairs for credit and discovery land with their
-  cross-domain proofs (source adoption, publication, Structure, exchange,
-  release, import identifiers and erasure custody have landed);
-- gate selection, shard adjudication, harness-test isolation and landing
-  conflict recovery are repaired. Gates fail on shared harness tests that the
-  change cannot affect, and that failure class costs more gate time than any
-  other; the repair briefs carry the research findings.
+- the paged-read basis repair covers every cursor owner, and main's integration
+  failures found on 2026-10-16 are fixed;
+- a committed review or proof test reaches its assertion before it blocks a
+  landing. Premise churn was the largest remaining waste in the 07:00–19:00
+  window.
+
+Efficiency readings on 2026-10-16: 13.16 M worker input per main landing for
+03:00–15:00, then 7.65 M after the gate, harness and watcher repairs landed
+(15:45–19:00), with failed landing surface gates down from six to none.
 
 Shared capabilities are implemented once ([platform thesis](../../product/platform-thesis.md)).
 The program inventories, across every in-scope vertical and source, the shared
