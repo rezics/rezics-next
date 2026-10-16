@@ -170,7 +170,7 @@ export function ZoneWorkRow({ work, rank, locale, messages, avatarQuery, heading
       <ShelfMark work={work.id} title={title} locale={locale} /></CoverLink>
     <div className="grid min-w-0 content-start gap-0.5">
       <Heading lang={work.title?.lang} dir={work.title?.dir}
-        className={cn('text-pretty font-medium font-work-title', compact ? 'line-clamp-1 text-[0.9375rem]/snug'
+        className={cn('wrap-anywhere text-pretty font-medium font-work-title', compact ? 'line-clamp-1 text-[0.9375rem]/snug'
           : 'line-clamp-2 text-base/snug')}>
         <LocalizedLink href={work.href} className="rounded-sm outline-none decoration-1 underline-offset-2
           hover:underline focus-visible:ring-2 focus-visible:ring-ring">{title}</LocalizedLink>
