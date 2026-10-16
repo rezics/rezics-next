@@ -24,10 +24,10 @@ describe('G-936 the panel hears of a counterpart although Main’s graph moved u
 
   test('a read that keeps moving ends as moved, and another failure is not retried', async () => {
     const moving = relationsFrom([{ status: 409 }]);
-    expect(await moving.api.relations('https://rezics.com/id/00000000-0000-4000-8000-000000000001')).toEqual({ ok: false, failure: 'moved' });
+    expect(await moving.api.relations('https://rezics.com/id/00000000-0000-4000-8000-000000000001')).toEqual({ ok: false, failure: 'moved', status: 409, problem: null });
     expect(moving.asked).toHaveLength(5);
     const missing = relationsFrom([{ status: 404 }]);
-    expect(await missing.api.relations('https://rezics.com/id/00000000-0000-4000-8000-000000000001')).toEqual({ ok: false, failure: 'missing' });
+    expect(await missing.api.relations('https://rezics.com/id/00000000-0000-4000-8000-000000000001')).toEqual({ ok: false, failure: 'missing', status: 404, problem: null });
     expect(missing.asked).toHaveLength(1);
   });
 });

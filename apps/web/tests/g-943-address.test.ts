@@ -266,7 +266,7 @@ test('G-943 members continue the public roster; a stale cursor never silently re
     expect(request.searchParams.get('after')).toBe('stale+cursor');
     return Response.json({ code: 'cursor_moved' }, { status: 409 });
   }) as typeof fetch;
-  expect(await readRoster(uuid, 'stale+cursor')).toEqual({ ok: false, failure: 'moved' });
+  expect(await readRoster(uuid, 'stale+cursor')).toEqual({ ok: false, failure: 'moved', status: 409, problem: { code: 'cursor_moved' } });
   expect(calls).toBe(1);
 });
 test('G-943 native-script addresses pass through real HTTP headers without a ByteString error', async () => {

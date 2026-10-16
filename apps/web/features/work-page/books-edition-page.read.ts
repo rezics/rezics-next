@@ -18,7 +18,8 @@ export const refusedRead = (error: NonNullable<Answer<unknown>['error']>) => ({ 
   ...(error.value !== undefined ? { problem: error.value } : {}) });
 
 /** Eden wraps a failed fetch in a synthetic error without an HTTP response. */
-const transportFailed = (answer: Answer<unknown>) => answer.error?.value instanceof Error && !answer.response;
+const transportFailed = (answer: Answer<unknown>) =>
+  (answer.error?.value instanceof Error || answer.error?.value instanceof DOMException) && !answer.response;
 
 function pendingRead<T>(answer: Answer<T>): BooksRead<T> | null {
   return (answer.status ?? answer.response?.status) === 202

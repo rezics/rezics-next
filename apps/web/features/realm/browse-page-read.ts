@@ -15,8 +15,10 @@ export async function settleRealmRead<T>(call: () => Promise<Answer<T>>, cursor?
     let answer = await call();
     if (answer.error?.status === 409 && !cursor) answer = await call();
     const { data, error } = answer;
+    if ((error?.value instanceof Error || error?.value instanceof DOMException) && !answer.response)
+      return { ok: false, failure: isOfflineError(error.value) ? 'offline' : 'unavailable' };
     if (error) return failedRead(failureOf(error.status, error.value), error.value,
-      answer.headers ?? answer.response?.headers);
+      answer.headers ?? answer.response?.headers, error.status);
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
   } catch (error) {
     return { ok: false, failure: isOfflineError(error) ? 'offline' : 'unavailable' };

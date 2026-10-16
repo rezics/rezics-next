@@ -164,7 +164,7 @@ test('the host display contract uses the same refused route without dropping the
   const session = open('visitor', [{ label: item.label, state: 'error' }]);
   const read = await zonePresentationReads(session.main, undefined, false)
     .readZoneRoute(zoneIdFromRecordedPath(item.path), '/draft-link');
-  expect(read).toEqual({ ok: false, failure: 'missing' });
+  expect(read).toEqual({ ok: false, failure: 'missing', status: item.status, problem: item.answer });
   expect(session.calls).toEqual([`GET ${BFF_PREFIX}${item.path} ${item.status}`]);
   expect(session.unmatched()).toBeUndefined();
 });

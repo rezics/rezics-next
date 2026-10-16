@@ -132,7 +132,7 @@ test('the owner unsupported query refusal stays a failure rather than an empty c
   const { sample, page, built } = await readRecorded(browse, 'owner', 'unsupported-query-shape', 'error', true);
   expect(sample.status).toBe(400);
   expect(sample.answer).toMatchObject({ code: 'unsupported_query_shape' });
-  expect(page).toEqual({ ok: false, failure: 'invalid' });
+  expect(page).toEqual({ ok: false, failure: 'invalid', status: sample.status, problem: sample.answer });
   expect(built).toBe(page as typeof built);
 });
 
@@ -175,7 +175,7 @@ test('the visitor unsupported query stays a failure', async () => {
   const { sample, page } = await readRecorded(browse, 'visitor', 'unsupported-query-shape', 'error', false);
   expect(sample.status).toBe(400);
   expect(sample.answer).toMatchObject({ code: 'unsupported_query_shape' });
-  expect(page).toEqual({ ok: false, failure: 'invalid' });
+  expect(page).toEqual({ ok: false, failure: 'invalid', status: sample.status, problem: sample.answer });
 });
 
 test('the owner filtered first page keeps the recorded query and continuation', async () => {
@@ -208,7 +208,7 @@ test('a changed cursor query stays the recorded refusal rather than a locally fi
   const { sample, page, built } = await readRecorded(pagination, 'owner', 'cursor-newest-q-refused', 'error', true);
   expect(sample.status).toBe(400);
   expect(sample.answer).toMatchObject({ code: 'invalid_work_read' });
-  expect(page).toEqual({ ok: false, failure: 'invalid' });
+  expect(page).toEqual({ ok: false, failure: 'invalid', status: sample.status, problem: sample.answer });
   expect(built).toBe(page as typeof built);
 });
 
@@ -227,7 +227,7 @@ test('the visitor changed cursor stays the recorded refusal', async () => {
   const { sample, page } = await readRecorded(pagination, 'visitor', 'cursor-newest-q-refused', 'error', false);
   expect(sample.status).toBe(400);
   expect(sample.answer).toMatchObject({ code: 'invalid_work_read' });
-  expect(page).toEqual({ ok: false, failure: 'invalid' });
+  expect(page).toEqual({ ok: false, failure: 'invalid', status: sample.status, problem: sample.answer });
 });
 
 let persona: AnswerPersona = 'visitor';

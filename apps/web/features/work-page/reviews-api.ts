@@ -41,7 +41,7 @@ export function mainReviewApi({ target, href, context, actingSubject }: {
       try {
         const { data, error, response } = await followHref<ReviewPage>(main(), href ?? `/v1/resources/${target.slice(-36)}/reviews`,
           { context, sort: filter.sort, language: filter.language, rating: filter.rating, cursor, limit: 10, ...reader })();
-        if (error?.value instanceof Error && !response) return { ok: false, failure: 'unavailable' };
+        if ((error?.value instanceof Error || error?.value instanceof DOMException) && !response) return { ok: false, failure: 'unavailable' };
         if (error) return refusedRead(error);
         return data ? { ok: true, data } : { ok: false, failure: 'unavailable' };
       } catch {

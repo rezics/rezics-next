@@ -7,6 +7,16 @@ import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch
 import { readPublishedRealmHeader, realmFrameReads } from './read.ts';
 import { idOf } from './route.ts';
 import type { RealmHeader } from './types.ts';
+import { settleFrame } from './zone-presentation-read.ts';
+
+test('frame transport failures never regain a synthetic HTTP problem', async () => {
+  for (const value of [new Error('Transport failed'), new DOMException('Aborted', 'AbortError')]) {
+    for (const keepProblem of [false, true]) {
+      expect(await settleFrame(async () => ({ data: null, error: { status: 503, value } }), undefined, keepProblem))
+        .toEqual({ ok: false, failure: 'unavailable' });
+    }
+  }
+});
 
 const record = manga as AnswerRecord;
 const realm = new URL(sample('visitor', 'frame-realm-header').path, 'https://recorded.invalid').pathname.split('/')[3]!;

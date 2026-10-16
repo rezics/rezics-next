@@ -154,7 +154,7 @@ test('the recorded unsupported query stays a failure rather than an empty catalo
     const main = browserMainApi('https://recorded.invalid', { fetcher: replay.fetcher });
     const realm = new URL(sample.path, 'https://recorded.invalid').pathname.split('/')[3]!;
     const page = await readBrowseAnswer(main, realm, { sort: 'relevance', limit: 3 });
-    expect(page).toEqual({ ok: false, failure: 'invalid' });
+    expect(page).toEqual({ ok: false, failure: 'invalid', status: sample.status, problem: sample.answer });
   }
 });
 

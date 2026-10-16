@@ -36,5 +36,5 @@ test('the saved release is read directly and a failed detail read remains a fail
   expect(calls[0]).toEqual({ path: { id: saoOne.split('/').at(-1) },
     target: { release: chosen.resource.split('/').at(-1) }, options: { query: { actingSubject: iri('agent') } } });
   unavailable = true;
-  expect(await api.edition(saoOne, chosen)).toEqual({ ok: false, failure: 'unavailable' });
+  expect(await api.edition(saoOne, chosen)).toEqual({ ok: false, failure: 'unavailable', status: 503, problem: null });
 });

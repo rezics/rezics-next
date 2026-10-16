@@ -161,7 +161,7 @@ test('a missing equivalence definition keeps the recorded problem title', async 
   const main = client('member', [{ label: 'collection-equivalence-definition', state: 'error' }], seen);
   const result = await mainTrackingApi(subjectOf('member'), () => main).definition('correspondence-equivalent');
   expect(seen).toEqual([{ method: 'GET', path: chosen.path, body: undefined }]);
-  expect(result).toEqual({ ok: false, failure: 'missing' });
+  expect(result).toEqual({ ok: false, failure: 'missing', status: chosen.status, problem: chosen.answer });
   expect(problemTitle(chosen.answer)).toBe('Definition is unavailable');
   expect((chosen.answer as { code: string }).code).toBe('definition_unavailable');
 });

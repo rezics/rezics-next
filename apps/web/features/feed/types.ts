@@ -171,7 +171,7 @@ type Answer<T> = {
 export async function settle<T>(call: () => Promise<Answer<T>>): Promise<Loaded<T>> {
   try {
     const answer = await call();
-    if (answer.error?.value instanceof Error && !answer.response)
+    if ((answer.error?.value instanceof Error || answer.error?.value instanceof DOMException) && !answer.response)
       return { ok: false, failure: isOfflineError(answer.error.value) ? 'offline' : 'unavailable' };
     if (answer.error) return failedRead(failureOf(answer.error.status, answer.error.value), answer.error.value,
       answer.headers ?? answer.response?.headers, answer.error.status);

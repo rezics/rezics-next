@@ -97,7 +97,8 @@ test('contract-built feed and refusal specimens conform to Main schemas', async 
 
 test('a transport failure has no invented HTTP status or Main problem', async () => {
   for (const [error, failure] of [[new TypeError('Failed to fetch'), 'offline'],
-    [new Error('Unexpected transport failure'), 'unavailable']] as const) {
+    [new Error('Unexpected transport failure'), 'unavailable'],
+    [new DOMException('Aborted', 'AbortError'), 'unavailable']] as const) {
     const main = browserMainApi('https://contract.invalid', {
       fetcher: Object.assign(async () => { throw error; }, { preconnect: globalThis.fetch.preconnect }),
     });

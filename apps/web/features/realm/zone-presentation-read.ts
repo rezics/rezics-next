@@ -41,7 +41,8 @@ export async function settleFrame<T>(call: () => Promise<FrameAnswer<T>>, cursor
     try {
       recorded.problem = null;
       const answer = await call();
-      recorded.problem = answer.error;
+      recorded.problem = !answer.response && (answer.error?.value instanceof Error || answer.error?.value instanceof DOMException)
+        ? null : answer.error;
       if (recordedReplayGap(answer.error?.value)) recorded.gap = answer.error?.value;
       return answer;
     } catch (error) {

@@ -167,9 +167,8 @@ test('the recorded unsupported query refusal stays a failure rather than an empt
     state: parseBrowseState({}), context: { realm, ref: recordedSiteKey(record), locale }, locale, messages,
   });
   expect(sample.answer).toMatchObject({ code: 'unsupported_query_shape', title: 'Relevance needs text' });
-  // The shared adapter classifies 400 as invalid and does not keep the problem body.
-  expect(page).toEqual({ ok: false, failure: 'invalid' });
-  expect(page).not.toHaveProperty('problem');
+  expect(page).toEqual({ ok: false, failure: 'invalid', status: sample.status, problem: sample.answer });
+  expect(page).toHaveProperty('problem', sample.answer);
   if (page.ok || built.ok) throw new Error('The refusal became a catalogue page');
   expect(built).toBe(page);
 });

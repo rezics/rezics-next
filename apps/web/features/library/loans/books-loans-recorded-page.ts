@@ -37,7 +37,7 @@ function problemTitle(value: unknown): string | null {
 
 /** A refused loans read keeps the problem sentence and does not invent a loan. */
 export function refusedLoansRead(status: number, body: unknown, headers?: unknown): LoansPageRead {
-  return { ...failedRead(failureOf(status, body), body, headers), problemTitle: problemTitle(body) };
+  return { ...failedRead(failureOf(status, body), body, headers, status), problemTitle: problemTitle(body) };
 }
 
 async function pooled<T>(items: readonly T[], task: (item: T) => Promise<void>, limit: number): Promise<void> {

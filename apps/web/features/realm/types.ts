@@ -51,7 +51,9 @@ export type MainAvatar = RealmHeader['icon'];
  */
 export type ReadFailure = 'missing' | 'moved' | 'invalid' | 'budget' | 'closed' | 'offline' | 'unavailable';
 
-export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure; reference?: string };
+export type Loaded<T> = { ok: true; data: T } | {
+  ok: false; failure: ReadFailure; reference?: string; status?: number; problem?: unknown;
+};
 
 export function failureOf(status: number, body?: unknown): ReadFailure {
   if (platformClosed(status, body)) return 'closed';

@@ -83,10 +83,10 @@ describe('read failure classification', () => {
 
   test('attaches that id only to a server failure', () => {
     expect(failedRead('unavailable', problem, { 'x-rezics-request-id': 'ab12cd34' }))
-      .toEqual({ ok: false, failure: 'unavailable', reference: 'ab12cd34' });
-    expect(failedRead('unavailable', problem)).toEqual({ ok: false, failure: 'unavailable' });
-    expect(failedRead('offline', problem, { 'x-request-id': 'ab12cd34' })).toEqual({ ok: false, failure: 'offline' });
-    expect(failedRead('closed', { code: 'platform_closed' })).toEqual({ ok: false, failure: 'closed' });
+      .toEqual({ ok: false, failure: 'unavailable', reference: 'ab12cd34', problem });
+    expect(failedRead('unavailable', problem)).toEqual({ ok: false, failure: 'unavailable', problem });
+    expect(failedRead('offline', problem, { 'x-request-id': 'ab12cd34' })).toEqual({ ok: false, failure: 'offline', problem });
+    expect(failedRead('closed', { code: 'platform_closed' })).toEqual({ ok: false, failure: 'closed', problem: { code: 'platform_closed' } });
   });
 });
 
@@ -107,9 +107,9 @@ describe('settle', () => {
   test('a 500 keeps a reference when the response carries one, and a problem code is not one', async () => {
     expect(await settle(async () => ({
       data: null, error: { status: 500, value: problem }, headers: { 'x-request-id': 'ab12cd34' },
-    }))).toEqual({ ok: false, failure: 'unavailable', reference: 'ab12cd34' });
+    }))).toEqual({ ok: false, failure: 'unavailable', reference: 'ab12cd34', status: 500, problem });
     expect(await settle(async () => ({ data: null, error: { status: 500, value: problem } })))
-      .toEqual({ ok: false, failure: 'unavailable' });
+      .toEqual({ ok: false, failure: 'unavailable', status: 500, problem });
   });
 
   test('a closed operation stays exactly closed', async () => {
@@ -118,7 +118,7 @@ describe('settle', () => {
       error: { status: 403, value: { code: 'platform_closed' } },
       headers: { 'x-request-id': 'ab12cd34' },
     }));
-    expect(read).toEqual({ ok: false, failure: 'closed' });
+    expect(read).toEqual({ ok: false, failure: 'closed', status: 403, problem: { code: 'platform_closed' } });
   });
 });
 

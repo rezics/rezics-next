@@ -46,7 +46,7 @@ export async function settle<T>(call: () => Promise<Answer<T>>, again = true): P
     let answer = await call();
     if (again && answer.error?.status === 409) answer = await call();
     const { data, error, response } = answer;
-    if (error?.value instanceof Error && !response) return { ok: false, failure: 'unavailable' };
+    if ((error?.value instanceof Error || error?.value instanceof DOMException) && !response) return { ok: false, failure: 'unavailable' };
     if (error) return { ok: false, failure: failureOf(error.status), status: error.status,
       ...(error.value !== undefined ? { problem: error.value } : {}) };
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };

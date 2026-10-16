@@ -12,7 +12,7 @@ for (const persona of rankingPersonas) {
           const transport = rankingContractFetch(sample);
           const main = browserMainApi('https://contract.invalid', { fetcher: transport.fetcher, anonymous: persona === 'visitor' });
           const result = await readRankingAnswer(main, sample.request);
-          if (sample.status === 404) expect(result).toEqual({ ok: false, failure: 'missing' });
+          if (sample.status === 404) expect(result).toEqual({ ok: false, failure: 'missing', status: sample.status, problem: sample.answer });
           else {
             if (!('items' in sample.answer)) throw new Error('Expected an admitted contract answer');
             expect(result).toEqual({ ok: true, data: sample.answer });
@@ -31,7 +31,7 @@ for (const persona of rankingPersonas) {
       const sample = rankingContractState({ persona, state, sort: 'top', window: 'month' });
       const transport = rankingContractFetch(sample);
       const result = await readRankingAnswer(browserMainApi('https://contract.invalid', { fetcher: transport.fetcher }), sample.request);
-      if (state === 'missing') expect(result).toEqual({ ok: false, failure: 'missing' });
+      if (state === 'missing') expect(result).toEqual({ ok: false, failure: 'missing', status: sample.status, problem: sample.answer });
       else {
         if (!('items' in sample.answer)) throw new Error('Expected a continuation contract answer');
         expect(result).toEqual({ ok: true, data: sample.answer });
@@ -45,7 +45,7 @@ test('a transferred continuation is sent as this viewer and its refusal cannot b
   const sample = rankingContractState({ persona: 'stranger', state: 'invalid-cursor' });
   const transport = rankingContractFetch(sample);
   const main = browserMainApi('https://contract.invalid', { fetcher: transport.fetcher });
-  expect(await readRankingAnswer(main, sample.request)).toEqual({ ok: false, failure: 'invalid' });
+  expect(await readRankingAnswer(main, sample.request)).toEqual({ ok: false, failure: 'invalid', status: sample.status, problem: sample.answer });
   transport.dispose();
 });
 
@@ -54,7 +54,7 @@ test('an expired ranking basis stays a restart; unavailable and network failures
     const sample = rankingContractState({ persona: 'member', state });
     const transport = rankingContractFetch(sample);
     expect(await readRankingAnswer(browserMainApi('https://contract.invalid', { fetcher: transport.fetcher }), sample.request))
-      .toEqual({ ok: false, failure });
+      .toEqual({ ok: false, failure, status: sample.status, problem: sample.answer });
     transport.dispose();
   }
   const sample = rankingContractState({ persona: 'member', state: 'populated' });

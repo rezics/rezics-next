@@ -56,7 +56,7 @@ test('the recorded unsupported query refusal stays a failure rather than an empt
   const { result, page, sample } = await pageFrom('unsupported-query-shape', 'relevance');
   expect(sample.status).toBe(400);
   expect(sample.answer).toMatchObject({ code: 'unsupported_query_shape' });
-  expect(page).toEqual({ ok: false, failure: 'invalid' });
+  expect(page).toEqual({ ok: false, failure: 'invalid', status: sample.status, problem: sample.answer });
   if (page.ok) throw new Error('The recorded refusal became a successful read');
   expect(result).toBe(page);
 });

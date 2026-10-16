@@ -13,10 +13,10 @@ describe('closed Realm notification reader', () => {
   test('visitor inbox, count and delivery retain the authentication refusal', async () => {
     const fixture = closureTransport('visitor');
     expect(fixture.recipient).toBeNull();
-    expect(await readLatest(fixture.main)).toEqual({ ok: false, failure: 'sign-in' });
-    expect(await readNotificationCount(fixture.main)).toEqual({ ok: false, failure: 'sign-in' });
+    expect(await readLatest(fixture.main)).toEqual({ ok: false, failure: 'sign-in', status: 401, problem: { code: 'account_assertion_denied' } });
+    expect(await readNotificationCount(fixture.main)).toEqual({ ok: false, failure: 'sign-in', status: 401, problem: { code: 'account_assertion_denied' } });
     expect(await readNotificationDelivery(fixture.main, fixture.deliveries[0]!.id))
-      .toEqual({ ok: false, failure: 'sign-in' });
+      .toEqual({ ok: false, failure: 'sign-in', status: 401, problem: { code: 'account_assertion_denied' } });
   });
 
   for (const persona of closurePersonas.filter(value => value !== 'visitor')) {
@@ -41,9 +41,9 @@ describe('closed Realm notification reader', () => {
       expect(fixture.requests.every(request => request.credentials === 'same-origin' && !request.path.includes('actingSubject'))).toBe(true);
       const other = closureAnswers(persona === 'stranger' ? 'member' : 'stranger');
       expect(await readNotificationDelivery(fixture.main, other.deliveries[0]!.id))
-        .toEqual({ ok: false, failure: 'missing' });
+        .toEqual({ ok: false, failure: 'missing', status: 404, problem: { code: 'not_found' } });
       expect(await readNotificationDelivery(fixture.main, '00000000-0000-4000-8000-000000000000'))
-        .toEqual({ ok: false, failure: 'missing' });
+        .toEqual({ ok: false, failure: 'missing', status: 404, problem: { code: 'not_found' } });
     });
   }
 
@@ -64,12 +64,15 @@ describe('closed Realm notification reader', () => {
   test('count and delivery failures keep their server references without removing eligible items', async () => {
     const count = closureTransport('member', 'count-error');
     expect(await readLatest(count.main)).toMatchObject({ ok: true, data: {
-      items: count.page.items, unreadCount: { ok: false, failure: 'unavailable', reference: 'closure-count-503' } } });
+      items: count.page.items, unreadCount: { ok: false, failure: 'unavailable', reference: 'closure-count-503',
+        status: 503, problem: { code: 'notification_unavailable', reference: 'closure-count-503' } } } });
     const delivery = closureTransport('member', 'delivery-error');
     expect(await readNotificationDelivery(delivery.main, delivery.deliveries[0]!.id))
-      .toEqual({ ok: false, failure: 'unavailable', reference: 'closure-delivery-503' });
+      .toEqual({ ok: false, failure: 'unavailable', reference: 'closure-delivery-503',
+        status: 503, problem: { code: 'notification_unavailable', reference: 'closure-delivery-503' } });
     const unavailable = closureTransport('member', 'error');
-    expect(await readLatest(unavailable.main)).toEqual({ ok: false, failure: 'unavailable', reference: 'closure-inbox-503' });
+    expect(await readLatest(unavailable.main)).toEqual({ ok: false, failure: 'unavailable', reference: 'closure-inbox-503',
+      status: 503, problem: { code: 'notification_unavailable', reference: 'closure-inbox-503' } });
   });
 
   test('empty and continuation refusal are completed API results', async () => {
@@ -77,7 +80,8 @@ describe('closed Realm notification reader', () => {
     expect(await readLatest(empty.main)).toMatchObject({ ok: true, data: { items: [], next: null,
       unreadCount: { ok: true, data: { count: 0 } } } });
     const expired = closureTransport('member', 'continuation-denied');
-    expect(await readWindow(expired.main, 'contract-older-page')).toEqual({ ok: false, failure: 'sign-in' });
+    expect(await readWindow(expired.main, 'contract-older-page')).toEqual({ ok: false, failure: 'sign-in',
+      status: 401, problem: { code: 'account_assertion_denied' } });
   });
 
   test('a delivery answer cannot replace the requested item or delivery identity', async () => {

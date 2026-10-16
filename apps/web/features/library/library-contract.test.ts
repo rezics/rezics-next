@@ -107,7 +107,7 @@ test('empty and unavailable visits remain reachable Library page outcomes', asyn
   const empty = await load(contractFixture('games', 'empty'));
   expect(empty.overview.ok && empty.overview.data.counts).toEqual({ reading: 0, read: 0, 'want-to-read': 0 });
   const error = await load(contractFixture('games', 'error'));
-  expect(error.overview).toEqual({ ok: false, failure: 'unavailable' });
+  expect(error.overview).toEqual({ ok: false, failure: 'unavailable', status: 503, problem: { code: 'unavailable' } });
 });
 
 test('a Library import waits for the HTTP 202 job rather than reporting completion', async () => {

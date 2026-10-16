@@ -17,7 +17,7 @@ type Answer<T> = {
 
 /** Eden uses a synthetic 503 for a thrown fetch; it is not an HTTP answer. */
 export function transportFailureOf(answer: Pick<Answer<unknown>, 'error' | 'response'>): TrackingFailure | null {
-  return answer.error?.value instanceof Error && !answer.response
+  return (answer.error?.value instanceof Error || answer.error?.value instanceof DOMException) && !answer.response
     ? { ok: false, failure: isOfflineError(answer.error.value) ? 'offline' : 'unavailable' } : null;
 }
 

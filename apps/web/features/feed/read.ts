@@ -14,7 +14,8 @@ export async function settleFeedRead<T>(call: () => Promise<{
   if (read.ok || !refused) return read;
   const { status, value: problem } = refused as { status: number; value: unknown };
   // Eden wraps a failed transport in a synthetic 503; there was no Main answer to retain.
-  if (problem instanceof Error) return { ok: false, failure: isOfflineError(problem) ? 'offline' : 'unavailable' };
+  if (problem instanceof Error || problem instanceof DOMException)
+    return { ok: false, failure: isOfflineError(problem) ? 'offline' : 'unavailable' };
   return { ...read, ...(status === 403 && read.failure !== 'closed' ? { failure: 'unavailable' as const } : {}),
     status, problem };
 }

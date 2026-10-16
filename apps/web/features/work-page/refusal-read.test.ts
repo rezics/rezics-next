@@ -76,7 +76,7 @@ for (const adapter of adapters) {
   });
 
   test(`${adapter.name}: transport failures and absent responses invent no HTTP problem`, async () => {
-    for (const value of [new Error('transport failed'), new TypeError('Failed to fetch')]) {
+    for (const value of [new Error('transport failed'), new TypeError('Failed to fetch'), new DOMException('Aborted', 'AbortError')]) {
       const result = await adapter.settle(async () => ({ data: null, error: { status: 503, value } }));
       expect(result).toEqual({ ok: false, failure: adapter.name === 'Feed' && value instanceof TypeError ? 'offline' : 'unavailable' });
     }

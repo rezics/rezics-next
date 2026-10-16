@@ -114,7 +114,7 @@ test('a visitor and another Person are refused the owner’s private recipe trac
     const denied = sample(persona, 'peer-progress-summary-denied');
     const summary = await mainTrackingApi(actingSubject(denied.path), () => client(persona, [
       { label: denied.label, state: 'error' }])).series(workId(denied.path));
-    expect(summary).toEqual({ ok: false, failure: 'sign-in' });
+    expect(summary).toEqual({ ok: false, failure: 'sign-in', status: denied.status, problem: denied.answer });
 
     const state = sample(persona, 'peer-reader-state-denied');
     const store = createReaderStore({ actingSubject: actingSubject(state.path), main: () => client(persona, [

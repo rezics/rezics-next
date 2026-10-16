@@ -148,7 +148,7 @@ test('the owner unsupported query refusal stays a failure rather than an empty c
   expect(sample.answer).toMatchObject({ code: 'unsupported_query_shape' });
   expect(request.query.limit).toBe(10);
   expect(request.query.sort).toBe('relevance');
-  expect(page).toEqual({ ok: false, failure: 'invalid' });
+  expect(page).toEqual({ ok: false, failure: 'invalid', status: sample.status, problem: sample.answer });
   expect(built).toBe(page as typeof built);
 });
 
@@ -168,7 +168,7 @@ test('the visitor unsupported query stays a failure', async () => {
   const { sample, page } = await readRecorded('visitor', 'unsupported-query-shape', 'error', false);
   expect(sample.status).toBe(400);
   expect(sample.answer).toMatchObject({ code: 'unsupported_query_shape' });
-  expect(page).toEqual({ ok: false, failure: 'invalid' });
+  expect(page).toEqual({ ok: false, failure: 'invalid', status: sample.status, problem: sample.answer });
 });
 
 let persona: AnswerPersona = 'visitor';

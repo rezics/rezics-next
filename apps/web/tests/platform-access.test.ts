@@ -60,7 +60,7 @@ describe('the closed outcome', () => {
 
   test('a shared read turns the closed refusal into a typed outcome, never a throw', async () => {
     const read = await settle(async () => ({ data: null, error: { status: 403, value: closedBody } }));
-    expect(read).toEqual({ ok: false, failure: 'closed' });
+    expect(read).toEqual({ ok: false, failure: 'closed', status: 403, problem: closedBody });
   });
 });
 
@@ -111,7 +111,7 @@ describe('Saved Filter client', () => {
   test('a grant revoked between the access read and the call is closed, not an error', async () => {
     const calls: string[] = [];
     const api = mainSavedFilterApi('agent', client(calls, { status: 403, value: closedBody }), gateFor(savedViews));
-    expect(await api.list('en')).toEqual({ ok: false, failure: 'closed' });
+    expect(await api.list('en')).toEqual({ ok: false, failure: 'closed', status: 403, problem: closedBody });
     expect(await api.update(filter, { pinned: false })).toEqual({ ok: false, failure: 'closed' });
     expect(await api.remove(filter)).toEqual({ ok: false, failure: 'closed' });
     expect(calls).toEqual(['get', 'patch:f1', 'delete:f1']);

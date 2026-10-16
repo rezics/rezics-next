@@ -62,12 +62,9 @@ export function mainSavedFilterApi(actingSubject: string, main: MainClient = bro
   const headers = () => ({ headers: { 'idempotency-key': crypto.randomUUID() } });
   const closed = { data: null, error: { status: 403, value: { code: 'platform_closed' } } } as const;
   return {
-    list: async locale => settle(async () => {
-      if (operationOpen('getV1MeSaved-filters')) {
-        return main.v1.me['saved-filters'].get({ query: { actingSubject, language: locale } });
-      }
-      return closed;
-    }),
+    list: async locale => operationOpen('getV1MeSaved-filters')
+      ? settle(() => main.v1.me['saved-filters'].get({ query: { actingSubject, language: locale } }))
+      : { ok: false, failure: 'closed' },
 
     create: async input => command(async () => {
       if (operationOpen('postV1MeSaved-filters')) {

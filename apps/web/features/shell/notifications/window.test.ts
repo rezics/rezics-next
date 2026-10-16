@@ -106,5 +106,5 @@ test('an expired count refuses the page rather than presenting an earlier person
       : Response.json({ profile: 'notification-stream-page-v1', generation: '7', head: '1', reset: false,
         readThrough: '0', items: [], groups: [], next: null });
   }) as typeof fetch });
-  expect(await readLatest(main)).toEqual({ ok: false, failure: 'sign-in' });
+  expect(await readLatest(main)).toEqual({ ok: false, failure: 'sign-in', status: 401, problem: { code: 'account_assertion_denied' } });
 });

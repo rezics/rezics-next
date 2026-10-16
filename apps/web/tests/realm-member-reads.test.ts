@@ -53,16 +53,13 @@ function mainDouble(initial: Reader) {
   return { calls, as: (value: Reader) => { reader = value; }, move: () => { moved = true; } };
 }
 
-/** Every adapter gives the same absence. The route read also keeps the HTTP problem, because the frame
- * chooses the attached Realm's browse chain from it; a kept problem must be the owner's concealed 404. */
+/** Every adapter retains the owner's concealed answer alongside the same absence category. */
 function expectConcealed(results: readonly object[]) {
   expect(results).toHaveLength(memberReads.length);
   for (const result of results) {
     const { status, problem, ...answer } = result as { status?: number; problem?: unknown };
     expect(answer).toEqual({ ok: false, failure: 'missing' });
-    if (status !== undefined || problem !== undefined) {
-      expect({ status, problem }).toEqual({ status: 404, problem: { code: 'realm_unavailable' } });
-    }
+    expect({ status, problem }).toEqual({ status: 404, problem: { code: 'realm_unavailable' } });
   }
 }
 

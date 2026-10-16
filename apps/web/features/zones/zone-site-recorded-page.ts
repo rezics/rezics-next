@@ -92,7 +92,7 @@ async function settle<T>(call: () => Promise<TreatyAnswer<T>>): Promise<ZoneSite
       const headers = answer.headers ?? (answer.response && typeof answer.response === 'object' && 'headers' in answer.response
         ? answer.response.headers : undefined);
       return {
-        loaded: failedRead(failure, answer.error.value, headers),
+        loaded: failedRead(failure, answer.error.value, headers, answer.error.status),
         problem: failure === 'missing' ? problemOf(answer.error.status, answer.error.value) : null,
       };
     }
