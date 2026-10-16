@@ -28,7 +28,7 @@ for (const [persona, visit] of [['owner', 'inventory'], ['operator', 'inventory'
       if (!result.ok) throw new Error(result.failure);
       const label = `${visit}-${index++}`;
       const sample = record.personas[persona].find(item => item.label === label)!;
-      expect(result.data).toEqual(sample.answer);
+      expect<unknown>(result.data).toEqual(sample.answer);
       expect(new URL(sample.path, 'https://recorded.invalid').searchParams.get('limit')).toBe('24');
       expect(result.data.items.length).toBeLessThanOrEqual(24);
       expect(result.data.complete).toBe(result.data.nextCursor === null);
