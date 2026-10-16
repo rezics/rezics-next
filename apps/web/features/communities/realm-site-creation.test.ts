@@ -148,7 +148,7 @@ test('an independent Zone attaches an existing Realm through the production clie
     const existing = await attachmentClient.resolveRealmHandle(handle, body.actingSubject);
     if (!existing.ok) throw new Error('Existing Realm was not resolved');
     const write = { expectedHead: basis.data.revision, actingSubject: body.actingSubject, defaultRealm: existing.data.realm };
-    expect(write).toEqual(sample('creation-attachment-save').body);
+    expect(write as unknown).toEqual(sample('creation-attachment-save').body);
     expect((await attachmentClient.saveConfiguration(zoneId, write, 'attach-existing-realm')).ok).toBe(true);
     const after = await attachmentClient.readConfiguration(zoneId, body.actingSubject);
     if (!after.ok) throw new Error('Saved attachment was not readable');
