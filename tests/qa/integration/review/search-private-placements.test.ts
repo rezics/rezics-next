@@ -26,6 +26,7 @@ test('anonymous phrase search withholds the private Work target withheld by Stru
     await grantPersonaFixtureAuthority(owner, [
       { scope: `work:edit:${anthology.work}`, action: 'work.edit' },
       { scope: `work:read:${anthology.work}`, action: 'work.read' },
+      { scope: `work:publish:${anthology.work}`, action: 'work.publish' },
       { scope: `work:read:${secret.work}`, action: 'work.read' },
       { scope: `contribution:create:${anthology.work}`, action: 'contribution.create' },
       { scope: `publication:select:${anthology.mainVersion}`, action: 'publication.select' },
@@ -59,11 +60,6 @@ test('anonymous phrase search withholds the private Work target withheld by Stru
         profile: 'section-list-v1', work: anthology.work,
         mainVersion: anthology.mainVersion, actingSubject,
       }), 201);
-    await answer(owner.main('POST', `/v1/compositions/${short(structure.structure)}/changes`, {
-      profile: 'section-list-v1', expectedHead: structure.revision, actingSubject,
-      operations: [{ op: 'insert', role: 'entry', parent: structure.structure,
-        position: 'last', target: secret.work, qualifier: { note: 'Private reference' } }],
-    }));
     const phrase = `hidden railway ${randomUUID().slice(0, 8)}`;
     const variantId = `urn:rezics:variant:${randomUUID()}`;
     const draft = await answer<{ revisionId: string; byteDigest: string;
@@ -82,6 +78,23 @@ test('anonymous phrase search withholds the private Work target withheld by Stru
       profile: 'content-search-eligibility-v1', resourceId: secret.work, variantId,
       publicationDecision: content.decision, expectedEligibilityHead: null,
       rightsBasis: 'original-contribution', disclosure: 'public', actingSubject,
+    }), 201);
+
+    const changed = await answer<{ revision: string }>(owner.main('POST',
+      `/v1/compositions/${short(structure.structure)}/changes`, {
+        profile: 'section-list-v1', expectedHead: structure.revision, actingSubject,
+        operations: [{ op: 'insert', role: 'entry', parent: structure.structure,
+          position: 'last', target: secret.work, qualifier: { note: 'Private reference' },
+          selection: { mode: 'fixed-revision', revision: draft.revisionId,
+            selector: { grain: 'content', variantId, revision: draft.revisionId } } }],
+      }));
+    const current = await answer<{ revision: string }>(owner.main('GET',
+      `/v1/works/${short(anthology.work)}?actingSubject=${encodeURIComponent(actingSubject)}`));
+    await answer(owner.main('POST', '/v1/work-publications', {
+      profile: 'work-structure-publication-v1', operation: 'publish', work: anthology.work,
+      actingSubject, expectedWorkHead: current.revision, expectedMainVersion: anthology.mainVersion,
+      structure: structure.structure, expectedStructureHead: changed.revision,
+      expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public',
     }), 201);
 
     expect((await visitor.main('GET', `/v1/works/${short(secret.work)}`)).status).toBe(404);
