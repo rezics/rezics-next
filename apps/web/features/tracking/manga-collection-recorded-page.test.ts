@@ -165,7 +165,7 @@ describe('Manga Work frame and public inventory through the production compositi
       const { work, actingSubject } = identity(persona);
       try {
         const visit = await mangaWorkVisit({ main, anonymous: browserMainApi('https://recorded.invalid', { fetcher, anonymous: true }),
-          actingSubject, signedIn: persona !== 'visitor', publicFetch: fetcher,
+          actingSubject, signedIn: persona !== 'visitor',
           avatarQuery: actingSubject ? `?actingSubject=${encodeURIComponent(actingSubject)}` : '',
           pageUrl: new URL(localizedPath(workHref(work), 'en'), 'https://rezics.com').href }, work, 'overview');
         expect(visit.ok).toBe(true);
@@ -201,7 +201,7 @@ describe('Manga Work frame and public inventory through the production compositi
       const sample = mangaCollectionSample(record, 'visitor', `${surface}-1`);
       const id = new URL(sample.path, 'https://recorded.invalid').pathname.split('/').at(-1)!;
       try {
-        const visit = await mangaWorkVisit({ main, anonymous: main, signedIn: false, publicFetch: fetcher,
+        const visit = await mangaWorkVisit({ main, anonymous: main, signedIn: false,
           pageUrl: new URL(localizedPath(workHref(id, 'contents'), 'en'), 'https://rezics.com').href }, id, 'contents');
         expect(visit.ok).toBe(true);
         if (!visit.ok) throw new Error(visit.failure);

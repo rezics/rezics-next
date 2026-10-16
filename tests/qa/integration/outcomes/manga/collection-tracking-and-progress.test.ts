@@ -12,7 +12,7 @@ import { booksEditionReads } from '../../../../../apps/web/features/work-page/bo
 import { loadBooksLibrary } from '../../../../../apps/web/features/library/books-library-recorded-page.ts';
 import { parseLibraryState } from '../../../../../apps/web/features/library/state.ts';
 import { mainMediaApi } from '../../../../../apps/web/features/tracking/media-api.ts';
-import { createReaderStore } from '../../../../../apps/web/features/catalogue/reader-store.ts';
+import { createReaderStore, readReaderSeed } from '../../../../../apps/web/features/catalogue/reader-store.ts';
 import { readResourcePage } from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
 import { mangaWorkVisit } from '../../../../../apps/web/features/tracking/manga-collection-recorded-page.work.tsx';
 import { finishMangaSlots } from '../../../../../apps/web/features/tracking/manga-collection-recorded-page.test-support.ts';
@@ -150,13 +150,23 @@ async function productionVisit(person: PersonaSession) {
   expect((await readResourcePage(main, actingSubject, short(manga.work))).ok).toBe(true);
   const host = { main, anonymous: client(sessions.visitor), actingSubject, signedIn: Boolean(actingSubject),
     avatarQuery: actingSubject ? `?actingSubject=${encodeURIComponent(actingSubject)}` : '',
-    publicFetch: request(sessions.visitor), pageUrl: new URL(localizedPath(workHref(short(manga.work)), 'en'), 'https://rezics.com').href };
+    pageUrl: new URL(localizedPath(workHref(short(manga.work)), 'en'), 'https://rezics.com').href };
   phase = 'work-overview'; requestNumber = 0;
   const overview = await mangaWorkVisit(host, short(manga.work), 'overview');
   expect(overview.ok).toBe(true);
   if (!overview.ok) throw new Error(overview.failure);
   await finishMangaSlots(overview.page);
   if (actingSubject) {
+    // The author's shelf contains both volumes and the omnibus. Streamed cards
+    // can mount in one turn or consecutive groups; the store preserves that order.
+    const cards = [volume1.work, volume2.work, omnibus.work];
+    for (let start = 0; start < cards.length; start++) {
+      for (let end = start + 1; end <= cards.length; end++) {
+        const works = cards.slice(start, end);
+        const seed = await readReaderSeed(main, actingSubject, works);
+        expect(Object.keys(seed ?? {})).toEqual(works);
+      }
+    }
     // The existing mounted edition and series controls use these same production adapters.
     const tracking = mainTrackingApi(actingSubject, () => main);
     await tracking.preference(manga.work);

@@ -79,8 +79,9 @@ export async function AboutFacts({ id, locale, messages, client }: Common & { id
       <ChevronDownIcon aria-hidden="true" className="size-4 transition-transform group-open:rotate-180" />
     </summary>
     <div className="grid gap-5 pb-6">
-      {StatementsSection({ section, cursor: undefined, hrefFor: standaloneHrefFor({}, entityHref(id)),
-        locale, t, messages, client })}
+      {client ? StatementsSection({ section, cursor: undefined, hrefFor: standaloneHrefFor({}, entityHref(id)),
+        locale, t, messages, client }) : <StatementsSection section={section} cursor={undefined}
+        hrefFor={standaloneHrefFor({}, entityHref(id))} locale={locale} t={t} messages={messages} />}
       <ProposeCorrectionSlot work={id} locale={locale} messages={messages} />
     </div>
   </details>;
@@ -122,8 +123,8 @@ export async function Parts({ workRef, id, locale, messages, client }: Common & 
   const embedded = { id, workRef: workRefOf(workRef), locale, pageMessages: messages, client };
   return <>
     {actingSubject ? <SeriesProgressPanel work={iriOf(id)} locale={locale} preferenceForm={false} /> : null}
-    <Suspense fallback={null}>{PartsPreview(embedded)}</Suspense>
-    <Suspense fallback={null}>{ConnectionsPreview(embedded)}</Suspense>
+    <Suspense fallback={null}>{client ? PartsPreview(embedded) : <PartsPreview {...embedded} />}</Suspense>
+    <Suspense fallback={null}>{client ? ConnectionsPreview(embedded) : <ConnectionsPreview {...embedded} />}</Suspense>
   </>;
 }
 
@@ -136,10 +137,13 @@ export async function DiscussionHub({ workRef, id, locale, messages, client }: C
   const discussion = workHref(workRef, 'discussion');
   const hrefFor = standaloneHrefFor({}, entityHref(id));
   return <div className="grid gap-4" data-discussion-hub>
-    {DiscussionSection({ section, cursor: undefined, resource: page.data.target.resource,
+    {client ? DiscussionSection({ section, cursor: undefined, resource: page.data.target.resource,
       registry: page.data.registry, signedIn, preview: 3, anchor: 'work-discussion',
       hrefFor: link => link.kind === 'continue' ? discussion : hrefFor(link), locale, t: entityCopy(locale),
-      messages, client })}
+      messages, client }) : <DiscussionSection section={section} cursor={undefined} resource={page.data.target.resource}
+      registry={page.data.registry} signedIn={signedIn} preview={3} anchor="work-discussion"
+      hrefFor={link => link.kind === 'continue' ? discussion : hrefFor(link)} locale={locale} t={entityCopy(locale)}
+      messages={messages} />}
     <p className="flex flex-wrap items-center gap-x-4 gap-y-2 text-muted-foreground text-sm">{t.discussionIntro}
       <Link href={discussion} className={buttonVariants({ variant: 'outline', size: 'sm', pill: true })}>
         {t.discussionOpen}</Link></p>

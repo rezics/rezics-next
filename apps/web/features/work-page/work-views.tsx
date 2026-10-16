@@ -106,17 +106,15 @@ export interface WorkPageClient extends SuppliedClient {
   anonymous: MainClient;
   signedIn: boolean;
   avatarQuery?: string;
-  publicFetch?: typeof fetch;
   pageUrl?: string | null;
 }
 
-const workPageClient = cache(async (): Promise<WorkPageClient> => {
-  const [host, browse, page] = await Promise.all([reader(), browseReader(), headers()]);
-  return { ...host, anonymous: browse.anonymous, avatarQuery: browse.avatarQuery,
-    pageUrl: page.get('x-rezics-page-url') };
-});
 
 interface Common { locale: UiLocale; messages: WorkPageMessages; client?: WorkPageClient }
+
+// An explicit host resolves the same server slots into streamed promises. The
+// default host leaves them as server components, with each cached reader reached
+// only when React renders that slot under its existing Suspense boundary.
 
 /** Realms the scope bar and empty states can offer: those that adopted the Work, plus the one in the URL. */
 async function scopeRealms(id: string, scope: WorkScope | null, locale: UiLocale, client?: WorkPageClient): Promise<ScopeRealm[]> {
@@ -222,7 +220,6 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
   /** The sections a Zone's page leads with (`ZonePackage.hubOrder`). */
   lead?: readonly HubSection[];
 }) {
-  client ??= await workPageClient();
   const experience = await readExperience(id, work.types, client);
   if (experience.kind === 'recipe') {
     return recipeWorkFrame({ host: await recipePageHost(), workRef, id, work, locale, messages, children });
@@ -232,7 +229,7 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
     readHubPlan(id, client),
     // One batch for the page, so the art costs one round trip however many layers it has, and one for
     // the header's images, so they are drawn (or masked) in the server's HTML.
-    readOwnWorkShowcase(work.id, client?.publicFetch).then(async (art) => {
+    readOwnWorkShowcase(work.id, undefined, client?.anonymous).then(async (art) => {
       const item = art.get(work.id);
       return { item, images: item ? await readShowcaseImages(item.images.flatMap(image =>
         image.role === 'cutout' ? [] : [image.url])) : {} };
@@ -246,21 +243,21 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
     actingSubject={seed ? actingSubject : null} readerSeed={seed ?? undefined} ratingTarget={ratingTarget} readerActions={readerActions} relationships={relationships}
     signInHref={signInPath(localizedPath(workHref(workRef), locale))} avatarQuery={avatarQuery}
     cover={<Suspense fallback={<WorkPageCover work={work} avatarQuery={avatarQuery} />}>
-      {Cover({ id, work, avatarQuery, locale, messages, client })}</Suspense>}
+      {(client ? Cover({ id, work, avatarQuery, locale, messages, client }) : <Cover id={id} work={work} avatarQuery={avatarQuery} locale={locale} messages={messages} />)}</Suspense>}
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
-      {Credits({ id, work, locale, messages, client })}</Suspense>}
-    ratingLine={<Suspense fallback={null}>{RatingLineSlot({ id, experience, locale, messages, client })}</Suspense>}
+      {(client ? Credits({ id, work, locale, messages, client }) : <Credits id={id} work={work} locale={locale} messages={messages} />)}</Suspense>}
+    ratingLine={<Suspense fallback={null}>{(client ? RatingLineSlot({ id, experience, locale, messages, client }) : <RatingLineSlot id={id} experience={experience} locale={locale} messages={messages} />)}</Suspense>}
     sections={hubLabels(messages, plan, lead)}
     readAction={<Suspense fallback={experience.kind === 'book'
       ? <ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} /> : null}>
-      {ReadSlot({ workRef, id, work, experience, locale, messages, client })}
+      {(client ? ReadSlot({ workRef, id, work, experience, locale, messages, client }) : <ReadSlot workRef={workRef} id={id} work={work} experience={experience} locale={locale} messages={messages} />)}
     </Suspense>}
     status={showsEditionStatus(experience) ? <Suspense fallback={null}>
-      {Status({ id, locale, messages, client })}</Suspense> : undefined}
+      {(client ? Status({ id, locale, messages, client }) : <Status id={id} locale={locale} messages={messages} />)}</Suspense> : undefined}
     shortcuts={<>
       <ProvisionalNotice verification={work.verification} provenance={work.fieldProvenance} locale={locale} />
       {plan.includes('wiki') ? <Suspense fallback={null}>
-        {WikiShortcut({ id, locale, messages, client })}</Suspense> : null}</>}>
+        {(client ? WikiShortcut({ id, locale, messages, client }) : <WikiShortcut id={id} locale={locale} messages={messages} />)}</Suspense> : null}</>}>
     {children}</WorkFrame>;
 }
 
@@ -415,13 +412,11 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
   /** The sections a Zone's page leads with (`ZonePackage.hubOrder`). */
   lead?: readonly HubSection[];
 }) {
-  const suppliedClient = client;
-  client ??= await workPageClient();
   const [experience, plan] = await Promise.all([readExperience(id, work.types, client), readHubPlan(id, client)]);
   if (experience.kind === 'recipe') {
     return recipeWorkOverview({ host: await recipePageHost(), workRef, id, work, scope, locale, messages, lead });
   }
-  const access = await readPlatformAccess(suppliedClient);
+  const access = await readPlatformAccess(client);
   const t = messages;
   const loading = t.loadingRegion;
   const common = { id, locale, messages, client };
@@ -437,44 +432,46 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
         <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} /></Suspense> : null
       : experience.kind === 'book' || experience.kind === 'plain' ? null : specialist}
     about={<WorkAbout work={work} locale={locale} messages={messages} />}
-    facts={<Suspense fallback={null}>{plan.includes('about') ? AboutFacts(common) : null}</Suspense>}
+    facts={<Suspense fallback={null}>{plan.includes('about') ? (client ? AboutFacts(common) : <AboutFacts {...common} />) : null}</Suspense>}
     availability={<>
       <Suspense fallback={<RegionSkeleton id="work-availability-loading" title={t.sectionAvailability} label={loading}
         lines={4} />}>
-        {plan.includes('availability') ? Availability({ workRef, ...common }) : null}</Suspense>
-      <Suspense fallback={null}>{plan.includes('availability') ? WorkTypeSections({ work: id, types: work.types, locale }) : null}</Suspense>
+        {plan.includes('availability') ? (client ? Availability({ workRef, ...common }) : <Availability workRef={workRef} {...common} />) : null}</Suspense>
+      <Suspense fallback={null}>{plan.includes('availability') ? (client
+        ? WorkTypeSections({ work: id, types: work.types, locale })
+        : <WorkTypeSections work={id} types={work.types} locale={locale} />) : null}</Suspense>
     </>}
     parts={<Suspense fallback={<RegionSkeleton id="work-parts-loading" title={t.sectionParts} label={loading} lines={3} />}>
-      {plan.includes('parts') ? Parts({ workRef, ...common }) : null}</Suspense>}
+      {plan.includes('parts') ? (client ? Parts({ workRef, ...common }) : <Parts workRef={workRef} {...common} />) : null}</Suspense>}
     wiki={<Suspense fallback={<RegionSkeleton id="work-wiki-loading" title={t.sectionWiki} label={loading} lines={2} />}>
-      {plan.includes('wiki') ? WikiSection(common) : null}</Suspense>}
+      {plan.includes('wiki') ? (client ? WikiSection(common) : <WikiSection {...common} />) : null}</Suspense>}
     scopeBar={<Suspense fallback={<ScopeBarSkeleton label={loading} />}>
-      {!scope && plan.includes('ratings') ? ScopeBarSlot({ workRef, id, scope, locale, messages, client }) : null}
+      {!scope && plan.includes('ratings') ? (client ? ScopeBarSlot({ workRef, id, scope, locale, messages, client }) : <ScopeBarSlot workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />) : null}
     </Suspense>}
     ratings={scope ? <Suspense fallback={<RegionSkeleton id="work-ratings-loading" title={t.ratings} label={loading}
       lines={5} />}>
-      {plan.includes('ratings') ? Ratings({ workRef, id, scope, context, locale, messages, client }) : null}
+      {plan.includes('ratings') ? (client ? Ratings({ workRef, id, scope, context, locale, messages, client }) : <Ratings workRef={workRef} id={id} scope={scope} context={context} locale={locale} messages={messages} />) : null}
     </Suspense> : null}
     classification={scope ? <Suspense fallback={<RegionSkeleton id="work-classification-loading"
       title={t.classification} label={loading} />}>
-      {plan.includes('about') ? Classification({ workRef, id, scope, locale, messages, client }) : null}
+      {plan.includes('about') ? (client ? Classification({ workRef, id, scope, locale, messages, client }) : <Classification workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />) : null}
     </Suspense> : null}
     reviews={scope ? <Suspense fallback={<RegionSkeleton id="work-reviews-loading" title={t.reviews} label={loading}
       lines={6} />}>
-      {plan.includes('ratings') ? Reviews({ workRef, id, work, scope, context, locale, messages, client }) : null}
+      {plan.includes('ratings') ? (client ? Reviews({ workRef, id, work, scope, context, locale, messages, client }) : <Reviews workRef={workRef} id={id} work={work} scope={scope} context={context} locale={locale} messages={messages} />) : null}
     </Suspense> : null}
     discussion={<Suspense fallback={<RegionSkeleton id="work-discussion-loading" title={t.sectionDiscussion}
       label={loading} lines={3} />}>
-      {plan.includes('discussion') ? DiscussionHub({ workRef, ...common }) : null}</Suspense>}
+      {plan.includes('discussion') ? (client ? DiscussionHub({ workRef, ...common }) : <DiscussionHub workRef={workRef} {...common} />) : null}</Suspense>}
     adoption={scope ? <Suspense fallback={<RegionSkeleton id="work-adoption-loading" title={t.adoption}
       label={loading} lines={2} />}>
-      {plan.includes('discussion') ? Adoption({ workRef, id, scope, locale, messages, client }) : null}
+      {plan.includes('discussion') ? (client ? Adoption({ workRef, id, scope, locale, messages, client }) : <Adoption workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />) : null}
     </Suspense> : null}
     record={<Suspense fallback={<WorkRecord work={work} locale={locale} messages={messages} />}>
-      {Record({ id, workRef, work, locale, messages, client })}</Suspense>}
+      {(client ? Record({ id, workRef, work, locale, messages, client }) : <Record id={id} workRef={workRef} work={work} locale={locale} messages={messages} />)}</Suspense>}
     alsoEnjoyed={<Suspense fallback={null}>
-      {plan.includes('lists') ? AlsoEnjoyed({ id, work, locale, messages, client }) : null}</Suspense>}
-    author={<Suspense fallback={null}>{plan.includes('lists') ? Author({ id, locale, messages, client }) : null}</Suspense>} />;
+      {plan.includes('lists') ? (client ? AlsoEnjoyed({ id, work, locale, messages, client }) : <AlsoEnjoyed id={id} work={work} locale={locale} messages={messages} />) : null}</Suspense>}
+    author={<Suspense fallback={null}>{plan.includes('lists') ? (client ? Author({ id, locale, messages, client }) : <Author id={id} locale={locale} messages={messages} />) : null}</Suspense>} />;
 }
 
 export async function WorkVersions({ workRef, id, query, locale, messages }: Common & {

@@ -59,14 +59,15 @@ export async function readWorkShowcase(
 }
 
 /** A Work page reads the Work's own art, with no Zone or Realm context to override it. */
-export function readOwnWorkShowcase(work: string, fetcher?: typeof fetch): Promise<ReadonlyMap<string, WorkShowcase>> {
-  return readShowcaseBatch([work], undefined, fetcher);
+export function readOwnWorkShowcase(work: string, fetcher?: typeof fetch, anonymous?: MainClient): Promise<ReadonlyMap<string, WorkShowcase>> {
+  return readShowcaseBatch([work], undefined, fetcher, anonymous);
 }
 
 async function readShowcaseBatch(
   targets: readonly string[],
   context?: string,
   fetcher?: typeof fetch,
+  anonymous?: MainClient,
 ): Promise<ReadonlyMap<string, WorkShowcase>> {
   const wanted = showcaseTargets(targets);
   if (!wanted.length) return new Map();
@@ -76,7 +77,7 @@ async function readShowcaseBatch(
       targets: wanted,
       ...(context ? { context } : {}),
     };
-    const { data, error } = fetcher
+    const { data, error } = anonymous ? await anonymous.v1.resources.showcase.post(body) : fetcher
       ? await browserMainApi(undefined, { anonymous: true, fetcher }).v1.resources.showcase.post(body)
       : await (async () => {
         const { mainApiWithToken } = await import('./main.ts');

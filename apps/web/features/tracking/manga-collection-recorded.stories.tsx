@@ -13,6 +13,7 @@ import { recordedFetch } from '../stories/recorded-fetch.ts';
 import { chooseMenuItem } from '../stories/choose-option.ts';
 import { messages as libraryMessages } from '../library/messages.ts';
 import { messages as catalogueMessages } from '../catalogue/messages.ts';
+import { messages as workMessages } from '../work-page/messages.ts';
 import { MangaCollectionRecordedPage } from './manga-collection-recorded-page.tsx';
 import { mangaCollectionSample, mangaCollectionSelections, type MangaLibraryPersona } from './manga-collection-recorded-page.ts';
 import { mangaWorkVisit } from './manga-collection-recorded-page.work.tsx';
@@ -77,7 +78,7 @@ function RecordedMangaWork({ persona, surface }: { persona: AnswerPersona; surfa
     const sample = mangaCollectionSample(record, persona, `${surface}-1`);
     const id = new URL(sample.path, 'https://recorded.invalid').pathname.split('/').at(-1)!;
     void mangaWorkVisit({ main, anonymous, actingSubject: actor, signedIn: persona !== 'visitor',
-      avatarQuery: actor ? `?actingSubject=${encodeURIComponent(actor)}` : '', publicFetch: fetcher,
+      avatarQuery: actor ? `?actingSubject=${encodeURIComponent(actor)}` : '',
       pageUrl: new URL(localizedPath(workHref(id, surface === 'work-overview' ? 'overview' : 'contents'), 'en'), 'https://rezics.com').href }, id,
     surface === 'work-overview' ? 'overview' : 'contents', 'en', actor ? mainRelationships(actor, {
       origin: `${window.location.origin}${BFF_PREFIX}`, fetch: fetcher,
@@ -221,7 +222,14 @@ async function workOverview(canvasElement: HTMLElement, persona: AnswerPersona) 
   for (const credit of credits.items) {
     await expect((await canvas.findAllByRole('link', { name: credit.displayName }))[0]).toBeVisible();
   }
-  await expect(await canvas.findByRole('heading', { name: 'About' })).toBeVisible();
+  const workCopy = materializeData(workMessages.en, { locale: 'en' });
+  const header = mangaCollectionSample(record, persona, 'work-header-1').answer as { description: { value: string } | null };
+  if (header.description) {
+    await expect(await canvas.findByRole('region', { name: workCopy.about })).toHaveTextContent(header.description.value);
+  } else {
+    await expect(canvas.queryByRole('region', { name: workCopy.about })).toBeNull();
+  }
+  await expect(await canvas.findByRole('heading', { name: workCopy.aboutAuthor })).toBeVisible();
   const copy = materializeData(catalogueMessages.en, { locale: 'en' });
   if (persona === 'visitor') {
     const refusal = canvas.getByRole('link', { name: `${copy.wantToRead} — ${copy.signInToShelve}` });
@@ -235,7 +243,13 @@ async function workOverview(canvasElement: HTMLElement, persona: AnswerPersona) 
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   canvas.getByRole('heading', { level: 1, name: title(persona) }).scrollIntoView({ block: 'start' });
 }
+const workRoute = (persona: AnswerPersona, surface: MangaWorkSurface) => {
+  const sample = mangaCollectionSample(record, persona, `${surface}-1`);
+  const id = new URL(sample.path, 'https://recorded.invalid').pathname.split('/').at(-1)!;
+  return { pathname: localizedPath(workHref(id, surface === 'work-overview' ? 'overview' : 'contents'), 'en'), query: {} };
+};
 const overview = (persona: AnswerPersona): Story => ({ args: { persona, surface: 'work-overview' },
+  parameters: { route: workRoute(persona, 'work-overview') },
   play: async ({ canvasElement }) => { await workOverview(canvasElement, persona); } });
 export const VisitorWork = overview('visitor');
 export const VisitorWorkPhone: Story = { ...VisitorWork, ...phone };
@@ -254,12 +268,26 @@ async function inventory(canvasElement: HTMLElement, surface: MangaWorkSurface) 
   const canvas = within(canvasElement);
   const header = mangaCollectionSample(record, 'visitor', `${surface}-1`).answer as { title: { value: string } };
   await expect(await canvas.findByRole('heading', { level: 1, name: header.title.value })).toBeVisible();
+  const byline = record.personas.visitor.find(item => item.label.startsWith(`${surface}-`) &&
+    new URL(item.path, 'https://recorded.invalid').pathname.endsWith('/agent-credits'))!;
+  const credits = byline.answer as { items: { displayName: string }[] };
+  for (const credit of credits.items) {
+    await expect((await canvas.findAllByRole('link', { name: credit.displayName }))[0]).toBeVisible();
+  }
   const sample = record.personas.visitor.find(item => item.label.startsWith(`${surface}-`) &&
     new URL(item.path, 'https://recorded.invalid').pathname.endsWith('/contents'))!;
-  const contents = sample.answer as { items: { label: { value: string } | null; displayLabel?: string; number: string | null }[] };
+  const contents = sample.answer as { items: { label: { value: string } | null; displayLabel?: string; number: string | null;
+    availability: string }[] };
   for (const item of contents.items) {
     const name = item.label?.value ?? item.displayLabel ?? `Chapter ${item.number}`;
-    await expect(canvas.getByRole('link', { name })).toBeVisible();
+    if (item.availability === 'available') {
+      await expect(await canvas.findByRole('link', { name })).toBeVisible();
+    } else {
+      const label = await canvas.findByText(name, { exact: true });
+      await expect(label).toBeVisible();
+      await expect(label.closest('[aria-disabled]')).toHaveAttribute('aria-disabled', 'true');
+      await expect(canvas.queryByRole('link', { name })).toBeNull();
+    }
   }
   const copy = materializeData(catalogueMessages.en, { locale: 'en' });
   await expect(canvas.getByRole('link', { name: `${copy.wantToRead} — ${copy.signInToShelve}` }))
@@ -269,6 +297,7 @@ async function inventory(canvasElement: HTMLElement, surface: MangaWorkSurface) 
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 }
 const publicInventory = (surface: MangaWorkSurface): Story => ({ args: { persona: 'visitor', surface },
+  parameters: { route: workRoute('visitor', surface) },
   play: async ({ canvasElement }) => { await inventory(canvasElement, surface); } });
 export const VisitorVolumes = publicInventory('inventory-series');
 export const VisitorVolumesPhone: Story = { ...VisitorVolumes, ...phone };
