@@ -14,7 +14,10 @@ test('G865: generated API exposes the common lifecycle, optional public reads an
     expect(operation.security).toEqual([{ bearerAuth: [] }]);
     expect(operation.parameters).toContainEqual(expect.objectContaining({ name: 'Idempotency-Key',in: 'header',required: true }));
     const problem = operation.responses['409']!.content['application/problem+json']!.schema;
-    expect(problem.properties?.blocker?.anyOf?.some(schema => schema.properties?.code?.const === 'stale_base')).toBe(true);
+    const variants = problem.anyOf ?? [problem];
+    expect(variants.some(schema => schema.properties?.blocker?.anyOf?.some(
+      blocker => blocker.properties?.code?.const === 'stale_base'))).toBe(true);
+    expect(variants.some(schema => schema.properties?.code?.const === 'idempotency_conflict')).toBe(true);
   }
   const read = document.paths[`${root}/{proposal}`]!.get!;
   expect(read.security).toEqual([{}, { bearerAuth: [] }]);
