@@ -1,32 +1,34 @@
 # State
 
-Checkpoint 22c3429a-8e3d-4875-aea1-6058a7484286 consolidates handled event
-task:G-2585:9. Its committed decision supersedes G-2585's retained-corpus
-hold below; other tasks and later events retain their own authority.
+Checkpoint 44156100-5b77-41fc-9fa9-487722eb8852 consolidates handled event
+mail:5318967b-e106-4027-8691-3fc6c8fb6bef. Program's committed ruling
+supersedes G-2585's producer-prerequisite hold from checkpoint 22c3429a;
+other tasks and later events retain their own authority.
 
 | Task | Current decision and next action |
 | --- | --- |
-| G-2585 | Task:G-2585:9 and brief decision `13f1ca7f80` keep the worker exited for Program's producer-prerequisite ruling. G-2668 landed and Program prepared the baseline; preserve its no-rebase instruction. Source preparation in QA `20261016t012532-6c1a13` stopped within budget before persona capture when `POST /v1/member-reply-drafts` returned HTTP 503 `dependency_unavailable` with `ECONNRESET`. Evidence mail:9f802cf0 and referral mail:0be8059e assign classification, resolution and the next authorized resume to Program. No capture retry, shared-source repair or polling workaround belongs in this surface task. After Program authorizes continuation, finish all six persona captures, answer-records, zero-miss production replay, inspected phone/desktop screenshots and the complete affected surface gate. The 64 focused passing tests accept no captures, screenshots or completed surface proof; no landing or row acceptance is granted. |
+| G-2585 | Mail:5318967b and Program decision `76fff223f6` classify the source-preparation 503 in QA `20261016t012532-6c1a13` as an environment fault: one connection reset under host load. Program rebased the branch and already resumed it for one recording retry with the same producer. Preserve its no-rebase instruction; add no retries or polling. If the same source-preparation failure repeats, stop and send Program the failing request, trace and API log line naming the dependency for API-defect handling. Otherwise finish all six persona captures, answer-records, zero-miss production replay, inspected phone/desktop screenshots and the complete affected surface gate, then hand off `RESULT: done`. The 64 focused passing tests accept no capture, screenshot or completed surface proof. This event grants no landing, closure or row acceptance and needs no duplicate resume. |
 
-The method's measures, current status and latest efficiency report were read.
-Scope remains 67/68 API rows proved and 402 proved/6 pending persona cells;
-this event promotes none. Web's ledger shows one open task, G-2585 exited at
-attempt 9, and no live worker. Later dispositions need their own events.
+The deciding mail turn verified the committed ruling and acknowledged the mail
+at 2026-10-16 04:24:37 UTC; its durable acknowledgement was confirmed here.
+No brief change was needed because Program had already recorded the worker's
+instructions. Later worker and landing results need their own events.
 
-Web's first-attempt share is 23% overall and 0% today (0 of 14); attempts per
-landed task have median 3 and maximum 25 (G-2237). Recorded tokens are
-2063.5M input/13.1M output, with two sessions unavailable and tokens per proved
-row unavailable. Attempts count 71 first, 51 step, 235 fix and 3 capacity;
-11 fixes are inferred. Retained refusals count 0 outcome, 12 gate,
-0 failing-test findings and 18 other. These are aggregate readings, not costs
-attributed to this event. The latest efficiency report remains dated
-2026-10-13 21:49 UTC and supplies no comparable measurement of this stop.
-The repeated work here is a producer prerequisite, with no evidence of a
-ranking surface defect. Program owns its resolution; the existing hold avoids
-another surface retry before that ruling. No efficiency gain is inferred.
+The method's measures and available current status were read. Scope remains
+67/68 API rows proved and 402 proved/6 pending persona cells; this event
+promotes none. The preceding checkpoint's aggregate readings remain historical:
+first-attempt share 23% overall and 0% that day (0 of 14), attempts per landed
+task median 3 and maximum 25 (G-2237), 2063.5M input/13.1M output tokens,
+two sessions unavailable and tokens per proved row unavailable. Attempts
+were 71 first, 51 step, 235 fix and 3 capacity, with 11 fixes inferred;
+retained refusals were 0 outcome, 12 gate, 0 failing-test findings and 18 other.
+These are not costs attributed to this event. The retained efficiency report
+reading is dated 2026-10-13 21:49 UTC and supplies no comparable measurement
+of this continuation. The repeated work here came from source preparation
+under host load; Program owns classification and any repeated API failure.
+One bounded retry applies its ruling without duplicating unchanged surface
+work. No successful capture, complete gate or efficiency gain is inferred.
 
-This checkpoint acknowledges consolidation of task:G-2585:9 and supplies no
-new mail to acknowledge. The referral was already sent by the deciding turn.
 Only this file changes; no worker, landing, closure, watcher or wait is started.
 
 ## Retained checkpoint 9e951fef

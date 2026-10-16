@@ -1,3 +1,4 @@
+import { qaFailure, recordQaFailure, testFailureClass, type FailureClass } from './failure.ts';
 import { randomUUID } from 'node:crypto';
 import { createOwnerErasureCleanupClock, ownerErasureCleanupShard } from './owner-erasure-cleanup.ts';
 import { assertRetainedSources } from './retained-preflight.ts';
@@ -107,6 +108,21 @@ const sourceBefore = sourceIdentity(root);
 const tiers: { name: Tier; status: 'passed' | 'failed' | 'uncovered'; elapsedMs?: number; shards?: ShardRecord[] }[] = [];
 const isolation: IsolationRecord[] = [];
 const errors: string[] = [];
+let firstFailure: FailureClass | undefined;
+const tierFailures = new Map<Tier, FailureClass>();
+function noteFailure(failureClass: FailureClass, tier?: Tier): void {
+  firstFailure ??= failureClass;
+  if (tier && !tierFailures.has(tier)) tierFailures.set(tier, failureClass);
+  recordQaFailure(failureClass, '');
+}
+function fail(message: string, failureClass: FailureClass = 'harness', tier?: Tier): void {
+  noteFailure(failureClass, tier);
+  errors.push(`${failureClass}: ${message}`);
+}
+function testFailure(result: { timedOut?: boolean; output?: string }, tier: Tier): FailureClass {
+  const xml = join(directory, `${tierArtifactName(tier)}.xml`);
+  return testFailureClass(result, existsSync(xml) ? parseJUnit(readFileSync(xml, 'utf8'), tier) : []);
+}
 const integrationBudgetNotes: string[] = [];
 const stackLeaseNotes: string[] = [];
 const startedProjects: string[] = [];
@@ -443,7 +459,8 @@ async function runTier(name: Tier, program: string, args: string[], budget: numb
     xmlForCommand(name, ok, result.elapsedMs, result.output));
   if (!ok) {
     writeFileSync(join(logs, `${name}.log`), result.output);
-    errors.push(`${name} failed or exceeded ${budget / 1000}s (see logs/${name}.log)`);
+    fail(`${name} failed (budget ${budget / 1000}s; see logs/${name}.log)`,
+      qaFailure({ ...result, timedOut: result.timedOut || result.elapsedMs > budget }, name === 'static' ? 'harness' : 'test', name !== 'static' && testFailure(result, name) === 'assertion'), name);
   }
   return ok;
 }
@@ -473,7 +490,8 @@ async function runBunTier(name: Tier, program: string, args: string[], budget: n
   tiers.push({ name, status: ok ? 'passed' : 'failed', elapsedMs: result.activeElapsedMs });
   if (!ok) {
     writeFileSync(logPath, result.output);
-    errors.push(`${name} failed or exceeded ${budget / 1000}s (see logs/${name}.log)`);
+    fail(`${name} failed (budget ${budget / 1000}s; see logs/${name}.log)`,
+      testFailure({ ...result, timedOut: result.timedOut || result.activeElapsedMs > budget }, name), name);
     if (result.timedOut) console.error(`QA tier budget exceeded: ${name} ${budget}ms`);
   }
   return ok;
@@ -589,6 +607,13 @@ async function runShardWork(
     ...(isolated ? { isolation: true } : {}),
     ...(resourceClass ? { resourceClass } : {}) };
   const finish = async (run: Omit<ShardRun, 'record'>): Promise<ShardRun> => {
+    if (!run.ok) {
+      record.failureClass ??= qaFailure({ timedOut: run.timedOut, output: run.xml },
+        record.stage === 'test' ? 'harness' : 'environment');
+      noteFailure(record.failureClass, tier);
+      if (record.stage !== 'test') record.fileFailures = Object.fromEntries(files.map(file => [file, record.failureClass!]));
+      else for (const file of record.missingFiles ?? []) (record.fileFailures ??= {})[file] ??= run.timedOut ? 'timeout' : 'harness';
+    }
     if (record.stage !== 'test') {
       const results = completeFileResults(run.xml ?? '', files, tier, {
         interrupted: true,
@@ -618,7 +643,8 @@ async function runShardWork(
         else {
           destroyedReason = 'reset failed';
           run.ok = false;
-          errors.push(`integration pool reset failed: ${projectRunId} (see logs/${label}-reset.log)`);
+          record.failureClass ??= qaFailure(reset, 'harness');
+          fail(`integration pool reset failed: ${projectRunId} (see logs/${label}-reset.log)`, record.failureClass, tier);
           writeFileSync(join(logs, `${label}-reset.log`), reset.output);
         }
       }
@@ -652,7 +678,7 @@ async function runShardWork(
     record.startupMs = 'activeElapsedMs' in up ? up.activeElapsedMs : 0;
     if (!up.ok) {
       writeFileSync(join(logs, `${label}-startup.log`), up.output);
-      errors.push(`${tier} stack startup failed: ${projectRunId} (see logs/${label}-startup.log)`);
+      fail(`${tier} stack startup failed: ${projectRunId} (see logs/${label}-startup.log)`, qaFailure(up, 'environment'), tier);
       return finish({ ok: false, timedOut: up.timedOut, noMatch: false,
         xml: xmlForCommand(tier, false, up.elapsedMs, up.output) });
     }
@@ -675,7 +701,7 @@ async function runShardWork(
       }
       if (failure) {
         writeFileSync(join(logs, `${label}-allocation.log`), failure);
-        errors.push(`${tier} allocation failed: ${projectRunId} (see logs/${label}-allocation.log)`);
+        fail(`${tier} allocation failed: ${projectRunId} (see logs/${label}-allocation.log)`, qaFailure(inspected, 'environment'), tier);
         return finish({ ok: false, timedOut: inspected.timedOut, noMatch: false,
           xml: xmlForCommand(tier, false, inspected.elapsedMs, failure) });
       }
@@ -689,7 +715,7 @@ async function runShardWork(
       : await commandAsync(root, 'bun', staged.args, 180_000, environment);
     record.bootstrapMs = bootstrap.elapsedMs;
     if (!bootstrap.ok) {
-      errors.push(`${tier} shared bootstrap failed: ${projectRunId} (see logs/${label}-bootstrap.log)`);
+      fail(`${tier} shared bootstrap failed: ${projectRunId} (see logs/${label}-bootstrap.log)`, qaFailure(bootstrap, 'environment'), tier);
       writeFileSync(join(logs, `${label}-bootstrap.log`), bootstrap.output);
       return finish({ ok: false, timedOut: bootstrap.timedOut, noMatch: false,
         xml: xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output) });
@@ -704,7 +730,7 @@ async function runShardWork(
         });
       } catch (error) {
         const message = redactCommandOutput(error instanceof Error ? error.message : String(error));
-        errors.push(`${tier} exclusive writer startup failed: ${projectRunId}`);
+        fail(`${tier} exclusive writer startup failed: ${projectRunId}`, 'environment', tier);
         writeFileSync(join(logs, `${label}-startup.log`), message);
         return finish({ ok: false, timedOut: false, noMatch: false,
           xml: xmlForCommand(tier, false, Date.now() - preparationStartedAt, message) });
@@ -717,7 +743,7 @@ async function runShardWork(
       else await admitRun(async () => {}, environment, reserve);
     } catch (error) {
       const message = redactCommandOutput(error instanceof Error ? error.message : String(error));
-      errors.push(message);
+      fail(message, 'timeout', tier);
       return finish({ ok: false, timedOut: true, noMatch: false,
         xml: xmlForCommand(tier, false, Date.now() - preparationStartedAt, message) });
     }
@@ -740,7 +766,7 @@ async function runShardWork(
         admissionWaitMs: prepared.admissionWaitMs, ok: prepared.ok,
       }));
       if (!prepared.ok) {
-        errors.push(`independent source selection failed before operation clock (${label})`);
+        fail(`independent source selection failed before operation clock (${label})`, qaFailure(prepared, 'environment'), tier);
         return finish({ ok: false, timedOut: prepared.timedOut, noMatch: false,
           xml: xmlForCommand(tier, false, prepared.activeElapsedMs, prepared.output) });
       }
@@ -768,7 +794,7 @@ async function runShardWork(
         admissionWaitMs: prepared.admissionWaitMs, ok: prepared.ok,
       }));
       if (!prepared.ok) {
-        errors.push(`owner-erasure source preparation failed before operation clock (${label}, later admission ${variant})`);
+        fail(`owner-erasure source preparation failed before operation clock (${label}, later admission ${variant})`, qaFailure(prepared, 'environment'), tier);
         return finish({ ok: false, timedOut: prepared.timedOut, noMatch: false,
           xml: xmlForCommand(tier, false, prepared.activeElapsedMs, prepared.output) });
       }
@@ -784,7 +810,7 @@ async function runShardWork(
       REZICS_QA_RUN_ID: projectRunId, REZICS_QA_ARTIFACT_DIR: directory }, noteMemory, { runDeadline });
     writeFileSync(join(logs, `${label}-realm-discussion-source.log`), prepared.output);
     if (!prepared.ok) {
-      errors.push(`Realm source preparation failed before operation clock (${label})`);
+      fail(`Realm source preparation failed before operation clock (${label})`, qaFailure(prepared, 'environment'), tier);
       return finish({ ok: false, timedOut: prepared.timedOut, noMatch: false,
         xml: xmlForCommand(tier, false, prepared.activeElapsedMs, prepared.output) });
     }
@@ -851,7 +877,8 @@ async function runShardWork(
           timedOut: reset.timedOut,
         });
         writeFileSync(join(logs, `${label}-reset.log`), reset.output);
-        errors.push(`${failure.message} (see logs/${label}-reset.log)`);
+        record.failureClass ??= qaFailure(reset, 'harness');
+        fail(`${failure.message} (see logs/${label}-reset.log)`, record.failureClass, tier);
         resetBlockedFiles.push(...pending);
         commandOk = false;
         break;
@@ -931,6 +958,15 @@ async function runShardWork(
     childAdmissionMs += result.admissionWaitMs;
     output.push(result.output);
     const empty = !result.ok && !result.timedOut && matchedNoTests(result.output);
+    const observed = existsSync(batchFile) ? parseJUnit(readFileSync(batchFile, 'utf8'), tier) : [];
+    for (const file of batch) {
+      const failed = observed.filter(test => test.file === file && test.failed);
+      if (failed.length) (record.fileFailures ??= {})[file] ??= testFailureClass({ output: result.output }, failed);
+    }
+    if (!result.ok && !empty) {
+      record.failureClass ??= testFailureClass(result, observed);
+      noteFailure(record.failureClass, tier);
+    }
     noMatch &&= empty;
     timedOut ||= result.timedOut;
     commandOk &&= result.ok || empty;
@@ -945,6 +981,7 @@ async function runShardWork(
         reason: result.timedOut ? 'Shard timed out before this file completed' : undefined,
       },
     );
+    for (const file of results.missing) (record.fileFailures ??= {})[file] ??= result.timedOut ? 'timeout' : 'harness';
     commandOk &&= !results.missing.length;
     suites.push(...junitSuites(results.xml).map((suite) => suite.xml));
     // Single-file commands include hooks, database cloning and process startup.
@@ -980,12 +1017,13 @@ async function runShardWork(
   writeFileSync(join(logs, `${label}.log`), output.join('\n'));
   writeFileSync(join(logs, `${label}-durations.json`), JSON.stringify(fileDurations));
   writeFileSync(outfile, results.xml);
+  if (!ok && (timedOut || record.elapsedMs > activeCeiling)) record.failureClass ??= 'timeout';
   return finish({ ok, timedOut, noMatch, testStart, testEnd, xml: results.xml, resetBlockedFiles });
 }
 
 function failedTests(run: ShardRun, tier: StackTier): Map<string, string[]> {
   const failed = new Map<string, string[]>();
-  for (const test of parseJUnit(run.xml ?? '', tier).filter(test => test.failed)) {
+  for (const test of parseJUnit(run.xml ?? '', tier).filter(test => test.failed && test.name !== 'QA file did not complete' && !test.preparationFailure)) {
     failed.set(test.file, [...failed.get(test.file) ?? [], test.name]);
   }
   return failed;
@@ -1040,8 +1078,9 @@ async function runStackTier(tier: StackTier): Promise<void> {
       admissionWaitMs: prepared.admissionWaitMs, ok: prepared.ok,
     }));
     if (!prepared.ok) {
-      errors.push(
-        'fault/recovery small-fixture preparation failed or exceeded 600s (see logs/fault-recovery-fixture-preparation.log)',
+      fail(
+        'fault/recovery small-fixture preparation failed (budget 600s; see logs/fault-recovery-fixture-preparation.log)',
+        qaFailure(prepared, 'environment'), tier,
       );
       writeFileSync(
         join(directory, `${artifact}.xml`),
@@ -1167,15 +1206,16 @@ async function runStackTier(tier: StackTier): Promise<void> {
     );
     writeFileSync(join(directory, `${artifact}.xml`), finalResults.xml);
     if (finalResults.missing.length)
-      errors.push(`${tier} files did not run: ${finalResults.missing.join(', ')}`);
+      fail(`${tier} files did not run: ${finalResults.missing.join(', ')}`);
     for (const run of [...runs, ...completed]) {
       if (run.record.stage !== 'test' || (run.record.isolation ? run.ok : resolved(run))) continue;
       const label = `${artifact}-${run.record.project.slice(runId.length + 1)}`;
-      errors.push(`${tier} failed or exceeded ${(run.record.budgetMs ?? budget) / 1000}s in ${run.record.project} (see logs/${label}.log)`);
+      fail(`${tier} failed (budget ${(run.record.budgetMs ?? budget) / 1000}s) in ${run.record.project} (see logs/${label}.log)`,
+        run.record.failureClass ?? 'harness', tier);
     }
     const executed = parseJUnit(mergeJUnit(suites, 0), tier).length > 0;
-    if (!executed) errors.push(`${tier} executed no tests`);
-    if (elapsedMs > tierBudget) errors.push(`${tier} test wall time ${(elapsedMs / 1000).toFixed(1)}s exceeded ${tierBudget / 1000}s`);
+    if (!executed) fail(`${tier} executed no tests`);
+    if (elapsedMs > tierBudget) fail(`${tier} test wall time ${(elapsedMs / 1000).toFixed(1)}s exceeded ${tierBudget / 1000}s`, 'timeout', tier);
     const ok = executed && elapsedMs <= tierBudget && runs.every(resolved) && completed.every(run => run.ok);
     tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs,
       shards: [...runs, ...completed].map(run => run.record) });
@@ -1202,10 +1242,13 @@ function noteIntegrationBudget(artifactDirectory: string): void {
 }
 
 try {
-  await assertRetainedSources(root, selected.flatMap(tier => {
+  try { await assertRetainedSources(root, selected.flatMap(tier => {
     if (tier !== 'integration' && tier !== 'fault/recovery' && tier !== 'load') return [];
     return splitTestArgs(testArgs(tier, selection, chosenFor(tier))).paths.flatMap(path => expandTestPaths(root, [path]));
-  }));
+  })); } catch (error) {
+    fail(error instanceof Error ? error.message : String(error), 'environment');
+    throw error;
+  }
   await stackPool.sweep();
   if (options.record && !sourceBefore.clean) throw new Error('--record requires a clean source tree');
   if (options.record) {
@@ -1240,7 +1283,7 @@ try {
           ?? selection?.tests.filter(test => test.tier === tier).map(test => test.file) ?? [];
         const failure = nativeProofPreparationFailure(tier, files, error, elapsedMs);
         tiers.push({ name: tier, status: 'failed', elapsedMs });
-        errors.push(failure.detail);
+        fail(failure.detail, 'environment', tier);
         writeFileSync(join(logs, `${tier}.log`), failure.detail);
         writeFileSync(join(directory, `${tier}.xml`), failure.xml);
       }
@@ -1250,7 +1293,7 @@ try {
       startedProjects.push(projectRunId);
       const up = await startRunStack(['stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
       if (!up.ok) {
-        errors.push('model stack startup failed');
+        fail('model stack startup failed', qaFailure(up, 'environment'), tier);
         writeFileSync(join(logs, 'model-stack.log'), up.output);
         tiers.push({ name: tier, status: 'failed' });
         writeFileSync(join(directory, 'model.xml'), xmlForCommand(tier, false, up.elapsedMs, up.output));
@@ -1269,7 +1312,7 @@ try {
       const ok = result.ok && result.activeElapsedMs <= 180_000;
       tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs: result.activeElapsedMs });
       if (!ok) {
-        errors.push('model failed or exceeded 180s');
+        fail('model failed (budget 180s)', testFailure(result, tier), tier);
         writeFileSync(join(logs, 'model.log'), result.output);
         const stackLogs = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
         writeFileSync(join(logs, 'model-stack.log'), stackLogs.output);
@@ -1363,7 +1406,7 @@ try {
         browserStack = owned.stack;
         writeFileSync(join(directory, 'e2e-preparation-failures.json'), JSON.stringify(owned.failures, null, 2));
         if (!browserStack) {
-          errors.push(...owned.failures.map(item => `${item.preparation.step}: ${item.error}`));
+          for (const item of owned.failures) fail(`${item.preparation.step}: ${item.error}`, 'environment', tier);
           tiers.push({ name: tier, status: 'failed' });
           continue;
         }
@@ -1391,10 +1434,11 @@ try {
         if (!ok) {
           const stepsPath = join(directory, 'e2e-steps.json');
           const steps = existsSync(stepsPath) ? JSON.parse(readFileSync(stepsPath, 'utf8')) as
-            { step: string; passed: boolean; error?: string }[] : [];
+            { step: string; passed: boolean; error?: string; elapsedMs?: number; budgetMs?: number }[] : [];
           const failed = steps.filter(step => !step.passed);
-          errors.push(...(failed.length ? failed.map(step => `${step.step}: ${step.error ?? 'failed'} (see logs/e2e.log)`)
-            : ['e2e runner failed or exceeded its combined step budgets (see logs/e2e.log)']));
+          for (const message of failed.length ? failed.map(step => `${step.step}: ${step.error ?? 'failed'} (see logs/e2e.log)`)
+            : ['e2e runner failed (see logs/e2e.log)']) fail(message, testFailure({ ...result, timedOut: result.timedOut
+              || failed.some(step => (step.elapsedMs ?? 0) > (step.budgetMs ?? Infinity)) }, tier), tier);
           if (!existsSync(join(directory, 'e2e.xml'))) {
             writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, result.elapsedMs, result.output));
           }
@@ -1403,7 +1447,7 @@ try {
         }
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
-        errors.push(detail);
+        fail(detail, error instanceof SyntaxError ? 'harness' : 'environment', tier);
         tiers.push({ name: tier, status: 'failed' });
         if (!existsSync(join(directory, 'e2e.xml')))
           writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, 0, detail));
@@ -1425,12 +1469,12 @@ try {
       const fixturePlan = loadFixturePlan(runId, selectedFiles, chosenFor(tier)?.id);
       startedProjects.push(projectRunId);
       const up = await startRunStack(['stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
-      if (!up.ok) { errors.push(`${tier} stack startup failed`); writeFileSync(join(logs, `${artifact}-stack.log`), up.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, up.elapsedMs, up.output)); continue; }
+      if (!up.ok) { fail(`${tier} stack startup failed`, qaFailure(up, 'environment'), tier); writeFileSync(join(logs, `${artifact}-stack.log`), up.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, up.elapsedMs, up.output)); continue; }
       const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
       const staged = stageQaBootstrap(stackDir);
       const compose = readEnv(join(stackDir, 'compose.env'));
       const bootstrap = command(root, 'bun', staged.args, Math.min(180_000, remainingPreparation()));
-      if (!bootstrap.ok) { errors.push(`${tier} shared bootstrap failed`); writeFileSync(join(logs, `${artifact}-bootstrap.log`), bootstrap.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output)); continue; }
+      if (!bootstrap.ok) { fail(`${tier} shared bootstrap failed`, qaFailure(bootstrap, 'environment'), tier); writeFileSync(join(logs, `${artifact}-bootstrap.log`), bootstrap.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output)); continue; }
       const fixtureResults = await Promise.all(fixturePlan.map(async item => {
         startedFixtureProjects.push(item.runId);
         const result = await admit('other', () => commandAsync(root, 'bun', ['scripts/fixture/cli.ts', 'restore',
@@ -1451,7 +1495,7 @@ try {
         fixture: LOAD_FIXTURE_ID, copies: fixtureResults,
       }, null, 2));
       if (preparationMs > LOAD_PREPARATION_BUDGET_MS || fixtureResults.some(item => !item.ok)) {
-        errors.push(`${tier} preparation failed or exceeded ${LOAD_PREPARATION_BUDGET_MS / 1000}s`);
+        fail(`${tier} preparation failed within a budget of ${LOAD_PREPARATION_BUDGET_MS / 1000}s`, qaFailure({ timedOut: preparationMs > LOAD_PREPARATION_BUDGET_MS || fixtureResults.some(item => item.timedOut) }, 'environment'), tier);
         tiers.push({ name: tier, status: 'failed' });
         writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, preparationMs,
           JSON.stringify(fixtureResults)));
@@ -1471,7 +1515,7 @@ try {
       const ok = result.ok && result.activeElapsedMs <= budget;
       tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs: result.activeElapsedMs });
       if (!ok) {
-        errors.push(`${tier} failed or exceeded ${budget / 1000}s`);
+        fail(`${tier} failed (budget ${budget / 1000}s)`, testFailure(result, tier), tier);
         writeFileSync(join(logs, `${artifact}.log`), result.output);
         const stackLogs = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
         writeFileSync(join(logs, `${artifact}-stack.log`), stackLogs.output);
@@ -1479,14 +1523,14 @@ try {
     }
   }
 } catch (error) {
-  errors.push(redactCommandOutput(error instanceof Error ? error.message : String(error)));
+  fail(redactCommandOutput(error instanceof Error ? error.message : String(error)));
 } finally {
   for (const registry of childStackRegistries) {
-    errors.push(...(await resetChildStacks(registry)).map(error => `QA child stack cleanup failed: ${error}`));
+    for (const error of await resetChildStacks(registry)) fail(`QA child stack cleanup failed: ${error}`);
   }
   if (!options.keep) for (const projectRunId of startedProjects) {
     const down = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', projectRunId], 120_000);
-    if (!down.ok) { errors.push(`QA stack cleanup failed: ${projectRunId}`); writeFileSync(join(logs, `${projectRunId}-cleanup.log`), down.output); }
+    if (!down.ok) { fail(`QA stack cleanup failed: ${projectRunId}`); writeFileSync(join(logs, `${projectRunId}-cleanup.log`), down.output); }
   }
   // Restored fixture copies hold large persistent volumes; removing one took over
   // 120 s in record run 20260927t054833-96d374, so the copies reset concurrently.
@@ -1496,24 +1540,27 @@ try {
         '--run-id', projectRunId, '--persistent',
         ...(rawUpdateProjects.has(projectRunId) ? ['--raw-update'] : [])], 300_000) })));
     for (const { projectRunId, down } of resets) {
-      if (!down.ok) { errors.push(`Fixture stack cleanup failed: ${projectRunId}`);
+      if (!down.ok) { fail(`Fixture stack cleanup failed: ${projectRunId}`);
         writeFileSync(join(logs, `${projectRunId}-cleanup.log`), down.output); }
     }
   }
   destroyHeldQaStacks();
   try {
     const sourceAfter = sourceIdentity(root);
-    if (sourceAfter.fingerprint !== sourceBefore.fingerprint) errors.push('Source changed during QA run');
+    if (sourceAfter.fingerprint !== sourceBefore.fingerprint) fail('Source changed during QA run');
     for (const tier of uncoveredTiers) tiers.push({ name: tier, status: 'uncovered' });
     const tests = junitResults(directory, selected.filter(tier => tier === 'unit' || tier === 'owner' || tier === 'integration'
       || tier === 'model' || tier === 'fault/recovery' || tier === 'e2e' || tier === 'load'));
     if (selection) {
       for (const expected of selection.tests) {
         if (!selectedTestExecuted(expected, tests))
-          errors.push(`Selected test was not executed: ${expected.file}: ${expected.name}`);
+          fail(`Selected test was not executed: ${expected.file}: ${expected.name}`);
       }
     }
-    writeSummary(directory, { runId, sourceBefore, sourceAfter, tiers, isolation,
+    writeSummary(directory, { runId, sourceBefore, sourceAfter,
+      tiers: tiers.map(tier => ({ ...tier, ...(tier.status === 'failed'
+        ? { failureClass: tierFailures.get(tier.name) ?? 'harness' as const } : {}) })),
+      isolation, failureClass: firstFailure,
       partial: Boolean(options.tier || options.groups || selection || options.files || options.id), errors, cases, tests,
       diagnosticOf: selection?.sourceRunId, retiredTests: selection?.retiredTests, caseCoverage,
       scope: options.backend ? 'backend' : 'all', excludedCases: backendSelection?.excluded,

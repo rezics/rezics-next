@@ -4,7 +4,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { JobStore, JOB_INLINE_MS, JOB_WAIT_MS, jobDirectory, runJob, wakeJobs, type JobPassOptions } from './job.ts';
+import { JobStore, JOB_INLINE_MS, JOB_WAIT_MS, jobDirectory, runJob, wakeJobs, jobResult, jobResultClass, type JobPassOptions } from './job.ts';
 import { coordinateWorkerJobs, stopTurnProcesses } from './coordinator.ts';
 import { processAlive, processIdentity } from '../qa/process/identity.ts';
 import { settlementOwed } from './settle.ts';
@@ -155,21 +155,22 @@ test('a stalled sequence command times out, kills its process group and wakes wi
     [process.execPath, '-e', 'console.log("first passed")'],
     [process.execPath, '-e', `await Bun.write(${JSON.stringify(ready)}, String(process.pid)); await Bun.sleep(30000)`],
     [process.execPath, '-e', `await Bun.write(${JSON.stringify(remaining)}, 'ran')`],
-  ]), 1, 500);
+  ]), 1, 3000); // Include the cold executor import before the command's own wait.
   const store = new JobStore(jobDirectory(f.cwd));
   try {
     await until(() => existsSync(ready));
     const stalled = processIdentity(Number(readFileSync(ready, 'utf8')))!;
-    await until(() => store.all()[0]!.phase === 'woken' && existsSync(f.wakes));
+    await until(() => store.all()[0]!.phase === 'woken' && existsSync(f.wakes), 10_000);
     await until(() => !processAlive(stalled));
     await f.pass();
     const wakes = readFileSync(f.wakes, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { args: string[] });
     expect(wakes).toHaveLength(1);
     expect(store.all()[0]!.code).toBe(124);
+    expect(store.all()[0]!.resultClass).toBe('timeout');
     expect(wakes[0]!.args.at(-1)).toContain('timed out');
     expect(existsSync(remaining)).toBe(false);
   } finally { store.close(); }
-});
+}, 20_000);
 
 test('a lost sequence owner fails the active command and wakes without starting the remaining commands', async () => {
   const f = processFixture(); const ready = join(f.cwd, 'ready'); const remaining = join(f.cwd, 'must-not-run');
@@ -680,4 +681,35 @@ test('RESULT: parked is neither a settlement handoff nor a manager event', () =>
   writeFileSync(f.task.attempts[0]!.lastMessage!, 'RESULT: done');
   delete f.task.settlement;
   expect(settlementOwed(f.task)).toBe(true);
+});
+
+for (const result of ['assertion', 'timeout', 'environment', 'harness'] as const) {
+  test('job reports and wake records preserve the first ' + result + ' failure', async () => {
+    const f = fixture();
+    const store = new JobStore(jobDirectory(f.cwd));
+    try {
+      store.put({ id: 'classified', task: f.task.id, attempt: 1, cwd: f.cwd, command: ['qa'],
+        created: Date.now(), phase: 'parked', code: 1 });
+      writeFileSync(store.log('classified'), 'QA failure class: ' + result + '\nQA failure class: harness\n');
+      const job = store.get('classified')!;
+      expect(jobResultClass(store, job)).toBe(result);
+      expect(jobResult(store, job)).toContain('Result class: ' + result);
+      await wakeJobs(store, f.options);
+      expect(store.get(job.id)?.resultClass).toBe(result);
+      expect(f.task.attempts[1]?.jobResult).toBe(result);
+    } finally { store.close(); }
+  });
+}
+
+test('passing jobs and old unknown failures have explicit report classes', () => {
+  const f = fixture();
+  const store = new JobStore(jobDirectory(f.cwd));
+  try {
+    const job = { id: 'plain', task: f.task.id, attempt: 1, cwd: f.cwd, command: ['qa'], created: Date.now(), phase: 'inline' as const, code: 0 };
+    writeFileSync(store.log(job.id), 'QA failure class: environment\n');
+    expect(jobResultClass(store, job)).toBe('passed');
+    writeFileSync(store.log(job.id), 'tool crashed');
+    expect(jobResultClass(store, { ...job, code: 1 })).toBe('harness');
+    expect(jobResultClass(store, { ...job, code: 124 })).toBe('timeout');
+  } finally { store.close(); }
 });

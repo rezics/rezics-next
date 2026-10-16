@@ -1,3 +1,4 @@
+import type { FailureClass } from './failure.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import {
   closeSync,
@@ -224,7 +225,7 @@ function reapSpawnedTest(name: string, args: readonly string[], env: NodeJS.Proc
 }
 
 export function command(root: string, name: string, args: string[], timeoutMs: number,
-  env: NodeJS.ProcessEnv = process.env, maxBuffer?:number): { ok: boolean; output: string; elapsedMs: number } {
+  env: NodeJS.ProcessEnv = process.env, maxBuffer?:number): { ok: boolean; output: string; elapsedMs: number; timedOut: boolean } {
   const start = Date.now();
   const environment = spawnEnvironment(name, args, env);
   const scope = childScope(name, args, environment);
@@ -235,7 +236,7 @@ export function command(root: string, name: string, args: string[], timeoutMs: n
       stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs,...(maxBuffer===undefined?{}:{maxBuffer}) });
     const elapsedMs = Date.now() - start;
     reapSpawnedTest(name, args, environment);
-    return { ok: result.status === 0 && !result.error,
+    return { ok: result.status === 0 && !result.error, timedOut: (result.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT',
     output: [result.stdout, result.stderr, result.error?.message].filter((part): part is string => Boolean(part)).map(part => redactCommandOutput(part)).join('\n'),
     elapsedMs };
   } finally { forgetChildScope(scope); }
@@ -366,8 +367,9 @@ function shardLines(tiers: { name: Tier; shards?: ShardRecord[] }[], isolation: 
 
 export function writeSummary(directory: string, report: {
   runId: string; sourceBefore: ReturnType<typeof sourceIdentity>; sourceAfter: ReturnType<typeof sourceIdentity>;
-  tiers: { name: Tier; status: 'passed' | 'failed' | 'uncovered'; elapsedMs?: number; shards?: ShardRecord[] }[];
+  tiers: { name: Tier; status: 'passed' | 'failed' | 'uncovered'; failureClass?: FailureClass; elapsedMs?: number; shards?: ShardRecord[] }[];
   isolation?: IsolationRecord[];
+  failureClass?: FailureClass;
   partial: boolean; errors: string[]; cases: Case[]; tests: TestResult[]; diagnosticOf?: string;
   retiredTests?: TestResult[];
   caseCoverage?: ReadonlyMap<string, readonly string[]>;
@@ -398,9 +400,15 @@ export function writeSummary(directory: string, report: {
     retiredPriorFailures: report.retiredTests?.map(test => `${test.tier}:${test.file}:${test.name}`) ?? [],
     declaredCaseCoverage: Object.fromEntries(report.caseCoverage ?? []),
     tests: report.tests.map(test => ({ ...test, ids: titleIds(test.name),
+      ...(test.failed ? { failureClass: report.tiers.find(tier => tier.name === test.tier)?.shards
+        ?.find(shard => shard.status === 'failed' && shard.files.includes(test.file))?.fileFailures?.[test.file]
+        ?? report.tiers.find(tier => tier.name === test.tier)?.shards
+          ?.find(shard => shard.status === 'failed' && shard.files.includes(test.file))?.failureClass
+        ?? report.tiers.find(tier => tier.name === test.tier)?.failureClass ?? report.failureClass ?? 'harness' } : {}),
       status: test.failed ? 'failed' : test.skipped ? 'skipped' : 'passed' })),
     unmappedTests: report.tests.filter(test => titleIds(test.name).some(id => !ids[id]))
       .map(test => `${test.tier}:${test.file}:${test.name}`),
+    failureClass: report.failureClass,
     tiers: report.tiers,
     isolation: report.isolation ?? [],
   }, null, 2) + '\n');
@@ -428,6 +436,8 @@ export interface ShardRecord {
   project: string;
   files: string[];
   status: 'passed' | 'failed';
+  failureClass?: FailureClass;
+  fileFailures?: Record<string, FailureClass>;
   stage: 'stack' | 'bootstrap' | 'test';
   elapsedMs?: number;
   isolation?: boolean;

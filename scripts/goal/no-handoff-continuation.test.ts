@@ -202,7 +202,9 @@ test('measures count handoff continuations separately from first attempts and fi
   const ledger = f.ledger();
   ledger.tasks[f.task.id]!.attempts.push({ ...f.attempt, n: 2, round: 'continuation', continuedFor: 'handoff' });
   const measures = (await goalMeasures(ledger, { root: f.directory, codexHomes: [] })).program!;
-  expect(measures.attempts.run).toEqual({ first: 1, stepResume: 0, fixRound: 0, capacityRetry: 0, transportRetry: 0, handoffRetry: 1 });
+  expect(measures.attempts.run).toEqual({ first: 1, stepResume: 0, fixRound: 0, capacityRetry: 0, transportRetry: 0, handoffRetry: 1,
+    jobWake: { passed: 0, assertion: 0, timeout: 0, environment: 0, harness: 0, unclassified: 0 },
+    baselineRed: 0, environment: 0, unclassified: 0 });
   expect(measures.attempts.today).toEqual(measures.attempts.run);
   expect(measures.attempts.inferredFixRounds).toBe(0);
   expect(measures.firstAttemptShare.run).toEqual({ first: 1, attempts: 1, share: 1 });
