@@ -4,7 +4,7 @@ import { Button } from '@rezics/ui/button';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '@rezics/ui/menu';
 import { PaletteIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useId, useState, useTransition } from 'react';
 import { preferenceCookie } from '../shell/preferences.ts';
 import { saveDisplayPreference } from '../api/preferences.ts';
 import { ZONE_LOOK_COOKIE } from './execution.ts';
@@ -20,6 +20,7 @@ export function LookMenu({ enabled, labels, save = saveDisplayPreference }: {
   save?: typeof saveDisplayPreference;
 }) {
   const router = useRouter();
+  const labelId = useId();
   const [pending, start] = useTransition();
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
@@ -37,9 +38,9 @@ export function LookMenu({ enabled, labels, save = saveDisplayPreference }: {
   }
   return <><Menu open={open} onOpenChange={details => setOpen(details.open)}>
     <MenuTrigger asChild>
-      <Button variant="outline" size="sm" pill aria-label={labels.menu} isLoading={pending || saving}
+      <Button variant="outline" size="sm" pill aria-labelledby={labelId} isLoading={pending || saving}
         className="bg-card/80 backdrop-blur">
-        <PaletteIcon aria-hidden="true" /><span className="max-sm:sr-only">{labels.menu}</span>
+        <PaletteIcon aria-hidden="true" /><span id={labelId} className="max-sm:sr-only">{labels.menu}</span>
       </Button>
     </MenuTrigger>
     <MenuContent className="w-64">

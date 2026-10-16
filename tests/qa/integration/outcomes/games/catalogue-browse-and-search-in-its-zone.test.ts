@@ -343,7 +343,7 @@ async function productionVisits(name: PersonaName) {
       if (membership?.signedIn && membership.actingSubject
         && (!membership.initial || membership.initial.following === null || membership.initial.level == null)) {
         await mainRelationships(membership.actingSubject, { origin: 'http://main.local', fetch: transport(true) })
-          .state(membership.realm);
+          .state(membership.realm, 'realm');
       }
       ids.push(...model.items.map(work => work.id));
       if (!model.next) break;
