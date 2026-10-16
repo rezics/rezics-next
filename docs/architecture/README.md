@@ -13,6 +13,7 @@
 - [Actionable collections](actionable-collections.md): decided occurrence-based runs and optional ingredient sum/stock offset; contracts and outcome proofs follow.
 - [Private scheduled plans](scheduled-plans.md): finite private occurrences, cancellation, due notifications and export over existing owners; contracts and proof follow.
 - [Target architecture](target-architecture.md): cross-domain decisions and links to their owning contracts.
+- [Shared capability exceptions](shared-capabilities.md): shared owners that still recognise a vertical or source, their repairs and required proof.
 
 ## Domain contracts
 
