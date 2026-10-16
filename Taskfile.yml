@@ -222,7 +222,7 @@ tasks:
     desc: Run the Accounts app alone with vinext, without Aspire, against the shared Account service (defaults in apps/accounts/.env.example; pass -- --port <n>).
     dir: apps/accounts
     cmds:
-      - ../../node_modules/.bin/vinext dev --hostname 127.0.0.1 {{.CLI_ARGS}}
+      - ../../node_modules/.bin/vinext dev --host 127.0.0.1 {{.CLI_ARGS}}
 
   accounts:build:
     desc: Build the Accounts vinext Workers application.
