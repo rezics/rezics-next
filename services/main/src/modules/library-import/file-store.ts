@@ -7,6 +7,7 @@ import { FILE_IMPORT_COST, canonicalRow, type CanonicalRow, type LibraryFileForm
 import { ReaderImportConflict } from './reader-import.ts';
 import { deleteLibraryUploads } from './privacy.ts';
 import { LibraryImportJobStore, ImportJobLeaseLost } from './job-store.ts';
+import { withImportJobProgress } from './job-context.ts';
 
 export class LibraryFileMissing extends Error {}
 export const LIBRARY_UPLOAD_RETENTION_DAYS = 7;
@@ -19,7 +20,7 @@ export interface RowMatch { kind: 'matched' | 'ambiguous' | 'not-found'; candida
 export interface RowResolution { choice: 'apply' | 'private'; work?: string; target?: string;
   conflictChoice?: 'keep' | 'replace' }
 export interface StoredSourceRow { index: number; source: CanonicalRow; match: RowMatch | null;
-  resolution: RowResolution | null; outcome: { applied: string[]; issues: string[] } | null; version: number }
+  resolution: RowResolution | null; outcome: { applied: string[]; issues: string[]; result?: Record<string, unknown> } | null; version: number }
 export interface ApplyIntent { context: string | null; language: string }
 interface SourceRecord { row_number: number; source: CanonicalRow; match: RowMatch | null;
   resolution: RowResolution | null; outcome: StoredSourceRow['outcome']; version: string }
@@ -192,6 +193,41 @@ export class LibraryFileStore {
       if (token) await this.jobs.progress(agent,id,token,client);
       await client.query('COMMIT');
     } catch (error) { await client.query('ROLLBACK');throw error; } finally { if (!borrowed) client.release(); }
+  }
+  /** A synchronous adapter consumes one retained row page under the existing
+   * job lease. Lost responses replay persisted outcomes; a later request can
+   * resume a stalled lease without uploading or decoding the file again. */
+  async applyPage(agent: string, id: string, key: string, after: number, limit: number,
+    apply: (row: StoredSourceRow) => Promise<NonNullable<StoredSourceRow['outcome']> | null>) {
+    await this.jobs.status(agent,id);
+    const accepted = await this.jobs.accept(agent,id,key,{ after,limit },true);
+    const job = await this.jobs.status(agent,id);
+    const token = accepted.token ?? (job?.state==='pending' ? job.lease_token : null);
+    const page = await this.page(agent,id,after-1,limit);
+    const rows: Array<StoredSourceRow & { replayed: boolean }> = [];
+    try {
+      for (const row of page.rows) {
+        const replayed = !!row.outcome;
+        if (!row.outcome) {
+          if (!token) break;
+          await this.jobs.renew(agent,id,token);
+          const outcome = await withImportJobProgress(() => this.jobs.progress(agent,id,token), () => apply(row));
+          if (!outcome) break;
+          await this.complete(agent,id,row.index,outcome,token);
+          row.outcome=outcome;
+        }
+        rows.push({ ...row,replayed });
+      }
+      const progress = await this.progress(agent,id);
+      return { rows, ...progress, receipt: accepted.result.receipt,
+        next: after+rows.length < progress.total ? after+rows.length : null,
+        pagePending: rows.length < page.rows.length };
+    } catch (error) {
+      if (token) await this.jobs.finish(agent,id,token,
+        error instanceof ImportJobLeaseLost ? 'stalled' : 'failed',
+        error instanceof ImportJobLeaseLost ? 'lease-expired' : 'apply-failed');
+      throw error;
+    }
   }
   async progress(agent: string, id: string) {
     const job=await this.jobs.status(agent,id);

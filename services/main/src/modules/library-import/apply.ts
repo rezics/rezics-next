@@ -3,7 +3,8 @@ import { contentConnection } from '../../../../content/src/connection.ts';
 import { ImportCommands, importReviewedBatch, resolvePortableShelf, type ReviewedImportBatch } from './batch.ts';
 import { LibraryFileStore, importDigest, type ApplyIntent, type StoredSourceRow } from './file-store.ts';
 import type { ReaderLibraryImportStore } from './reader-import.ts';
-import { requireImportOwnerAvailable } from './reader-import.ts';
+import { adapters } from './formats/index.ts';
+import { requireImportOwnerAvailable, ReaderImportConflict } from './reader-import.ts';
 import { mainCall } from './match.ts';
 import type { CanonicalRow, LibraryFileFormat } from './formats/contract.ts';
 import type { SessionState } from '../session/contract.ts';
@@ -193,8 +194,9 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
 
 export async function applyLibraryFile(files: LibraryFileStore, store: ReaderLibraryImportStore,
   request: Request, agent: string, id: string, intent: ApplyIntent,token?: string) {
-  await files.seal(agent,id,intent);
   const file = await files.file(agent,id);
+  if (!adapters[file.format]) throw new ReaderImportConflict('This upload requires its command adapter');
+  await files.seal(agent,id,intent);
   await store.withBatch(agent,'library-file-agent-apply',async () => {
     for (const item of await files.pending(agent,id)) {
       const reviewedKey = commandKey(agent,file.import_key,item.index,'reviewed');

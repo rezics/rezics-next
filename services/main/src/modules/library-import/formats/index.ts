@@ -8,7 +8,7 @@ import { parseVndb } from './vndb.ts';
 import { parseMal } from './mal.ts';
 import { importRowBudget } from './bounds.ts';
 
-export const adapters: Record<LibraryFileFormat, FormatAdapter> = {
+export const adapters: Partial<Record<LibraryFileFormat, FormatAdapter>> = {
   goodreads: parseGoodreads, storygraph: parseStoryGraph, 'generic-csv': parseGenericCsv, rezics: parseRezics, vndb: parseVndb, mal: parseMal,
 };
 export function parseLibraryFile(format: LibraryFileFormat, file: string, mapping?: CsvMapping): CanonicalRow[] {

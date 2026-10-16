@@ -143,7 +143,8 @@ export async function readAuthorizedExport(deps: ExportDependencies, request: Re
   else if (profile === 'rezics-verification-v1') selection = { kind: 'assessment', reference,
     expectedPosition };
   else if (profile === 'rezics-composition-v1' && typeof data?.structure === 'string') {
-    selection = { kind: 'composition-seal', reference, structure: data.structure, expectedPosition };
+    selection = { kind: 'composition-seal', reference, structure: data.structure, expectedPosition,
+      ...(typeof data.after === 'string' ? { after: data.after } : {}) };
   } else if (profile === 'rezics-semantic-values-v1' && typeof data?.resource === 'string') {
     selection = { kind: 'semantic-revision', reference, resource: data.resource, expectedPosition };
   } else if (profile === 'rezics-vndb-concept-source-v1') {

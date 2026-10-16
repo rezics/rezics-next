@@ -34,6 +34,7 @@ import { WorkReadMoved } from '../modules/work/read-session.ts';
 import { structureRevisionDisclosureVisible } from '../modules/work/read-header.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import { groupUuid } from './shared.ts';
+import { readNativeExportPage, NATIVE_EXPORT_PAGE_SIZE } from '../modules/export/native-page.ts';
 import { requireZoneEditor } from '../modules/zone/editor.ts';
 import { ZoneUnavailable } from '../modules/zone/configuration.ts';
 
@@ -199,6 +200,7 @@ async function disclosedComposition<T>(work: MainWorkDependencies, request: Requ
 }
 export const openApiOperations = {
   '/v1/compositions': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/compositions/{id}/export': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
   '/v1/compositions/{id}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
   '/v1/compositions/{id}/revisions/{revision}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
   '/v1/compositions/{id}/occurrences/{occurrence}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
@@ -600,6 +602,35 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           ...(result.cost ? { cost: result.cost } : {}), sourcePosition: { datasetId: 'product',
             dataEpoch: result.dataEpoch, sequence: result.sequence } },
         { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return compositionError(error); }
+    })
+    .get('/v1/compositions/:id/export', {
+      params: t.Object({ id: groupUuid }),
+      query: t.Object({ actingSubject: ref, revision: t.Optional(ref), parent: t.Optional(ref),
+        after: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
+      detail: { description: 'Export an exact native Structure revision in bounded sibling pages. Retain revision and visit containers in breadth-first order; next continues the same parent. Exact Content and its derivations retain their owner disclosure and rights.' },
+      response: transportResponses(openApiOperations['/v1/compositions/{id}/export'].get, {
+        200: t.Object({ profile: t.Literal('native-export-page-v1'), structure: ref, revision: ref, parent: ref,
+          next: t.Nullable(t.String()), occurrences: t.Array(occurrence, { maxItems: NATIVE_EXPORT_PAGE_SIZE }),
+          containers: t.Array(ref, { maxItems: NATIVE_EXPORT_PAGE_SIZE }),
+          selections: t.Array(t.Any(), { maxItems: NATIVE_EXPORT_PAGE_SIZE }),
+          contents: t.Array(t.Object({ reference: t.Object({ target: t.String(), selector: ExactInstructionSelector }),
+            document: t.Optional(t.Any()), body: t.Optional(t.String()) }), { maxItems: NATIVE_EXPORT_PAGE_SIZE }),
+          measures: t.Array(t.Any()), rights: t.Array(t.Any()),
+          cost: t.Object({ pagesRead: t.Integer(), occurrences: t.Integer() }) }),
+        ...authorizedReadProblems, ...workReadProblems }, 'GET'),
+    }, async ({ request, params, query }) => {
+      try {
+        await work.account.verify(request, ['work:read']);
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        if ((query.parent || query.after) && !query.revision) return problem(400,
+          'invalid_request', 'Native export continuation requires the selected revision');
+        const structure = `https://rezics.com/id/${params.id}`;
+        const page = await disclosedComposition(work, request, structure, query.actingSubject,
+          { revision: query.revision }, (session, header, revision) => readNativeExportPage(session,
+            { structure, revision, work: header.work, actingSubject: query.actingSubject,
+              parent: query.parent, after: query.after }));
+        return Response.json(page, { headers: { 'cache-control': 'private, no-store' } });
       } catch (error) { return compositionError(error); }
     })
     .get('/v1/compositions/:id', {

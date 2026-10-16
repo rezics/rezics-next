@@ -1,3 +1,4 @@
+import { nativeExportCheckpoint, nativeExportContents, continueNativeExport, assembleNativeExport, type NativeExportCheckpoint } from './native-export.ts';
 /** Recipe export continuation protocol. Projection and disclosure belong to Main;
  * clients only join ordered parts and retain their checkpoint between requests. */
 export interface RecipeExportLoss { occurrence: string; code: string; pointer: string }
@@ -29,47 +30,15 @@ export interface RecipeExportPage {
   cost: { pagesRead: number; occurrences: number };
 }
 
-export interface RecipeExportCheckpoint {
-  pages: RecipeExportPage[];
-  parents: string[];
-  parentIndex: number;
-  after?: string;
-  derivations: unknown[];
-  contentIndex: number;
-  derivationCursor?: string;
-}
+export type RecipeExportCheckpoint = NativeExportCheckpoint<RecipeExportPage>;
+export const recipeExportCheckpoint = (structure: string): RecipeExportCheckpoint => nativeExportCheckpoint<RecipeExportPage>(structure);
+export const recipeExportContents = nativeExportContents;
 
-export function recipeExportCheckpoint(structure: string): RecipeExportCheckpoint {
-  return { pages: [], parents: [structure], parentIndex: 0, derivations: [], contentIndex: 0 };
-}
-
-export function recipeExportContents(pages: readonly RecipeExportPage[]) {
-  return [...new Map(pages.flatMap(page => page.contents)
-    .map(item => [JSON.stringify(item.reference), item])).values()];
-}
-
-/** Each successful response advances the caller-owned, JSON-serializable
- * checkpoint once. A lost response is safely retried at the same sibling cut. */
-export async function continueRecipeExport(checkpoint: RecipeExportCheckpoint, readPage: (parent: string, after?: string) => Promise<RecipeExportPage>,
+export async function continueRecipeExport(checkpoint: RecipeExportCheckpoint,
+  readPage: (parent: string, after?: string) => Promise<RecipeExportPage>,
   readDerivations: (revision: string, cursor?: string) => Promise<{ items: unknown[]; nextCursor: string | null }>) {
-  while (checkpoint.parentIndex < checkpoint.parents.length) {
-    const parent = checkpoint.parents[checkpoint.parentIndex]!;
-    const page = await readPage(parent, checkpoint.after);
-    if (page.parent !== parent || page.next && page.next === checkpoint.after) throw new Error('Invalid Recipe export continuation');
-    checkpoint.pages.push(page);
-    checkpoint.parents.push(...page.parts.filter(part => part.group).map(part => part.occurrence));
-    checkpoint.after = page.next ?? undefined;
-    if (!page.next) checkpoint.parentIndex++;
-  }
-  const revisions = [...new Set(recipeExportContents(checkpoint.pages).flatMap(item =>
-    item.reference.selector.grain === 'content' && item.reference.selector.revision ? [item.reference.selector.revision] : []))];
-  while (checkpoint.contentIndex < revisions.length) {
-    const page = await readDerivations(revisions[checkpoint.contentIndex]!, checkpoint.derivationCursor);
-    if (page.nextCursor && page.nextCursor === checkpoint.derivationCursor) throw new Error('Invalid derivation continuation');
-    checkpoint.derivations.push(...page.items);
-    checkpoint.derivationCursor = page.nextCursor ?? undefined;
-    if (!page.nextCursor) checkpoint.contentIndex++;
-  }
+  return continueNativeExport(checkpoint, readPage, readDerivations,
+    page => page.parts.filter(part => part.group).map(part => part.occurrence));
 }
 
 /** Joining is deterministic: occurrences use breadth-first sibling order, while
@@ -79,9 +48,7 @@ export function assembleRecipeExport(pages: readonly RecipeExportPage[], derivat
   if (!first) throw new Error('Recipe export has no pages');
   const { structure, revision, rights, measures, importLimits } = first;
   if (pages.some(page => page.structure !== structure || page.revision !== revision)) throw new Error('Recipe export revisions differ');
-  if (format === 'native') return { format: 'native' as const, structure, revision, rights,
-    occurrences: pages.flatMap(page => page.occurrences), measures,
-    contents: recipeExportContents(pages), derivations,
+  if (format === 'native') return { ...assembleNativeExport(pages, derivations),
     instructions: pages.flatMap(page => page.instructions), losses: [] as RecipeExportLoss[] };
 
   const parts = pages.flatMap(page => page.parts);

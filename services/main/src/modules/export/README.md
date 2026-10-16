@@ -65,9 +65,18 @@ The fixed-release reader
 performs the Work owner's exact graph/object reads. The semantic reader performs
 one root Access decision and one per distinct referenced resource, plus one
 exact graph/object revision read with at most 255 properties. The Structure
-reader makes one owner lookup and at most three seal
-page reads, each with up to 100 Access target decisions; 256 members including
-the root is the limit. The assessment reader reads two exact graph records and
+reader makes one owner lookup and one seal page read with at most 100 visible
+pins. The root retains `after` and `next`; submit `next` as the next selection's
+`after` with the same seal and expected position. Each manifest retains its
+starting cut for download revalidation. The 256-member bound applies to each
+manifest, while continuation has no pin-count ceiling.
+
+Native revision export uses `GET /v1/compositions/{id}/export`. Keep its exact
+revision, continue sibling pages with `next`, and visit declared `containers` in
+breadth-first order. Pages share Structure, Content and Rights readers with the
+Recipe projection. `@rezics/model/native-export` checkpoints native pages and
+Content derivation cursors across interruptions; Recipe adds its Schema.org
+projection separately. The assessment reader reads two exact graph records and
 one indexed principal-filtered Content evidence manifest. Remote attempt and
 byte counters, native Jena work, and multi-scale contention remain unqualified
 under `docs/testing/complexity.md`.

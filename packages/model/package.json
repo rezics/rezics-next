@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./native-export": "./src/native-export.ts",
     "./recipe-export": "./src/recipe-export.ts",
     ".": "./src/index.ts",
     "./address": "./src/address/index.ts",

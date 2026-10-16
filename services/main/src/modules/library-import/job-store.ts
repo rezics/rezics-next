@@ -2,7 +2,7 @@ import { indexedRead } from '../../infrastructure/indexed-read.ts';
 import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { LibraryFileMissing, importDigest, type ApplyIntent } from './file-store.ts';
+import { LibraryFileMissing, importDigest } from './file-store.ts';
 import { ReaderImportConflict } from './reader-import.ts';
 
 export const IMPORT_JOB_LEASE_SECONDS = 60;
@@ -44,7 +44,7 @@ export class LibraryImportJobStore {
     }, 'write');
   }
   /** `seal` runs in the receipt's transaction: a refused command seals nothing. */
-  async accept(agent: string,id: string,key: string,intent: ApplyIntent,resume: boolean,
+  async accept(agent: string,id: string,key: string,intent: unknown,resume: boolean,
     seal?: (client: PoolClient) => Promise<void>) {
     const borrowed = contentSessionClient(this.pool);
     const client = borrowed ?? await this.pool.connect();

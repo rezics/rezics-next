@@ -58,7 +58,7 @@ export type ExportSelection =
   | { kind: 'wiki-revision-set'; reference: string; revisions: WikiRevisionSet; expectedPosition: OwnerPosition;
     scope?: import('../wiki/history-read.ts').WikiHistoryScope }
   | { kind: 'fixed-release' | 'assessment'; reference: string; expectedPosition: OwnerPosition }
-  | { kind: 'composition-seal'; reference: string; structure: string; expectedPosition: OwnerPosition }
+  | { kind: 'composition-seal'; reference: string; structure: string; expectedPosition: OwnerPosition; after?: string }
   | { kind: 'semantic-revision'; reference: string; resource: string; expectedPosition: OwnerPosition }
   | { kind: 'projection-revision'; reference: string; resource: string; expectedPosition: OwnerPosition }
   | { kind: 'rating-aggregate'; reference: string; target: string; expectedPosition: OwnerPosition }
@@ -415,31 +415,18 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
     const env = deps.structureObjects
       ? { ...deps.env, structureObjects: deps.structureObjects } : deps.env;
     if ((await unverifiedWorks(deps.env, [work])).size) throw new ExportSourceNotFound('Work awaits catalogue verification');
-    const pins: Awaited<ReturnType<typeof readCompositionSeal>>['pins'] = [];
-    let cursor: string | undefined;
-    let coverage: 'complete' | 'partial' | undefined;
-    let revision: string | undefined;
-    do {
-      let page: Awaited<ReturnType<typeof readCompositionSeal>>;
-      try { page = await readCompositionSeal(env, { structure: selection.structure,
-        seal: selection.reference, ...(cursor ? { after: cursor } : {}), limit: 100,
-        canReadTarget: target => deps.canReadWork(principal, actingSubject, target) }); }
-      catch (error) {
-        if (error instanceof CompositionUnavailable) throw new ExportSourceNotFound(error.message);
-        throw error;
-      }
-      pinned(page.sourcePosition, selection.expectedPosition, deps.env.lineage.dataEpoch, 'composition seal');
-      if (coverage !== undefined && (coverage !== page.coverage || revision !== page.structureRevision)) {
-        throw new ExportStale('composition seal pages differ');
-      }
-      coverage = page.coverage;
-      revision = page.structureRevision;
-      pins.push(...page.pins);
-      if (pins.length > 255) throw new InvalidExportPlan('composition seal exceeds export member limit');
-      cursor = page.next ?? undefined;
-    } while (cursor);
+    let page: Awaited<ReturnType<typeof readCompositionSeal>>;
+    try { page = await readCompositionSeal(env, { structure: selection.structure,
+      seal: selection.reference, after: selection.after, limit: 100,
+      canReadTarget: target => deps.canReadWork(principal, actingSubject, target) }); }
+    catch (error) {
+      if (error instanceof CompositionUnavailable) throw new ExportSourceNotFound(error.message);
+      throw error;
+    }
+    pinned(page.sourcePosition, selection.expectedPosition, deps.env.lineage.dataEpoch, 'composition seal');
+    const { pins, coverage, structureRevision: revision } = page;
     const rootData = { structure: selection.structure, seal: selection.reference,
-      structureRevision: revision!, coverage: coverage!,
+      structureRevision: revision, coverage, after: selection.after ?? null, next: page.next ?? null,
       exportActor: actingSubject };
     const position = selection.expectedPosition;
     for (let offset = 0; offset < pins.length; offset += 128) {

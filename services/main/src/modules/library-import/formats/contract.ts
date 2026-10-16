@@ -34,7 +34,7 @@ export const canonicalRow = t.Object({
   session: t.Nullable(portableSession), raw: t.Record(t.String(), t.Unknown()),
 }, closed);
 export type CanonicalRow = Static<typeof canonicalRow>;
-export type LibraryFileFormat = 'goodreads' | 'storygraph' | 'generic-csv' | 'vndb' | 'mal' | 'rezics';
+export type LibraryFileFormat = 'goodreads' | 'storygraph' | 'generic-csv' | 'vndb' | 'mal' | 'rezics' | 'paprikarecipes' | 'melarecipes' | 'melarecipe';
 export type FormatAdapter = (file: string, mapping?: CsvMapping) => CanonicalRow[];
 export class FileImportInvalid extends Error {}
 export class FileImportUnsupported extends Error {}

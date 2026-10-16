@@ -72,16 +72,10 @@ ten-page Realm roster (`apps/web/features/zones/catalogue-browse.tsx`) and shoul
 pass Realm and conditions to the publication-year query. Proof: an Anime Work is
 found by phrase, filtered in discovery and listed past the roster.
 
-Exchange lifecycle lives in Recipe routes. Collection imports reupload files
-for continuation outside the import job store, native Structure and Content
-export traversal exists only for Recipe, and composition export stops at 255 pins
-(`routes/recipe-collections.ts`, `recipe/collection-import.ts`,
-`export/readers.ts`, `recipe/export-page.ts`). Imports should use the existing
-upload and job custody, and the shared export owner should page native
-occurrences. Fixed releases and sealed exports accept only VNDB evidence shapes
+Fixed releases and sealed exports accept only VNDB evidence shapes
 (`work/fixed-release.ts`, `export/readers.ts`, `export/operations.ts`); Source
-should verify a provider-neutral external release reference. Proof: a non-Recipe
-composition exports past 255 pins, and a non-VNDB release link seals and exports.
+should verify a provider-neutral external release reference. Proof: a non-VNDB
+release link seals and exports.
 
 ## Acceptance evidence
 

@@ -35,7 +35,7 @@ const selection = t.Union([
   t.Object({ kind: t.Union([t.Literal('fixed-release'), t.Literal('assessment')]),
     reference: groupAgent, expectedPosition: position }, { additionalProperties: false }),
   t.Object({ kind: t.Literal('composition-seal'), reference: groupAgent,
-    structure: groupAgent, expectedPosition: position }, { additionalProperties: false }),
+    structure: groupAgent, expectedPosition: position, after: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
   t.Object({ kind: t.Literal('semantic-revision'), reference: groupAgent,
     resource: groupAgent, expectedPosition: position }, { additionalProperties: false }),
   t.Object({ kind: t.Literal('vndb-concept-run'), reference: groupAgent,
