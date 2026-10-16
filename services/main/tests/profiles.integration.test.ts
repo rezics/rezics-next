@@ -241,7 +241,8 @@ test('G238: native Agent profiles, credits and library enforce disclosure, autho
       expectedRevisionHead: rating.revision, value: null, actingSubject: person.agent }, a.token), 201);
     expect((await json<Page<{ id: string; value: number | null; availability: string }>>(await read('/v1/me/ratings'))).items
       .find(item => item.id === rating.id)).toMatchObject({ value: null, availability: 'withdrawn' });
-    expect((await read(`/v1/me/ratings?cursor=${ratings.nextCursor}`)).status).toBe(409);
+    expect(await json<{ code: string }>(await read(`/v1/me/ratings?cursor=${ratings.nextCursor}`), 409))
+      .toMatchObject({ code: 'read_basis_changed' });
     await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {
       ${iri(await workHead(second.work))} a rv:ErasedRevision } }`);
     expect((await json<Page<{ id: string }>>(await call('GET', `${root}/works`))).items.map(item => item.id)).toEqual([first.work]);
