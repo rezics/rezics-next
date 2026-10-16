@@ -106,7 +106,7 @@ function recordedStory(mode: 'created' | 'loading' | 'recovery' = 'created'): St
         const resolve = record.personas.owner.find(item => item.label === 'creation-attachment-resolve')!;
         const handle = new URL(resolve.path, 'https://record.invalid').searchParams.get('key')!;
         await userEvent.type(editor.getByRole('textbox', { name: editorCopy.realmHandle }), handle);
-        await userEvent.click(editor.getByRole('button', { name: editorCopy.realmAttach, exact: true }));
+        await userEvent.click(editor.getByRole('button', { name: editorCopy.realmAttach }));
         await expect(await editor.findByRole('status')).toHaveTextContent(editorCopy.realmSaved);
         const named = record.personas.owner.find(item => item.label === 'creation-attachment-resolve-realm')!.answer as { name: { value: string } };
         await expect(editor.getByText(named.name.value, { exact: true })).toBeVisible();
