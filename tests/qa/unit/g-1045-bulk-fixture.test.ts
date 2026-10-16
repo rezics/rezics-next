@@ -8,7 +8,10 @@ import { catalogueSeedPort } from '../support/catalogue-seed-port.ts';
 import { integrationOrderFiles } from '../support/integration-order.ts';
 import { workProfileCorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
 import type { SeedPort } from '../../../scripts/dev/seed/vn-catalogue-step.ts';
-import { planIntegrationShards } from '../../../scripts/qa/integration-shards.ts';
+import { planIntegrationShards as planIntegrationShardsImpl } from '../../../scripts/qa/integration-shards.ts';
+
+const planIntegrationShards = (estimates: ReadonlyMap<string, number>, count: number) =>
+  planIntegrationShardsImpl(estimates, count, new Set());
 
 const actor = 'https://rezics.com/id/00000000-0000-0000-0000-000000000001';
 const input: CatalogueImportInput = {

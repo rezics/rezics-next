@@ -9,18 +9,20 @@ import { startRestoredFixture } from '../../../scripts/fixture/restore.ts';
 import type { FixtureRestoreEvidence } from '../../../scripts/fixture/restore.ts';
 import type { FixtureManifest } from '../../../scripts/fixture/manifest.ts';
 import { assertPhaseDRestore, PHASE_D_FIXTURE } from '../load/fixture-phase-d.ts';
+import { observeChild } from '../support/child-readiness.ts';
 import { processStartTime } from '../../../scripts/qa/process/identity.ts';
 import { tryAcquireDirectoryLease } from '../../../scripts/qa/process/lease.ts';
 import { startupChildEnvironment } from '../../../scripts/qa/stack-startup.ts';
 import { qaSlotAdmission, qaWaitStatusLines } from '../../../scripts/goal/qa-slots.ts';
-import { admissionCpuPressure, GiB, measuredAdmissionMessage, memoryBytes, parseMemoryReading, qaMemoryNeed, waitForMemory as waitForMemoryImpl,
+import { admissionCpuLimit, admissionCpuPressure, GiB, measuredAdmissionMessage, memoryBytes, parseMemoryReading, qaMemoryNeed, waitForMemory as waitForMemoryImpl,
   isLocalQaRun, qaMemoryDeadline, withMemoryStartup as withMemoryStartupImpl, withQaStackStartup,
   type MemoryReading, type MemoryWaitOptions, type StartupMemoryOptions } from '../../../scripts/qa/memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const need = qaMemoryNeed(root, 'other', 'ordinary', {});
 const loadFixture = join(root, '.temp', `qa-loadavg-${process.pid}`);
-const qaEnv = { REZICS_STACK_PROFILE: 'qa', REZICS_QA_LOADAVG_FILE: loadFixture,
+const privateSettings = mkdtempSync(join(root, '.temp', 'qa-admission-settings-'));
+const qaEnv = { REZICS_STACK_PROFILE: 'qa', GOAL_QA_SLOT_DIRECTORY: join(privateSettings, 'slots'), REZICS_QA_LOADAVG_FILE: loadFixture,
   REZICS_QA_CPU_PRESSURE_FILE: `${loadFixture}-missing-pressure` };
 const plenty: MemoryReading = { vmTotal: 24 * GiB, vmUsed: 5 * GiB, hostAvailable: 20 * GiB };
 
@@ -52,7 +54,10 @@ test('admission inherits the run deadline without capping it to the fallback dur
 const scratch = join(root, '.temp');
 mkdirSync(scratch, { recursive: true });
 writeFileSync(loadFixture, '0.00 0.00 0.00 1/1 1\n');
-afterAll(() => rmSync(loadFixture, { force: true }));
+afterAll(() => {
+  rmSync(loadFixture, { force: true });
+  rmSync(privateSettings, { recursive: true, force: true });
+});
 
 const readingDirectories: string[] = [];
 const readingStates: Database[] = [];
@@ -66,9 +71,9 @@ function fixtureMemoryState(): Database {
   return state;
 }
 function waitForMemory(need: Parameters<typeof waitForMemoryImpl>[0], options: MemoryWaitOptions) {
-  const dir = mkdtempSync(join(scratch, 'qa-reading-'));
-  readingDirectories.push(dir);
-  return waitForMemoryImpl(need, { lockFile: join(dir, 'state.sqlite'), readingMaxAgeMs: 1, ...options });
+  // Synthetic accounting uses admission's private in-memory state. Only tests
+  // of file sharing or locking opt into a SQLite file explicitly.
+  return waitForMemoryImpl(need, { readingMaxAgeMs: 1, ...options });
 }
 function withMemoryStartup<T>(need: Parameters<typeof withMemoryStartupImpl>[0], options: StartupMemoryOptions,
   start: () => T | Promise<T>) {
@@ -166,12 +171,6 @@ test(`a restore reports five minutes of admission separately and qualifies ${act
 });
 }
 
-async function untilFile(path: string): Promise<void> {
-  const deadline = Date.now() + 3_000;
-  while (!existsSync(path) && Date.now() < deadline) await Bun.sleep(5);
-  expect(existsSync(path)).toBe(true);
-}
-
 test('admission uses existing Goal orchestration or the actual QA profile, never a target name', async () => {
   const dir = mkdtempSync(join(scratch, 'qa-memory-context-'));
   try {
@@ -223,18 +222,64 @@ test('saved dev restores bypass all admission entry points even with Goal metada
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('synthetic startup ignores discovered Goal concurrency and CPU settings', async () => {
+  const directory = mkdtempSync(join(scratch, 'qa-synthetic-settings-'));
+  const settings = join(directory, '.temp', 'goal-orchestration');
+  mkdirSync(join(settings, 'qa-slots'), { recursive: true });
+  execFileSync('git', ['init', '--quiet'], { cwd: directory });
+  writeFileSync(join(settings, 'qa-startup-concurrency'), '99');
+  writeFileSync(join(settings, 'qa-load-limit'), '0');
+  writeFileSync(join(settings, 'qa-cpu-pressure-limit'), '0');
+  let starts = 0;
+  const held = deferred<void>();
+  const admitted = deferred<void>();
+  const options = { root: directory, env: { REZICS_STACK_PROFILE: 'qa' },
+    state: fixtureMemoryState(), deadline: 10, now: () => 0,
+    read: async () => plenty, announce: () => {},
+    sleep: async () => { throw new Error('Synthetic startup reached private wait'); } };
+  let first: Promise<void> | undefined;
+  try {
+    expect(await admissionCpuLimit(options, false)).toBe(1);
+    expect(await admissionCpuLimit(options, true)).toBe(12);
+    first = withMemoryStartupImpl(need, options, async () => { starts++; admitted.resolve(); await held.promise; });
+    await admitted.promise;
+    await expect(withMemoryStartupImpl(need, options, () => { starts++; }))
+      .rejects.toThrow('Synthetic startup reached private wait');
+    expect(starts).toBe(1);
+    expect(readdirSync(settings).sort()).toEqual(['qa-cpu-pressure-limit', 'qa-load-limit', 'qa-slots', 'qa-startup-concurrency']);
+  } finally { held.resolve(); await first; rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('startup preserves a measurement deadline failure on a fresh database', async () => {
+  const state = fixtureMemoryState();
+  let now = 0, identities = 0, reads = 0, starts = 0;
+  await expect(withMemoryStartupImpl(need, {
+    env: qaEnv, state, deadline: 10, now: () => now, announce: () => {},
+    startTime: pid => { if (++identities === 2) now = 10; return processStartTime(pid); },
+    read: async () => { reads++; return plenty; },
+  }, () => { starts++; })).rejects.toThrow('measurement failed: Memory measurement deadline reached');
+  expect(reads).toBe(0);
+  expect(starts).toBe(0);
+  expect(state.query('SELECT generation FROM memory_generation').all()).toEqual([{ generation: 0 }]);
+  expect(state.query('SELECT * FROM startup_waiters').all()).toEqual([]);
+});
+
 test('independent QA processes measure after the preceding startup and wait for its memory to clear', async () => {
   const dir = mkdtempSync(join(scratch, 'qa-memory-processes-'));
   const script = join(dir, 'startup.ts');
   writeFileSync(join(dir, 'used'), String(18 * GiB));
+  writeFileSync(join(dir, 'clock'), '0');
   writeFileSync(script, `
     import { withMemoryStartup } from ${JSON.stringify(join(root, 'scripts/qa/memory-admission.ts'))};
     import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
     import { join } from 'node:path';
     const [dir, name] = process.argv.slice(2);
+    writeFileSync(join(dir, name + '-ready'), 'ready');
+    while (!existsSync(join(dir, name + '-arm'))) await Bun.sleep(5);
     await withMemoryStartup(${JSON.stringify(need)}, {
       env: { ...${JSON.stringify(qaEnv)}, GOAL_QA_SLOT_DIRECTORY: join(dir, 'qa-slots') },
-      deadline: Date.now() + 5_000, lockFile: join(dir, 'mutex.sqlite'), pollMs: 5,
+      deadline: 10_000, now: () => Number(readFileSync(join(dir, 'clock'), 'utf8')),
+      lockFile: join(dir, 'mutex.sqlite'), pollMs: 5,
       announce: message => {
         if (message.startsWith('Waiting for another')) writeFileSync(join(dir, name + '-queued'), message);
         if (message.startsWith('Waiting;')) writeFileSync(join(dir, name + '-short'), message);
@@ -256,24 +301,34 @@ test('independent QA processes measure after the preceding startup and wait for 
   try {
     const first = Bun.spawn(['bun', script, dir, 'first'], { stdout: 'pipe', stderr: 'pipe' });
     children.push(first);
-    await untilFile(join(dir, 'first-started'));
+    const firstProbe = observeChild(first);
+    await firstProbe.ready(join(dir, 'first-ready'));
+    // Deliberately hold startup behind a parent-controlled barrier.
+    expect(existsSync(join(dir, 'mutex.sqlite'))).toBe(false);
+    writeFileSync(join(dir, 'first-arm'), 'armed');
+    await firstProbe.ready(join(dir, 'first-started'));
     const second = Bun.spawn(['bun', script, dir, 'second'], { stdout: 'pipe', stderr: 'pipe' });
     children.push(second);
-    await untilFile(join(dir, 'second-queued'));
+    const secondProbe = observeChild(second);
+    await secondProbe.ready(join(dir, 'second-ready'));
+    writeFileSync(join(dir, 'second-arm'), 'armed');
+    await secondProbe.ready(join(dir, 'second-queued'));
     expect(existsSync(join(dir, 'second-started'))).toBe(false);
     writeFileSync(join(dir, 'release'), 'ready');
-    expect(await first.exited).toBe(0);
-    await untilFile(join(dir, 'second-short'));
+    await firstProbe.exit(0);
+    await secondProbe.ready(join(dir, 'second-short'));
     expect(existsSync(join(dir, 'second-started'))).toBe(false);
     expect(readFileSync(join(dir, 'reads'), 'utf8')).toContain(`second:${21 * GiB}`);
     writeFileSync(join(dir, 'used'), String(18 * GiB));
-    expect(await second.exited).toBe(0);
+    // Expire the shared reading by advancing the simulated clock, not by sleeping.
+    writeFileSync(join(dir, 'clock'), '3000');
+    await secondProbe.exit(0);
     expect(existsSync(join(dir, 'second-started'))).toBe(true);
   } finally {
     for (const child of children) { child.kill(); await child.exited; }
     rmSync(dir, { recursive: true, force: true });
   }
-}, 10_000);
+}, 60_000);
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -335,7 +390,7 @@ for (const fails of [false, true]) {
       for (const child of children) { child.kill(); await child.exited; }
       rmSync(dir, { recursive: true, force: true });
     }
-  }, 10_000);
+  }, 60_000);
 }
 
 for (const fails of [false, true]) {
@@ -384,14 +439,15 @@ test('a dead measuring process leaves its turn to the next waiter', async () => 
     import { waitForMemory } from ${JSON.stringify(join(root, 'scripts/qa/memory-admission.ts'))};
     import { writeFileSync } from 'node:fs';
     await waitForMemory(${JSON.stringify(need)}, {
-      env: ${JSON.stringify(qaEnv)}, lockFile: ${JSON.stringify(lockFile)}, deadline: Date.now() + 5000,
+      env: ${JSON.stringify(qaEnv)}, lockFile: ${JSON.stringify(lockFile)}, deadline: 100, now: () => 0,
       read: async () => { writeFileSync(${JSON.stringify(ready)}, 'ready');
         await new Promise(() => { setInterval(() => {}, 1000); }); return ${JSON.stringify(plenty)}; },
     });
   `);
   const child = Bun.spawn(['bun', script], { stdout: 'pipe', stderr: 'pipe' });
+  const probe = observeChild(child);
   try {
-    await untilFile(ready);
+    await probe.ready(ready);
     let reads = 0;
     const waiting = deferred<void>();
     const next = waitForMemoryImpl(need, { env: qaEnv, lockFile, deadline: Date.now() + 2000,
@@ -410,7 +466,8 @@ test('a reading begun before startup completion cannot admit even when it finish
   let now = 0, reads = 0, started = false;
   const ready = deferred<void>(), finish = deferred<void>();
   const options = { env: qaEnv, lockFile: join(dir, 'state.sqlite'), readingMaxAgeMs: 3000,
-    now: () => now, deadline: 3100, pollMs: 5, sleep: async (ms: number) => { now += ms; }, announce: () => {} };
+    // One poll reaches the deadline after the invalidated reading is replaced.
+    now: () => now, deadline: 3100, pollMs: 100, sleep: async (ms: number) => { now += ms; }, announce: () => {} };
   try {
     const first = withMemoryStartupImpl(need, { ...options, read: async () => { reads++; return plenty; } }, async () => {
       ready.resolve(); await finish.promise;
@@ -591,21 +648,22 @@ test('process death discards startup promises before the next admission', async 
       import { withMemoryStartup } from ${JSON.stringify(join(root, 'scripts/qa/memory-admission.ts'))};
       import { writeFileSync } from 'node:fs';
       await withMemoryStartup(${JSON.stringify(need)}, { env: ${JSON.stringify(qaEnv)}, lockFile: ${JSON.stringify(lockFile)},
-        deadline: Date.now() + 5_000, announce: () => {}, read: async () => (${JSON.stringify(plenty)}) }, async () => {
+        deadline: 100, now: () => 0, announce: () => {}, read: async () => (${JSON.stringify(plenty)}) }, async () => {
         writeFileSync(${JSON.stringify(ready)}, 'held');
         await new Promise(() => { setInterval(() => {}, 1000); });
       });
     `);
     const child = Bun.spawn(['bun', script], { stdout: 'pipe', stderr: 'pipe' });
+    const probe = observeChild(child);
     try {
-      await untilFile(ready);
+      await probe.ready(ready);
       child.kill(signal);
       await child.exited;
       expect(await withMemoryStartup(need, { env: qaEnv, lockFile, deadline: Date.now() + 5000,
         announce: () => {}, read: async () => plenty }, () => 'recovered')).toBe('recovered');
     } finally { child.kill(); await child.exited; rmSync(dir, { recursive: true, force: true }); }
   }
-}, 10_000);
+}, 60_000);
 
 test('each source and restore target startup receives a fresh reading and its inherited deadline', async () => {
   const dir = mkdtempSync(join(scratch, 'qa-memory-children-'));

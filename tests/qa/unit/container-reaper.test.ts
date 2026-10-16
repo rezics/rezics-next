@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -14,6 +14,23 @@ import {
 
 const root = resolve(import.meta.dir, '../../..');
 const shim = join(dockerShimDirectory(), 'docker');
+
+const reapKeys = ['REZICS_REAP_STATE_ROOT', 'REZICS_REAP_STATE', 'REZICS_REAP_OWNER', 'REZICS_REAP_SCOPE', 'REZICS_REAP_SCOPES'] as const;
+let savedReapEnvironment: NodeJS.ProcessEnv;
+let privateReapRoot: string;
+beforeEach(() => {
+  savedReapEnvironment = Object.fromEntries(reapKeys.map(key => [key, process.env[key]]));
+  for (const key of reapKeys) delete process.env[key];
+  privateReapRoot = mkdtempSync(join(root, '.temp', 'reap-fixture-'));
+  process.env.REZICS_REAP_STATE_ROOT = privateReapRoot;
+});
+afterEach(() => {
+  for (const key of reapKeys) {
+    if (savedReapEnvironment[key] === undefined) delete process.env[key];
+    else process.env[key] = savedReapEnvironment[key];
+  }
+  rmSync(privateReapRoot, { recursive: true, force: true });
+});
 
 // A stub must finish writing its response before process.exit: console.log can
 // leave pipe output pending under load, making a successful ps appear empty.
@@ -491,6 +508,13 @@ await commandAsync(${JSON.stringify(directory)}, 'bun', ['test', ${JSON.stringif
   try {
     await waitFor(() => existsSync(ready) && existsSync(join(noted, 'extra-child')), 'nested child and scope markers');
     expect(existsSync(ready), stderr).toBe(true);
+    const sweep = spawnSync('bun', [join(root, 'scripts/qa/container-reaper.ts'), '--sweep-orphans'], {
+      env: { ...env, REZICS_REAP_STATE_ROOT: join(directory, 'concurrent-sweep'),
+        REZICS_REAP_STATE: '', REZICS_REAL_DOCKER: join(bin, 'docker') },
+      encoding: 'utf8', timeout: 30_000,
+    });
+    expect(sweep.status, sweep.stderr).toBe(0);
+    expect(existsSync(join(noted, 'extra-child'))).toBe(true);
     child.kill('SIGTERM');
     const closed = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
       child.once('close', (code, signal) => resolve({ code, signal }));

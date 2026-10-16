@@ -60,8 +60,8 @@ export function integrationTierWallMs(
   return integrationTierBudget(classes, slots);
 }
 
-function shardOf(files: string[], estimates: ReadonlyMap<string, number>): IntegrationShard {
-  const assemblerClasses = new Set(files.map(file => rawSparqlIntegrationFiles().has(file)));
+function shardOf(files: string[], estimates: ReadonlyMap<string, number>, rawFiles: ReadonlySet<string>): IntegrationShard {
+  const assemblerClasses = new Set(files.map(file => rawFiles.has(file)));
   if (assemblerClasses.size > 1) throw new Error('Integration shard mixes raw-SPARQL and product-assembler files');
   const shared = files.filter((file) => !isolatedIntegrationFiles.has(file));
   const isolated = files
@@ -126,19 +126,19 @@ function packWithinLimit(
 export function planIntegrationShards(
   estimates: ReadonlyMap<string, number>,
   count: number,
+  rawFiles: ReadonlySet<string> = rawSparqlIntegrationFiles(),
 ): IntegrationShard[] {
   const ownProject = (file: string) =>
     commandOnlyIntegrationFiles.has(file) || integrationResourceClasses.has(file);
   const reusable = new Map([...estimates].filter(([file]) => !ownProject(file)));
   const persistent = [...estimates.keys()].filter(ownProject).sort();
-  const rawFiles = rawSparqlIntegrationFiles();
   const limit = integrationPlanLimitMs(qaResourceClasses.ordinary.budgetMs);
   const planAssemblerClass = (files: Map<string, number>) => {
     const alone = [...files.keys()].filter((file) => (files.get(file) ?? 0) > limit).sort();
     for (const file of alone) files.delete(file);
     return [
-      ...packWithinLimit(files, count, limit).map((group) => shardOf(group, estimates)),
-      ...alone.map((file) => shardOf([file], estimates)),
+      ...packWithinLimit(files, count, limit).map((group) => shardOf(group, estimates, rawFiles)),
+      ...alone.map((file) => shardOf([file], estimates, rawFiles)),
     ];
   };
   const productAssembler = new Map([...reusable].filter(([file]) => !rawFiles.has(file)));
@@ -146,7 +146,7 @@ export function planIntegrationShards(
   return [
     ...planAssemblerClass(productAssembler),
     ...planAssemblerClass(fixtureAssembler),
-    ...persistent.map((file) => shardOf([file], estimates)),
+    ...persistent.map((file) => shardOf([file], estimates, rawFiles)),
   ];
 }
 

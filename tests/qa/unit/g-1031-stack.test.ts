@@ -3,7 +3,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { qaStackEnvironment, qaStackMode, scaleIntegrationFiles, scalePreparationBudgetMs } from '../../../scripts/qa/stack-environment.ts';
 import { composeProcessEnvironment, ensureSecrets, stackStorage, type StackOptions } from '../../../scripts/dev/config.ts';
-import { planIntegrationShards } from '../../../scripts/qa/integration-shards.ts';
+import { planIntegrationShards as planIntegrationShardsImpl } from '../../../scripts/qa/integration-shards.ts';
+
+const planIntegrationShards = (estimates: ReadonlyMap<string, number>, count: number) =>
+  planIntegrationShardsImpl(estimates, count, new Set());
 
 test('G1031: scale selects disk storage and larger allocations while ordinary QA retains tmpfs', () => {
   const ordinary = qaStackEnvironment({});

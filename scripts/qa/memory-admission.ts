@@ -242,8 +242,10 @@ function waitForStartupSlot(options: StartupMemoryOptions): { gated: boolean; re
 }
 
 async function startupDirectory(options: StartupMemoryOptions): Promise<string | undefined> {
-  return (options.env ?? process.env).GOAL_QA_SLOT_DIRECTORY
-    ?? (await import('./core.ts')).goalSlotDirectory(options.root ?? resolve(import.meta.dir, '../..'));
+  const explicit = (options.env ?? process.env).GOAL_QA_SLOT_DIRECTORY;
+  // A simulated host must not discover this checkout's live admission settings.
+  if (explicit !== undefined || options.read !== undefined || options.now !== undefined) return explicit;
+  return (await import('./core.ts')).goalSlotDirectory(options.root ?? resolve(import.meta.dir, '../..'));
 }
 
 async function startupConcurrency(options: StartupMemoryOptions): Promise<number> {
@@ -441,7 +443,7 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? (ms => Bun.sleep(ms));
   const announce = options.announce ?? console.log;
-  const pollMs = options.pollMs ?? threshold(process.env, 'REZICS_QA_MEMORY_POLL_MS', 3_000);
+  const pollMs = options.pollMs ?? threshold(options.env ?? process.env, 'REZICS_QA_MEMORY_POLL_MS', 3_000);
   if (pollMs <= 0) { release(); throw new Error('REZICS_QA_MEMORY_POLL_MS must be positive'); }
   const reportWait = admissionAccounting(options, now);
   const publishWait = memoryWaitStatus(options.env ?? process.env, now);
@@ -483,6 +485,9 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
       try {
         mutex.exec('BEGIN IMMEDIATE');
         held = true;
+        // Measurement can expire before it opens a transaction. Later accounting
+        // still needs the schema, and must retain that original failure.
+        memoryState(mutex);
         mutex.exec(`CREATE TABLE IF NOT EXISTS startup_promises (
           id TEXT PRIMARY KEY, pid INTEGER NOT NULL, start_time TEXT NOT NULL,
           vm REAL NOT NULL, host REAL NOT NULL, admitted_at REAL NOT NULL,
@@ -560,7 +565,7 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
           }
         }
         const activeStartups = live.length;
-        if (readingGeneration !== memoryGeneration(mutex)) {
+        if (reading && readingGeneration !== memoryGeneration(mutex)) {
           reading = undefined;
           retryReading = true;
           measured = `${admissionMessage(need)}; reading predates a completed QA startup`;
@@ -758,7 +763,7 @@ export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions
   const publishWait = memoryWaitStatus(options.env ?? process.env, now);
   const needsVm = need.vm + need.vmReserve > 0;
   const read = options.read ?? (needsVm ? readMemory : async () => readHostMemory());
-  const pollMs = options.pollMs ?? threshold(process.env, 'REZICS_QA_MEMORY_POLL_MS', 3_000);
+  const pollMs = options.pollMs ?? threshold(options.env ?? process.env, 'REZICS_QA_MEMORY_POLL_MS', 3_000);
   if (pollMs <= 0) throw new Error('REZICS_QA_MEMORY_POLL_MS must be positive');
   const { db, readingOptions, release } = openMemoryState(options);
   db.exec('PRAGMA busy_timeout=0');

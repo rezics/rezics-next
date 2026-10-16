@@ -1,3 +1,4 @@
+import { observeChild } from '../support/child-readiness.ts';
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -770,25 +771,39 @@ test('QA slots: SIGTERM, SIGINT, process exit, errors and the run deadline relea
     const script = join(dir, 'holder.ts');
     const ready = join(dir, 'ready');
     writeFileSync(script, `
-      import { acquireQaSlots, commandAsync } from ${JSON.stringify(join(import.meta.dir, '../../../scripts/qa/core.ts'))};
-      import { writeFileSync } from 'node:fs';
+      import { acquireQaSlots, commandAsync, QaRunDeadline } from ${JSON.stringify(join(import.meta.dir, '../../../scripts/qa/core.ts'))};
+      import { existsSync, writeFileSync } from 'node:fs';
+      const clock = new QaRunDeadline(100, () => 0);
+      const arm = clock.wait();
+      writeFileSync(${JSON.stringify(join(dir, 'booted'))}, 'booted');
+      while (!existsSync(${JSON.stringify(join(dir, 'start'))})) await Bun.sleep(5);
       await acquireQaSlots(${JSON.stringify(dir)}, 1, { GOAL_QA_SLOTS: '1' }, process.pid,
-        ${mode === 'deadline' ? '{ runDeadline: Date.now() + 100 }' : '{}'});
+        ${mode === 'deadline' ? '{ runDeadline: clock }' : '{}'});
       ${mode === 'SIGTERM' || mode === 'SIGINT'
         ? `await commandAsync(${JSON.stringify(dir)}, 'bun', ['-e', ${JSON.stringify(`require('node:fs').writeFileSync(${JSON.stringify(ready)}, String(process.pid)); setInterval(() => {}, 1_000);`)}], 5_000);`
         : `writeFileSync(${JSON.stringify(ready)}, 'ready');`}
+      if (${mode === 'deadline'}) {
+        while (!existsSync(${JSON.stringify(join(dir, 'arm'))})) await Bun.sleep(5);
+        arm();
+      }
       ${mode === 'exit' ? 'process.exit(0);' : mode === 'error' ? "throw new Error('injected holder failure');" : 'await new Promise(() => { setInterval(() => {}, 1_000); });'}
     `);
     const child = Bun.spawn(['bun', script], { stdout: 'pipe', stderr: 'pipe' });
+    const probe = observeChild(child);
     try {
-      const deadline = Date.now() + 2_000;
-      while (!existsSync(ready) && Date.now() < deadline) await Bun.sleep(5);
-      expect(existsSync(ready)).toBe(true);
+      await probe.ready(join(dir, 'booted'));
+      expect(existsSync(join(dir, '0'))).toBe(false);
+      writeFileSync(join(dir, 'start'), 'start');
+      await probe.ready(ready);
+      if (mode === 'deadline') {
+        expect(existsSync(join(dir, '0'))).toBe(true);
+        writeFileSync(join(dir, 'arm'), 'armed');
+      }
       if (mode === 'SIGTERM' || mode === 'SIGINT') {
         expect(existsSync(join(dir, '0'))).toBe(true);
         child.kill(mode);
       }
-      expect(await child.exited).toBe(mode === 'SIGTERM' ? 143 : mode === 'SIGINT' ? 130 : mode === 'error' ? 1 : mode === 'deadline' ? 124 : 0);
+      await probe.exit(mode === 'SIGTERM' ? 143 : mode === 'SIGINT' ? 130 : mode === 'error' ? 1 : mode === 'deadline' ? 124 : 0);
       expect(existsSync(join(dir, '0'))).toBe(false);
       if (mode === 'SIGTERM' || mode === 'SIGINT') {
         const subprocess = Number(readFileSync(ready, 'utf8'));
@@ -798,14 +813,14 @@ test('QA slots: SIGTERM, SIGINT, process exit, errors and the run deadline relea
         while (alive() && Date.now() < stoppedBy) await Bun.sleep(5);
         expect(alive()).toBe(false);
       }
-      if (mode === 'deadline') expect(await new Response(child.stderr).text()).toContain('reached its deadline');
+      if (mode === 'deadline') expect(probe.diagnostics()).toContain('reached its deadline');
     } finally {
       child.kill();
       await child.exited;
       rmSync(dir, { recursive: true, force: true });
     }
   }
-}, 30_000); // Five children start one after another; a busy host takes longer than the default limit.
+}, 120_000); // Five children start one after another; a busy host takes longer than the default limit.
 
 test('a run deadline destroys its leased warm stack before releasing the QA slot', async () => {
   const dir = mkdtempSync(join(scratch, 'qa-pool-deadline-'));

@@ -6,7 +6,10 @@ import {
   integrationResourceClass,
   qaResourceHeapBytes,
 } from '../../../scripts/qa/resource-classes.ts';
-import { planIntegrationShards } from '../../../scripts/qa/integration-shards.ts';
+import { planIntegrationShards as planIntegrationShardsImpl } from '../../../scripts/qa/integration-shards.ts';
+
+const planIntegrationShards = (estimates: ReadonlyMap<string, number>, count: number) =>
+  planIntegrationShardsImpl(estimates, count, new Set());
 
 test('G1062: catalogue and reading files retain their own allocation after ten preceding files', () => {
   const heavy = [

@@ -10,9 +10,12 @@ import {
   integrationPlanLimitMs,
   integrationStackPoolEligible,
   integrationTierWallMs,
-  planIntegrationShards,
+  planIntegrationShards as planIntegrationShardsImpl,
   runQueuedProjects,
 } from '../../../scripts/qa/integration-shards.ts';
+
+const planIntegrationShards = (estimates: ReadonlyMap<string, number>, count: number) =>
+  planIntegrationShardsImpl(estimates, count, new Set());
 import { qaResourceClasses, queuedProjectsBudget } from '../../../scripts/qa/resource-classes.ts';
 
 const ordinaryBudgetMs = qaResourceClasses.ordinary.budgetMs;
@@ -104,9 +107,6 @@ const measured = new Map([
   ['tests/qa/integration/g-836-old-address.test.ts', 2_898],
 ]);
 
-// This first plan also discovers raw-SPARQL assemblers across the fixed repository
-// inventory. Its cold crawl measured 18.75s with every processor loaded; allow
-// 60s for that one-time bounded preparation, independently of planner size.
 test('measured integration files plan into projects within 60% of the budget', () => {
   expect([...measured.values()].reduce((sum, ms) => sum + ms, 0)).toBeGreaterThan(planLimitMs);
   for (const slots of [1, 3]) {
@@ -119,7 +119,7 @@ test('measured integration files plan into projects within 60% of the budget', (
     }
   }
   expect(planIntegrationShards(measured, 1).length).toBeGreaterThan(1);
-}, 60_000);
+});
 
 test('integration files that need more projects than three slots stay within 60% of the budget', () => {
   const slots = 3;
@@ -271,4 +271,14 @@ test('queued integration projects keep the command budget and start as slots fre
     }
     await done;
   }
+});
+
+test('injected assembler classification splits reusable files and dedicated projects consistently', () => {
+  const raw = 'tests/qa/integration/raw-probe.test.ts';
+  const product = 'tests/qa/integration/product-probe.test.ts';
+  const dedicated = 'tests/qa/integration/g-1031-catalogue-write.test.ts';
+  const estimates = new Map([[raw, 10], [product, 10], [dedicated, 10]]);
+  const plan = planIntegrationShardsImpl(estimates, 1, new Set([raw, dedicated]));
+  expect(plan.map(shard => shard.files)).toEqual([[product], [raw], [dedicated]]);
+  expect(plan.flatMap(shard => shard.batches)).toEqual([[product], [raw], [dedicated]]);
 });

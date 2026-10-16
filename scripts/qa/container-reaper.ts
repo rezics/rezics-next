@@ -35,13 +35,13 @@ export function settleReap(): void {
 }
 
 /** Directory the shim fills with one empty file per scope it labels, plus `.owner` when it labels an owner. */
-export function reapStateDirectory(owner: string): string | undefined {
+export function reapStateDirectory(owner: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
   if (!/^\d+:\d+$/.test(owner)) return undefined;
-  return join(resolve(import.meta.dir, '../..'), '.temp', 'reap', owner);
+  return join(reapStateRoot(env), owner);
 }
 
-function reapStateRoot(): string {
-  return join(resolve(import.meta.dir, '../..'), '.temp', 'reap');
+function reapStateRoot(env: NodeJS.ProcessEnv = process.env): string {
+  return env.REZICS_REAP_STATE_ROOT ?? join(resolve(import.meta.dir, '../..'), '.temp', 'reap');
 }
 
 function safeScopeName(scope: string): boolean {
@@ -166,14 +166,14 @@ export function reapOwnerEnvironment(env: NodeJS.ProcessEnv, pid = process.pid):
   }
   // The minter publishes the directory; a child that already inherited it keeps that path.
   if (next.REZICS_REAP_OWNER && !next.REZICS_REAP_STATE) {
-    const state = reapStateDirectory(next.REZICS_REAP_OWNER);
+    const state = reapStateDirectory(next.REZICS_REAP_OWNER, next);
     if (state) next.REZICS_REAP_STATE = state;
   }
   return next;
 }
 
 /** Project files and partial Docker environments must not replace a runner's owner. */
-const reapEnvironmentKeys = ['REZICS_REAP_OWNER', 'REZICS_REAP_SCOPE', 'REZICS_REAP_SCOPES', 'REZICS_REAP_STATE'] as const;
+const reapEnvironmentKeys = ['REZICS_REAP_OWNER', 'REZICS_REAP_SCOPE', 'REZICS_REAP_SCOPES', 'REZICS_REAP_STATE', 'REZICS_REAP_STATE_ROOT'] as const;
 
 /**
  * Keep the reap owner, its scope chain and the shim on PATH. A saved project
