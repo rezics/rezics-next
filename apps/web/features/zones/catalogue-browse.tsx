@@ -19,11 +19,6 @@ export function catalogueBrowseQuery(search: Record<string, string | string[] | 
     ...year !== null ? { publicationYear: String(year) } : {} };
 }
 
-/** Pages of `work-publication-years` one request may read. A cap on that request's cost, not a quota. */
-export const YEAR_PAGES = 8;
-/** Matches kept from the pages this request read. A further year-read page waits for the next cursor. */
-const SCREEN = 20;
-
 function withFlags(href: string, year: string | null, directory: boolean): string {
   const url = new URL(href, 'https://rezics.local');
   if (year === null) url.searchParams.delete('year');
@@ -120,49 +115,41 @@ export async function applyCatalogueYear({ view, search, model }: {
   const publicationYears = new Map<string, number[]>();
   // A range is a Condition, not evidence of each card's publication year.
   const exactYear = year === null ? null : catalogueYearParam(year);
-  if (exactYear !== null) for (const work of model.items) publicationYears.set(work.id, [exactYear]);
+  if (exactYear !== null) {
+    const page = { works: model.items, nextCursor: model.nextCursor };
+    for (const work of page.works) publicationYears.set(work.id, [exactYear]);
+  }
   if (directory) {
     // Directory reads belong to the server. Selected-year presentation can also
     // render in Storybook without importing their request context.
     const years = reads.publicationYears ?? (await import('./catalogue-facts.ts')).readPublicationYears;
     const hydrate = reads.works ?? (await import('./catalogue-facts.ts')).readPublicationYearWorks;
     const parameters = catalogueYearScope(view.context.realm, state);
+    const listed = await years(parameters, yearCursorOf(search.yearCursor) ?? undefined);
+    if (!listed.ok) return { header, publicationYears, year: exactYear, failure: 'unavailable' };
+    const page = { rows: listed.data.items, nextCursor: listed.data.nextCursor };
+    const resources = [...new Set(page.rows.map(row => row.id))];
+    const cards = await hydrate(resources, parameters.realm);
+    if (!cards.ok) return { header, publicationYears, year: exactYear, failure: 'unavailable' };
     const found: ZoneWork[] = [];
-    let cursor = yearCursorOf(search.yearCursor) ?? undefined;
-    let nextCursor: string | null = null;
-    // Each query page applies Realm membership and Conditions before hydration.
-    for (let step = 0; step < YEAR_PAGES; step++) {
-      const listed = await years(parameters, cursor);
-      if (!listed.ok) return { header, publicationYears, year: exactYear, failure: 'unavailable' };
-      const resources = [...new Set(listed.data.items.map(row => row.id))];
-      const cards = await hydrate(resources, parameters.realm);
-      if (!cards.ok) return { header, publicationYears, year: exactYear, failure: 'unavailable' };
-      for (const row of listed.data.items) {
-        const summary = cards.data.get(row.id);
-        if (!summary) return { header, publicationYears, year: exactYear, failure: 'unavailable' };
-        const work = zoneWork(summary, view.context, null);
-        const prior = publicationYears.get(work.id) ?? [];
-        if (!prior.includes(row.year)) publicationYears.set(work.id, [...prior, row.year].sort((left, right) => right - left));
-        if (!found.some(item => item.id === work.id)) found.push(work);
-      }
-      if (!listed.data.nextCursor) { nextCursor = null; break; }
-      nextCursor = listed.data.nextCursor;
-      cursor = listed.data.nextCursor;
-      if (found.length >= SCREEN) break;
+    for (const row of page.rows) {
+      const summary = cards.data.get(row.id);
+      if (!summary) return { header, publicationYears, year: exactYear, failure: 'unavailable' };
+      const work = zoneWork(summary, view.context, null);
+      const prior = publicationYears.get(work.id) ?? [];
+      if (!prior.includes(row.year)) publicationYears.set(work.id, [...prior, row.year].sort((left, right) => right - left));
+      if (!found.some(item => item.id === work.id)) found.push(work);
     }
-    // Every match on a page this request read stays on the screen, so the read leaves nothing
-    // unshown. Next carries the cursor where the read stopped when a further page remains.
-    // A screen with no match still links forward when the owner has a continuation.
-    const started = yearCursorOf(search.yearCursor);
     const listedHref = withFlags(plain, year, directory);
-    model.items = found;
-    model.next = nextCursor ? yearHref(listedHref, nextCursor) : null;
-    model.first = started ? listedHref : null;
     const t = materializeData(view.zoneMessages, { locale: view.context.locale });
-    const open = nextCursor !== null;
-    model.complete = !open;
-    model.results = open
-      ? t.resultsAtLeast({ count: String(found.length) }) : t.results(found.length);
+    const open = page.nextCursor !== null;
+    Object.assign(model, {
+      items: found, nextCursor: page.nextCursor,
+      next: page.nextCursor ? yearHref(listedHref, page.nextCursor) : null,
+      first: yearCursorOf(search.yearCursor) ? listedHref : null,
+      complete: !open,
+      results: open ? t.resultsAtLeast({ count: String(found.length) }) : t.results(found.length),
+    });
   }
   return { header, publicationYears, year: exactYear, failure: null };
 }

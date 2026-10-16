@@ -37,6 +37,8 @@ export interface BrowseModel {
   results: string;
   notes: string[];
   items: ZoneWork[];
+  /** Main's opaque continuation accompanies items through catalogue presentation. */
+  nextCursor?: string | null;
   next: string | null;
   first: string | null;
   complete?: boolean;
@@ -148,7 +150,7 @@ export function browseModel({ base, zoneName, state, page, admitted, locale, mes
     sorts, views,
     results: page.matches.kind === 'exact' ? t.results(page.matches.value)
       : t.resultsAtLeast({ count: String(page.matches.value) }),
-    notes, items: page.items, complete: page.window.complete,
+    notes, items: page.items, nextCursor: page.nextCursor, complete: page.window.complete,
     ...(page.sourcePosition ? { basis: { sourcePosition: page.sourcePosition, window: page.window,
       tags: page.tags, matches: page.matches } } : {}),
     next: page.nextCursor ? browseHref(base, { ...state, cursor: page.nextCursor }) : null,

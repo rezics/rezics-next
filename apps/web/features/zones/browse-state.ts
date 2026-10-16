@@ -87,7 +87,7 @@ export function parseBrowseState(params: SearchParams): BrowseState {
   view: list(params.view)[0] === 'grid' ? 'grid' : 'list', filter,
   ...excludedConcepts.length ? { excludedConcepts } : {},
   ...publicationYear ? { publicationYear } : {},
-  cursor: cursor && cursor.length <= 2048 ? cursor : null };
+  cursor: cursor ?? null };
 }
 
 /** The Query Main's browse read takes for this state; `mainValue` admitted every value. */

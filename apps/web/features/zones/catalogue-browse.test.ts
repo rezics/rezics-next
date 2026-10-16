@@ -1,13 +1,12 @@
 import { expect, test } from 'bun:test';
 import type { RealmView } from '../realm/realm-page.tsx';
-import { applyCatalogueYear, catalogueBrowseQuery, YEAR_PAGES } from './catalogue-browse.tsx';
+import { applyCatalogueYear, catalogueBrowseQuery } from './catalogue-browse.tsx';
 import type { BrowseModel } from './browse-view.ts';
 import type { readPublicationYears, readPublicationYearWorks } from './catalogue-facts.ts';
 import { messages } from './messages.ts';
 
-// More members than one request can read. Each publication-year page names one of them, so the
-// 8-page bound stops the first screen while a cursor remains and every match is already shown.
-const WORKS = YEAR_PAGES * 3 + 2;
+// Every owner page remains reachable without the client combining pages into one screen.
+const WORKS = 26;
 const OTHER = 'https://rezics.com/id/other-zone';
 
 function workId(index: number): string {
@@ -37,7 +36,7 @@ const view = {
   pkg: null,
 } as unknown as RealmView;
 
-test('the restored all-years directory pages the publication-year template in its existing order', async () => {
+test('the all-years directory forwards one owner page at a time in publication-year order', async () => {
   const ids = Array.from({ length: WORKS }, (_, index) => workId(index));
   const pages = new Map<string, { items: { id: string; year: number; statement: string }[]; nextCursor: string | null }>();
   for (let index = 0; index < WORKS; index++) {
@@ -57,15 +56,14 @@ test('the restored all-years directory pages the publication-year template in it
   const readCursors: (string | undefined)[] = [];
   let search: Record<string, string> = { years: '1' };
   let ended = false;
-  for (let step = 0; step < 10; step++) {
+  for (let step = 0; step < WORKS + 1; step++) {
     const before = calls.length;
     const page = model();
     const result = await applyCatalogueYear({ view, search, model: page }, { publicationYears, works });
     const requested = calls.slice(before);
     expect(result.failure).toBeNull();
     expect(page.complete).toBe(page.next === null);
-    expect(requested.length).toBeGreaterThan(0);
-    expect(requested.length).toBeLessThanOrEqual(YEAR_PAGES);
+    expect(requested).toHaveLength(1);
     expect(requested.every(call => call.fromYear === undefined && call.toYear === undefined)).toBe(true);
     expect(page.items.length).toBeGreaterThan(0);
     expect(page.items.some(item => item.id === OTHER)).toBe(false);
@@ -93,13 +91,13 @@ test('the restored all-years directory pages the publication-year template in it
 
   expect(ended).toBe(true);
   expect(seen).toEqual(ids);
-  expect(search.yearCursor).toBe(`page-${YEAR_PAGES * 3}`);
+  expect(search.yearCursor).toBe(`page-${WORKS - 1}`);
 });
 
 test('an empty scoped year window still links forward to a later matching Work', async () => {
   // The year owner may need bounded windows before a matching Condition appears.
   const ours = [workId(1), workId(2)];
-  const others = YEAR_PAGES * 2;
+  const others = 16;
   const keys = Array.from({ length: others + ours.length }, (_, index) => (index === 0 ? '' : `page-${index}`));
   const pages = new Map(keys.map((key, index) => [key, {
     items: index < others ? [] : [{ id: ours[index - others]!, year: 2001,
@@ -113,7 +111,7 @@ test('an empty scoped year window still links forward to a later matching Work',
   const seen: string[] = [];
   const screens: number[] = [];
   let search: Record<string, string> = { years: '1' };
-  for (let step = 0; step < 6; step++) {
+  for (let step = 0; step < keys.length; step++) {
     const page = model();
     await applyCatalogueYear({ view, search, model: page }, { publicationYears, works });
     screens.push(page.items.length);
@@ -163,13 +161,17 @@ test('the selected year and existing Conditions go together to Zone browse', () 
 
 test('the year directory forwards opaque cursors without inspecting their size or equality', async () => {
   const token = `opaque:+/%?=&雪${'x'.repeat(2048)}`;
+  let calls = 0;
   const publicationYears: typeof readPublicationYears = async (_parameters, cursor) => {
+    calls++;
     expect(cursor).toBe(token);
     return { ok: true, data: { items: [], nextCursor: token } };
   };
   const page = model();
   await applyCatalogueYear({ view, search: { years: '1', yearCursor: token }, model: page },
     { publicationYears, works });
+  expect(calls).toBe(1);
+  expect(page.nextCursor).toBe(token);
   expect(new URL(page.next!, 'https://rezics.local').searchParams.get('yearCursor')).toBe(token);
   expect(page.complete).toBe(false);
 });

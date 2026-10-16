@@ -36,10 +36,10 @@ const facets: FacetCounts = {
   type: [{ value: 'https://schema.org/Book', count: 2 }],
 };
 
-function modelFor(state: ReturnType<typeof parseBrowseState>) {
+function modelFor(state: ReturnType<typeof parseBrowseState>, continuation = nextCursor) {
   return browseModel({ base, zoneName: 'Manga', state, locale: 'en', messages, admitted: new Map(),
     page: { items: [], facets, matches: { value: 2, kind: 'exact' },
-      window: { scanned: 2, complete: true }, tags: 'current', nextCursor, sort: state.sort ?? 'newest' } });
+      window: { scanned: 2, complete: true }, tags: 'current', nextCursor: continuation, sort: state.sort ?? 'newest' } });
 }
 
 describe('publication year in shared browse state', () => {
@@ -73,6 +73,17 @@ describe('publication year in shared browse state', () => {
 });
 
 describe.each(['1995', '1995-2001'])('browse model with year %s', year => {
+  test('forwards opaque cursors longer than the former client limit unchanged', () => {
+    const token = `opaque:+/%?=&雪${'x'.repeat(4096)}`;
+    const state = { ...selected(year), cursor: token };
+    expect(fromHref(browseHref(base, state))).toEqual(state);
+    expect(mainBrowseQuery(fromHref(browseHref(base, state))).cursor).toBe(token);
+    const model = modelFor(state, token);
+    expect(model.nextCursor).toBe(token);
+    expect(fromHref(model.next!)).toEqual(state);
+    expect(fromHref(model.first!)).toEqual({ ...state, cursor: null });
+  });
+
   test('keeps the year and all Conditions on next, first, sort and view links', () => {
     const state = selected(year);
     const model = modelFor(state);
