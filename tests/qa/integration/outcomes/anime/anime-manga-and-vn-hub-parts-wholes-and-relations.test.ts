@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import hub from '../../../../../scripts/qa/cases/outcomes/anime/anime-manga-and-vn-hub-parts-wholes-and-relations.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { readDatedAnimeHub, readWorkParts, readWorkWholes, readWorkRelations } from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
+import { readSuppliedContents } from '../../../../../apps/web/features/work-page/games-hub-recorded-page.ts';
+import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -24,6 +28,7 @@ const parts: Work[] = [];
 let privatePart: Work;
 let privateWhole: Work;
 let privateComposition: Composition;
+const recording = new OutcomeRecorder(hub);
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession, fields: Record<string, string> = {}) =>
   new URLSearchParams({
@@ -39,6 +44,7 @@ async function answer<T>(request: Promise<Response>, status = 200, context = '')
 
 beforeAll(async () => {
   sessions = await personaSessions();
+  await recording.prepare();
   const owner = sessions.owner;
   const operator = sessions.operator;
   // An explicit creation grant admits administrator media kinds. It grants
@@ -200,7 +206,7 @@ beforeAll(async () => {
   }
 }, 300_000);
 afterAll(async () => {
-  await sessions?.close();
+  try { await recording.publish(); } finally { await sessions?.close(); }
 });
 
 async function pages<T>(
@@ -225,7 +231,11 @@ async function pages<T>(
 }
 
 async function read(name: PersonaName) {
-  const person = sessions[name];
+  const session = sessions[name];
+  const sample = recording.session(name, session);
+  let request = 0;
+  const person: PersonaSession = { ...session,
+    main: (...args) => sample(`proof-${++request}`, ...args) };
   const expectedParts = name === 'owner' ? [privatePart, ...parts] : parts;
   for (const root of roots) {
     const base = `/v1/resources/${short(root.work)}`;
@@ -295,9 +305,45 @@ async function read(name: PersonaName) {
     );
 }
 
-outcomeTest(hub, 'visitor', () => read('visitor'));
-outcomeTest(hub, 'stranger', () => read('stranger'));
-outcomeTest(hub, 'member', () => read('member'));
-outcomeTest(hub, 'owner', () => read('owner'));
-outcomeTest(hub, 'moderator', () => read('moderator'));
-outcomeTest(hub, 'operator', () => read('operator'));
+/** Record the shared production readers with this persona's unchanged acting Person. */
+async function visit(name: PersonaName) {
+  const person = sessions[name];
+  const sample = recording.session(name, person);
+  for (const [index, work] of [...roots, parts[0]!, privateWhole].entries()) {
+    let request = 0;
+    const faults: unknown[] = [];
+    const fetcher: typeof fetch = async (input, init) => {
+      const url = new URL(String(input));
+      const path = url.pathname.slice(BFF_PREFIX.length) + url.search;
+      const body: unknown = init?.body === undefined ? undefined : JSON.parse(String(init.body));
+      try { return await sample(`visit-${index + 1}-${++request}`, init?.method ?? 'GET', path, body); }
+      catch (error) { faults.push(error); throw error; }
+    };
+    const main = browserMainApi('http://record.invalid', { anonymous: !person.actingSubject, fetcher });
+    const host = { main, actingSubject: person.actingSubject ?? undefined };
+    const id = short(work.work);
+    const page = await readDatedAnimeHub(main, host.actingSubject, id);
+    if (faults.length) throw faults[0];
+    if (!page.header.ok) continue;
+    await Promise.all([
+      readWorkParts(main, host.actingSubject, id, { limit: 50 }),
+      readWorkWholes(main, host.actingSubject, id),
+      readWorkRelations(main, host.actingSubject, id, { limit: 20 }),
+      readSuppliedContents(host, id, {}),
+      host.actingSubject ? mainTrackingApi(host.actingSubject, () => main).relations(work.work) : null,
+    ]);
+    if (faults.length) throw faults[0];
+  }
+}
+
+async function proveAndVisit(name: PersonaName) {
+  await read(name);
+  await visit(name);
+}
+
+outcomeTest(hub, 'visitor', () => proveAndVisit('visitor'), recording);
+outcomeTest(hub, 'stranger', () => proveAndVisit('stranger'), recording);
+outcomeTest(hub, 'member', () => proveAndVisit('member'), recording);
+outcomeTest(hub, 'owner', () => proveAndVisit('owner'), recording);
+outcomeTest(hub, 'moderator', () => proveAndVisit('moderator'), recording);
+outcomeTest(hub, 'operator', () => proveAndVisit('operator'), recording);
