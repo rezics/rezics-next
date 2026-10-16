@@ -27,7 +27,7 @@ function recordedStory(mode: 'created' | 'loading' | 'recovery' = 'created'): St
   return {
     beforeEach() {
       requests.length = 0; misses.length = 0; forgetReadingLanguages();
-      const labels = ['creation-preferences', 'creation-space', ...(mode === 'recovery' ? ['creation-space-replay'] : []),
+      const labels = ['creation-page-preferences', 'creation-page-concepts', 'creation-space', ...(mode === 'recovery' ? ['creation-space-replay'] : []),
         'creation-home', ...(mode === 'recovery' ? ['creation-home-replay'] : []), 'creation-address'];
       const replay = recordedFetch(record, 'owner', labels.map(label => ({
         label, state: mode === 'loading' && label === 'creation-space' ? 'loading' : 'populated',
@@ -99,7 +99,7 @@ function recordedStory(mode: 'created' | 'loading' | 'recovery' = 'created'): St
   };
 }
 
-function labelsFor(mode: 'created' | 'recovery') { return mode === 'recovery' ? 6 : 4; }
+function labelsFor(mode: 'created' | 'recovery') { return mode === 'recovery' ? 7 : 5; }
 
 export const Created: Story = recordedStory();
 export const Creating: Story = recordedStory('loading');

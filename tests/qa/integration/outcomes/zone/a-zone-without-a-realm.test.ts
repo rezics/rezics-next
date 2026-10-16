@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { AnswerRecordValidator, answerPersonas, answerRecord, type AnswerContract, type AnswerRecord } from '../../../../../scripts/api/answer-record.ts';
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
 import { uuidToSid } from '@rezics/model/address';
+import { discoveryApi } from '../../../../../apps/web/features/discover/api.ts';
 import { realmSiteCreationClient } from '../../../../../apps/web/features/communities/realm-site-creation-api.ts';
 import { realmFrameReads, zonePresentationReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
 import { browserZoneAuthoring, browserZoneRealmAttachment, loadCompleteZoneNavigation } from '../../../../../apps/web/features/zone-editor/api.ts';
@@ -385,13 +386,32 @@ async function qualify(name: PersonaName, proof: () => Promise<void>) {
     await within(60_000, 'API proof', proof);
     proofMs = Date.now() - started;
     visitStarted = Date.now();
-    await within(120_000, 'production visit', () => productionVisit(fixtures.get(name)!.site!, sessions[name]));
+    await within(120_000, 'production visit', async () => {
+      await creationEntryReads(name, sessions[name]);
+      await productionVisit(fixtures.get(name)!.site!, sessions[name]);
+    });
     completedVisits.add(name);
     if (name === 'operator' && independent.cells.operator?.state === 'pending' && operatorZoneRefused)
       throw new Error('Exact-mandated operator: showcase-editor 200, Zone read 404; production stops before editor authority');
   } finally {
     console.info(`[persona-timing] ${name} proofMs=${proofMs || Date.now() - started} visitMs=${visitStarted ? Date.now() - visitStarted : 0}`);
   }
+}
+
+/** The existing creation page mounts the Realm form's preferences and Concept picker beside the site action. */
+async function creationEntryReads(name: PersonaName, person: PersonaSession) {
+  if (!person.actingSubject) return; // The signed-out page contains only the sign-in action.
+  let label = 'creation-page-preferences';
+  const main = browserMainApi('https://record.invalid', { fetcher: (async (input, init) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    return capture(name, person, label, request.method, url.pathname.replace(/^\/api\/main/, '') + url.search);
+  }) as typeof fetch });
+  const preferences = await main.v1.me['person-preferences'].get({ query: { actingSubject: person.actingSubject } });
+  expect(preferences.error).toBeNull();
+  label = 'creation-page-concepts';
+  const topics = await discoveryApi(main, 'en').concepts({ q: '' });
+  expect(topics.profile).toBe('concept-search-v1');
 }
 
 const requestLabels = new AsyncLocalStorage<(method: string, path: string) => string>();
