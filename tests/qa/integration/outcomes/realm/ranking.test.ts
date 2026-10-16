@@ -64,7 +64,8 @@ async function captureVisit(sessions: PersonaSessions, name: PersonaName, label:
   const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init), url = new URL(request.url);
     if (!url.pathname.startsWith(`${BFF_PREFIX}/`)) throw new Error(`Unexpected visit request: ${url.pathname}`);
-    const person = request.credentials === 'omit' ? sessions.visitor : sessions[name];
+    // Bun's Request currently reports include even when constructed with omit.
+    const person = (init?.credentials ?? request.credentials) === 'omit' ? sessions.visitor : sessions[name];
     const response = await recording.session(name, person)(`${label}-${++ordinal}`, request.method,
       url.pathname.slice(BFF_PREFIX.length) + url.search, undefined, undefined,
       { headers: Object.fromEntries(request.headers.entries()), settle: false });

@@ -28,8 +28,8 @@ export function rankingVisitHost(fetcher: typeof fetch, signedIn: boolean): Real
     const request = new Request(input, init), url = new URL(request.url);
     if (url.origin === origin && url.pathname.startsWith('/v1/')) {
       url.pathname = `${BFF_PREFIX}${url.pathname}`;
-      return fetcher(new Request(url, { ...init, headers: request.headers, method: request.method,
-        signal: request.signal, credentials: 'omit' }));
+      return fetcher(url, { ...init, headers: request.headers, method: request.method,
+        signal: request.signal, credentials: 'omit' });
     }
     return fetcher(input, init);
   }) as typeof fetch;
