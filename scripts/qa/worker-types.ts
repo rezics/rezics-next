@@ -10,7 +10,7 @@ export const WORKER_TYPE_PROJECTS = [
   ...TYPECHECK_WORKSPACES.map(([workspace, roots]) => ({ workspace, root: roots[0]!,
     project: `${roots[0]}${workspace === 'apphost' ? 'tsconfig.apphost.json' : 'tsconfig.json'}`, task: `${workspace}:typecheck` })),
   ...['apps/about/', 'packages/zone-sdk/', 'packages/wiki-toolkit/'].map(root => ({ workspace: root.split('/')[1]!, root,
-    project: `${root}tsconfig.json`, task: undefined })),
+    project: `${root}tsconfig.json`, task: root === 'apps/about/' ? 'about:typecheck' : undefined })),
 ];
 
 /** Membership and import resolution only: no whole-program ASTs, libraries or type-checker state.
@@ -89,7 +89,7 @@ export function workerTypePlans(root: string, changed: readonly string[], graph?
     const broadDeclaration = touched.some(file => /\.d\.[cm]?ts$/.test(file)
       && (affected.size >= Math.max(1, entries.size / 2) || !ts.isExternalModule(
         ts.createSourceFile(file, scanned.get(file)?.text ?? '', ts.ScriptTarget.Latest, false))));
-    plans.push({ workspace, project, ...(!configChanged && workspace !== 'apphost' && !touched.some(file => ambient.has(file)) && !broadDeclaration && selected.length < entries.size
+    plans.push({ workspace, project, ...(!configChanged && workspace !== 'apphost' && workspace !== 'about' && !touched.some(file => ambient.has(file)) && !broadDeclaration && selected.length < entries.size
       ? { files: selected.map(file => relative(root, file)).sort() } : {}) });
   }
   return plans;
