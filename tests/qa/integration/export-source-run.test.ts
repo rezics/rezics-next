@@ -108,6 +108,7 @@ test('an editor seals, reads and exports Open Library edition evidence through t
     expect(release.externalReleases.every(link => link.captureDigest === digest)).toBe(true);
     expect(JSON.stringify(release)).not.toContain('sourcePrincipalId');
     expect((await call('POST', '/v1/fixed-releases', intent, key)).status).toBe(200);
+    await grant(`work:read:${work.work}`, 'work.read');
     const read = await call('GET', `/v1/fixed-releases/${release.release.slice(-36)}?actingSubject=${encodeURIComponent(actor)}`);
     expect(read.status, await read.clone().text()).toBe(200);
     expect((await read.json() as typeof release).externalReleases).toEqual(release.externalReleases);
@@ -132,9 +133,9 @@ test('an editor seals, reads and exports Open Library edition evidence through t
       expect(download.status, await download.clone().text()).toBe(200);
       expect((await download.json() as typeof saved).manifestDigest).toBe(saved.manifestDigest);
       expect((await call('GET', `/v1/exports/${saved.manifestId}`, undefined, randomUUID(), account.tokenB)).status).toBe(403);
-      await accessPool.query('UPDATE access.permission_grant SET active=false WHERE recipient_subject=$1 AND scope_id=$2',
-        [actor, `export:${selection.reference}`]);
+      await accessPool.query('UPDATE access.principal SET active=false WHERE id=$1', [principalId]);
       expect((await call('GET', `/v1/exports/${saved.manifestId}`)).status).toBe(403);
+      await accessPool.query('UPDATE access.principal SET active=true WHERE id=$1', [principalId]);
     }
   } finally {
     if (previousGroups === undefined) delete process.env.REZICS_PLATFORM_OPEN_GROUPS;
