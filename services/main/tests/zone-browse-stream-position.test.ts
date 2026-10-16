@@ -13,8 +13,8 @@ function projection(checkpoint: string, coverage: RelayHandoffPosition, nextBatc
       queries.push({ sql, values });
       if (sql.includes('FROM relay.checkpoint')) {
         expect(sql).toContain('FROM relay.checkpoint');
-        expect(sql).not.toContain('WHERE stream_scope =');
-        expect(values).toBeUndefined();
+        expect(sql).toContain('WHERE stream_scope = $1 AND data_epoch = $2');
+        expect(values).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch']);
         return { rows: [{ stream_scope: coverage.streamScope, data_epoch: coverage.dataEpoch,
           sequence: coverage.sequence }] };
       }
