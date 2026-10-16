@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { qaFailure, recordedFailure, recordQaFailure, type FailureClass } from './failure.ts';
+import { qaFailure, testFailureClass, recordedFailure, recordQaFailure, type FailureClass } from './failure.ts';
 import { command } from './core.ts';
 
 const cases: [string, Parameters<typeof qaFailure>[0], Parameters<typeof qaFailure>[1], boolean, FailureClass][] = [
@@ -53,4 +53,17 @@ test('tier and integration-file artifacts carry each recorded class', async () =
       expect(report.tests[0].failureClass).toBe(failureClass);
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+
+test('each integration file keeps its own cause within a mixed-failure shard', () => {
+  const cases = [
+    { failed: true, name: 'assertion', detail: 'Expected 1, got 2' },
+    { failed: true, name: 'connection', detail: 'connect ECONNREFUSED' },
+    { failed: true, name: 'deadline', timeout: true },
+    { failed: true, name: 'QA file did not complete' },
+  ];
+  expect(cases.map(test => testFailureClass({}, [test]))).toEqual(['assertion', 'environment', 'timeout', 'harness']);
+  expect(testFailureClass({ output: 'expected ECONNREFUSED from a passing case' }, [cases[0]!])).toBe('assertion');
+  expect(testFailureClass({ timedOut: true }, [cases[0]!])).toBe('timeout');
 });

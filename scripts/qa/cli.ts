@@ -1,4 +1,4 @@
-import { qaFailure, recordQaFailure, type FailureClass } from './failure.ts';
+import { qaFailure, recordQaFailure, testFailureClass, type FailureClass } from './failure.ts';
 import { randomUUID } from 'node:crypto';
 import { createOwnerErasureCleanupClock, ownerErasureCleanupShard } from './owner-erasure-cleanup.ts';
 import { assertRetainedSources } from './retained-preflight.ts';
@@ -121,8 +121,7 @@ function fail(message: string, failureClass: FailureClass = 'harness', tier?: Ti
 }
 function testFailure(result: { timedOut?: boolean; output?: string }, tier: Tier): FailureClass {
   const xml = join(directory, `${tierArtifactName(tier)}.xml`);
-  const failed = existsSync(xml) && parseJUnit(readFileSync(xml, 'utf8'), tier).some(test => test.failed && test.name !== 'QA file did not complete' && !test.preparationFailure);
-  return qaFailure(result, 'test', failed);
+  return testFailureClass(result, existsSync(xml) ? parseJUnit(readFileSync(xml, 'utf8'), tier) : []);
 }
 const integrationBudgetNotes: string[] = [];
 const stackLeaseNotes: string[] = [];
@@ -609,6 +608,8 @@ async function runShardWork(
       record.failureClass ??= qaFailure({ timedOut: run.timedOut, output: run.xml },
         record.stage === 'test' ? 'harness' : 'environment');
       noteFailure(record.failureClass, tier);
+      if (record.stage !== 'test') record.fileFailures = Object.fromEntries(files.map(file => [file, record.failureClass!]));
+      else for (const file of record.missingFiles ?? []) (record.fileFailures ??= {})[file] ??= run.timedOut ? 'timeout' : 'harness';
     }
     if (record.stage !== 'test') {
       const results = completeFileResults(run.xml ?? '', files, tier, {
@@ -954,9 +955,13 @@ async function runShardWork(
     childAdmissionMs += result.admissionWaitMs;
     output.push(result.output);
     const empty = !result.ok && !result.timedOut && matchedNoTests(result.output);
+    const observed = existsSync(batchFile) ? parseJUnit(readFileSync(batchFile, 'utf8'), tier) : [];
+    for (const file of batch) {
+      const failed = observed.filter(test => test.file === file && test.failed);
+      if (failed.length) (record.fileFailures ??= {})[file] ??= testFailureClass({ output: result.output }, failed);
+    }
     if (!result.ok && !empty) {
-      record.failureClass ??= qaFailure(result, 'test',
-        existsSync(batchFile) && parseJUnit(readFileSync(batchFile, 'utf8'), tier).some(test => test.failed && test.name !== 'QA file did not complete' && !test.preparationFailure));
+      record.failureClass ??= testFailureClass(result, observed);
       noteFailure(record.failureClass, tier);
     }
     noMatch &&= empty;
@@ -973,6 +978,7 @@ async function runShardWork(
         reason: result.timedOut ? 'Shard timed out before this file completed' : undefined,
       },
     );
+    for (const file of results.missing) (record.fileFailures ??= {})[file] ??= result.timedOut ? 'timeout' : 'harness';
     commandOk &&= !results.missing.length;
     suites.push(...junitSuites(results.xml).map((suite) => suite.xml));
     // Single-file commands include hooks, database cloning and process startup.

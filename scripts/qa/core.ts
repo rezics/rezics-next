@@ -401,7 +401,9 @@ export function writeSummary(directory: string, report: {
     declaredCaseCoverage: Object.fromEntries(report.caseCoverage ?? []),
     tests: report.tests.map(test => ({ ...test, ids: titleIds(test.name),
       ...(test.failed ? { failureClass: report.tiers.find(tier => tier.name === test.tier)?.shards
-        ?.find(shard => shard.status === 'failed' && shard.files.includes(test.file))?.failureClass
+        ?.find(shard => shard.status === 'failed' && shard.files.includes(test.file))?.fileFailures?.[test.file]
+        ?? report.tiers.find(tier => tier.name === test.tier)?.shards
+          ?.find(shard => shard.status === 'failed' && shard.files.includes(test.file))?.failureClass
         ?? report.tiers.find(tier => tier.name === test.tier)?.failureClass ?? report.failureClass ?? 'harness' } : {}),
       status: test.failed ? 'failed' : test.skipped ? 'skipped' : 'passed' })),
     unmappedTests: report.tests.filter(test => titleIds(test.name).some(id => !ids[id]))
@@ -435,6 +437,7 @@ export interface ShardRecord {
   files: string[];
   status: 'passed' | 'failed';
   failureClass?: FailureClass;
+  fileFailures?: Record<string, FailureClass>;
   stage: 'stack' | 'bootstrap' | 'test';
   elapsedMs?: number;
   isolation?: boolean;

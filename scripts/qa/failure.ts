@@ -22,3 +22,17 @@ export function recordQaFailure(failureClass: FailureClass, message: string,
   print(`QA failure class: ${failureClass}`);
   return `${failureClass}: ${message}`;
 }
+
+interface FailedTestEvidence {
+  failed: boolean; name: string; detail?: string; timeout?: boolean; preparationFailure?: boolean;
+}
+
+/** Use failing-case evidence, so an expected connection error in a passing case cannot change the cause. */
+export function testFailureClass(result: { timedOut?: boolean; output?: string }, tests: readonly FailedTestEvidence[]): FailureClass {
+  if (result.timedOut) return 'timeout';
+  const failed = tests.filter(test => test.failed);
+  if (failed.some(test => test.timeout)) return 'timeout';
+  if (failed.some(test => test.preparationFailure)) return 'environment';
+  const ran = failed.filter(test => test.name !== 'QA file did not complete');
+  return qaFailure({ output: ran.length ? ran.map(test => test.detail ?? '').join('\n') : result.output }, 'test', ran.length > 0);
+}
