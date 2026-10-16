@@ -74,8 +74,10 @@ export function MangaTwoDeviceRecordedPage({ persona, locale = 'en', state = 'un
   const t = messages[locale];
   const facet = frame?.facets.ok ? classificationFacet(frame.facets.data) : null;
   const view = { workRef: mangaWorkId(persona), scope: { kind: 'global' as const }, realms: frame?.adoptions.ok
-    ? frame.adoptions.data.items.flatMap(item => {
-      const id = idOf(item.realm); return id ? [{ id, name: item.name }] : [];
+    ? frame.adoptions.data.items.map(item => {
+      const id = idOf(item.realm);
+      if (!id) throw new Error(`Recorded adoption has no native Realm identity: ${item.realm}`);
+      return { id, name: item.name };
     }) : [] };
   return <div className="grid min-w-0 gap-3" lang={locale}>
     <div className="px-4 pt-4 sm:px-6">

@@ -106,7 +106,11 @@ async function playPage({ canvasElement, args, parameters }: {
         await expectSelected(second, label, false, locale);
         await expect(within(second).findByRole('button', { name: t.markChapterRead })).resolves.toBeEnabled();
       }
-      second.scrollIntoView({ block: 'start' });
+      if (parameters.until === 'conflict') {
+        within(second).getByRole('alert').scrollIntoView({ block: 'center' });
+      } else if (args.hold) {
+        within(second).getByRole('status').scrollIntoView({ block: 'center' });
+      } else second.scrollIntoView({ block: 'start' });
     }
   }
   // Unmatched requests are surfaced as an alert by the page instead of silently becoming an empty panel.
