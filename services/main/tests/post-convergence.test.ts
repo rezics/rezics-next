@@ -24,6 +24,10 @@ test('Work header hydration stays a Work read and rejects a Post without a Work 
       environment: { fuseki: { query: async () => ({ results: { bindings: [] } }) } } },
     query: async (query: string, maximumRows: number) => {
       queries.push(query);
+      if (query.includes('SELECT ?text WHERE')) {
+        expect(maximumRows).toBe(2);
+        return [];
+      }
       expect(maximumRows).toBe(9);
       return [
         {
@@ -43,7 +47,8 @@ test('Work header hydration stays a Work read and rejects a Post without a Work 
   expect(header).toMatchObject({ profile: 'work-read-v1', id: work, title: { value: 'Book' },
     publicationState: 'unpublished' });
   expect(header).not.toHaveProperty('partOf');
-  expect(queries).toHaveLength(1);
+  expect(queries).toHaveLength(2);
+  expect(queries[1]).toContain('schema:description ?text');
   expect(queries[0]).not.toContain('rv:OccurrencePlacement');
   const postSession = { ...session, query: async () => [] } as unknown as WorkReadSession;
   await expect(readWorkHeader(postSession, work)).rejects.toBeInstanceOf(WorkReadMissing);

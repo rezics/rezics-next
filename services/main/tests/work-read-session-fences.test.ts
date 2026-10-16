@@ -76,12 +76,16 @@ function fixture() {
 
 function headerFixture() {
   const f = fixture();
-  const header = { published: false, selection: null as string | null,
+  const header = { published: false, description: null as string | null, selection: null as string | null,
     profile: 'a'.repeat(64), otherProfile: 'b'.repeat(64),
     stats: { chapterCount: 2, wordCount: 200, lastUpdatedAt: null as string | null },
     unrelatedStats: { chapterCount: 1, wordCount: 20, lastUpdatedAt: null as string | null } };
   const originalQuery = f.graph.query.bind(f.graph);
   f.graph.query = async body => {
+    if (body.includes('SELECT ?text WHERE')) {
+      f.state.calls++;
+      return result(header.description ? [{ text: { ...term(header.description), 'xml:lang': 'en' } }] : []);
+    }
     if (body.includes('SELECT ?head ?main ?mainHead')) {
       f.state.calls++;
       return result([{ head: term(f.state.head, 'uri'), main: term(f.state.main, 'uri'),
@@ -139,7 +143,7 @@ test('ordinary Work header dependencies ignore unrelated writes and keep a const
   expect(new Set(costs).size).toBe(1);
 });
 
-for (const changed of ['publication', 'language', 'profile', 'statistics'] as const) {
+for (const changed of ['publication', 'language', 'profile', 'statistics', 'description'] as const) {
   test(`ordinary Work headers replay a selected ${changed} owner dependency without opting into a local cursor basis`, async () => {
     const f = headerFixture(); let attempts = 0;
     const page = await workRead(f.deps, f.request, {}, async session => {
@@ -149,6 +153,7 @@ for (const changed of ['publication', 'language', 'profile', 'statistics'] as co
         if (changed === 'publication') f.header.published = true;
         else if (changed === 'language') f.header.selection = id(40);
         else if (changed === 'profile') f.header.profile = 'e'.repeat(64);
+        else if (changed === 'description') f.header.description = 'Current catalogue synopsis';
         else f.header.stats.wordCount = 500;
       }
       return page;
@@ -158,6 +163,8 @@ for (const changed of ['publication', 'language', 'profile', 'statistics'] as co
     if (changed === 'publication') expect(page.publicationState).toBe('published');
     if (changed === 'language') expect(page.selectedLanguage).toBe('en');
     if (changed === 'statistics') expect(page.wordCount).toBe(500);
+    if (changed === 'description') expect(page.description).toMatchObject({
+      value: 'Current catalogue synopsis', language: 'en', basis: 'fallback' });
   });
 }
 

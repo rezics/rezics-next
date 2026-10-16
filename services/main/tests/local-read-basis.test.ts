@@ -44,6 +44,7 @@ class WorkGraph extends FusekiClient {
   }
   override async query(query: string): Promise<SparqlResult> {
     const control = { epoch: term('epoch'), sequence: term(String(this.sequence)) };
+    if (query.includes('SELECT ?text WHERE')) return result([]);
     if (query.includes('SELECT ?structuredDecision ?structuredSource')) return result([]);
     if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) return result(this.erased ? [control] : [{ ...control,
       r: term(work, 'uri'), type: term('work'), work: term(work, 'uri'), head: term(revision, 'uri'),

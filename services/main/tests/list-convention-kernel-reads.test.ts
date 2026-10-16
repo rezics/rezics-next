@@ -98,6 +98,7 @@ test('post identifications are complete only when the page bound does not cut th
       return { results: { bindings: [{ head: uri(id(900)), main: uri(id(901)), mainHead: uri(id(902)),
         public: literal('true') }] } };
     }
+    if (query.includes('SELECT ?text WHERE')) return { results: { bindings: [] } };
     if (query.includes('?selection ?language')) return { results: { bindings: [] } };
     throw new Error(`Unexpected graph probe: ${query.slice(0, 180)}`);
   };

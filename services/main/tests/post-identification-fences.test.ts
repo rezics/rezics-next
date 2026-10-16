@@ -57,6 +57,8 @@ function fixture() {
     if (body.includes('SELECT ?work ?main ?structure (MIN')) return result([{ work: uri(works[0]!),
       main: uri(id(30)), structure: uri(id(31)), occurrence: uri(id(32)) }]);
     if (body.includes('SELECT ?relation WHERE')) return result([{ relation: uri(relation) }]);
+    // These Works have no catalogue synopsis before metadata is authored.
+    if (body.includes('SELECT ?text WHERE')) return result([]);
     if (body.includes('SELECT ?head ?main ?mainHead')) {
       const index = body.includes(`<${works[1]}>`) ? 1 : 0;
       return result([{ head: uri(id(40 + index)), main: uri(id(50 + index)),
