@@ -135,7 +135,7 @@ test('a publication rights refusal is stored distinctly and returns the same pro
     const registered = admission(input, { state: replayed ? 'sealed' : 'claimed', dispatchEligible: !replayed, replayed });
     const response = await changeAdmittedWorkStructurePublication(env,
       { verify: async () => ({ issuer: actor, subject: actor }) }, {
-        register: async () => registered, claim: async () => registered,
+        register: async () => registered, claim: async () => ({ ...registered, claimedAt: '2026-10-16T00:00:00Z' }),
         recordGraphOutcome: async () => {},
       }, new Request('https://main.invalid/v1/work-publications'),
       { ...input, idempotencyKey: 'publication-one' }, async dispatch => dispatch(true))
@@ -152,7 +152,8 @@ test('dependency preparation preserves a publication rights refusal instead of r
   const env = environment(async query => query.includes('ASK') ? { boolean: true } : { results: { bindings: [] } });
   const response = await changeAdmittedWorkStructurePublication(env,
     { verify: async () => ({ issuer: actor, subject: actor }) }, {
-      register: async () => registered, claim: async () => registered, recordGraphOutcome: async () => {},
+      register: async () => registered, claim: async () => ({ ...registered, claimedAt: '2026-10-16T00:00:00Z' }),
+      recordGraphOutcome: async () => {},
     }, new Request('https://main.invalid/v1/work-publications'),
     { ...publishInput, idempotencyKey: 'publication-one' }, async dispatch => dispatch(true), async () => {
       checkedWorkStructurePublicationReceipt(cancelledReceipt(publishInput, 'rights-unavailable'),
