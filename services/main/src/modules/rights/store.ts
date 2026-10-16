@@ -1,4 +1,5 @@
-import { contentConnection } from '../../../../content/src/connection.ts';
+import type { VerifiedSourceImportBinding } from '../source/native-work-adoption.ts';
+import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
@@ -328,7 +329,8 @@ export class RightsStore {
 
   private async transaction<T>(work: (client: PoolClient) => Promise<T>,
     commit?: (effect: () => Promise<void>) => Promise<void>): Promise<T> {
-    const client = await this.content.connect().catch(() => { throw new RightsUnavailable('rights owner is unavailable'); });
+    const borrowed = contentSessionClient(this.content);
+    const client = borrowed ?? await this.content.connect().catch(() => { throw new RightsUnavailable('rights owner is unavailable'); });
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -341,7 +343,7 @@ export class RightsStore {
     } catch (error) {
       await rollback(client);
       throw normalize(error);
-    } finally { client.release(); }
+    } finally { if (!borrowed) client.release(); }
   }
 
   private async findMaterial(client: PoolClient, material: MaterialScope): Promise<{ id: string;
@@ -364,27 +366,22 @@ export class RightsStore {
         ASSESS_ACTION, authority, () => new RightsDenied('rights assessment authority ended'), effect));
   }
 
-  /** The Source owner already admitted this exact Open Library title. Its
-   * immutable binding supplies the principal, actor and source identity;
-   * callers cannot use an arbitrary Work or claim a licence for user text. */
-  async assessOpenLibraryImport(work: string, externalId: string): Promise<void> {
-    const bindings = await this.content.query<{ id: string; principal_id: string; acting_subject: string }>(`
-      SELECT b.id, b.principal_id, i.acting_subject FROM source.native_work_binding b
-      JOIN source.native_work_adoption_intent i ON i.id = b.intent_id
-      JOIN source.native_work_proposal p ON p.id = b.proposal_id
-      JOIN source.observation o ON o.id = p.observation_id
-      JOIN source.record r ON r.id = o.record_id
-      WHERE b.work = $1 AND r.provider = 'open-library' AND r.namespace = 'work' AND r.external_id = $2
-        AND NOT EXISTS (SELECT 1 FROM source.native_work_support_withdrawal w WHERE w.binding_id = b.id)
-      LIMIT 2`, [work, externalId]);
-    const binding = bindings.rows[0];
-    if (bindings.rows.length !== 1 || !binding) throw new RightsUnavailable('Imported source binding is unavailable');
-    const { importedRightsAssessments } = await import('./import-policy.ts');
-    const assessments = importedRightsAssessments({ provider: 'open-library',
-      url: `https://openlibrary.org/works/${externalId}` }, work);
-    for (const [index, assessment] of assessments.entries()) await this.writeAssessment(binding.principal_id,
-      { ...assessment, actingSubject: binding.acting_subject,
-        idempotencyKey: `source-import:${binding.id}:${index}` });
+  /** Source verifies admission; importer policy supplies materials and uses.
+   * Rights owns the same assessment, head, obligation and retry persistence as
+   * operator assessments. The binding key survives partial import recovery. */
+  async assessSourceImport(binding: VerifiedSourceImportBinding,
+    assessments: ReadonlyArray<Omit<AssessmentInput, 'actingSubject' | 'idempotencyKey'>>): Promise<void> {
+    for (const assessment of assessments) {
+      if (assessment.material.scopeKind !== 'work' || assessment.material.workId !== binding.work
+        || !['record', 'synopsis'].includes(assessment.material.component)) {
+        throw new RightsInvalid('Imported assessment differs from the admitted material');
+      }
+    }
+    for (const [index, assessment] of assessments.entries()) {
+      await binding.assertActive();
+      await this.writeAssessment(binding.principalId, { ...assessment, actingSubject: binding.actingSubject,
+        idempotencyKey: `source-import:${binding.binding}:${index}` });
+    }
   }
 
   private async writeAssessment(principalId: string, input: AssessmentInput,

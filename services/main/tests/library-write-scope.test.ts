@@ -270,12 +270,15 @@ test('retained row adoption admits library writers only with catalogue creation 
       access: { canReadAsBaselineMember: async () => true, activePrincipalId: async () => 'reader' },
       libraryFiles: { page: async () => ({ rows: [row], more: false }) },
       libraryImport: {
-        withOpenLibraryWork: async (_work: string, action: () => Promise<Response>) => action(),
-        adoptedOpenLibraryWork: async () => { adoptedLookups++; return work; },
+        withSourceRecord: async (_source: unknown, action: () => Promise<Response>) => action(),
       },
       sourceIntake: { replay: async () => null },
-      rights: { store: { assessOpenLibraryImport: async (adopted: string, workId: string) => {
-        expect([adopted, workId]).toEqual([work, 'OL45804W']); assessed++;
+      sourceAdoptions: { importBinding: async (source: unknown) => {
+        expect(source).toEqual({ provider: 'open-library', namespace: 'work', externalId: 'OL45804W' });
+        adoptedLookups++; return { work };
+      } },
+      rights: { store: { assessSourceImport: async (binding: { work: string }, assessments: unknown[]) => {
+        expect(binding.work).toBe(work); expect(assessments).toHaveLength(6); assessed++;
       } } },
     });
     const response = await respond(libraryImportsRoutes(state.deps), request(operation));

@@ -4,7 +4,7 @@ import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { recordImportJobProgress } from './job-context.ts';
 
-const WORK = /^OL[1-9][0-9]{0,11}W$/;
+import type { SourceRecordIdentity } from '../source/native-work-adoption.ts';
 const AGENT = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const READER_IMPORT_COST = { sourceSearchesPerDay: 200, acquisitionsPerDay: 50,
   sourceBindings: 2, batchRows: 5_000, rowsPerRequest: 8,
@@ -182,10 +182,11 @@ export class ReaderLibraryImportStore {
     }, signal);
   }
 
-  async withOpenLibraryWork<T>(workId: string, action: () => Promise<T>): Promise<T> {
-    if (!WORK.test(workId)) throw new ReaderImportUnavailable('invalid Open Library Work');
+  async withSourceRecord<T>(source: SourceRecordIdentity, action: () => Promise<T>): Promise<T> {
+    if ([source.provider, source.namespace, source.externalId].some(value => !value || value.length > 500
+      || /[\u0000-\u001f\u007f]/.test(value))) throw new ReaderImportUnavailable('invalid source identity');
     return withContentSession(this.pool, async client => {
-      const lock = `reader-open-library-work:${workId}`;
+      const lock = `reader-source-record:${JSON.stringify([source.provider, source.namespace, source.externalId])}`;
       let held = false;
       try {
         // A concurrent reader waits for the first adoption and then sees its
@@ -197,7 +198,7 @@ export class ReaderLibraryImportStore {
         return await action();
       } catch (error) {
         if ((error as { code?: string }).code === '57014') {
-          throw new ReaderImportUnavailable('Open Library Work addition is still pending');
+          throw new ReaderImportUnavailable('Source record addition is still pending');
         }
         throw error;
       } finally {
@@ -208,21 +209,6 @@ export class ReaderLibraryImportStore {
         }
       }
     });
-  }
-
-  /** A retained source binding, irrespective of its original reader, supplies
-   * the canonical native Work. Multiple earlier bindings are refused. */
-  async adoptedOpenLibraryWork(workId: string): Promise<string | null> {
-    if (!WORK.test(workId)) throw new ReaderImportUnavailable('invalid Open Library Work');
-    const rows = await contentConnection(this.pool).query<{ work: string }>(`
-      SELECT DISTINCT b.work FROM source.record r
-      JOIN source.observation o ON o.record_id = r.id
-      JOIN source.native_work_proposal p ON p.observation_id = o.id
-      JOIN source.native_work_binding b ON b.proposal_id = p.id
-      WHERE r.provider = 'open-library' AND r.namespace = 'work' AND r.external_id = $1
-      LIMIT ${READER_IMPORT_COST.sourceBindings}`, [workId]);
-    if (rows.rows.length > 1) throw new ReaderImportUnavailable('Open Library Work has multiple native bindings');
-    return rows.rows[0]?.work ?? null;
   }
 
   async takeBudget(agent: string, kind: 'search' | 'acquisition', now = new Date()): Promise<void> {

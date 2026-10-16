@@ -326,7 +326,7 @@ export async function composeMain(input: ComposeMainInput) {
   const media = { store: new MediaStore(contentPool, content, matcherMode), content,
     sourceCoverEvidence: new SourceCoverEvidenceVerifier(sourceIntake), objects: mediaObjects };
   const requiredMatcher = requiredSafetyMatcher(matcherMode);
-  const account = new AccountAssertionVerifier({
+  const account = input.overrides?.account ?? new AccountAssertionVerifier({
     issuer: config.ACCOUNT_ISSUER, audience: config.ACCOUNT_MAIN_RESOURCE,
     jwksUrl: config.ACCOUNT_JWKS_URL, introspectUrl: config.ACCOUNT_INTROSPECT_URL,
     clientId: config.ACCOUNT_MAIN_CLIENT_ID, clientSecret: config.ACCOUNT_MAIN_CLIENT_SECRET,

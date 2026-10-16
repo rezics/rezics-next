@@ -173,7 +173,7 @@ test('Open Library acquisition lends its lock connection to Source evidence and 
   const conversions = new OpenLibraryConversionStore(pool, intake);
   const proposals = new SourceNativeWorkProposalStore(pool, {} as never, conversions);
   const adoptions = new SourceNativeWorkAdoptionStore(pool, proposals, {} as never, {} as never, {} as never);
-  await new ReaderLibraryImportStore(pool).withOpenLibraryWork('OL123W', async () => {
+  await new ReaderLibraryImportStore(pool).withSourceRecord({ provider: 'open-library', namespace: 'work', externalId: 'OL123W' }, async () => {
     expect(await intake.replay(owner, 'source-key')).toBeNull();
     expect(await conversions.read(owner, owner)).toBeNull();
     expect(await proposals.read(owner, owner)).toBeNull();

@@ -46,15 +46,6 @@ reference, with admitted role vocabulary, keeping source-reported and confirmed
 status apart. Proof: a non-Open-Library contributor with a non-author role
 appears in public and discovery reads.
 
-Automatic rights assessment for reader imports reconstructs Source authority
-through an Open Library join inside `rights/store.ts`. Source should verify the
-admitted binding and importer policy supply the assessment input, while Rights
-keeps persistence and idempotency. Library import matching admits only ISBN and
-VNDB identifiers and chooses Open Library unless VNDB applies
-(`library-import/match.ts`, `reader-import.ts`, `open-library.ts`). It should use
-the generic Release identifier lookup for every admitted identifier, with source
-selection in reviewed mappings. Proof: a MAL-identified row matches and adopts.
-
 ## Publication, Structure and types
 
 Sourced structured publication interprets Recipe inside Work publication. It

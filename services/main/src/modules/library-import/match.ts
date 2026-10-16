@@ -1,3 +1,4 @@
+import { libraryIdentifier, librarySourceQueries } from './identifier-mappings.ts';
 import type { ReaderLibraryImportStore } from './reader-import.ts';
 import { ReaderImportUnavailable } from './reader-import.ts';
 import { FILE_IMPORT_COST, type CanonicalRow } from './formats/contract.ts';
@@ -38,22 +39,36 @@ export async function matchLibraryRow(store: ReaderLibraryImportStore, request: 
     return { kind: response.ok ? 'matched' : 'not-found', work: response.ok ? row.work ?? native : null,
       target: row.target, candidates: [], truncated: false, openLibrary: [],openLibraryAvailability: 'not-requested' };
   }
-  for (const identifier of row.identifiers.filter(i => i.provider === 'isbn13' || i.provider === 'https://vndb.org/vn')) {
-    const query = new URLSearchParams({ actingSubject: agent, limit: '20', ...(identifier.provider === 'isbn13'
-      ? { isbn13: identifier.value } : { provider: identifier.provider, identifier: identifier.value }) });
+  const identifiers = row.identifiers.flatMap(identifier => {
+    const admitted = libraryIdentifier(identifier);
+    return admitted ? [admitted] : [];
+  });
+  const identified = new Map<string, { candidate: ImportCandidate; targets: Set<string> }>();
+  const releaseTargets = new Set<string>();
+  let incomplete = false;
+  for (const { mapping, lookup } of identifiers) {
+    const query = new URLSearchParams({ actingSubject: agent, limit: '20', ...lookup });
     const page = await read<{ items: Array<{ id: string; title: { value: string }; coverage: Array<{ work: string }> }>; nextCursor: string | null }>(
       store,request,`/v1/releases?${query}`);
-    const candidates = page.items.flatMap(r => r.coverage.map(c => ({ work: c.work, target: r.id,
-      title: row.title, creators: row.creators })));
-    const distinct = [...new Map(candidates.map(c => [c.work,c])).values()];
-    // A VN identifier identifies the Work, never an arbitrary first release.
-    // Even ISBN evidence with several native releases does not choose a grain.
-    const exactTarget = identifier.provider === 'isbn13' && new Set(candidates.map(c => c.target)).size === 1
-      ? candidates[0]?.target ?? null : null;
-    if (distinct.length) return { kind: distinct.length === 1 && !page.nextCursor ? 'matched' : 'ambiguous',
-      work: distinct.length === 1 && !page.nextCursor ? distinct[0]!.work : null,
-      target: distinct.length === 1 && !page.nextCursor ? exactTarget : null,
-      candidates: distinct, truncated: !!page.nextCursor, openLibrary: [],openLibraryAvailability: 'not-requested' };
+    for (const release of page.items) for (const covered of release.coverage) {
+      if (mapping.grain === 'release') releaseTargets.add(release.id);
+      let found = identified.get(covered.work);
+      if (!found && identified.size < FILE_IMPORT_COST.candidates) {
+        found = { candidate: { work: covered.work, target: null, title: row.title, creators: row.creators }, targets: new Set() };
+        identified.set(covered.work, found);
+      }
+      if (!found) incomplete = true;
+      else if (mapping.grain === 'release') found.targets.add(release.id);
+    }
+    incomplete ||= !!page.nextCursor;
+  }
+  const distinct = [...identified.values()].map(({ candidate, targets }) => ({ ...candidate,
+    target: targets.size === 1 ? [...targets][0]! : null }));
+  if (distinct.length || incomplete) {
+    const matched = distinct.length === 1 && !incomplete;
+    return { kind: matched ? 'matched' : 'ambiguous', work: matched ? distinct[0]!.work : null,
+      target: matched && releaseTargets.size === 1 ? [...releaseTargets][0]! : null,
+      candidates: distinct, truncated: incomplete, openLibrary: [],openLibraryAvailability: 'not-requested' };
   }
   const titleQuery = row.title.replace(/\s+/gu,' ').trim();
   if (titleQuery) {
@@ -79,10 +94,8 @@ export async function matchLibraryRow(store: ReaderLibraryImportStore, request: 
     cursor = page.next; if (!cursor) break;
   }
   const match = chooseCandidates(row,candidates,!!cursor);
-  if (match.kind === 'not-found' && titleQuery && !row.identifiers.some(i => i.provider === 'https://vndb.org/vn')) {
-    const isbn = row.identifiers.find(i => i.provider === 'isbn13')?.value;
-    const queries: { actingSubject: string; isbn?: string; title?: string; author?: string }[] = [...(isbn ? [{ actingSubject: agent,isbn }] : []),{ actingSubject: agent,title: row.title.slice(0,200),
-      ...(row.creators[0] ? { author: row.creators[0].slice(0,200) } : {}) }];
+  if (match.kind === 'not-found' && titleQuery) {
+    const queries = librarySourceQueries(row, agent);
     for (const search of queries) {
       const response = await searchSource(search);
       match.openLibraryAvailability = response.ok ? 'available' : response.status === 429 ? 'budget-exceeded' : 'unavailable';

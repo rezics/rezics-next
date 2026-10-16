@@ -1,3 +1,4 @@
+import { importedRightsAssessments } from '../rights/import-policy.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { commandError, problem } from '../../routes/problems.ts';
 import { checkedOpenLibraryWorkId, fetchOpenLibraryWork } from '../source/open-library.ts';
@@ -76,7 +77,8 @@ export async function adoptLibrarySource(
     const principalId = await work.access.activePrincipalId(principal);
     if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
     const workId = checkedOpenLibraryWorkId(body.workId);
-    return await work.libraryImport.withOpenLibraryWork(workId, async () => {
+    const source = { provider: 'open-library', namespace: 'work', externalId: workId };
+    return await work.libraryImport.withSourceRecord(source, async () => {
       let observation = await work.sourceIntake!.replay(principalId, key);
       if (observation) {
         if (
@@ -88,11 +90,12 @@ export async function adoptLibrarySource(
           return problem(409, 'source_intent_conflict', 'Import key changed Work');
         }
       }
-      const existing = await work.libraryImport!.adoptedOpenLibraryWork(workId);
+      const existing = await work.sourceAdoptions!.importBinding(source);
       if (!work.rights) return problem(503, 'source_unavailable', 'Source rights owner is unavailable');
       if (existing) {
-        await work.rights.store.assessOpenLibraryImport(existing, workId);
-        return Response.json({ work: existing, replayed: true }, { headers: privateHeaders });
+        await work.rights.store.assessSourceImport(existing, importedRightsAssessments({
+          provider: 'open-library', url: `https://openlibrary.org/works/${workId}` }, existing.work));
+        return Response.json({ work: existing.work, replayed: true }, { headers: privateHeaders });
       }
       if (!observation) {
         await work.libraryImport!.takeBudget(body.actingSubject, 'acquisition');
@@ -124,7 +127,10 @@ export async function adoptLibrarySource(
         },
       );
       if (!adopted) return problem(503, 'source_unavailable', 'Work adoption is unavailable');
-      await work.rights.store.assessOpenLibraryImport(adopted.adoption.work, workId);
+      const binding = await work.sourceAdoptions!.importBinding(source, adopted.adoption.work);
+      if (!binding) return problem(503, 'source_unavailable', 'Source binding is unavailable');
+      await work.rights.store.assessSourceImport(binding, importedRightsAssessments({
+        provider: 'open-library', url: `https://openlibrary.org/works/${workId}` }, binding.work));
       return Response.json(
         { work: adopted.adoption.work, replayed: adopted.replayed },
         { headers: privateHeaders },

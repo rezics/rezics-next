@@ -67,12 +67,11 @@ test('G428: exhausted reader adoption budget refuses before acquisition', async 
   const app = sourceOwner({
     account: { verify: async () => ({ issuer: 'test', subject: 'reader' }) },
     access: { canReadAsBaselineMember: async () => true, activePrincipalId: async () => 'reader' },
-    libraryImport: { withOpenLibraryWork: async (_id: string, action: () => Promise<unknown>) => action(),
-      adoptedOpenLibraryWork: async () => null,
+    libraryImport: { withSourceRecord: async (_id: string, action: () => Promise<unknown>) => action(),
       takeBudget: async () => { throw new ReaderImportBudgetExceeded('acquisition'); } },
-    rights: { store: { assessOpenLibraryImport: async () => { throw new Error('budget refusal must precede assessment'); } } },
+    rights: { store: { assessSourceImport: async () => { throw new Error('budget refusal must precede assessment'); } } },
     sourceIntake: { replay: async () => null }, sourceConversions: {}, sourceGraph: {},
-    sourceProposals: {}, sourceAdoptions: {},
+    sourceProposals: {}, sourceAdoptions: { importBinding: async () => null },
     openLibraryFetch: (async () => { fetched++; return Response.json({}); }) as unknown as typeof fetch,
   } as unknown as MainWorkDependencies);
   const response = await app.handle(new Request('http://main.local/source-adoption', {
@@ -95,10 +94,10 @@ test('G428: adoption reuses source intent and returns the adopted native Work', 
     } },
     access: { canReadAsBaselineMember: async () => true, activePrincipalId: async () =>
       '0194f314-9280-767f-89a6-000000000099' },
-    libraryImport: { withOpenLibraryWork: async (_id: string, action: () => Promise<unknown>) => action(),
-      adoptedOpenLibraryWork: async () => null, takeBudget: async () => {} },
-    rights: { store: { assessOpenLibraryImport: async (work: string, workId: string) => {
-      expect([work, workId]).toEqual([iri('000000000004'), 'OL45804W']); assessed++;
+    libraryImport: { withSourceRecord: async (_id: string, action: () => Promise<unknown>) => action(),
+      takeBudget: async () => {} },
+    rights: { store: { assessSourceImport: async (binding: { work: string }, assessments: unknown[]) => {
+      expect(binding.work).toBe(iri('000000000004')); expect(assessments).toHaveLength(6); assessed++;
     } } },
     sourceIntake: { replay: async () => observation, reserveOpenLibrarySlot: async () => { acquired++; },
       submit: async () => { acquired++; return { observation }; } },
@@ -107,7 +106,7 @@ test('G428: adoption reuses source intent and returns the adopted native Work', 
     sourceGraph: { project: async () => { projected++; } },
     sourceProposals: { propose: async () => { proposed++;
       return { proposal: { proposal: iri('000000000003'), candidateTitle: 'Frankenstein' } }; } },
-    sourceAdoptions: { adopt: async () => { adopted++;
+    sourceAdoptions: { importBinding: async (_source: unknown, work?: string) => work ? { work } : null, adopt: async () => { adopted++;
       return { adoption: { work: iri('000000000004') }, replayed: true }; } },
   } as unknown as MainWorkDependencies);
   const response = await app.handle(new Request('http://main.local/source-adoption', {
@@ -129,14 +128,14 @@ test('G428: first adoption captures Open Library through Main and a retry does n
     account: { verify: async () => ({ issuer: 'test', subject: 'reader' }) },
     access: { canReadAsBaselineMember: async () => true, activePrincipalId: async () =>
       '0194f314-9280-767f-89a6-000000000099' },
-    libraryImport: { withOpenLibraryWork: async (_id: string, action: () => Promise<unknown>) => action(),
-      adoptedOpenLibraryWork: async () => null, takeBudget: async () => {} },
+    libraryImport: { withSourceRecord: async (_id: string, action: () => Promise<unknown>) => action(),
+      takeBudget: async () => {} },
     openLibraryFetch: (async (url: string) => { captured++;
       expect(url).toBe('https://openlibrary.org/works/OL45804W.json');
       return Response.json({ key: '/works/OL45804W', type: { key: '/type/work' }, title: 'Frankenstein' });
     }) as typeof fetch,
-    rights: { store: { assessOpenLibraryImport: async (work: string, workId: string) => {
-      expect([work, workId]).toEqual([iri('000000000004'), 'OL45804W']); assessed++;
+    rights: { store: { assessSourceImport: async (binding: { work: string }, assessments: unknown[]) => {
+      expect(binding.work).toBe(iri('000000000004')); expect(assessments).toHaveLength(6); assessed++;
     } } },
     sourceIntake: { replay: async () => stored ? observation : null,
       reserveOpenLibrarySlot: async () => {},
@@ -147,7 +146,7 @@ test('G428: first adoption captures Open Library through Main and a retry does n
     sourceGraph: { project: async () => {} },
     sourceProposals: { propose: async () => ({ proposal: { proposal: iri('000000000003'),
       candidateTitle: 'Frankenstein' } }) },
-    sourceAdoptions: { adopt: async () => ({ adoption: { work: iri('000000000004') }, replayed: stored }) },
+    sourceAdoptions: { importBinding: async (_source: unknown, work?: string) => work ? { work } : null, adopt: async () => ({ adoption: { work: iri('000000000004') }, replayed: stored }) },
   } as unknown as MainWorkDependencies);
   const request = () => new Request('http://main.local/source-adoption', {
     method: 'POST', headers: { authorization: 'Bearer reader', 'idempotency-key': 'goodreads-1',

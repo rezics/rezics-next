@@ -192,12 +192,68 @@ const reportedAuthorId = (binding: string, ordinal: number) => {
   return url(`${bytes.slice(0, 8)}-${bytes.slice(8, 12)}-5${bytes.slice(13, 16)}-8${bytes.slice(17, 20)}-${bytes.slice(20, 32)}`);
 };
 
+export interface SourceRecordIdentity { provider: string; namespace: string; externalId: string }
+const verifiedImportBinding = Symbol('verified-source-import-binding');
+export interface VerifiedSourceImportBinding {
+  readonly [verifiedImportBinding]: true;
+  readonly binding: string;
+  readonly principalId: string;
+  readonly actingSubject: string;
+  readonly work: string;
+  readonly source: SourceRecordIdentity;
+  readonly sourceRecord: string;
+  readonly observation: string;
+  readonly conversion: string;
+  readonly rightsEvidence: NativeWorkSourceProposal['rightsEvidence'];
+  assertActive(): Promise<void>;
+}
+
 export class SourceNativeWorkAdoptionStore {
   constructor(private readonly pool: Pool, private readonly proposals: SourceNativeWorkProposalStore,
     private readonly env: WorkActivationEnvironment,
     private readonly account: Pick<AccountAssertionVerifier, 'verify'>,
     private readonly access: Pick<AccessAdmissionRegistry,
       'assertAuthority' | 'register' | 'claim' | 'recordGraphOutcome' | 'issueTitleAdmission'>) {}
+
+  /** Resolve one exact provider-qualified identity, then verify the immutable
+   * proposal, conversion and admitted native receipt through their owner. A
+   * withdrawn binding stays refused rather than causing another acquisition. */
+  async importBinding(source: SourceRecordIdentity, work?: string): Promise<VerifiedSourceImportBinding | null> {
+    const rows = await contentConnection(this.pool).query<{ id: string; principal_id: string;
+      proposal_id: string; acting_subject: string; work: string; observation_id: string;
+      withdrawn: boolean }>(`SELECT b.id, b.principal_id, b.proposal_id, i.acting_subject,
+        b.work, p.observation_id,
+        EXISTS (SELECT 1 FROM source.native_work_support_withdrawal w WHERE w.binding_id = b.id) AS withdrawn
+      FROM source.record r
+      JOIN source.observation o ON o.record_id = r.id
+      JOIN source.native_work_proposal p ON p.observation_id = o.id AND p.record_id = r.id
+      JOIN source.native_work_binding b ON b.proposal_id = p.id
+      JOIN source.native_work_adoption_intent i ON i.id = b.intent_id AND i.proposal_id = p.id
+        AND i.principal_id = b.principal_id
+      WHERE r.provider = $1 AND r.namespace = $2 AND r.external_id = $3
+      LIMIT 2`, [source.provider, source.namespace, source.externalId]);
+    if (rows.rows.length > 1) throw new SourceAdoptionUnavailable('Source record has multiple native bindings');
+    const row = rows.rows[0];
+    if (!row) return null;
+    if (row.withdrawn) throw new SourceSupportConflict('source_support_withdrawn');
+    if (work !== undefined && row.work !== work) throw new SourceAdoptionUnavailable('Source binding belongs to another Work');
+    const adoption = await this.read(row.principal_id, row.proposal_id);
+    const proposal = await this.proposals.read(row.principal_id, row.proposal_id);
+    if (!adoption || !proposal || adoption.binding !== url(row.id) || adoption.work !== row.work
+      || adoption.sourceRecord !== proposal.record || adoption.sourceConversion !== proposal.conversion) {
+      throw new SourceAdoptionUnavailable('Imported source binding is unavailable');
+    }
+    const assertActive = async () => {
+      const active = await contentConnection(this.pool).query(`SELECT 1 FROM source.native_work_binding b
+        WHERE b.id = $1 AND NOT EXISTS (
+          SELECT 1 FROM source.native_work_support_withdrawal w WHERE w.binding_id = b.id)`, [row.id]);
+      if (active.rowCount !== 1) throw new SourceSupportConflict('source_support_withdrawn');
+    };
+    return { [verifiedImportBinding]: true, binding: row.id, principalId: row.principal_id,
+      actingSubject: row.acting_subject, work: row.work, source: { ...source },
+      sourceRecord: adoption.sourceRecord, observation: url(row.observation_id),
+      conversion: adoption.sourceConversion, rightsEvidence: proposal.rightsEvidence, assertActive };
+  }
 
   /** The adoption records only a title. These retained author references are
    * source reported until the separate author-credit command confirms them. */

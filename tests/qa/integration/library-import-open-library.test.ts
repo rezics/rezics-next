@@ -34,6 +34,7 @@ test('G428: two readers add one Open Library identity and receive one native Wor
       accessPolicy: new AccessPolicyOwner(h.accessPool),
       libraryImport, libraryFiles, sourceIntake: h.intake, sourceConversions: h.conversions,
       sourceGraph: h.graph, sourceProposals: h.proposals, sourceAdoptions: h.adoptions,
+      rights: { store: h.rightsStore },
       openLibraryFetch: (async (url: string) => { fetched++;
         expect(url).toBe(`https://openlibrary.org/works/${workId}.json`);
         sourceStarted();
