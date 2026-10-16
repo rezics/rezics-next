@@ -89,22 +89,45 @@ export const Loading: Story = { args: { loading: true }, play: async ({ canvasEl
 } };
 export const LoadingPhone: Story = { ...Loading, ...phone };
 
+/** Controls and the selected panel must stay inside the Library card, not merely the viewport. */
+async function contained(canvasElement: HTMLElement) {
+  const progress = canvasElement.querySelector('[data-chapter-progress]')!;
+  const card = progress.closest('details')!.getBoundingClientRect();
+  for (const control of progress.querySelectorAll('button, input, [data-selected]')) {
+    const box = control.getBoundingClientRect();
+    await expect(box.width).toBeGreaterThan(0);
+    await expect(box.left).toBeGreaterThanOrEqual(card.left);
+    await expect(box.right).toBeLessThanOrEqual(card.right);
+  }
+}
+
 /** Library opens the production Manga control, marks a chapter in volume two, then clears it. */
-export const ChaptersAcrossVolumes: Story = { play: async ({ canvasElement }) => {
-  const canvas = await library(canvasElement, 'stranger');
+async function chapters(canvasElement: HTMLElement, persona: MangaLibraryPersona) {
+  const canvas = await library(canvasElement, persona);
   const t = copyOf('en');
   await userEvent.click(canvas.getByText(t.workProgress, { exact: false, selector: 'summary' }));
   await expect(await canvas.findByText(t.lastRead({ place: 'Volume 1, chapter 2' }))).toBeVisible();
   for (const name of ['Volume 1, chapter 1', 'Volume 1, chapter 2', 'Volume 2, chapter 1', 'Volume 2, chapter 2']) {
     await expect(canvas.getByRole('button', { name })).toBeVisible();
   }
+  await contained(canvasElement);
   await userEvent.click(canvas.getByRole('button', { name: 'Volume 2, chapter 1' }));
   await userEvent.click(await canvas.findByRole('button', { name: t.markChapterRead }));
   await expect(await canvas.findByText(t.lastRead({ place: 'Volume 2, chapter 1' }))).toBeVisible();
   await userEvent.click(await canvas.findByRole('button', { name: t.markChapterUnread }));
   await expect(await canvas.findByText(t.lastRead({ place: 'Volume 1, chapter 2' }))).toBeVisible();
   await expect(canvas.getByRole('button', { name: t.markChapterRead })).toBeVisible();
+  await contained(canvasElement);
   await expect(canvas.queryByRole('alert')).toBeNull();
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-} };
+}
+export const ChaptersAcrossVolumes: Story = { play: async ({ canvasElement }) => { await chapters(canvasElement, 'stranger'); } };
 export const ChaptersAcrossVolumesPhone: Story = { ...ChaptersAcrossVolumes, ...phone };
+export const MemberChapters: Story = { args: { persona: 'member' }, play: async ({ canvasElement }) => { await chapters(canvasElement, 'member'); } };
+export const MemberChaptersPhone: Story = { ...MemberChapters, ...phone };
+export const OwnerChapters: Story = { args: { persona: 'owner' }, play: async ({ canvasElement }) => { await chapters(canvasElement, 'owner'); } };
+export const OwnerChaptersPhone: Story = { ...OwnerChapters, ...phone };
+export const ModeratorChapters: Story = { args: { persona: 'moderator' }, play: async ({ canvasElement }) => { await chapters(canvasElement, 'moderator'); } };
+export const ModeratorChaptersPhone: Story = { ...ModeratorChapters, ...phone };
+export const OperatorChapters: Story = { args: { persona: 'operator' }, play: async ({ canvasElement }) => { await chapters(canvasElement, 'operator'); } };
+export const OperatorChaptersPhone: Story = { ...OperatorChapters, ...phone };

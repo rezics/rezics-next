@@ -176,10 +176,10 @@ export function ChapterProgress({ work, api, t, className }: { work: string; api
     <h2 id={headingId} className="font-semibold text-xl tracking-tight">{t.chapters}</h2>
     <p className="font-medium text-base" data-where>{chapterProgressWhere(standing, t)}</p>
 
-    {places.length ? <ul className="grid gap-2">
-      {places.map(place => <li key={place.occurrence}>
+    {places.length ? <ul className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
+      {places.map(place => <li key={place.occurrence} className="min-w-0">
         <Button type="button" variant={selected?.occurrence === place.occurrence ? 'default' : 'outline'}
-          className="min-h-11 w-full justify-start sm:w-auto" disabled={saving} aria-pressed={selected?.occurrence === place.occurrence}
+          className="h-auto min-h-11 w-full max-w-full justify-start whitespace-normal text-start sm:w-auto" disabled={saving} aria-pressed={selected?.occurrence === place.occurrence}
           onClick={() => void choose(place)}>{named(place, t)}</Button>
       </li>)}
     </ul> : inventoryComplete && !cursor ? <p className="text-muted-foreground text-sm" data-empty>{t.noChapters}</p> : null}
@@ -193,14 +193,14 @@ export function ChapterProgress({ work, api, t, className }: { work: string; api
     {cursor ? <div><Button type="button" variant="outline" className="min-h-11 sm:min-h-8" disabled={saving || loadingMore}
       onClick={() => void more()}>{t.showMore}</Button></div> : null}
 
-    {selected ? <div className="grid gap-2 rounded-xl bg-muted/40 p-3" data-selected={selected.occurrence}
+    {selected ? <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-xl bg-muted/40 p-3" data-selected={selected.occurrence}
       data-pending={read?.status === 'pending' || undefined} aria-live="polite">
       <p className="font-medium text-sm">{named(selected, t)}
         {ready ? <span className="text-muted-foreground" data-state={ready.completed ? 'done' : 'open'}>
           {' · '}{ready.completed ? t.chapterRead : t.chapterUnread}</span> : null}
         {read?.status === 'loading' ? <span className="text-muted-foreground">{' · '}{t.episodeSaving}</span> : null}</p>
       {read?.status === 'pending' ? <Button variant="outline" onClick={() => void choose(selected)}>{t.retry}</Button> : null}
-      {ready ? <div><Button type="button" variant={ready.completed ? 'ghost' : 'outline'} className="min-h-11 sm:min-h-8" disabled={saving}
+      {ready ? <div className="min-w-0"><Button type="button" variant={ready.completed ? 'ghost' : 'outline'} className="h-auto min-h-11 max-w-full whitespace-normal sm:min-h-8" disabled={saving}
         onClick={() => void write(selected, !ready.completed, ready.completed ? null : ready.position)}>{ready.completed ? t.markChapterUnread : t.markChapterRead}</Button></div> : null}
       {ready ? <ChapterPosition key={`${selected.structure}/${selected.occurrence}/${ready.version}`}
         progress={ready} t={t} busy={saving} onSave={position => void write(selected, ready.completed, position)} /> : null}
@@ -235,12 +235,12 @@ function ChapterPosition({ progress, t, busy, onSave }: {
   const id = useId();
   const [draft, setDraft] = useState(progress.position ?? '');
   const position = draft === '' ? null : draft;
-  return <Field className="gap-2">
+  return <Field className="min-w-0 gap-2">
     <FieldLabel htmlFor={id}>{t.conflictPosition}</FieldLabel>
     <div className="flex flex-wrap gap-2">
       <Input id={id} value={draft} maxLength={500} disabled={busy} className="min-w-0 flex-1"
         onChange={event => setDraft(event.target.value)} />
-      <Button type="button" variant="outline" disabled={busy || position === progress.position}
+      <Button type="button" variant="outline" className="h-auto min-h-8 max-w-full whitespace-normal" disabled={busy || position === progress.position}
         onClick={() => onSave(position)}>{t.savePosition}</Button>
     </div>
   </Field>;
