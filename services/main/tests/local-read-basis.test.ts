@@ -5,8 +5,8 @@ import { Pool } from 'pg';
 import { execFileSync } from 'node:child_process';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
-import { workRead, WorkReadExpired, WorkReadMissing, type ReadRow } from '../src/modules/work/read-session.ts';
-import { readWorkHeader } from '../src/modules/work/read-header.ts';
+import { workRead, WorkReadExpired, WorkReadMissing, WorkReadMoved, type ReadRow } from '../src/modules/work/read-session.ts';
+import { readWorkBasis, readWorkHeader } from '../src/modules/work/read-header.ts';
 import { readWorkEditions } from '../src/modules/work/metadata-read.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
 import { resolveInterpretation } from '../src/modules/context/interpretation.ts';
@@ -32,6 +32,7 @@ const result = (rows: ReadRow[]): SparqlResult => ({ results: { bindings: rows }
 
 class WorkGraph extends FusekiClient {
   sequence = 1;
+  head = revision;
   collection = revision;
   profile = 'a'.repeat(64);
   erased = false;
@@ -47,7 +48,7 @@ class WorkGraph extends FusekiClient {
     if (query.includes('SELECT ?text WHERE')) return result([]);
     if (query.includes('SELECT ?structuredDecision ?structuredSource')) return result([]);
     if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) return result(this.erased ? [control] : [{ ...control,
-      r: term(work, 'uri'), type: term('work'), work: term(work, 'uri'), head: term(revision, 'uri'),
+      r: term(work, 'uri'), type: term('work'), work: term(work, 'uri'), head: term(this.head, 'uri'),
       public: term(String(this.public)), label: { ...term('Selected title'), 'xml:lang': 'en' } }]);
     if (query.includes('SELECT ?head ?main ?mainHead')) return result(this.erased ? [] : [{
       head: term(revision, 'uri'), main: term(main, 'uri'), mainHead: term(id(4), 'uri'), public: term(String(this.public)) }]);
@@ -78,6 +79,70 @@ function workDeps(graph: WorkGraph) {
     activePrincipalId: async () => state.active ? 'reader' : null, canReadWork: async () => state.granted } } as unknown as MainWorkDependencies;
   return { deps, state };
 }
+
+test('shared summary dependencies exclude hidden Work revisions and hidden covers', async () => {
+  const graph = new WorkGraph(), { deps } = workDeps(graph);
+  const request = new Request('http://main.test/v1/summaries');
+  graph.public = false;
+  const hidden = await workRead(deps, request, { cursor: 'continuation' }, async session => {
+    const value = await session.summaries([work]);
+    graph.head = id(40); graph.sequence++;
+    return value;
+  });
+  expect(hidden).toEqual([{ reference: work, status: 'unavailable' }]);
+  graph.public = true;
+  const asset = id(32), author = id(30);
+  let avatar = { target: work, context: DEFAULT_MEDIA_CONTEXT, selection: id(33).slice(-36),
+    selectionPosition: '1', use: id(34).slice(-36), asset: asset.slice(-36), crop: null,
+    representation: id(35).slice(-36), sha256: 'a'.repeat(64), mediaType: 'image/png',
+    width: 400, height: 600, byteLength: 1000, disclosure: 'private', moderation: 'none', lifecycle: 'active',
+    availability: 'available', clearance: 'cleared' } as AvatarRow;
+  deps.media = { store: {
+    avatarRows: async () => ({ rows: new Map([[work, avatar]]), generation: { dataEpoch: 'epoch', sequence: '1' } }),
+    visibilityFacts: async (references: readonly string[]) => new Map(references.map(reference => [reference,
+      { owner: author, disclosure: 'private', pending: false, blocked: false,
+        attachments: [{ target: work, context: DEFAULT_MEDIA_CONTEXT }] }])),
+  } } as never;
+  configureMediaVisibility(deps);
+  const publicSummary = await workRead(deps, request, { cursor: 'continuation' }, async session => {
+    const value = await session.summaries([work]);
+    avatar = { ...avatar, selection: id(36).slice(-36) };
+    return value;
+  });
+  expect(publicSummary[0]).toMatchObject({ status: 'available', avatar: { kind: 'fallback' } });
+  await expect(workRead(deps, request, { cursor: 'continuation' }, async session => {
+    const value = await session.summaries([work]);
+    graph.head = id(41); graph.sequence++;
+    return value;
+  })).rejects.toBeInstanceOf(WorkReadMoved);
+});
+
+test('shared Work admission and edition continuation do not consume unshown serial statistics', async () => {
+  const graph = new WorkGraph(), { deps } = workDeps(graph);
+  let count = 0, calls = 0;
+  deps.serialStats = { batch: async () => {
+    calls++;
+    return new Map([[work, { chapterCount: count, wordCount: null, lastUpdatedAt: null }]]);
+  } } as unknown as NonNullable<MainWorkDependencies['serialStats']>;
+  const request = new Request(`http://main.test/v1/works/${work.slice(-36)}`);
+  await workRead(deps, request, {}, async session => {
+    const value = await readWorkBasis(session, work);
+    count++; graph.sequence++;
+    return value;
+  });
+  const first = await workRead(deps, request, { localBasis: true, limit: 1 }, session => readWorkEditions(session, work));
+  const next = await workRead(deps, request, { localBasis: true, limit: 1, cursor: first.nextCursor! }, async session => {
+    const value = await readWorkEditions(session, work);
+    count++; graph.sequence++;
+    return value;
+  });
+  expect(next.items[0]!.id).toBe(id(11));
+  expect(calls).toBe(0);
+  // The header displays these values and must still fence a visible change.
+  await expect(workRead(deps, request, { cursor: 'continuation' }, async session => {
+    const value = await readWorkHeader(session, work); count++; return value;
+  })).rejects.toBeInstanceOf(WorkReadMoved);
+});
 
 test('Work header and editions survive unrelated writes; insertions and selected profile changes expire continuations', async () => {
   const graph = new WorkGraph(), { deps } = workDeps(graph);

@@ -140,7 +140,7 @@ test('G-382 Open Library author pages list public credited Works with projected 
       WHERE agent_id = $1`, [first]);
     expect((await read(path(key))).totals.readers).toEqual({ value: 1, kind: 'exact' });
 
-    // Pages share one order and one basis; a cursor from another position restarts.
+    // Pages share the public selection, independent of other people's private activity.
     const before = stack.fuseki.queries;
     const firstPage = await read(`${path(key)}?limit=1`);
     const overviewQueries = stack.fuseki.queries - before;
@@ -151,8 +151,12 @@ test('G-382 Open Library author pages list public credited Works with projected 
     expect(rest.items.map(item => item.id)).toEqual(unnamed.works.items.map(item => item.id)
       .filter(work => work !== firstPage.works.items[0]!.id));
     expect(rest.nextCursor).toBeNull();
-    const moved = await stack.publicWork(writer.actor, ['en'], `Author page unrelated ${base}`);
-    expect(moved.work).toBeTruthy();
+    const stranger = await stack.member('private-writer');
+    await stack.privateWork(stranger.actor, `Author page unrelated draft ${base}`);
+    expect((await call(`${path(key, '/works')}?limit=1&cursor=${firstPage.works.nextCursor}`)).status).toBe(200);
+    // A newly visible credit changes the author's selection and still restarts.
+    const moved = await stack.publicWork(writer.actor, ['en'], `Author page newly credited ${base}`);
+    await credit(moved.work, key, 0);
     expect((await call(`${path(key, '/works')}?limit=1&cursor=${firstPage.works.nextCursor}`)).status).toBe(409);
     expect((await call(`${path(key, '/works')}?cursor=not-a-cursor`)).status).toBe(400);
 
@@ -170,7 +174,7 @@ test('G-382 Open Library author pages list public credited Works with projected 
     const reported = await read(path(reportedKey));
     expect(reported.works.items.map(item => item.id)).toEqual([adopted.work]);
     expect(reported.works.items[0]!.authors.map(item => item.key)).toEqual([reportedKey, key]);
-    expect((await read(path(key))).totals.works).toEqual({ value: 3, kind: 'exact' });
+    expect((await read(path(key))).totals.works).toEqual({ value: 4, kind: 'exact' });
 
     // Both indexes answer their lookups.
     const client = await stack.contentPool.connect();

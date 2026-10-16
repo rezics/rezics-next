@@ -26,9 +26,8 @@ const hash = (items: unknown) => createHash('sha256').update(JSON.stringify(item
 
 /** Nested source collections have their own cursor identity. */
 function sourceSession(session: WorkReadSession) {
-  // Candidate selection needs the source identity and language, not its serial
-  // preview. Covers remain optional even in nested classification/adoption reads.
-  const nested = new WorkReadSession({ ...session.deps, serialStats: undefined }, session.request,
+  // Covers remain optional even in nested classification/adoption reads.
+  const nested = new WorkReadSession(session.deps, session.request,
     { ...session.options, cursor: undefined, limit: 20 }, session.position);
   nested.principal = session.principal;
   nested.summaries = resources => session.summaries(resources, true);
@@ -108,17 +107,17 @@ async function publicCandidates(session: WorkReadSession, candidates: Candidate[
   sourceTypes: readonly string[]) {
   const ids = candidates.map(item => item.work);
   if (!ids.length || !sourceTypes.length) return [];
-  const visible = new Set<string>();
+  const visible = new Map<string, string>();
   for (let offset = 0; offset < ids.length; offset += 20) {
     const batch = ids.slice(offset, offset + 20);
-    const rows = await session.query(`SELECT DISTINCT ?work WHERE {
+    const rows = await session.query(`SELECT DISTINCT ?work ?head WHERE {
       VALUES ?work { ${batch.map(iri).join(' ')} }
       VALUES ?sourceType { ${sourceTypes.map(type => `<${type}>`).join(' ')} }
       ${publicWork('?work', '?main')}
-      GRAPH ${iri(GRAPHS.current)} { ?work a ?sourceType }
+      GRAPH ${iri(GRAPHS.current)} { ?work a ?sourceType ; rv:head ?head }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work rv:provisional true } }
     } LIMIT 21`, 20);
-    for (const row of rows) if (row.work) visible.add(row.work.value);
+    for (const row of rows) if (row.work && row.head) visible.set(row.work.value, row.head.value);
   }
   // Credits here decide membership (exclude the source's authors), so this
   // strict identity read must not use the optional display-name boundary.
@@ -127,12 +126,13 @@ async function publicCandidates(session: WorkReadSession, candidates: Candidate[
   const identities = new WorkReadSession({ ...session.deps, sourceAuthorNames: undefined },
     session.request, session.options, session.position);
   identities.principal = session.principal;
-  const credits = await searchPageCredits(identities, ids);
+  const credits = await searchPageCredits(identities, [...visible.keys()]);
   const sourceCredits = await searchPageCredits(identities, [source]);
   await fenceAuthorNames(identities);
   const sourceAuthors = creditIdentities(sourceCredits, source);
   return candidates.filter(item => visible.has(item.work)
-    && ![...creditIdentities(credits, item.work)].some(author => sourceAuthors.has(author)));
+    && ![...creditIdentities(credits, item.work)].some(author => sourceAuthors.has(author)))
+    .map(item => ({ ...item, revision: visible.get(item.work)! }));
 }
 
 /** A read considers at most 64 candidate IDs and hydrates only its ≤20-page.
@@ -144,7 +144,6 @@ export async function readAlsoEnjoyed(session: WorkReadSession, source: string,
     WORK_SEMANTIC_TYPES.includes(type as typeof WORK_SEMANTIC_TYPES[number]));
   const binding = ['also-enjoyed-v1', source, session.options.language ?? null,
     session.options.actingSubject ?? null];
-  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const co = await store.candidates(source, 24);
   const projectionPosition = co.graphEpoch && co.graphSequence
     ? { dataEpoch: co.graphEpoch, sequence: co.graphSequence } : null;
@@ -162,7 +161,11 @@ export async function readAlsoEnjoyed(session: WorkReadSession, source: string,
   append(await typeCandidates(session, sourceBasis), 'similar');
   append(await realmCandidates(session, source), 'realm');
   const visible = await publicCandidates(session, candidates, source, sourceTypes);
-  const fingerprint = hash([co.generation, visible]);
+  // Internal projection generations and the dataset sequence include activity
+  // outside this shelf. Fence the admitted Works and their public revisions.
+  const fingerprint = hash([sourceBasis.dependencyToken, visible]);
+  const position = { ...session.position, dependencyToken: fingerprint };
+  const cursor = decodeReadCursor(session.options.cursor, binding, position);
   if (cursor?.order && cursor.order !== fingerprint) throw new WorkReadMoved('Recommendations changed');
   const start = cursor ? Number(cursor.after) : 0;
   if (!Number.isSafeInteger(start) || start < 0 || start > visible.length) {
@@ -240,5 +243,5 @@ export async function readAlsoEnjoyed(session: WorkReadSession, source: string,
     stale: co.stale || !!projectionPosition && (projectionPosition.dataEpoch !== session.position.dataEpoch
       || projectionPosition.sequence !== session.position.sequence) || session.stale,
     ...pageResult(session, items, end < visible.length
-      ? encodeReadCursor(binding, session.position, String(end), fingerprint) : null) };
+      ? encodeReadCursor(binding, position, String(end), fingerprint) : null), sourcePosition: position };
 }

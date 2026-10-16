@@ -176,7 +176,8 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     expect(signals.candidates.find(item => item.work === unrelated.work)?.sharedReaders).toBe(3);
     const page = await json<CardPage>(await read());
     expect(page.stale).toBe(false);
-    expect(page.projectionPosition).toEqual(current.sourcePosition);
+    expect(page.projectionPosition).toEqual({ dataEpoch: current.sourcePosition.dataEpoch,
+      sequence: current.sourcePosition.sequence });
     expect(page.items.find(item => item.id === candidate.work)?.basis).toBe('co-readers');
     expect(page.items.find(item => item.id === candidate.work)?.title.value).toBe('A co-read book');
     expect(page.items.find(item => item.id === candidate.work)?.rating?.count).toBe(1);
@@ -189,10 +190,17 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     expect(first.nextCursor).not.toBeNull();
     expect(() => decodeReadCursor(first.nextCursor!,
       ['also-enjoyed-v1', source.work, null, null], first.sourcePosition)).not.toThrow();
+    // Authority was granted during setup; this changes only a private Work.
+    await json(await manager.send('PUT', `/v1/works/${hidden.work.slice(-36)}/type`, {
+      profile: 'work-type-v2', expectedHead: await workHead(hidden.work), types: [BOOK, GUIDE],
+      actingSubject: manager.actor,
+    }), 200);
     const second = await json<CardPage>(await read(1, first.nextCursor!));
     expect(second.items.map(item => item.id)).toEqual([another.work]);
     expect(second.items[0]?.basis).toBe('similar');
     expect((await read(1, `${first.nextCursor}broken`)).status).toBe(400);
+    await recordType(another.work, [BOOK, GUIDE]);
+    expect((await read(1, first.nextCursor!)).status).toBe(409);
     const staleBuild = await store.register(context, current.sourcePosition, receipt());
     await stack.accessPool.query(`UPDATE access.agent_library_visibility SET visibility = 'private',
       version = version + 1 WHERE agent_id = $1`, [readers[0]!.actor]);

@@ -11,7 +11,7 @@ import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type {} from '../../routes/media.ts';
 import { AccountAssertionDenied, verifyRequestAccount, type VerifiedAccountAssertion } from '../account/verify-assertion.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { MAX_SUMMARY_BATCH, readResourceSummaries, type ResourceSummary, type SummaryInput, type SummaryReader,
+import { readResourceSummaries, type ResourceSummary, type SummaryInput, type SummaryReader,
   type SummaryMedia } from '../media/summary.ts';
 import { readerLanguages } from '../display-language/select.ts';
 import { readRealmPolicy } from '../space/policy.ts';
@@ -216,8 +216,6 @@ export class WorkReadSession {
       }
     }
   }
-  private readonly avatarSnapshots = new Map<string, { epoch: string;
-    rows: Map<string, string>; targets: Set<string> }>();
   private readonly deliveredSummaryAssets = new Set<string>();
   /** Snapshot of the signed-in reader's Main preference, shared by every name read. */
   readingLanguages: readonly string[] | null = null;
@@ -336,77 +334,55 @@ export class WorkReadSession {
         return value;
       },
     } : {}) };
+    const assetsByReference = new Map<string, string>();
     const summaryMedia = media ? {
       avatarRows: async (...args: Parameters<typeof media.avatarRows>) => {
         const row = optionalMedia ? await optionalPreview(this, () => media.avatarRows(...args)) : await media.avatarRows(...args);
-        if (row && this.captureDependencies) {
-          const prior = this.avatarSnapshots.get(args[1]);
-          const captured = prior ?? { epoch: row.generation.dataEpoch, rows: new Map<string,string>(), targets: new Set<string>() };
-          if (captured.epoch !== row.generation.dataEpoch) throw new WorkReadMoved('Media owner changed');
-          for (const target of args[0]) {
-            const signature = JSON.stringify(row.rows.get(target) ?? null);
-            if (captured.rows.has(target) && captured.rows.get(target) !== signature) throw new WorkReadMoved('Avatar changed');
-            captured.rows.set(target, signature); captured.targets.add(target);
-          }
-          this.avatarSnapshots.set(args[1], captured);
+        if (row) for (const [reference, avatar] of row.rows) {
+          if (avatar?.asset) assetsByReference.set(reference, `https://rezics.com/id/${avatar.asset}`);
         }
         return row;
       },
     } : undefined;
     const summaryInput = (localBasis: boolean) => ({ ...input, localBasis });
     const result = await readResourceSummaries(this.deps.environment, summaryMedia, selectedReader,
-      summaryInput(this.fencesSelectedUnits));
+      summaryInput(true));
     const rememberWorkRevisions = (revisions: ReadonlyMap<string, string>) => {
       for (const [work, revision] of revisions) this.workRevisions.set(work, revision);
     };
     rememberWorkRevisions(result.workRevisions);
-    if (this.fencesSelectedUnits && this.captureDependencies) {
+    if (this.captureDependencies) {
       const key = `summaries:${JSON.stringify(input)}`;
-      const token = readDependencyToken([result.generation.graph, result.generation.media?.split(':')[0] ?? null, result.summaries]);
+      // Raw graph rows and avatar selections include private revisions and
+      // undisclosed Assets. Only admitted values can move this reader's basis.
+      const selected = (batch: typeof result) => {
+        const visibleWorks = new Set(batch.summaries.flatMap(summary => summary.status === 'available'
+          ? [summary.reference, ...(summary.work ? [summary.work] : []),
+            ...(summary.parts ? [summary.parts.subject, ...summary.parts.frames]
+              .flatMap(part => [part.reference, ...(part.work ? [part.work] : [])]) : [])] : []));
+        return [this.position.dataEpoch, batch.generation.media?.split(':')[0] ?? null, batch.summaries,
+          new Map([...batch.workRevisions].filter(([work]) => visibleWorks.has(work)))];
+      };
+      const token = readDependencyToken(selected(result));
       const previous = this.ownerDependencies.get(key);
       if (previous && previous.token !== token) throw new WorkReadMoved('Summary dependency changed');
       this.ownerDependencies.set(key, { token, read: async () => {
         const fresh = await readResourceSummaries(this.deps.environment, summaryMedia, selectedReader, summaryInput(true));
         rememberWorkRevisions(fresh.workRevisions);
-        return [fresh.generation.graph, fresh.generation.media?.split(':')[0] ?? null, fresh.summaries];
+        return selected(fresh);
       } });
-    } else if (!this.fencesSelectedUnits && result.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {
-      if (this.options.movingGraph && result.generation.graph.startsWith(`${this.position.dataEpoch}:`)) {
-        this.stale = true;
-        return result;
-      }
-      throw new WorkReadMoved('Graph changed during the read');
     }
     for (const summary of result.summaries) {
       if (summary.status !== 'available' || summary.avatar.kind !== 'image') continue;
-      const captured = this.avatarSnapshots.get(input.context)?.rows.get(summary.reference);
-      if (captured) {
-        const row = JSON.parse(captured) as { asset?: string } | null;
-        if (row?.asset) this.deliveredSummaryAssets.add(`https://rezics.com/id/${row.asset}`);
-      }
+      const asset = assetsByReference.get(summary.reference);
+      if (asset) this.deliveredSummaryAssets.add(asset);
     }
     return result;
   }
 
-  /** Summary sections share a context but can exceed one owner's batch.
-   * Close every target in bounded batches at one media cut per context;
-   * graph labels/publication heads use the selected summary dependency token. */
+  /** Selected summaries close names, visible covers and media recovery epochs.
+   * Close delivered Assets' disclosure again after those consistency checks. */
   async fenceSummaryMedia() {
-    for (const [context, prior] of this.avatarSnapshots) {
-      const targets = [...prior.targets];
-      let sequence: string | undefined;
-      for (let offset = 0; offset < targets.length; offset += MAX_SUMMARY_BATCH) {
-        this.checkDeadline();
-        const batch = targets.slice(offset, offset + MAX_SUMMARY_BATCH);
-        const row = await this.deps.media!.store.avatarRows(batch, context);
-        if (row.generation.dataEpoch !== prior.epoch
-          || sequence !== undefined && row.generation.sequence !== sequence
-          || batch.some(target => JSON.stringify(row.rows.get(target) ?? null) !== prior.rows.get(target))) {
-          throw new WorkReadMoved('Avatar changed');
-        }
-        sequence = row.generation.sequence;
-      }
-    }
     const assets = [...this.deliveredSummaryAssets];
     if (assets.length && (await this.disclosure(assets.map(resource => ({ owner: 'media',resource,component: 'cover' })), 'summary'))
       .some(decision => decision !== 'visible')) throw new WorkReadMoved('Avatar disclosure changed');

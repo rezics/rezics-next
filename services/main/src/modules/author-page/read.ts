@@ -5,7 +5,7 @@ import { searchPageRatings } from '../search/ratings.ts';
 import { readAuthorNames, sourceReportedAuthorWorks, sourceReportedCredits } from '../source/author-name-read.ts';
 import { SourceIntakeUnavailable } from '../source/intake.ts';
 import { GRAPHS, WORK_SEMANTIC_TYPES, iri, lit } from '../work/activate.ts';
-import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadInvalid, WorkReadMissing,
+import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, readDependencyToken, WorkReadInvalid, WorkReadMissing,
   WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
 import type { ProjectedWork } from '../discovery/contract.ts';
@@ -15,7 +15,7 @@ import { AUTHOR_PAGE_COST, type authorCredit, type authorTotals, type authorWork
 type Credit = Static<typeof authorCredit>;
 type Work = Static<typeof authorWork>;
 type Rating = NonNullable<ProjectedWork['rating']>;
-interface Listed { id: string; main: string; rating: Rating | null }
+interface Listed { id: string; main: string; revision: string; rating: Rating | null }
 
 const AUTHOR_KEY = /^\/authors\/OL[1-9][0-9]{0,11}A$/;
 const openLibraryId = (key: string) => key.slice('/authors/'.length);
@@ -55,10 +55,12 @@ export function creditedPublicWorks(keys: readonly string[],
  */
 async function listedWorks(session: WorkReadSession, key: string) {
   const reported = await sourceReportedAuthorWorks(session, key);
-  const rows = await session.query(`SELECT DISTINCT ?id ?main WHERE {
+  const rows = await session.query(`SELECT DISTINCT ?id ?main ?head WHERE {
     ${creditedPublicWorks([key], reported.works.map(work => [work, key] as const))}
+    GRAPH ${iri(GRAPHS.current)} { ?id rv:head ?head }
   } ORDER BY STR(?id) LIMIT ${AUTHOR_PAGE_COST.works + 1}`, AUTHOR_PAGE_COST.works + 1);
-  const works = rows.slice(0, AUTHOR_PAGE_COST.works).map(row => ({ id: field(row, 'id'), main: field(row, 'main') }));
+  const works = rows.slice(0, AUTHOR_PAGE_COST.works).map(row => ({ id: field(row, 'id'), main: field(row, 'main'),
+    revision: field(row, 'head') }));
   if (new Set(works.map(work => work.id)).size !== works.length) throw new WorkReadUnavailable('Author Works are ambiguous');
   const rated = works.length ? await searchPageRatings(session, works.map(work => ({ work: work.id, mainVersion: work.main })))
     : { values: new Map<string, Rating | null>(), status: 'no-context' as const };
@@ -169,6 +171,13 @@ function totals(session: WorkReadSession, listed: Awaited<ReturnType<typeof list
 
 const binding = (session: WorkReadSession, key: string) => ['author-works-v1', key, session.options.language ?? null];
 
+// The reverse source index can contain private Works. Only the public result
+// and its shown revisions/order belong to this author's continuation.
+const selection = (session: WorkReadSession, key: string) =>
+  session.selection(`author-works:${key}`, probe => listedWorks(probe, key));
+const position = (session: WorkReadSession, listed: Awaited<ReturnType<typeof listedWorks>>) =>
+  ({ ...session.position, dependencyToken: readDependencyToken(listed) });
+
 /**
  * `/v1/authors/open-library/{id}`: the author, their facts, totals and first
  * Works. Missing when no public Work on REZICS credits them, whatever Open
@@ -178,7 +187,7 @@ const binding = (session: WorkReadSession, key: string) => ['author-works-v1', k
 export async function readExternalAuthor(session: WorkReadSession, key: string,
   limit: number = AUTHOR_PAGE_COST.pageSize): Promise<Static<typeof externalAuthorRead>> {
   if (!AUTHOR_KEY.test(key)) throw new WorkReadInvalid('Invalid author key');
-  const listed = await listedWorks(session, key);
+  const listed = await selection(session, key);
   if (!listed.works.length) throw new WorkReadMissing('No public Work credits this author');
   const name = (await readAuthorNames(session, [key])).get(key) ?? null;
   let facts = null;
@@ -194,8 +203,8 @@ export async function readExternalAuthor(session: WorkReadSession, key: string,
     name: name && { displayName: name.displayName, nameSource: name.nameSource }, facts: facts?.facts ?? null,
     record: `https://openlibrary.org${key}`, totals: totals(session, listed, readers),
     works: { items: await hydrate(session, key, page), nextCursor: listed.works.length > limit
-      ? encodeReadCursor(binding(session, key), session.position, page.at(-1)!.id) : null },
-    sourcePosition: session.position,
+      ? encodeReadCursor(binding(session, key), position(session, listed), page.at(-1)!.id) : null },
+    sourcePosition: position(session, listed),
     links: { page: `/authors/open-library/${id}`, works: `/v1/authors/open-library/${id}/works` } };
 }
 
@@ -203,12 +212,13 @@ export async function readExternalAuthor(session: WorkReadSession, key: string,
 export async function readExternalAuthorWorks(session: WorkReadSession, key: string) {
   if (!AUTHOR_KEY.test(key)) throw new WorkReadInvalid('Invalid author key');
   const limit = session.options.limit ?? AUTHOR_PAGE_COST.pageSize;
-  const cursor = decodeReadCursor(session.options.cursor, binding(session, key), session.position);
-  const listed = await listedWorks(session, key);
+  const listed = await selection(session, key);
+  const cursor = decodeReadCursor(session.options.cursor, binding(session, key), position(session, listed));
   if (!listed.works.length) throw new WorkReadMissing('No public Work credits this author');
   const start = cursor ? listed.works.findIndex(work => work.id === cursor.after) + 1 : 0;
   if (cursor && !start) throw new WorkReadMoved('Author Works changed; restart from the first page');
   const page = listed.works.slice(start, start + limit);
-  return pageResult(session, await hydrate(session, key, page), listed.works.length > start + limit
-    ? encodeReadCursor(binding(session, key), session.position, page.at(-1)!.id) : null);
+  return { ...pageResult(session, await hydrate(session, key, page), listed.works.length > start + limit
+    ? encodeReadCursor(binding(session, key), position(session, listed), page.at(-1)!.id) : null),
+  sourcePosition: position(session, listed) };
 }

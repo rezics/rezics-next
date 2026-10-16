@@ -6,6 +6,50 @@ import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { RECIPE_WORK_PAGE_OCCURRENCES, RECIPE_WORK_PAGE_READ_BOUND }
   from '../../../services/main/src/modules/recipe/work-page.ts';
+import { acting, fixtureAnswer, ingredient, originalRecipe, short }
+  from '../../../scripts/qa/cases/outcomes/recipes/read-a-recipe.ts';
+import { personaSessions } from '../support/personas.ts';
+import { settledWrite } from '../support/settled-write.ts';
+
+test('a visitor continues the published Recipe across private drafts and restarts after publication', async () => {
+  const sessions = await personaSessions('public');
+  try {
+    const recipe = await originalRecipe(sessions.owner, 'Continuation sauce', { paged: true });
+    const hidden = await originalRecipe(sessions.stranger, 'Private continuation sauce', { published: false });
+    const path = `/v1/recipes/works/${short(recipe.work)}`;
+    type Page = { revision: string; next?: string; occurrences: Array<{ occurrence: string }> };
+    const first = await fixtureAnswer<Page>(sessions.visitor.main('GET', path));
+    expect(first.next).toBeString();
+    const continuation = `${path}?cursor=${encodeURIComponent(first.next!)}`;
+    const edit = async (person: typeof sessions.owner, structure: string, revision: string) =>
+      fixtureAnswer<{ revision: string }>(settledWrite(person.main, 'POST',
+        `/v1/compositions/${short(structure)}/changes`, { profile: 'recipe-composition',
+          expectedHead: revision, actingSubject: person.actingSubject,
+          operations: [ingredient(structure, 'PRIVATE extra parsley')] }));
+    // Another Person's private activity must not become a restart signal.
+    await edit(sessions.stranger, hidden.structure, hidden.revision);
+    expect((await sessions.visitor.main('GET', `/v1/recipes/works/${short(hidden.work)}`)).status).toBe(404);
+    const afterOtherDraft = await fixtureAnswer<Page>(sessions.visitor.main('GET', continuation));
+    expect(afterOtherDraft.revision).toBe(recipe.revision);
+    // Even this Work's unpublished Structure head is outside the visitor's basis.
+    const draft = await edit(sessions.owner, recipe.structure, recipe.revision);
+    const afterOwnDraft = await fixtureAnswer<Page>(sessions.visitor.main('GET', continuation));
+    expect(afterOwnDraft).toEqual(afterOtherDraft);
+    expect([...first.occurrences, ...afterOwnDraft.occurrences].map(item => item.occurrence))
+      .toEqual(recipe.occurrenceIds);
+    const header = await fixtureAnswer<{ revision: string; structurePublicationHead: string }>(
+      sessions.owner.main('GET', `/v1/works/${short(recipe.work)}?${acting(sessions.owner)}`));
+    await fixtureAnswer(settledWrite(sessions.owner.main, 'POST', '/v1/work-publications', {
+      profile: 'work-structure-publication-v1', operation: 'publish', work: recipe.work,
+      actingSubject: sessions.owner.actingSubject, expectedWorkHead: header.revision,
+      expectedMainVersion: recipe.mainVersion, structure: recipe.structure,
+      expectedStructureHead: draft.revision, expectedPublicationHead: header.structurePublicationHead,
+      disclosure: 'public', rightsBasis: 'original-contribution',
+    }), 201);
+    expect((await sessions.visitor.main('GET', continuation)).status).toBe(409);
+    expect((await fixtureAnswer<Page>(sessions.visitor.main('GET', path))).revision).toBe(draft.revision);
+  } finally { await sessions.close(); }
+}, 240_000);
 
 test('G-415: a visible Recipe Work page scales the pinned ingredient revision and fences private reads', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');

@@ -14,7 +14,8 @@ import { selectedPublicationAttribution } from './sourced-structure-publication.
 import { readSerialStatistics } from './summary-serial.ts';
 
 export type WorkCard = Static<typeof workCard>;
-export interface WorkBasis { card: WorkCard; mainRevision: string; selectedLanguage: string | null;
+export interface WorkBasis { card: Omit<WorkCard, 'chapterCount' | 'wordCount' | 'lastUpdatedAt'>;
+  mainRevision: string; selectedLanguage: string | null;
   dependencyToken: string;
   metadataRevision: string | null; metadata: Awaited<ReturnType<typeof readMetadataHeader>>;
   disclosure: 'public' | 'restricted'; publicationState: 'published' | 'unpublished';
@@ -148,13 +149,10 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
   if (summary?.status !== 'available' || summary.type !== 'work') throw new WorkReadMissing('Work is unavailable');
   const metadata = await readMetadataHeader(session, work, row.metadataHead?.value ?? null);
   const selectedMetadataValue = selectedMetadata(metadata, session.options.language);
-  const stats = (await readSerialStatistics(session, [work]))?.get(work) ?? null;
   return { card: { id: work, revision: row.head.value, mainVersion: row.main.value,
     ...(row.provisional ? { verification: row.provisional.value === 'true' ? 'unverified' as const : 'verified' as const } : {}),
     title: summary.name, cover: summary.avatar, types: [...new Set(rows.flatMap(item => item.type ? [item.type.value] : []))].sort(),
-    tagline: selectedMetadataValue.tagline, completionStatus: metadata.completionStatus,
-    chapterCount: stats?.chapterCount ?? null, wordCount: stats?.wordCount ?? null,
-    lastUpdatedAt: stats?.lastUpdatedAt ?? null },
+    tagline: selectedMetadataValue.tagline, completionStatus: metadata.completionStatus },
   mainRevision: row.mainHead.value, metadataRevision: row.metadataHead?.value ?? null, metadata,
   dependencyToken: readDependencyToken([readRowsToken(rows), languageToken, profiles, summary, source]),
   selectedLanguage: selected?.language ?? null,
@@ -184,6 +182,10 @@ export async function fenceWorkBasis(session: WorkReadSession, basis: WorkBasis)
 
 export async function readWorkHeader(session: WorkReadSession, work: string) {
   const basis = await readWorkBasis(session, work);
+  // Admission is shared by Recipe, contents, editions and other readers that
+  // never display these asynchronously projected facts. Only their consumer
+  // owns this dependency; relay progress must not invalidate another read.
+  const stats = (await readSerialStatistics(session, [work]))?.get(work) ?? null;
   const metadata = basis.metadata;
   const selected = selectedMetadata(metadata, session.options.language);
   // Catalogue creation can carry a source synopsis before an editor has made
@@ -219,7 +221,9 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
   }
   const path = `/v1/works/${work.slice(-36)}`;
   const attribution = await selectedPublicationAttribution(session, basis.structuredPublication);
-  return { profile: 'work-read-v1' as const, ...basis.card, disclosure: basis.disclosure,
+  return { profile: 'work-read-v1' as const, ...basis.card,
+    chapterCount: stats?.chapterCount ?? null, wordCount: stats?.wordCount ?? null,
+    lastUpdatedAt: stats?.lastUpdatedAt ?? null, disclosure: basis.disclosure,
     publicationState: basis.publicationState,
     ...(attribution ? { rights: { basis: 'public-domain' as const, source: attribution } } : {}),
     ...(session.principal && session.options.actingSubject
