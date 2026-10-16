@@ -127,3 +127,47 @@ export const Creating: Story = recordedStory('loading');
 export const LostResponses: Story = recordedStory('recovery');
 export const Phone: Story = { ...recordedStory(), globals: { viewport: { value: 'phone' } } };
 export const PhoneRecovery: Story = { ...recordedStory('recovery'), globals: { viewport: { value: 'phone' } } };
+
+
+function existingRealmStory(): Story {
+  return {
+    args: { existing: true },
+    beforeEach() {
+      requests.length = 0; misses.length = 0;
+      const labels = ['creation-attached-management-address', 'creation-attached-management-configuration',
+        'creation-attached-management-zone', 'creation-attached-management-editor',
+        'creation-attached-route-configuration', 'creation-attached-route-name'];
+      const replay = recordedFetch(record, 'owner', labels.map(label => ({ label, state: 'populated' })),
+        { pathPrefix: BFF_PREFIX, sequence: true });
+      const original = window.fetch;
+      window.fetch = (async (input, init) => {
+        const request = new Request(input instanceof Request ? input.clone() : new URL(String(input), window.location.origin), init);
+        const path = new URL(request.url).pathname;
+        if (!path.startsWith(`${BFF_PREFIX}/`)) return original(input, init);
+        requests.push({ method: request.method, path, key: request.headers.get('idempotency-key'), body: undefined });
+        try { return await replay.fetcher(request); }
+        catch (error) { misses.push(error); throw error; }
+      }) as typeof fetch;
+      return () => { window.fetch = original; replay.dispose(); };
+    },
+    async play({ canvasElement, globals }) {
+      const locale = (globals.locale as UiLocale | undefined) ?? 'en';
+      const copy = attachmentMessages[locale];
+      const page = within(canvasElement);
+      const editor = within(await page.findByRole('region', { name: copy.realmTitle }));
+      const named = record.personas.owner.find(item => item.label === 'creation-attached-route-name')!.answer as { name: { value: string } };
+      await expect(editor.getByText(named.name.value, { exact: true })).toBeVisible();
+      await expect(editor.getByText(copy.realmAttached)).toBeVisible();
+      await expect(editor.getByRole('button', { name: copy.realmRemove })).toBeEnabled();
+      const identity = record.personas.owner.find(item => item.label === 'page-agent-profile')!.answer as { displayName: string };
+      await expect(page.getByText(identity.displayName, { exact: true })).toBeVisible();
+      await expect(requests).toHaveLength(6);
+      await expect(requests.every(item => item.method === 'GET')).toBe(true);
+      await expect(misses).toEqual([]);
+      await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    },
+  };
+}
+
+export const ExistingRealm: Story = existingRealmStory();
+export const PhoneExistingRealm: Story = { ...existingRealmStory(), globals: { viewport: { value: 'phone' } } };

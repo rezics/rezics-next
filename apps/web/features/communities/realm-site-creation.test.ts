@@ -205,6 +205,7 @@ for (const persona of ['stranger', 'member', 'owner', 'moderator', 'operator'] a
       const query = new URL(selections.find(item => item.label === 'management-address')!.path, 'https://record.invalid').searchParams;
       const actor = query.get('actingSubject')!;
       const frame = await readZoneManagementFrame(main, query.get('key')!, 'en', actor);
+      expect(frame.authoring.kind).toBe(persona === 'owner' || persona === 'operator' ? 'ready' : 'failure');
       const view = await zoneRealmAttachmentView({ main, anonymous: browserMainApi('https://record.invalid', { anonymous: true, fetcher: replay.fetcher }),
         actingSubject: actor, locale: 'en', signInHref: '/en/sign-in', loadAuthoring: async () => frame.authoring });
       if (!isValidElement<{ failure: string; actingSubject: string }>(view)) throw new Error('Missing route result');
@@ -219,3 +220,37 @@ for (const persona of ['stranger', 'member', 'owner', 'moderator', 'operator'] a
     } finally { replay.dispose(); }
   });
 }
+
+
+test('an existing Realm reopens the same production controls without creation and keeps its anonymous name reader', async () => {
+  const labels = ['creation-attached-management-address', 'creation-attached-management-configuration',
+    'creation-attached-management-zone', 'creation-attached-management-editor',
+    'creation-attached-route-configuration', 'creation-attached-route-name'];
+  const replay = recordedFetch(creation, 'owner', labels.map(label => ({ label, state: 'populated' })), { pathPrefix: BFF_PREFIX, sequence: true });
+  const calls: Request[] = [];
+  const misses: unknown[] = [];
+  const fetcher = (async (input, init) => {
+    const request = new Request(input, init);
+    calls.push(request);
+    try { return await replay.fetcher(request); }
+    catch (error) { misses.push(error); throw error; }
+  }) as typeof fetch;
+  try {
+    const main = browserMainApi('https://record.invalid', { fetcher });
+    const anonymous = browserMainApi('https://record.invalid', { anonymous: true, fetcher });
+    const address = (sample('creation-address').answer as { canonical: CanonicalAddress }).canonical;
+    const frame = await readZoneManagementFrame(main, addressKey(address), 'en', body.actingSubject);
+    const view = await zoneRealmAttachmentView({ main, anonymous, locale: 'en', actingSubject: body.actingSubject,
+      signInHref: '/en/sign-in', loadAuthoring: async () => frame.authoring });
+    if (!isValidElement<{ attachedRealm: string; attachedName: string; zoneHead: string }>(view)) throw new Error('Missing attachment controls');
+    expect(view.type).toBe(RealmAttachmentEditor);
+    const configuration = sample('creation-attached-route-configuration').answer as { revision: string; configuration: { defaultRealm: string } };
+    expect(view.props).toMatchObject({ attachedRealm: configuration.configuration.defaultRealm, zoneHead: configuration.revision,
+      attachedName: (sample('creation-attached-route-name').answer as { name: { value: string } }).name.value });
+    expect(calls).toHaveLength(6);
+    expect(calls.every(call => call.method === 'GET')).toBe(true);
+    expect(calls.at(-1)!.credentials).toBe('omit');
+    expect(new URL(calls.at(-1)!.url).searchParams.has('actingSubject')).toBe(false);
+    expect(misses).toEqual([]);
+  } finally { replay.dispose(); }
+});
