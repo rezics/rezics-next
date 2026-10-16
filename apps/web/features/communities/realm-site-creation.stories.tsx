@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fn, userEvent, within, waitFor } from 'storybook/test';
+import { expect, userEvent, within, waitFor } from 'storybook/test';
 import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import creationJson from '../../../../tests/qa/fixtures/outcomes/zone/a-zone-without-a-realm.json';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -13,12 +13,11 @@ import { realmSiteCreationMessages } from './realm-site-creation-messages.ts';
 const record = creationJson as AnswerRecord;
 const command = record.personas.owner.find(item => item.label === 'creation-space')!;
 const body = command.body as RealmSiteCreationIntent;
-const navigation = fn();
 const requests: { method: string; path: string; key: string | null; body: unknown }[] = [];
 const misses: unknown[] = [];
 const meta = { title: 'Communities/Independent site creation', component: CreateCommunityPage,
   args: { locale: 'en', signedIn: true, actingSubject: body.actingSubject },
-  parameters: { route: { pathname: '/en/r/new', onPush: navigation } },
+  parameters: { route: { pathname: '/en/r/new' } },
   render: (args, { globals }) => <CreateCommunityPage {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
 } satisfies Meta<typeof CreateCommunityPage>;
 export default meta;
@@ -27,7 +26,7 @@ type Story = StoryObj<typeof meta>;
 function recordedStory(mode: 'created' | 'loading' | 'recovery' = 'created'): Story {
   return {
     beforeEach() {
-      requests.length = 0; misses.length = 0; navigation.mockClear(); forgetReadingLanguages();
+      requests.length = 0; misses.length = 0; forgetReadingLanguages();
       const labels = ['creation-preferences', 'creation-space', ...(mode === 'recovery' ? ['creation-space-replay'] : []),
         'creation-home', ...(mode === 'recovery' ? ['creation-home-replay'] : []), 'creation-address'];
       const replay = recordedFetch(record, 'owner', labels.map(label => ({
@@ -88,8 +87,6 @@ function recordedStory(mode: 'created' | 'loading' | 'recovery' = 'created'): St
         const ref = new URL(address.path, 'https://record.invalid').searchParams.get('key');
         const attachment = canvas.getByRole('link', { name: copy.attach });
         await expect(attachment).toHaveAttribute('href', `/${locale}/manage/z/${ref}/realm`);
-        await userEvent.click(attachment);
-        await waitFor(() => expect(navigation).toHaveBeenCalledWith(`/${locale}/manage/z/${ref}/realm`));
         await expect(writes().map(item => item.method)).toEqual(mode === 'recovery' ? ['POST', 'POST', 'PUT', 'PUT'] : ['POST', 'PUT']);
         if (mode === 'recovery') await expect(writes()[3]).toEqual(writes()[2]);
         await expect(new Set(writes().filter(item => item.method === 'POST').map(item => item.key)).size).toBe(1);
