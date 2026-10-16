@@ -176,8 +176,9 @@ test('a mismatched confirmation keeps the pending answer and a recorded refusal 
     const own = recordedSample(record, 'stranger', 'withdraw-confirm-own-request');
     expect(await (await playback.fetcher(`${origin}${own.path}`)).json()).toEqual(own.answer);
   } finally { playback.dispose(); }
-  const label = 'request-decision-accepted-1';
+  const label = 'request-decision-accepted-0';
   const refusal = recordedSample(record, 'owner', label);
+  expect(refusal.status).toBe(409);
   const refused = membershipRecordedTransition(record, 'owner', [
     { selections: [{ label, state: 'error' }], advanceOn: label },
     { selections: [{ label: 'request-inbox-after-decisions', state: 'empty' }] },
