@@ -68,8 +68,9 @@ operating procedures. Prefer a bounded architecture over reducing API count:
 operation cost must not grow with total population, and a new vertical should
 be configuration of shared owners.
 
-Managers work locally and commit on main. Do not push, deploy, provision paid
-services or send repository data to other services without explicit authorization.
+Managers work locally and send commits to main through
+`task goal -- commit -m <message> -- <paths...>`. Do not push, deploy, provision
+paid services or send repository data to other services without explicit authorization.
 Workers follow their worktree and branch protocol instead.
 
 Account configuration and resource policies belong in ignored
@@ -146,6 +147,19 @@ reports effective settings and field sources.
 Use the [Goal management skill](../../.agents/skills/goal-management/SKILL.md)
 for startup, event handling, checkpoints, enrollment, handover and closure.
 The charter defines decisions; the skill owns their operating procedure.
+
+Manager commits and archival commits join the same ordered merge train as
+worker landings. The commit command snapshots only the named paths, restores
+them in the main checkout while gating, and preserves peer staging. A failed
+snapshot remains at `refs/goal-manager/<manager-id>` with its error under
+`.temp/goal-orchestration/manager-commits/`; inspect it before
+`task goal -- commit --retry <manager-id>`. Retry gates the same snapshot;
+a content correction is a new commit.
+
+`task goal -- train` reports observed landings, discarded gate-seconds and
+p95 handoff-to-main seconds from `train-events.jsonl` in that directory.
+The journal timestamps gate components, admission waits and train positions.
+An empty observation window reports a null latency.
 
 ## Starting a manager
 
