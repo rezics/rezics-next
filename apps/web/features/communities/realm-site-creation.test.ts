@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import type { CanonicalAddress } from '@rezics/model/address';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import creationJson from '../../../../tests/qa/fixtures/outcomes/zone/a-zone-without-a-realm.json';
 import attachmentJson from '../../../../tests/qa/fixtures/outcomes/zone/attach-a-realm.json';
@@ -26,12 +27,12 @@ test('creation preserves the Person, exact Space/Zone commands, keys and complet
   try {
     const client = realmSiteCreationClient(main);
     const created = await client.create(body, 'create-site');
-    expect(created).toEqual({ ok: true, data: sample('creation-space').answer });
+    expect(created as unknown).toEqual({ ok: true, data: sample('creation-space').answer });
     if (!created.ok) throw new Error('Creation failed');
     const prepared = await client.prepare(created.data, body.actingSubject, 'prepare-site');
-    expect(prepared).toEqual({ ok: true, data: sample('creation-home').answer });
+    expect(prepared as unknown).toEqual({ ok: true, data: sample('creation-home').answer });
     const destination = await client.destination(created.data, body.actingSubject, 'de');
-    const address = sample('creation-address').answer as { canonical: { prefix: string; key: string; suffixSource: string } };
+    const address = sample('creation-address').answer as { canonical: CanonicalAddress };
     expect(destination).toEqual({ ok: true, data: { attachmentPath: `/manage/z/${addressKey(address.canonical)}/realm`, sitePath: canonicalHref(address.canonical, 'de') } });
     expect(calls).toEqual([
       { method: 'POST', body, key: 'create-site' },
@@ -47,7 +48,7 @@ test('the newly created canonical address opens the existing management reader',
   const selections = creation.personas.owner.filter(item => item.label.startsWith('creation-management-'));
   const replay = recordedFetch(creation, 'owner', selections.map(item => ({ label: item.label, state: 'populated' })), { pathPrefix: BFF_PREFIX });
   try {
-    const address = sample('creation-address').answer as { canonical: { prefix: string; key: string; suffixSource: string } };
+    const address = sample('creation-address').answer as { canonical: CanonicalAddress };
     const frame = await readZoneManagementFrame(browserMainApi('https://record.invalid', { fetcher: replay.fetcher }), addressKey(address.canonical), 'en', body.actingSubject);
     expect(frame.authoring.kind).toBe('ready');
     expect(frame.draftZoneId).toBe((sample('creation-space').answer as { zone: string }).zone.slice(-36));

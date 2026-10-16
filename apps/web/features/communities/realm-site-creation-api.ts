@@ -39,8 +39,9 @@ export function realmSiteCreationClient(main: Main = browserMainApi()) {
         || address.capabilities?.zone !== receipt.zone || address.canonical.prefix !== '/z/') {
         return { ok: false, failure: 'unavailable' };
       }
-      return { ok: true, data: { attachmentPath: zoneRealmPath(addressKey(address.canonical)),
-        sitePath: canonicalHref(address.canonical, locale) } };
+      const canonical = { ...address.canonical, prefix: '/z/' as const };
+      return { ok: true, data: { attachmentPath: zoneRealmPath(addressKey(canonical)),
+        sitePath: canonicalHref(canonical, locale) } };
     },
   };
 }

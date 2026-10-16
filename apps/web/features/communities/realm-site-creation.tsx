@@ -5,7 +5,7 @@ import { Input } from '@rezics/ui/input';
 import { useId, useRef, useState, type FormEvent } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { LanguageSelect } from '../content-language/language-select.tsx';
-import { textAttributes } from '../content-language/writing-language.ts';
+import { textAttributes, UNSPECIFIED } from '../content-language/writing-language.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { communityText } from './messages.ts';
 import { realmSiteCreationClient, type RealmSiteCreationClient, type RealmSiteCreationIntent,
@@ -80,13 +80,13 @@ function RealmSiteCreationForm({ actingSubject, locale, client }: RealmSiteCreat
     </div>
     {destination ? <div className="grid justify-items-start gap-3">
       <p role="status">{copy.created}</p>
-      <p {...textAttributes(language, name)}>{name}</p>
+      <p {...textAttributes(language ?? UNSPECIFIED, name)}>{name}</p>
       <LocalizedLink href={destination.attachmentPath} className={buttonVariants()}>{copy.attach}</LocalizedLink>
     </div> : <form onSubmit={event => void submit(event)} className="grid justify-items-start gap-4">
       <div className="grid w-full gap-1.5 text-sm font-medium">
         <label htmlFor={`${id}-name`}>{copy.name}</label>
         <Input id={`${id}-name`} required maxLength={120} value={name} disabled={locked}
-          {...textAttributes(language, name)} onChange={event => setName(event.currentTarget.value)} />
+          {...textAttributes(language ?? UNSPECIFIED, name)} onChange={event => setName(event.currentTarget.value)} />
       </div>
       <LanguageSelect value={language} onChange={setLanguage} locale={locale} disabled={locked}
         label={communityText.nameLanguage[locale]} />
