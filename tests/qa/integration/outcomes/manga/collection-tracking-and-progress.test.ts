@@ -4,7 +4,12 @@ import { Pool } from 'pg';
 import outcome from '../../../../../scripts/qa/cases/outcomes/manga/collection-tracking-and-progress.ts';
 import { classificationContextBody, classifiedStatementBody } from '../../../../../scripts/dev/seed/classified-statement.ts';
 import { grantMangaFixtureAuthority } from '../../../../../scripts/qa/cases/outcomes/manga/work-hub-and-edition-choice.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { browserMainApi, BFF_PREFIX } from '../../../../../apps/web/features/api/browser.ts';
+import { booksEditionReads } from '../../../../../apps/web/features/work-page/books-edition-page.read.ts';
+import { loadBooksLibrary } from '../../../../../apps/web/features/library/books-library-recorded-page.ts';
+import { parseLibraryState } from '../../../../../apps/web/features/library/state.ts';
+import { mainMediaApi } from '../../../../../apps/web/features/tracking/media-api.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 type Work = { work: string; mainVersion: string };
@@ -15,6 +20,16 @@ type Positions = { resolved: string | null; scope: string; items: { occurrence: 
 setDefaultTimeout(90_000);
 let sessions: PersonaSessions, access: Pool, content: Pool;
 let manga: Work, omnibus: Work, volume1: Work, volume2: Work, first: Composition, second: Composition;
+const recording = new OutcomeRecorder(outcome);
+let activePersona: PersonaName | null = null;
+let phase = 'proof';
+let requestNumber = 0;
+const proof = (name: PersonaName, run: () => Promise<void>) => async () => {
+  activePersona = name;
+  phase = 'proof';
+  requestNumber = 0;
+  try { await run(); } finally { activePersona = null; }
+};
 const short = (id: string) => id.slice(-36);
 const acting = (actor: string) => `actingSubject=${encodeURIComponent(actor)}`;
 async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
@@ -56,7 +71,14 @@ async function compose(profile: string, work: Work, operations: (structure: stri
   return { ...base, ...changed };
 }
 beforeAll(async () => {
+  await recording.prepare();
   sessions = await personaSessions('public');
+  for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
+    const person = sessions[name], send = person.main.bind(person);
+    person.main = (...args) => activePersona
+      ? recording.session(activePersona, { main: send })(`${phase}-${++requestNumber}`, ...args)
+      : send(...args);
+  }
   access = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   content = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
   volume1 = await create('Ink Garden volume 1', 'Book');
@@ -97,7 +119,39 @@ beforeAll(async () => {
     }));
   }
 }, 240_000);
-afterAll(async () => { await sessions?.close(); await access?.end(); await content?.end(); });
+afterAll(async () => { await recording.publish(); await sessions?.close(); await access?.end(); await content?.end(); });
+
+/** Reach the production readers with the same HTTP boundary as the session client. */
+async function productionVisit(person: PersonaSession) {
+  const client = (session: PersonaSession) => browserMainApi('https://recorded.invalid', { fetcher: (async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    const raw = await request.text();
+    return session.main(request.method, url.pathname.slice(BFF_PREFIX.length) + url.search,
+      raw ? JSON.parse(raw) : undefined, request.headers.get('idempotency-key') ?? undefined);
+  }) as typeof fetch });
+  const main = client(person), actingSubject = person.actingSubject ?? undefined;
+  const reads = booksEditionReads({ main, actingSubject });
+  phase = 'work-header'; requestNumber = 0;
+  expect((await reads.readWorkHeader(short(manga.work))).ok).toBe(true);
+  phase = 'work-agent-credits'; requestNumber = 0;
+  expect((await reads.readAgentCredits(short(manga.work))).ok).toBe(true);
+  phase = 'work-credits'; requestNumber = 0;
+  expect((await reads.readCredits(short(manga.work))).ok).toBe(true);
+  phase = 'chapter-standing'; requestNumber = 0;
+  const media = mainMediaApi(actingSubject!, () => main);
+  expect((await media.standing(manga.work)).ok).toBe(true);
+  phase = 'chapter-inventory'; requestNumber = 0;
+  expect((await media.positions(manga.work)).ok).toBe(true);
+  if (actingSubject) {
+    phase = 'library'; requestNumber = 0;
+    const loaded = await loadBooksLibrary({ main, anonymous: client(sessions.visitor), actingSubject }, {
+      state: parseLibraryState({ shelf: 'reading', view: 'grid' }), locale: 'en', year: new Date().getUTCFullYear(), first: false,
+    });
+    expect(loaded.overview.ok).toBe(true);
+    expect(loaded.view.ok).toBe(true);
+  }
+  phase = 'proof'; requestNumber = 100;
+}
 const path = (composition: Composition, occurrence: string) =>
   `/v1/compositions/${short(composition.structure)}/occurrences/${short(occurrence)}/progress`;
 const read = (person: PersonaSession, composition: Composition, occurrence: string, actor = person.actingSubject!) =>
@@ -182,8 +236,9 @@ async function track(name: Exclude<PersonaName, 'visitor'>) {
     await grant(person, `work:edit:${manga.work}`, 'work.edit');
   }
   await foreign(name);
+  await productionVisit(person);
 }
-outcomeTest(outcome, 'visitor', async () => {
+outcomeTest(outcome, 'visitor', proof('visitor', async () => {
   const person = sessions.visitor, actor = sessions.owner.actingSubject!;
   expect(await state(person, manga, actor)).toMatchObject({ status: { status: null, version: 0, changedAt: null }, progress: null });
   const opening = await positions(person, manga), mine = await positions(person, manga, 'mine');
@@ -193,9 +248,10 @@ outcomeTest(outcome, 'visitor', async () => {
   await answer(write(person, first, first.occurrences[1]!, true, 0, actor), 401);
   await answer(person.main('PUT', `/v1/works/${short(manga.work)}/reader-status`, { actingSubject: actor, status: 'reading', expectedVersion: 0 }), 401);
   await answer(person.main('GET', `/v1/me/shelves?${acting(actor)}`), 401);
-});
-outcomeTest(outcome, 'stranger', () => track('stranger'));
-outcomeTest(outcome, 'member', () => track('member'));
-outcomeTest(outcome, 'owner', () => track('owner'));
-outcomeTest(outcome, 'moderator', () => track('moderator'));
-outcomeTest(outcome, 'operator', () => track('operator'));
+  await productionVisit(person);
+}), recording);
+outcomeTest(outcome, 'stranger', proof('stranger', () => track('stranger')), recording);
+outcomeTest(outcome, 'member', proof('member', () => track('member')), recording);
+outcomeTest(outcome, 'owner', proof('owner', () => track('owner')), recording);
+outcomeTest(outcome, 'moderator', proof('moderator', () => track('moderator')), recording);
+outcomeTest(outcome, 'operator', proof('operator', () => track('operator')), recording);
