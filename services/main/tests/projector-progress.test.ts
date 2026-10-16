@@ -85,6 +85,10 @@ function directoryHarness(options: { holdOnFence?: boolean; builderConflict?: bo
     }
     if (sql === 'ROLLBACK') { snapshot = null; return { rows: [], rowCount: 0 }; }
     if (sql.startsWith('SET LOCAL') || sql.includes('pg_advisory_xact_lock')) return { rows: [], rowCount: 0 };
+    // Growth ranks are already current; this fixture exercises publication progress.
+    if (sql.includes('RETURNING growth_day=growth_target_day AS ready')) {
+      return { rows: [{ ready: true, generation: 0, realm: '' }], rowCount: 1 };
+    }
     if (sql.includes('SELECT generation::text FROM access.recovery_fence')) return { rows: [{ generation: '4' }], rowCount: 1 };
     if (sql.includes('realm_directory_position') && sql.includes('revision = $1')) {
       const current = saved();
