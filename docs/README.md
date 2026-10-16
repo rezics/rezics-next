@@ -29,9 +29,6 @@ Design documents do not claim that a capability or deployment is complete.
 - [API checkpoint](goals/api/state.md) — Api retained decisions and unproved obligations; read for continuation, then check live ledger status.
 - [Goal manager charter](goals/manager.md) — Manager authority and standing policy; read when managing a Goal.
 - [How work is defined, proved and landed](goals/method.md) — Outcome rows and landing criteria; read when defining or proving work.
-- [Operations Goal](goals/operations/GOAL.md) — Operations outcome and boundaries; read when working for that Goal.
-- [Later](goals/operations/later.md) — Operations deferred findings; read before promoting or briefing a related defect.
-- [Operations checkpoint](goals/operations/state.md) — Operations retained decisions and unproved obligations; read for continuation, then check live ledger status.
 - [Program Goal](goals/program/GOAL.md) — Program outcome and boundaries; read when working for that Goal.
 - [State](goals/program/state.md) — Program retained decisions and unproved obligations; read for continuation, then check live ledger status.
 - [Waves: build, then prove](goals/wave.md) — Build and prove phase boundaries; read only for wave work.

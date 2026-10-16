@@ -135,3 +135,7 @@ have been removed. Task IDs locate evidence rather than confer authority.
 - Finding 139: Main logs `NestedPoolCheckoutError` at three sites (22 lines in 7 of 347 recent QA logs: `progress/completion.ts` and `library/copies.ts` holding while `media/store.ts avatarRows` checks out; `governance/store.ts withPublicationFence` holding while `access/admission.ts` checks out); sent to api as one class at 01:48 with the request that the fault fail the gates.
 - Finding 140: A typed 503 (`ActingContextUnavailable`) drops its cause and logs nothing, so retained evidence cannot name it; api's G-2415 repairs that first.
 - Finding 141: The answer record validates against Main's contract only; the signed-in frame's Account read cannot be recorded until Account has a generated contract.
+- Finding 142: Operations drill gap: A drill schedule exists in a document and is not registered in the harness.
+- Finding 143: Operations drill gap: Restore time under host load is not measured.
+- Finding 144: Operations drill gap: One inventory row carries a lower-case task file name (reported by the trust-ops manager, not examined).
+- Finding 145: Operations drill gap: G-2684 found missing `referenceFencePool` in the Contribution environments of `translated-work-recovery.test.ts` and `fixed-release-recovery.test.ts`; unqualified, deferred by Program mail `2c07cd06-6ec0-47b2-87ca-74ba39f0328c`, and outside Operations completion criteria.
