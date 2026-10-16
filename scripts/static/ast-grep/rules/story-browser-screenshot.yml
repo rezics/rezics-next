@@ -1,0 +1,47 @@
+id: story-browser-screenshot
+language: TypeScript
+severity: error
+message: Browser stories and their helpers use the runner's Node screenshot command.
+note: Browser-side screenshot writes are disabled when Vitest exposes its server. The QA runner captures each story through scripts/qa/story-screenshots.ts.
+files:
+  - apps/*/features/**/*.ts
+  - apps/*/components/**/*.ts
+  - apps/**/*.stories.ts
+  - packages/ui/**/*.ts
+rule:
+  kind: call_expression
+  has:
+    field: function
+    any:
+      - kind: member_expression
+        has:
+          field: property
+          regex: ^screenshot$
+      - kind: subscript_expression
+        has:
+          field: index
+          regex: ^['"]screenshot['"]$
+---
+id: story-browser-screenshot-tsx
+language: Tsx
+severity: error
+message: Browser stories and their helpers use the runner's Node screenshot command.
+note: Browser-side screenshot writes are disabled when Vitest exposes its server. The QA runner captures each story through scripts/qa/story-screenshots.ts.
+files:
+  - apps/**/*.stories.tsx
+  - apps/*/features/**/*.tsx
+  - apps/*/components/**/*.tsx
+  - packages/ui/**/*.tsx
+rule:
+  kind: call_expression
+  has:
+    field: function
+    any:
+      - kind: member_expression
+        has:
+          field: property
+          regex: ^screenshot$
+      - kind: subscript_expression
+        has:
+          field: index
+          regex: ^['"]screenshot['"]$

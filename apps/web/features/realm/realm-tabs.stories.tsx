@@ -231,14 +231,6 @@ export const BrowseMoved: Story = {
   },
 };
 
-async function captureSection(name: string) {
-  if (import.meta.env.VITE_G943_VISUAL === '1') {
-    const { page } = await import('vitest/browser');
-    await document.fonts.ready;
-    await page.screenshot({ path: `../../../../.temp/g-943-${name}.png` });
-  }
-}
-
 export const Rules: Story = {
   args: { tab: 'rules' },
   parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'community', ['rules']), 'en') } },
@@ -247,7 +239,6 @@ export const Rules: Story = {
     await expect(canvas.getByRole('heading', { name: 'Community rules' })).toBeVisible();
     await expect(canvas.queryByRole('heading', { name: 'Moderators' })).toBeNull();
     await expect(canvas.queryByRole('heading', { name: 'Members' })).toBeNull();
-    await captureSection('rules');
   },
 };
 export const Members: Story = {
@@ -260,7 +251,6 @@ export const Members: Story = {
     await expect(canvas.queryByRole('heading', { name: 'Moderators' })).toBeNull();
     // The header's membership is labelled as the community's, never as the roster's length.
     await expect(canvas.getByText('Showing 4 listed members · Community membership: 12,408 members (counted separately from this list)')).toBeVisible();
-    await captureSection('members');
   },
 };
 

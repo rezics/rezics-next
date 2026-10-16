@@ -122,19 +122,11 @@ async function checkContinuation(canvasElement: HTMLElement, early = false) {
 export const AfterEffects: Story = {
   async play({ canvasElement }) {
     await checkContinuation(canvasElement);
-    if ('__vitest_browser__' in globalThis) {
-      const { page } = await import('vitest/browser');
-      await document.fonts.ready;
-      for (const width of [1280, 390]) {
-        await page.viewport(width, 860);
-        const capture = {
-          path: `../../../../.temp/g-1060/continuation-${width}.png`,
-          fullPage: true,
-        };
-        await page.screenshot(capture);
-      }
-    }
   },
+};
+export const AfterEffectsPhone: Story = {
+  ...AfterEffects,
+  globals: { viewport: { value: 'phone' } },
 };
 export const AcrossHydration: Story = {
   args: { early: true },

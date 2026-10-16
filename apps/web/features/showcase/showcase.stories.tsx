@@ -15,7 +15,6 @@ import {
   showcaseFixtures,
   type ShowcaseLanguage,
   showcaseLocale,
-  showcaseViewports,
 } from './fixtures.ts';
 
 function Preview({
@@ -152,53 +151,34 @@ const meta = {
     if (matchMedia('(pointer: coarse)').matches || (innerWidth < 768 && innerHeight > innerWidth))
       await expect(within(region).queryByRole('button', { name: 'Next' })).toBeNull();
   },
-  async afterEach({ id }) {
-    if (import.meta.env.VITE_SHOWCASE_VISUAL !== '1') return;
-    const { page } = await import('vitest/browser');
-    await document.fonts.ready;
-    await Promise.all([...document.images].map((image) => image.decode().catch(() => {})));
-    const suffix = import.meta.env.VITE_SHOWCASE_REDUCED === '1' ? '-reduce' : '';
-    await page.screenshot({ path: `../../../../.temp/showcase/${id}${suffix}.png` });
-  },
 } satisfies Meta<typeof Preview>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function inspectAndCapture(language: ShowcaseLanguage) {
-  if (import.meta.env.VITE_SHOWCASE_VISUAL !== '1') return;
-  const { page } = await import('vitest/browser');
-  for (const [name, [width, height]] of Object.entries(showcaseViewports)) {
-    await page.viewport(width, height);
-    await document.fonts.ready;
-    await Promise.all([...document.images].map((image) => image.decode().catch(() => {})));
-    await page.screenshot({ path: `../../../../.temp/showcase/${language}-${name}.png` });
-  }
-}
 export const English: Story = {
   async play({ canvasElement }) {
     const image = canvasElement.querySelector<HTMLImageElement>('img.showcase-art');
     await waitFor(() => expect(image?.naturalWidth).toBeGreaterThan(0));
-    await inspectAndCapture('en');
   },
 };
 export const TraditionalChinese: Story = {
   args: { language: 'zh-Hant' },
   globals: { locale: 'zh-Hant' },
   async play() {
-    await inspectAndCapture('zh-Hant');
+    // The QA runner captures this localized preview after play.
   },
 };
 export const Japanese: Story = {
   args: { language: 'ja' },
   globals: { locale: 'ja' },
   async play() {
-    await inspectAndCapture('ja');
+    // The QA runner captures this localized preview after play.
   },
 };
 export const ArabicContent: Story = {
   args: { language: 'ar', effect: 'glow' },
   async play() {
-    await inspectAndCapture('ar');
+    // The QA runner captures this localized preview after play.
   },
 };
 export const Phone: Story = {

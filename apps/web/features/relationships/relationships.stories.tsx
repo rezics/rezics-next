@@ -62,12 +62,6 @@ function RelationshipsScene({ state, locale }: { state: State; locale: UiLocale 
 const meta = { title: 'Relationships/Inventory', component: RelationshipsScene,
   args: { state: 'thousands', locale: 'en' }, parameters: { route: { pathname: '/en/following' } },
   globals: { viewport: { value: 'desktop' } },
-  async afterEach(context) {
-    if (import.meta.env.VITE_G944_CAPTURE !== '1') return;
-    const { page } = await import('vitest/browser');
-    await document.fonts.ready;
-    await page.screenshot({ path: `../../../../.temp/g-944/screenshots/${context.id}.png` });
-  },
 } satisfies Meta<typeof RelationshipsScene>;
 export default meta;
 type Story = StoryObj<typeof meta>;

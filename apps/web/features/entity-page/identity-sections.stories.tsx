@@ -50,7 +50,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 async function checks(context: Parameters<NonNullable<Story['play']>>[0]) {
-  const { canvasElement, args, id } = context;
+  const { canvasElement, args } = context;
   const browser =
     import.meta.env.VITE_IDENTITY_VISUAL === '1' ? (await import('vitest/browser')).page : null;
   if (browser) await browser.viewport(args.phone ? 390 : 1280, 844);
@@ -86,27 +86,6 @@ async function checks(context: Parameters<NonNullable<Story['play']>>[0]) {
     }
   }
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-  if (browser) {
-    await document.fonts.ready;
-    for (const region of canvasElement.querySelectorAll('section')) {
-      const name = `${id}-${region.getAttribute('aria-labelledby')}`;
-      if (region.getBoundingClientRect().height <= 800) {
-        await browser.screenshot({
-          element: region,
-          path: `../../../../.temp/identity-pages/stories/${name}.png`,
-        });
-      } else {
-        for (const [index, card] of [
-          ...region.querySelectorAll('[data-identity-member]'),
-        ].entries()) {
-          await browser.screenshot({
-            element: card,
-            path: `../../../../.temp/identity-pages/stories/${name}-${index}.png`,
-          });
-        }
-      }
-    }
-  }
 }
 
 export const PopulatedDesktop: Story = { play: checks };
@@ -137,7 +116,6 @@ export const MemberWithoutARatingQuestion: Story = {
       const browser = (await import('vitest/browser')).page;
       await browser.viewport(390, 844);
       await document.fonts.ready;
-      await browser.screenshot({ element: canvasElement, path: '../../../../.temp/identity-pages/stories/units-no-question.png' });
     }
   },
 };

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { accessActor, accessFixtureApi, captureAccessStory, joinPageFixture, ownRequestFixture } from '../manage/settings-fixtures.ts';
+import { accessActor, accessFixtureApi, checkAccessViewports, joinPageFixture, ownRequestFixture } from '../manage/settings-fixtures.ts';
 import { emptyRequestJournal, requestStorageKey } from './request-state.ts';
 import { PrivateSpaceJoinPage } from './join-page.tsx';
 import { realmHref } from '../realm/route.ts';
@@ -16,7 +16,7 @@ type Story = StoryObj<typeof meta>;
 const acceptedApi = () => accessFixtureApi({ basis: async () => ({ ok: true, data: {
   policyRevision: '12', termsRevision: 'rules-3', membershipGeneration: '5', state: 'joined',
 } }) }, ownRequestFixture('accepted'));
-export const English: Story = { async play() { await captureAccessStory('join'); } };
+export const English: Story = { async play() { await checkAccessViewports('join'); } };
 export const TraditionalChinese: Story = { args: { locale: 'zh-Hant' }, globals: { locale: 'zh-Hant' } };
 export const SimplifiedChinese: Story = { args: { locale: 'zh-Hans' }, globals: { locale: 'zh-Hans' } };
 export const Japanese: Story = { args: { locale: 'ja' }, globals: { locale: 'ja' } };
@@ -34,17 +34,17 @@ export const RequestToPending: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Request to join' }));
     await expect(await canvas.findByText('Your request is pending. A manager will review it.')).toBeVisible();
     await expect(canvas.queryByRole('button', { name: 'Request to join' })).not.toBeInTheDocument();
-    await captureAccessStory('join-pending');
+    await checkAccessViewports('join-pending');
   },
 };
-export const Declined: Story = { args: { api: accessFixtureApi({}, ownRequestFixture('declined')) }, async play() { await captureAccessStory('join-declined'); } };
+export const Declined: Story = { args: { api: accessFixtureApi({}, ownRequestFixture('declined')) }, async play() { await checkAccessViewports('join-declined'); } };
 export const Pending: Story = { args: { api: accessFixtureApi({}, ownRequestFixture('pending')) } };
 export const SignedOut: Story = { args: { actingSubject: null, signInHref: signInPath(realmHref('en', 'private-books')) }, async play({ canvasElement }) {
   const canvas = within(canvasElement);
   await expect(canvas.getByRole('link', { name: 'Sign in to request to join' })).toHaveAttribute('href', signInPath(realmHref('en', 'private-books')));
   await expect(canvas.queryByRole('textbox')).not.toBeInTheDocument();
   await expect(canvas.queryByText(accessMessages.en.statusLoading)).not.toBeInTheDocument();
-  await captureAccessStory('g-988-join-signed-out-en');
+  await checkAccessViewports('g-988-join-signed-out-en');
 } };
 export const RequestAgainAfterLeaving: Story = {
   args: { api: accessFixtureApi({}, ownRequestFixture('accepted')) },
@@ -52,10 +52,10 @@ export const RequestAgainAfterLeaving: Story = {
     const canvas = within(canvasElement);
     await userEvent.type(await canvas.findByRole('textbox', { name: accessMessages.en.joinReason }), 'I would like to return.');
     await expect(canvas.queryByText(accessMessages.en.approved)).not.toBeInTheDocument();
-    await captureAccessStory('g-989-request-again-ready');
+    await checkAccessViewports('g-989-request-again-ready');
     await userEvent.click(canvas.getByRole('button', { name: accessMessages.en.requestJoin }));
     await expect(await canvas.findByText(accessMessages.en.pending)).toBeVisible();
-    await captureAccessStory('g-989-request-again');
+    await checkAccessViewports('g-989-request-again');
   },
 };
 export const AcceptedMembershipStillActive: Story = {
@@ -144,7 +144,7 @@ export const SignedOutTraditionalChinese: Story = { args: { locale: 'zh-Hant', a
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: accessMessages['zh-Hant'].signIn })).toHaveAttribute('href', signInPath(realmHref('zh-Hant', 'private-books')));
     await expect(canvas.queryByRole('textbox')).not.toBeInTheDocument();
-    await captureAccessStory('g-988-join-signed-out-zh-Hant');
+    await checkAccessViewports('g-988-join-signed-out-zh-Hant');
   },
 };
 export const PendingSimplifiedChinese: Story = { args: { locale: 'zh-Hans', api: accessFixtureApi({}, ownRequestFixture('pending')) }, globals: { locale: 'zh-Hans' } };

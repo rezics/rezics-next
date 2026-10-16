@@ -41,20 +41,12 @@ const meta = { title: 'Address/Space surfaces', component: Surface,
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function capture(name: string) {
-  if (import.meta.env.VITE_G943_VISUAL === '1') {
-    const { page } = await import('vitest/browser');
-    await document.fonts.ready;
-    await page.screenshot({ path: `../../../../.temp/g-943-${name}.png` });
-  }
-}
 export const Site: Story = { async play({ canvasElement }) {
   const canvas = within(canvasElement);
   await expect(canvas.queryByRole('navigation', { name: 'Community sections' })).toBeNull();
   await expect(canvas.getByRole('link', { name: 'About' })).toHaveAttribute('aria-current', 'page');
   await expect(canvas.getByRole('link', { name: 'Home' })).not.toHaveAttribute('aria-current');
   await expect(canvas.getByRole('link', { name: 'Community' })).toHaveAttribute('href', '/en/r/fiction');
-  await capture('site');
 } };
 export const Community: Story = { args: { site: false }, parameters: { route: { pathname: '/en/r/fiction' } },
   async play({ canvasElement }) {
@@ -62,7 +54,6 @@ export const Community: Story = { args: { site: false }, parameters: { route: { 
     await expect(canvas.getByRole('navigation', { name: 'Community sections' })).toBeVisible();
     await expect(canvas.queryByRole('link', { name: 'Browse works' })).toBeNull();
     await expect(canvas.getByRole('link', { name: 'Site' })).toHaveAttribute('href', '/en/z/fiction');
-    await capture('community');
   } };
 export const SiteWithoutRealm: Story = { args: { paired: false }, async play({ canvasElement }) {
   await expect(within(canvasElement).queryByRole('link', { name: 'Community' })).toBeNull();
@@ -75,5 +66,4 @@ export const SitePhoneChinese: Story = { globals: { locale: 'zh-Hans', viewport:
   parameters: { route: { pathname: '/zh-Hans/z/fiction/about' } }, async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('link', { name: '社区' })).toBeVisible();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
-    await capture('site-phone-chinese');
   } };

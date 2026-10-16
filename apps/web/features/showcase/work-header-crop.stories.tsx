@@ -77,12 +77,6 @@ const meta = {
   component: Preview,
   args: { surface: 'stage' },
   play: ({ canvasElement }) => cropFits(canvasElement),
-  async afterEach({ id }) {
-    if (import.meta.env.VITE_SHOWCASE_VISUAL !== '1') return;
-    const { page } = await import('vitest/browser');
-    await document.fonts.ready;
-    await page.screenshot({ path: `../../../../.temp/showcase-crop/${id}.png` });
-  },
 } satisfies Meta<typeof Preview>;
 export default meta;
 type Story = StoryObj<typeof meta>;

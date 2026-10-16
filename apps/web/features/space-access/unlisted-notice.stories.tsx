@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { captureAccessStory, joinPageFixture } from '../manage/settings-fixtures.ts';
+import { checkAccessViewports, joinPageFixture } from '../manage/settings-fixtures.ts';
 import { UnlistedSpaceNotice } from './unlisted-notice.tsx';
 
 const meta = { title: 'Space access/Unlisted', component: UnlistedSpaceNotice,
@@ -8,7 +8,7 @@ const meta = { title: 'Space access/Unlisted', component: UnlistedSpaceNotice,
 } satisfies Meta<typeof UnlistedSpaceNotice>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const English: Story = { async play() { await captureAccessStory('unlisted'); } };
+export const English: Story = { async play() { await checkAccessViewports('unlisted'); } };
 export const TraditionalChinese: Story = { args: { locale: 'zh-Hant' }, globals: { locale: 'zh-Hant' } };
 export const SimplifiedChinese: Story = { args: { locale: 'zh-Hans' }, globals: { locale: 'zh-Hans' } };
 export const Japanese: Story = { args: { locale: 'ja' }, globals: { locale: 'ja' } };

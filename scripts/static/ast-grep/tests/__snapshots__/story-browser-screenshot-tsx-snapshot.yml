@@ -1,0 +1,72 @@
+id: story-browser-screenshot-tsx
+snapshots:
+  'await browser.screenshot({ element: canvasElement, path });':
+    labels:
+    - source: 'browser.screenshot({ element: canvasElement, path })'
+      style: primary
+      start: 6
+      end: 58
+    - source: screenshot
+      style: secondary
+      start: 14
+      end: 24
+    - source: browser.screenshot
+      style: secondary
+      start: 6
+      end: 24
+  'await page.screenshot({ path: ''.temp/story.png'' });':
+    labels:
+    - source: 'page.screenshot({ path: ''.temp/story.png'' })'
+      style: primary
+      start: 6
+      end: 50
+    - source: screenshot
+      style: secondary
+      start: 11
+      end: 21
+    - source: page.screenshot
+      style: secondary
+      start: 6
+      end: 21
+  await page.screenshot?.(options);:
+    labels:
+    - source: page.screenshot?.(options)
+      style: primary
+      start: 6
+      end: 32
+    - source: screenshot
+      style: secondary
+      start: 11
+      end: 21
+    - source: page.screenshot
+      style: secondary
+      start: 6
+      end: 21
+  await page['screenshot']({ path });:
+    labels:
+    - source: page['screenshot']({ path })
+      style: primary
+      start: 6
+      end: 34
+    - source: '''screenshot'''
+      style: secondary
+      start: 11
+      end: 23
+    - source: page['screenshot']
+      style: secondary
+      start: 6
+      end: 24
+  const options = { path }; await page.screenshot(options);:
+    labels:
+    - source: page.screenshot(options)
+      style: primary
+      start: 32
+      end: 56
+    - source: screenshot
+      style: secondary
+      start: 37
+      end: 47
+    - source: page.screenshot
+      style: secondary
+      start: 32
+      end: 47

@@ -89,12 +89,6 @@ type Story = StoryObj<typeof meta>;
 export const LaterChapter: Story = {
   async play({ canvasElement, args, id, parameters }) {
     const locale = args.locale ?? 'en';
-    const capture = async (step: string) => {
-      if (import.meta.env.VITE_G1059_VISUAL !== '1') return;
-      const { page } = await import('vitest/browser');
-      await document.fonts.ready;
-      await page.screenshot({ path: `../../../../.temp/g-1059/${id}-${step}.png` });
-    };
     if (import.meta.env.VITE_G1059_VISUAL === '1') {
       const { page } = await import('vitest/browser');
       await page.viewport(id.endsWith('phone') ? 390 : 1280, 844);
@@ -111,7 +105,6 @@ export const LaterChapter: Story = {
     await focusForTyping(input);
     await userEvent.type(input, chapter);
     await page.findByRole('option', { name: chapter });
-    await capture('found');
     if (parameters.selection === 'keyboard') await userEvent.keyboard('{ArrowDown}{Enter}');
     else await chooseOption(page, chapter);
     await waitFor(() =>
@@ -126,7 +119,6 @@ export const LaterChapter: Story = {
     // A selection-triggered input clear must not launch another server action
     // at the old position after the reader has chosen the chapter.
     await expect(requests).toHaveBeenLastCalledWith({ q: chapter, cursor: null });
-    await capture('selected');
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };

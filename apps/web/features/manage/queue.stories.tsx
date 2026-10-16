@@ -50,11 +50,6 @@ export const ChapterWithoutLabel: Story = {
     await expect(detailTitle(canvas)).toHaveTextContent('A chapter of 雨夜书店 · 连载小说');
     await expect(within(list(canvas)).getByRole('button', { name: /A chapter of 雨夜书店/ })).toBeVisible();
     await expect(canvas.queryByText('A Work')).toBeNull();
-    if (import.meta.env.VITE_POST_CONVERGENCE_CAPTURE === '1') {
-      const { page } = await import('vitest/browser');
-      await document.fonts.ready;
-      await page.screenshot({ path: '../../../../.temp/post-convergence-queue-en.png' });
-    }
   },
 };
 
@@ -67,11 +62,6 @@ export const ChapterWithoutLabelTraditionalChinese: Story = {
     const canvas = within(canvasElement);
     await expect(detailTitle(canvas)).toHaveTextContent('《雨夜书店 · 连载小说》的一個章節');
     await expect(detailTitle(canvas)).not.toHaveTextContent('作品');
-    if (import.meta.env.VITE_POST_CONVERGENCE_CAPTURE === '1') {
-      const { page } = await import('vitest/browser');
-      await document.fonts.ready;
-      await page.screenshot({ path: '../../../../.temp/post-convergence-queue-zh-Hant.png' });
-    }
   },
 };
 

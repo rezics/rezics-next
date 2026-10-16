@@ -48,12 +48,6 @@ function ResourceControl({ kind, state }: { kind: string; state: State }) {
 
 const meta = { title: 'Relationships/Resource control', component: ResourceControl,
   args: { kind: 'https://rezics.com/vocab/Character', state: 'ready' },
-  async afterEach(context) {
-    if (import.meta.env.VITE_CAPTURE_RELATIONSHIPS !== '1') return;
-    const { page } = await import('vitest/browser');
-    await document.fonts.ready;
-    await page.screenshot({ path: `../../../../.temp/relationship-review/${context.id}.png` });
-  },
 } satisfies Meta<typeof ResourceControl>;
 export default meta;
 type Story = StoryObj<typeof meta>;

@@ -124,13 +124,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function capture(name: string) {
+async function prepareViewport(locale: Args['locale']) {
   if (!('__vitest_browser__' in globalThis)) return;
   const { page } = await import('vitest/browser');
-  await page.viewport(name.endsWith('zh-Hans') ? 390 : 1280, 860);
+  await page.viewport(locale === 'zh-Hans' ? 390 : 1280, 860);
   await document.fonts.ready;
-  const options = { path: `../../../../.temp/g-1047/${name}.png`, target: 'page' as const };
-  await page.screenshot(options);
 }
 
 const arriving = (locale: Args['locale']) =>
@@ -156,7 +154,7 @@ function emptyStory(locale: Args['locale'], building: boolean): Story {
         await expect(canvas.getByText(empty(locale))).toBeVisible();
         await expect(canvas.queryByRole('status')).toBeNull();
       }
-      await capture(`empty-${building ? 'building' : 'ready'}-${locale}`);
+      await prepareViewport(locale);
     },
   };
 }
@@ -176,7 +174,7 @@ function buildingStory(locale: Args['locale']): Story {
       await expect(canvas.getAllByRole('article')).toHaveLength(2);
       await expect(canvas.getByText(arriving(locale)).closest('[role="status"]')).toBeVisible();
       await expect(canvas.getAllByRole('article')[0]).toHaveAttribute('aria-setsize', '-1');
-      await capture(`populated-building-${locale}`);
+      await prepareViewport(locale);
     },
   };
 }
@@ -194,7 +192,7 @@ function readyStory(locale: Args['locale']): Story {
         canvas.getByRole('region', { name: locale === 'en' ? messages.caughtUp : zhHans.caughtUp }),
       ).toBeVisible();
       await expect(canvas.queryByText(arriving(locale))).toBeNull();
-      await capture(`following-ready-${locale}`);
+      await prepareViewport(locale);
     },
   };
 }
@@ -215,7 +213,7 @@ function emptyRecoveryStory(locale: Args['locale']): Story {
         canvas.getByRole('region', { name: locale === 'en' ? messages.caughtUp : zhHans.caughtUp }),
       ).toBeVisible();
       await waitFor(() => expect(args.scenario.api.calls).toContain('watermark:following'));
-      await capture(`empty-recovered-${locale}`);
+      await prepareViewport(locale);
     },
   };
 }
@@ -252,7 +250,7 @@ function recoveryStory(locale: Args['locale']): Story {
         'page:r3',
         'page:r4',
       ]);
-      await capture(`reading-place-recovered-${locale}`);
+      await prepareViewport(locale);
     },
   };
 }
@@ -276,7 +274,7 @@ function newerStory(locale: Args['locale']): Story {
       await expect(
         canvas.getByRole('button', { name: locale === 'en' ? messages.refresh : zhHans.refresh }),
       ).toBeVisible();
-      await capture(`new-source-deferred-${locale}`);
+      await prepareViewport(locale);
     },
   };
 }

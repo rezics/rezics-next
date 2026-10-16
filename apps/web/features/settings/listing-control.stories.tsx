@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { accessActor, captureAccessStory } from '../manage/settings-fixtures.ts';
+import { accessActor, checkAccessViewports } from '../manage/settings-fixtures.ts';
 import { PersonListingControl } from './listing-control.tsx';
 
 const initial = { listing: 'listed' as const, version: 3, changedAt: null };
@@ -28,7 +28,7 @@ export const UnlistAndSave: Story = {
     await expect(canvas.getByText(/Your profile still opens by link/)).toBeVisible();
     await expect(canvas.getByRole('switch')).toBeChecked();
     await expect(canvas.getByRole('button', { name: 'Save listing' })).toBeEnabled();
-    await captureAccessStory('person-unlisted');
+    await checkAccessViewports('person-unlisted');
     await userEvent.click(canvas.getByRole('button', { name: 'Save listing' }));
     await expect(await canvas.findByText('Settings saved.')).toBeVisible();
     await expect(canvas.getByRole('switch')).toBeChecked();

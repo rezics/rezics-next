@@ -57,16 +57,10 @@ export function accessFixtureApi(overrides: Partial<SpaceAccessApi> = {}, initia
   };
 }
 
-/** Capture only in the isolated browser suite; artifacts stay in the worktree's .temp. */
-export async function captureAccessStory(name: string) {
+/** Keep the responsive overflow assertions; the runner captures each story after play. */
+export async function checkAccessViewports(name: string) {
   if (!('__vitest_browser__' in globalThis)) return;
   const { page } = await import('vitest/browser');
-  // Capture the provider's page viewport: an element taller than the test iframe
-  // includes blank clipped pixels below the viewport rather than its lower content.
-  async function capture(path: string) {
-    const options = { path, target: 'page' as const };
-    await page.screenshot(options);
-  }
   await document.fonts.ready;
   for (const [width, height] of [[1280, 860], [390, 844]]) {
     await page.viewport(width!, height!);
@@ -74,11 +68,6 @@ export async function captureAccessStory(name: string) {
     await Promise.allSettled(document.getAnimations().filter(animation =>
       animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished));
     if (document.documentElement.scrollWidth > width!) throw new Error(`${name} overflows at ${width}`);
-    await capture(`../../../../.temp/g-947/${name}-${width}.png`);
-    if (document.documentElement.scrollHeight > height! && !document.querySelector('[role="dialog"]')) {
-      window.scrollTo(0, document.documentElement.scrollHeight);
-      await capture(`../../../../.temp/g-947/${name}-${width}-end.png`);
-    }
   }
   window.scrollTo(0, 0);
   await page.viewport(1280, 860);

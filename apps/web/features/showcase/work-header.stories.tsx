@@ -52,14 +52,6 @@ const meta = {
   component: Page,
   args: { showcase: art },
   parameters: { route: { pathname: localizedPath(workHref(fixture.workRef), 'en') } },
-  async afterEach({ id }) {
-    // Screenshots for review by eye; the run sets this flag, ordinary runs skip it.
-    if (import.meta.env.VITE_SHOWCASE_VISUAL !== '1') return;
-    const { page } = await import('vitest/browser');
-    await document.fonts.ready;
-    await Promise.all([...document.images].map((image) => image.decode().catch(() => {})));
-    await page.screenshot({ path: `../../.temp/work-header/${id}.png` });
-  },
 } satisfies Meta<typeof Page>;
 export default meta;
 type Story = StoryObj<typeof meta>;

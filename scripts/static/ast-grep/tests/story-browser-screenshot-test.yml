@@ -1,0 +1,10 @@
+id: story-browser-screenshot
+valid:
+  - "await commands.captureStoryScreenshot('English');"
+  - 'await page.viewport(390, 844);'
+invalid:
+  - "await page.screenshot({ path: '.temp/story.png' });"
+  - 'const options = { path }; await page.screenshot(options);'
+  - 'await browser.screenshot(capture);'
+  - "await page['screenshot']({ path });"
+  - 'await page?.screenshot(options);'

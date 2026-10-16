@@ -110,12 +110,10 @@ export const OfficialSites: Story = {
     if ('__vitest_browser__' in globalThis) {
       const { page } = await import('vitest/browser');
       await document.fonts.ready;
-      await page.screenshot({ path: '../../../../.temp/g-989/official-sites-desktop.png' });
       await page.viewport(390, 844);
       await userEvent.click(canvas.getByRole('button', { name: 'Open navigation' }));
       const mobile = within(await within(document.body).findByRole('dialog', { name: 'Menu' }));
       await expect(await mobile.findByRole('link', { name: 'Fiction' })).toHaveAttribute('href', localizedPath(spaceHref('fiction', 'site'), 'en'));
-      await page.screenshot({ path: '../../../../.temp/g-989/official-sites-phone.png' });
       await whenSettled('Menu');
       await userEvent.keyboard('{Escape}');
       await waitFor(() => expect(within(document.body).queryByRole('dialog', { name: 'Menu' })).toBeNull());

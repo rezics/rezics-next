@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { communityText } from '../communities/messages.ts';
 import { SettingsAccess } from './settings-access.tsx';
-import { accessActor, accessFixtureApi, accessInitial, captureAccessStory, realmAccessInitial } from './settings-fixtures.ts';
+import { accessActor, accessFixtureApi, accessInitial, checkAccessViewports, realmAccessInitial } from './settings-fixtures.ts';
 import { acting, header } from './fixtures.ts';
 import { messages } from './messages.ts';
 import { RealmFrame } from './realm-frame.tsx';
@@ -21,13 +21,13 @@ export const English: Story = { async play({ canvasElement }) {
   await expect(canvas.getByRole('radio', { name: /^Public/ })).toBeChecked();
   await expect(canvas.getByRole('radio', { name: /^Restricted/ })).toBeVisible();
   await expect(canvas.getByText(communityText.publicHelp.en)).toBeVisible();
-  await captureAccessStory('settings-en');
+  await checkAccessViewports('settings-en');
 } };
 export const TraditionalChinese: Story = { args: { locale: 'zh-Hant' }, globals: { locale: 'zh-Hant' } };
 export const SimplifiedChinese: Story = { args: { locale: 'zh-Hans' }, globals: { locale: 'zh-Hans' } };
 export const Japanese: Story = { args: { locale: 'ja' }, globals: { locale: 'ja' } };
 export const Korean: Story = { args: { locale: 'ko' }, globals: { locale: 'ko' } };
-export const German: Story = { args: { locale: 'de' }, globals: { locale: 'de' }, async play() { await captureAccessStory('settings-de'); } };
+export const German: Story = { args: { locale: 'de' }, globals: { locale: 'de' }, async play() { await checkAccessViewports('settings-de'); } };
 export const French: Story = { args: { locale: 'fr' }, globals: { locale: 'fr' } };
 export const Spanish: Story = { args: { locale: 'es' }, globals: { locale: 'es' } };
 /** A Realm created as restricted opens on that choice, with the create form's help. */
@@ -38,7 +38,7 @@ export const Restricted: Story = {
     await expect(canvas.getByRole('radio', { name: /^Restricted/ })).toBeChecked();
     await expect(canvas.getByText(communityText.restrictedHelp.en)).toBeVisible();
     await expect(canvas.getByRole('radio', { name: /^Public/ })).not.toBeChecked();
-    await captureAccessStory('settings-restricted');
+    await checkAccessViewports('settings-restricted');
   },
 };
 export const ManagementFrame: Story = {
@@ -47,7 +47,7 @@ export const ManagementFrame: Story = {
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('link', { name: 'Join requests' })).toHaveAttribute('href',
       `/en/manage/r/${accessInitial.space.slice(-36)}/requests`);
-    await captureAccessStory('manage-frame');
+    await checkAccessViewports('manage-frame');
   },
 };
 
@@ -64,7 +64,7 @@ export const ConsequencesBeforeSave: Story = {
     await expect(dialog.getByText(/Non-member follows pause/)).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Save settings' })).toBeDisabled();
     await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'A private reading group.');
-    await captureAccessStory('settings-review');
+    await checkAccessViewports('settings-review');
     await userEvent.click(dialog.getByRole('button', { name: 'Save settings' }));
     await expect(await canvas.findByText('Settings saved.')).toBeVisible();
   },
@@ -82,7 +82,7 @@ export const ConcurrentChange: Story = {
     await userEvent.click(dialog.getByRole('button', { name: 'Save settings' }));
     await expect(await canvas.findByText(/Someone changed these settings/)).toBeVisible();
     await expect(canvas.getByRole('radio', { name: /^Private/ })).toBeChecked();
-    await captureAccessStory('settings-conflict');
+    await checkAccessViewports('settings-conflict');
     await userEvent.click(canvas.getByRole('button', { name: 'Use current settings' }));
     await expect(canvas.getByRole('radio', { name: /^Public/ })).toBeChecked();
     await expect(canvas.getByRole('radio', { name: /^Unlisted/ })).toBeChecked();

@@ -23,12 +23,6 @@ const meta = { title: 'Settings/Subscription notifications', component: Preferen
     }
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
-  async afterEach(context) {
-    if (import.meta.env.VITE_G944_CAPTURE !== '1') return;
-    const { page } = await import('vitest/browser');
-    await document.fonts.ready;
-    await page.screenshot({ path: `../../../../.temp/g-944/screenshots/${context.id}.png` });
-  },
 } satisfies Meta<typeof Preferences>;
 export default meta;
 type Story = StoryObj<typeof meta>;

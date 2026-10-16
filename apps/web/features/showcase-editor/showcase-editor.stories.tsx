@@ -35,16 +35,6 @@ const meta = {
   args: { art: 'complete', locale: 'en', saveArt: answers.done as Args['saveArt'],
     upload: uploads({ status: 'cleared', asset: '01a0e3d1-0000-7000-8000-0000000000ff' }) as Args['upload'] },
   parameters: { route: { pathname: localizedPath(editHref(work.id, 'showcase'), 'en') } },
-  async afterEach({ id }) {
-    if (import.meta.env.VITE_SHOWCASE_EDITOR_VISUAL !== '1') return;
-    const { page } = await import('vitest/browser');
-    await document.fonts.ready;
-    await new Promise(resolve => setTimeout(resolve, 600));
-    // The whole page, at the story's width: a taller window does not change this page's layout.
-    await page.viewport(innerWidth, Math.max(innerHeight, document.documentElement.scrollHeight));
-    await new Promise(resolve => setTimeout(resolve, 400));
-    await page.screenshot({ path: `../../../../.temp/showcase-editor/${id}.png` });
-  },
 } satisfies Meta<typeof Page>;
 export default meta;
 type Story = StoryObj<typeof meta>;

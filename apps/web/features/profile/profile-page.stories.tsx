@@ -525,14 +525,6 @@ export const ShelfMoved: StoryObj<typeof ProfileShelfPage> = {
   },
 };
 
-async function captureShelfCount(name: string, width: number) {
-  if (import.meta.env.VITE_SHELF_COUNT_VISUAL !== '1') return;
-  const { page } = await import('vitest/browser');
-  await page.viewport(width, 860);
-  await document.fonts.ready;
-  await page.screenshot({ path: `../../../../.temp/shelf-counts/${name}.png` });
-}
-
 export const PublicLowerBounds: Story = {
   args: { works: { ok: true, data: noWorks }, library: { kind: 'shelves', own: false, shelves: [
     { status: 'reading', count: 0, countKind: 'lower-bound', countBasis: '2026-10-07T00:00:00.000Z', works: { ok: true, data: [] } },
@@ -545,11 +537,11 @@ export const PublicLowerBounds: Story = {
     await expect(summary.getByRole('link', { name: 'Currently reading 0+' })).toBeVisible();
     await expect(summary.getByRole('link', { name: 'Read 20+' })).toBeVisible();
     await expect(summary.getByRole('link', { name: 'Want to read 0' })).toBeVisible();
-    await captureShelfCount('public-lower-bounds', 1280);
   },
 };
 
 export const ShelfScanContinuation: StoryObj<typeof ProfileShelfPage> = {
+  globals: { viewport: { value: 'phone' } },
   render: () => <ProfileShelfPage profile={storyProfile()} status="reading"
     shelf={{ ok: true, data: { count: 0, countKind: 'lower-bound', countBasis: '2026-10-07T00:00:00.000Z', cards: [], nextCursor: 'scan-next' } }}
     reader={signedOut} locale="en" messages={messages} />,
@@ -559,7 +551,6 @@ export const ShelfScanContinuation: StoryObj<typeof ProfileShelfPage> = {
     await expect(canvas.queryByText(messages.shelfEmpty)).not.toBeInTheDocument();
     await expect(canvas.getByRole('link', { name: 'Next page' })).toHaveAttribute('href',
       localizedPath(`${profileHref('lin_mei')}/shelves/reading?cursor=scan-next`, 'en'));
-    await captureShelfCount('empty-scan-continuation', 390);
   },
 };
 

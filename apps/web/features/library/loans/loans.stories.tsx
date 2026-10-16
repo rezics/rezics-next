@@ -62,13 +62,6 @@ type Story = StoryObj<typeof meta>;
 
 const body = () => within(document.body);
 
-async function shot(name: string) {
-  if (!('__vitest_browser__' in globalThis)) return;
-  const { page } = await import('vitest/browser');
-  await document.fonts.ready;
-  await page.screenshot({ path: `../../../../../.temp/library-loans/${name}.png` });
-}
-
 function loansView(items: readonly LoanListItem[], extra?: { nextCursor?: string | null; cursor?: string | null }) {
   return <LoansView items={items} nextCursor={extra?.nextCursor ?? null} failure={null} cursor={extra?.cursor ?? null}
     locale="en" messages={messages} />;
@@ -84,7 +77,6 @@ export const Overdue: Story = {
     const due = canvas.getByRole('region', { name: 'Due soon' });
     await expect(overdue).toBeVisible();
     await expect(overdue.compareDocumentPosition(due) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    await shot('overdue-desktop');
     await expect(within(overdue).getByRole('heading', { name: frankTitle })).toBeVisible();
     await expect(within(overdue).getByText('Due Sep 27, 2026')).toBeVisible();
     await expect(within(due).getByText('Due Oct 3, 2026')).toBeVisible();
@@ -154,7 +146,6 @@ export const ByDate: Story = {
     await expect(within(due).getByText('Due Sep 27, 2026')).toBeVisible();
     await expect(within(due).getByText('Borrowed from Prior Reader')).toBeVisible();
     await expect(within(overdue).queryByText(/\d:\d{2}|AM|PM/)).toBeNull();
-    await shot('api-overdue');
   },
 };
 
@@ -174,7 +165,6 @@ export const Phone: Story = {
       const row = shelves.getBoundingClientRect();
       if (link.left < row.left - 1 || link.right > row.right + 1) throw new Error('Loans is outside the shelf row');
     });
-    await shot('overdue-phone');
     const root = canvasElement.ownerDocument.documentElement;
     await expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
   },

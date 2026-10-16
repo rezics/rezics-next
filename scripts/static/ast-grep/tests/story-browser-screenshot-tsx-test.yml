@@ -1,0 +1,10 @@
+id: story-browser-screenshot-tsx
+valid:
+  - "await commands.captureStoryScreenshot('English');"
+  - 'export const Phone = { globals: { viewport: { value: "phone" } } };'
+invalid:
+  - "await page.screenshot({ path: '.temp/story.png' });"
+  - 'const options = { path }; await page.screenshot(options);'
+  - 'await browser.screenshot({ element: canvasElement, path });'
+  - "await page['screenshot']({ path });"
+  - 'await page.screenshot?.(options);'

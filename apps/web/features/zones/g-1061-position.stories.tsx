@@ -137,12 +137,6 @@ export const CjkPhone: Story = {
       copy = copyOf(locale);
     const canvas = within(canvasElement),
       page = within(document.body);
-    const capture = async (step: string) => {
-      if (import.meta.env.VITE_G1061_VISUAL !== '1') return;
-      const { page: browser } = await import('vitest/browser');
-      await document.fonts.ready;
-      await browser.screenshot({ path: `../../../../.temp/g-1061/${id}-${step}.png` });
-    };
     if (import.meta.env.VITE_G1061_VISUAL === '1') {
       const { page: browser } = await import('vitest/browser');
       await browser.viewport(id.includes('desktop') ? 1280 : 390, 844);
@@ -167,7 +161,6 @@ export const CjkPhone: Story = {
     await expect(page.queryByRole('option', { name: chapter })).toBeNull();
     pending.get(query)!();
     await page.findByRole('option', { name: chapter });
-    await capture('found');
     if (parameters.selection === 'keyboard') await userEvent.keyboard('{ArrowDown}{Enter}');
     else await chooseOption(page, chapter);
     const destination = `/${locale}${here}?position=${occurrence}`;
@@ -189,7 +182,6 @@ export const CjkPhone: Story = {
       ),
     ).toBe(true);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-    await capture('selected');
     // A later explicit choice is allowed to replace the chapter.
     await userEvent.click(trigger);
     const sheet = await page.findByRole('dialog', { name: copy.sheetTitle });

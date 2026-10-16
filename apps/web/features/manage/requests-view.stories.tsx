@@ -5,7 +5,7 @@ import { acting, header } from './fixtures.ts';
 import { messages } from './messages.ts';
 import { accessMessages } from './settings-messages.ts';
 import { RequestsView } from './requests-view.tsx';
-import { accessActor, accessFixtureApi, accessInitial, captureAccessStory, requestsInitial, requestFixture } from './settings-fixtures.ts';
+import { accessActor, accessFixtureApi, accessInitial, checkAccessViewports, requestsInitial, requestFixture } from './settings-fixtures.ts';
 
 const meta = { title: 'Manage/Join requests', component: RequestsView,
   args: { initial: requestsInitial, space: accessInitial.space, realm: accessInitial.realm, actingSubject: accessActor,
@@ -14,7 +14,7 @@ const meta = { title: 'Manage/Join requests', component: RequestsView,
 } satisfies Meta<typeof RequestsView>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const English: Story = { async play() { await captureAccessStory('requests'); } };
+export const English: Story = { async play() { await checkAccessViewports('requests'); } };
 export const TraditionalChinese: Story = { args: { locale: 'zh-Hant' }, globals: { locale: 'zh-Hant' } };
 export const SimplifiedChinese: Story = { args: { locale: 'zh-Hans' }, globals: { locale: 'zh-Hans' } };
 export const Japanese: Story = { args: { locale: 'ja' }, globals: { locale: 'ja' } };
@@ -46,7 +46,7 @@ export const Approve: Story = {
     await decideInLocale(canvasElement, 'en', false, 'Welcome to the reading group.');
     await expect(await canvas.findByText('Member admitted.')).toBeVisible();
     await expect(canvas.queryByText(/I would like to discuss/)).not.toBeInTheDocument();
-    await captureAccessStory('request-approved');
+    await checkAccessViewports('request-approved');
   },
 };
 export const StaleRequest: Story = {
