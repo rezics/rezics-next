@@ -377,7 +377,11 @@ test('Populated libraries migrate to point revisions without rewriting saved sta
   expect((await pool.query(`SELECT to_jsonb(saved) -> 'order_key' AS order_key, to_jsonb(saved) -> 'order_revision' AS order_revision,
     to_jsonb(saved) -> 'resume_eligible' AS resume_eligible FROM structure.progress AS saved`)).rows)
     .toEqual([{ order_key: null, order_revision: null, resume_eligible: null }]);
-  expect((await pool.query('SELECT agent FROM reader.library_status_revision')).rows).toEqual([]);
+  // Shelf-count backfill creates a revision row without advancing any cursor fence.
+  expect((await pool.query(`SELECT agent,revision::text,title_revision::text,rating_revision::text,
+    progress_revision::text,want_to_read_count::text,reading_count::text,read_count::text
+    FROM reader.library_status_revision`)).rows).toEqual([{ agent, revision: '0', title_revision: '0',
+    rating_revision: '0', progress_revision: '0', want_to_read_count: '0', reading_count: '1', read_count: '0' }]);
   const store = new ReaderLibraryStatusStore(pool);
   expect(await store.fence(agent)).toBe('0:0');
   expect((await store.batch(agent, [work]))[0]).toMatchObject({ status: 'reading', version: 7 });
