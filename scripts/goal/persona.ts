@@ -2,7 +2,7 @@ import { existsSync, lstatSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { searchOperations, type IndexedOperation } from '../api/operation-index.ts';
 import type { PersonaName } from '../../tests/qa/support/personas.ts';
-import { answerPersonas, recordAnswer, redactAnswer, type AnswerCall, type RecordedAnswer } from '../api/answer-record.ts';
+import { answerPersonas, clientResponseHeaders, recordAnswer, redactAnswer, type AnswerCall, type RecordedAnswer } from '../api/answer-record.ts';
 
 // Keep validation independent of the test-only application composition and its environment.
 export const probePersonas = answerPersonas satisfies readonly PersonaName[];
@@ -18,7 +18,7 @@ export interface ProbeResult {
   calls: ProbeAnswer[];
   error?: string;
 }
-export const probeHeaders = ['location', 'retry-after', 'etag', 'cache-control'] as const;
+export const probeHeaders = clientResponseHeaders;
 const placeholder = /\{(realm|space|zone|[1-9]\d*\.[A-Za-z0-9_.-]+)\}/g;
 /** Only application data crosses the probe boundary; credentials never do. */
 export const redactProbe = redactAnswer;
@@ -141,10 +141,8 @@ export function formatProbeAnswer(call: ProbeAnswer, full = false): string {
 }
 
 export function probeRecord(result: ProbeResult): unknown {
-  return redactProbe({ visibility: result.visibility, calls: result.calls.map(call => {
-    const { headers: _headers, ...data } = recordAnswer(call);
-    return { persona: call.persona, ...data };
-  }) });
+  return redactProbe({ visibility: result.visibility,
+    calls: result.calls.map(call => ({ persona: call.persona, ...recordAnswer(call) })) });
 }
 
 /** Resolve existing ancestors too, so a repository symlink cannot export a record. */

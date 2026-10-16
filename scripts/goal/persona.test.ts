@@ -105,26 +105,27 @@ describe('persona output and recordings', () => {
     expect(formatProbeAnswer(large, true).split('\n')).toHaveLength(103);
     expect(formatProbeAnswer({ ...answer, answer: [1] })).not.toContain('truncated');
   });
-  test('prints the caller, status, elapsed time and only the four answer headers', () => {
+  test('prints the caller, status, elapsed time and only client response headers', () => {
     const printed = formatProbeAnswer({ ...answer, headers: { location: '/created', 'retry-after': '2',
-      etag: '"head"', 'cache-control': 'no-store', 'set-cookie': 'secret-cookie' } });
+      etag: '"head"', 'cache-control': 'no-store', 'content-type': 'application/json', 'set-cookie': 'secret-cookie' } });
     expect(printed).toContain('owner POST /v1/spaces → 201 (1.000s)');
-    for (const header of ['location:', 'retry-after:', 'etag:', 'cache-control:']) expect(printed).toContain(header);
+    for (const header of ['location:', 'retry-after:', 'etag:', 'cache-control:', 'content-type:']) expect(printed).toContain(header);
     expect(printed).not.toContain('secret-cookie');
   });
   test('records only calls and application answers, stripping nested credentials from both sides', () => {
     const result: ProbeResult = { visibility: 'private', setupSeconds: 9, calls: [{ ...answer,
       body: { name: 'story', authorization: 'Bearer secret-bearer', cookie: 'secret-cookie',
         nested: { 'x-session-key': 'secret-session' } },
-      headers: { 'set-cookie': 'response-cookie' },
+      headers: { 'set-cookie': 'response-cookie', 'content-type': 'application/problem+json', 'cache-control': 'no-store' },
       answer: { id: 'resource', access_token: 'response-bearer', sessionKey: 'response-session',
         nested: [{ cookie: 'nested-cookie', title: 'story' }], message: 'Bearer echoed-token' } }] };
     const recorded = JSON.stringify(probeRecord(result));
     for (const secret of ['secret-bearer', 'secret-cookie', 'secret-session', 'response-cookie',
-      'response-bearer', 'response-session', 'nested-cookie', 'echoed-token', 'elapsedSeconds', 'setupSeconds', 'headers'])
+      'response-bearer', 'response-session', 'nested-cookie', 'echoed-token', 'elapsedSeconds', 'setupSeconds'])
       expect(recorded).not.toContain(secret);
     expect(JSON.parse(recorded)).toEqual({ visibility: 'private', calls: [{ ...call, status: 201,
-      body: { name: 'story', nested: {} }, answer: { id: 'resource', nested: [{ title: 'story' }], message: '[redacted]' } }] });
+      body: { name: 'story', nested: {} }, answer: { id: 'resource', nested: [{ title: 'story' }], message: '[redacted]' },
+      headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' } }] });
     expect(probeRecord({ ...result, setupSeconds: 100, calls: result.calls.map(item => ({ ...item, elapsedSeconds: 100 })) }))
       .toEqual(probeRecord(result));
   });
@@ -141,7 +142,7 @@ describe('persona output and recordings', () => {
       calls: [{ ...answer, body: { name: 'keep', idempotencyKey: 'request-secret' },
         answer: { id: 'resource', idempotency_secret: 'response-secret' } }] };
     expect(probeRecord(result)).toEqual({ visibility: 'public', calls: [{ ...call,
-      body: { name: 'keep' }, status: 201, answer: { id: 'resource' } }] });
+      body: { name: 'keep' }, status: 201, answer: { id: 'resource' }, headers: {} }] });
   });
   test('refuses records outside the repository, including symlink escapes', () => {
     const parent = resolve('.temp/persona-unit');
