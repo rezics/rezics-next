@@ -5,6 +5,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { LibraryFileStore, type StoredSourceRow } from '../../../services/main/src/modules/library-import/file-store.ts';
 import { FILE_IMPORT_COST, emptyRow } from '../../../services/main/src/modules/library-import/formats/contract.ts';
 import { startHomeStack } from './feed-read-support.ts';
+import { foregroundCounted } from './support/query-cost-meter.ts';
 
 interface Plan {
   'Relation Name'?: string;
@@ -35,8 +36,9 @@ test('first and middle import pages keep matching, authority checks and visited 
     const seeks: Array<{ sql: string; values: unknown[] }> = [];
     const pool = new Proxy(stack.contentPool, { get(target, key) {
       if (key === 'query') return async (sql: string, values: unknown[]) => {
+        const counted = measuring && foregroundCounted();
         const result = await target.query(sql, values);
-        if (measuring) {
+        if (counted) {
           statements++;
           if (/^\s*SELECT\b/.test(sql)) returnedRows += result.rows.length;
           if (/FROM reader\.library_import_source_row r/.test(sql)) seeks.push({ sql, values });
