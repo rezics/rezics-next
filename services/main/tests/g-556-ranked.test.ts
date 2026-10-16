@@ -4,7 +4,11 @@ import { searchGraphSnapshot } from '../src/modules/search/snapshot-state.ts';
 import { InvalidSearchContinuation, SearchContinuationRestart } from '../src/modules/work/search-continuation.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { PublicTextPosition } from '../src/modules/work/search-readiness.ts';
-import { WorkReadMoved } from '../src/modules/work/read-session.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { PublicRealmUnavailable } from '../src/modules/work/search-public.ts';
+import { RV } from '../src/modules/work/activate.ts';
+import { fusekiReadBudget } from '../src/infrastructure/fuseki.ts';
+import { boundedSearchHydration, SEARCH_HYDRATION_FENCE_MS } from '../src/modules/search/hydration.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const b = (value: string) => ({ type: 'literal', value });
@@ -14,11 +18,19 @@ const position: PublicTextPosition = { dataEpoch: 'epoch', sequence: '9',
 
 function fixture(count = 2005) {
   const calls: string[] = [];
+  const realmState = { closed: false, checks: 0, afterCheck: () => {} };
   const hits = Array.from({ length: count }, (_, n) => ({ id: `urn:rezics:g556:unit:${n}`, key: id(n), score: '1.0' }));
   const env = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, fuseki: {
     query: async (query: string, bytes: number) => {
       calls.push(query);
       expect(bytes).toBeLessThanOrEqual(RANKED_CATALOGUE_COST.responseBytes);
+      if (query.includes('SELECT ?space ?realmRevision')) return { results: { bindings: [{
+        space: b(id(9000)), realmRevision: b(id(9002)), disclosure: b(`${RV}Public`),
+        visibility: b('public'), mode: b('open'),
+      }] } };
+      if (query.includes('SELECT ?work ?head ?owningWork')) return { results: { bindings: [{
+        work: b(id(9001)), head: b(id(9002)),
+      }] } };
       if (query.includes('SELECT ?space')) return { results: { bindings: [{ space: b(id(9000)) }] } };
       if (query.includes('rv:rankedText')) {
         const args = /rv:rankedText\(rv:searchBody, "(?:[^"\\]|\\.)*", (\d+), ("(?:[^"\\]|\\.)*"),/u.exec(query)!;
@@ -40,19 +52,30 @@ function fixture(count = 2005) {
       }) } };
     },
   } } as unknown as WorkActivationEnvironment;
+  configureDisclosure(env, { read: async targets => {
+    realmState.checks++;
+    const decisions = targets.map(() => realmState.closed ? 'hidden' as const : 'visible' as const);
+    realmState.afterCheck();
+    return decisions;
+  } });
   const read = <T>(fn: () => Promise<T>, selectedPosition = position) => searchGraphSnapshot.run({
     clients: new Set([env.fuseki]), lineage: env.lineage, position: selectedPosition }, fn);
-  return { env, read, calls };
+  return { env, read, calls, realmState };
 }
 const request = { phrase: 'common catalogue phrase', language: null, pageSize: 20 } as const;
 
-test('cancelled Realm hydration discloses no scope, count or continuation on first and continued pages', async () => {
-  const { env, read } = fixture(100);
+test('cancelled Realm hydration withholds scope, counts and continuation when the Realm closes', async () => {
+  const { env, read, realmState } = fixture(100);
   const selected = { ...request, realm: id(9001) };
   const first = await read(() => readRankedCatalogue(env, selected));
   for (const continuation of [undefined, first.next!]) {
-    await expect(read(() => readRankedCatalogue(env, { ...selected, continuation },
-      undefined, async () => null))).rejects.toBeInstanceOf(WorkReadMoved);
+    for (const duringFence of [false, true]) {
+      realmState.closed = false;
+      realmState.afterCheck = () => { if (duringFence) realmState.closed = true; };
+      await expect(read(() => readRankedCatalogue(env, { ...selected, continuation },
+        undefined, async () => { realmState.closed = !duringFence; return null; })))
+        .rejects.toBeInstanceOf(PublicRealmUnavailable);
+    }
   }
 });
 
@@ -139,21 +162,29 @@ test('current presentation filtering advances through the retained ranking witho
   expect(new Set([...first.results, ...continued.results].map(row => row.work)).size).toBe(40);
 });
 
-test('deferred catalogue hydration resumes the same first, middle and terminal page without counting undelivered matches', async () => {
-  const { env, read } = fixture(45);
-  let continuation: string | undefined;
-  const works: string[] = [];
-  for (let pageNumber = 0; pageNumber < 3; pageNumber++) {
-    const selected = { ...request, continuation };
-    const deferred = await read(() => readRankedCatalogue(env, selected, undefined, async () => null));
-    expect(deferred.results).toEqual([]);
-    expect(deferred.count).toEqual({ value: works.length, precision: 'lower-bound' });
-    expect(deferred.next).not.toBeNull();
-    const page = await read(() => readRankedCatalogue(env, { ...request, continuation: deferred.next! }));
-    works.push(...page.results.map(row => row.work));
-    expect(page.count).toEqual({ value: works.length, precision: pageNumber === 2 ? 'exact' : 'lower-bound' });
-    continuation = page.next ?? undefined;
-  }
-  expect(continuation).toBeUndefined();
-  expect(works).toEqual(Array.from({ length: 45 }, (_, n) => id(n)));
-});
+for (const realm of [undefined, id(9001)]) {
+  test(`deferred ${realm ? 'Realm' : 'global'} catalogue hydration preserves first, middle and terminal pages without a basis change`, async () => {
+    const { env, read, realmState } = fixture(45);
+    let continuation: string | undefined;
+    const works: string[] = [];
+    for (let pageNumber = 0; pageNumber < 3; pageNumber++) {
+      const selected = { ...request, realm, continuation };
+      const deferred = await fusekiReadBudget.run({ signal: new AbortController().signal,
+        callsLeft: 72, bytesLeft: 8_388_608, deadline: performance.now() + SEARCH_HYDRATION_FENCE_MS - 1 },
+        () => read(() => readRankedCatalogue(env, selected, undefined,
+          () => boundedSearchHydration(async () => { throw new Error('No card allocation remains'); }))));
+      expect(deferred.results).toEqual([]);
+      expect(deferred.count).toEqual({ value: works.length, precision: 'lower-bound' });
+      expect(deferred.next).not.toBeNull();
+      expect(deferred.sourcePosition).toEqual({ datasetId: 'product', dataEpoch: position.dataEpoch, sequence: position.sequence });
+      expect(deferred.indexGeneration).toBe(position.generation);
+      const page = await read(() => readRankedCatalogue(env, { ...selected, continuation: deferred.next! }));
+      works.push(...page.results.map(row => row.work));
+      expect(page.count).toEqual({ value: works.length, precision: pageNumber === 2 ? 'exact' : 'lower-bound' });
+      continuation = page.next ?? undefined;
+    }
+    expect(continuation).toBeUndefined();
+    expect(works).toEqual(Array.from({ length: 45 }, (_, n) => id(n)));
+    expect(realmState.checks).toBe(realm ? 6 : 0);
+  });
+}

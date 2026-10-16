@@ -8,9 +8,10 @@ import { PublicQueryUnavailable } from '../work/search-budget.ts';
 import { InvalidPublicQuery, PublicRealmUnavailable } from '../work/search-public.ts';
 import { SELECTION_POLICY } from '../space/create.ts';
 import { InvalidSearchContinuation, SearchContinuationRestart, SEARCH_PAGE_TTL_MS } from '../work/search-continuation.ts';
-import { decodeReadCursor, encodeReadCursor, WorkReadExpired, WorkReadInvalid, WorkReadMoved } from '../work/read-session.ts';
+import { decodeReadCursor, encodeReadCursor, WorkReadExpired, WorkReadInvalid } from '../work/read-session.ts';
 import { FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge, type SparqlResult } from '../../infrastructure/fuseki.ts';
 import { observeSearchPhase } from './operation-evidence.ts';
+import { withPublicRealmSearch } from './realm-disclosure.ts';
 
 /** Ranked retrieval has O(P) retained rows; refills consume at most 512
  * candidates, 8 native rank reads and 8 RDF joins, under the existing 72-call,
@@ -207,12 +208,12 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
   if (!hydrate || !results.length) return page;
   const hydrated = await hydrate(page);
   if (hydrated) return hydrated;
-  // A cancelled Realm hydration has no completed occurrence proof. Its scope,
-  // population and continuation are disclosures too; restart without them.
-  if (input.realm) throw new WorkReadMoved('Realm search hydration did not complete');
   // None of this page was delivered. Keep the preceding native anchor and
   // visible count, including a resumable first page and a deferred last page.
-  return { ...page, results: [], count: { value: prior?.visible ?? 0, precision: 'lower-bound' },
+  const deferred: RankedCataloguePage = { ...page, results: [], count: { value: prior?.visible ?? 0, precision: 'lower-bound' },
     next: encodeReadCursor(binding, position, JSON.stringify({ after: beginning ?? null,
       visible: prior?.visible ?? 0, generation, instance: position.serverInstanceId } satisfies Cursor), '', expiresAt) };
+  // Cancellation proves no movement. Close the Realm disclosure proof outside
+  // the aborted card allocation before delivering scope, counts or a cursor.
+  return withPublicRealmSearch(env, input.realm, async () => deferred);
 }
