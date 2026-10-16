@@ -213,7 +213,6 @@ export async function adoptAuthorCredit(env: WorkActivationEnvironment,
     scope: `work:edit:${value.work}`, action: 'work.edit', idempotencyKey: key, requestDigest: digest });
   if (nativeCommand) value = { ...value, revision: `https://rezics.com/id/${registered.id}` };
   let admission = registered;
-  let replayed = true;
   if (registered.state !== 'sealed' && registered.dispatchEligible) {
     try { admission = await access.claim(registered.id, digest, principal); }
     catch (error) { if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error; }
@@ -246,7 +245,6 @@ export async function adoptAuthorCredit(env: WorkActivationEnvironment,
           BIND(?n + 1 AS ?next) }`;
       try {
         const result = await validatedCommand(env, { receipt, digest, update, validations, deadlineMs: 10_000 }, admission);
-        replayed = registered.replayed;
         if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
         if (result.status === 'guard-unmatched') {
           if (nativeCommand && !await nativeCommand.visible()) throw new AuthorCreditUnavailable('Agent unavailable');
@@ -264,5 +262,7 @@ export async function adoptAuthorCredit(env: WorkActivationEnvironment,
     || receipt.scope !== admission.scope || receipt.work !== value.work || receipt.credit !== value.credit
     || receipt.revision !== value.revision || receipt.expectedHead !== value.expectedHead
     || receipt.sourceIntent !== sourceIntent) throw new IdempotencyConflict('credit receipt differs from intent');
-  return { receipt, replayed };
+  // A receipt reconciles a lost graph acknowledgement without turning this
+  // first request into a replay. Registration owns that distinction.
+  return { receipt, replayed: registered.replayed };
 }

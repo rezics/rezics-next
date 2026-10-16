@@ -152,7 +152,12 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
             canReadDraftPresentations: async definition => {
               if (!principal || !actor || !work.mediaAccess) return false;
               const disclosure = await work.mediaAccess.canReadSemantics(principal, actor, [definition], fuseki);
-              return 'granted' in disclosure && disclosure.granted.has(definition);
+              if (!('granted' in disclosure)) return false;
+              if (disclosure.granted.has(definition)) return true;
+              // Public vocabulary omits explicit grants from `granted`, just
+              // as on the lexicon presentation route. Drafts still need one.
+              return disclosure.public.has(definition)
+                && ((await work.mediaAccess.explicitSemanticRead?.(principal, actor, definition)) ?? false);
             }, summarize,
             visibleRecords: visibility,
             // Token expiry and scope-list size are transport details; keep the effective reader and disclosure bound.
