@@ -5,8 +5,10 @@ import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { seedServedTypes } from '../catalogue/type-fixtures.ts';
 import { loadBooksLibrary } from '../library/books-library-recorded-page.ts';
 import { parseLibraryState } from '../library/state.ts';
+import type { ShelfStatus } from '../library/types.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
 import { booksEditionReads } from '../work-page/books-edition-page.read.ts';
+import type { AgentCreditPage, WorkHeader } from '../work-page/types.ts';
 import { readAnimeReaderState } from '../work-page/anime-hub-recorded-page.ts';
 import { mangaCollectionSample, mangaCollectionSelections, type MangaLibraryPersona } from './manga-collection-recorded-page.ts';
 import { mainMediaApi } from './media-api.ts';
@@ -41,7 +43,7 @@ describe('Manga collection through the production Library and chapter readers', 
         if (!loaded.overview.ok || !loaded.view.ok) throw new Error('Recorded Library visit failed');
         expect(loaded.overview.data.agent).toBe(actingSubject!);
         const shelf = mangaCollectionSample(record, persona, 'library-9').answer as {
-          items: { work: string; status: string; version: number; changedAt: string; card: { title: { value: string } } }[];
+          items: { work: string; status: ShelfStatus | null; version: number; changedAt: string; card: { title: { value: string } } }[];
           nextCursor: string | null;
         };
         expect(loaded.view.data.rows.map(row => row.work.id)).toEqual(shelf.items.map(item => item.work));
@@ -114,8 +116,8 @@ describe('Manga collection through the production Library and chapter readers', 
       const { work, actingSubject } = identity('visitor');
       expect(actingSubject).toBeUndefined();
       const reads = booksEditionReads({ main });
-      expect(await reads.readWorkHeader(work)).toEqual({ ok: true, data: mangaCollectionSample(record, 'visitor', 'work-header-1').answer });
-      expect(await reads.readAgentCredits(work)).toEqual({ ok: true, data: mangaCollectionSample(record, 'visitor', 'work-agent-credits-1').answer });
+      expect(await reads.readWorkHeader(work)).toEqual({ ok: true, data: mangaCollectionSample(record, 'visitor', 'work-header-1').answer as WorkHeader });
+      expect(await reads.readAgentCredits(work)).toEqual({ ok: true, data: mangaCollectionSample(record, 'visitor', 'work-agent-credits-1').answer as AgentCreditPage });
       expect(await readAnimeReaderState(main, undefined, work)).toBeNull();
     } finally { transport.dispose(); }
   });

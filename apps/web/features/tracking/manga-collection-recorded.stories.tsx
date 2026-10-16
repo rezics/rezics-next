@@ -95,14 +95,14 @@ export const ChaptersAcrossVolumes: Story = { play: async ({ canvasElement }) =>
   await userEvent.click(canvas.getByText(t.workProgress, { exact: false, selector: 'summary' }));
   await expect(await canvas.findByText(t.lastRead({ place: 'Volume 1, chapter 2' }))).toBeVisible();
   for (const name of ['Volume 1, chapter 1', 'Volume 1, chapter 2', 'Volume 2, chapter 1', 'Volume 2, chapter 2']) {
-    await expect(canvas.getByRole('button', { name, exact: true })).toBeVisible();
+    await expect(canvas.getByRole('button', { name })).toBeVisible();
   }
-  await userEvent.click(canvas.getByRole('button', { name: 'Volume 2, chapter 1', exact: true }));
-  await userEvent.click(await canvas.findByRole('button', { name: t.markChapterRead, exact: true }));
+  await userEvent.click(canvas.getByRole('button', { name: 'Volume 2, chapter 1' }));
+  await userEvent.click(await canvas.findByRole('button', { name: t.markChapterRead }));
   await expect(await canvas.findByText(t.lastRead({ place: 'Volume 2, chapter 1' }))).toBeVisible();
-  await userEvent.click(await canvas.findByRole('button', { name: t.markChapterUnread, exact: true }));
+  await userEvent.click(await canvas.findByRole('button', { name: t.markChapterUnread }));
   await expect(await canvas.findByText(t.lastRead({ place: 'Volume 1, chapter 2' }))).toBeVisible();
-  await expect(canvas.getByRole('button', { name: t.markChapterRead, exact: true })).toBeVisible();
+  await expect(canvas.getByRole('button', { name: t.markChapterRead })).toBeVisible();
   await expect(canvas.queryByRole('alert')).toBeNull();
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 } };
