@@ -7,7 +7,7 @@ import { protectJourneyBrowser } from './network-transport.ts';
 
 test('API commands retain their exact body and key without replaying a reset or refusal', async () => {
   const requests: { path: string; body: string; key: string | undefined }[] = [];
-  const server = createServer(async (request, response) => {
+  const server = createServer((request, response) => void (async () => {
     // Exercise the reset on a fresh connection, avoiding Chromium's stale
     // keep-alive recovery before the command's exact-once assertion.
     response.setHeader('connection', 'close');
@@ -22,7 +22,7 @@ test('API commands retain their exact body and key without replaying a reset or 
     if (request.url === '/api/reset') { request.socket.destroy(); return; }
     response.writeHead(request.url === '/api/refused' ? 503 : 201, { 'content-type': 'application/json' });
     response.end(JSON.stringify({ body, key: request.headers['idempotency-key'], cookie: request.headers.cookie }));
-  });
+  })());
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Missing test server port');
@@ -92,7 +92,7 @@ test('closing a journey cancels and drains page and context route reads before r
 test('configured Playwright fixture survives navigation with pending resources and closes cleanly', async () => {
   const directory = resolve('.temp', `journey-transport-${process.pid}`);
   mkdirSync(directory, { recursive: true });
-  const server = createServer(async (request, response) => {
+  const server = createServer((request, response) => void (async () => {
     if (request.url === '/disconnected.js') {
       response.destroy();
       return;
@@ -105,7 +105,7 @@ test('configured Playwright fixture survives navigation with pending resources a
     }
     response.setHeader('content-type', 'text/html');
     response.end('<title>Journey</title><script type="module" src="/slow.js"></script>');
-  });
+  })());
   await new Promise<void>(done => server.listen(0, '127.0.0.1', done));
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Expected a loopback HTTP port');
