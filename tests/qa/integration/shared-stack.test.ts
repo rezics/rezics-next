@@ -5,6 +5,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSyn
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { readEnv } from '../../../scripts/dev/config.ts';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { createQaStackPool, type QaStackPoolEntry } from '../../../scripts/qa/stack-pool.ts';
 import { qaMemoryDeadline } from '../../../scripts/qa/memory-admission.ts';
 import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
@@ -56,7 +57,9 @@ async function runPoolProbe(): Promise<void> {
   const mailbox = `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}/api/v1/messages?limit=1`;
   const container = `rezics-qa-${projectRunId}-fuseki-1`;
   const docker = (...args: string[]) => {
-    const result = Bun.spawnSync(['docker', ...args], { stdout: 'pipe', stderr: 'pipe' });
+    const result = Bun.spawnSync(['docker', ...args], {
+      env: preserveReapEnvironment(process.env), stdout: 'pipe', stderr: 'pipe',
+    });
     expect(result.exitCode, new TextDecoder().decode(result.stderr)).toBe(0);
     return new TextDecoder().decode(result.stdout).trim();
   };
