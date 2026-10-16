@@ -114,25 +114,20 @@ export const replyHref = (context: AdaptContext, work: { id: string; inZone: boo
   workLink(context, work.id, null, 'discussion', work.inZone);
 
 /**
- * The Realm's own cards for its Works, by ID: the Realm's list pairs each
- * Work with the adoption that placed it, and the new-adoptions read also
- * names its authors. Charts, editor lists and quotes read thinner cards; they
- * take the author, hook, kind and "Why here?" from here, so a Work reads the
- * same in every module. Both reads are cached for the request.
+ * Decorate the displayed Works with their Realm adoption and author credits.
+ * Exact target batches stay within the card reader's 20-Work hydration bound.
  */
-async function realmCards(context: AdaptContext, client?: RealmReadClient): Promise<Map<string, ZoneWork>> {
-  const [works, adopted] = await Promise.all([
-    readRealmWorks(context.realm, context.locale, undefined, client),
-    readNewAdoptions(context.realm, context.locale, client),
-  ]);
-  const cards = new Map(
-    works.ok
-      ? works.data.items.map((item) => [item.id, zoneWork(item, context, item.selection)])
-      : [],
-  );
-  for (const item of adopted.ok ? adopted.data.items : []) {
-    const card = zoneWork(item, context, item.evidence);
-    cards.set(item.id, { ...card, decision: cards.get(item.id)?.decision ?? card.decision });
+async function realmCards(context: AdaptContext, works: readonly string[],
+  client?: RealmReadClient): Promise<Map<string, ZoneWork>> {
+  const targets = [...new Set(works)];
+  const cards = new Map<string, ZoneWork>();
+  for (let offset = 0; offset < targets.length; offset += 20) {
+    const batch = targets.slice(offset, offset + 20);
+    const adopted = await readNewAdoptions(context.realm, context.locale, client, batch);
+    if (!adopted.ok || adopted.data.nextCursor) continue;
+    for (const item of adopted.data.items) {
+      cards.set(item.id, zoneWork(item, context, item.evidence));
+    }
   }
   return cards;
 }
@@ -175,26 +170,21 @@ export async function loadFeedWorks(feed: RealmFeed, context: AdaptContext,
       : page;
   }
   if (feed === 'recently-completed') {
-    const [page, cards] = await Promise.all([
-      read.completed(realm, locale),
-      read.cards(context),
-    ]);
-    return page.ok
-      ? {
-          ok: true,
-          data: page.data.items.map((item) =>
-            withRealmCard(zoneWork(item, context, null), cards.get(item.id)),
-          ),
-          nextCursor: page.data.nextCursor,
-        }
-      : page;
+    const page = await read.completed(realm, locale);
+    if (!page.ok) return page;
+    const cards = await read.cards(context, page.data.items.map(item => item.id));
+    return {
+      ok: true,
+      data: page.data.items.map((item) =>
+        withRealmCard(zoneWork(item, context, null), cards.get(item.id)),
+      ),
+      nextCursor: page.data.nextCursor,
+    };
   }
   if (feed === 'latest-chapters') {
-    const [page, cards] = await Promise.all([
-      read.chapters(realm, locale),
-      read.cards(context),
-    ]);
+    const page = await read.chapters(realm, locale);
     if (!page.ok) return page;
+    const cards = await read.cards(context, page.data.items.map(item => item.work.id));
     // One card per Work: the newest chapter stands for its Work.
     const seen = new Set<string>();
     return {
@@ -228,7 +218,7 @@ export async function loadHeroModule(
     const targets = scheduled.flatMap(slide => 'work' in slide ? [slide.work] : []);
     const [summaries, known] = await Promise.all([
       readShowcaseWorks(targets, showcaseContext(context)),
-      targets.length ? realmCards(context) : Promise.resolve(new Map<string, ZoneWork>()),
+      realmCards(context, targets),
     ]);
     const headers = await readShowcaseHeaders(targets.filter(target => summaries.has(target) && !known.has(target)));
     const slides: ZoneShowcaseSlide[] = scheduled.flatMap(slide => {
@@ -345,7 +335,7 @@ const intervals = ['day', 'week', 'month'] as const;
 /** Supplied transports use the same card enrichment and chart reads as the host. */
 export function rankingModuleReads(client: RealmReadClient) {
   return {
-    cards: (context: AdaptContext) => realmCards(context, client),
+    cards: (context: AdaptContext, works: readonly string[]) => realmCards(context, works, client),
     rankings: (realm: string, _locale: UiLocale, interval: 'day' | 'week' | 'month', metric: RankingMetric) =>
       readRankingModuleAnswer(client.main, realm, interval, metric),
   };
@@ -357,11 +347,10 @@ export async function loadRankingsModule(
   read = { cards: realmCards, rankings: readRankings },
 ): Promise<ModuleState<'ranking'>> {
   const metric = chartMetric(module.options?.metric);
-  const [cards, ...pages] = await Promise.all([
-    read.cards(context),
-    ...intervals.map((interval) => read.rankings(context.realm, context.locale, interval, metric)),
-  ]);
+  const pages = await Promise.all(intervals.map((interval) =>
+    read.rankings(context.realm, context.locale, interval, metric)));
   if (pages.some((page) => !page.ok || underfilled(page.data, page.data.items.length, 10))) return failed;
+  const cards = await read.cards(context, pages.flatMap(page => page.ok ? page.data.items.map(item => item.id) : []));
   const tabs = intervals.flatMap((interval, index) => {
     const page = pages[index]!;
     return page.ok && page.data.items.length
@@ -387,15 +376,13 @@ export async function loadRisingModule(
   context: AdaptContext,
   read = { rising: readRising, cards: realmCards },
 ): Promise<ModuleState<'rising'>> {
-  const [page, cards] = await Promise.all([
-    read.rising(context.realm, context.locale),
-    read.cards(context),
-  ]);
+  const page = await read.rising(context.realm, context.locale);
   if (!page.ok) return failed;
   const limit = module.options?.limit ?? 6;
   if (underfilled(page.data, page.data.items.length, limit)) return failed;
-  const items = page.data.items
-    .slice(0, limit)
+  const visible = page.data.items.slice(0, limit);
+  const cards = await read.cards(context, visible.map(item => item.id));
+  const items = visible
     .map((item) => withRealmCard(zoneWork(item, context, null), cards.get(item.id)));
   return items.length ? { state: 'ready', data: { items } } : empty;
 }
@@ -464,14 +451,13 @@ export async function loadQuoteModule(
 ): Promise<ModuleState<'quote-stream'>> {
   if (module.source.kind !== 'query-block' || module.source.block !== 'reader-quotes')
     return unsupported;
-  const [page, cards] = await Promise.all([
-    read.quotes(context.realm, context.locale),
-    read.cards(context),
-  ]);
+  const page = await read.quotes(context.realm, context.locale);
   if (!page.ok) return failed;
   const limit = module.options?.limit ?? 6;
   if (underfilled(page.data, page.data.items.length, limit)) return failed;
-  const items = page.data.items.slice(0, limit).map((item) => ({
+  const visible = page.data.items.slice(0, limit);
+  const cards = await read.cards(context, visible.map(item => item.work.id));
+  const items = visible.map((item) => ({
     id: item.id,
     body: zoneContentText(item.excerpt),
     reader: item.authorName,
@@ -488,14 +474,13 @@ export async function loadDiscussionModule(
 ): Promise<ModuleState<'discussion-list'>> {
   if (module.source.kind !== 'query-block' || module.source.block !== 'discussions')
     return unsupported;
-  const [page, cards] = await Promise.all([
-    read.discussions(context.realm, context.locale),
-    read.cards(context),
-  ]);
+  const page = await read.discussions(context.realm, context.locale);
   if (!page.ok) return failed;
   const limit = module.options?.limit ?? 8;
   if (underfilled(page.data, page.data.items.length, limit)) return failed;
-  const items = page.data.items.slice(0, limit).map((item) => ({
+  const visible = page.data.items.slice(0, limit);
+  const cards = await read.cards(context, visible.map(item => item.work.id));
+  const items = visible.map((item) => ({
     id: item.id,
     title: zoneContentText(item.excerpt),
     href: replyHref(context, item.work),
@@ -513,28 +498,26 @@ async function editorLists(
     (source) => (source.kind === 'collection' ? [source.collection] : []),
   );
   if (!collections.length) return unsupported;
-  const [read, cards] = await Promise.all([
-    readZoneEditorLists(context.realm, context.locale),
-    realmCards(context),
-  ]);
+  const read = await readZoneEditorLists(context.realm, context.locale);
   if (!read.ok) return failed;
   // A list whose Works are all private has nothing to show yet, like an empty module.
-  const lists = read.data.lists
+  const visible = read.data.lists
     .filter((list) => collections.includes(list.collection) && list.items.length)
-    .slice(0, module.options?.limit ?? 2)
-    .map((list) => {
-      // A Collection the Zone mounts opens as its own page, and its members open under that mount.
-      const mount = context.mounts?.get(list.collection) ?? null;
-      return {
-        id: list.collection,
-        title: zoneText(list.name),
-        blurb: null,
-        href: mount && !context.unrouted ? spaceHref(context.ref, 'site', [mount]) : null,
-        items: list.items.map((item) =>
-          withRealmCard(summaryWork(item, context, mount), cards.get(item.id)),
-        ),
-      };
-    });
+    .slice(0, module.options?.limit ?? 2);
+  const cards = await realmCards(context, visible.flatMap(list => list.items.map(item => item.id)));
+  const lists = visible.map((list) => {
+    // A Collection the Zone mounts opens as its own page, and its members open under that mount.
+    const mount = context.mounts?.get(list.collection) ?? null;
+    return {
+      id: list.collection,
+      title: zoneText(list.name),
+      blurb: null,
+      href: mount && !context.unrouted ? spaceHref(context.ref, 'site', [mount]) : null,
+      items: list.items.map((item) =>
+        withRealmCard(summaryWork(item, context, mount), cards.get(item.id)),
+      ),
+    };
+  });
   return lists.length ? { state: 'ready', data: { lists } } : empty;
 }
 

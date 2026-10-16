@@ -9,7 +9,7 @@ import { compileZoneBrowse, readZoneBrowse } from '../modules/zone-modules/brows
 import { QueryRejected } from '../modules/query/compile.ts';
 import { problem } from './problems.ts';
 import { zoneBrowsePage, zoneBrowseQuery, zoneChapterPage, zoneDecisionPage, zoneEditorLists, zoneGenrePage,
-  zoneReplyPage, zoneWorkPage } from '../modules/zone-modules/contract.ts';
+  zoneReplyPage, zoneWorkPage, ZONE_MODULE_COST } from '../modules/zone-modules/contract.ts';
 import { pageQuery, readId, readLanguage, readUuid } from '../modules/work/read-contract.ts';
 import { publicWorkRead } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -18,6 +18,9 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 const params = t.Object({ realm: readUuid });
 const query = t.Object({ limit: pageQuery.limit, cursor: pageQuery.cursor,
   language: t.Optional(readLanguage), actingSubject: t.Optional(readId) }, { additionalProperties: false });
+const cardQuery = t.Object({ ...query.properties,
+  work: t.Optional(t.Array(readId, { minItems: 1, maxItems: ZONE_MODULE_COST.pageSize, uniqueItems: true })),
+}, { additionalProperties: false });
 const id = (uuid: string) => `https://rezics.com/id/${uuid}`;
 const headers = { 'cache-control': 'no-store' };
 // Readers can send their usual identity query; publication reads select only
@@ -40,11 +43,11 @@ export const openApiOperations = {
 /** Zone modules are public publications; a stray bearer token cannot widen them. */
 export function zoneModuleRoutes(work: MainWorkDependencies) {
   return new Elysia()
-    .get('/v1/realms/:realm/modules/new-adoptions', { params, query,
+    .get('/v1/realms/:realm/modules/new-adoptions', { params, query: cardQuery,
       response: transportResponses(openApiOperations["/v1/realms/{realm}/modules/new-adoptions"].get, { 200: zoneWorkPage, ...workReadProblems }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await publicWorkRead(work, request, publicOptions(options),
-        session => readZoneWorks(session, id(path.realm), 'new-adoptions')), { headers }); }
+        session => readZoneWorks(session, id(path.realm), 'new-adoptions', options.work)), { headers }); }
       catch (error) { return workReadError(error); }
     })
     .get('/v1/realms/:realm/modules/recently-completed', { params, query,

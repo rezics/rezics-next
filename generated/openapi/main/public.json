@@ -668645,6 +668645,21 @@
               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "work",
+            "required": false,
+            "schema": {
+              "items": {
+                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                "type": "string"
+              },
+              "maxItems": 20,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
           }
         ],
         "responses": {

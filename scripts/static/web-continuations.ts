@@ -102,9 +102,27 @@ export function pagedOperations(api: ListOpenApi): Set<string> {
     .filter(([, operation]) => page(operation.responses?.['200']?.content?.['application/json']?.schema))
     .map(([method]) => `${method.toUpperCase()} ${path}`)));
 }
+/** A whole-batch iteration may refuse any remainder immediately before it starts. */
+function completeIteration(node: Node, parent: Node | undefined, parents: WeakMap<Node, Node>): boolean {
+  if (parent?.type !== 'ForOfStatement' || parent.right !== node || node.type !== 'MemberExpression') return false;
+  const block = parents.get(parent);
+  if (block?.type !== 'BlockStatement') return false;
+  const previous = block.body[block.body.indexOf(parent) - 1];
+  if (previous?.type !== 'IfStatement' || previous.alternate) return false;
+  const remainder = (test: Node): boolean => test.type === 'MemberExpression'
+    && name(test.property) === 'nextCursor' && syntax(test.object) === syntax(node.object)
+    || test.type === 'LogicalExpression' && test.operator === '||'
+      && (remainder(test.left) || remainder(test.right));
+  const exit = previous.consequent.type === 'BlockStatement' && previous.consequent.body.length === 1
+    ? previous.consequent.body[0] : previous.consequent;
+  return remainder(previous.test) && !!exit && (exit.type === 'ReturnStatement' || exit.type === 'ThrowStatement'
+    || exit.type === 'ContinueStatement' && !exit.label);
+}
+
 /** Conservative syntax guard. Projecting items requires an explicit sibling
  * continuation from the same envelope, either directly or through the tested
- * browse URL encoder. Other helpers, aliases and loops need an exact exception.
+ * browse URL encoder. A complete batch can reject its remainder before iteration.
+ * Other helpers, aliases and loops need an exact exception.
  * Its syntax context also pins the enclosing function: changing a cap or an
  * alias initializer cannot silently inherit the exception. Trivia stays benign. */
 export function continuationInventory(sources: readonly WebSource[]): ContinuationInventory {
@@ -137,7 +155,7 @@ export function continuationInventory(sources: readonly WebSource[]): Continuati
           return (direct || link) && container.properties.slice(index + 1).every(later =>
             later.type === 'Property' && !later.computed && name(later.key) !== name(property.key));
         });
-        if (!forwarded) report('dropped-continuation');
+        if (!forwarded && !completeIteration(node, parent, objectParents)) report('dropped-continuation');
       }
       if (node.type === 'ObjectPattern' && node.properties.some(property =>
         property.type === 'Property' && name(property.key) === 'items')) report('dropped-continuation');

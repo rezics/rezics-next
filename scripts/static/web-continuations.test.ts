@@ -43,14 +43,11 @@ test('an exact expression exception cannot cover another projection in the same 
   expect(changedContinuationGroups(continuationInventory([source(`${text}\nexport function another(other) { return other.items; }`)]), baseline)).toHaveLength(1);
 });
 
-// These readers consume a URL token or an optional metadata window, rather than
-// projecting a pageable result. Keep every exception pinned to its whole reader.
+// These readers consume a URL token. Keep each exception pinned to its whole reader.
 test.each([
   ['apps/web/features/realm/discussions-route.tsx', 'cursor: parseCursor(search)', 'cursor: parseCursor(search) + "suffix"'],
-  ['apps/web/features/realm/modules.ts', 'works.data.items.map', 'works.data.items.slice(0, 1).map'],
-  ['apps/web/features/realm/modules.ts', 'adopted.data.items : []', 'adopted.data.items.slice(0, 1) : []'],
   ['apps/web/features/realm/ranking-recorded-page.tsx', "params.get('cursor') ?? undefined", "Number(params.get('cursor')) + 1"],
-] as const)('a reviewed Realm URL or metadata exception rejects changed data flow: %s / %s', (path, before, after) => {
+] as const)('a reviewed Realm URL exception rejects changed data flow: %s / %s', (path, before, after) => {
   const original = readFileSync(join(root, path), 'utf8');
   expect(original).toContain(before);
   expect(changedContinuationGroups(continuationInventory([source(original, path)]), accepted.violations)).toEqual([]);
@@ -61,6 +58,27 @@ test.each([
 
 test('stories stay outside production inventory', () => {
   expect(continuationInventory([source('api.get().items', 'apps/web/features/example/read.stories.tsx')])).toEqual([]);
+});
+
+const completeBatch = `export function read(pages) {
+  for (const page of pages) {
+    if (!page.ok || page.data.nextCursor) continue;
+    for (const item of page.data.items) consume(item);
+  }
+}`;
+
+test('a card batch can iterate only after refusing an unfinished page', () => {
+  expect(continuationInventory([source(completeBatch)])).toEqual([]);
+});
+
+test.each([
+  completeBatch.replace('page.data.nextCursor', 'other.data.nextCursor'),
+  completeBatch.replace('|| page.data.nextCursor', '&& page.data.nextCursor'),
+  completeBatch.replace('page.data.nextCursor', '!page.data.nextCursor'),
+  completeBatch.replace('continue;', 'observe(page);'),
+  completeBatch.replace('for (const item', 'page.data = other; for (const item'),
+])('an unfinished card batch cannot bypass the continuation guard: %s', text => {
+  expect(continuationInventory([source(text)]).length).toBeGreaterThan(0);
 });
 
 test('a capped-request exception does not survive a changed cap or alias initializer', () => {

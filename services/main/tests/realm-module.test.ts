@@ -51,10 +51,13 @@ function session(options: { cursor?: string; candidate?: boolean; privateRealm?:
         placement: binding(chapter), publication: binding(revision), contentRevision: binding(revision), language: binding('en'),
         revisionEpoch: binding('epoch'), sequence: binding('4'), epochOrder: binding('0'),
       }] : [];
-      if (body.includes('SELECT DISTINCT ?work ?head')) return options.candidate ? [{
-        work: binding(work), head: binding(revision), main: binding(realm), evidence: binding(revision),
-        revisionEpoch: binding('epoch'), sequence: binding('4'), epochOrder: binding('0'),
-      }] : [];
+      if (body.includes('SELECT DISTINCT ?work ?head')) {
+        const targets = /VALUES \?work \{([^}]+)\}/.exec(body)?.[1];
+        return options.candidate && (!targets || targets.includes(`<${work}>`)) ? [{
+          work: binding(work), head: binding(revision), main: binding(realm), evidence: binding(revision),
+          revisionEpoch: binding('epoch'), sequence: binding('4'), epochOrder: binding('0'),
+        }] : [];
+      }
       if (body.includes('SELECT ?work ?head')) return [{ work: binding(work), head: binding(revision) }];
       if (body.includes('SELECT ?state')) return [{ state: binding(JSON.stringify({ kind: 'header',
         originalTitle: null, completionStatus: options.status ?? 'completed', localized: [] })) }];
@@ -112,6 +115,27 @@ test('Zone Work and chapter cards resolve every retained Open Library credit wit
   expect((await readZoneWorks(removed.read, realm, 'new-adoptions')).items[0]?.primaryCredits)
     .toMatchObject([{ key: sourceKey, displayName: null },
       { key: secondSourceKey, displayName: null }]);
+});
+
+test('explicit module card targets keep rich credits and never return a different Realm window', async () => {
+  const selected = session({ candidate: true, authorName: 'Jane Austen' });
+  const page = await readZoneWorks(selected.read, realm, 'new-adoptions', [work]);
+  expect(page.items[0]?.primaryCredits[0]?.displayName).toBe('Jane Austen');
+  expect(selected.calls.find(query => query.includes('SELECT DISTINCT ?work ?head')))
+    .toContain(`VALUES ?work { <${work}> }`);
+  const absent = session({ candidate: true, authorName: 'Jane Austen' });
+  const missing = await readZoneWorks(absent.read, realm, 'new-adoptions', [chapter]);
+  expect(missing.items).toEqual([]);
+  expect(missing.nextCursor).toBeNull();
+});
+
+test('explicit module card targets reject oversized, empty, duplicate or invalid batches before reading', async () => {
+  for (const targets of [[], [work, work], ['invalid-work'],
+    Array.from({ length: 21 }, () => `https://rezics.com/id/${randomUUID()}`)]) {
+    const read = session();
+    await expect(readZoneWorks(read.read, realm, 'new-adoptions', targets)).rejects.toBeInstanceOf(WorkReadInvalid);
+    expect(read.calls).toEqual([]);
+  }
 });
 
 test('recent decision summary describes only the public decision page', async () => {

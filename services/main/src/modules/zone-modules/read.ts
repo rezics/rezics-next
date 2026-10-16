@@ -57,10 +57,18 @@ export async function zoneCreditNames(session: WorkReadSession, credits: Project
 
 /** One bounded candidate page, one type batch, two summary batches and ≤20 exact
  * metadata heads. Native graph sorting may scan D Realm decisions: O(D log D). */
-export async function readZoneWorks(session: WorkReadSession, realm: string, kind: Kind) {
+export async function readZoneWorks(session: WorkReadSession, realm: string, kind: Kind,
+  works?: readonly string[]) {
+  if (works && (kind !== 'new-adoptions' || !works.length || works.length > ZONE_MODULE_COST.pageSize
+    || new Set(works).size !== works.length
+    || works.some(work => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)))) {
+    throw new WorkReadInvalid('Zone Work card targets are invalid');
+  }
+  const targets = works ? [...works].sort() : undefined;
   await readRealmBasis(session, realm);
   const limit = session.options.limit ?? ZONE_MODULE_COST.pageSize;
-  const binding = ['zone-module-v1', realm, kind, session.options.language ?? null];
+  const binding = ['zone-module-v1', realm, kind, session.options.language ?? null,
+    ...(targets ? [targets] : [])];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const order = cursor ? cursorOrder(cursor.order) : null;
   const epochs = await readEpochOrder(session);
@@ -68,6 +76,7 @@ export async function readZoneWorks(session: WorkReadSession, realm: string, kin
   const rows = await session.query(`SELECT DISTINCT ?work ?head ?main ?evidence ?revisionEpoch
     ?sequence ?epochOrder WHERE {
     ${epochs}
+    ${targets ? `VALUES ?work { ${targets.map(iri).join(' ')} }` : ''}
     { ${zoneAdoption(realm)} }
     GRAPH ${iri(GRAPHS.current)} {
       ?work rv:head ?head .
@@ -83,7 +92,8 @@ export async function readZoneWorks(session: WorkReadSession, realm: string, kin
       && (?sequence < ${order[1]} || (?sequence = ${order[1]}
         && STR(?evidence) > ${lit(cursor.after)}))))` : ''}
   } ORDER BY ?epochOrder DESC(?sequence) STR(?evidence) LIMIT ${limit + 1}`, limit + 1);
-  if (rows.some(row => !row.work || !row.head || !row.main || !row.evidence
+  if (rows.some(row => !row.work || targets && !targets.includes(row.work.value)
+    || !row.head || !row.main || !row.evidence
     || !row.revisionEpoch || !/^\d+$/.test(row.sequence?.value ?? '')
     || !/^\d+$/.test(row.epochOrder?.value ?? ''))
     || new Set(rows.map(row => row.work!.value)).size !== rows.length) {

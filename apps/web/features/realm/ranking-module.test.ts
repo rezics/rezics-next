@@ -1,10 +1,49 @@
 import { expect, test } from 'bun:test';
 import { browserMainApi } from '../api/browser.ts';
 import { resourceHref } from '../address/path.ts';
-import { loadRankingsModule } from './modules.ts';
+import { loadRankingsModule, rankingModuleReads } from './modules.ts';
 import { rankingRealm } from './ranking-contract-states.ts';
-import { rankingIntervals, rankingModule, rankingModuleContractCards, rankingModuleContractFetch } from './ranking-module-contract-states.ts';
+import { rankingIntervals, rankingModule, rankingModuleContractCards, rankingModuleContractFetch,
+  rankingModuleContractPage } from './ranking-module-contract-states.ts';
 import { readRankingModuleAnswer } from './ranking-read.ts';
+import { zoneWork } from './adapt.ts';
+
+test('all displayed chart Works get cards beyond the first Realm window, in bounded target batches', async () => {
+  const context = { realm: rankingRealm, ref: 'ranking-garden', locale: 'en' as const };
+  const works = Array.from({ length: 30 }, (_, index) => {
+    const sample = rankingModuleContractPage('day', 'populated').items[0]!;
+    const id = `https://rezics.com/id/${String(index + 100).padStart(8, '0')}-1234-4123-8123-123456789abc`;
+    return { ...sample, id, inZone: false, evidence: sample.revision, dataEpoch: 'epoch', sequence: '1', hub: null,
+      primaryCredits: [{ agent: id, handle: null, displayName: `Author ${index}`, provider: null, key: null }] };
+  });
+  const batches: string[][] = [];
+  const fetcher = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(new Request(input, init).url);
+    if (url.pathname.endsWith('/rankings')) {
+      const interval = rankingIntervals.find(value => value === url.searchParams.get('interval'))!;
+      const offset = rankingIntervals.indexOf(interval) * 10;
+      const page = rankingModuleContractPage(interval, 'populated');
+      return Response.json({ ...page, items: works.slice(offset, offset + 10).map(work => ({ ...page.items[0], id: work.id })) });
+    }
+    if (url.pathname.endsWith('/modules/new-adoptions')) {
+      const encoded = url.searchParams.get('work');
+      const targets: string[] = encoded?.startsWith('[') ? JSON.parse(encoded) : url.searchParams.getAll('work');
+      batches.push(targets);
+      return Response.json({ profile: 'zone-new-adoptions-v1', realm: rankingRealm,
+        items: targets.length ? works.filter(work => targets.includes(work.id)) : works.slice(0, 20),
+        nextCursor: targets.length ? null : 'realm:page-2', count: { value: targets.length || 20, kind: 'exact-page', total: null } });
+    }
+    throw new Error(`Unexpected card request: ${url.pathname}`);
+  }, { preconnect: fetch.preconnect });
+  const main = browserMainApi('https://contract.invalid', { fetcher, anonymous: true });
+  const state = await loadRankingsModule(rankingModule, context, rankingModuleReads({ main, signedIn: false }));
+  expect(state.state).toBe('ready');
+  if (state.state !== 'ready') throw new Error('Expected populated module');
+  expect(state.data.tabs.flatMap(tab => tab.items.map(item => item.work.author?.value)))
+    .toEqual(works.map(work => zoneWork(work, context, work.evidence).author!.value));
+  expect(batches.map(batch => batch.length)).toEqual([20, 10]);
+  expect(batches.flat()).toEqual(works.map(work => work.id));
+});
 
 async function load(state: Parameters<typeof rankingModuleContractFetch>[0]) {
   const main = browserMainApi('https://contract.invalid', { fetcher: rankingModuleContractFetch(state), anonymous: true });

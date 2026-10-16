@@ -167,13 +167,16 @@ export const readRealmDecision = cache(
 );
 
 export const readNewAdoptions = cache(
-  async (realm: string, _locale: UiLocale, client?: RealmReadClient): Promise<Loaded<ZoneWorkPage>> =>
-    readNewAdoptionsAnswer(client?.main ?? main(), realm),
+  async (realm: string, _locale: UiLocale, client?: RealmReadClient, works?: readonly string[]): Promise<Loaded<ZoneWorkPage>> =>
+    readNewAdoptionsAnswer(client?.main ?? main(), realm, undefined, works),
 );
 
 /** Public callers omit the Person; an authenticated supplied reader must carry its Person. */
-export function readNewAdoptionsAnswer(client: MainClient, realm: string, actingSubject?: string): Promise<Loaded<ZoneWorkPage>> {
-  return settle(() => client.v1.realms({ realm }).modules['new-adoptions'].get({ query: { actingSubject } }));
+export function readNewAdoptionsAnswer(client: MainClient, realm: string, actingSubject?: string,
+  works?: readonly string[]): Promise<Loaded<ZoneWorkPage>> {
+  return settle(() => client.v1.realms({ realm }).modules['new-adoptions'].get({ query: {
+    actingSubject, ...(works ? { work: [...works], limit: works.length } : {}),
+  } }));
 }
 
 export const readRecentlyCompleted = cache(
