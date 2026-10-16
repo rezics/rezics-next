@@ -46,12 +46,12 @@ function story(persona: NonNullable<Story['args']>['persona'], surface: 'realm' 
       }
       if (persona === 'owner' || persona === 'operator' || surface === 'delegated-realm') {
         const sample = record.personas[persona!].find(item => item.label === `${surface}-attachments`)!.answer as {
-          items: { zone: string; name: string | null; address: { key: string } }[] };
+          items: { zone: string; name: string | null; address: { prefix: string; key: string } }[] };
         const target = record.personas[persona!].find(item => item.label === `${surface}-withdraw`)!.path.split('/')[3]!;
         const item = sample.items.find(row => row.zone.endsWith(target))!;
         const list = await canvas.findByRole('list', { name: copy.zonesTitle });
         const row = within(list).getAllByRole('listitem').find(node => within(node).queryByRole('link', {
-          name: copy.zonesOpen({ zone: item.name ?? copy.zonesNameFallback }) }));
+          name: `${copy.zonesOpen({ zone: item.name ?? copy.zonesNameFallback })}: ${item.address.prefix}${item.address.key}` }));
         if (!row) throw new Error('Recorded withdrawal target is absent');
         await expect(within(row).getByRole('link')).toHaveAttribute('href', localizedPath(spaceHref(item.address.key, 'site'), 'en'));
         await userEvent.click(within(row).getByRole('button', { name: copy.zonesWithdraw }));

@@ -45,7 +45,8 @@ async function populated(context: Context) {
   const sample = record.personas[context.args.persona].find(item => item.label === `${context.args.visit}-0`)!;
   const page = sample.answer as { items: { name: string | null; address: { key: string; prefix: string } }[] };
   const item = page.items[0]!;
-  await expect(within(within(list).getAllByRole('listitem')[0]!).getByRole('link', { name: t.zonesOpen({ zone: item.name ?? t.zonesNameFallback }) })).toHaveAttribute(
+  await expect(within(within(list).getAllByRole('listitem')[0]!).getByRole('link', {
+    name: `${t.zonesOpen({ zone: item.name ?? t.zonesNameFallback })}: ${item.address.prefix}${item.address.key}` })).toHaveAttribute(
     'href', localizedPath(spaceHref(item.address.key, 'site'), localeOf(context)));
   await expect(canvas.getAllByRole('button', { name: t.zonesWithdraw })).toHaveLength(50);
 }

@@ -147,7 +147,7 @@ export function ZoneAttachments({ principal, realm, actingSubject, locale, messa
             </p>
             <p className="truncate text-muted-foreground text-sm">
               <LocalizedLink href={spaceHref(item.address.key, 'site')} className="rounded-md underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={t.zonesOpen({ zone: label })}>{item.address.prefix}{item.address.key}</LocalizedLink>
+                aria-label={`${t.zonesOpen({ zone: label })}: ${item.address.prefix}${item.address.key}`}>{item.address.prefix}{item.address.key}</LocalizedLink>
             </p>
             <p className="text-muted-foreground text-sm">{item.attachedAt && item.when
               ? <time dateTime={item.attachedAt}>{t.zonesAttached({ time: item.when })}</time>
