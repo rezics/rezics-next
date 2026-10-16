@@ -38,13 +38,15 @@ import {
 // never silently as the session Agent, and returns a `Loaded` result so one
 // region's failure leaves the others standing.
 
-type Answer<T> = { data: T | null; error: { status: number; value?: unknown } | null };
+type Answer<T> = { data: T | null; error: { status: number; value?: unknown } | null; response?: { status: number } };
 
 /** Main answers 409 when its graph moved during a read that started from scratch; ask once more. */
 export async function settle<T>(call: () => Promise<Answer<T>>, again = true): Promise<Loaded<T>> {
   try {
-    let { data, error } = await call();
-    if (again && error?.status === 409) ({ data, error } = await call());
+    let answer = await call();
+    if (again && answer.error?.status === 409) answer = await call();
+    const { data, error, response } = answer;
+    if (error?.value instanceof Error && !response) return { ok: false, failure: 'unavailable' };
     if (error) return { ok: false, failure: failureOf(error.status), status: error.status,
       ...(error.value !== undefined ? { problem: error.value } : {}) };
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };

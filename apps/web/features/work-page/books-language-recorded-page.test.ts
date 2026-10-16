@@ -141,6 +141,7 @@ test('a refused private header keeps its problem and the owner missing text keep
   expect(booksLanguageReading({ text: selection, header: work.data })).toEqual({
     kind: 'refused',
     failure: 'missing',
+    status: refused.status,
     problem,
   });
 });
@@ -188,6 +189,7 @@ test('production route reuses a cached header and only requests credits after su
     }
     expect(page).toEqual({ kind: 'shown', actingSubject: actingSubject ?? null,
       reading: { kind: 'refused', failure: 'missing',
+        status: sample('owner', 'private-reading-page-selection').status,
         problem: problemOf(sample('owner', 'private-reading-page-selection').answer) } });
   }
 });

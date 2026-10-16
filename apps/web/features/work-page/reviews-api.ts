@@ -1,6 +1,6 @@
 import { browserMainApi } from '../api/browser.ts';
 import { followHref } from '../entity-page/href.ts';
-import { failureOf } from './failure.ts';
+import { refusedRead } from './books-edition-page.read.ts';
 import type { Loaded, Review, Reviewer, ReviewPage } from './types.ts';
 
 /** The list's controls: Main's sort, and the language and rating filters. */
@@ -39,9 +39,10 @@ export function mainReviewApi({ target, href, context, actingSubject }: {
   return {
     async page(filter, cursor) {
       try {
-        const { data, error } = await followHref<ReviewPage>(main(), href ?? `/v1/resources/${target.slice(-36)}/reviews`,
+        const { data, error, response } = await followHref<ReviewPage>(main(), href ?? `/v1/resources/${target.slice(-36)}/reviews`,
           { context, sort: filter.sort, language: filter.language, rating: filter.rating, cursor, limit: 10, ...reader })();
-        if (error) return { ok: false, failure: failureOf(error.status) };
+        if (error?.value instanceof Error && !response) return { ok: false, failure: 'unavailable' };
+        if (error) return refusedRead(error);
         return data ? { ok: true, data } : { ok: false, failure: 'unavailable' };
       } catch {
         return { ok: false, failure: 'unavailable' };

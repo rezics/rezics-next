@@ -1,17 +1,14 @@
 import type { MainClient } from '../discover/types.ts';
-import { failureOf } from './failure.ts';
-import { booksEditionReads } from './books-edition-page.read.ts';
+import { booksEditionReads, settle } from './books-edition-page.read.ts';
 import { idOf } from './route.ts';
 import type { AgentCreditPage, CreditPage, Loaded, ReadFailure, WorkHeader, WorkText } from './types.ts';
 
 // The text's recorded language is the language the reader sees. The UI locale
 // names that language; it never replaces the text.
 
-export type RecordedProblem = { type?: string; title: string; code: string; status: number };
+export type RecordedProblem = { type?: string; title: string; code: string; status: number; [key: string]: unknown };
 
-export type Answered<T> =
-  | { ok: true; data: T }
-  | { ok: false; failure: ReadFailure; problem?: RecordedProblem };
+export type Answered<T> = Loaded<T>;
 
 export type BooksLanguageTitle = {
   value: string;
@@ -32,47 +29,15 @@ export type BooksLanguageReading =
       agentCredits: Loaded<AgentCreditPage>;
       credits: Loaded<CreditPage>;
     }
-  | { kind: 'refused'; failure: ReadFailure; problem: RecordedProblem }
-  | { kind: 'missing' }
-  | { kind: 'unavailable'; failure: ReadFailure };
+  | { kind: 'refused'; failure: ReadFailure; problem: RecordedProblem; status?: number }
+  | { kind: 'missing'; status?: number; problem?: unknown }
+  | { kind: 'unavailable'; failure: ReadFailure; status?: number; problem?: unknown };
 
-type CallResult<T> = {
-  data: T | null;
-  error: { status: number; value: unknown } | null;
-  response?: unknown;
-};
-
-function recordedProblem(value: unknown, status: number): RecordedProblem | undefined {
+function recordedProblem(value: unknown): RecordedProblem | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const body = value as { type?: unknown; title?: unknown; code?: unknown; status?: unknown };
-  if (typeof body.title !== 'string' || typeof body.code !== 'string') return undefined;
-  return {
-    ...(typeof body.type === 'string' ? { type: body.type } : {}),
-    title: body.title,
-    code: body.code,
-    status: typeof body.status === 'number' ? body.status : status,
-  };
-}
-
-/**
- * The same failure adapter as `settle` in `read.ts`: one retry when Main
- * reports that the graph moved, then `failureOf`. The recorded problem is
- * kept alongside the display category.
- */
-async function settleCall<T>(call: () => Promise<CallResult<T>>): Promise<Answered<T>> {
-  try {
-    let result = await call();
-    if (result.error?.status === 409) result = await call();
-    if (result.error) {
-      const problem = recordedProblem(result.error.value, result.error.status);
-      return { ok: false, failure: failureOf(result.error.status), ...(problem ? { problem } : {}) };
-    }
-    return result.data === null
-      ? { ok: false, failure: 'unavailable' }
-      : { ok: true, data: result.data };
-  } catch {
-    return { ok: false, failure: 'unavailable' };
-  }
+  return typeof body.title === 'string' && typeof body.code === 'string' && typeof body.status === 'number'
+    ? value as RecordedProblem : undefined;
 }
 
 function readingTitle(header: WorkHeader | null | undefined): BooksLanguageTitle | null {
@@ -87,9 +52,12 @@ function readingTitle(header: WorkHeader | null | undefined): BooksLanguageTitle
 
 function failed(answer: Answered<unknown>): BooksLanguageReading {
   if (answer.ok) return { kind: 'unavailable', failure: 'unavailable' };
-  if (answer.problem) return { kind: 'refused', failure: answer.failure, problem: answer.problem };
-  if (answer.failure === 'missing') return { kind: 'missing' };
-  return { kind: 'unavailable', failure: answer.failure };
+  const evidence = { ...(answer.status === undefined ? {} : { status: answer.status }),
+    ...(answer.problem === undefined ? {} : { problem: answer.problem }) };
+  const problem = recordedProblem(answer.problem);
+  if (problem) return { ...evidence, kind: 'refused', failure: answer.failure, problem };
+  if (answer.failure === 'missing') return { ...evidence, kind: 'missing' };
+  return { ...evidence, kind: 'unavailable', failure: answer.failure };
 }
 
 /**
@@ -134,7 +102,7 @@ export function booksLanguageReads(host: { main: Pick<MainClient, 'v1'>; actingS
   const readText = (mainVersion: string, language: string | undefined): Promise<Answered<WorkText>> => {
     const id = idOf(mainVersion);
     if (!id) return Promise.resolve({ ok: false, failure: 'missing' });
-    return settleCall(() =>
+    return settle(() =>
       main.v1['main-versions']({ mainVersion: id }).selection.get({ query: { language } }),
     );
   };

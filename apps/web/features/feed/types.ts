@@ -139,12 +139,12 @@ export function referenceOf(body: unknown, headers?: unknown): string | undefine
   return undefined;
 }
 
-/** A failed read. The reference is kept only for a server failure that carried one. */
-export function failedRead<F extends string>(failure: F, body?: unknown, headers?: unknown):
-  { ok: false; failure: F; reference?: string } {
-  if (failure !== 'unavailable') return { ok: false, failure };
-  const reference = referenceOf(body, headers);
-  return reference ? { ok: false, failure, reference } : { ok: false, failure };
+/** The original refusal accompanies its category; only server failures show a support reference. */
+export function failedRead<F extends string>(failure: F, body?: unknown, headers?: unknown, status?: number):
+  { ok: false; failure: F; reference?: string; status?: number; problem?: unknown } {
+  const reference = failure === 'unavailable' ? referenceOf(body, headers) : undefined;
+  return { ok: false, failure, ...(status === undefined ? {} : { status }),
+    ...(body === undefined ? {} : { problem: body }), ...(reference ? { reference } : {}) };
 }
 
 /** The browser or the transport never got a response. A timeout is Main's, not the reader's connection. */
@@ -171,8 +171,10 @@ type Answer<T> = {
 export async function settle<T>(call: () => Promise<Answer<T>>): Promise<Loaded<T>> {
   try {
     const answer = await call();
+    if (answer.error?.value instanceof Error && !answer.response)
+      return { ok: false, failure: isOfflineError(answer.error.value) ? 'offline' : 'unavailable' };
     if (answer.error) return failedRead(failureOf(answer.error.status, answer.error.value), answer.error.value,
-      answer.headers ?? answer.response?.headers);
+      answer.headers ?? answer.response?.headers, answer.error.status);
     return answer.data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data: answer.data };
   } catch (error) {
     return { ok: false, failure: isOfflineError(error) ? 'offline' : 'unavailable' };

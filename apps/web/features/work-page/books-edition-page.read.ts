@@ -17,6 +17,9 @@ export const refusedRead = (error: NonNullable<Answer<unknown>['error']>) => ({ 
   failure: failureOf(error.status), status: error.status,
   ...(error.value !== undefined ? { problem: error.value } : {}) });
 
+/** Eden wraps a failed fetch in a synthetic error without an HTTP response. */
+const transportFailed = (answer: Answer<unknown>) => answer.error?.value instanceof Error && !answer.response;
+
 function pendingRead<T>(answer: Answer<T>): BooksRead<T> | null {
   return (answer.status ?? answer.response?.status) === 202
     ? { ok: false, failure: 'pending', status: 202, problem: answer.problem ?? answer.data } : null;
@@ -27,6 +30,7 @@ export async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string)
   try {
     let answer = await call();
     if (answer.error?.status === 409 && !cursor) answer = await call();
+    if (transportFailed(answer)) return { ok: false, failure: 'unavailable' };
     if (answer.error) return refusedRead(answer.error);
     return pendingRead(answer) ?? (answer.data === null
       ? { ok: false, failure: 'unavailable' } : { ok: true, data: answer.data });
@@ -39,6 +43,7 @@ export async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string)
 export async function settleNullable<T>(call: () => Promise<Answer<T>>): Promise<BooksRead<T | null>> {
   try {
     const answer = await call();
+    if (transportFailed(answer)) return { ok: false, failure: 'unavailable' };
     return answer.error ? refusedRead(answer.error) : pendingRead(answer) ?? { ok: true, data: answer.data };
   } catch { return { ok: false, failure: 'unavailable' }; }
 }
