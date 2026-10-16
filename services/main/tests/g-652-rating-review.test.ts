@@ -12,15 +12,17 @@ test('G-652: review command and response preserve absent scores and reject inval
     expectedRevision: null, language: 'en', text: 'A translation review without a score', spoiler: false };
   expect(Value.Check(reviewCommand, body)).toBe(true);
   expect(Value.Check(reviewCommand, { ...body, rating: null })).toBe(true);
-  expect(Value.Check(reviewCommand, { ...body, rating: 8 })).toBe(true);
-  for (const rating of [0, 11, 8.5, '8']) expect(Value.Check(reviewCommand, { ...body, rating })).toBe(false);
+  // Context admission checks the selected scale; transport preserves exact scores.
+  for (const rating of [0, 8, 11, 8.5]) expect(Value.Check(reviewCommand, { ...body, rating })).toBe(true);
+  for (const rating of [-1, 1_000_001, '8']) expect(Value.Check(reviewCommand, { ...body, rating })).toBe(false);
   expect(Value.Check(reviewItem.properties.rating, null)).toBe(true);
   expect(Value.Check(reviewItem.properties.ratingObservation, null)).toBe(true);
   expect(Value.Check(reviewItem.properties.ratingRevision, null)).toBe(true);
   const intent = { actingSubject: id(1), context: id(2), work: id(3), expectedRevision: null,
     language: 'en', text: body.text, spoiler: false };
   expect(() => validateReviewIntent(intent, 'review-key')).not.toThrow();
-  expect(() => validateReviewIntent({ ...intent, rating: 0 }, 'review-key')).toThrow();
+  for (const rating of [0, 11, 8.5]) expect(() => validateReviewIntent({ ...intent, rating }, 'review-key')).not.toThrow();
+  for (const rating of [-1, 1_000_001, NaN, Infinity]) expect(() => validateReviewIntent({ ...intent, rating }, 'review-key')).toThrow();
 });
 
 test('G-652: every resource ratings response variant requires complete aggregation scope', () => {

@@ -106,7 +106,8 @@ function fixture() {
     query: async (sparql: string) => {
       if (sparql.includes('SELECT ?kind ?context')) return [{ kind: literal('global'), context: uri(context) }];
       expect(sparql).toContain('rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence');
-      return [{ ...revisions.get(inventoryHead!)!, currentHead: uri(head!) }];
+      return [{ ...revisions.get(inventoryHead!)!, currentHead: uri(head!),
+        scaleMin: literal('1'), scaleMax: literal('10'), scaleStep: literal('1') }];
     } } as unknown as WorkReadSession;
   const own = async () => (await new ReaderLibraryRatings(pool).read(session, [{ work, main: mainVersion }])).get(work)!.global!;
   return { seal, send, own, registered, revisions,
