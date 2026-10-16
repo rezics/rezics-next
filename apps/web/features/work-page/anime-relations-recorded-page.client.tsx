@@ -20,6 +20,7 @@ import { animeRelationsReads, readAnimeRelationsConnections, readAnimeRelationsP
 import { booksEditionReads, readBooksEditionStatus } from './books-edition-page.read.ts';
 import { readSuppliedContents, readSuppliedStart } from './games-hub-recorded-page.ts';
 import { ContentsRegion } from './contents.tsx';
+import { hubLabels, hubPlan } from './hub.ts';
 import { coverAuthors, WorkCredits } from './credits.tsx';
 import { messages } from './messages.ts';
 import { IdentityStatus, nextAction, NextActionView } from './primary-action.tsx';
@@ -86,6 +87,7 @@ export function AnimeRelationsRecordedPage({ main, fetcher, actingSubject, id, v
         relationships={actingSubject ? mainRelationships(actingSubject, { origin: `http://record.invalid${BFF_PREFIX}`, fetch: fetcher }) : undefined}
         signInHref={signInPath(localizedPath(workHref(id), locale))}
         showcase={workShowcaseHeader(art.get(work.id), showcaseMessages[locale])}
+        sections={hubLabels(t, hubPlan(page.projection.ok ? page.projection.data : null))}
         cover={<WorkPageCover work={work} authors={authors} />}
         credits={<WorkCredits agentCredits={page.agentCredits} credits={page.credits} source={publicationSource(work)} locale={locale} messages={t} />}
         ratingLine={<RatingLine ratings={ratings} stats={stats} experience={experience} locale={locale} messages={t} />}
@@ -96,7 +98,7 @@ export function AnimeRelationsRecordedPage({ main, fetcher, actingSubject, id, v
           : <WorkKindActions kind={experience.kind} workId={work.id} title={work.title.value} locale={locale}
             messages={t} words={shelfWords(experience, t)} />}
         status={showsEditionStatus(experience) ? <IdentityStatus {...identity} locale={locale} messages={t} /> : undefined}>
-        {view !== 'contents' && actingSubject ? <SeriesProgressPanel work={work.id} locale={locale} preferenceForm={false} /> : null}
+        {view !== 'contents' && actingSubject ? <SeriesProgressPanel work={work.id} locale={locale} preferenceForm={view === 'connections'} /> : null}
         {view === 'connections' && connections ? <div className="grid gap-10">
           <AnimeRelationsSections view={connections} workRef={id} id={id} query={{ grain: 'series' }} locale={locale} pageMessages={t} />
         </div> : null}

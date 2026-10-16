@@ -4,14 +4,18 @@ import { expect, waitFor, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import answers from '../../../../tests/qa/fixtures/outcomes/anime/anime-manga-and-vn-hub-parts-wholes-and-relations.json';
 import type { UiLocale } from '../../i18n/define.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { seedTypes, type TypeRegistry } from '../catalogue/types.ts';
 import type { MainClient } from '../discover/types.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
+import { messages as relationshipMessages } from '../relationships/messages.ts';
+import { copyOf } from '../work-levels/messages.ts';
 import { AnimeRelationsRecordedPage, type AnimeRelationsView } from './anime-relations-recorded-page.client.tsx';
 import { recordedAnimeRelationsVisit } from './anime-relations-recorded-page.ts';
 import { messages } from './messages.ts';
 import type { WorkHeader } from './types.ts';
+import { workHref } from './route.ts';
 
 const record = answers as AnswerRecord;
 interface Args { persona: AnswerPersona; entry: number; view: AnimeRelationsView; loading: boolean; locale: UiLocale }
@@ -92,14 +96,20 @@ const visit: Story['play'] = async ({ canvasElement, args }) => {
     if (args.entry === 5) {
       await expect(canvas.findAllByText('Part 1', { exact: true })).resolves.not.toHaveLength(0);
       await expect(canvas.findAllByRole('link', { name: /First seed journey/ })).resolves.not.toHaveLength(0);
+      await expect(canvas.findByText(relationshipMessages[args.locale].unavailable)).resolves.toBeVisible();
     }
   }
   await waitFor(() => expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1));
   await expect(canvas.queryByText(/Unmatched recorded request|Missing.*recorded|This visit needs/)).not.toBeInTheDocument();
+  if (!args.loading && selected.header.status === 200 && selected.actingSubject && args.view === 'connections') {
+    canvas.getByRole('heading', { name: copyOf(args.locale).parts, exact: true }).scrollIntoView();
+  }
 };
 function page(persona: AnswerPersona, entry: number, viewport: 'desktop' | 'phone',
   view: AnimeRelationsView = 'connections', loading = false): Story {
-  return { args: { persona, entry, view, loading }, globals: { viewport: { value: viewport } }, play: visit };
+  const selected = recordedAnimeRelationsVisit(record, persona, entry);
+  return { args: { persona, entry, view, loading }, globals: { viewport: { value: viewport } },
+    parameters: { route: { pathname: localizedPath(workHref(selected.id, view), 'en') } }, play: visit };
 }
 export const VisitorAnimeDesktop: Story = page('visitor', 1, 'desktop');
 export const VisitorAnimePhone: Story = page('visitor', 1, 'phone');
