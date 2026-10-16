@@ -152,8 +152,9 @@ function RelationshipControlState({
     let active = true;
     const refresh = () => {
       const generation = ++readGeneration.current;
+      // Main derives the follow identity; a surface's type can differ from its canonical kind (for example Projection).
       void apiRef
-        .current!.state(target, kind)
+        .current!.state(target)
         .then((fresh) => {
           if (active && generation === readGeneration.current) {
             setState(fresh);
