@@ -58,20 +58,6 @@ test('search withholds occurrences refused by the same visitor composition reade
         profile: 'section-list-v1', work: anthology.work,
         mainVersion: anthology.mainVersion, actingSubject,
       }), 201);
-    const changed = await answer<{ revision: string; occurrences: string[] }>(owner.main(
-      'POST', `/v1/compositions/${short(structure.structure)}/changes`, {
-        profile: 'section-list-v1', expectedHead: structure.revision, actingSubject,
-        operations: [{ op: 'insert', role: 'entry', parent: structure.structure,
-          position: 'last', target: source.work, qualifier: { note: 'Editorial placement' } }],
-      }));
-    const current = await answer<{ revision: string }>(owner.main('GET',
-      `/v1/works/${short(anthology.work)}?actingSubject=${encodeURIComponent(actingSubject)}`));
-    await answer(owner.main('POST', '/v1/work-publications', {
-      profile: 'work-structure-publication-v1', operation: 'publish', work: anthology.work,
-      actingSubject, expectedWorkHead: current.revision, expectedMainVersion: anthology.mainVersion,
-      structure: structure.structure, expectedStructureHead: changed.revision,
-      expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public',
-    }), 201);
     await grantPersonaFixtureAuthority(owner, ['draft', 'publish', 'search-eligibility'].map(action => ({
       scope: `content:${action}:${source.work}`, action: `content.${action}`,
     })));
@@ -93,6 +79,23 @@ test('search withholds occurrences refused by the same visitor composition reade
       profile: 'content-search-eligibility-v1', resourceId: source.work, variantId,
       publicationDecision: content.decision, expectedEligibilityHead: null,
       rightsBasis: 'original-contribution', disclosure: 'public', actingSubject,
+    }), 201);
+
+    const changed = await answer<{ revision: string; occurrences: string[] }>(owner.main(
+      'POST', `/v1/compositions/${short(structure.structure)}/changes`, {
+        profile: 'section-list-v1', expectedHead: structure.revision, actingSubject,
+        operations: [{ op: 'insert', role: 'entry', parent: structure.structure,
+          position: 'last', target: source.work, qualifier: { note: 'Editorial placement' },
+          selection: { mode: 'fixed-revision', revision: draft.revisionId,
+            selector: { grain: 'content', variantId, revision: draft.revisionId } } }],
+      }));
+    const current = await answer<{ revision: string }>(owner.main('GET',
+      `/v1/works/${short(anthology.work)}?actingSubject=${encodeURIComponent(actingSubject)}`));
+    await answer(owner.main('POST', '/v1/work-publications', {
+      profile: 'work-structure-publication-v1', operation: 'publish', work: anthology.work,
+      actingSubject, expectedWorkHead: current.revision, expectedMainVersion: anthology.mainVersion,
+      structure: structure.structure, expectedStructureHead: changed.revision,
+      expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public',
     }), 201);
 
     await answer(visitor.main('GET', `/v1/works/${short(source.work)}`));
