@@ -35,11 +35,11 @@ export function realmSiteCreationClient(main: Main = browserMainApi()) {
       } }), { keepProblem: true });
       if (!answer.ok) return answer;
       const address = answer.data;
+      const canonical = { ...address.canonical, prefix: '/z/' as const };
       if (address.status !== 'resolved' || address.holder !== receipt.space
-        || address.capabilities?.zone !== receipt.zone || address.canonical.prefix !== '/z/') {
+        || address.capabilities?.zone !== receipt.zone || address.canonical.prefix !== canonical.prefix) {
         return { ok: false, failure: 'unavailable' };
       }
-      const canonical = { ...address.canonical, prefix: '/z/' as const };
       return { ok: true, data: { attachmentPath: zoneRealmPath(addressKey(canonical)),
         sitePath: canonicalHref(canonical, locale) } };
     },
