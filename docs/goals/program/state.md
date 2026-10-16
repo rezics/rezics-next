@@ -20,6 +20,16 @@ owned by an open task in the ledger:
 - the erasure drill reruns green from a clean checkout after wave/3, and the
   operations, api and web Goals close.
 
+Shared capabilities are implemented once ([platform thesis](../../product/platform-thesis.md)).
+The program inventories, across every in-scope vertical and source, the shared
+owners that recognise a vertical or provider to do a generic job, such as Work
+publication requiring the Recipe profile. Findings are grouped by cause, decided
+in a design note, and repaired after wave/3 merges by generalising each owner and
+migrating its callers together, without moving or renaming special cases. Proof
+needs a non-Recipe consumer and a second source where that is the boundary.
+Product-row coverage and shared-capability acceptance are reported separately,
+and the unified-engine outcome is not complete while a known exception remains.
+
 The supermanager handles program tooling and steers the delivery Goals'
 remaining tasks directly. Delivery manager registration and mail state come
 from the coordinator.
