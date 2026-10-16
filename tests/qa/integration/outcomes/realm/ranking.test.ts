@@ -18,6 +18,7 @@ type Page = {
   items: { reply: string; author: { id: string } | null; work: { id: string }; vote: { score: number } }[];
   nextCursor: string | null; count: { value: number; kind: string; total: null };
 };
+type Header = Record<string, unknown> & { sourcePosition: { dataEpoch: string; sequence: string } };
 setDefaultTimeout(120_000);
 let publicRealm: PersonaSessions, privateRealm: PersonaSessions;
 const publicThreads: string[] = [], oldThreads: string[] = [], currentThreads: string[] = [];
@@ -175,7 +176,7 @@ async function storyStates(name: PersonaName) {
 
 async function traverse(sessions: PersonaSessions, name: PersonaName, expected: string[]) {
   const person = sessions[name], root = `/v1/realms/${short(sessions.realm)}`;
-  const header = await answer<Record<string, unknown>>(person.main('GET', `${root}?${acting(person)}`));
+  const header = await answer<Header>(person.main('GET', `${root}?${acting(person)}`));
   for (const [sort, window] of [['best', 'all'], ['top', 'week'], ['top', 'month'], ['top', 'all']]) {
     const visits: Promise<{ error?: unknown }>[] = [];
     const params = acting(person); params.set('sort', sort!); params.set('window', window!); params.set('limit', '20');
@@ -190,7 +191,12 @@ async function traverse(sessions: PersonaSessions, name: PersonaName, expected: 
         const recorded = await storyRanking(sessions, name, sort as 'best' | 'top',
           window as 'week' | 'month' | 'all', `${prefix}${sort}-${window}${suffix}`, params.get('cursor') ?? undefined);
         expect(recorded.ok).toBe(true);
-        if (pageNumber === 0 || finalPage) visits.push(captureVisit(sessions, name, `visit-${prefix}${sort}-${window}${suffix}`, {
+        // Every ordering uses the same frame. Capture each public ordering, one terminal
+        // continuation and the private admission boundary without repeating that frame.
+        const frameVisit = sessions === publicRealm
+          ? pageNumber === 0 || finalPage && sort === 'top' && window === 'month'
+          : sort === 'best' && (pageNumber === 0 || finalPage);
+        if (frameVisit) visits.push(captureVisit(sessions, name, `visit-${prefix}${sort}-${window}${suffix}`, {
           sort: sort as 'best' | 'top', window: window as 'week' | 'month' | 'all', cursor: params.get('cursor') ?? undefined,
         }).then(() => ({}), error => ({ error })));
         if (!recorded.ok) throw new Error('Ranked traversal read failed');
@@ -209,14 +215,18 @@ async function traverse(sessions: PersonaSessions, name: PersonaName, expected: 
       }
       expect(cursors.size).toBeLessThan(30);
     } while (page.nextCursor);
-    // At most three independent frame visits overlap the unchanged API traversal.
+    // Independent frame visits overlap the unchanged complete API traversal.
     for (const result of await Promise.all(visits)) if ('error' in result) throw result.error;
     expect(new Set(seen).size).toBe(seen.length);
     expect(seen.sort()).toEqual([...expected].sort());
     if (sort === 'top') expect(scores).toEqual([...scores].sort((left, right) => right - left));
   }
-  const after = await answer<Record<string, unknown>>(person.main('GET', `${root}?${acting(person)}`));
-  expect(after).toEqual(header);
+  const after = await answer<Header>(person.main('GET', `${root}?${acting(person)}`));
+  const { sequence: beforeSequence, ...beforePosition } = header.sourcePosition;
+  const { sequence: afterSequence, ...afterPosition } = after.sourcePosition;
+  // Projection progress can advance during a read-only visit; the represented state cannot change.
+  expect({ ...after, sourcePosition: afterPosition }).toEqual({ ...header, sourcePosition: beforePosition });
+  expect(BigInt(afterSequence)).toBeGreaterThanOrEqual(BigInt(beforeSequence));
 }
 async function prove(name: PersonaName) {
   const person = publicRealm[name];
@@ -235,7 +245,7 @@ async function prove(name: PersonaName) {
       await answer(person.main('GET', `/v1/realms/${short(privateRealm.realm)}/threads?${params}`), 404);
       expect(await storyRanking(privateRealm, name, sort as 'best' | 'top', window as 'week' | 'month' | 'all',
         `private-${sort}-${window}`, undefined, 404)).toMatchObject({ ok: false, failure: 'missing' });
-      await captureVisit(privateRealm, name, `visit-private-${sort}-${window}`, {
+      if (sort === 'best') await captureVisit(privateRealm, name, `visit-private-${sort}-${window}`, {
         sort: sort as 'best' | 'top', window: window as 'week' | 'month' | 'all',
       });
     }
