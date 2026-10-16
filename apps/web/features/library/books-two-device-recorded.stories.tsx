@@ -25,8 +25,9 @@ async function ownerPosition(canvasElement: HTMLElement, recovered: boolean) {
   const chapters = within(await canvas.findByRole('region', { name: 'Chapters' }));
   await userEvent.click(await chapters.findByRole('button', { name: 'Chapter 2' }));
   await expect(await chapters.findByLabelText('Position')).toHaveValue(recovered ? '' : 'device one paragraph');
-  await expect(chapters.getByText(recovered ? 'Chapter 2 · Not read' : 'Chapter 2 · Read')).toBeVisible();
+  await expect(chapters.getByText(recovered ? '· Not read' : '· Read')).toBeVisible();
   await expect(chapters.getByRole('button', { name: recovered ? 'Mark read' : 'Mark not read' })).toBeVisible();
+  chapters.getByLabelText('Position').scrollIntoView({ block: 'center' });
 }
 
 /** A second device reads the winning saved position through Library's production chapter control. */
