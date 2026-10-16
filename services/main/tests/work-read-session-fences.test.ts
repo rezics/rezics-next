@@ -456,6 +456,7 @@ function ratingFixture() {
       f.state.calls++; f.state.sequence += state.advanceOnAggregate;
       const position = { epoch: term(state.graphEpoch), sequence: term(String(f.state.sequence)) };
       const root: ReadRow = { ...position, kind: term('context'), component: term('global'),
+        scaleMin: term('1'), scaleMax: term('5'), scaleStep: term('1'),
         owner: term(GLOBAL_RATING_POPULATION_OWNER, 'uri'), contextRevision: term(contextRevision, 'uri'),
         contextManifest: term('urn:rezics:sha256:' + contextManifest, 'uri'),
         question: { ...term(question), 'xml:lang': 'en' }, contextEpoch: term('epoch'), contextSequence: term('1'),
