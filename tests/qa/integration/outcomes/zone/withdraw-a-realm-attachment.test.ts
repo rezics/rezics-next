@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -9,7 +10,20 @@ import {
   type PersonaSessions,
 } from '../../../support/personas.ts';
 
-setDefaultTimeout(90_000);
+import { discoverActingContexts, discoverAgents, readMainSessionAgent } from '../../../../../apps/web/features/auth/session.ts';
+import { readAgentProfile } from '../../../../../apps/web/features/auth/agent-profile.ts';
+import { commandLane } from '../../../../../apps/web/features/api/command.ts';
+import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { readRealmHeader, readZoneAttachments, settle } from '../../../../../apps/web/features/manage/read.ts';
+import { readManagementAccess } from '../../../../../apps/web/features/manage/settings-api.ts';
+import { realmEditSite } from '../../../../../apps/web/features/manage/realm-site.ts';
+import { withdrawRealmAttachment } from '../../../../../apps/web/features/manage/zone-attachments-api.ts';
+import { readShowcaseEditor } from '../../../../../apps/web/features/zone-editor/edit-site-link.tsx';
+import { browserZoneRealmAttachment, commitCommand } from '../../../../../apps/web/features/zone-editor/api.ts';
+import { readManagementAddress, suppliedManagementSite, zoneAuthoringFromAddress, zoneLifecycleFromAddress } from '../../../../../apps/web/features/zone-editor/authoring-reads.ts';
+
+setDefaultTimeout(210_000);
+const fileWall = setTimeout(() => { throw new Error('Realm attachment withdrawal file exceeded 480 s'); }, 480_000);
 let sessions: PersonaSessions;
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) =>
@@ -148,17 +162,28 @@ async function resourceMandate(action: string, scopeId: string) {
   return answer(Promise.resolve(response));
 }
 afterAll(async () => {
-  await sessions?.close();
+  clearTimeout(fileWall);
+  try { await recording.publish(); } finally { await sessions?.close(); }
 });
 
 import withdrawal from '../../../../../scripts/qa/cases/outcomes/zone/withdraw-a-realm-attachment.ts';
+const recording = new OutcomeRecorder(withdrawal);
+const visits = {} as Record<PersonaName, Site>;
 const sites = {} as Record<PersonaName, Site>;
 beforeAll(async () => {
+  await recording.prepare();
   sessions = await personaSessions('public');
   const created = await site(sessions.owner);
   await answer(configure(sessions.owner, created.zone, created.zoneRevision, sessions.realm));
   for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const)
     sites[name] = created;
+  for (const name of ['stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
+    const editor = name === 'member' || name === 'owner' ? sessions.member : sessions.owner;
+    visits[name] = await site(editor);
+    const delegated = editor === sessions.member ? await role(editor, true) : null;
+    try { await answer(configure(editor, visits[name].zone, visits[name].zoneRevision, sessions.realm)); }
+    finally { if (delegated) await role(editor, false, delegated); }
+  }
   // The moderator ends created; the later operator refusal uses the retained fixture attachment.
   sites.operator = { ...created, zone: sessions.zone };
 }, 180_000);
@@ -239,10 +264,10 @@ async function denied(name: PersonaName, status: number) {
   await answer(configure(sessions[name], target.zone, current.revision, null), status);
   expect(await head(target.zone)).toEqual(current);
 }
-outcomeTest(withdrawal, 'visitor', () => denied('visitor', 401));
-outcomeTest(withdrawal, 'stranger', () => denied('stranger', 403));
-outcomeTest(withdrawal, 'member', () => denied('member', 403));
-outcomeTest(withdrawal, 'owner', async () => {
+outcomeTest(withdrawal, 'visitor', () => qualify('visitor', () => denied('visitor', 401)), recording);
+outcomeTest(withdrawal, 'stranger', () => qualify('stranger', () => denied('stranger', 403)), recording);
+outcomeTest(withdrawal, 'member', () => qualify('member', () => denied('member', 403)), recording);
+outcomeTest(withdrawal, 'owner', () => qualify('owner', async () => {
   const zoneOnly = await site(sessions.member);
   const roleId = await role(sessions.member, true);
   try {
@@ -306,8 +331,8 @@ outcomeTest(withdrawal, 'owner', async () => {
   );
   expect(await publicRealm(zoneOnly.zone)).toEqual({ route: null, presentation: null });
   await answer(withdraw(sessions.owner, zoneOnly.zone), 404);
-});
-outcomeTest(withdrawal, 'moderator', async () => {
+}), recording);
+outcomeTest(withdrawal, 'moderator', () => qualify('moderator', async () => {
   await denied('moderator', 403);
   const target = sites.moderator;
   await publishHome(target);
@@ -322,8 +347,8 @@ outcomeTest(withdrawal, 'moderator', async () => {
   } finally {
     await role(sessions.moderator, false, roleId);
   }
-});
-outcomeTest(withdrawal, 'operator', async () => {
+}), recording);
+outcomeTest(withdrawal, 'operator', () => qualify('operator', async () => {
   await denied('operator', 403);
   const target = sites.operator;
   const navigation = await answer<{ revision: string }>(
@@ -354,4 +379,118 @@ outcomeTest(withdrawal, 'operator', async () => {
   );
   await resourceMandate('realm.attach', `realm:attach:${sessions.realm}`);
   await answer(withdraw(sessions.operator, sites.operator.zone));
-});
+}), recording);
+
+async function within<T>(milliseconds: number, part: string, run: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${part} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+async function qualify(name: PersonaName, proof: () => Promise<void>) {
+  const started = Date.now();
+  let proofMs = 0, visitStarted = 0;
+  try {
+    // The API proof keeps its original 90 s; the production visit owns another 120 s.
+    await within(90_000, 'API proof', proof);
+    proofMs = Date.now() - started;
+    visitStarted = Date.now();
+    await within(120_000, 'production visit', () => productionVisit(name));
+  } finally {
+    console.info(`[persona-timing] ${name} proofMs=${proofMs || Date.now() - started} visitMs=${visitStarted ? Date.now() - visitStarted : 0}`);
+  }
+}
+
+const labels = new AsyncLocalStorage<string | ((path: string) => string)>();
+const named = <T,>(label: string | ((path: string) => string), run: () => Promise<T>) => labels.run(label, run);
+function productionTransport(name: PersonaName, anonymous = false) {
+  const sample = recording.session(name, anonymous ? sessions.visitor : sessions[name]);
+  const fetcher = (async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
+    const naming = labels.getStore();
+    const label = typeof naming === 'function' ? naming(path) : naming;
+    if (!label) throw new Error(`Production request has no label: ${request.method} ${path}`);
+    const raw = await request.text();
+    return sample(label, request.method, path, raw ? JSON.parse(raw) as unknown : undefined,
+      request.headers.get('idempotency-key') ?? undefined,
+      { headers: Object.fromEntries([...request.headers].filter(([key]) =>
+        !['authorization', 'cookie', 'x-session-key'].includes(key))), settle: false });
+  }) as typeof fetch;
+  return { fetcher, main: browserMainApi('https://recorded.invalid', { anonymous, fetcher }) };
+}
+
+async function productionVisit(name: PersonaName) {
+  // Both management routes send the signed-out visitor to sign-in before any Main read.
+  if (name === 'visitor') return;
+  const { main, fetcher } = productionTransport(name), actor = sessions[name].actingSubject!;
+  const realm = short(sessions.realm), target = visits[name];
+  // readSession's server-only cookie/cache wrapper is unavailable here. Its typed Main
+  // client sends these discovery reads together, then reads the selected Agent profile.
+  await named('session-language-selection', () => readMainSessionAgent('recorded', '00000000-0000-4000-8000-000000000001', fetcher));
+  await named('session-preferences', () => main.v1.me['person-preferences'].get({ query: { actingSubject: actor } }));
+  await Promise.all([
+    named('session-contexts', () => discoverActingContexts('recorded', fetcher)),
+    named('session-agents', () => discoverAgents('recorded', 'en', fetcher)),
+    named('session-selection', () => readMainSessionAgent('recorded', '00000000-0000-4000-8000-000000000001', fetcher)),
+  ]);
+  await named('session-profile', () => readAgentProfile(actor, 'recorded', fetcher));
+
+  async function realmPage(prefix: string) {
+    // /manage/r/[realm]/zones: layout and body render together; tabs read after hydration.
+    const [, , inventory] = await Promise.all([
+      named(`${prefix}-header`, () => readRealmHeader(main, realm, 'en', actor)),
+      realmEditSite({
+        zone: () => named(`${prefix}-zone`, () => settle(() => main.v1.realms({ realm }).zone.get({ query: { actingSubject: actor } }))),
+        editor: async zoneId => (await named(`${prefix}-editor`, () => readShowcaseEditor(main, zoneId, actor))).loaded,
+      }),
+      named(`${prefix}-attachments`, () => readZoneAttachments(main, realm, actor)),
+    ]);
+    await named(`${prefix}-access`, () => readManagementAccess(main, realm, actor));
+    if (!inventory.ok || !inventory.data.items.some(item => item.zone === target.zone)) return;
+    const input = { zone: target.zone, realm: sessions.realm, actingSubject: actor, key: randomUUID() };
+    let result = await named(`${prefix}-withdraw`, () => withdrawRealmAttachment(main, input));
+    if (!result.ok && result.failure === 'unavailable')
+      result = await named(`${prefix}-withdraw-retry`, () => withdrawRealmAttachment(main, input));
+    if (!result.ok && ['denied', 'missing', 'sign-in'].includes(result.failure))
+      await named(`${prefix}-refused-attachments`, () => readZoneAttachments(main, realm, actor));
+    // On success production removes the row locally; it sends no follow-up read.
+  }
+  await realmPage('realm');
+  if (name === 'moderator') {
+    const roleId = await role(sessions.moderator, true);
+    try { await realmPage('delegated-realm'); }
+    finally { await role(sessions.moderator, false, roleId); }
+  }
+
+  // /manage/z/[space]/realm shares address admission and authoring between its
+  // layout and body. Give each concurrent branch its own fixed request names.
+  const space = short(target.space);
+  const address = await named(path => path.includes('/addresses/resolve') ? 'zone-address' : 'zone-configuration',
+    () => readManagementAddress(main, space, 'en', actor, suppliedManagementSite(main, actor)));
+  const authoringRead = named(path => path.includes('/showcase-editor') ? 'zone-editor' : 'zone-navigation',
+      () => zoneAuthoringFromAddress(main, space, actor, address));
+  await Promise.all([
+    named('zone-lifecycle-configuration', () => zoneLifecycleFromAddress(main, space, actor, address)),
+    (async () => {
+      const authoring = await authoringRead;
+      if (authoring.kind !== 'ready') return;
+      const zoneId = authoring.model.zoneId;
+      const configuration = await named('attachment-configuration', () => settle(
+        () => main.v1.zones({ id: zoneId }).configuration.get({ query: { actingSubject: actor } }), { management: true }));
+      if (!configuration.ok) return;
+      const attached = configuration.data.configuration.defaultRealm;
+      if (typeof attached !== 'string') return;
+      const { main: anonymous } = productionTransport(name, true);
+      await named('attachment-name', () => settle(() => anonymous.v1.realms({ realm: short(attached) }).get({ query: {} })));
+      const client = browserZoneRealmAttachment(main);
+      const body = { expectedHead: configuration.data.revision, actingSubject: actor, defaultRealm: null };
+      // The Remove action retains this revision and retry key through commitCommand.
+      const lane = commandLane<typeof body, Awaited<ReturnType<typeof client.saveConfiguration>>>({ ok: false, failure: 'unavailable' });
+      await lane.submit(body, (captured, round) => named('attachment-remove', () => commitCommand(round,
+        key => client.saveConfiguration(zoneId, captured, key))));
+    })(),
+  ]);
+}
