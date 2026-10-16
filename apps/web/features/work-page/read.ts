@@ -22,7 +22,7 @@ import { sessionAgentState } from '../auth/session.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderSeed, readerEntry } from '../catalogue/reader-store.ts';
 import { localizedPath } from '../../i18n/locale.ts';
-import { type ContentsQuery, idOf, iriOf, mainScope, parseWorkRef, postPlaceHref,
+import { type ContentsQuery, idOf, iriOf, parseWorkRef, postPlaceHref,
   type VersionQuery, type WorkRef, type WorkScope, workHref } from './route.ts';
 import type { EditionPreference, ProgressSummary } from '../tracking/types.ts';
 import type { AdoptionPage, AgentCreditPage, AgentWorksPage, AlsoEnjoyedPage, ChapterRead, ClassificationPage,

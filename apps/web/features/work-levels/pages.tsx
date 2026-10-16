@@ -23,7 +23,7 @@ import {
   readWholes,
 } from './read.ts';
 import type { ConnectionsQuery, EditionsQuery } from './route.ts';
-import type { Loaded, Realization, ReleasePage } from './types.ts';
+import type { Realization, ReleasePage } from './types.ts';
 
 const outline = buttonVariants({ variant: 'outline', size: 'sm' });
 
