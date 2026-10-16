@@ -16,6 +16,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ZoneBrowse } from './browse.tsx';
 import { direction } from '@rezics/main/language';
 import { realmHref, siteHref } from '../realm/route.ts';
+import { browseHref } from './browse-state.ts';
 
 const zone = (realm: string): ZoneContext => ({
   slug: null, realm: `https://rezics.com/id/${realm}`, name: { value: 'Catalogue', lang: 'en', dir: direction('en', 'Catalogue') },
@@ -121,7 +122,7 @@ test('an empty incomplete answer never claims that the catalogue has no matches'
   expect(html).not.toContain(messages.browseEmptyTitle);
 });
 
-test('a year range stays on all generated links without fabricating card dates', async () => {
+test('a year range can be removed while other Conditions keep it, without fabricating card dates', async () => {
   const record = catalogueRecords.manga!;
   const label = 'publication-year-range-and-format';
   const sample = catalogueSample(record, 'visitor', label);
@@ -132,6 +133,16 @@ test('a year range stays on all generated links without fabricating card dates',
     const page = await readCatalogueStory(browserMainApi('https://recorded.invalid', { anonymous: true, fetcher: replay.fetcher }),
       sample.path, context, 'en', zoneMessagesFor('en'), false);
     if (!page.ok) throw new Error('Range fixture did not build');
+    const yearCondition = page.data.chosen.find(item => item.key === 'publicationYear');
+    expect(yearCondition).toBeDefined();
+    // The recorded presentation declares no year control; its chosen Conditions come from the shared model.
+    const removed = new URL(yearCondition!.href, 'https://story.invalid');
+    const expected = new URL(browseHref(context.links.browse, { ...page.data.state, cursor: null }), 'https://story.invalid');
+    expected.searchParams.delete('year');
+    expect(removed.pathname).toBe(expected.pathname);
+    expect([...removed.searchParams]).toEqual([...expected.searchParams]);
+    expect(removed.searchParams.has('year')).toBe(false);
+    expect(removed.searchParams.has('cursor')).toBe(false);
     const year = await applyCatalogueYear({ model: page.data, search: { ...request.search, q: 'Lantern title', sort: 'updated' },
       view: { kind: 'view', zone: context, context: { locale: 'en' }, pkg: { slots: { browseHeader: () => null } },
         zoneMessages: zoneMessagesFor('en') } as unknown as Extract<RealmView, { kind: 'view' }> });
@@ -140,7 +151,8 @@ test('a year range stays on all generated links without fabricating card dates',
     expect(year.header.props.year.kept).toContainEqual({ name: 'sort', value: 'updated' });
     expect(year.publicationYears.size).toBe(0);
     expect(page.data.kept).toContainEqual({ name: 'year', value: request.query.publicationYear! });
-    for (const link of [...page.data.sorts, ...page.data.views, ...page.data.chosen]) {
+    for (const link of [...page.data.sorts, ...page.data.views,
+      ...page.data.chosen.filter(item => item.key !== 'publicationYear')]) {
       expect(new URL(link.href, 'https://story.invalid').searchParams.get('year')).toBe(request.query.publicationYear!);
     }
   } finally { replay.dispose(); }
