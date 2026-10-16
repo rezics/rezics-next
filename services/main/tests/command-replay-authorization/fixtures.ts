@@ -1,4 +1,4 @@
-import type { MembershipChange } from '../../src/modules/access/memberships.ts';
+import type { PrivateMembershipChange } from '../../src/modules/access/private-memberships.ts';
 import type { SetStatementDecisionInput } from '../../src/modules/statement/graph.ts';
 import type { Loss } from './authority-classes.ts';
 import { afterAll, beforeAll, beforeEach, expect } from 'bun:test';
@@ -115,15 +115,14 @@ export async function loseGrant(member: Member, grant: string, loss: Loss) {
   if (loss === 'expired') await expireFixtureAuthority(stack.accessPool, member.actor);
   else await reduceFixtureGrant(stack.accessPool, grant, { active: false });
 }
-export type RealmMembershipLossInput = Pick<MembershipChange,
-  'ownerSubject' | 'expectedGeneration' | 'expectedPolicyRevision'>;
+export type RealmMembershipLossInput = Pick<PrivateMembershipChange,
+  'ownerSubject' | 'expectedGeneration' | 'expectedPolicyRevision'> & { membershipId: string };
 
-// Use the membership owner so its generation, consent and dependent-authority
-// fences apply. The caller supplies the current episode from its lawful setup.
+// Judgment eligibility uses the Account's private membership, independently of
+// Agent membership. Its owner applies the episode and dependent-authority fences.
 export async function loseRealmMembership(member: Member, input: RealmMembershipLossInput) {
-  const response = await member.send('POST', '/v1/access/membership-changes', {
-    profile: 'access-membership-change-v1', ...input,
-    kind: 'realm', memberSubject: member.actor, action: 'leave',
+  const response = await member.send('POST', '/v1/access/private-membership-changes', {
+    profile: 'access-private-membership-change-v1', ...input, kind: 'realm', action: 'leave',
   });
   expect(response.status, await response.clone().text()).toBe(200);
   const result = await response.json() as { state: string; generation: string };
