@@ -211,11 +211,19 @@ function pendingCommits(pending: string): ManagerCommit[] {
     .sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
 }
 
+/** Snapshot failures belong to their own IDs, never to the task or Goal action that drains them. */
 export async function drainManagerCommits(repo: string, directory: string, goal?: string): Promise<void> {
   const pending = join(directory, 'manager-commits');
   if (!existsSync(pending)) return;
   for (const record of pendingCommits(pending).filter(record => !goal || record.goal === goal)) {
-    if (record.status !== 'landed') await runManagerCommit(repo, directory, record.id);
+    if (record.status === 'landed') continue;
+    try {
+      // Failed snapshots stay available for an explicit retry; draining only reports them.
+      if (record.status === 'failed') throw new Error(record.error ?? 'Unknown failure');
+      await runManagerCommit(repo, directory, record.id);
+    } catch (error) {
+      console.error(`${record.id}: manager snapshot failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
 

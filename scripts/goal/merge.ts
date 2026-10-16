@@ -478,7 +478,7 @@ async function mergeUnderLease(id: string, flags: Set<string>, expectedHead?: st
       if (!conflicted && /index\.lock['"]?:\s*File exists/i.test(rebase.stderr)) {
         return refuse(task, `${task.id} rebase stopped waiting for index.lock:\n${rebase.stderr}`, 'wait');
       }
-      return refuse(task, message);
+      return refuse(task, message, conflicted ? 'rebase-conflict' : 'task');
     }
     if (landing) {
       advanceLandingReview(runDir, git(task.worktree, ['rev-parse', 'HEAD']));

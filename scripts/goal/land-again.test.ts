@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { repo } from './land.test.ts';
@@ -79,22 +80,91 @@ test.each(['head', 'brief'])('a stopped landing reviews again when the accepted 
   } finally { r.cleanup(); }
 });
 
-test.each(['conflict', 'gate'])('a real task %s remains refused and names its evidence', kind => {
+test.each(['rebase', 'merge'])('a mechanism landing keeps its admitted scope after the manager resolves a %s conflict', operation => {
+  const r = repo({ paths: [] });
+  try {
+    const brief = readFileSync(r.task.brief, 'utf8').replace('kind: implementation', 'kind: mechanism');
+    writeFileSync(r.task.brief, brief);
+    writeFileSync(join(r.dir, 'services/account/src/value.ts'), 'export const value = 9;\n');
+    r.git(r.dir, 'commit', '-qam', 'Conflicting value');
+    const submitted = r.ledger().tasks[r.task.id]!;
+    const handoff = readFileSync(submitted.attempts[0]!.lastMessage!, 'utf8');
+    const head = r.git(r.worktree, 'rev-parse', 'HEAD');
+    const stopped = r.run();
+    expect(stopped.status).toBe(1);
+    expect(stopped.stderr).toContain('services/account/src/value.ts');
+    expect(stopped.stderr).not.toContain('Correct the brief');
+    expect(r.ledger().tasks[r.task.id]!.mergeStop).toMatchObject({ kind: 'rebase-conflict', landing: true });
+    // An unresolved conflict can be tried again without replacing claims or the submission.
+    expect(r.run('land', { REVIEW_EXIT: '1' }).status).toBe(1);
+    expect(reviewCount(r.log)).toBe(1);
+    expect(r.ledger().tasks[r.task.id]!.paths).toEqual([]);
+    expect(r.ledger().tasks[r.task.id]!.attempts).toEqual(submitted.attempts);
+    expect(readFileSync(r.task.brief, 'utf8')).toBe(brief);
+    expect(readFileSync(submitted.attempts[0]!.lastMessage!, 'utf8')).toBe(handoff);
+    expect(r.git(r.worktree, 'rev-parse', 'HEAD')).toBe(head);
+
+    const resolution = spawnSync('git', [operation, ...(operation === 'merge' ? ['--no-edit'] : []), 'main'],
+      { cwd: r.worktree, encoding: 'utf8' });
+    expect(resolution.status).toBe(1);
+    writeFileSync(join(r.worktree, 'services/account/src/value.ts'), 'export const value = 10;\n');
+    r.git(r.worktree, 'add', 'services/account/src/value.ts');
+    if (operation === 'rebase') r.git(r.worktree, '-c', 'core.editor=true', 'rebase', '--continue');
+    else r.git(r.worktree, 'commit', '-qm', 'Resolve main conflict');
+    const resolved = r.git(r.worktree, 'rev-parse', 'HEAD');
+    expect(resolved).not.toBe(head);
+    const landed = r.run();
+    expect(landed.status, landed.stdout + landed.stderr).toBe(0);
+    expect(r.ledger().tasks[r.task.id]!.state).toBe('verified');
+    expect(r.ledger().tasks[r.task.id]!.paths).toEqual([]);
+    expect(reviewCount(r.log)).toBe(2);
+    expect(r.git(r.dir, 'show', 'main:services/account/src/value.ts')).toBe('export const value = 10;');
+    expect(JSON.parse(readFileSync(join(r.runDir, 'landing.json'), 'utf8')).accepted.head).toBe(resolved);
+  } finally { r.cleanup(); }
+});
+
+test.each(['failed', 'queued'])('a verified landing closes beside a %s manager snapshot and reports that snapshot separately', status => {
   const r = repo();
   try {
-    if (kind === 'conflict') {
-      writeFileSync(join(r.dir, 'services/account/src/value.ts'), 'export const value = 9;\n');
-      r.git(r.dir, 'commit', '-qam', 'Conflicting value');
-    } else {
-      writeFileSync(join(r.worktree, 'value.test.ts'), "import { test, expect } from 'bun:test'; test('value', () => expect(1).toBe(2));\n");
-      r.git(r.worktree, 'add', '.'); r.git(r.worktree, 'commit', '-qm', 'Failing value proof');
-    }
-    expect(r.run('land', kind === 'gate' ? { GATE_FAILURE: 'yes' } : {}).status).toBe(1);
+    const directory = join(r.dir, '.temp/goal-orchestration/manager-commits');
+    mkdirSync(directory, { recursive: true });
+    const id = 'manager-00000000-0000-0000-0000-000000000001';
+    const record = { id, status, goal: 'alpha', base: r.base, source: status === 'failed' ? r.base : 'missing-source',
+      paths: ['obsolete-brief.md'], message: 'Obsolete brief snapshot', queuedAt: new Date().toISOString(),
+      cleared: true, ...status === 'failed' ? { error: 'Obsolete snapshot failure' } : {} };
+    const file = join(directory, `${id}.json`);
+    writeFileSync(file, JSON.stringify(record));
+    const peer = { ...record, id: 'manager-00000000-0000-0000-0000-000000000002', status: 'failed', error: 'Another snapshot failure' };
+    const foreign = { ...peer, id: 'manager-00000000-0000-0000-0000-000000000003', goal: 'another-goal' };
+    for (const snapshot of [peer, foreign]) writeFileSync(join(directory, `${snapshot.id}.json`), JSON.stringify(snapshot));
+    r.git(r.dir, 'update-ref', `refs/goal-manager/${id}`, r.base);
+    const landed = r.run();
+    expect(landed.status, landed.stdout + landed.stderr).toBe(0);
+    expect(r.ledger().tasks[r.task.id]!.state).toBe('verified');
+    expect(landed.stdout).toContain(`${r.task.id}: landed and verified`);
+    expect(landed.stderr).toContain(`${id}: manager snapshot failed:`);
+    expect(landed.stderr).toContain(`${peer.id}: manager snapshot failed: ${peer.error}`);
+    expect(landed.stderr).not.toContain(foreign.id);
+    expect(landed.stderr).not.toContain(`${r.task.id}: land stopped`);
+    const retained = JSON.parse(readFileSync(file, 'utf8'));
+    expect(retained.status).toBe('failed');
+    expect(retained.error).toContain(status === 'failed' ? 'Obsolete snapshot failure' : 'missing-source');
+    if (status === 'failed') expect(retained).toEqual(record);
+    expect(r.git(r.dir, 'rev-parse', `refs/goal-manager/${id}`)).toBe(r.base);
+  } finally { r.cleanup(); }
+});
+
+test('a real task gate failure remains refused and names its evidence', () => {
+  const r = repo();
+  try {
+    writeFileSync(join(r.worktree, 'value.test.ts'), "import { test, expect } from 'bun:test'; test('value', () => expect(1).toBe(2));\n");
+    r.git(r.worktree, 'add', '.'); r.git(r.worktree, 'commit', '-qm', 'Failing value proof');
+    expect(r.run('land', { GATE_FAILURE: 'yes' }).status).toBe(1);
     expect(r.ledger().tasks[r.task.id]!.mergeStop?.kind).toBe('task');
     const refused = r.run();
     expect(refused.status).toBe(1);
     expect(refused.stderr).toContain('land requires an exited task (conflict)');
-    expect(refused.stderr).toContain(kind === 'conflict' ? 'services/account/src/value.ts' : 'value.test.ts');
+    expect(refused.stderr).toContain('value.test.ts');
     expect(reviewCount(r.log)).toBe(1);
   } finally { r.cleanup(); }
 });
