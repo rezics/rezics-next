@@ -14,6 +14,9 @@ import { booksEditionReads } from '../../../../../apps/web/features/work-page/bo
 import { mainMediaApi } from '../../../../../apps/web/features/tracking/media-api.ts';
 import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
 import { displayLanguageHeaders } from '../../../../../apps/web/i18n/display-languages.ts';
+import { readContentsInventory } from '../../../../../apps/web/features/work-page/books-contents-recorded-page.tsx';
+import { readAnimeReaderState } from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
 
 const recording = new OutcomeRecorder(outcome);
 let currentPersona: PersonaName | null = null;
@@ -22,17 +25,24 @@ const sample = (name: PersonaName, person: PersonaSession, label: string, ...arg
   recording.session(name, person)(label, ...args);
 
 /** Run the real browser adapters over a real authenticated device, recording their wire requests. */
-function recordedClient(name: PersonaName, person: PersonaSession, prefix: string) {
+function recordedTransport(name: PersonaName, person: PersonaSession, prefix: string, loseWrite = false): typeof fetch {
   let count = 0;
-  return browserMainApi('https://recorded.invalid', { anonymous: name === 'visitor', fetcher: async (input, init) => {
+  return Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init), url = new URL(request.url);
     const body = request.method === 'GET' ? undefined : await request.json();
-    return sample(name, person, `${prefix}-${++count}`, request.method,
+    const response = await sample(name, person, `${prefix}-${++count}`, request.method,
       url.pathname.slice(BFF_PREFIX.length) + url.search, body,
       request.headers.get('idempotency-key') ?? undefined, { headers: displayLanguageHeaders({
         signedIn: name !== 'visitor', pageUrl: `https://rezics.com/en/w/${short(manga.work)}`,
       }) });
-  } });
+    // Drop one received command answer. The production adapter retries with its original key.
+    if (loseWrite && request.method === 'PUT' && response.ok) { loseWrite = false; throw new TypeError('Connection lost after save'); }
+    return response;
+  }, { preconnect: fetch.preconnect });
+}
+function recordedClient(name: PersonaName, person: PersonaSession, prefix: string, loseWrite = false) {
+  return browserMainApi('https://recorded.invalid', { anonymous: name === 'visitor',
+    fetcher: recordedTransport(name, person, prefix, loseWrite) });
 }
 
 async function recordedFrame(name: PersonaName, person: PersonaSession) {
@@ -46,34 +56,48 @@ async function recordedFrame(name: PersonaName, person: PersonaSession) {
     const tracking = mainTrackingApi(person.actingSubject, () => main);
     expect((await tracking.preference(manga.work)).ok).toBe(true);
     expect((await tracking.series(manga.work, 'en')).ok).toBe(true);
+    expect(await readAnimeReaderState(recordedClient(name, person, 'reader-state'), person.actingSubject, id)).not.toBeNull();
+    await mainRelationships(person.actingSubject, { origin: 'https://recorded.invalid/api/main',
+      fetch: recordedTransport(name, person, 'relationships') }).state(manga.work, 'work');
+  } else {
+    const opening = await readContentsInventory({ main: recordedClient(name, person, 'public-contents') }, {
+      workId: id, workRef: id, workIri: manga.work, locale: 'en', limit: 20,
+    });
+    expect(opening.kind).toBe('page');
   }
 }
 
 async function recordedControls(name: Exclude<PersonaName, 'visitor'>, person: PersonaSession, device: PersonaSession) {
   const actor = person.actingSubject!;
-  const firstOpen = recordedClient(name, person, 'first-open');
-  const firstApi = mainMediaApi(actor, () => firstOpen);
-  const secondMain = recordedClient(name, device, 'second-open');
-  const secondApi = mainMediaApi(actor, () => secondMain);
-  // Open a still-unread chapter on both devices before either writes it.
-  const firstMain = recordedClient(name, person, 'first-chain');
+  const firstMain = recordedClient(name, person, 'mark', true);
   const firstChain = mainMediaApi(actor, () => firstMain);
-  expect((await firstApi.types(manga.work)).ok).toBe(true);
+  expect((await firstChain.types(manga.work)).ok).toBe(true);
   const opening = await firstChain.standing(manga.work);
   expect(opening.ok).toBe(true);
   const choices = await firstChain.positions(manga.work);
   if (!choices.ok) throw new Error('Production chapter inventory did not answer');
   const chapter = choices.data.items.find(item => item.occurrence === second.occurrences[0]);
   if (!chapter) throw new Error('Production chapter inventory omitted volume two');
-  expect((await secondApi.types(omnibus.work)).ok).toBe(true);
-  expect((await secondApi.standing(omnibus.work)).ok).toBe(true);
-  expect((await secondApi.positions(omnibus.work)).ok).toBe(true);
-  const before = await firstChain.progress(chapter), cached = await secondApi.progress(chapter);
-  if (!before.ok || !cached.ok) throw new Error('Production private chapter read did not answer');
-  expect(cached.data).toEqual(before.data);
+  const before = await firstChain.progress(chapter);
+  if (!before.ok) throw new Error('Production private chapter read did not answer');
   expect(before.data.completed).toBe(false);
-  expect((await firstChain.mark(chapter, { completed: true, position: null, expectedVersion: before.data.version })).ok).toBe(true);
+  expect(await firstChain.mark(chapter, { completed: true, position: null, expectedVersion: before.data.version }))
+    .toMatchObject({ ok: true, data: { completed: true, replayed: true } });
   expect((await firstChain.standing(manga.work)).ok).toBe(true);
+  // Both controls reopen on the same saved version before the first device undoes it.
+  const undoMain = recordedClient(name, person, 'first-undo'), secondMain = recordedClient(name, device, 'second-undo');
+  const firstApi = mainMediaApi(actor, () => undoMain), secondApi = mainMediaApi(actor, () => secondMain);
+  for (const [api, work] of [[firstApi, manga], [secondApi, omnibus]] as const) {
+    expect((await api.types(work.work)).ok).toBe(true);
+    expect((await api.standing(work.work)).ok).toBe(true);
+    expect((await api.positions(work.work)).ok).toBe(true);
+  }
+  const own = await firstApi.progress(chapter), cached = await secondApi.progress(chapter);
+  if (!own.ok || !cached.ok) throw new Error('Production saved chapter read did not answer');
+  expect(own.data).toEqual(cached.data);
+  expect(own.data.completed).toBe(true);
+  expect((await firstApi.mark(chapter, { completed: false, position: null, expectedVersion: own.data.version })).ok).toBe(true);
+  expect((await firstApi.standing(manga.work)).ok).toBe(true);
   const stale = await secondApi.mark(chapter, { completed: false, position: null, expectedVersion: cached.data.version });
   expect(stale).toMatchObject({ ok: false, failure: 'stale' });
   if (stale.ok || stale.failure !== 'stale') throw new Error('Production undo did not reach stale conflict');
@@ -86,7 +110,7 @@ async function recordedControls(name: Exclude<PersonaName, 'visitor'>, person: P
     expect((await api.types(work.work)).ok).toBe(true);
     expect((await api.standing(work.work)).ok).toBe(true);
     expect((await api.positions(work.work)).ok).toBe(true);
-    expect(await api.progress(chapter)).toMatchObject({ ok: true, data: { completed: false, version: before.data.version + 2 } });
+    expect(await api.progress(chapter)).toMatchObject({ ok: true, data: { completed: false, version: before.data.version + 3 } });
   }
 }
 
