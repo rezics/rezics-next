@@ -1,5 +1,78 @@
 # State
 
+Checkpoint 20642ac8-88e8-4c28-a637-b8cd1e303c82 consolidates handled events
+task:G-2319:6, task:G-2475:5,
+mail:c5fba963-02a0-4d18-bf91-3326725c5ef3 and task:G-2330:7.
+These decisions supersede the affected dispositions below; later handoffs
+and landing results retain their own events.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2319 | Task:G-2319:6 and committed decision `7413e92cad` extend the claim to both official Manga/Anime footers and the composed year model/tests. Fix attribution links that rely on colour alone in dark theme, preserving text, destinations and accessibility checks. Reconcile `applyCatalogueYear` with shared browse state: one hidden year, year removal drops only year, other Condition removals retain it, and clear-all removes all Conditions; prove exact year and range through the composed model. Preserve all-years reads/order. Retain applicable `run-XV90tp` evidence, but its 21 failed stories prevent acceptance. Attempt 7 was resumed; finish the complete affected canonical gate, both footer story consumers and phone/desktop dark-theme/year inspection. No rebase or new control/API/record/tooling work. G-2229 stays exited. No landing accepted by this event. |
+| G-2475 | Task:G-2475:5 admitted and reclaimed 31 additional OWNER CHANGES paths, retained adapter proof `6189deba3d`/`6d1c895f6c`, and referred the two evidence gaps to Program in mail:3c316e17. Its hold snapshot `manager-49b09622` failed against Program's concurrent ruling; it is not a landed decision. Mail:c5fba963 and committed decision `dc879224c9` settle the gaps: the four Games Edition-selector failures reproduce on base (`run-fvPVDe`) and Program owns them separately; no outcome records a Discovery `GET /v1/works` or `POST /v1/query` 409, so existing structural units prove retention there, labelled as structural. Invent no samples or identities. Program rebased and resumed the worker; finish remaining checks excluding only Member, MemberPhone, MemberSaved and MemberSavedPhone with the base run evidence, then hand off done. Do not retry the obsolete hold snapshot or duplicate resume. G-2241 receives bounded recorded VN 401/403 equality and zero-miss adapter proof, not whole-row or two-device acceptance. A later landing is already running under its own event; do not edit the locked brief or start it again. |
+| G-2330 | Task:G-2330:7 leaves the worker exited until G-2475 lands; Program owns rebase/resume under its concurrent 13:00 UTC ruling. The corrected scope/layout decision is retained in queued snapshot `manager-e63a9957` after the earlier `manager-43d38faf` conflicted; do not retry the earlier snapshot. The admitted production presentation/entity-reader, Library/chapter layout and exact outcome/record paths support the remaining Work frame, visitor inventory/refusal and five signed-in status-command surfaces. Reuse the held Work reader after Program's continuation; no duplicate reader or visitor Library state. Record all reached missing requests with unchanged assertions and consistent identities, run answer-records and zero-miss replay, fix card containment across the shared composition, extend story containment assertions and inspect every final phone/desktop PNG. The passing capture, 11 units and 14 inspected stories are partial evidence. Run accepted-command and anti-silo guards alone after resume; report run IDs only if they still time out alone. Complete the affected surface gate without changing guards, assertions, baselines or timeouts. No landing accepted. |
+
+The supplied mail was acknowledged by its deciding turn at
+2026-10-16 12:41:40 UTC; its durable acknowledgement was confirmed here.
+The three task events supplied no mail. This checkpoint supplies no new mail.
+
+The method's measures, available current status and latest efficiency report
+were read. Concurrent scope is 68/68 API rows proved and 408 proved/0 pending
+persona cells; these events accept no new row or completed surface. Status
+has not supplied fresh attempt/token/refusal measures during this bounded
+read. Retain the preceding checkpoint's aggregate readings as historical,
+not costs of these events. The latest efficiency report remains dated
+2026-10-13 21:49 UTC and supplies no comparable continuation measurement or
+current tokens-per-proved-row result. Repeated work here comes from composed
+model/accessibility defects, inherited consumer failures, missing production
+integration/records and shared guard execution. The recorded decisions assign
+those causes, preserve passed evidence and require complete affected proof;
+no efficiency gain is inferred.
+
+Only this file changes; no worker, landing, closure, watcher or wait is started.
+
+## Retained checkpoint ace8d573
+
+Checkpoint ace8d573-6921-4ad2-aeb6-106dbae95211 consolidates handled events
+task:G-2338:2, mail:caee4dac-9ffb-4a90-b2c1-4bee269079a0,
+task:G-2226:2, task:G-2319:4 and
+mail:df87cb90-3548-49e8-8a49-e75e2c2c3bf7. These decisions supersede the
+older recording waits and admission dispositions for these three tasks;
+other tasks and later result events retain their own authority.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2338 | Task:G-2338:2 delivered no implementation or owner changes; preflight stopped because the two-device test and story did not exist. Its missing Library reads went to Program in mail:13eb1486. Mail:caee4dac and committed decision `4ee65b400e` settle ownership: this surface captures all six personas' reached production Library frame/page reads, including conditional work-state and continue requests, preserving the persona/anonymous split. Keep the existing winning `device one paragraph` version 2, `409 stale_progress`, and recovered version 3 with `completed=false`, `position=null`; no fabricated pending state. Program already rebased and resumed it; do not rebase or duplicate the resume. Finish the production two-device unit/story, complete surface gate and phone/desktop inspection, then hand off `RESULT: done`. The old outside-queue/record-owner hold no longer applies. |
+| G-2226 | Task:G-2226:2 and committed decision `ca5dccd132` replace the G-2341/API G-2271 wait with surface-owned recording. The outcome test and record were claimed, attempt 3 resumed, and API notified in mail:fa6a840f. Retain `fcdb3fd8ef` and its 13 passing reader tests as bounded evidence only; the absent-story gate refusal accepts no surface. Capture all six personas' actual production browse, frame and facet requests, default/sorts/search/no-match and reached continuations; preserve exact queries, conditional reads, persona/anonymous clients, existing samples and assertions. Add no omitted query values. Verify current shared problem preservation before requesting exact OWNER CHANGES; wrong API answers go to Program. Finish mapping, route-reachable recorded stories, whole-row capture, answer-records guard, zero-miss replay, complete affected gate and phone/desktop inspection. Bare relevance without text normalizes to default; pending needs HTTP 202. No duplicate resume or landing. |
+| G-2319 | Task:G-2319:4 retains publication-year implementation `14408f1587` and fixture-direction correction `50144a5817` as partial evidence: 29 units, types, targeted lint and AST passed; canonical admission refused the missing story declaration and affected consumer checks remained unrun. Mail:df87cb90 and committed decision `96dea42d5c` resolve this in the surface brief: name existing production Zone catalogue browse stories for the gate, and include `catalogue-browse-records.test.ts` in the claim. Assert year removal drops only year and all other chosen-Condition links retain it. Preserve year/range through addresses, API queries, Conditions, forms, continuations and clear-all, without a new control or shared-tooling change. Program already rebased and resumed it; do not rebase or duplicate the resume. Finish the complete affected gate and applicable story inspection. No landing or G-2229 resume is granted here. |
+
+The two mails were acknowledged by their deciding turns at
+2026-10-16 11:56:16 UTC and 12:10:05 UTC respectively; the durable
+acknowledgement results were confirmed here. The three task events supplied
+no mail. This checkpoint supplies no new mail to acknowledge.
+
+The method's measures and available current status were read. The concurrent
+ledger reports 68/68 API rows proved and 408 proved/0 pending persona cells;
+these handled events accept no surface or new row themselves. Other results
+that produced that ledger reading retain their own events. Status had not
+supplied fresh attempt/token/refusal measures during this bounded read.
+The preceding checkpoint's readings remain historical: first-attempt share
+23% overall and 0% that day (0 of 14), attempts per landed task median 3 and
+maximum 25 (G-2237), 2063.5M input/13.1M output tokens, two sessions
+unavailable and tokens per proved row unavailable; 71 first, 51 step,
+235 fix and 3 capacity attempts, with 11 fixes inferred; retained refusals
+0 outcome, 12 gate, 0 failing-test findings and 18 other. These are not
+costs attributed to these events. The latest efficiency report still dates
+from 2026-10-13 21:49 UTC and supplies no comparable continuation measurement.
+The repeated work here came from missing production recordings and incomplete
+surface gate admission. The committed decisions assign reached reads to the
+surface owners and admit existing consumer stories/tests; no efficiency gain,
+successful recording or complete gate is inferred.
+
+Only this file changes; no worker, landing, closure, watcher or wait is started.
+
+## Retained checkpoint e45d1203
+
 Checkpoint e45d1203-4006-4f72-a114-dc1c8268662d consolidates handled events
 mail:f2893db9-5cad-4c14-a4fc-f90abeedfcba and task:G-2585:15.
 Program's committed restore-harness ruling supersedes G-2585's one-retry
