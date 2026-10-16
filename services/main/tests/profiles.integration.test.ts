@@ -155,7 +155,9 @@ test('G238: native Agent profiles, credits and library enforce disclosure, autho
     }
     const collectionReadsBefore = stack.fuseki.queries;
     const shelves = await json<Page<{ name: string }>>(await call('GET', `${root}/collections?limit=1`));
-    expect(stack.fuseki.queries - collectionReadsBefore).toBe(5);
+    // The three version probes required by request-fence-cost.test.ts also
+    // close collection pages after their three profile/selection queries.
+    expect(stack.fuseki.queries - collectionReadsBefore).toBe(6);
     expect(shelves.items).toMatchObject([{ name: 'public shelf' }]);
     expect(shelves.nextCursor).toBeString();
     const shelfNext = await json<Page<{ name: string }>>(await call('GET', `${root}/collections?limit=1&cursor=${shelves.nextCursor}`));
@@ -210,8 +212,9 @@ test('G238: native Agent profiles, credits and library enforce disclosure, autho
     const ratingReadsBefore = stack.fuseki.queries;
     const ratings = await json<Page<{ value: number; scope: string; id: string; revision: string;
       mainVersion: string; work: { id: string } }>>(await read('/v1/me/ratings?limit=1'));
-    // Position fences, receipt, two summary batches and the semantic-type batch.
-    expect(stack.fuseki.queries - ratingReadsBefore).toBe(6);
+    // Three version probes (request-fence-cost.test.ts), receipt, two summary
+    // graph reads and the semantic-type batch; attribution uses SQL only.
+    expect(stack.fuseki.queries - ratingReadsBefore).toBe(7);
     expect(ratings.items).toMatchObject([{ value: 5, scope: 'global' }]);
     const ratingsNext = await json<Page<{ value: number }>>(await read(`/v1/me/ratings?limit=1&cursor=${ratings.nextCursor}`));
     expect(ratingsNext.items).toMatchObject([{ value: 5 }]);

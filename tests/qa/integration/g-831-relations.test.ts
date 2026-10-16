@@ -265,7 +265,8 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
     const second = await page(bunko.work, 'en', `&limit=1&after=${first.next}`);
     expect(second.items[0]?.relation).not.toBe(first.items[0]?.relation);
     await f.json(await occurrence('correspondence-partial', { source: hidden.work, target: bunko.work }), 201);
-    const stalePage = await f.call('GET', `/v1/resources/${shortId(bunko.work)}/relations?${query}&limit=1&after=${first.next}`);
+    // Relation cursors bind the complete query, including the display language.
+    const stalePage = await f.call('GET', `/v1/resources/${shortId(bunko.work)}/relations?${query}&languages=en&limit=1&after=${first.next}`);
     expect(stalePage.status).toBe(409);
     await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [readGrants.get(hidden.work)]);
     const hiddenPage = await page(bunko.work);

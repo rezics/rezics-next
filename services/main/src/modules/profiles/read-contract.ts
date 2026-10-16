@@ -55,7 +55,7 @@ export const libraryRating = t.Object({ id: readId, revision: readId, work: t.Nu
 /** Shared metered graph envelope. Agent reads use 4 graph calls (one profile
  * query and three version probes) and one Media
  * avatar slot probe; collections
- * use 5; Work pages use ≤8 plus at most one serial batch, one type batch and
+ * use 6; Work pages use ≤8 plus at most one serial batch, one type batch and
  * 20 bounded standing rating reads when a Context is selected. Library hydration
  * is O(P), P≤20, with two summary batches, one type batch and final authority checks. SQL uses
  * five-second statements; personal pages add two listing point reads to fence
