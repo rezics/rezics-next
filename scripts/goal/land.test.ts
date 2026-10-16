@@ -203,6 +203,8 @@ describe('Goal landing', () => {
     expect(handoffResult('so it does not open the edition menu in a loop.RESULT: done\n\nCASES: x')).toBe('done');
     expect(handoffResult('Checked.RESULT: done\nRESULT: partial')).toBeUndefined();
     expect(handoffResult('the RESULT: done line comes later')).toBeUndefined();
+    expect(handoffResult('RESULT: done\nCASES: x\nThe skill says “End that turn immediately with `RESULT: parked`”.')).toBe('done');
+    expect(handoffResult('Ran `task gen`RESULT: done\nCASES: x')).toBe('done');
   });
 
   test('reviews, merges, verifies and archives a done task', () => {
