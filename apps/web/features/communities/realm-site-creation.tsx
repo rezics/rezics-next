@@ -21,9 +21,15 @@ interface Attempt {
 }
 
 /** Embedded in the creation entry; the existing management route owns attachment and publication. */
-export function RealmSiteCreation({ actingSubject, locale, client }: {
+interface RealmSiteCreationProps {
   actingSubject: string; locale: UiLocale; client?: RealmSiteCreationClient;
-}) {
+}
+
+export function RealmSiteCreation(props: RealmSiteCreationProps) {
+  return <RealmSiteCreationForm key={props.actingSubject} {...props} />;
+}
+
+function RealmSiteCreationForm({ actingSubject, locale, client }: RealmSiteCreationProps) {
   const copy = realmSiteCreationMessages[locale];
   const id = useId();
   const [name, setName] = useState('');
