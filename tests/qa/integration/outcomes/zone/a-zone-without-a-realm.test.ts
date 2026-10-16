@@ -280,7 +280,9 @@ async function creationVisit(person: PersonaSession) {
     capabilities: ['zone'] as ['zone'], actingSubject: person.actingSubject! };
   const createKey = randomUUID();
   label = 'creation-space'; loseResponse = true;
-  expect(await creator.create(intent, createKey)).toEqual({ ok: false, failure: 'unavailable' });
+  const lostCreation = await creator.create(intent, createKey);
+  expect(lostCreation).toMatchObject({ ok: false, failure: 'unavailable' });
+  if (!lostCreation.ok) expect(lostCreation.problem).toEqual(new TypeError('Response lost after the command reached Main'));
   label = 'creation-space-replay';
   const created = await creator.create(intent, createKey);
   if (!created.ok) throw new Error(`Production creation failed: ${JSON.stringify(created)}`);
@@ -291,7 +293,9 @@ async function creationVisit(person: PersonaSession) {
   expect(created.data.navigation).toBe(original.navigation);
   label = 'creation-home';
   const prepareKey = randomUUID(); loseResponse = true;
-  expect(await creator.prepare(created.data, person.actingSubject!, prepareKey)).toEqual({ ok: false, failure: 'unavailable' });
+  const lostPreparation = await creator.prepare(created.data, person.actingSubject!, prepareKey);
+  expect(lostPreparation).toMatchObject({ ok: false, failure: 'unavailable' });
+  if (!lostPreparation.ok) expect(lostPreparation.problem).toEqual(new TypeError('Response lost after the command reached Main'));
   label = 'creation-home-replay';
   const prepared = await creator.prepare(created.data, person.actingSubject!, prepareKey);
   if (!prepared.ok) throw new Error(`Production home preparation failed: ${prepared.failure}`);
