@@ -245,6 +245,10 @@ for (const head of [id(9), null]) test(`Contribution conflict retains currentHea
       language: { type: 'literal', value: 'en' }, author: { type: 'uri', value: id(3) } }] : [] } }
     : { boolean: true });
   const work = dependencies(graph, { account: throwingAccount(new StaleContributionDraftHead('stale')) });
+  // Writer construction now requires the Content fence pool even when Account
+  // refuses before admission. No database operation belongs to this scenario.
+  const unusedFence = async () => { throw new Error('Unexpected Content fence query'); };
+  work.environment.referenceFencePool = { query: unusedFence, connect: unusedFence } as never;
   await conforms(await contributionRoutes(graph, work).handle(request('/v1/contribution-edits', {
     profile: 'text-contribution-v1', contribution: id(1), expectedHead: id(8), actingSubject: id(3), body: 'Edit',
   })), '/v1/contribution-edits', 'post', 409,
