@@ -29,7 +29,7 @@ export function directClient(fetcher: typeof fetch, signedIn: boolean): RealmRea
   return { main, personal, signedIn, fetch: fetcher, resolution: {
     resolveAddress: (scope, key, locale) => readAddress({ scope, key }, locale, origin, new Headers(), undefined, true, fetcher),
     readPrivateRealm: async (ref, locale, address) => {
-      const state = signedIn ? await (session ??= personal.v1.me['session-agent'].get()) : null;
+      const state = signedIn ? await (session ??= personal.v1.me['session-agent'].get({ headers: { 'x-session-key': 'recorded-visit' } })) : null;
       const actingSubject = state?.data?.sessionAgent.eligible ? state.data.sessionAgent.actingSubject ?? undefined : undefined;
       return readSpacePage(ref, locale, { address, origin,
         ...(signedIn ? { token: 'recorded', actingSubject } : {}),
@@ -56,7 +56,7 @@ export async function directRoute(record: AnswerRecord, persona: AnswerPersona, 
   try {
     if (entry === 'zone-entry') {
       if (client.signedIn) {
-        const state = await client.personal!.v1.me['session-agent'].get();
+        const state = await client.personal!.v1.me['session-agent'].get({ headers: { 'x-session-key': 'recorded-visit' } });
         client.actingSubject = state.data?.sessionAgent.eligible ? state.data.sessionAgent.actingSubject ?? undefined : undefined;
       }
       return renderHome(await ZoneSiteRoute({ params: Promise.resolve({ locale: 'en', space: key }),
