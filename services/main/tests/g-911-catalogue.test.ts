@@ -50,7 +50,10 @@ test('G-911: document continuations consume rejected name/body documents without
   expect(second.count).toEqual({ value: 2, precision: 'exact' });
   expect(second.next).toBeNull();
   expect((await read(first.next!)).results).toEqual(second.results);
-  expect(calls.filter(query => query.includes('rv:rankedText'))).toHaveLength(5);
+  // A filled page reads through grouped/rejected tail documents to prove exhaustion.
+  const rankCalls = calls.filter(query => query.includes('rv:rankedText'));
+  expect(rankCalls).toHaveLength(6);
+  expect(rankCalls[0]).toContain('rv:rankedText(rv:searchBody, "Camp Lanterns", 2,');
 });
 
 test('G-911: the shared native body recipe retains authored values and proposed header titles', async () => {
