@@ -1,5 +1,36 @@
 # State
 
+Checkpoint f660b9dc-7f46-40ec-892f-2c22ccd4fca6 consolidates handled event
+task:G-2319:14. This records that event's decision only; subsequent Program
+rulings, worker results and closure retain their own events.
+
+| Task | Decision at the handled event and next action |
+| --- | --- |
+| G-2319 | Event 14 and decision commit `ce858f9c3f` retained the worker exited pending Program's screenshot-helper ruling in mail:c8cb2478. All ten footer stories in `run-2Q1Iwv` stopped before accessibility at `captureCatalogueStory`, `catalogue-zone.tsx:77`, because Vitest rejected screenshot file writes on its exposed server. Program owns the repair assignment, any required rebase and resume; no unchanged gate retry or shared-helper/configuration edit was authorized under the surface claim. Admit `catalogue-browse.test.ts` from `fa43f5f242` to the claim and checks: exactly one owner-page request per screen, full traversal including empty windows, and the same opaque cursor forwarded unchanged. Retain the year/range, Conditions and footer requirements, 85 targeted passing tests, applicable inspected dark phone/desktop captures and the incomplete gate's evidence. Earlier gate stages and 55 stories passed; ten failed stories and two registry assertions reproduced on main grant no waiver. After Program's helper ruling and repair, finish the complete affected canonical gate, both footer consumers and accessibility, inspect final applicable captures, and report done only on a complete pass. No handoff, landing or closure was accepted; G-2229 remained exited. |
+
+This task event supplied no incoming mail to acknowledge. Its deciding turn
+sent mail:c8cb2478 to Program; durable delivery history records Program's
+acknowledgement at 2026-10-16 18:10:57 UTC. This checkpoint acknowledges the
+requested consolidation and starts no duplicate continuation.
+
+The method's measures and current status were read. Scope remains 68/68 API
+rows proved, with 408 proved and zero pending, not-applicable or missing
+persona cells; this event adds no API proof or accepted surface row.
+Program-wide first-attempt share is 67% (478/717), today 75% (42/56);
+attempts per landed task have median 2 and maximum 63 (G-2582).
+Status reports 0 outcome, 15 gate, 0 failing-test-finding and 32 other
+refusals, with 1,679 unclassified attempt/job causes. Tokens per proved row
+remain unavailable. The latest efficiency report is still 2026-10-13
+21:49 UTC and supplies no current paired 12-hour comparison or demonstrated
+efficiency improvement. The repeated footer failures have one shared
+screenshot-write cause; the event referred that cause to Program rather than
+retrying unchanged or weakening the complete gate.
+
+Only this file changes. This checkpoint starts no brief, worker, landing,
+closure, watcher or wait; later deliveries remain for their own event turns.
+
+## Retained checkpoint 2571dd24
+
 Checkpoint 2571dd24-8f45-4a92-8b6f-3e3069dbd01f consolidates handled events
 task:G-2330:23, mail:cfb60583-c818-4056-b51c-ef96484f898e and task:G-2330:26.
 These decisions supersede affected dispositions below; later worker and
