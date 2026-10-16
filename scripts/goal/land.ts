@@ -6,6 +6,8 @@ import { processAlive, processIdentity } from '../qa/process/identity.ts';
 import { configuredAccounts, loadSettings } from './config.ts';
 import { engineEnv, launcherOf, modelOf } from './types.ts';
 import { solAccount } from './handover.ts';
+import { readReviewProof, reviewProof, type ReviewTestResult } from './review-proof.ts';
+export type { ReviewTestResult } from './review-proof.ts';
 
 interface LandingState {
   accepted?: { head: string; brief: string; directory: string };
@@ -154,6 +156,7 @@ export interface LandReview {
   permittedFiles?: string[];
   /** The landing covers one step of the brief; the task stays open for the rest. */
   step?: boolean;
+  setupFailures?: { finding: ReviewFinding; failure: string }[];
 }
 export interface LandScope {
   outOfClaim: string[];
@@ -167,6 +170,7 @@ export interface LandOptions extends Omit<LandReview, 'directory'> {
   test?: (files: string[], directory: string) => Promise<Map<string, ReviewTestResult>>;
   checkTargets?: (files: string[]) => void;
   checkpoint?: () => void;
+  unconfirmed?: (findings: RecordedFinding[], directory: string) => void;
   scope?: () => Promise<LandScope>;
   merge: (permittedFiles: string[], head: string) => Promise<void>;
   close: () => Promise<void>;
@@ -244,7 +248,12 @@ function runReviewer(program: string, args: string[], request: LandReview, promp
 }
 
 export interface ReviewFinding { text: string; test?: { path: string; content: string } }
-export type ReviewTestResult = 'passed' | 'failed' | 'unavailable';
+interface RecordedFinding { text: string; reason: string }
+interface ReviewRecord {
+  findings: ReviewFinding[]; tests?: string[];
+  setupCorrection?: { paths: string[] };
+  unconfirmed?: RecordedFinding[];
+}
 
 // These are the current owners and their route/storage adapters, not every caller of an owner.
 export const SENSITIVE_REVIEW_PATHS = [
@@ -287,10 +296,16 @@ ${request.handoff}
 
 /** One review supplies reproducible public API tests; the harness decides which findings block. */
 export function reviewPrompt(request: LandReview): string {
+  if (request.setupFailures?.length) return `Correct only the setup of the review tests below, once, on commit ${request.head}.
+Their failures did not reach an assertion in the test body. This is the setup correction for the existing review, not another review.
+Return findings with the same test paths and corrected content. Keep each outcome assertion intact; put setup checks in helpers or hooks. Use the reported setup failure and existing QA helpers to correct authority, rights and other fixture premises. Do not add findings. If the test cannot be made runnable, omit it; it will be an unconfirmed finding for program, never a worker fix round.
+${request.setupFailures.map(({ finding, failure }) => `<setup-failure>\n${failure}\n</setup-failure>\n<finding>\n${JSON.stringify(finding)}\n</finding>`).join('\n')}
+${reviewRules(request)}`;
   return `Review this exited Goal worker's committed branch against its assigned brief, once.
 Report confirmed authority, disclosure, rights, erasure or Account defects, not style or speculative improvements.
 For each finding provide text and, if reproducible, a test object with path and content.
 Tests must be new files under tests/qa/integration/review/<capability>.test.ts, exercise the public HTTP API of the real QA stack, and mock none of our own modules. Use the existing QA support helpers; do not instantiate owners or route handlers. A failing assertion must show a persona reading or changing what its row refuses, or data lost or corrupted. No severity labels.
+Keep setup checks in helpers or hooks and outcome assertions directly in the test body. The harness runs the test on this head and confirms the failing assertion's location before it can block. A setup failure returns to you once for correction, then becomes an unconfirmed finding for program.
 Inspect git diff ${request.base}..${request.head} and relevant source/tests in this worktree.
 ${reviewRules(request)}`;
 }
@@ -377,6 +392,7 @@ export async function reviewBranch(request: LandReview, engine: ReviewEngine = r
 
 /** Only completed, stable harness reports containing an assertion failure establish a reproduction. */
 export async function runReviewTests(worktree: string, files: string[], directory: string): Promise<Map<string, ReviewTestResult>> {
+  const head = landingGit(worktree, ['rev-parse', 'HEAD']);
   const resultFile = join(directory, 'test-result.json');
   const stdout = openSync(join(directory, 'test-stdout.log'), 'w');
   const stderr = openSync(join(directory, 'test-stderr.log'), 'w');
@@ -386,26 +402,10 @@ export async function runReviewTests(worktree: string, files: string[], director
     await new Promise<void>((resolve, reject) => { child.once('error', reject); child.once('exit', () => resolve()); });
   } catch { /* Launch and stack errors record the finding; they are not evidence of a defect. */ }
   finally { closeSync(stdout); closeSync(stderr); }
-  const results = new Map<string, ReviewTestResult>(files.map(file => [file, 'unavailable']));
-  try {
-    const result = JSON.parse(readFileSync(resultFile, 'utf8')) as { artifactPaths: string[] };
-    for (const artifact of result.artifactPaths) {
-      const report = JSON.parse(readFileSync(join(artifact, 'acceptance.json'), 'utf8')) as {
-        sourceStable: boolean; tests: { file: string; name: string; failed: boolean; skipped: boolean; detail?: string; timeout?: boolean; preparationFailure?: boolean }[];
-      };
-      if (!report.sourceStable) continue;
-      for (const file of files) {
-        const tests = report.tests.filter(test => test.file === file);
-        // A harness/load failure has no named assertion. A timeout or connection error is not a reproduction.
-        const failures = tests.filter(test => test.failed);
-        if (failures.some(test => !test.timeout && !test.preparationFailure && /expect\(|AssertionError|Expected:|Received:/.test(test.detail ?? '')
-          && !/ECONNREFUSED|ETIMEDOUT|timed out|timeout|stack startup|bootstrap failed/i.test(test.detail ?? ''))) {
-          results.set(file, 'failed');
-        } else if (tests.length && tests.every(test => !test.failed && !test.skipped)) results.set(file, 'passed');
-      }
-    }
-  } catch { /* Missing or malformed reports cannot establish a failing public API test. */ }
-  return results;
+  const proof = landingGit(worktree, ['rev-parse', 'HEAD']) === head ? reviewProof(worktree, files, head, directory)
+    : { head, results: Object.fromEntries(files.map(file => [file, 'unavailable' as const])), failures: [] };
+  writeFileSync(join(directory, 'test-proof.json'), JSON.stringify(proof, null, 2));
+  return new Map(Object.entries(proof.results));
 }
 
 function testPathAllowed(worktree: string, test: NonNullable<ReviewFinding['test']>): boolean {
@@ -420,13 +420,56 @@ function testPathAllowed(worktree: string, test: NonNullable<ReviewFinding['test
 }
 
 /** Existing reports are the record of the task's one review, including the committed fix targets. */
-function priorReview(runDir: string, directory?: string): { findings: ReviewFinding[]; tests?: string[] } | undefined {
+function priorReview(runDir: string, directory?: string): ReviewRecord | undefined {
   for (const name of directory ? [relative(runDir, directory)] : (existsSync(runDir) ? readdirSync(runDir) : []).filter(name => name.startsWith('review-')).sort()) {
     const file = join(runDir, name, 'findings.json');
     if (!existsSync(file)) continue;
-    return JSON.parse(readFileSync(file, 'utf8')) as { findings: ReviewFinding[]; tests?: string[] };
+    return JSON.parse(readFileSync(file, 'utf8')) as ReviewRecord;
   }
   return undefined;
+}
+
+async function correctReviewSetup(options: LandOptions, record: ReviewRecord, candidates: ReviewFinding[],
+  results: Map<string, ReviewTestResult>, directory: string, reportFile: string, head: string, permittedFiles: string[],
+  test: NonNullable<LandOptions['test']>): Promise<ReviewFinding[]> {
+  const proof = readReviewProof(directory);
+  const setup = candidates.filter(finding => results.get(finding.test!.path) === 'setup-failed'
+    || proof?.failures.some(test => test.file === finding.test!.path && test.assertionReached === 'no'));
+  if (!setup.length || record.setupCorrection) return setup;
+  // Publish the one correction before calling the reviewer: an interrupted call is never sent twice.
+  record.setupCorrection = { paths: setup.map(finding => finding.test!.path) };
+  writeFileSync(reportFile, JSON.stringify(record, null, 2));
+  const correctionDirectory = join(directory, 'setup-correction');
+  mkdirSync(correctionDirectory, { recursive: true });
+  const corrected = await (options.review ?? reviewBranch)({ ...options, directory: correctionDirectory, permittedFiles,
+    setupFailures: setup.map(finding => ({ finding, failure: proof?.failures.filter(test => test.file === finding.test!.path)
+      .map(test => `${test.name}: assertion reached ${test.assertionReached}\n${test.detail}`).join('\n') || 'setup failed; assertion reached: no' })) })
+    .catch(() => []);
+  options.checkpoint?.();
+  if (git(options.worktree, ['rev-parse', 'HEAD']).stdout.trim() !== head
+    || git(options.worktree, ['diff', '--exit-code', 'HEAD', '--']).status !== 0) throw new Error('branch changed during setup correction');
+  const rerun: string[] = [];
+  for (const finding of setup) {
+    const path = finding.test!.path;
+    rmSync(join(options.worktree, path), { force: true });
+    const replacement = corrected.find(item => item.test?.path === path)?.test;
+    if (replacement && testPathAllowed(options.worktree, replacement)) {
+      finding.test = replacement;
+      rerun.push(path);
+    }
+    writeFileSync(join(options.worktree, path), finding.test!.content);
+  }
+  writeFileSync(reportFile, JSON.stringify(record, null, 2));
+  if (rerun.length) {
+    const correctedResults = await test(rerun, correctionDirectory).catch(() => new Map<string, ReviewTestResult>());
+    for (const path of rerun) results.set(path, correctedResults.get(path) ?? 'unavailable');
+  }
+  return setup;
+}
+
+function unconfirmedSetup(finding: ReviewFinding, result: ReviewTestResult | undefined, directory: string): RecordedFinding {
+  const failure = readReviewProof(directory)?.failures.filter(test => test.file === finding.test!.path).map(test => test.detail).join('\n');
+  return { text: finding.text, reason: `unconfirmed after one setup correction; ${result ?? 'unavailable'}; assertion reached: ${result === 'setup-failed' ? 'no' : 'unknown'}${failure ? `\n${failure}` : ''}` };
 }
 
 /** Keep landing on the shared merge path; merge receives only the revalidated owner-change list. */
@@ -454,6 +497,8 @@ export async function land(options: LandOptions): Promise<void> {
     let head = options.head;
     const test = options.test ?? ((files, directory) => runReviewTests(options.worktree, files, directory));
     const targets = previous?.tests ?? [];
+    const reviewFiles = new Set(targets);
+    if (previous?.unconfirmed?.length) options.unconfirmed?.(previous.unconfirmed, previousDirectory!);
     if (previous?.tests !== undefined) {
       if (targets.length) {
         for (const file of targets) {
@@ -463,17 +508,39 @@ export async function land(options: LandOptions): Promise<void> {
           if (original === undefined || committed.stdout !== original) throw new Error(`committed review test was edited: ${file}`);
         }
         const results = await test(targets, directory);
+        const reportFile = join(previousDirectory!, 'findings.json');
+        const setup = await correctReviewSetup(options, previous, previous.findings.filter(finding => targets.includes(finding.test?.path ?? '')),
+          results, directory, reportFile, head, beforeReview.permitted, test);
+        if (setup.length) {
+          for (const finding of setup) {
+            const path = finding.test!.path;
+            if (results.get(path) === 'passed' || results.get(path) === 'failed') continue;
+            (previous.unconfirmed ??= []).push(unconfirmedSetup(finding, results.get(path), directory));
+            targets.splice(targets.indexOf(path), 1);
+            rmSync(join(options.worktree, path), { force: true });
+          }
+          const paths = setup.map(finding => finding.test!.path);
+          if (git(options.worktree, ['diff', '--exit-code', 'HEAD', '--', ...paths]).status !== 0) {
+            options.checkpoint?.();
+            const committed = git(options.worktree, ['commit', '--only', '-m', 'Correct public API review test setup', '--', ...paths]);
+            if (committed.status !== 0) throw new Error(committed.stderr);
+            head = git(options.worktree, ['rev-parse', 'HEAD']).stdout.trim();
+          }
+          writeFileSync(reportFile, JSON.stringify(previous, null, 2));
+          if (previous.unconfirmed?.length) options.unconfirmed?.(previous.unconfirmed, previousDirectory!);
+        }
         if (targets.some(file => results.get(file) !== 'passed')) throw new Error('committed review tests did not pass');
       }
     } else if (previous || accepted || needsReview(options.kind, options.changedFiles ?? [])) {
-      const findings = previous?.findings ?? await (options.review ?? reviewBranch)({ ...options, permittedFiles: beforeReview.permitted, directory });
+      const record: ReviewRecord = previous ?? { findings: await (options.review ?? reviewBranch)({ ...options, permittedFiles: beforeReview.permitted, directory }) };
+      const findings = record.findings;
       // The report records the one completed reviewer pass even if validation or QA is interrupted.
       const reportFile = join(previousDirectory ?? directory, 'findings.json');
-      writeFileSync(reportFile, JSON.stringify({ findings }, null, 2));
+      writeFileSync(reportFile, JSON.stringify(record, null, 2));
       options.checkpoint?.();
       if (git(options.worktree, ['rev-parse', 'HEAD']).stdout.trim() !== head
         || git(options.worktree, ['status', '--porcelain']).stdout.trim()) throw new Error('branch changed during review');
-      const recorded: { text: string; reason: string }[] = [];
+      const recorded: RecordedFinding[] = [];
       const candidates: ReviewFinding[] = [];
       for (const finding of findings) {
         if (!finding.test || !testPathAllowed(options.worktree, finding.test)
@@ -482,6 +549,7 @@ export async function land(options: LandOptions): Promise<void> {
         } else candidates.push(finding);
       }
       options.checkTargets?.(candidates.map(finding => finding.test!.path));
+      for (const finding of candidates) reviewFiles.add(finding.test!.path);
       try {
         for (const finding of candidates) {
           const target = finding.test!;
@@ -489,14 +557,25 @@ export async function land(options: LandOptions): Promise<void> {
           writeFileSync(join(options.worktree, target.path), target.content);
         }
         const results = candidates.length ? await test(candidates.map(finding => finding.test!.path), directory).catch(() => new Map<string, ReviewTestResult>()) : new Map<string, ReviewTestResult>();
+        const setup = await correctReviewSetup(options, record, candidates, results, directory, reportFile, head, beforeReview.permitted, test);
+        record.unconfirmed = [];
         for (const finding of candidates) {
           const target = finding.test!;
           if (results.get(target.path) === 'failed') targets.push(target.path);
-          else recorded.push({ text: finding.text, reason: results.get(target.path) ?? 'unavailable' });
+          else {
+            const observation: RecordedFinding = { text: finding.text, reason: results.get(target.path) ?? 'unavailable' };
+            recorded.push(observation);
+            if (setup.includes(finding) && results.get(target.path) !== 'passed') {
+              observation.reason = unconfirmedSetup(finding, results.get(target.path), directory).reason;
+              record.unconfirmed.push(observation);
+            }
+          }
         }
         if (targets.length) {
           options.checkpoint?.();
           if (git(options.worktree, ['rev-parse', 'HEAD']).stdout.trim() !== head) throw new Error('branch changed during review tests');
+          for (const finding of candidates) if (targets.includes(finding.test!.path)
+            && readFileSync(join(options.worktree, finding.test!.path), 'utf8') !== finding.test!.content) throw new Error('review test changed during validation');
           const added = git(options.worktree, ['add', '--', ...targets]);
           if (added.status !== 0) throw new Error(added.stderr);
           const committed = git(options.worktree, ['commit', '--only', '-m', 'Add failing public API review tests', '--', ...targets]);
@@ -508,14 +587,16 @@ export async function land(options: LandOptions): Promise<void> {
         for (const finding of candidates) if (!targets.includes(finding.test!.path)) rmSync(join(options.worktree, finding.test!.path), { force: true });
         writeFileSync(join(directory, 'recorded.json'), JSON.stringify({ findings: recorded }, null, 2));
       }
-      writeFileSync(reportFile, JSON.stringify({ findings, tests: targets }, null, 2));
+      record.tests = targets;
+      writeFileSync(reportFile, JSON.stringify(record, null, 2));
+      if (record.unconfirmed?.length) options.unconfirmed?.(record.unconfirmed, previousDirectory ?? directory);
       if (targets.length) throw new Error(`blocking review tests committed for the fix:\n  ${targets.join('\n  ')}`);
     }
     const afterReview = await readScope();
     if (afterReview.claimed.length) {
       throw new Error(`out-of-claim files are claimed by another task:\n  ${afterReview.claimed.join('\n  ')}`);
     }
-    if (JSON.stringify(afterReview.permitted.filter(file => !targets.includes(file))) !== JSON.stringify(beforeReview.permitted.filter(file => !targets.includes(file)))) {
+    if (JSON.stringify(afterReview.permitted.filter(file => !reviewFiles.has(file))) !== JSON.stringify(beforeReview.permitted.filter(file => !reviewFiles.has(file)))) {
       throw new Error('scope changed during review; review again');
     }
     const state = landingState(options.runDir);

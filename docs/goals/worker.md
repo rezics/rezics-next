@@ -86,6 +86,15 @@ pass, name the class of the defect, search your whole change for every other
 site of that class and fix them all. Then read the diff of your fix as a reviewer before handing off. A task gets two fix rounds; say plainly when the second cannot
 close it.
 
+The landing runs a review test on the reviewed head before committing it as a
+blocker. Its runner stack must locate the failure at an outcome assertion in
+the test body. Setup requests, helpers and hooks do not confirm the finding:
+the reviewer gets one setup correction, with the failure evidence. A finding
+that still cannot reach its assertion goes to program as unconfirmed and uses
+no worker fix round. An assertion that demonstrates the defect still blocks.
+When blocked on a test premise, name the failing file and case, whether it
+reached its outcome assertion, and the failure evidence in the handoff.
+
 ## Handoff
 
 If an instruction file makes you pause, ask, stop or change direction, name
@@ -104,6 +113,7 @@ RESULT: done | partial | blocked
 CASES: <IDs or the outcome delivered>
 COMMITS: <hashes and one-line summaries>
 CHECKS: <commands and QA run IDs with pass/fail>
+TEST PREMISE: <if blocked on a test: file/case, assertion reached yes/no/unknown and evidence; otherwise none>
 OWNER CHANGES: <files outside the claim, schemas, migrations, routes>
 PROPOSED TASKS: <follow-up work with reason, or none>
 BLOCKERS: <exact blocker, or none>

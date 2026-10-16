@@ -7,6 +7,7 @@ import { GoalMailStore } from './mail.ts';
 import { GoalCoordinator, type IndependentLauncher, processIdentity, WAKE_PROMPT, WAKE_LAST_MESSAGE } from './coordinator.ts';
 import { managerEvents } from './manager-commands.ts';
 import { classifyLandingRefusal } from './refusal.ts';
+import { reviewProof } from './review-proof.ts';
 import { scheduleConfirmation } from './confirm.ts';
 import { readDirectoryLease, releaseDirectoryLease } from '../qa/process/lease.ts';
 import { fixtureProcessScope } from './fixtures/process-scope.ts';
@@ -353,12 +354,17 @@ test('review findings return only reproduced failing cases and their first error
   const f = fixture();
   const directory = stoppedLanding(f, 'blocking review tests committed for the fix:\n  tests/qa/integration/review/delivery.test.ts');
   const artifact = join(directory, 'artifacts'); mkdirSync(artifact);
+  const file = 'tests/qa/integration/review/delivery.test.ts';
+  const source = "import { test, expect } from 'bun:test'; test('reader gets delivery', () => { expect('missing').toBe('delivered'); });";
+  mkdirSync(join(f.task.worktree, 'tests/qa/integration/review'), { recursive: true });
+  writeFileSync(join(f.task.worktree, file), source);
   writeFileSync(join(directory, 'test-result.json'), JSON.stringify({ artifactPaths: [artifact] }));
-  writeFileSync(join(artifact, 'acceptance.json'), JSON.stringify({ sourceStable: true, tests: [
+  writeFileSync(join(artifact, 'acceptance.json'), JSON.stringify({ sourceStable: true, source: { head: f.task.base }, tests: [
     { file: 'tests/qa/integration/review/delivery.test.ts', name: 'reader gets delivery', failed: true, skipped: false,
-      detail: 'Expected: delivered\nReceived: missing\nerror: assertion\nstack detail' },
+      detail: 'Expected: delivered\nReceived: missing\nerror: assertion\nstack detail', stack: `      at ${file}:1:${source.indexOf('expect(') + 1}` },
     { file: 'tests/qa/integration/review/delivery.test.ts', name: 'a passing case', failed: false, skipped: false },
   ] }));
+  writeFileSync(join(directory, 'test-proof.json'), JSON.stringify(reviewProof(f.task.worktree, [file], f.task.base, directory)));
   await f.execute(['settle']); await waitForLaunch(f);
   const args = JSON.parse(readFileSync(f.launches, 'utf8').trim()) as string[];
   expect(args.at(-1)).toContain('Check: review finding with a failing test');
@@ -368,16 +374,23 @@ test('review findings return only reproduced failing cases and their first error
   expect(args.at(-1)).not.toContain('a passing case');
 });
 
-test.each(['missing', 'unstable', 'timeout', 'preparation'] as const)('an unproved review refusal stays with the manager: %s', async evidence => {
+test.each(['missing', 'unstable', 'timeout', 'preparation', 'setup', 'location', 'head'] as const)('an unproved review refusal stays with the manager: %s', async evidence => {
   const f = fixture();
   const directory = stoppedLanding(f, 'committed review tests did not pass');
   if (evidence !== 'missing') {
     const artifact = join(directory, 'artifacts'); mkdirSync(artifact);
     writeFileSync(join(directory, 'test-result.json'), JSON.stringify({ artifactPaths: [artifact] }));
-    writeFileSync(join(artifact, 'acceptance.json'), JSON.stringify({ sourceStable: evidence !== 'unstable', tests: [
+    const file = 'tests/qa/integration/review/delivery.test.ts';
+    const source = "import { test, expect } from 'bun:test'; function setup() { expect('missing').toBe('delivered'); } test('reader gets delivery', () => { setup(); expect(true).toBe(true); });";
+    mkdirSync(join(f.task.worktree, 'tests/qa/integration/review'), { recursive: true });
+    writeFileSync(join(f.task.worktree, file), source);
+    writeFileSync(join(artifact, 'acceptance.json'), JSON.stringify({ sourceStable: evidence !== 'unstable',
+      source: { head: evidence === 'head' ? 'another-head' : f.task.base }, tests: [
       { file: 'tests/qa/integration/review/delivery.test.ts', name: 'reader gets delivery', failed: true, skipped: false,
-        detail: 'Expected: delivered', timeout: evidence === 'timeout', preparationFailure: evidence === 'preparation' },
+        detail: 'Expected: delivered', timeout: evidence === 'timeout', preparationFailure: evidence === 'preparation',
+        ...(evidence === 'location' ? {} : { stack: `      at ${file}:1:${source.indexOf('expect(') + 1}` }) },
     ] }));
+    writeFileSync(join(directory, 'test-proof.json'), JSON.stringify(reviewProof(f.task.worktree, [file], f.task.base, directory)));
   }
   await f.execute(['settle']);
   await until(() => !!f.ledger().tasks[f.task.id]!.settlement?.settledAt);

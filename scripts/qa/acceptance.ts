@@ -17,6 +17,8 @@ export interface TestResult {
   seed?: number;
   /** Decoded failure or error message. Present when that attribute is non-empty. */
   detail?: string;
+  /** Decoded runner stack, retained separately from the short failure message. */
+  stack?: string;
   /** The failure is a runner timeout, so a hanging file can be retried alone. */
   timeout?: boolean;
   /** Preparation failed before this journey could run; retry the whole file. */
@@ -63,13 +65,14 @@ function reportedFile(file: string, root: string | undefined): string {
 }
 
 /** The first failure or error element. A self-closing testcase has no body, so it cannot own a later case. */
-function caseFailure(body: string): { failed: boolean; detail?: string; timeout?: boolean; preparationFailure?: boolean } {
-  const tag = /<(?:failure|error)\b([^>]*?)(?:\/>|>)/.exec(body);
+function caseFailure(body: string): { failed: boolean; detail?: string; stack?: string; timeout?: boolean; preparationFailure?: boolean } {
+  const tag = /<(?:failure|error)\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:failure|error)>)/.exec(body);
   if (!tag) return { failed: false };
   const type = attribute(tag[1] ?? '', 'type');
   const message = attribute(tag[1] ?? '', 'message');
+  const stack = decodeXml(tag[2] ?? '').trim();
   const timeout = type === 'TimeoutError' || (message !== undefined && /^test timed out\b/i.test(message));
-  return { failed: true, ...(message ? { detail: message } : {}), ...(timeout ? { timeout: true } : {}),
+  return { failed: true, ...(message ? { detail: message } : {}), ...(/^\s*at .+:\d+:\d+/m.test(stack) ? { stack } : {}), ...(timeout ? { timeout: true } : {}),
     ...(type === 'JourneyPreparationError' || type === NATIVE_PROOF_PREPARATION_ERROR
       ? { preparationFailure: true } : {}) };
 }
@@ -90,6 +93,7 @@ export function parseJUnit(xml: string, tier: Tier, options?: JUnitDecodeOptions
       skipped: /<skipped\b/.test(body),
       ...(Number.isFinite(seconds) && seconds >= 0 ? { durationMs: Math.round(seconds * 1000) } : {}),
       ...(failure.detail ? { detail: failure.detail } : {}),
+      ...(failure.stack ? { stack: failure.stack } : {}),
       ...(failure.timeout ? { timeout: true } : {}),
       ...(failure.preparationFailure ? { preparationFailure: true } : {}),
     });

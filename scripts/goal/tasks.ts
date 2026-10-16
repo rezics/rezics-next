@@ -9,7 +9,7 @@ import { launchGates, briefFile, launch, workerPrompt, lastAttempt, taskOf, read
 import { postgresSocketRefusal, physicalPath } from './postgres-socket.ts';
 import { describeAccount } from './usage.ts';
 import { spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { clearRefusal, mergeTask } from './merge.ts';
 import { cellReading, latestConfirmation, type ConfirmationRecord } from './confirmed.ts';
@@ -21,6 +21,7 @@ import type { GateLaneOptions } from './qa-slots.ts';
 import { gateRefusal } from './queue.ts';
 import { parkedOnJob } from './job.ts';
 import { processIdentity } from '../qa/process/identity.ts';
+import { GoalMailStore } from './mail.ts';
 
 /** Declarations and their test registrations belong to the outcomes loader, not to orchestration. */
 export async function dispatchMethodErrors(brief: Brief, markdown: string, outcomeRoot = root,
@@ -431,6 +432,15 @@ export async function landTask(id: string, step = false, gateLane: GateLaneOptio
       checkTargets: files => {
         const claimed = claimingTasks(readLedger(), files, new Set([id]));
         if (claimed.length) throw new Error(`review test paths claimed by another task: ${claimed.map(item => item.id).join(', ')}`);
+      },
+      unconfirmed: (findings, directory) => {
+        const sender = snapshot.task.goal ?? 'program';
+        const mail = new GoalMailStore({ stateDir, goals: [...new Set(['program', sender])], sender });
+        try {
+          mail.send('program', `${id}: unconfirmed review findings after the one setup correction. No worker fix round is authorized by these findings.\n`
+            + findings.map(finding => `${finding.text}\n${finding.reason}`).join('\n\n') + `\nEvidence: ${directory}`,
+          `review-setup:${id}:${directory}:${createHash('sha256').update(JSON.stringify(findings)).digest('hex')}`);
+        } finally { mail.close(); }
       },
       merge: (permittedFiles, head) => mergeTask(id, new Set(), head, current => {
         if (landingMoved(current, snapshot)

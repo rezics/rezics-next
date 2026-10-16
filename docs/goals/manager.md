@@ -101,6 +101,12 @@ merge; the rest merge with the change and join the next batch. Small follow-ups
 in the same tooling or owners go to one batch task rather than separate briefs,
 so they cannot conflict with each other.
 
+A review test blocks only after its run on the reviewed head fails at an
+outcome assertion in the test body. A setup failure returns to its reviewer
+once with the runner evidence. If setup still fails, program receives an
+unconfirmed finding; it does not consume a worker fix round. Worker handoffs
+blocked on a test premise state whether that test reached its assertion.
+
 Monitor and improve efficiency continuously, including when delivery is nearly
 done. Keep the hourly monitor running. At least every three hours, measure the
 last full 12-hour window with `task goal -- efficiency --since … --until …`

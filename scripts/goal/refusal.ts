@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { repositoryGuards } from '../qa/repository-guards.ts';
+import { readReviewProof } from './review-proof.ts';
 
 export type LandingRefusal =
   | { kind: 'worker'; check: string; message: string; output: string }
@@ -37,20 +38,7 @@ export function classifyLandingRefusal(output: string): LandingRefusal {
 }
 
 function reviewFailures(directory: string): string[] {
-  const resultFile = join(directory, 'test-result.json');
-  if (!existsSync(resultFile)) return [];
-  try {
-    const result = JSON.parse(readFileSync(resultFile, 'utf8')) as { artifactPaths: string[] };
-    return result.artifactPaths.flatMap(artifact => {
-      const report = JSON.parse(readFileSync(join(artifact, 'acceptance.json'), 'utf8')) as {
-        sourceStable: boolean;
-        tests: { file: string; name: string; failed: boolean; skipped: boolean; detail?: string; timeout?: boolean; preparationFailure?: boolean }[];
-      };
-      if (!report.sourceStable) return [];
-      return report.tests.filter(test => test.failed && !test.skipped && !test.timeout && !test.preparationFailure
-        && /expect\(|AssertionError|Expected:|Received:/.test(test.detail ?? '')
-        && !/ECONNREFUSED|ETIMEDOUT|timed out|timeout|stack startup|bootstrap failed/i.test(test.detail ?? ''))
-        .flatMap(test => [`${test.file}: ${test.name}`, ...(test.detail ?? '').split(/\r?\n/).slice(0, 3)]);
-    });
-  } catch { return []; }
+  const proof = readReviewProof(directory);
+  return (proof?.failures ?? []).filter(test => proof?.results[test.file] === 'failed' && test.assertionReached === 'yes')
+    .flatMap(test => [`${test.file}: ${test.name}`, ...test.detail.split(/\r?\n/).slice(0, 3)]);
 }

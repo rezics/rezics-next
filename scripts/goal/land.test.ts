@@ -8,6 +8,10 @@ import { describe, expect, test } from 'bun:test';
 import { findingsFromText, handoffResult, land, needsReview, reviewBranch, reviewEngine, reviewPrompt } from './land.ts';
 import { parseBrief, validateBrief, type Ledger, type Task } from './goalctl.ts';
 import { testAccountSettings } from './fixtures/accounts.ts';
+import { parseJUnit } from '../qa/acceptance.ts';
+import { readReviewProof, reviewProof, type ReviewTestResult } from './review-proof.ts';
+import { classifyLandingRefusal } from './refusal.ts';
+import { GoalMailStore } from './mail.ts';
 
 isolateTestSettings();
 
@@ -109,8 +113,14 @@ if (args.includes('--result-file')) {
   const status = process.env.REVIEW_TEST_STATUS ?? 'unavailable';
   const files = args.filter(arg => arg.startsWith('tests/qa/integration/review/'));
   writeFileSync(directory + '/acceptance.json', JSON.stringify({ sourceStable: status !== 'unstable',
-    tests: status === 'unavailable' ? [] : files.map(file => ({ file, name: 'public API assertion', failed: status !== 'passed', skipped: false,
-      detail: status === 'timeout' ? 'test timed out' : 'Expected: 403 Received: 200', timeout: status === 'timeout' })) }));
+    source: { head: Bun.spawnSync(['git', 'rev-parse', 'HEAD']).stdout.toString().trim() },
+    tests: status === 'unavailable' ? [] : files.map(file => {
+      const source = readFileSync(file, 'utf8');
+      const before = source.slice(0, source.indexOf('expect(')).split('\\n');
+      return { file, name: 'public API assertion', failed: status !== 'passed', skipped: false,
+        stack: '      at ' + file + ':' + before.length + ':' + (before.at(-1).length + 1),
+        detail: status === 'timeout' ? 'test timed out' : 'Expected: 403 Received: 200', timeout: status === 'timeout' };
+    }) }));
   writeFileSync(resultFile, JSON.stringify({ artifactPaths: [directory] }));
   process.exit(status === 'passed' ? 0 : 1);
 }
@@ -523,7 +533,7 @@ echo '{"findings":[]}' > "$out"
     const r = repo();
     try {
       const path = 'tests/qa/integration/review/private-name.test.ts';
-      const finding = { text: 'private name disclosed', test: { path, content: 'await fetch("http://main.local/private");\n' } };
+      const finding = { text: 'private name disclosed', test: { path, content: "import { test, expect } from 'bun:test'; test('private name', async () => { expect((await fetch('http://main.local/private')).status).toBe(403); });\n" } };
       expect(r.run('land', { REVIEW_JSON: JSON.stringify({ findings: [finding] }), REVIEW_TEST_STATUS: 'failed' }).status).toBe(1);
       if (action === 'edited') writeFileSync(join(r.worktree, path), 'test.skip("private name", () => {});\n');
       else rmSync(join(r.worktree, path));
@@ -531,6 +541,171 @@ echo '{"findings":[]}' > "$out"
       const result = r.run('land', { REVIEW_TEST_STATUS: 'passed' });
       expect(result.status).toBe(1); expect(result.stderr).toContain(action === 'edited' ? 'was edited' : 'is missing');
       expect(readFileSync(r.log, 'utf8').trim().split('\n')).toHaveLength(1);
+    } finally { r.cleanup(); }
+  });
+
+  test.each(['assertion', 'setup', 'passed'] as const)('one setup correction ends in %s without an invalid worker fix round', async outcome => {
+    const r = repo();
+    try {
+      const path = 'tests/qa/integration/review/private-name.test.ts';
+      const content = (setupStatus: number, outcomeStatus = 200) => `import { test, expect } from 'bun:test';
+function prepare() { expect(${setupStatus}).toBe(201); }
+test('a stranger cannot read a private name', () => { prepare(); expect(${outcomeStatus}).toBe(403); });\n`;
+      const head = r.git(r.worktree, 'rev-parse', 'HEAD');
+      let reviews = 0; let runs = 0; let merges = 0;
+      const unconfirmed: string[] = [];
+      const options = { id: r.task.id, runDir: r.runDir, worktree: r.worktree, base: r.base, head,
+        kind: 'implementation', changedFiles: ['services/account/src/value.ts'], brief: 'brief', handoff: 'RESULT: done',
+        review: async (request: Parameters<NonNullable<Parameters<typeof land>[0]['review']>>[0]) => {
+          reviews++;
+          expect(request.head).toBe(head);
+          if (reviews === 1) return [{ text: 'private name disclosed', test: { path, content: content(403) } }];
+          expect(request.setupFailures).toHaveLength(1);
+          expect(request.setupFailures![0]!.failure).toContain('assertion reached no');
+          expect(request.setupFailures![0]!.failure).toContain('Received: 403');
+          expect(reviewPrompt(request)).toContain('Correct only the setup');
+          return [{ text: 'private name disclosed', test: { path,
+            content: content(outcome === 'setup' ? 403 : 201, outcome === 'passed' ? 403 : 200) } }];
+        },
+        test: async (files: string[], directory: string): Promise<Map<string, ReviewTestResult>> => {
+          runs++;
+          const child = spawnSync(process.execPath, ['test', ...files.map(file => `./${file}`),
+            '--reporter=junit', `--reporter-outfile=${join(directory, 'tests.xml')}`],
+          { cwd: r.worktree, encoding: 'utf8', timeout: 10_000 });
+          expect(child.status, child.stderr).toBe(outcome === 'passed' && runs === 2 ? 0 : 1);
+          writeFileSync(join(directory, 'acceptance.json'), JSON.stringify({ sourceStable: true, source: { head },
+            tests: parseJUnit(readFileSync(join(directory, 'tests.xml'), 'utf8'), 'integration') }));
+          writeFileSync(join(directory, 'test-result.json'), JSON.stringify({ artifactPaths: [directory] }));
+          const proof = reviewProof(r.worktree, files, head, directory);
+          writeFileSync(join(directory, 'test-proof.json'), JSON.stringify(proof));
+          return new Map(Object.entries(proof.results));
+        },
+        unconfirmed: (findings: { text: string; reason: string }[]) => { unconfirmed.push(...findings.map(finding => finding.reason)); },
+        merge: async () => { merges++; }, close: async () => {} };
+      if (outcome === 'assertion') {
+        await expect(land(options)).rejects.toThrow('blocking review tests committed');
+        expect(r.git(r.worktree, 'show', `HEAD:${path}`)).toBe(content(201).trim());
+        const directory = join(r.runDir, readdirSync(r.runDir).find(name => name.startsWith('review-'))!);
+        expect(readReviewProof(directory)?.failures.map(test => test.assertionReached)).toEqual(['yes']);
+        expect(classifyLandingRefusal(join(directory, 'stop.txt')).kind).toBe('worker');
+        expect(merges).toBe(0);
+      } else {
+        await land(options);
+        expect(merges).toBe(1);
+        expect(existsSync(join(r.worktree, path))).toBe(false);
+        expect(unconfirmed).toHaveLength(outcome === 'setup' ? 1 : 0);
+        if (outcome === 'setup') {
+          expect(unconfirmed[0]).toContain('assertion reached: no');
+          expect(unconfirmed[0]).toContain('Received: 403');
+          await land(options);
+        }
+      }
+      expect(reviews).toBe(2);
+      expect(runs).toBe(2);
+      expect(r.git(r.worktree, 'status', '--porcelain')).toBe('');
+    } finally { r.cleanup(); }
+  });
+
+  test('a review that still fails in setup lands with one unconfirmed program message', () => {
+    const r = repo();
+    try {
+      const path = 'tests/qa/integration/review/private-name.test.ts';
+      const content = "import { test, expect } from 'bun:test'; function setup() { expect(403).toBe(201); } test('private name', () => { setup(); expect(200).toBe(403); });\n";
+      const result = r.run('land', { REVIEW_JSON: JSON.stringify({ findings: [{ text: 'private name disclosed', test: { path, content } }] }), REVIEW_TEST_STATUS: 'failed' });
+      expect(result.status, result.stderr).toBe(0);
+      expect(readFileSync(r.log, 'utf8').trim().split('\n')).toHaveLength(2);
+      expect(r.git(r.dir, 'ls-tree', '-r', '--name-only', 'main')).not.toContain(path);
+      const mail = new GoalMailStore({ stateDir: join(r.dir, '.temp/goal-orchestration'), goals: ['program'] });
+      try {
+        const messages = mail.pending('program');
+        expect(messages).toHaveLength(1);
+        expect(messages[0]?.body).toContain('unconfirmed review findings');
+        expect(messages[0]?.body).toContain('assertion reached: no');
+        expect(messages[0]?.body).toContain('private name disclosed');
+      } finally { mail.close(); }
+    } finally { r.cleanup(); }
+  });
+
+  test.each(['assertion', 'setup', 'passed'] as const)('a committed review target failing in setup is corrected once, then %s', async outcome => {
+    const r = repo();
+    try {
+      const path = 'tests/qa/integration/review/private-name.test.ts';
+      const content = (setup: string) => `import { test, expect } from 'bun:test';
+function prepare() { expect(${setup}).toBe(201); }
+test('private name is refused', () => { prepare(); expect(Number(process.env.OUTCOME_STATUS)).toBe(403); });\n`;
+      let reviews = 0; let runs = 0; let merges = 0;
+      const unconfirmed: string[] = [];
+      const options = { id: r.task.id, runDir: r.runDir, worktree: r.worktree, base: r.base,
+        head: r.git(r.worktree, 'rev-parse', 'HEAD'), kind: 'implementation', changedFiles: ['services/account/src/value.ts'],
+        brief: 'brief', handoff: 'RESULT: done',
+        review: async (request: Parameters<NonNullable<Parameters<typeof land>[0]['review']>>[0]) => {
+          reviews++;
+          if (reviews === 1) return [{ text: 'private name disclosed', test: { path, content: content('Number(process.env.SETUP_STATUS)') } }];
+          expect(request.setupFailures?.[0]?.failure).toContain('assertion reached no');
+          return [{ text: 'private name disclosed', test: { path, content: content(outcome === 'setup' ? '403' : '201') } }];
+        },
+        test: async (files: string[], directory: string): Promise<Map<string, ReviewTestResult>> => {
+          runs++;
+          const head = r.git(r.worktree, 'rev-parse', 'HEAD');
+          const child = spawnSync(process.execPath, ['test', ...files.map(file => `./${file}`),
+            '--reporter=junit', `--reporter-outfile=${join(directory, 'tests.xml')}`], { cwd: r.worktree, encoding: 'utf8', timeout: 10_000,
+            env: { ...process.env, CLAUDECODE: '1', SETUP_STATUS: runs === 1 ? '201' : '403', OUTCOME_STATUS: runs > 1 && outcome === 'passed' ? '403' : '200' } });
+          expect(child.status, child.stderr).toBe(outcome === 'passed' && runs === 3 ? 0 : 1);
+          writeFileSync(join(directory, 'acceptance.json'), JSON.stringify({ sourceStable: true, source: { head },
+            tests: parseJUnit(readFileSync(join(directory, 'tests.xml'), 'utf8'), 'integration') }));
+          writeFileSync(join(directory, 'test-result.json'), JSON.stringify({ artifactPaths: [directory] }));
+          const proof = reviewProof(r.worktree, files, head, directory);
+          writeFileSync(join(directory, 'test-proof.json'), JSON.stringify(proof));
+          return new Map(Object.entries(proof.results));
+        },
+        unconfirmed: (findings: { reason: string }[]) => { unconfirmed.push(...findings.map(finding => finding.reason)); },
+        merge: async () => { merges++; }, close: async () => {} };
+      await expect(land(options)).rejects.toThrow('blocking review tests committed');
+      options.head = r.git(r.worktree, 'rev-parse', 'HEAD');
+      if (outcome === 'assertion') {
+        await expect(land(options)).rejects.toThrow('committed review tests did not pass');
+        const latest = readdirSync(r.runDir).filter(name => name.startsWith('review-')).sort().at(-1)!;
+        expect(classifyLandingRefusal(join(r.runDir, latest, 'stop.txt')).kind).toBe('worker');
+        expect(merges).toBe(0);
+      } else {
+        await land(options);
+        expect(merges).toBe(1);
+        expect(unconfirmed).toHaveLength(outcome === 'setup' ? 1 : 0);
+        if (outcome === 'setup') {
+          expect(unconfirmed[0]).toContain('assertion reached: no');
+          expect(existsSync(join(r.worktree, path))).toBe(false);
+        } else expect(readFileSync(join(r.worktree, path), 'utf8')).toBe(content('201'));
+      }
+      expect(reviews).toBe(2);
+      expect(runs).toBe(3);
+      expect(r.git(r.worktree, 'status', '--porcelain')).toBe('');
+    } finally { r.cleanup(); }
+  });
+
+  test('an interrupted setup correction consumes its one reviewer return and resumes as unconfirmed', async () => {
+    const r = repo();
+    try {
+      let reviews = 0; let interrupt = true; let merges = 0;
+      const unconfirmed: string[] = [];
+      const path = 'tests/qa/integration/review/private-name.test.ts';
+      const options = { id: r.task.id, runDir: r.runDir, worktree: r.worktree, base: r.base,
+        head: r.git(r.worktree, 'rev-parse', 'HEAD'), kind: 'implementation', changedFiles: ['services/account/src/value.ts'],
+        brief: 'brief', handoff: 'RESULT: done',
+        review: async () => { reviews++; return [{ text: 'private name disclosed', test: { path,
+          content: "import { test, expect } from 'bun:test'; function prepare() { expect(403).toBe(201); } test('private name', () => { prepare(); expect(200).toBe(403); });\n" } }]; },
+        test: async (files: string[]) => new Map(files.map(file => [file, 'setup-failed' as const])),
+        checkpoint: () => { if (interrupt && reviews === 2) throw new Error('interrupted correction'); },
+        unconfirmed: (findings: { reason: string }[]) => { unconfirmed.push(...findings.map(finding => finding.reason)); },
+        merge: async () => { merges++; }, close: async () => {} };
+      await expect(land(options)).rejects.toThrow('interrupted correction');
+      expect(r.git(r.worktree, 'status', '--porcelain')).toBe('');
+      interrupt = false;
+      await land(options);
+      expect(reviews).toBe(2);
+      expect(merges).toBe(1);
+      expect(unconfirmed).toHaveLength(1);
+      expect(unconfirmed[0]).toContain('assertion reached: no');
+      expect(existsSync(join(r.worktree, path))).toBe(false);
     } finally { r.cleanup(); }
   });
 
