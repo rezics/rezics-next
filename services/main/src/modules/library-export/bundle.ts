@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { indexedRead } from '../../infrastructure/indexed-read.ts';
+import { withAccessClient } from '../access/topology-control.ts';
 import { emptyRow, FILE_IMPORT_COST, type CanonicalRow } from '../library-import/formats/contract.ts';
 import { importDigest, type RowMatch } from '../library-import/file-store.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
@@ -70,8 +71,12 @@ export class LibraryBundleExporter {
   async page(session: WorkReadSession, agent: string, options: ExportOptions) {
     // One index scope per database covers every phase, including sparse ones.
     // Reopening a scope per phase would spend the SQL budget on planner setup.
-    return indexedRead(this.content, content => indexedRead(this.access, access =>
-      new LibraryBundleExporter(content, access).readPage(session, agent, options)));
+    // Admission and selected-evidence fences must join this same Access checkout.
+    // Their FOR SHARE recovery/authority locks require a read-write transaction.
+    const read = (access: PoolClient) => indexedRead(this.content, content =>
+      indexedRead(access, client => new LibraryBundleExporter(content, client)
+        .readPage(session, agent, options), 'write'));
+    return 'release' in this.access ? read(this.access) : withAccessClient(this.access, read);
   }
   private async readPage(session: WorkReadSession, agent: string, options: ExportOptions) {
     if (!session.principal) throw new WorkReadInvalid('Authentication is required');
