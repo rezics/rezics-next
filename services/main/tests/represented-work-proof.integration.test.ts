@@ -8,6 +8,7 @@ import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied,
   type AdmissionRequest } from '../src/modules/access/admission.ts';
 import { accessStateCoverage } from '../src/modules/work/access-recovery-coverage.ts';
+import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const issuer = 'https://account.rezics.test';
@@ -164,8 +165,16 @@ test('IAM33 partial: represented Work proof binds mandate, grant, actor and gene
       VALUES ($1, $2, $3, 'work.create', now() + interval '1 hour')`,
     [repThree, principalId, actor]);
     await denyClaim(actorSwitch.id, actorSwitch.requestDigest);
+    // commands.md requires current authorization before receipt or conflict
+    // disclosure; a mandate alone does not grant the other Agent permission.
+    await expect(access.register({ ...original, actingSubject: otherActor }))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    const switchedAuthority = await grantFixtureAuthority(pool, { scope, requireDispatch: true,
+      representations: [{ principalId, actor: otherActor, action: 'work.create', lifetime: '8 hours' }],
+      grant: { actor: otherActor, action: 'work.create', lifetime: '8 hours' } });
     await expect(access.register({ ...original, actingSubject: otherActor }))
       .rejects.toBeInstanceOf(AdmissionConflict);
+    await pool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [switchedAuthority.grantId]);
     const restoredActor = await access.register(request());
     expect((await access.claim(restoredActor.id, restoredActor.requestDigest)).state).toBe('claimed');
 
