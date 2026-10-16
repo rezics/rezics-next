@@ -95,10 +95,21 @@ test('relay retains the Work/Main branch and refuses mixed, missing or malformed
     { work: id(9) },
     { main: id(10) },
     { target: 'bad:target' },
+    { ratingValue: '0' },
+    { ratingValue: '8.5' },
     { ratingValue: '11' },
   ]) {
     await expect(readMainOutboxEnvelope(graph(override), batch, eventId)).rejects.toBeInstanceOf(
       OutboxIncomplete,
     );
+  }
+});
+
+test('relay preserves configurable Work/Main scores independently of the exact-target v1 scale', async () => {
+  for (const ratingValue of ['0', '8.5', '11']) {
+    const delivered = await readMainOutboxEnvelope(
+      graph({ target: undefined, work: id(9), main: id(10), ratingValue }), batch, eventId,
+    );
+    expect(delivered.data.receipt).toMatchObject({ work: id(9), mainVersion: id(10), ratingValue: Number(ratingValue) });
   }
 });

@@ -1733,6 +1733,10 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
         || ![`${RV}Available`, `${RV}Withdrawn`].includes(ratingAvailability ?? '')
         || (ratingAvailability === `${RV}Available`
           && !isRatingValue(ratingValue === undefined ? undefined : Number(ratingValue)))
+        // Exact-target contexts still use the fixed integer scale. Configurable
+        // judgment scales belong to the Work/Main observation branch.
+        || (target && ratingAvailability === `${RV}Available`
+          && (!Number.isInteger(Number(ratingValue)) || Number(ratingValue) < 1 || Number(ratingValue) > 10))
         || (ratingAvailability === `${RV}Withdrawn` && ratingValue)
         || value('eventOperation') !== operation
         || value('eventRatingContext') !== ratingContext
