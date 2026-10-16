@@ -10,10 +10,13 @@ the release image start passed from a clean checkout, and 67 of the 68 launch
 rows are declared proved. The program's completion still needs these, each
 owned by an open task in the ledger:
 
-- wave/3 merges into main through its merge candidate and confirmation;
+- wave/3 merges into main through its merge candidate and confirmation. The
+  candidate merged main without introducing a failure, and wave/3 was
+  fast-forwarded to it; wave/3's own red unit and owner files (155 cases in
+  49 files) are repaired by cause on that branch first;
 - main's scheduled confirmation passes every launch row, including Realm
   ranking (its retained-data fix lands first) and Realm closure search;
-- the Realm rules and Realm ranking surfaces land;
+- the Realm ranking surface lands (Realm rules has landed);
 - the erasure drill reruns green from a clean checkout after wave/3, and the
   operations, api and web Goals close.
 
