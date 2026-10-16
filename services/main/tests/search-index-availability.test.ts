@@ -100,7 +100,7 @@ test('public search cancels unfinished work at its original wall bound without a
   expect(attempts).toBe(1);
 });
 
-test('one delivered catalogue slot admits only one initial index candidate to audience disclosure', async () => {
+test('one delivered catalogue slot admits one candidate and one visible successor probe', async () => {
   const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
   const hits = Array.from({ length: 3 }, (_, n) => ({ id: `urn:rezics:unit:${n}`, key: id(n), score: '1' }));
   for (const population of [6, 22, 70]) {
@@ -125,7 +125,7 @@ test('one delivered catalogue slot admits only one initial index candidate to au
         candidates += rows.length;
         return rows;
       }));
-    expect(candidates).toBe(1);
+    expect(candidates).toBe(2);
     expect(page.results.map(row => row.work)).toEqual([id(0)]);
     expect(page.count).toEqual({ value: 1, precision: 'lower-bound' });
     expect(page.next).not.toBeNull();
@@ -146,7 +146,7 @@ test('ranked continuations keep Main candidate work bound to the page across unr
       let baseline: string[] | undefined;
       for (const population of [6, 22, 70, 196]) {
         const fixture = indexed('25'), client = fixture.client;
-        const requests: string[] = [], submitted: number[] = [], disclosed: number[] = [];
+        const requests: string[] = [], submitted: number[] = [], joined: number[] = [], disclosed: number[] = [];
         client.query = async sparql => {
           requests.push(sparql);
           if (sparql.includes('SELECT ?space')) return { results: { bindings: [{ space: term(id(901)) }] } };
@@ -167,7 +167,7 @@ test('ranked continuations keep Main candidate work bound to the page across unr
           expect(searchOperationEvidence.getStore()!.phases.filter(phase => phase.state === 'active').map(phase => phase.phase))
             .toContain('catalogue-candidate-identity-read');
           const units = [...values[1]!.matchAll(/<(urn:rezics:unit:\d+)>/gu)].map(match => match[1]!);
-          expect(units).toHaveLength(1);
+          joined.push(units.length);
           return { results: { bindings: expected.filter(row => units.includes(row.matchUnit)).map(row => ({
             unit: term(row.matchUnit), work: term(row.work), main: term(row.mainVersion), contribution: term(row.contribution),
             revision: term(row.revision), selection: term(row.selection), language: term(row.language),
@@ -184,18 +184,20 @@ test('ranked continuations keep Main candidate work bound to the page across unr
               disclosed.push(rows.length);
               return rows;
             });
-            expect(page.results).toEqual(n === 3 ? [] : [{ ...expected[n], score: 2000000, ...(realm ? { reason: 'realm-adoption' } : {}) }]);
+            expect(page.results).toEqual([{ ...expected[n], score: 2000000, ...(realm ? { reason: 'realm-adoption' } : {}) }]);
             delivered.push(...page.results);
-            expect(page.count).toEqual({ value: delivered.length, precision: n === 3 ? 'exact' : 'lower-bound' });
+            expect(page.count).toEqual({ value: delivered.length, precision: n === 2 ? 'exact' : 'lower-bound' });
             expect(page.population).toBe(population);
-            if (n === 3) expect(page.next).toBeNull();
+            if (n === 2) expect(page.next).toBeNull();
             else expect(page.next).not.toBeNull();
             continuation = page.next ?? undefined;
+            if (!page.next) break;
           }
         }));
         expect(delivered.map(row => row.work)).toEqual(expected.map(row => row.work));
-        expect(submitted).toEqual([1, 1, 1, 1]);
-        expect(disclosed).toEqual([1, 1, 1, 0]);
+        expect(submitted).toEqual([2, 2, 2]);
+        expect(joined).toEqual([2, 2, 1]);
+        expect(disclosed).toEqual([2, 2, 1]);
         baseline ??= requests;
         expect(requests).toEqual(baseline);
       }
