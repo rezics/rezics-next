@@ -123,8 +123,8 @@ export function DiscussionCard({ post, menu, position, total }: { post: Discussi
     attachment={post.work ? <WorkAttachment work={post.work} /> : null}
     vote={<VoteControl target={post.vote} plain />}
     comments={post.comments && count !== null ? <LocalizedLink href={`${post.href}#comments`} className={barAction}
-      aria-label={post.comments.kind === 'exact' ? t.comments(post.comments.value)
-        : t.commentsAtLeast(post.comments.value)}>
+      aria-label={`${count}${post.comments.kind === 'exact' ? '' : '+'} (${post.comments.kind === 'exact'
+        ? t.comments(post.comments.value) : t.commentsAtLeast(post.comments.value)})`}>
       <MessageCircleIcon aria-hidden="true" />
       <span aria-hidden="true" className="tabular-nums">{count}{post.comments.kind === 'exact' ? '' : '+'}</span>
     </LocalizedLink> : null}

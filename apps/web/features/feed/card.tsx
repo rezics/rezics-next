@@ -369,7 +369,8 @@ function FeedPost({ item, position, total }: { item: FeedItem; position?: number
     attachment={about ? <WorkAttachment work={about} /> : null}
     vote={<VoteControl target={{ id: item.id, vote: item.vote, score: item.score, revision: item.voteRevision }} plain />}
     comments={comments ? <LocalizedLink href={comments} className={barAction}
-      aria-label={item.comments.kind === 'exact' ? t.comments(item.comments.value) : t.commentsAtLeast(item.comments.value)}>
+      aria-label={`${count}${item.comments.kind === 'exact' ? '' : '+'} (${item.comments.kind === 'exact'
+        ? t.comments(item.comments.value) : t.commentsAtLeast(item.comments.value)})`}>
       <MessageCircleIcon aria-hidden="true" />
       <span aria-hidden="true" className="tabular-nums">{count}{item.comments.kind === 'exact' ? '' : '+'}</span>
     </LocalizedLink> : null}

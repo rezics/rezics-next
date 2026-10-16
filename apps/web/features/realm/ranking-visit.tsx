@@ -62,7 +62,8 @@ export async function rankingVisit({ replay, ref, locale, query, module }: {
     actingSubject: view.reader.actingSubject ?? undefined, fetch: replay.fetch };
   if (module) {
     const state = await loadRankingsModule(module, view.context, rankingModuleReads(client));
-    const body = <ZoneHome modules={[{ module: { ...placedModule(module, null), type: 'ranking' }, state }]}
+    const body = <ZoneHome modules={[{ module: { ...placedModule(module, null),
+      title: module.title || view.zoneMessages.rankings, type: 'ranking' }, state }]}
       zone={view.zone} pkg={null} locale={locale} messages={view.zoneMessages} slotAccess={null}
       empty={<EmptyState icon={LibraryBigIcon} title={view.messages.emptyHomeTitle} description={view.messages.emptyHomeBody} />} />;
     return RealmFrame({ view, tab: 'home', locale, search: {}, children: body, client });

@@ -153,7 +153,7 @@ function RelationshipControlState({
     const refresh = () => {
       const generation = ++readGeneration.current;
       void apiRef
-        .current!.state(target)
+        .current!.state(target, kind)
         .then((fresh) => {
           if (active && generation === readGeneration.current) {
             setState(fresh);
