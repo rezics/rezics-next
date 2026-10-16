@@ -1,6 +1,6 @@
 import type { WorkReadSession } from '../work/read-session.ts';
 import { readCompositionHeader, CompositionUnavailable } from '../structure/graph.ts';
-import { readCompositionPage, readStructureMeasures } from '../structure/read.ts';
+import { readCompositionPage, readCompositionSnapshot } from '../structure/read.ts';
 import { structureProfileFor } from '../structure/profiles.ts';
 import { compositionTargetBatchReader } from '../composition/disclosure-read.ts';
 import { readImportedExportBases } from '../rights/read-imported.ts';
@@ -17,10 +17,11 @@ export async function readNativeExportPage(session: WorkReadSession, input: {
   const header = await readCompositionHeader(session.deps.environment, structure);
   if (!header) throw new CompositionUnavailable('Composition is unavailable');
   const profile = structureProfileFor(header.profile);
+  const snapshot = await readCompositionSnapshot(session.deps.environment, { structure, revision, header });
   const parent = input.parent ?? structure;
   const canReadTargets = compositionTargetBatchReader(session, profile);
   const read = (limit: number) => readCompositionPage(session.deps.environment, {
-    structure, revision, parent, after: input.after, limit, canReadTargets,
+    structure, revision, parent, after: input.after, limit, canReadTargets, snapshot,
     canReadTarget: async target => (await canReadTargets([target])).has(target),
     canReadOccurrence: record => Promise.resolve(isExactNativeSelection(record)),
   });
@@ -34,7 +35,7 @@ export async function readNativeExportPage(session: WorkReadSession, input: {
     occurrences: page.occurrences, selections, contents,
     containers: page.occurrences.filter(record => (profile.containerRoles ?? ['group']).includes(record.role))
       .map(record => record.occurrence),
-    measures: (await readStructureMeasures(session.deps.environment, { structure, revision })).measures,
+    measures: snapshot.manifest.measures,
     rights: [...await readImportedExportBases(session, input.work, revision)],
     cost: { pagesRead: page.cost.pagesRead, occurrences: page.occurrences.length } };
 }
