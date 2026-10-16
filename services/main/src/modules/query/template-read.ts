@@ -82,8 +82,10 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       fromYear:input.parameters.fromYear ?? null,toYear:input.parameters.toYear ?? null,
       realm:input.parameters.realm ?? null,filter:input.parameters.filter ?? null,
       languages:session.displayLanguages,actor:session.options.actingSubject ?? null,limit};
+    const publicationRefs=template.sourceCredits ? await sourcedPublicationCreditReferences(session,roots) : [];
+    const publicationCreditIds=new Set(publicationRefs.map(ref=>ref.id));
     const refs=template.sourceCredits ? [...(await sourceCreditReferences(session,roots)).map(ref=>({...ref,role:'author',provider:'open-library',agent:null as string|null,displayName:null as string|null})),
-      ...await sourcedPublicationCreditReferences(session,roots)] : [];
+      ...publicationRefs] : [];
     let membership:unknown, candidateRead:(after:{key:string;id:string}|null)=>Promise<SeekCandidate[]>;
     let extraBasis:()=>Promise<unknown>;
     let physicalMore=true;
@@ -227,8 +229,9 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
     const authorFields=Object.values(template.fields).flatMap(field=>'author' in field?[field.author]:[]);
     const names=authorFields.length ? await readAuthorNames(session,page.flatMap(candidate=> {
       const row=byId.get(rowKey(candidate))!;
-      // A publication supplies its retained display name; its provider key is not an Open Library author key.
-      if(Object.values(template.fields).some(field=>'author' in field && field.fallbackTerm && row[field.fallbackTerm])) return [];
+      // Publication attribution includes explicitly unknown names. Its provider
+      // key never belongs to the external author-name owner's namespace.
+      if(publicationCreditIds.has(candidate.id)) return [];
       return authorFields.map(name=>row[name]?.value).filter((key):key is string=>!!key);
     })) : new Map();
     const items=page.flatMap(candidate=> {

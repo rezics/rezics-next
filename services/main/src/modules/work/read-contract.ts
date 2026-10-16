@@ -78,7 +78,7 @@ export const workCard = t.Object({ id: readId, revision: readId, mainVersion: re
   lastUpdatedAt: t.Nullable(t.String({ format: 'date-time' })) });
 export const workHeader = t.Object({ rights: t.Optional(t.Object({ basis: t.Literal('public-domain'),
   source: t.Object({ record: readId, observation: readId, provider: t.String(), externalId: t.String(),
-    url: t.String(), license: t.Nullable(t.String()), author: t.String(), transcriber: readId }) })), profile: t.Literal('work-read-v1'), ...workCard.properties,
+    url: t.String(), license: t.Nullable(t.String()), author: t.Nullable(t.String()), transcriber: readId }) })), profile: t.Literal('work-read-v1'), ...workCard.properties,
   fieldProvenance: t.Optional(t.Object({ basis: t.Literal('creation'), revision: readId,
     contributor: t.String(), admission: t.String(),
     candidateReceipt: t.String(), fields: t.Array(t.String()) })),

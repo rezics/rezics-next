@@ -36,21 +36,6 @@ reference, with admitted role vocabulary, keeping source-reported and confirmed
 status apart. Proof: a non-Open-Library contributor with a non-author role
 appears in public and discovery reads.
 
-## Publication, Structure and types
-
-Sourced structured publication interprets Recipe inside Work publication. It
-requires `complete-recipe` coverage, reparses with `importRecipe`, requires the
-`recipe-composition` profile, checks ingredient, step and group qualifiers and
-picks Gutenberg's licence by provider (`work/sourced-structure-publication.ts`,
-`work/sourced-publication-credits.ts`). The profile boundary should verify the
-correspondence between an exact Source observation and Structure revision, and
-publication should consume that evidence with its common admission, disclosure,
-rights and attribution rules. Its adopted dependencies are written as
-`schema:recipeInstructions`, and Content and Media delivery grants read that
-relation (`work/instruction-adoption.ts`, `content-publication/public-selection.ts`);
-the dependency relation should be owner-neutral, with Recipe semantics projected
-by its profile. Proof: a non-Recipe structured profile publishes from a source.
-
 ## Discovery
 
 Phrase search reaches a Work from Content only through Book chapter placement
@@ -64,8 +49,7 @@ found by phrase, filtered in discovery and listed past the roster.
 
 ## Acceptance evidence
 
-Shared grant and disclosure obligations are listed under the Recipe hub row
-(`scripts/qa/cases/outcomes/recipes/work-hub-and-reading.ts`), and two of its
-prerequisites are stale. Shared obligations belong with their capability owners;
-the row stays as a Recipe composition example. A product row passing is not
-evidence for this page: each repair reports its own cross-domain proof.
+A product row passing is not evidence for this page: each repair reports its own
+cross-domain proof. Shared publication admission obligations live with the Access
+cases and exact delivery obligations with the Content composition cases; Recipe
+hub outcomes retain the domain composition example.

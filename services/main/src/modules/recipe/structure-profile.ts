@@ -1,5 +1,6 @@
 import { projectRecipeFacts, hydrateRecipeFacts, recipeFactValidations, projectRecipeMeasures, canonicalRecipeQualifier } from './fact-projection.ts';
-import { RV } from '../work/activate.ts';
+import { verifyRecipeSource } from './source-correspondence.ts';
+import { RV, iri } from '../work/activate.ts';
 import type { StructureProfileRegistration } from '../structure/profiles.ts';
 import { InvalidStructureObject } from '../structure/format.ts';
 import { checkExactInstructionSelection } from '../structure/selection.ts';
@@ -11,6 +12,9 @@ import { ingredientReferences } from './references.ts';
 export const structureProfiles: readonly StructureProfileRegistration[] = [{
   id: 'recipe-composition',
   workPublication: true,
+  verifySourceCorrespondence: verifyRecipeSource,
+  projectPublicationDependency: (source, dependency) =>
+    `${iri(source)} <https://schema.org/recipeInstructions> ${iri(dependency)} .`,
   graphProfile: `${RV}RecipeComposition`,
   ownerType: 'https://schema.org/Recipe',
   componentType: `${RV}MainVersion`,

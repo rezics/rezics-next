@@ -1379,7 +1379,12 @@
               "source": {
                 "properties": {
                   "author": {
-                    "type": "string"
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "externalId": {
                     "type": "string"
@@ -741649,7 +741654,12 @@
                                       "source": {
                                         "properties": {
                                           "author": {
-                                            "type": "string"
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
                                           },
                                           "externalId": {
                                             "type": "string"
@@ -750092,7 +750102,12 @@
                             "source": {
                               "properties": {
                                 "author": {
-                                  "type": "string"
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
                                 },
                                 "externalId": {
                                   "type": "string"

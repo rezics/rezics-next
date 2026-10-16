@@ -113,6 +113,7 @@ public final class CommandModule implements FusekiAutoModule {
             // Any restoreHold value is an uncertain cut, like a held one: no qualification
             // is minted. Source admission and effects stay closed while inspection can start.
             if (control != null && !control.held() && !hasRestoreHold(data)) {
+                PublicationDependencyUpgrade.apply(data);
                 long deadline = System.nanoTime() + 10_000_000_000L;
                 SemanticSourceBasis.qualifyAtStartup(data, deadline);
                 SemanticSourceBasis.check(deadline);

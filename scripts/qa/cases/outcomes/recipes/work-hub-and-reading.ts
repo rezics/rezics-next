@@ -1,3 +1,5 @@
+import { sourcedPublicationAuthority } from '../../identity-and-access.ts';
+import { sourcedPublicationDelivery } from '../../content-composition.ts';
 import { proved, rowOutcomes } from '../../outcome-cells.ts';
 
 // The source-bound publication contract, exercised through public Main operations.
@@ -5,10 +7,10 @@ import { proved, rowOutcomes } from '../../outcome-cells.ts';
 export const sourcedRecipePrerequisites = {
   intake: 'POST /v1/sources/intakes must retain rightsEvidence.basis=public-domain without relabeling it as facts/original/exception',
   publication: 'POST /v1/work-publications needs a public-domain alternative bound to sourceObservation and its exact supported Structure revision',
-  authority: 'Intake needs catalogue-import exposure and platform:resource:work.create at work:create:root; publication needs platform:resource:work.publish at work:publish:{work}. Bootstrap has no work.publish assignment ceiling: public grant issuance must be provisioned before operation proof',
+  ...sourcedPublicationAuthority,
   structure: 'POST /v1/recipes/{structure}/imports binds exact source lines but currently inserts every imported section at the root; preserve retained HowToSection parents using existing Structure changes',
-  delivery: 'GET /v1/works/{work} needs rights={basis,source:{record,observation,provider,externalId,url}} for the selected publication; GET credits needs retained source author and importing actor as transcriber',
-  credit: 'Source author adoption is Open Library-only; native/public credit roles omit transcriber. Generalize existing Source/Work credits, derive author from retained evidence, preserve explicit unknown authorship',
+  ...sourcedPublicationDelivery,
+  credit: 'Selected sourced-publication credits include the retained source author and importing actor as transcriber, preserving explicit unknown authorship; external author adoption remains independently owned',
 } as const;
 
 export default rowOutcomes('recipes/work-hub-and-reading', {

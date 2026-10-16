@@ -10,7 +10,7 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from './activate.ts';
 import { WORK_STRUCTURE_PUBLICATION_RECEIPT_FAMILY, WORK_STRUCTURE_WITHDRAWAL_RECEIPT_FAMILY }
   from './receipt-family.ts';
-import type { PublicationAttribution } from './sourced-structure-publication.ts';
+import type { VerifiedPublicationAttribution } from './sourced-structure-publication.ts';
 import { instructionAdoptionTriples, type InstructionAdoption } from './instruction-adoption.ts';
 
 export const WORK_STRUCTURE_PUBLICATION_PROFILE = 'https://rezics.com/definition/work-structure-publication-v1';
@@ -433,7 +433,7 @@ export async function denyWorkStructurePublicationAdmission(env: WorkActivationE
 async function publish(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   input: Extract<WorkStructurePublicationInput, { operation: 'publish' }>,
   admittedActingSubject: (id: string) => Promise<string>, adoptions: readonly InstructionAdoption[] = [],
-  attribution?: PublicationAttribution): Promise<WorkStructurePublicationReceipt> {
+  attribution?: VerifiedPublicationAttribution): Promise<WorkStructurePublicationReceipt> {
   const header = await readCompositionHeader(env, input.structure);
   if (!header) return sealForReason(env, admission, input, 'source-unavailable');
   let reviewed;
@@ -447,7 +447,8 @@ async function publish(env: WorkActivationEnvironment, admission: RegisteredAdmi
   }
   if (!sourceRoot.test(header.manifest)) return sealForReason(env, admission, input, 'source-unavailable');
   const sourced = input.rightsBasis === 'public-domain';
-  if (sourced && attribution?.observation !== input.sourceObservation)
+  if (sourced && (attribution?.observation !== input.sourceObservation
+    || attribution.structure !== input.structure || attribution.structureRevision !== input.expectedStructureHead))
     return sealForReason(env, admission, input, 'rights-unavailable');
   let originalContribution = sourced;
   try {
@@ -512,7 +513,7 @@ async function publish(env: WorkActivationEnvironment, admission: RegisteredAdmi
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.work)} rv:workStructurePublicationHead ${iri(decision)} }
       GRAPH ${iri(GRAPHS.revisions)} {
-        ${instructionAdoptionTriples(source, adoptions)}
+        ${instructionAdoptionTriples(source, adoptions, reviewed)}
         ${sourceTerm} a rv:WorkStructurePublicSource ; rv:work ${iri(input.work)} ;
           rv:structureProfile ${structureIri(reviewed.graphProfile)} ; rv:structure ${iri(input.structure)} ;
           rv:component ${iri(input.expectedMainVersion)} ;
@@ -696,7 +697,7 @@ async function withdraw(env: WorkActivationEnvironment, admission: RegisteredAdm
 export async function changeStructuredWorkPublication(env: WorkActivationEnvironment,
   admission: RegisteredAdmission, input: WorkStructurePublicationInput,
   admittedActingSubject: (id: string) => Promise<string>, adoptions: readonly InstructionAdoption[] = [],
-  attribution?: PublicationAttribution): Promise<WorkStructurePublicationReceipt> {
+  attribution?: VerifiedPublicationAttribution): Promise<WorkStructurePublicationReceipt> {
   checkInput(input);
   const digest = workStructurePublicationDigest(input);
   const action = actionFor(input);

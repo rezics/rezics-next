@@ -1,3 +1,4 @@
+import type { SourceCorrespondenceVerifier } from './source-correspondence.ts';
 import { join, resolve } from 'node:path';
 import { bindStructureProfiles, STRUCTURE_LIMITS, type OccurrenceRole, type StructureProfile,
   type StructureQualifierSpec } from './format.ts';
@@ -33,6 +34,10 @@ export interface StructureProfileRegistration {
   graphProfile: string;
   /** Explicit review for use as a Work-owned public Structure source. */
   workPublication?: true;
+  /** The profile alone interprets source bytes and proves their exact Structure correspondence. */
+  verifySourceCorrespondence?: SourceCorrespondenceVerifier;
+  /** Optional semantic projection; delivery authority always follows the neutral dependency. */
+  projectPublicationDependency?: (source: string, dependency: string) => string;
   /** Type of the resource that owns and authorizes this Structure. */
   ownerType: string;
   /** Type of the resource named by rv:structureOf. */
@@ -175,6 +180,8 @@ export async function discoverStructureProfiles(directory = join(import.meta.dir
         || profiles.has(profile.id as StructureProfile)
         || !validUri(profile.graphProfile) || graphProfiles.has(profile.graphProfile)
         || profile.workPublication !== undefined && profile.workPublication !== true
+        || profile.verifySourceCorrespondence !== undefined && typeof profile.verifySourceCorrespondence !== 'function'
+        || profile.projectPublicationDependency !== undefined && typeof profile.projectPublicationDependency !== 'function'
         || profile.workPublication === true
           && (profile.componentType !== 'https://rezics.com/vocab/MainVersion'
             || profile.componentPredicate !== 'https://rezics.com/vocab/mainVersion'

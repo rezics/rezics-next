@@ -1,13 +1,9 @@
-import { isDeepStrictEqual } from 'node:util';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
 import { PublicationUnavailable, StalePublicationHead } from '../contribution/publish.ts';
-import { importRecipe } from '../recipe/importer.ts';
-import { GUTENBERG_LICENSE } from '../rights/import-policy.ts';
-import { readCompositionPage, readCompositionSnapshot } from '../structure/read.ts';
-import type { OccurrenceRecord } from '../structure/format.ts';
+import { workPublicationProfileFor } from '../structure/profiles.ts';
 import { readCompositionHeader } from '../structure/graph.ts';
 import type { WorkStructurePublicationInput } from './structured-publication.ts';
 import { GRAPHS, iri, type WorkActivationEnvironment } from './activate.ts';
@@ -15,92 +11,47 @@ import { WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from './re
 
 export interface PublicationAttribution {
   record: string; observation: string; provider: string; externalId: string; url: string;
-  license: string | null; author: string; transcriber: string;
+  license: string | null; author: string | null; transcriber: string;
+}
+
+export interface VerifiedPublicationAttribution extends PublicationAttribution {
+  structure: string; structureRevision: string;
 }
 
 /** Private bytes are inspected only after the exact Work publish admission. */
 export async function prepareSourcedStructurePublication(deps: MainWorkDependencies,
   input: Extract<WorkStructurePublicationInput, { operation: 'publish' }>, principal: VerifiedPrincipal)
-  : Promise<PublicationAttribution> {
+  : Promise<VerifiedPublicationAttribution> {
   const refuse = (reason = 'source-incomplete') =>
-    new PublicationUnavailable(`The exact public-domain Recipe source is unavailable: ${reason}`);
+    new PublicationUnavailable(`The exact public-domain source is unavailable: ${reason}`);
   const principalId = await deps.access.activePrincipalId?.(principal);
   if (input.rightsBasis !== 'public-domain' || !principalId || !deps.sourceIntake) throw refuse('source-owner');
   const observation = await deps.sourceIntake.read(principalId, input.sourceObservation.slice(-36));
   if (!observation || observation.observation !== input.sourceObservation
     || observation.rightsEvidence.basis !== 'public-domain' || observation.retention !== 'retained'
     || !observation.rawBytesBase64 || !observation.coverage.complete
-    || observation.coverage.scope !== 'complete-recipe' || observation.coverage.omittedFields.length
-    || !/^application\/(?:json|ld\+json)(?:;|$)/i.test(observation.mediaType)) throw refuse('source-evidence');
-  let document: { url?: unknown; author?: { name?: unknown }; license?: unknown };
-  try { document = JSON.parse(Buffer.from(observation.rawBytesBase64, 'base64').toString('utf8')); }
-  catch { throw refuse(); }
-  const url = typeof document.url === 'string' ? document.url : '';
-  if (!/^https?:\/\//.test(url) || typeof document.author?.name !== 'string'
-    || !document.author.name || document.author.name.length > 200) throw refuse();
-  const parsed = importRecipe(document, observation.observation);
-  const expected = new Map<string, { role: string; parent: string | null; text?: unknown; labels?: unknown }>([
-    ...parsed.ingredients.map(item => [item.sourceKey, { role: 'ingredient', parent: null,
-      text: { ...item.qualifier, ...(item.qualifier.parseStatus !== 'parsed'
-        ? { residual: `sha256:${parsed.residual}` } : {}) } }] as const),
-    ...parsed.steps.map(item => [item.sourceKey, { role: 'step', parent: parsed.sections[item.section]?.sourceKey ?? null,
-      text: { value: item.text, language: item.language } }] as const),
-    ...parsed.sections.map(item => [item.sourceKey, { role: 'group', parent: parsed.sections[item.parent]?.sourceKey ?? null,
-      labels: [{ value: item.label, language: item.language }] }] as const),
-  ]);
+    || observation.coverage.omittedFields.length) throw refuse('source-evidence');
   const header = await readCompositionHeader(deps.environment, input.structure);
-  if (!header || header.profile !== 'recipe-composition' || header.owner !== input.work
-    || header.component !== input.expectedMainVersion
-    || header.placementCount !== expected.size || !expected.size) throw refuse('structure-owner');
-  if (header.head !== input.expectedStructureHead) throw new StalePublicationHead('Recipe Structure head changed');
-  const records: OccurrenceRecord[] = [];
-  const snapshot = await readCompositionSnapshot(deps.environment, { structure: input.structure, header,
-    revision: input.expectedStructureHead });
-  const visit = async (parent: string) => {
-    let after: string | undefined;
-    do {
-      const page = await readCompositionPage(deps.environment, { structure: input.structure, header, snapshot,
-        revision: input.expectedStructureHead, parent, limit: 100, after, canReadTarget: async () => false });
-      for (const record of page.occurrences) {
-        records.push(record);
-        if (records.length > expected.size) throw refuse();
-        if (record.role === 'group') await visit(record.occurrence);
-      }
-      after = page.next ?? undefined;
-    } while (after);
-  };
-  await visit(input.structure);
-  if (!isDeepStrictEqual(records.filter(item => item.role === 'ingredient').map(item => item.sourceKey),
-    parsed.ingredients.map(item => item.sourceKey))
-    || !isDeepStrictEqual(records.filter(item => item.role === 'step').map(item => item.sourceKey),
-      parsed.steps.map(item => item.sourceKey))
-    || !isDeepStrictEqual(records.filter(item => item.role === 'group').map(item => item.sourceKey),
-      parsed.sections.map(item => item.sourceKey))) throw refuse('source-order');
-  const keys = new Map(records.map(record => [record.occurrence, record.sourceKey]));
-  if (records.length !== expected.size || new Set(records.map(record => record.sourceKey)).size !== expected.size)
-    throw refuse();
-  for (const record of records) {
-    const wanted = record.sourceKey ? expected.get(record.sourceKey) : undefined;
-    const qualifier = record.qualifier;
-    if (!wanted || record.role !== wanted.role || record.target && record.target !== record.occurrence
-      || (record.parent === input.structure ? null : keys.get(record.parent)) !== wanted.parent
-      || wanted.role === 'ingredient' && !isDeepStrictEqual(qualifier, wanted.text)
-      || wanted.role === 'step' && (!qualifier || qualifier.type !== 'recipe-step'
-        || qualifier.media.length > 0 || qualifier.usesIngredient.length > 0
-        || !isDeepStrictEqual(qualifier.instructionText, wanted.text))
-      || wanted.role === 'group' && !isDeepStrictEqual(record.labels, wanted.labels)) {
-      throw refuse('source-text');
-    }
-  }
+  if (!header || header.owner !== input.work || header.component !== input.expectedMainVersion)
+    throw refuse('structure-owner');
+  if (header.head !== input.expectedStructureHead) throw new StalePublicationHead('Structure head changed');
+  let profile;
+  try { profile = workPublicationProfileFor(header.profile); }
+  catch { throw refuse('structure-profile'); }
+  if (!profile.verifySourceCorrespondence) throw refuse('source-profile');
+  const evidence = await profile.verifySourceCorrespondence({ environment: deps.environment, observation, header });
+  if (evidence.observation !== observation.observation || evidence.structure !== input.structure
+    || evidence.revision !== input.expectedStructureHead) throw refuse('source-correspondence');
+  const { url, author, license } = evidence.attribution;
+  if (!/^https?:\/\//.test(url) || author !== null && (typeof author !== 'string' || !author || author.length > 200)
+    || license !== null && !/^https?:\/\//.test(license)) throw refuse('source-attribution');
   if ((await discloseInventory(deps.environment, [{ owner: 'source', resource: observation.record,
     component: 'record', revision: observation.observation }], ANONYMOUS_VIEWER, 'read'))[0] !== 'visible') throw refuse('source-disclosure');
   if (!deps.rights || !(await deps.rights.store.structuredPublicationRights(input.work, observation.record)).allowed)
     throw refuse();
   return { record: observation.record, observation: observation.observation, provider: observation.provider,
-    externalId: observation.externalId, url, author: document.author.name, transcriber: input.actingSubject,
-    license: observation.provider === 'gutenberg' || observation.provider === 'project-gutenberg'
-      ? GUTENBERG_LICENSE : typeof document.license === 'string' && /^https?:\/\//.test(document.license)
-        ? document.license : null };
+    externalId: observation.externalId, url, author, license, transcriber: input.actingSubject,
+    structure: evidence.structure, structureRevision: evidence.revision };
 }
 
 /** The publication snapshot carries public attribution, never retained Source bytes. */
@@ -112,7 +63,7 @@ export async function readPublicationAttribution(env: Pick<WorkActivationEnviron
   let value: PublicationAttribution;
   try { value = JSON.parse(rows[0].citation.value); }
   catch { throw new WorkReadUnavailable('Publication attribution is invalid'); }
-  if (value.observation !== observation || !value.record || !value.author || !value.transcriber
+  if (value.observation !== observation || !value.record || value.author !== null && (typeof value.author !== 'string' || !value.author) || !value.transcriber
     || !value.provider || !value.externalId || !/^https?:\/\//.test(value.url))
     throw new WorkReadUnavailable('Publication attribution is incomplete');
   return value;

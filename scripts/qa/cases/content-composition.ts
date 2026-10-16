@@ -44,3 +44,8 @@ export const cases = defineCases('docs/testing/content-composition.md', [
     requiredResult: 'Completeness and exact positions are explicit; no fabricated global snapshot.',
   },
 ]);
+
+/** Publication selects exact dependencies; current disclosure and Rights own delivery. */
+export const sourcedPublicationDelivery = {
+  delivery: 'GET Work and credits disclose the selected exact Source observation and Structure revision with truthful source author (including unknown) and importing actor as transcriber. Revoking publisher authority does not withdraw an existing publication; Source or Rights refusal and publication withdrawal close dependency delivery.',
+} as const;

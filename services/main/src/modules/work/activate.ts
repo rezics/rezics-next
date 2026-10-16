@@ -58,6 +58,8 @@ export interface GraphLineage {
 }
 
 export interface WorkActivationEnvironment {
+  /** Rights owner rechecks source-bound delivery for selected publication dependencies. */
+  structuredPublicationRights?: (work: string, record: string) => Promise<{ allowed: boolean }>;
   /** Exact contribution edit receipts resolve their original actor through Access. */
   accessAdmission?: Pick<import('../access/admission.ts').AccessAdmissionRegistry, 'admittedActingSubject'>;
   /** Shared Content database for linking payloads concurrently with erasure. */

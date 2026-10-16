@@ -249,3 +249,8 @@ export const pendingActingIdentitySubcases = [
     status: 'pending',
   },
 ] as const satisfies readonly PendingSubcase[];
+
+/** Work publication admission, including source-bound compositions of any reviewed profile. */
+export const sourcedPublicationAuthority = {
+  authority: 'Intake needs catalogue-import exposure and platform:resource:work.create at work:create:root; source-bound publication needs platform:resource:work.publish at work:publish:{work}. Bootstrap supplies the assignment ceiling; issue an exact Work grant before publication. Platform status, import authority and another Work grant cannot substitute for it.',
+} as const;

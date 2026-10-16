@@ -1,5 +1,5 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import type { PublicationAttribution } from './sourced-structure-publication.ts';
+import type { VerifiedPublicationAttribution } from './sourced-structure-publication.ts';
 import type { InstructionAdoption } from './instruction-adoption.ts';
 import { AdmissionDenied, AdmissionExpired, AdmissionUnavailable,
   type AccessAdmissionRegistry, type VerifiedPrincipal } from '../access/admission.ts';
@@ -23,7 +23,7 @@ export async function changeAdmittedWorkStructurePublication(
   request: Request,
   input: WorkStructurePublicationInput & { idempotencyKey: string },
   publicationFence: <T>(dispatch: (allowed: boolean) => Promise<T>) => Promise<T>,
-  prepareDependencies?: (admissionId: string, principal: VerifiedPrincipal) => Promise<{ adoptions: readonly InstructionAdoption[]; attribution?: PublicationAttribution }>,
+  prepareDependencies?: (admissionId: string, principal: VerifiedPrincipal) => Promise<{ adoptions: readonly InstructionAdoption[]; attribution?: VerifiedPublicationAttribution }>,
 ): Promise<WorkStructurePublicationReceipt & { replayed: boolean }> {
   const digest = workStructurePublicationDigest(input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);

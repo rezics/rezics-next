@@ -270,6 +270,7 @@ export async function composeMain(input: ComposeMainInput) {
   }) : undefined;
   if (workObjects) await workObjects.initialize();
   const environment = createWorkActivationEnvironment({
+    structuredPublicationRights: (work: string, record: string) => rightsStore.structuredPublicationRights(work, record),
     referenceFencePool: contentPool,
     eventTemporalAccess: pool,
     addresses: new AliasRegistry(pool),

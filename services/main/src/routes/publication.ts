@@ -151,8 +151,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           work.access, request, { ...input, idempotencyKey }, dispatch =>
           withStructuredPublicationFence(work, body.work, dispatch), body.operation === 'publish'
             ? async (admissionId, principal) => ({
-              adoptions: body.rightsBasis === 'public-domain' ? []
-                : await prepareInstructionAdoptions(work, body, admissionId, principal),
+              adoptions: await prepareInstructionAdoptions(work, body, admissionId, principal),
               ...(input.operation === 'publish' && input.rightsBasis === 'public-domain'
                 ? { attribution: await prepareSourcedStructurePublication(work, input, principal) } : {}),
             }) : undefined);

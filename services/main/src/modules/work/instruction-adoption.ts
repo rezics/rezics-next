@@ -4,10 +4,13 @@ import { canReadContentTarget, resolveContentTarget } from '../content-publicati
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { ExactInstructionSelector } from '../structure/selection.ts';
 import { readCompositionHeader, roleIri } from '../structure/graph.ts';
-import { structureProfileFor } from '../structure/profiles.ts';
-import { PublicationUnavailable } from '../contribution/publish.ts';
+import { structureProfileFor, type StructureProfileRegistration } from '../structure/profiles.ts';
+import { PublicationUnavailable, StalePublicationHead } from '../contribution/publish.ts';
 import { GRAPHS, hash, iri, lit, type WorkActivationEnvironment } from './activate.ts';
-import { admittedPublicWorks } from './public-patterns.ts';
+import { discloseInventory } from '../disclosure/read.ts';
+import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
+import { readPublicationAttribution } from './sourced-structure-publication.ts';
+import { readPublishedStructuredWorkSources, admittedPublicWorks } from './public-patterns.ts';
 import type { Viewer } from '../suitability/policy.ts';
 import type { DisclosureChannel } from '../disclosure/read.ts';
 
@@ -16,10 +19,12 @@ export interface InstructionAdoption {
 }
 
 /** An immutable publication retains the exact dependency cut, independently of later drafts. */
-export function instructionAdoptionTriples(source: string, adoptions: readonly InstructionAdoption[]): string {
+export function instructionAdoptionTriples(source: string, adoptions: readonly InstructionAdoption[],
+  profile?: StructureProfileRegistration): string {
   return adoptions.map(adoption => {
     const node = `urn:rezics:instruction-adoption:${hash(`${source}\0${adoption.occurrence}`)}`;
-    return `${iri(source)} <https://schema.org/recipeInstructions> ${iri(node)} .
+    return `${iri(source)} <https://rezics.com/vocab/publicationDependency> ${iri(node)} .
+      ${profile?.projectPublicationDependency?.(source, node) ?? ''}
       ${iri(node)} a <http://www.w3.org/ns/oa#SpecificResource> ;
         <http://www.w3.org/ns/oa#hasSource> ${iri(adoption.target)} ;
         <http://www.w3.org/ns/oa#hasState> ${iri(`${node}:state`)} ;
@@ -47,7 +52,7 @@ export async function readInstructionAdoptionCandidates(env: WorkActivationEnvir
       GRAPH ${iri(GRAPHS.revisions)} {
         ?decision a rv:WorkStructurePublicationDecision ; rv:publicationOutcome rv:Published ; rv:publicSource ?source .
         ?source rv:work ?work ; rv:structureRevision ${selection.revision ? iri(selection.revision) : '?structureRevision'} ;
-          <https://schema.org/recipeInstructions> ?adoption .
+          <https://rezics.com/vocab/publicationDependency> ?adoption .
         ?adoption <http://www.w3.org/ns/oa#hasSource> ?target ; <https://schema.org/identifier> ?occurrence ;
           <http://www.w3.org/1999/02/22-rdf-syntax-ns#value> ?selector .
         OPTIONAL { ?adoption <https://schema.org/associatedMedia> ?use }
@@ -77,7 +82,17 @@ export async function readPublicInstructionAdoptions(env: WorkActivationEnvironm
   const candidates = await readInstructionAdoptionCandidates(env, selection);
   const allowed = admittedWorks ?? await admittedPublicWorks(env,
     [...new Set(candidates.map(item => item.work))], viewer, undefined, channel);
-  return candidates.flatMap(({ work, ...adoption }) => allowed.has(work) ? [adoption] : []);
+  const selected = candidates.filter(item => allowed.has(item.work));
+  const sources = await readPublishedStructuredWorkSources(env, [...new Set(selected.map(item => item.work))]);
+  const sourceAllowed = new Set<string>();
+  for (const source of sources.values()) {
+    if (!source.sourceObservation) { sourceAllowed.add(source.work); continue; }
+    const attribution = await readPublicationAttribution(env, source.source, source.sourceObservation);
+    if ((await discloseInventory(env, [{ owner: 'source', resource: attribution.record, component: 'record',
+      revision: attribution.observation }], viewer ?? ANONYMOUS_VIEWER, channel))[0] === 'visible'
+      && (await env.structuredPublicationRights?.(source.work, attribution.record))?.allowed) sourceAllowed.add(source.work);
+  }
+  return selected.flatMap(({ work, ...adoption }) => sourceAllowed.has(work) ? [adoption] : []);
 }
 
 /** Runs after Work publish admission. Custody and original authorship are separate proofs. */
@@ -88,7 +103,7 @@ export async function prepareInstructionAdoptions(work: MainWorkDependencies,
   if (!header) throw new PublicationUnavailable('Instruction Structure is unavailable');
   const profile = structureProfileFor(header.profile);
   if (!profile.selectionSelectorRoles?.length) return [];
-  if (header.head !== input.expectedStructureHead) throw new PublicationUnavailable('Instruction Structure head changed');
+  if (header.head !== input.expectedStructureHead) throw new StalePublicationHead('Structure head changed');
   // Only adopted dependencies count against this bounded inventory. An unrelated
   // ingredient inventory does not acquire the export operation's 4,096-use limit.
   const rows = (await work.environment.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>

@@ -40,11 +40,12 @@ const edge = 'rv:mainVersion/^rv:structureOf/rv:selectedGeneration/^rv:generatio
  * keep this independent of any arbitrary-length closure. A fifth edge is refused.
  * One query, at most 16 targets for an edit or 4096 for a restore; one returned row.
  */
-export function invalidWorkTargets(owner: string, targets: readonly string[]): string {
+export function invalidWorkTargets(owner: string, targets: readonly string[], nonWorkTypes: readonly string[] = []): string {
   const paths = Array.from({ length: 4 }, (_, index) => Array(index + 1).fill(edge).join('/'));
   const branches = [
     `FILTER(?target = ${iri(owner)})`,
     `FILTER EXISTS { ?target a <https://schema.org/CreativeWork> }
+      ${nonWorkTypes.length ? `FILTER NOT EXISTS { VALUES ?nonWorkType { ${nonWorkTypes.map(type => `<${type}>`).join(' ')} } ?target a ?nonWorkType }` : ''}
       FILTER NOT EXISTS { ?target rv:mainVersion ?targetMain . ?targetMain a rv:MainVersion }`,
     `?target (${paths.join('|')}) ${iri(owner)} .`,
     ...Array.from({ length: 5 }, (_, ancestors) => {
@@ -58,9 +59,9 @@ export function invalidWorkTargets(owner: string, targets: readonly string[]): s
 }
 
 export async function workTargetGuard(env: WorkActivationEnvironment, owner: string,
-  targets: readonly string[]) {
+  targets: readonly string[], nonWorkTypes: readonly string[] = []) {
   if (!targets.length) return { guard: '', rejection: '' };
-  const invalid = invalidWorkTargets(owner, targets);
+  const invalid = invalidWorkTargets(owner, targets, nonWorkTypes);
   const prefixes = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>`;
   const result = await env.fuseki.query(`${prefixes} SELECT ?target WHERE { ${invalid} } LIMIT 1`);
   return { guard: `FILTER NOT EXISTS { ${invalid} }`, rejection: `FILTER EXISTS { ${invalid} }`,
