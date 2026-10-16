@@ -62,7 +62,7 @@ test('mapped evidence adopts a non-Book Work, ordered children and synopsis with
     const convert = (observation: string) => editor.send('POST',
       `/v1/sources/observations/${short(observation)}/conversions`, { profile: 'bangumi-subject-map-v1' });
     const incomplete = await capture(raw, 'incomplete', false);
-    expect((await convert(incomplete.observation)).status).toBe(400);
+    expect((await convert(incomplete.observation)).status).toBe(422);
     const propose = async (body: typeof raw, revision: string) => {
       const observation = await capture(body, revision);
       const { conversion } = await answer<{ conversion: { conversion: string; sourceDigest: string;
