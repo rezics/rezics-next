@@ -1,3 +1,4 @@
+import type { JobResultClass } from '../qa/failure.ts';
 import { configuredAccounts } from './config.ts';
 
 export type State = 'starting' | 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
@@ -28,6 +29,8 @@ export interface Attempt {
   round?: 'initial' | 'step' | 'fix' | 'continuation';
   /** Why settlement continued an ended worker attempt without a manager resume. */
   continuedFor?: 'transport' | 'capacity' | 'handoff' | 'job';
+  jobResult?: JobResultClass;
+  resumeClass?: 'baselineRed' | 'environment' | 'fixRound';
 }
 export interface Task extends Omit<Brief, 'worktree'> {
   brief: string; worktree: string; branch: string; base: string; state: State; attempts: Attempt[];
@@ -38,6 +41,7 @@ export interface Task extends Omit<Brief, 'worktree'> {
   waitingResume?: {
     token: string; queuedAt: string; reason: string; message: string;
     effort?: string; engine?: Engine; fresh: boolean; forceUsage: boolean;
+    resumeClass?: Attempt['resumeClass'];
   };
   /** The Goal that owns the task. Tasks dispatched before several Goals ran at once have none. */
   goal?: string;

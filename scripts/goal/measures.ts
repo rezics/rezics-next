@@ -1,3 +1,5 @@
+import { Database } from 'bun:sqlite';
+import { failureClasses, type JobResultClass } from '../qa/failure.ts';
 import { createReadStream, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { configuredAccounts } from './config.ts';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -5,7 +7,8 @@ import { createInterface } from 'node:readline';
 import type { Attempt, Ledger, Task } from './goalctl.ts';
 import { handoffResult } from './land.ts';
 
-type AttemptCounts = { first: number; stepResume: number; fixRound: number; capacityRetry: number; transportRetry: number; handoffRetry: number };
+type WakeCounts = Record<JobResultClass | 'unclassified', number>;
+type AttemptCounts = { jobWake: WakeCounts; baselineRed: number; environment: number; unclassified: number; first: number; stepResume: number; fixRound: number; capacityRetry: number; transportRetry: number; handoffRetry: number };
 type Refusals = { outcomeTest: number; gate: number; failingTestFinding: number; other: number };
 type Tokens = { input: number; output: number };
 export interface GoalMeasures {
@@ -27,7 +30,8 @@ interface LogEvent {
 interface MeasureOptions {
   root?: string; nowMs?: number; codexHomes?: string[]; print?: (line: string) => void;
 }
-const counts = (): AttemptCounts => ({ first: 0, stepResume: 0, fixRound: 0, capacityRetry: 0, transportRetry: 0, handoffRetry: 0 });
+const counts = (): AttemptCounts => ({ jobWake: { passed: 0, assertion: 0, timeout: 0, environment: 0, harness: 0, unclassified: 0 },
+  baselineRed: 0, environment: 0, unclassified: 0, first: 0, stepResume: 0, fixRound: 0, capacityRetry: 0, transportRetry: 0, handoffRetry: 0 });
 const zero = (): Tokens => ({ input: 0, output: 0 });
 const share = (c: AttemptCounts): Share => ({ first: c.first, attempts: c.first + c.fixRound,
   share: c.first + c.fixRound ? c.first / (c.first + c.fixRound) : null });
@@ -108,6 +112,27 @@ async function sessionGrowth(path: string, attempts: Attempt[], nowMs: number): 
   return seen ? total : undefined;
 }
 
+/** Read old job records without creating a database or migrating another worktree. */
+function jobWakes(task: Task): Map<number, JobResultClass | undefined> {
+  const results = new Map<number, JobResultClass | undefined>();
+  const path = join(task.worktree, '.temp/goal/jobs/jobs.sqlite');
+  if (!existsSync(path)) return results;
+  let db: Database | undefined;
+  try {
+    db = new Database(path, { readonly: true });
+    for (const row of db.query('SELECT record FROM jobs').all() as { record: string }[]) {
+      const job = JSON.parse(row.record) as { task: string; attempt: number; resumedAttempt?: number;
+        phase: string; code?: number; resultClass?: JobResultClass };
+      if (job.task !== task.id || (!job.resumedAttempt && job.phase !== 'woken')) continue;
+      const result = job.code === 0 ? 'passed' : job.resultClass;
+      results.set(job.resumedAttempt ?? job.attempt + 1,
+        result === 'passed' || failureClasses.some(kind => kind === result) ? result : undefined);
+    }
+  } catch { /* Pruned, unavailable and older records remain visibly unclassified. */ }
+  finally { db?.close(); }
+  return results;
+}
+
 /** Read the existing ledger and session evidence; no counters or history are written. */
 export async function goalMeasures(ledger: Ledger, options: MeasureOptions = {}): Promise<Record<string, GoalMeasures>> {
   const root = options.root ?? process.cwd(), nowMs = options.nowMs ?? Date.now();
@@ -133,18 +158,26 @@ export async function goalMeasures(ledger: Ledger, options: MeasureOptions = {})
     for (const task of Object.values(ledger.tasks).filter(t => t.goal === goal)) {
       let prior: AttemptLog | undefined;
       const refused = refusals(task, root);
+      const wakes = jobWakes(task);
       for (const [index, attempt] of task.attempts.entries()) {
         const log = await attemptLog(attempt, root);
         const priorResult = handoffResult(prior?.handoff ?? '');
         const refusedBeforeResume = index > 0 && refused.times.some(at => at >= Date.parse(task.attempts[index - 1]!.startedAt)
           && at <= Date.parse(attempt.startedAt));
-        const kind: keyof AttemptCounts = attempt.continuedFor === 'capacity' ? 'capacityRetry'
+        const kind = attempt.continuedFor === 'capacity' ? 'capacityRetry'
           : attempt.continuedFor === 'transport' ? 'transportRetry' : attempt.continuedFor === 'handoff' ? 'handoffRetry' : index === 0 ? 'first'
-          : !refusedBeforeResume && priorResult === 'partial' ? 'stepResume' : 'fixRound';
-        // Old runs may have lost their handoff files: treat unknown resumes conservatively, visibly.
+          : attempt.continuedFor === 'job' || wakes.has(attempt.n) || priorResult === 'parked' ? 'jobWake'
+          : attempt.resumeClass ?? (!refusedBeforeResume && priorResult === 'partial' ? 'stepResume' : 'fixRound');
+        const wakeResult = attempt.jobResult ?? wakes.get(attempt.n) ?? 'unclassified';
+        // Legacy handoffs cannot establish a failure class; retain their conservative fix count visibly.
         if (kind === 'fixRound' && !priorResult && !refusedBeforeResume) measure.attempts.inferredFixRounds++;
-        measure.attempts.run[kind]++;
-        if (new Date(attempt.startedAt).toISOString().slice(0, 10) === today) measure.attempts.today[kind]++;
+        const increment = (counts: AttemptCounts) => {
+          if (kind === 'jobWake') counts.jobWake[wakeResult]++;
+          else counts[kind]++;
+          if ((kind === 'fixRound' && !attempt.resumeClass) || (kind === 'jobWake' && wakeResult === 'unclassified')) counts.unclassified++;
+        };
+        increment(measure.attempts.run);
+        if (new Date(attempt.startedAt).toISOString().slice(0, 10) === today) increment(measure.attempts.today);
         prior = log;
         const key = log.session ?? `${task.id}/${attempt.n}`;
         const session = sessions.get(key) ?? { attempts: [], incremental: zero() };
@@ -182,11 +215,15 @@ export function measureLines(goal: string, m: GoalMeasures): string[] {
   const percent = (s: Share) => s.share === null ? 'n/a' : `${Math.round(s.share * 100)}%`;
   const compact = (n: number) => n >= 1e6 ? `${Math.round(n / 1e5) / 10}M` : n >= 1e3 ? `${Math.round(n / 100) / 10}k` : String(n);
   const largest = m.attemptsPerLanded.largest;
-  const r = m.landingsRefused, a = m.attempts.run;
-  const line = `measures ${goal}: first-attempt ${percent(m.firstAttemptShare.run)} (today ${percent(m.firstAttemptShare.today)}, ${m.firstAttemptShare.today.first} of ${m.firstAttemptShare.today.attempts}); `
+  const r = m.landingsRefused;
+  const attempts = (a: AttemptCounts) => `${a.first} first, ${a.stepResume} step, ${a.fixRound} fix, ${a.baselineRed} baseline-red, ${a.environment} environment, `
+    + `${a.capacityRetry} capacity, ${a.transportRetry} transport, ${a.handoffRetry} handoff; `
+    + `job wakes ${Object.values(a.jobWake).reduce((sum, value) => sum + value, 0)} (`
+    + Object.entries(a.jobWake).map(([kind, value]) => `${value} ${kind}`).join(', ') + `); ${a.unclassified} unclassified`;
+  const line = `measures ${goal}: first-attempt ${percent(m.firstAttemptShare.run)} (${m.firstAttemptShare.run.first} of ${m.firstAttemptShare.run.attempts}; today ${percent(m.firstAttemptShare.today)}, ${m.firstAttemptShare.today.first} of ${m.firstAttemptShare.today.attempts}); `
     + `attempts/landed median ${m.attemptsPerLanded.median ?? 'n/a'}, max ${largest ? `${largest.attempts} (${largest.task})` : 'n/a'}; `
     + `tokens ${compact(m.tokens.input)} in, ${compact(m.tokens.output)} out${m.tokens.missingSessions ? ` (${m.tokens.missingSessions} sessions unavailable)` : ''}; tokens/proved row n/a; `
-    + `attempts ${a.first} first, ${a.stepResume} step, ${a.fixRound} fix, ${a.capacityRetry} capacity, ${a.transportRetry} transport, ${a.handoffRetry} handoff; `
+    + `attempts run: ${attempts(m.attempts.run)}; today: ${attempts(m.attempts.today)}; `
     + (m.attempts.inferredFixRounds ? `${m.attempts.inferredFixRounds} fixes inferred from unavailable handoffs; ` : '')
     + `refused ${r.outcomeTest} outcome, ${r.gate} gate, ${r.failingTestFinding} failing-test finding, ${r.other} other (retained reports)`;
   return [line, ...m.repeatsDominate ? [`REPEATS ${goal}: first-attempt share today ${percent(m.firstAttemptShare.today)} (${m.firstAttemptShare.today.first} of ${m.firstAttemptShare.today.attempts}); class today's fix rounds by cause and remove the commonest; keep dispatching every brief whose inputs are on main`] : []];

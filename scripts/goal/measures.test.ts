@@ -1,3 +1,4 @@
+import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -47,7 +48,7 @@ describe('Goal method measures', () => {
       f.attempt(f.task('open', 'running'));
       f.attempt(f.task('cancelled', 'cancelled'));
       const m = (await f.report()).api!;
-      expect(m.attempts.run).toEqual({ first: 4, stepResume: 1, fixRound: 1, capacityRetry: 1, transportRetry: 1, handoffRetry: 0 });
+      expect(m.attempts.run).toMatchObject({ first: 4, stepResume: 1, fixRound: 1, capacityRetry: 1, transportRetry: 1, handoffRetry: 0 });
       expect(m.firstAttemptShare.run).toEqual({ first: 4, attempts: 5, share: 0.8 });
       expect(m.firstAttemptShare.today).toEqual({ first: 3, attempts: 4, share: 0.75 });
       expect(m.attemptsPerLanded).toEqual({ tasks: { row: 5, other: 1 }, median: 3, largest: { task: 'row', attempts: 5 } });
@@ -167,4 +168,60 @@ describe('Goal method measures', () => {
       expect(lines[0]).toContain('tokens/proved row n/a');
     } finally { f.cleanup(); }
   });
+});
+
+for (const result of ['passed', 'assertion', 'timeout', 'environment', 'harness'] as const) {
+  test('a recorded ' + result + ' job wake is counted on its UTC day', async () => {
+    const f = fixture();
+    try {
+      const t = f.task('job');
+      f.attempt(t, 'parked', { startedAt: '2026-10-12T23:00:00Z' });
+      f.attempt(t, 'done', { continuedFor: 'job', jobResult: result });
+      const m = (await f.report()).api!;
+      expect(m.attempts.run.jobWake[result]).toBe(1);
+      expect(m.attempts.today.jobWake[result]).toBe(1);
+      expect(m.attempts.run.fixRound).toBe(0);
+      expect(m.firstAttemptShare.run.share).toBe(1);
+      expect(m.firstAttemptShare.today.share).toBeNull();
+      expect(measureLines('api', m)[0]).toContain('1 ' + result);
+    } finally { f.cleanup(); }
+  });
+}
+
+test('legacy job records retain passed results; unknown wakes and fixes remain visible', async () => {
+  const f = fixture();
+  try {
+    const t = f.task('legacy');
+    f.attempt(t, 'parked');
+    f.attempt(t, 'parked', { continuedFor: 'job' });
+    f.attempt(t, 'done', { continuedFor: 'job' });
+    f.attempt(t);
+    mkdirSync(join(f.dir, '.temp/goal/jobs'), { recursive: true });
+    const db = new Database(join(f.dir, '.temp/goal/jobs/jobs.sqlite'));
+    db.exec('CREATE TABLE jobs(id TEXT PRIMARY KEY, record TEXT NOT NULL)');
+    db.query('INSERT INTO jobs VALUES(?, ?)').run('old', JSON.stringify({ task: t.id, attempt: 1, resumedAttempt: 2, phase: 'woken', code: 0 }));
+    db.close();
+    const m = (await f.report()).api!;
+    expect(m.attempts.run.jobWake).toMatchObject({ passed: 1, unclassified: 1 });
+    expect(m.attempts.run.fixRound).toBe(1);
+    expect(m.attempts.run.unclassified).toBe(2);
+    expect(m.firstAttemptShare.run.share).toBe(0.5);
+    expect(measureLines('api', m)[0]).toContain('today:');
+    expect(measureLines('api', m)[0]).toContain('2 unclassified');
+  } finally { f.cleanup(); }
+});
+
+test('explicit baseline-red and environment resumes exclude only those causes', async () => {
+  const f = fixture();
+  try {
+    const t = f.task('resume');
+    f.attempt(t);
+    f.attempt(t, 'done', { resumeClass: 'baselineRed' });
+    f.attempt(t, 'done', { resumeClass: 'environment' });
+    f.attempt(t, 'done', { resumeClass: 'fixRound' });
+    const m = (await f.report()).api!;
+    expect(m.attempts.run).toMatchObject({ baselineRed: 1, environment: 1, fixRound: 1, unclassified: 0 });
+    expect(m.firstAttemptShare.run.share).toBe(0.5);
+    expect(measureLines('api', m)[0]).toContain('1 baseline-red, 1 environment');
+  } finally { f.cleanup(); }
 });

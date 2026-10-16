@@ -1,3 +1,4 @@
+import { recordedFailure, qaFailure, type JobResultClass } from '../qa/failure.ts';
 import { Database } from 'bun:sqlite';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -48,6 +49,7 @@ export interface Job {
   signal?: NodeJS.Signals;
   code?: number; ended?: number; resumedAttempt?: number; reason?: string;
   sequence?: JobStep[]; current?: number; timeoutMs?: number;
+  resultClass?: JobResultClass;
 }
 
 /** Jobs stay with their worktree; the resident coordinator discovers them from its task ledger. */
@@ -194,7 +196,10 @@ async function jobProcess(directory: string, id: string, role: 'owner' | 'execut
       try {
         // Completion owns the first wake; the coordinator retries if this process dies or admission waits.
         const result = store.get(id);
-        if (result?.code !== undefined && !(role === 'executor' && result.sequence)) await wakeJobs(store, {}, id);
+        if (result?.code !== undefined && !(role === 'executor' && result.sequence)) {
+          store.update(id, current => { current.resultClass = jobResultClass(store!, current); });
+          await wakeJobs(store, {}, id);
+        }
       } catch (error) {
         appendFileSync(path, `error: job wake: ${error instanceof Error ? error.message : String(error)}\n`);
       } finally { store.close(); }
@@ -258,6 +263,16 @@ export async function runJob(command: string[], options: {
   } finally { store.close(); }
 }
 
+/** The first recorded QA failure survives later cleanup errors; plain commands retain a conservative fallback. */
+export function jobResultClass(store: JobStore, job: Job): JobResultClass {
+  if (job.code === 0) return 'passed';
+  if (job.resultClass) return job.resultClass;
+  const paths = job.sequence ? job.sequence.map((_, index) => store.log(job.id, index)) : [store.log(job.id)];
+  const output = paths.filter(existsSync).map(path => readFileSync(path, 'utf8')).join('\n');
+  return recordedFailure(output) ?? qaFailure({ timedOut: job.code === 124 || /timed out/.test(job.reason ?? ''), output },
+    job.reason || job.signal ? 'harness' : 'test', /(?:^\s*\(fail\)|<failure\b|<error\b)/m.test(output));
+}
+
 export function jobResult(store: JobStore, job: Job): string {
   if (job.sequence) {
     const failed = job.code !== 0 ? job.sequence[job.current ?? 0] : undefined;
@@ -267,10 +282,10 @@ export function jobResult(store: JobStore, job: Job): string {
         + (existsSync(log) ? checkFailureLines(readFileSync(log, 'utf8')).join('\n').slice(0, 12_000) : '')
         + `\nWhole output: ${log}`
       : job.sequence.map((step, index) => `${index + 1}. exit:${step.code} ${step.command.join(' ').replaceAll('\n', '\\n').replaceAll('\r', '\\r')}; log: ${store.log(job.id, index)}`).join('\n');
-    return `Job job:${job.id} finished with exit status ${job.code}.\n${summary}\nContinue where you parked; this is a continuation, not a fix round.`;
+    return `Job job:${job.id} finished with exit status ${job.code}.\nResult class: ${jobResultClass(store, job)}\n${summary}\nContinue where you parked; this is a continuation, not a fix round.`;
   }
   const lines = job.code ? checkFailureLines(readFileSync(store.log(job.id), 'utf8')) : [];
-  return `Job job:${job.id} finished with exit status ${job.code}.\nCommand: ${job.command.join(' ')}\n`
+  return `Job job:${job.id} finished with exit status ${job.code}.\nResult class: ${jobResultClass(store, job)}\nCommand: ${job.command.join(' ')}\n`
     + (job.reason ? `Reason: ${job.reason.slice(0, 2000)}\n` : '')
     + `${lines.join('\n').slice(0, 12_000)}\nWhole output: ${store.log(job.id)}\nContinue where you parked; this is a continuation, not a fix round.`;
 }
@@ -362,12 +377,12 @@ export async function wakeJobs(store: JobStore, options: JobPassOptions = {}, id
         if (!gateRefusal(reason)) report(reason);
         return;
       }
-      store.update(job.id, current => { current.phase = 'waking'; });
+      store.update(job.id, current => { current.phase = 'waking'; current.resultClass = jobResultClass(store, current); });
       try {
         attempt.endedAt ??= new Date().toISOString(); attempt.session = session;
         const resumed = (options.start ?? launch)(task, attempt.effort, session, jobResult(store, job), true,
           managerOf(ledger, task.goal), engineOf(attempt), 'continuation');
-        resumed.continuedFor = 'job'; task.attempts.push(resumed); task.state = 'running';
+        resumed.continuedFor = 'job'; resumed.jobResult = jobResultClass(store, job); task.attempts.push(resumed); task.state = 'running';
         woke = resumed.n;
       } catch (error) { report(error instanceof Error ? error.message : String(error)); }
     });

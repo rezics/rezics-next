@@ -464,8 +464,14 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
   let engine: Engine | undefined;
   let fresh = false;
   let forceUsage = false;
+  let resumeClass: Attempt['resumeClass'];
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '-m') message = args[++i] ?? '';
+    if (args[i] === '--class') {
+      const value = args[++i];
+      if (value !== 'baselineRed' && value !== 'environment' && value !== 'fixRound')
+        throw new Error('--class must be baselineRed, environment or fixRound');
+      resumeClass = value;
+    } else if (args[i] === '-m') message = args[++i] ?? '';
     else if (args[i] === '--file') message = readFileSync(args[++i] ?? '', 'utf8');
     else if (args[i] === '--effort') effort = args[++i];
     else if (args[i] === '--engine') engine = args[++i] as Engine;
@@ -479,7 +485,7 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
     if (waitingToken) {
       const pending = task.waitingResume;
       if (!pending || pending.token !== waitingToken) return;
-      ({ message, effort, engine, fresh, forceUsage } = pending);
+      ({ message, effort, engine, fresh, forceUsage, resumeClass } = pending);
     }
     assertOwner(task);
     assertPrepared(task);
@@ -512,7 +518,7 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
       if (!gateRefusal(reason) || reason.startsWith('Claude usage is ')) throw error;
       task.waitingResume = { token: waitingToken ?? randomUUID(),
         queuedAt: waitingToken ? task.waitingResume!.queuedAt : new Date().toISOString(),
-        reason, message, effort, engine, fresh, forceUsage };
+        reason, message, effort, engine, fresh, forceUsage, resumeClass };
       console.log(`${task.id} resume waiting: ${reason}`);
       return;
     }
@@ -536,7 +542,8 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
       : await workerPrompt(task, manager, nextEngine, nextEffort, handover))
       + `\n\n${worktreeUpdate}\n\nManager note:\n${message}`;
     recordResumeHead(task);
-    task.attempts.push(launch(task, nextEffort, session, prompt, continuing, manager, nextEngine, round));
+    task.attempts.push({ ...launch(task, nextEffort, session, prompt, continuing, manager, nextEngine, round),
+      ...(resumeClass ? { resumeClass } : {}) });
     task.engine = nextEngine;
     task.state = 'running';
     delete task.waitingResume;
