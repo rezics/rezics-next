@@ -196,7 +196,7 @@ for (const [makeEntry, loss] of [[realmMembershipEntry, 'realm-membership-lost']
       const entry = makeEntry();
       entry.requestBuilder = async () => {
         const fixture = new SavedOwner(false).scenario();
-        return { ...fixture, command: async (fresh, changed) => {
+        return { ...fixture, command: async (fresh?: boolean, changed?: boolean) => {
           try { return await fixture.command(fresh, changed); }
           catch (error) { if (!fresh && !changed && error instanceof Denied) throw wrong; throw error; }
         } };
