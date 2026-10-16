@@ -245,10 +245,12 @@ async function deviceLibraryReads(name: PersonaName, phase: 'winning' | 'recover
   };
   const main = client(people[name], 'personal'), anonymous = client(people.visitor, 'anonymous');
   const frame = recording.session(name, people[name]);
-  const session = await frame(`${phase}-session-agent`, 'GET', '/v1/me/session-agent');
-  expect(session.status).toBe(name === 'visitor' ? 401 : 200);
-  if (name !== 'visitor') await json(frame(`${phase}-person-preferences`, 'GET',
-    `/v1/me/person-preferences?actingSubject=${encodeURIComponent(people[name].actingSubject!)}`));
+  // The signed-out route redirects before asking Main for a session Agent.
+  if (name !== 'visitor') {
+    await json(frame(`${phase}-session-agent`, 'GET', '/v1/me/session-agent'));
+    await json(frame(`${phase}-person-preferences`, 'GET',
+      `/v1/me/person-preferences?actingSubject=${encodeURIComponent(people[name].actingSubject!)}`));
+  }
   const reader = name === 'visitor' ? null : { main, anonymous, actingSubject: subject() };
   const year = new Date().getUTCFullYear();
   const page = await loadBooksLibrary(reader, { state: parseLibraryState({}), locale: 'en', year, first: true });
