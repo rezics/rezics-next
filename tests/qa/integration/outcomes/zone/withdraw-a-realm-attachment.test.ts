@@ -184,7 +184,7 @@ beforeAll(async () => {
   finally { await role(sessions.member, false, delegated); }
   // The moderator ends created; the later operator refusal uses the retained fixture attachment.
   sites.operator = { ...created, zone: sessions.zone };
-  visits.operator = { ...sites.operator, space: sessions.space };
+  visits.operator = { ...sites.operator, space: sessions.zone };
 }, 180_000);
 
 type Published = { revision: string; realm: string | null };
@@ -435,18 +435,21 @@ async function productionVisit(name: PersonaName) {
   } else if (name === 'moderator' || name === 'operator') {
     await answer(configure(sessions.owner, target.zone, (await head(target.zone)).revision, sessions.realm));
   }
-  // readSession's server-only cookie/cache wrapper is unavailable here. Its typed Main
-  // client sends these discovery reads together, then reads the selected Agent profile.
-  await named('session-language-selection', () => readMainSessionAgent('recorded', '00000000-0000-4000-8000-000000000001', fetcher));
-  await named('session-preferences', () => main.v1.me['person-preferences'].get({ query: { actingSubject: actor } }));
-  await Promise.all([
-    named('session-contexts', () => discoverActingContexts('recorded', fetcher)),
-    named('session-agents', () => discoverAgents('recorded', 'en', fetcher)),
-    named('session-selection', () => readMainSessionAgent('recorded', '00000000-0000-4000-8000-000000000001', fetcher)),
-  ]);
-  await named('session-profile', () => readAgentProfile(actor, 'recorded', fetcher));
+  async function readVisitSession(prefix: string) {
+    // readSession's server-only cookie/cache wrapper is unavailable here. Its typed Main
+    // client sends these discovery reads together, then reads the selected Agent profile.
+    await named(`${prefix}-session-language-selection`, () => readMainSessionAgent('recorded', '00000000-0000-4000-8000-000000000001', fetcher));
+    await named(`${prefix}-session-preferences`, () => main.v1.me['person-preferences'].get({ query: { actingSubject: actor } }));
+    await Promise.all([
+      named(`${prefix}-session-contexts`, () => discoverActingContexts('recorded', fetcher)),
+      named(`${prefix}-session-agents`, () => discoverAgents('recorded', 'en', fetcher)),
+      named(`${prefix}-session-selection`, () => readMainSessionAgent('recorded', '00000000-0000-4000-8000-000000000001', fetcher)),
+    ]);
+    await named(`${prefix}-session-profile`, () => readAgentProfile(actor, 'recorded', fetcher));
+  }
 
   async function realmPage(prefix: string) {
+    await readVisitSession(prefix);
     // /manage/r/[realm]/zones: layout and body render together; tabs read after hydration.
     const [, , inventory] = await Promise.all([
       named(`${prefix}-header`, () => readRealmHeader(main, realm, 'en', actor)),
@@ -475,6 +478,7 @@ async function productionVisit(name: PersonaName) {
 
   // /manage/z/[space]/realm shares address admission and authoring between its
   // layout and body. Give each concurrent branch its own fixed request names.
+  await readVisitSession('zone');
   const space = short(target.space);
   const address = await named(path => path.includes('/addresses/resolve') ? 'zone-address' : 'zone-configuration',
     () => readManagementAddress(main, space, 'en', actor, suppliedManagementSite(main, actor)));
