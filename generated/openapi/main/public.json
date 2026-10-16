@@ -161962,11 +161962,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -162076,11 +162076,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -217891,11 +217891,11 @@
                                                       },
                                                       "role": {
                                                         "enum": [
-                                                          "transcriber",
                                                           "author",
                                                           "director",
                                                           "artist",
-                                                          "animation-studio"
+                                                          "animation-studio",
+                                                          "transcriber"
                                                         ],
                                                         "type": "string"
                                                       }
@@ -218005,11 +218005,11 @@
                                                       },
                                                       "role": {
                                                         "enum": [
-                                                          "transcriber",
                                                           "author",
                                                           "director",
                                                           "artist",
-                                                          "animation-studio"
+                                                          "animation-studio",
+                                                          "transcriber"
                                                         ],
                                                         "type": "string"
                                                       }
@@ -253566,11 +253566,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -253680,11 +253680,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -556404,11 +556404,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -556518,11 +556518,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -558666,11 +558666,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -558780,11 +558780,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -560937,11 +560937,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -561051,11 +561051,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -563359,11 +563359,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -563473,11 +563473,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -565792,11 +565792,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -565906,11 +565906,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -568252,11 +568252,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -568366,11 +568366,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -573900,11 +573900,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -574014,11 +574014,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -574973,11 +574973,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -575087,11 +575087,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -576058,11 +576058,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -576172,11 +576172,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -577291,11 +577291,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -577405,11 +577405,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -578534,11 +578534,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -578648,11 +578648,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -579804,11 +579804,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -579918,11 +579918,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -581597,11 +581597,11 @@
                             "properties": {
                               "role": {
                                 "enum": [
-                                  "transcriber",
                                   "author",
                                   "director",
                                   "artist",
-                                  "animation-studio"
+                                  "animation-studio",
+                                  "transcriber"
                                 ],
                                 "type": "string"
                               },
@@ -582369,11 +582369,11 @@
                             "properties": {
                               "role": {
                                 "enum": [
-                                  "transcriber",
                                   "author",
                                   "director",
                                   "artist",
-                                  "animation-studio"
+                                  "animation-studio",
+                                  "transcriber"
                                 ],
                                 "type": "string"
                               },
@@ -583141,11 +583141,11 @@
                             "properties": {
                               "role": {
                                 "enum": [
-                                  "transcriber",
                                   "author",
                                   "director",
                                   "artist",
-                                  "animation-studio"
+                                  "animation-studio",
+                                  "transcriber"
                                 ],
                                 "type": "string"
                               },
@@ -584191,11 +584191,11 @@
                                                     },
                                                     "role": {
                                                       "enum": [
-                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
-                                                        "animation-studio"
+                                                        "animation-studio",
+                                                        "transcriber"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -584305,11 +584305,11 @@
                                                     },
                                                     "role": {
                                                       "enum": [
-                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
-                                                        "animation-studio"
+                                                        "animation-studio",
+                                                        "transcriber"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -585264,11 +585264,11 @@
                                                     },
                                                     "role": {
                                                       "enum": [
-                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
-                                                        "animation-studio"
+                                                        "animation-studio",
+                                                        "transcriber"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -585378,11 +585378,11 @@
                                                     },
                                                     "role": {
                                                       "enum": [
-                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
-                                                        "animation-studio"
+                                                        "animation-studio",
+                                                        "transcriber"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -586349,11 +586349,11 @@
                                                     },
                                                     "role": {
                                                       "enum": [
-                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
-                                                        "animation-studio"
+                                                        "animation-studio",
+                                                        "transcriber"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -586463,11 +586463,11 @@
                                                     },
                                                     "role": {
                                                       "enum": [
-                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
-                                                        "animation-studio"
+                                                        "animation-studio",
+                                                        "transcriber"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -587582,11 +587582,11 @@
                                                     },
                                                     "role": {
                                                       "enum": [
-                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
-                                                        "animation-studio"
+                                                        "animation-studio",
+                                                        "transcriber"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -587696,11 +587696,11 @@
                                                     },
                                                     "role": {
                                                       "enum": [
-                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
-                                                        "animation-studio"
+                                                        "animation-studio",
+                                                        "transcriber"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -588825,11 +588825,11 @@
                                                     },
                                                     "role": {
                                                       "enum": [
-                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
-                                                        "animation-studio"
+                                                        "animation-studio",
+                                                        "transcriber"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -588939,11 +588939,11 @@
                                                     },
                                                     "role": {
                                                       "enum": [
-                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
-                                                        "animation-studio"
+                                                        "animation-studio",
+                                                        "transcriber"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -590095,11 +590095,11 @@
                                                     },
                                                     "role": {
                                                       "enum": [
-                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
-                                                        "animation-studio"
+                                                        "animation-studio",
+                                                        "transcriber"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -590209,11 +590209,11 @@
                                                     },
                                                     "role": {
                                                       "enum": [
-                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
-                                                        "animation-studio"
+                                                        "animation-studio",
+                                                        "transcriber"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -591232,11 +591232,11 @@
                                                 },
                                                 "role": {
                                                   "enum": [
-                                                    "transcriber",
                                                     "author",
                                                     "director",
                                                     "artist",
-                                                    "animation-studio"
+                                                    "animation-studio",
+                                                    "transcriber"
                                                   ],
                                                   "type": "string"
                                                 }
@@ -591346,11 +591346,11 @@
                                                 },
                                                 "role": {
                                                   "enum": [
-                                                    "transcriber",
                                                     "author",
                                                     "director",
                                                     "artist",
-                                                    "animation-studio"
+                                                    "animation-studio",
+                                                    "transcriber"
                                                   ],
                                                   "type": "string"
                                                 }
@@ -592349,11 +592349,11 @@
                                                 },
                                                 "role": {
                                                   "enum": [
-                                                    "transcriber",
                                                     "author",
                                                     "director",
                                                     "artist",
-                                                    "animation-studio"
+                                                    "animation-studio",
+                                                    "transcriber"
                                                   ],
                                                   "type": "string"
                                                 }
@@ -592463,11 +592463,11 @@
                                                 },
                                                 "role": {
                                                   "enum": [
-                                                    "transcriber",
                                                     "author",
                                                     "director",
                                                     "artist",
-                                                    "animation-studio"
+                                                    "animation-studio",
+                                                    "transcriber"
                                                   ],
                                                   "type": "string"
                                                 }
@@ -593455,11 +593455,11 @@
                                                 },
                                                 "role": {
                                                   "enum": [
-                                                    "transcriber",
                                                     "author",
                                                     "director",
                                                     "artist",
-                                                    "animation-studio"
+                                                    "animation-studio",
+                                                    "transcriber"
                                                   ],
                                                   "type": "string"
                                                 }
@@ -593569,11 +593569,11 @@
                                                 },
                                                 "role": {
                                                   "enum": [
-                                                    "transcriber",
                                                     "author",
                                                     "director",
                                                     "artist",
-                                                    "animation-studio"
+                                                    "animation-studio",
+                                                    "transcriber"
                                                   ],
                                                   "type": "string"
                                                 }
@@ -594770,11 +594770,11 @@
                                                     },
                                                     "role": {
                                                       "enum": [
-                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
-                                                        "animation-studio"
+                                                        "animation-studio",
+                                                        "transcriber"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -594884,11 +594884,11 @@
                                                     },
                                                     "role": {
                                                       "enum": [
-                                                        "transcriber",
                                                         "author",
                                                         "director",
                                                         "artist",
-                                                        "animation-studio"
+                                                        "animation-studio",
+                                                        "transcriber"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -595509,11 +595509,11 @@
                                           },
                                           "role": {
                                             "enum": [
-                                              "transcriber",
                                               "author",
                                               "director",
                                               "artist",
-                                              "animation-studio"
+                                              "animation-studio",
+                                              "transcriber"
                                             ],
                                             "type": "string"
                                           }
@@ -595623,11 +595623,11 @@
                                           },
                                           "role": {
                                             "enum": [
-                                              "transcriber",
                                               "author",
                                               "director",
                                               "artist",
-                                              "animation-studio"
+                                              "animation-studio",
+                                              "transcriber"
                                             ],
                                             "type": "string"
                                           }
@@ -660722,11 +660722,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -660836,11 +660836,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -665201,11 +665201,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -665315,11 +665315,11 @@
                                             },
                                             "role": {
                                               "enum": [
-                                                "transcriber",
                                                 "author",
                                                 "director",
                                                 "artist",
-                                                "animation-studio"
+                                                "animation-studio",
+                                                "transcriber"
                                               ],
                                               "type": "string"
                                             }
@@ -666767,11 +666767,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -666881,11 +666881,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -670060,11 +670060,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -670174,11 +670174,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -788565,11 +788565,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -788679,11 +788679,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -789968,11 +789968,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -790082,11 +790082,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -907432,11 +907432,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -907546,11 +907546,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -913337,11 +913337,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -913451,11 +913451,11 @@
                                         },
                                         "role": {
                                           "enum": [
-                                            "transcriber",
                                             "author",
                                             "director",
                                             "artist",
-                                            "animation-studio"
+                                            "animation-studio",
+                                            "transcriber"
                                           ],
                                           "type": "string"
                                         }
@@ -923946,11 +923946,11 @@
                               },
                               "role": {
                                 "enum": [
-                                  "transcriber",
                                   "author",
                                   "director",
                                   "artist",
-                                  "animation-studio"
+                                  "animation-studio",
+                                  "transcriber"
                                 ],
                                 "type": "string"
                               }
@@ -924060,11 +924060,11 @@
                               },
                               "role": {
                                 "enum": [
-                                  "transcriber",
                                   "author",
                                   "director",
                                   "artist",
-                                  "animation-studio"
+                                  "animation-studio",
+                                  "transcriber"
                                 ],
                                 "type": "string"
                               }
