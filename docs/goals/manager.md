@@ -93,6 +93,14 @@ uncertain choices and decides within this charter. Send only decisions that need
 the maintainer through the [notice-board procedure](program/GOAL.md#asking-the-maintainer),
 while independent work continues.
 
+Landing gates run the tests the change affects plus those its brief names;
+main's scheduled confirmation catches what that selection misses, and its
+failures are fixed on main. A second landing review with findings comes to the
+program. Findings that disclose data or bypass authority are fixed before the
+merge; the rest merge with the change and join the next batch. Small follow-ups
+in the same tooling or owners go to one batch task rather than separate briefs,
+so they cannot conflict with each other.
+
 Monitor and improve efficiency continuously, including when delivery is nearly
 done. Keep the hourly monitor running. At least every three hours, measure the
 last full 12-hour window with `task goal -- efficiency --since … --until …`
