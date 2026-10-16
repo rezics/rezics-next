@@ -80,7 +80,7 @@ async function captureVisit(sessions: PersonaSessions, name: PersonaName, label:
   expect(ordinal, `${name}/${label} must reach the production transport`).toBeGreaterThan(0);
   // The shared relationship control refreshes unknown follow levels on mount.
   if (refreshFollow && sessions[name].actingSubject) await mainRelationships(sessions[name].actingSubject!, {
-    origin: 'https://recorded.invalid', fetch: fetcher,
+    origin: `https://recorded.invalid${BFF_PREFIX}`, fetch: fetcher,
   }).state(sessions.realm, 'realm');
 }
 
@@ -176,6 +176,7 @@ async function traverse(sessions: PersonaSessions, name: PersonaName, expected: 
   const person = sessions[name], root = `/v1/realms/${short(sessions.realm)}`;
   const header = await answer<Record<string, unknown>>(person.main('GET', `${root}?${acting(person)}`));
   for (const [sort, window] of [['best', 'all'], ['top', 'week'], ['top', 'month'], ['top', 'all']]) {
+    const visits: Promise<{ error?: unknown }>[] = [];
     const params = acting(person); params.set('sort', sort!); params.set('window', window!); params.set('limit', '20');
     const seen: string[] = [], scores: number[] = [], cursors = new Set<string>();
     let page: Page;
@@ -188,9 +189,9 @@ async function traverse(sessions: PersonaSessions, name: PersonaName, expected: 
         const recorded = await storyRanking(sessions, name, sort as 'best' | 'top',
           window as 'week' | 'month' | 'all', `${prefix}${sort}-${window}${suffix}`, params.get('cursor') ?? undefined);
         expect(recorded.ok).toBe(true);
-        await captureVisit(sessions, name, `visit-${prefix}${sort}-${window}${suffix}`, {
+        visits.push(captureVisit(sessions, name, `visit-${prefix}${sort}-${window}${suffix}`, {
           sort: sort as 'best' | 'top', window: window as 'week' | 'month' | 'all', cursor: params.get('cursor') ?? undefined,
-        });
+        }).then(() => ({}), error => ({ error })));
         if (!recorded.ok) throw new Error('Ranked traversal read failed');
         page = recorded.data;
       } else page = await answer<Page>(person.main('GET', `${root}/threads?${params}`));
@@ -207,6 +208,8 @@ async function traverse(sessions: PersonaSessions, name: PersonaName, expected: 
       }
       expect(cursors.size).toBeLessThan(30);
     } while (page.nextCursor);
+    // At most three independent frame visits overlap the unchanged API traversal.
+    for (const result of await Promise.all(visits)) if ('error' in result) throw result.error;
     expect(new Set(seen).size).toBe(seen.length);
     expect(seen.sort()).toEqual([...expected].sort());
     if (sort === 'top') expect(scores).toEqual([...scores].sort((left, right) => right - left));
