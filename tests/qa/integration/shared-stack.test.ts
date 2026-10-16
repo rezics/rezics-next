@@ -1,7 +1,7 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { readEnv } from '../../../scripts/dev/config.ts';
@@ -219,6 +219,8 @@ test.skipIf(Boolean(probe))('ordinary QA runs lease clean warm stacks and destro
     const first = await finish('first');
     const checkoutA = join(directory, 'parking-checkout');
     mkdirSync(join(checkoutA, 'tests', 'fixtures'), { recursive: true });
+    mkdirSync(join(checkoutA, 'scripts', 'dev'), { recursive: true });
+    copyFileSync(join(root, 'scripts', 'dev', 'qa-ports.ts'), join(checkoutA, 'scripts', 'dev', 'qa-ports.ts'));
     // A's fixture lock deliberately differs; using it cannot pass media startup.
     writeFileSync(join(checkoutA, 'tests', 'fixtures', 'fixtures.lock.json'), '{"version":0}');
     const parkedPath = join(directory, 'qa-stack-pool-state', `${first.projectRunId}.json`);
