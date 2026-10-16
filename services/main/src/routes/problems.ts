@@ -82,6 +82,7 @@ import { ContributionEditUnavailable, StaleContributionDraftHead }
   from '../modules/contribution/edit.ts';
 import { InvalidPublicationInput, PublicationUnavailable, StalePublicationHead }
   from '../modules/contribution/publish.ts';
+import { WorkStructurePublicationRightsDenied } from '../modules/work/structured-publication.ts';
 import { InvalidRealmRejectionInput, RealmRejectionUnavailable, StaleRealmRejection }
   from '../modules/work/reject-realm.ts';
 import { InvalidRealmSelectionInput, RealmSelectionUnavailable, StaleRealmSelection }
@@ -489,6 +490,9 @@ function mapTypedRefusal(error: unknown): Response | undefined {
   }
   if (error instanceof ContributionEditUnavailable || error instanceof PublicationUnavailable) {
     return problem(404, 'contribution_unavailable', 'Contribution is unavailable');
+  }
+  if (error instanceof WorkStructurePublicationRightsDenied) {
+    return problem(403, 'rights_denied', 'Work publication rights are not established');
   }
   if (error instanceof MainSelectionUnavailable) {
     return problem(404, 'selection_unavailable', 'Main Version selection is unavailable');

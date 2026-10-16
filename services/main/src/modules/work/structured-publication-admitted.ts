@@ -11,6 +11,7 @@ import { InvalidPublicationInput, PublicationUnavailable, StalePublicationHead }
 import { changeStructuredWorkPublication, checkedWorkStructurePublicationReceipt,
   readWorkStructurePublicationReceipt, sealWorkStructurePublicationAdmission,
   denyWorkStructurePublicationAdmission,
+  WorkStructurePublicationRightsDenied,
   workStructurePublicationDigest, type WorkStructurePublicationInput,
   type WorkStructurePublicationReceipt } from './structured-publication.ts';
 
@@ -54,6 +55,7 @@ export async function changeAdmittedWorkStructurePublication(
             try { dependencies = await prepareDependencies?.(admission.id, principal); }
             catch (error) {
               if (error instanceof PublicationUnavailable || error instanceof AdmissionDenied
+                || error instanceof WorkStructurePublicationRightsDenied
                 || error instanceof StalePublicationHead || error instanceof InvalidPublicationInput) throw error;
               throw new AdmissionUnavailable('Work publication dependencies are unavailable', { cause: error });
             }
@@ -75,6 +77,7 @@ export async function changeAdmittedWorkStructurePublication(
   } catch (error) {
     if (error instanceof IdempotencyConflict || error instanceof InvalidPublicationInput
       || error instanceof PublicationUnavailable || error instanceof StalePublicationHead
+      || error instanceof WorkStructurePublicationRightsDenied
       || error instanceof AdmissionDenied || error instanceof AdmissionUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'work-publication');
   }

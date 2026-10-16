@@ -9,6 +9,7 @@ import { type WorkStructurePublicationInput,
   from '../src/modules/work/structured-publication.ts';
 import { RV, hash } from '../src/modules/work/activate.ts';
 import { strongRevokeWorkPrincipal } from '../src/modules/work/strong-revoke.ts';
+import { commandError } from '../src/routes/problems.ts';
 
 const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
@@ -51,11 +52,21 @@ function terminalReceipt(input: WorkStructurePublicationInput, overrides: Partia
     publicationDecision: decision, predecessor: null, ...overrides };
 }
 
+function cancelledReceipt(input: WorkStructurePublicationInput, reason: WorkStructurePublicationReceipt['reason'])
+  : WorkStructurePublicationReceipt {
+  const registered = admission(input);
+  return { action: registered.action as WorkStructurePublicationReceipt['action'], outcome: 'cancelled', reason,
+    receipt: workStructurePublicationReceiptIri(admissionId, registered.action as 'work.publish'),
+    admissionId, requestDigest: registered.requestDigest, authorityEpoch, scope, dataEpoch, sequence: '28',
+    work, attestedBy: actor, predecessor: input.expectedPublicationHead };
+}
+
 function graphRow(receipt: WorkStructurePublicationReceipt) {
   const values: Record<string, string | undefined> = {
     outcome: receipt.outcome === 'succeeded' ? `${RV}Succeeded` : `${RV}Cancelled`,
     reason: receipt.reason ? `${RV}${receipt.reason === 'stale-head' ? 'StaleHead'
       : receipt.reason === 'source-unavailable' ? 'SourceUnavailable'
+        : receipt.reason === 'rights-unavailable' ? 'RightsUnavailable'
         : receipt.reason === 'unsupported-profile' ? 'UnsupportedProfile' : 'AuthorityDenied'}` : undefined,
     action: receipt.action,
     family: receipt.action === 'work.publish' ? 'work-structure-publication-v1' : 'work-structure-withdrawal-v1',
@@ -75,6 +86,82 @@ function environment(query: (text: string) => Promise<unknown>,
   return { fuseki: { query, commandWithReceipt }, lineage: { dataEpoch, routingEpoch: '4' },
     objectDirectory: '/unused' } as never;
 }
+
+test.each([
+  ['rights-unavailable', 403, 'rights_denied'],
+  ['authority-denied', 403, 'authority_denied'],
+  ['source-unavailable', 404, 'contribution_unavailable'],
+  ['unsupported-profile', 404, 'contribution_unavailable'],
+  ['stale-head', 409, 'stale_head'],
+] as const)('cancelled publication replay keeps the exact %s problem', async (reason, status, code) => {
+  const receipt = cancelledReceipt(publishInput, reason);
+  const env = environment(async query => query.includes('ASK') ? { boolean: true }
+    : { results: { bindings: [graphRow(receipt)] } });
+  let recorded = false;
+  const response = await changeAdmittedWorkStructurePublication(env,
+    { verify: async () => ({ issuer: actor, subject: actor }) }, {
+      register: async () => admission(publishInput),
+      claim: async () => { throw new Error('terminal replay must not claim'); },
+      recordGraphOutcome: async () => { recorded = true; },
+    }, new Request('https://main.invalid/v1/work-publications'),
+    { ...publishInput, idempotencyKey: 'publication-one' }, async dispatch => dispatch(true))
+    .then(() => { throw new Error('cancelled publication must refuse'); }, commandError);
+  expect(recorded).toBe(true);
+  expect(response.status).toBe(status);
+  expect(await response.json()).toMatchObject({ status, code });
+});
+
+test('a publication rights refusal is stored distinctly and returns the same problem on replay', async () => {
+  const input = { ...publishInput, rightsBasis: 'public-domain' as const, sourceObservation: actor };
+  let stored: WorkStructurePublicationReceipt | null = null;
+  const updates: string[] = [];
+  const env = environment(async query => {
+    if (query.includes('rv:rejectionKind rv:InvalidProfile')) return { boolean: false };
+    if (query.includes('ASK')) return { boolean: true };
+    if (query.includes('SELECT ?component ?profile')) return { results: { bindings: [{
+      component: { value: mainVersion }, profile: { value: `${RV}RecipeComposition` },
+      head: { value: structureHead }, generation: { value: generation },
+      count: { value: '0' }, manifest: { value: sourceRoot },
+    }] } };
+    if (query.includes('SELECT ?owner')) return { results: { bindings: [{ owner: { value: work } }] } };
+    return { results: { bindings: stored ? [graphRow(stored)] : [] } };
+  }, async envelope => {
+    updates.push(envelope.update);
+    const reason = /rv:reason rv:(\w+)/.exec(envelope.update)?.[1];
+    stored = cancelledReceipt(input, reason === 'RightsUnavailable' ? 'rights-unavailable' : 'authority-denied');
+    return { status: 'committed' };
+  });
+  for (const replayed of [false, true]) {
+    const registered = admission(input, { state: replayed ? 'sealed' : 'claimed', dispatchEligible: !replayed, replayed });
+    const response = await changeAdmittedWorkStructurePublication(env,
+      { verify: async () => ({ issuer: actor, subject: actor }) }, {
+        register: async () => registered, claim: async () => registered,
+        recordGraphOutcome: async () => {},
+      }, new Request('https://main.invalid/v1/work-publications'),
+      { ...input, idempotencyKey: 'publication-one' }, async dispatch => dispatch(true))
+      .then(() => { throw new Error('unproven publication rights must refuse'); }, commandError);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'rights_denied', status: 403 });
+  }
+  expect(updates).toHaveLength(1);
+  expect(updates[0]).toContain('rv:reason rv:RightsUnavailable');
+});
+
+test('dependency preparation preserves a publication rights refusal instead of reporting a pending command', async () => {
+  const registered = admission(publishInput, { state: 'claimed', dispatchEligible: true, replayed: false });
+  const env = environment(async query => query.includes('ASK') ? { boolean: true } : { results: { bindings: [] } });
+  const response = await changeAdmittedWorkStructurePublication(env,
+    { verify: async () => ({ issuer: actor, subject: actor }) }, {
+      register: async () => registered, claim: async () => registered, recordGraphOutcome: async () => {},
+    }, new Request('https://main.invalid/v1/work-publications'),
+    { ...publishInput, idempotencyKey: 'publication-one' }, async dispatch => dispatch(true), async () => {
+      checkedWorkStructurePublicationReceipt(cancelledReceipt(publishInput, 'rights-unavailable'),
+        registered, publishInput, registered.requestDigest);
+      throw new Error('rights refusal must throw');
+    }).then(() => { throw new Error('unproven publication rights must refuse'); }, commandError);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ code: 'rights_denied', status: 403 });
+});
 
 test('WORK10/COMP08: publication intent digest binds the exact source, disclosure, rights and predecessor', () => {
   const digest = workStructurePublicationDigest(publishInput);

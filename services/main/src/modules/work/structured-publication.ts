@@ -68,6 +68,15 @@ export interface WorkStructurePublicationReceipt {
 
 export class WorkStructurePublicationUnavailable extends PublicationUnavailable {}
 export class WorkStructurePublicationStale extends StalePublicationHead {}
+export class WorkStructurePublicationRightsDenied extends Error {}
+
+const cancellationReasons: Record<WorkStructurePublicationReason, string> = {
+  'stale-head': 'StaleHead',
+  'source-unavailable': 'SourceUnavailable',
+  'rights-unavailable': 'RightsUnavailable',
+  'unsupported-profile': 'UnsupportedProfile',
+  'authority-denied': 'AuthorityDenied',
+};
 
 function actionFor(input: WorkStructurePublicationInput): WorkStructurePublicationAction {
   return input.operation === 'publish' ? 'work.publish' : 'work.withdraw-publication';
@@ -206,8 +215,10 @@ export function checkedWorkStructurePublicationReceipt(receipt: WorkStructurePub
   }
   if (receipt.outcome === 'cancelled') {
     if (receipt.reason === 'stale-head') throw new WorkStructurePublicationStale('Work publication head is stale');
-    if (receipt.reason === 'source-unavailable' || receipt.reason === 'rights-unavailable'
-      || receipt.reason === 'unsupported-profile') {
+    if (receipt.reason === 'rights-unavailable') {
+      throw new WorkStructurePublicationRightsDenied('Work publication rights are not established');
+    }
+    if (receipt.reason === 'source-unavailable' || receipt.reason === 'unsupported-profile') {
       throw new WorkStructurePublicationUnavailable('Work publication source is unavailable');
     }
     throw new AdmissionDenied('Work publication was not admitted for dispatch');
@@ -366,9 +377,7 @@ async function cancel(env: WorkActivationEnvironment, admission: RegisteredAdmis
           rv:requestDigest ${lit(admission.requestDigest)} ; rv:admissionId ${lit(admission.id)} ;
           rv:authorityEpoch ${lit(admission.authorityEpoch)} ; rv:admittedScope ${lit(admission.scope)} ;
           rv:action ${lit(action)} ; rv:commandFamily ${lit(familyFor(action))} ;
-          rv:outcome rv:Cancelled ; ${reason ? `rv:reason rv:${reason === 'stale-head' ? 'StaleHead'
-            : reason === 'source-unavailable' ? 'SourceUnavailable'
-              : reason === 'unsupported-profile' ? 'UnsupportedProfile' : 'AuthorityDenied'} ;` : ''}
+          rv:outcome rv:Cancelled ; ${reason ? `rv:reason rv:${cancellationReasons[reason]} ;` : ''}
           rv:work ${iri(input.work)} ; rv:attestedBy ${iri(input.actingSubject)} ;
           ${recordExpectedHead && input.operation === 'publish' && input.expectedPublicationHead
             ? `rv:expectedHead ${iri(input.expectedPublicationHead)} ;` : input.operation === 'withdraw'
