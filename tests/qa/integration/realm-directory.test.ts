@@ -286,7 +286,10 @@ test('Realm directory: public profiles, activity/member/newest pages, CJK search
         firstRelease.release(); secondRelease.release(); stack.fuseki.query = query;
       }
       await waitForRealmDirectory(stack.env, () => get(`/v1/realms?sort=newest&q=Scale%20directory%20${size}&limit=20`),
-        page => page.items.length === 20);
+        // 01349b70e1 and realm-directory.test.ts settle bounded source windows:
+        // search can omit rows. A match proves the rebuilt generation is live;
+        // the complete cursor walk below still proves every seeded Realm.
+        page => page.items.length > 0);
       let next: string | null = null;
       const seen = new Set<string>();
       do {
