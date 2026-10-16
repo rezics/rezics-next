@@ -377,7 +377,10 @@ export async function buildRealmDiscussionCorpus(runtime: RealmSourceRuntime, co
     });
     const privateOpener = await phase('discussion-private-opener', async () => (await grow(live.discussionPrivate, privateWork,
       ['Private garden\nAn original contribution in a private Realm.']))[0]!);
-    const rankingStates = await phase('ranking-chart-and-cursor-states', () => prepareRealmRankingStates(live.rankingPublic));
+    // The catalogue editor is part of the retained members/roles snapshots too;
+    // its assignment must survive the same source lifetime as the moderators.
+    const rankingStates = await phase('ranking-chart-and-cursor-states', () => prepareRealmRankingStates(live.rankingPublic,
+      new Date(startedAt + realmSourceAuthorityLifetimeMs).toISOString()));
     const realms = Object.fromEntries(Object.entries(live).map(([name, value]) => [name, runtime.retain(value)])) as RealmSourceMetadata['realms'];
     const authoritySnapshots = await phase('starting-authority-snapshots', async () => Object.fromEntries(await together(
       Object.entries(live).map(async ([name, realm]) => [name, await realmAuthoritySnapshot(realm)] as const))) as RealmSourceMetadata['authoritySnapshots']);

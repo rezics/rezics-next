@@ -64,7 +64,7 @@ export async function seedRealmRanking(sessions: PersonaSessions, size: number, 
   return replies;
 }
 
-export async function prepareRealmRankingStates(sessions: PersonaSessions) {
+export async function prepareRealmRankingStates(sessions: PersonaSessions, authorityValidUntil?: string) {
   // The QA planner imports the source's cost contract outside Bun's test
   // runner; load helpers with test hooks only when actually building data.
   const { publishClosureOriginals } = await import('../integration/outcomes/realm/closure-original-credit-setup.ts');
@@ -81,7 +81,7 @@ export async function prepareRealmRankingStates(sessions: PersonaSessions) {
   }
   await seedRealmRanking({ ...sessions, owner: founder, realm: realms[1]! }, 21, 'moving');
   const originals: ClosureOriginal[] = [];
-  await publishClosureOriginals(sessions, originals, `Rankinggarden${randomUUID().replaceAll('-', '')}`, 12);
+  await publishClosureOriginals(sessions, originals, `Rankinggarden${randomUUID().replaceAll('-', '')}`, 12, authorityValidUntil);
   for (const original of originals) await answer(sessions.owner.main('PUT',
     `/v1/works/${short(original.work)}/progress`, {
       actingSubject: sessions.owner.actingSubject, expectedVersion: 0, standing: 'started',

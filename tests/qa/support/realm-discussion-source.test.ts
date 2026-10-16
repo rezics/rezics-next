@@ -236,6 +236,11 @@ test('complete builder uses 552 public draft/identity/placement commands with ex
     expect(f.requests.filter(request => request.path === '/v1/contribution-publications')
       .every(request => request.body.disclosure === 'public')).toBe(true);
     expect(f.requests.filter(request => request.path === '/v1/realm-replies').every(request => Boolean(request.key))).toBe(true);
+    const assignments = f.requests.filter(request => request.path.endsWith('/role-changes'))
+      .map(request => request.body.change as { kind: string; validUntil?: string })
+      .filter(change => change.kind === 'assignment');
+    expect(assignments).toHaveLength(1);
+    expect(Date.parse(assignments[0]!.validUntil!)).toBeGreaterThanOrEqual(result.metadata.startingStatesValidUntil);
     const corrupted = structuredClone(result.metadata);
     corrupted.discussion.nested[20]!.parentRevision = randomUUID();
     expect(() => validateRealmSourceMetadata(corrupted)).toThrow('nested chain');
