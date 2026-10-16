@@ -12,6 +12,7 @@ import { browserBudgets, browserFileCounts, browserProjectCount } from '../../..
 import { dispatchTest, selectTestCommand } from '../../../scripts/qa/test.ts';
 import { acquireQaSlots, commandAsync, parseArgs, selfManagedFaultFiles, tierBunTestArgs } from '../../../scripts/qa/core.ts';
 import { waitForMemory } from '../../../scripts/qa/memory-admission.ts';
+import { qaFailure } from '../../../scripts/qa/failure.ts';
 import { qaWaitStatusLines } from '../../../scripts/goal/goalctl.ts';
 import { cleanupQaStacks, forgetQaStack, QA_STACK_REGISTRY, rememberQaStack }
   from '../../../scripts/qa/stack-ownership.ts';
@@ -58,6 +59,7 @@ function poolStartupBoundary(bindings: Record<string, unknown>) {
   const testBoundary = shard.body!.statements.find(node =>
     ts.isIfStatement(node) && node.expression.getText(source) === '!needsStack')!;
   const boundary = ts.transpileModule(declaration('integrationInfrastructureFingerprint').getText(source) + '\n'
+    + declaration('fail').getText(source) + '\n'
     + source.text.slice(shard.getStart(source), testBoundary.getStart(source))
     + "\nrecord.stage = 'test'; return finish({ ok: testPassed, timedOut: false, noMatch: false, xml: '' });\n}\n"
     + '({ runShardWork, integrationInfrastructureFingerprint });',
@@ -226,6 +228,7 @@ function coldPoolHarness(directory: string, inspectionError: string,
     QA_STACK_TIER: 'REZICS_QA_STACK_TIER',
     startedProjects: [], startedFixtureProjects: [], rawUpdateProjects: new Set(),
     stackLeaseNotes: [], errors, runDeadline: Date.now() + 60_000,
+    qaFailure, noteFailure: () => {},
     qaStackPoolEnabled: () => enabled, integrationStackPoolEligible: () => mode.eligible ?? !mode.keep,
     integrationResourceClass: () => 'ordinary', qaResourceClasses: { ordinary: { budgetMs: 60_000 } },
     qaStackEnvironment: (environment: NodeJS.ProcessEnv) => environment, qaStackMode: () => 'test',
@@ -490,6 +493,9 @@ function startupHarness(directory: string, inheritedEnvironment: NodeJS.ProcessE
     import { basename, dirname, join } from 'node:path';
     const args = process.argv.slice(2);
     if (basename(process.argv[1]) === 'docker') {
+      // Daemon discovery precedes resource startup. Refusing it would exercise
+      // the real 60-second retry loop rather than the resource lease boundary.
+      if (args[0] === 'info') { console.log('fixture-engine'); process.exit(0); }
       const filterAt = args.indexOf('--filter');
       const filter = filterAt >= 0 ? String(args[filterAt + 1] ?? '') : '';
       const reapList = args[0] === 'ps' && (filter.startsWith('label=rezics.reap-owner')
@@ -641,6 +647,8 @@ for (const file of [
     const holder = Bun.spawn([process.execPath, '-e', 'setInterval(() => {}, 1000)']);
     const slot = await acquireQaSlots(harness.slots, 1, { GOAL_QA_SLOTS: '1' }, holder.pid);
     try {
+      // This case blocks on the runner lease, not a second, synthetic memory shortage.
+      writeFileSync(join(harness.control, 'native-memory'), '');
       const run = harness.startGoal('native', [file], { QA_HARNESS_REAL_HOST_TEST: '1' });
       await until(() => existsSync(join(harness.control, 'native-admitted')), 'host memory admission');
       await until(() => qaWaitStatusLines(harness.slots).some(line => line.startsWith('QA waiting for slot:')),

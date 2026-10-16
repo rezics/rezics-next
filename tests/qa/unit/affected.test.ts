@@ -1,11 +1,12 @@
 import { expect, test } from 'bun:test';
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { Script } from 'node:vm';
 import ts from 'typescript-6';
 import * as acceptance from '../../../scripts/qa/acceptance.ts';
 import * as qaCore from '../../../scripts/qa/core.ts';
+import { recordQaFailure, testFailureClass } from '../../../scripts/qa/failure.ts';
 import { ownerTierBudgetMs } from '../../../scripts/qa/owner-tier-budget.ts';
 import { redactCommandOutput } from '../../../scripts/fixture/command-output.ts';
 import { failedSelection, nativeModuleSuiteTest, nativeProofBatchDeadline, nativeProofDeclaration, nativeProofDeclarations, testArgs } from '../../../scripts/qa/acceptance.ts';
@@ -374,14 +375,14 @@ function cliOwnerEntry(artifacts: string, configuration: {
     process.env.REZICS_QA_OWNER_MUTATION_FILE ?? join(root, 'scripts/qa/cli.ts'), 'utf8'),
   ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const functions = source.statements.filter(node => ts.isFunctionDeclaration(node)
-    && ['chosenFor', 'runBunTier'].includes(node.name?.text ?? ''));
+    && ['chosenFor', 'runBunTier', 'fail', 'noteFailure', 'testFailure'].includes(node.name?.text ?? ''));
   let execution: ts.IfStatement | undefined;
   const visit = (node: ts.Node) => {
     if (ts.isIfStatement(node) && node.expression.getText(source) === "tier === 'unit' || tier === 'owner'") execution = node;
     ts.forEachChild(node, visit);
   };
   visit(source);
-  if (!execution || functions.length !== 2) throw new Error('Missing CLI owner execution entry');
+  if (!execution || functions.length !== 5) throw new Error('Missing CLI owner execution entry');
   const compile = (text: string) => ts.transpileModule(text, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
     transformers: { before: [context => {
@@ -391,7 +392,8 @@ function cliOwnerEntry(artifacts: string, configuration: {
       return node => ts.visitNode(node, visit, ts.isSourceFile)!;
     }] },
   }).outputText;
-  const body = compile(functions.map(node => node.getText(source)).join('\n')
+  const body = compile('let firstFailure; const tierFailures = new Map();\n'
+    + functions.map(node => node.getText(source)).join('\n')
     + `\n(async () => { const tier = 'owner'; ${execution.getText(source)} })();`);
   const helper = compile(readFileSync(join(root, 'scripts/qa/native-proof-execution.ts'), 'utf8'));
   const calls: { program: string; files: string[]; budget: number }[] = [];
@@ -442,6 +444,10 @@ function cliOwnerEntry(artifacts: string, configuration: {
       splitTestArgs: qaCore.splitTestArgs, tierBunTestArgs: qaCore.tierBunTestArgs,
       ownerTierBudgetMs: () => ownerTierBudgetMs(processFixture.env),
       commandAsync, admitRun: async (work: () => Promise<unknown>) => work(), noteMemory: () => {},
+      recordQaFailure: (failureClass: Parameters<typeof recordQaFailure>[0], message: string) =>
+        recordQaFailure(failureClass, message, () => {}),
+      testFailureClass, existsSync,
+      parseJUnit: acceptance.parseJUnit, readFileSync, tierArtifactName: qaCore.tierArtifactName,
       console: { error: () => {} },
     });
     const source = { head: 'fixture', fingerprint: 'stable', clean: true };
