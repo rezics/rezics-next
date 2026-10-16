@@ -8,8 +8,10 @@ import { recordedFetch } from '../stories/recorded-fetch.ts';
 import { saveSettings } from './commands.ts';
 import { publishedRealmRules, readRealmRulesSettings } from './realm-rules-recorded-page.ts';
 import { rulesPageClient } from './realm-rules-recorded-page-client.ts';
+import { mainRelationships, RelationshipError } from '../relationships/api.ts';
+import { readCurrentRequest } from '../space-access/request-state.ts';
 import { readAgents, readRealmHeader, readSettings } from './read.ts';
-import { readPrivateSpaceJoinPage } from './settings-api.ts';
+import { readPrivateSpaceJoinPage, spaceAccessApi } from './settings-api.ts';
 import type { MainClient, RealmHeader, SettingsView } from './types.ts';
 import { uuidOf } from './types.ts';
 
@@ -365,4 +367,34 @@ test('owner production settings reader preserves the recorded empty rules and ba
   expect<unknown>(loaded.settings).toEqual(objectAnswer('owner', 'empty-page-management-rule-settings'));
   expect(loaded.settings.settings.rules).toEqual([]);
   expect(loaded.settings.ruleBasis).toEqual(settingsOf('owner', 'empty-page-management-rule-settings').settings.ruleBasis);
+});
+
+for (const persona of ['stranger', 'operator'] as const) {
+  test(`${persona} private rules landing reads recorded own-request unavailability before enabling its form`, async () => {
+    const label = 'private-page-own-join-requests';
+    const sample = sampleOf(persona, label);
+    const client = clientFor(persona, [{ label, state: 'error' }], false);
+    const api = spaceAccessApi(() => client, realmId(sample.path), realmId(sample.path), actingSubject(sample.path));
+    const refusal = await api.mine(null);
+    expect(refusal).toEqual({ ok: false, failure: 'missing', status: sample.status,
+      title: problemOf(persona, label).title, code: problemOf(persona, label).code,
+      problem: objectAnswer(persona, label) });
+    expect(await readCurrentRequest(api)).toEqual({ ok: true, data: { entry: null, state: 'available' } });
+  });
+}
+
+test('owner private rules follow refresh preserves the recorded unavailable status', async () => {
+  const label = 'private-page-follow-detail';
+  const sample = sampleOf('owner', label);
+  const replay = recordedFetch(record, 'owner', [{ label, state: 'error' }], { pathPrefix: BFF_PREFIX });
+  disposals.push(replay.dispose);
+  const query = new URL(sample.path, 'https://recorded.invalid').searchParams;
+  const target = query.get('target');
+  if (!target) throw new Error('Recorded follow read has no target');
+  const api = mainRelationships(actingSubject(sample.path), { fetch: replay.fetcher });
+  let caught: unknown;
+  try { await api.state(target); } catch (error) { caught = error; }
+  expect(caught).toBeInstanceOf(RelationshipError);
+  expect((caught as RelationshipError).status).toBe(sample.status);
+  expect(sample.status).toBe(404);
 });

@@ -6,6 +6,7 @@ import rulesRecord from '../../../../tests/qa/fixtures/outcomes/realm/rules.json
 import { isUiLocale, type UiLocale } from '../../i18n/define.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { realmHref } from '../realm/route.ts';
+import { messages as relationshipMessages } from '../relationships/messages.ts';
 import { messages } from './messages.ts';
 import { accessMessages } from './settings-messages.ts';
 import { RealmRulesRecordedPage } from './realm-rules-recorded-page.tsx';
@@ -234,12 +235,16 @@ export const EmptyOwnerPhone: Story = at(emptyOwner, 'phone');
 export const EmptyOwnerDesktop: Story = at(emptyOwner, 'desktop');
 
 function pageSelections(persona: AnswerPersona, scope: 'public' | 'private', held = false): RecordedSelection[] {
+  const join = scope === 'private' && ['visitor', 'stranger', 'operator'].includes(persona);
   const labels = [`${scope}-page-frame-address`, `${scope}-page-frame-realm-header`,
-    ...scope === 'private' && persona === 'visitor' ? [] : [`${scope}-page-rules-site-link`,
+    ...join ? [] : [`${scope}-page-rules-site-link`,
       `${scope}-page-frame-facets`, `${scope}-page-frame-presentation`, `${scope}-page-frame-routes`],
     ...scope === 'private' ? [persona === 'visitor' ? 'private-page-join-page' : 'private-page-rules-header'] : [],
-    ...persona !== 'visitor' ? ['joining', 'follow', 'platform-access', 'member-ban', 'session-agent', 'person-preferences']
-      .map(part => `${scope}-page-frame-${part}`) : []];
+    ...join && persona !== 'visitor' ? ['private-page-join-page', 'private-page-own-join-requests',
+      'private-page-frame-session-agent', 'private-page-frame-person-preferences'] : [],
+    ...!join && persona !== 'visitor' ? ['joining', 'follow', 'platform-access', 'member-ban', 'session-agent', 'person-preferences']
+      .map(part => `${scope}-page-frame-${part}`) : [],
+    ...scope === 'private' && persona === 'owner' ? ['private-page-follow-detail'] : []];
   return labels.map(label => ({ label, state: held && label === `${scope}-page-frame-realm-header` ? 'loading'
     : sampleOf(persona, label).status >= 400 ? 'error' : 'populated' }));
 }
@@ -255,17 +260,31 @@ function publicPage(persona: AnswerPersona, scope: 'public' | 'private', held = 
     play: held ? loadingPlay : async ({ canvasElement, globals }) => {
       const canvas = within(canvasElement);
       const label = scope === 'private' && persona !== 'visitor' ? 'private-page-rules-header' : `${scope}-page-frame-realm-header`;
-      const nameLabel = scope === 'private' && persona === 'visitor' ? 'private-page-join-page' : label;
+      const join = scope === 'private' && ['visitor', 'stranger', 'operator'].includes(persona);
+      const nameLabel = join ? 'private-page-join-page' : label;
       await expect(canvas.findByRole('heading', { level: 1, name: recordedName(persona, nameLabel) })).resolves.toBeVisible();
       const text = recordedRuleText(persona, nameLabel);
       await expect(canvas.getByRole('heading', { name: name => name.includes(text.title) })).toBeVisible();
       await expect(canvas.getByText(text.body)).toBeVisible();
       await expect(canvas.queryByRole('button', { name: messages.editRules })).toBeNull();
-      if (scope === 'private' && persona === 'visitor') {
+      if (scope === 'private' && persona === 'owner') {
+        const t = relationshipMessages[localeOf(globals)];
+        await expect(canvas.findByText(t.unavailable)).resolves.toBeVisible();
+        await expect(canvas.getByRole('button', { name: t.retry })).toBeEnabled();
+      }
+      if (join) {
         await expect(canvas.getByRole('alert')).toHaveTextContent(problemTitle(persona, 'private-page-frame-realm-header'));
         await expect(canvas.getByRole('alert')).toHaveAttribute('data-status', '404');
         await expect(canvas.getByRole('alert')).toHaveAttribute('data-problem-code', 'realm_unavailable');
-        await expect(canvas.getByRole('link', { name: accessMessages[localeOf(globals)].signIn })).toBeVisible();
+        const t = accessMessages[localeOf(globals)];
+        if (persona === 'visitor') {
+          await expect(canvas.getByRole('link', { name: t.signIn })).toBeVisible();
+        } else {
+          await expect(canvas.findByRole('textbox', { name: t.joinReason })).resolves.toBeEnabled();
+          await expect(canvas.getByRole('button', { name: t.requestJoin })).toBeDisabled();
+          await expect(canvas.getByRole('button', { name: t.refreshStatus })).toBeEnabled();
+          await expect(canvas.queryByRole('link', { name: t.signIn })).toBeNull();
+        }
       }
     },
   };
@@ -302,10 +321,16 @@ export const PublishedLoadingVisitorPhone: Story = at(publicPage('visitor', 'pub
 export const PublishedLoadingVisitorDesktop: Story = at(publicPage('visitor', 'public', true), 'desktop');
 export const PrivateVisitorPhone: Story = at(publicPage('visitor', 'private'), 'phone');
 export const PrivateVisitorDesktop: Story = at(publicPage('visitor', 'private'), 'desktop');
+export const PrivateStrangerPhone: Story = at(publicPage('stranger', 'private'), 'phone');
+export const PrivateStrangerDesktop: Story = at(publicPage('stranger', 'private'), 'desktop');
 export const PrivateMemberPhone: Story = at(publicPage('member', 'private'), 'phone');
 export const PrivateMemberDesktop: Story = at(publicPage('member', 'private'), 'desktop');
+export const PrivateOwnerPhone: Story = at(publicPage('owner', 'private'), 'phone');
+export const PrivateOwnerDesktop: Story = at(publicPage('owner', 'private'), 'desktop');
 export const PrivateModeratorPhone: Story = at(publicPage('moderator', 'private'), 'phone');
 export const PrivateModeratorDesktop: Story = at(publicPage('moderator', 'private'), 'desktop');
+export const PrivateOperatorPhone: Story = at(publicPage('operator', 'private'), 'phone');
+export const PrivateOperatorDesktop: Story = at(publicPage('operator', 'private'), 'desktop');
 export const DeniedStrangerPhone: Story = at(deniedSettings('stranger'), 'phone');
 export const DeniedStrangerDesktop: Story = at(deniedSettings('stranger'), 'desktop');
 export const DeniedMemberPhone: Story = at(deniedSettings('member'), 'phone');
