@@ -1,5 +1,45 @@
 # State
 
+Checkpoint 5e7710ac-404a-4beb-bf08-a9f732ca794c consolidates handled events
+task:G-2465:11, task:G-2319:11, task:G-2466:9,
+mail:14bea458-1aae-42f3-96e8-b02c6f6ac544, task:G-2475:8,
+mail:7de57be7-54c5-410b-9b36-4dcf52bd3e19 and task:G-2461:7.
+These decisions supersede the affected dispositions below; later rulings,
+handoffs and landing results retain their own events.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2465 | Task:G-2465:11 corrected surface selection while retaining separate integration proof and started a landing; that landing failed on conflict state and the integration entry still in the selector. Its snapshot `manager-3a884581` conflicted with the concurrent correction; do not retry it. Mail:7de57be7 replaces that recovery disposition: snapshot `manager-81db71aa` corrects the selection left by `a09b843870`, retaining the outcome test in recording paths, separate passing integration proof and answer-records guard. The deciding turn reclaimed from the corrected snapshot and started `merge G-2465` through normal gates and existing review. Leave that merge to its result; no duplicate landing, resume or closure. No assertion, persona or gate is waived. |
+| G-2319 | Task:G-2319:11 leaves this worker and G-2229 exited pending Program's tooling ruling in mail:a1c901ee. Decision snapshot `manager-98a9595e` is submitted, not confirmed landed. Complete gate `run-JsSLbA` passed contract/types/lint/AST and 58 affected unit files, then failed guards. Stories-only `run-jYNLap` passed 55 browse stories but ten footer stories failed before accessibility on the existing helper's Vitest-blocked file writes. A focused 20-second guard run still failed seven changed enclosing-function contexts in the projection inventory. Program decides the inventory/helper correction and owns rebase/resume. Retain implementation and inspected dark phone/desktop and year-view artifacts, then finish the complete affected canonical gate including both footer consumers. No tooling edit, unchanged retry, inventory acceptance, waiver or landing is authorized. |
+| G-2466 | Task:G-2466:9 accepts the handoff through `65a50deb84` for landing with corrected selection: integration stays a claimed recording path and separate six-persona proof, outside surface tests. Retain integration `20261016t122002-b1ebbc`, answer guard `20261016t122910-721355`, 11-story phone/desktop inspection and complete supported-selection gate `run-XiWhB7`, including affected consumers; its two anti-silo failures reproduced on main `00f70299e7`. Decision snapshot `manager-f72f9c31` is submitted, not confirmed landed. Conflict state prevents canonical land; Program received mail:4e660c7c asking whether recovery uses reclaim/merge or restores land eligibility. The deciding turn started no landing. Await that ruling's own event; acceptance of the handoff supplies no successful landing or closure. |
+| G-2330 | Mail:14bea458 confirms committed Program decision `facb626c5f`: no loan of `work-page/read.ts`; keep exited until G-2475 lands, then Program rebases and resumes it to reuse that reader. Rerun the two timed-out guards alone afterward. The existing production/layout scope and complete surface proof remain required. No duplicate continuation or brief edit was needed. |
+| G-2475 | Task:G-2475:8 stops after landing gate `run-27hPVj`: contract/types passed, lint rejected inherited async `createServer` callbacks in `apps/web/tests/support/network-transport.test.ts:10,95`, present on base `92dcf36471` and outside its claim. Decision snapshot `manager-459e2d9e` is submitted, not confirmed landed; Program received repair/ownership question mail:97f5bee8. Keep stopped until Program supplies the repair and authorizes incorporation, then finish the complete canonical affected gate before another done handoff. Retain applicable adapter/replay/consumer/inspection evidence, structural Discovery 409 proof and only the four previously excused Games stories. No unclaimed harness edit, lint suppression, expanded exclusion or landing retry. |
+| G-2461 | Task:G-2461:7 admits the four reported production injection seams in Realm routes/discussion and Zone site-route, preserving other callers, within nine files/about 400 authored lines plus record. Decision snapshot `manager-1d8e6bdf` is submitted, claims reclaimed and attempt 8 resumed. Preserve `e064b4ac97`'s unit/story/answer-guard selection and separate integration recording, capture `20261016t131501-072aeb`, answer guard `20261016t131639-392bb5`, mapping/19 stories `20261016t131658-f3d0b1` and applicable inspected images. Gate `run-YHYIpy` failed tests; Program owns shared harness classification under mail:4950f398. Run each failed harness file once in isolation with unchanged assertions, timeouts and baselines. Remaining failure means immediate partial handoff with exact assertions/run IDs; if all clear, finish the complete canonical gate including guards/consumers. No shared harness repair, exclusion, repeated failing full gate or landing acceptance. |
+
+Both supplied mails were acknowledged by their deciding turns: mail:14bea458
+at 2026-10-16 13:23:40 UTC and mail:7de57be7 at 13:28:40 UTC. Their durable
+acknowledgements were confirmed here. The five task events supplied no mail;
+this checkpoint supplies no new mail to acknowledge.
+
+The method's measures and available current status were read. Concurrent
+scope remains 68/68 API rows proved and 408 proved/0 pending persona cells;
+these events accept no new completed row. Status supplied no fresh
+attempt/token/refusal totals during this bounded read; preceding aggregate
+readings remain historical, not costs attributed to these events. The latest
+efficiency report remains dated 2026-10-13 21:49 UTC and supplies no current
+tokens-per-proved-row comparison. Repeated work here comes from integration
+tests incorrectly selected as surface tests, conflict-state landing recovery,
+and shared inventory, screenshot, lint and QA harness failures. Program's
+selector corrections and the recorded separate-proof rule address the common
+admission cause; Program owns the referred tooling faults. Retained passed
+evidence and G-2461's bounded isolation avoid unchanged full-gate retries.
+No efficiency gain or successful landing is inferred.
+
+Only this file changes; no brief, worker, landing, closure, watcher or wait
+is started by this checkpoint.
+
+## Retained checkpoint 20642ac8
+
 Checkpoint 20642ac8-88e8-4c28-a637-b8cd1e303c82 consolidates handled events
 task:G-2319:6, task:G-2475:5,
 mail:c5fba963-02a0-4d18-bf91-3326725c5ef3 and task:G-2330:7.
