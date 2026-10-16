@@ -170,10 +170,11 @@ function browseSession(count = 310, firstMatch = 300, cursor?: string) {
     deps: {
       zoneBrowse: {
         current: async () => true,
-        batch: async (_realm: string, _sort: string, after: { key: string | null } | null) => {
+        batch: async (_realm: string, _sort: string, after: { key: string | null } | null,
+          _position: unknown, batchSize: number) => {
           const rows = entries
             .filter((entry) => !after || Number(entry.adoptedOrder) < Number(after.key))
-            .slice(0, 64);
+            .slice(0, batchSize);
           batches.push(rows.length);
           return rows;
         },
@@ -190,15 +191,21 @@ test('a year match beyond member 300 remains reachable after an empty bounded pa
   expect(first.items).toEqual([]);
   expect(first.matches).toEqual({ value: 0, kind: 'lower-bound' });
   expect(first.nextCursor).toBeTruthy();
-  expect(firstFixture.batches).toEqual([64, 64, 64, 64]);
-  const second = await readZoneBrowse(browseSession(310, 300, first.nextCursor!).session, realm, {
-    publicationYear: '1995',
-  });
-  expect(second.items.map((item) => item.id)).toEqual(
+  expect(firstFixture.batches).toEqual([21, 21, 21, 21]);
+  const seen: string[] = [];
+  let page = first;
+  while (page.nextCursor) {
+    const fixture = browseSession(310, 300, page.nextCursor);
+    page = await readZoneBrowse(fixture.session, realm, { publicationYear: '1995' });
+    seen.push(...page.items.map((item) => item.id));
+    expect(fixture.batches.length).toBeLessThanOrEqual(4);
+    expect(fixture.batches.every(size => size <= 21)).toBe(true);
+  }
+  expect(seen).toEqual(
     Array.from({ length: 10 }, (_, index) => reference(300 + index)),
   );
-  expect(second.matches).toEqual({ value: 10, kind: 'exact' });
-  expect(second.nextCursor).toBeNull();
+  expect(page.matches).toEqual({ value: 10, kind: 'exact' });
+  expect(page.nextCursor).toBeNull();
 });
 
 test('the year predicate binds the Statement meaning key before it asks for acceptance', async () => {

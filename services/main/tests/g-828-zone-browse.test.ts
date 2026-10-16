@@ -86,12 +86,13 @@ function fixture(count = 1000) {
     deps: {
       environment,
       serialStats,
-      zoneBrowse: { current: () => true, batch: async (_: string, sort: 'newest' | 'updated', after: { work: string; key: string | null } | null) => {
+      zoneBrowse: { current: () => true, batch: async (_: string, sort: 'newest' | 'updated', after: { work: string; key: string | null } | null,
+        _position: unknown, batchSize: number) => {
         const ordered = [...entries].sort((a, b) => sort === 'newest' ? Number(b.adoptedOrder) - Number(a.adoptedOrder)
           || b.work.localeCompare(a.work) : (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '') || b.work.localeCompare(a.work));
         const found = ordered.filter(entry => !after || (sort === 'newest'
           ? Number(entry.adoptedOrder) < Number(after.key) || entry.adoptedOrder === after.key && entry.work < after.work
-          : (entry.updatedAt ?? '') < (after.key ?? '') || entry.updatedAt === after.key && entry.work < after.work)).slice(0, 64);
+          : (entry.updatedAt ?? '') < (after.key ?? '') || entry.updatedAt === after.key && entry.work < after.work)).slice(0, batchSize);
         reads.push(found.length);
         return found;
       } },
