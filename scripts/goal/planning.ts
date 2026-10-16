@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { basename, join, posix, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import ts from 'typescript-6';
 import { git, root } from './ledger.ts';
@@ -14,18 +14,38 @@ import { launchCoverage } from '../qa/cases/launch-coverage.ts';
 
 const declarationsPath = 'scripts/qa/cases/outcomes';
 type DeclarationRead = { file: string } & ({ declaration: RowOutcomes; unreadable?: never } | { declaration?: never; unreadable: string });
-const declarationsCache = new Map<string, { tree: string; rows: DeclarationRead[] }>();
+const declarationsCache = new Map<string, { main: string; rows: DeclarationRead[] }>();
 const verticalOrder = [...new Set(launchCoverage.map(row => row.kind))];
 const ancestryCache = new Map<string, boolean>();
 const introductionsCache = new Map<string, string>();
 const commitOrderCache = new Map<string, { main: string; order: Map<string, number> }>();
 
-// Read the authored values without executing a declaration or importing a worker's copy.
-function declarationValues(file: string, text: string): RowOutcomes {
+// Resolve only values used by the default export. Declarations also export fixture
+// helpers that the planner never needs to evaluate; imports must come from the same main.
+function declarationModule(file: string, read: (file: string) => string,
+  modules: Map<string, (name: string) => unknown>): (name: string) => unknown {
+  const cached = modules.get(file);
+  if (cached) return cached;
+  const text = read(file);
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const values = new Map<string, unknown>();
+  const bindings = new Map<string, () => unknown>();
+  const exports = new Map<string, () => unknown>();
+  const resolving = new Set<string>();
   const helpers = new Map<string, (...args: never[]) => unknown>();
   const functions = { pending, proved, notApplicable, rowOutcomes };
+  function binding(name: string): unknown {
+    if (values.has(name)) return values.get(name);
+    const get = bindings.get(name);
+    if (!get) throw new Error(`Unknown outcome binding in ${file}: ${name}`);
+    if (resolving.has(name)) throw new Error(`Circular outcome binding in ${file}: ${name}`);
+    resolving.add(name);
+    try {
+      const result = get();
+      values.set(name, result);
+      return result;
+    } finally { resolving.delete(name); }
+  }
   function value(node: ts.Expression): unknown {
     if (ts.isStringLiteralLike(node)) return node.text;
     if (ts.isTemplateExpression(node)) return node.head.text + node.templateSpans.map(span => {
@@ -33,7 +53,12 @@ function declarationValues(file: string, text: string): RowOutcomes {
       if (typeof text !== 'string') throw new Error(`Unsupported outcome interpolation in ${file}: ${span.expression.getText(source)}`);
       return text + span.literal.text;
     }).join('');
-    if (ts.isIdentifier(node) && values.has(node.text)) return values.get(node.text);
+    if (ts.isIdentifier(node)) return binding(node.text);
+    if (ts.isPropertyAccessExpression(node)) {
+      const object = value(node.expression);
+      if (object && typeof object === 'object' && Object.hasOwn(object, node.name.text))
+        return (object as Record<string, unknown>)[node.name.text];
+    }
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
       const left = value(node.left), right = value(node.right);
       if (typeof left !== 'string' || typeof right !== 'string') throw new Error(`Unsupported outcome string sum: ${node.getText(source)}`);
@@ -57,38 +82,58 @@ function declarationValues(file: string, text: string): RowOutcomes {
     throw new Error(`Unsupported outcome value in ${file}: ${node.getText(source)}`);
   }
   for (const statement of source.statements) {
-    if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
-      && statement.moduleSpecifier.text.endsWith('/outcome-cells.ts')) {
-      const bindings = statement.importClause?.namedBindings;
-      if (bindings && ts.isNamedImports(bindings)) for (const binding of bindings.elements) {
-        const name = (binding.propertyName ?? binding.name).text;
-        if (Object.hasOwn(functions, name)) helpers.set(binding.name.text, functions[name as keyof typeof functions] as (...args: never[]) => unknown);
+    if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
+      const specifier = statement.moduleSpecifier.text;
+      const imported = statement.importClause?.namedBindings;
+      if (imported && ts.isNamedImports(imported)) for (const item of imported.elements) {
+        if (statement.importClause?.isTypeOnly || item.isTypeOnly) continue;
+        const name = (item.propertyName ?? item.name).text;
+        if (specifier.endsWith('/outcome-cells.ts') && Object.hasOwn(functions, name))
+          helpers.set(item.name.text, functions[name as keyof typeof functions] as (...args: never[]) => unknown);
+        else bindings.set(item.name.text, () => {
+          if (!specifier.startsWith('.')) throw new Error(`Unsupported outcome import in ${file}: ${specifier}`);
+          const dependency = posix.normalize(posix.join(posix.dirname(file), specifier));
+          if (dependency === '..' || dependency.startsWith('../')) throw new Error(`Outcome import outside checkout: ${file} -> ${specifier}`);
+          return declarationModule(dependency, read, modules)(name);
+        });
       }
     } else if (ts.isVariableStatement(statement)) {
-      for (const declaration of statement.declarationList.declarations)
-        if (ts.isIdentifier(declaration.name) && declaration.initializer) values.set(declaration.name.text, value(declaration.initializer));
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
+        const name = declaration.name.text, initializer = declaration.initializer;
+        bindings.set(name, () => value(initializer));
+        if (statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword))
+          exports.set(name, () => binding(name));
+      }
     } else if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
-      return value(statement.expression) as RowOutcomes;
+      exports.set('default', () => value(statement.expression));
     }
   }
-  throw new Error(`Missing rowOutcomes default export: ${file}`);
+  const exported = (name: string): unknown => {
+    const get = exports.get(name);
+    if (!get) throw new Error(`Missing outcome export in ${file}: ${name}`);
+    return get();
+  };
+  modules.set(file, exported);
+  return exported;
 }
 
 function mainDeclarations(repo: string, main: string): DeclarationRead[] {
   const tree = git(repo, ['rev-parse', `${main}:${declarationsPath}`], true);
   if (!tree) return [];
   const cached = declarationsCache.get(repo);
-  if (cached?.tree === tree) return cached.rows;
+  if (cached?.main === main) return cached.rows;
+  const modules = new Map<string, (name: string) => unknown>();
+  const read = (file: string) => git(repo, ['show', `${main}:${file}`]);
   const files = git(repo, ['ls-tree', '-r', '--name-only', main, '--', declarationsPath]).split('\n').filter(file => file.endsWith('.ts'));
   const rows: DeclarationRead[] = files.map(file => {
-    const text = git(repo, ['show', `${main}:${file}`]);
     try {
-      const declaration = declarationValues(file, text);
+      const declaration = declarationModule(file, read, modules)('default') as RowOutcomes;
       return { file, declaration: rowOutcomes(declaration.rowId, declaration.cells, declaration) };
     }
     catch (error) { return { file, unreadable: (error instanceof Error ? error.message : String(error)).replace(/\s+/g, ' ') }; }
   });
-  declarationsCache.set(repo, { tree, rows });
+  declarationsCache.set(repo, { main, rows });
   return rows;
 }
 

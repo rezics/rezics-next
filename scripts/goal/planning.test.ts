@@ -87,6 +87,33 @@ test('planning reads string sums built from constants', () => {
   } finally { f.close(); }
 });
 
+test('planning resolves imported case sets from main and refreshes when only the import changes', () => {
+  const f = fixture();
+  try {
+    const shared = 'scripts/qa/cases/shared.ts';
+    const caseSet = (note: string) => `import { pending as gap } from './outcome-cells.ts';
+export const cases = buildFixtureCases();
+export const importedCells = { visitor: gap('${note}'), owner: gap('imported owner') };`;
+    f.write(shared, caseSet('imported visitor'));
+    const file = f.declaration('imported', 'program', "...cells, operator: proved('working')");
+    f.write(file, "import { importedCells as cells } from '../../shared.ts';\n"
+      + "export const fixtureHelpers = buildFixtures(cells);\n" + readFileSync(join(f.repo, file), 'utf8'));
+    f.commit();
+    // Neither a worker's imported values nor unrelated exported fixture builders own planning.
+    f.write(shared, caseSet('worker value'));
+    const rows = uncoveredPlanningRows(f.state, f.ledger, f.repo).get('program')!;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.unreadable).toBeUndefined();
+    expect(rows[0]!.pending).toEqual([
+      { persona: 'visitor', note: 'imported visitor' }, { persona: 'owner', note: 'imported owner' },
+    ]);
+    f.write(shared, caseSet('updated import'));
+    f.commit();
+    expect(uncoveredPlanningRows(f.state, f.ledger, f.repo).get('program')![0]!.pending[0]!.note)
+      .toBe('updated import');
+  } finally { f.close(); }
+});
+
 test('an unreadable declaration stays uncovered and reports one line without executing it or aborting the pass', () => {
   const f = fixture();
   try {
