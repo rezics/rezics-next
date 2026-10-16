@@ -475,6 +475,9 @@ export function withWorkReadSession<T>(session: WorkReadSession, operation: () =
   return activeReadSession.run(session, () => withDisclosureViewer(session.viewer, operation));
 }
 
+/** Owner adapters retain the enclosing reader's authority and dependency fence. */
+export const currentWorkReadSession = () => activeReadSession.getStore();
+
 /** Public inventories retain live Account age/preferences without adopting bearer authority. */
 export async function publicWorkRead<T>(deps: MainWorkDependencies, request: Request,
   options: Omit<ReadOptions, 'actingSubject' | 'publicViewer'>,

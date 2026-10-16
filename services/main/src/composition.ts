@@ -20,6 +20,10 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { ContentComments, ContentCore, ContentProjectionCursor } from '../../content/src/index.ts';
 import { createMainApp } from './app.ts';
+import { compositionTargetBatchReader } from './modules/composition/disclosure-read.ts';
+import { structureProfileFor } from './modules/structure/profiles.ts';
+import { currentWorkReadSession, workRead } from './modules/work/read-session.ts';
+import { currentDisclosureViewer } from './modules/disclosure/viewer.ts';
 import type { MainWorkDependencies } from './routes/dependencies.ts';
 import { mainRateLimit } from './modules/rate-limit/config.ts';
 import { openLibraryFixtureFetch } from '../../../scripts/dev/seed/open-library-fixtures.ts';
@@ -611,6 +615,14 @@ export async function composeMain(input: ComposeMainInput) {
   if (input.overrides?.media) dependencies.media = input.overrides.media;
   if (input.overrides?.mediaAccess) dependencies.mediaAccess = input.overrides.mediaAccess;
   if (input.overrides?.dependencies) Object.assign(dependencies, input.overrides.dependencies);
+  dependencies.environment.readCompositionTargets = (profile, targets) => {
+    const read = (session: import('./modules/work/read-session.ts').WorkReadSession) =>
+      compositionTargetBatchReader(session, structureProfileFor(profile))(targets);
+    const session = currentWorkReadSession();
+    return session?.deps.environment === dependencies.environment ? read(session)
+      : workRead(dependencies, new Request('http://main.internal/v1/compositions'),
+        { publicViewer: currentDisclosureViewer(), localBasis: true }, read);
+  };
   const app = createMainApp(fuseki, dependencies);
   libraryImport.setDispatch(request => app.handle(request));
   const savedViewNotifications = new SavedViewNotifications(pool, { environment, account, access, media, content,

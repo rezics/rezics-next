@@ -108,6 +108,8 @@ export async function searchablePlacement(env: WorkActivationEnvironment, lucene
     recordsRead += records.length;
     if (recordsRead > 512) throw new DisclosureUnavailable('Search retained Structure records exceed their bound');
     const registration = registrations.find(item => item.id === header.profile)!;
+    // These are phrase-index constraints, not target admission. The complete
+    // candidate relation passes Structure's target reader before ranking.
     for (const record of records) {
       if (record.state !== 'active' || !record.target || !resourceIds.has(record.target)
         || !registration.searchableRoles!.includes(record.role)) continue;

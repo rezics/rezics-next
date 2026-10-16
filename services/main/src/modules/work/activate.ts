@@ -58,6 +58,8 @@ export interface GraphLineage {
 }
 
 export interface WorkActivationEnvironment {
+  /** Structure owns complete target admission for public search readers. */
+  readCompositionTargets?: (profile: string, targets: readonly string[]) => Promise<ReadonlySet<string>>;
   /** Rights owner rechecks source-bound delivery for selected publication dependencies. */
   structuredPublicationRights?: (work: string, record: string) => Promise<{ allowed: boolean }>;
   /** Exact contribution edit receipts resolve their original actor through Access. */

@@ -2,7 +2,6 @@ import type { SearchPlacement } from '../structure/searchable-placements.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { currentDisclosureViewer } from './viewer.ts';
 import { discloseInventory, hasDisclosure, DisclosureUnavailable, type DisclosureTarget } from './read.ts';
-import { publicWork } from '../work/public-patterns.ts';
 
 export interface SearchDisclosureMatch {
   work: string;
@@ -20,18 +19,27 @@ export async function discloseSearchMatches<T extends SearchDisclosureMatch>(env
   matches: readonly T[], channel: 'search' | 'typeahead' = 'search'): Promise<T[]> {
   if (matches.length > 512) throw new DisclosureUnavailable('Search disclosure exceeds its bound');
   if (!hasDisclosure(env)) return [...matches];
+  // A legacy chapter label alone cannot identify the Structure admission to
+  // consume. Rebuilt phrase units carry their declared profile and occurrence.
+  if (matches.some(match => match.matchedChapter && !match.matchedPlacements?.length)) {
+    throw new DisclosureUnavailable('Search placement profile is unavailable');
+  }
   const sourceOf = (match: SearchDisclosureMatch) => match.matchedPlacements?.[0]?.resource ?? match.matchedChapter?.post;
-  const hasPlacements = matches.some(match => sourceOf(match) !== undefined);
+  const placementTargets = new Map<string, Set<string>>();
+  for (const match of matches) for (const placement of match.matchedPlacements ?? []) {
+    let targets = placementTargets.get(placement.profile);
+    if (!targets) { targets = new Set(); placementTargets.set(placement.profile, targets); }
+    targets.add(placement.resource);
+  }
+  const readableTargets = new Map<string, ReadonlySet<string>>();
+  for (const [profile, targets] of placementTargets) {
+    if (!env.readCompositionTargets) throw new DisclosureUnavailable('Structure target reader is unavailable');
+    readableTargets.set(profile, await env.readCompositionTargets(profile, [...targets]));
+  }
   const resources = [...new Set(matches.flatMap(match => [match.work, ...(sourceOf(match) ? [sourceOf(match)!] : [])]))];
   if (!resources.length) return [];
-  // Content eligibility exposes an exact body, not its Work's publication.
-  // Reuse the Work reader's candidate predicate for placed Work targets, while
-  // independently published resources keep their existing disclosure checks.
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
-    PREFIX schema: <https://schema.org/>
-    SELECT ?work ?head${hasPlacements ? `
-      ((!EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork } }
-        || EXISTS { ${publicWork('?work', '?sourceMain')} }) AS ?sourceVisible)` : ''} WHERE {
+    SELECT ?work ?head WHERE {
     VALUES ?work { ${resources.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head }
   } LIMIT ${resources.length + 1}`, 131_072)).results?.bindings ?? [];
@@ -39,8 +47,6 @@ export async function discloseSearchMatches<T extends SearchDisclosureMatch>(env
   if (rows.length !== resources.length || heads.size !== resources.length) {
     throw new DisclosureUnavailable('Search disclosure heads are incomplete');
   }
-  const visibleSources = new Set(rows.flatMap(row => row.work && row.sourceVisible?.value === 'true'
-    ? [row.work.value] : []));
   const targets: DisclosureTarget[] = [], ranges: number[][] = [];
   for (const match of matches) {
     const selected: DisclosureTarget[] = [{ owner: 'graph', resource: match.work,
@@ -59,6 +65,7 @@ export async function discloseSearchMatches<T extends SearchDisclosureMatch>(env
     targets.push(...selected);
   }
   const decisions = await discloseInventory(env, targets, currentDisclosureViewer(), channel);
-  return matches.filter((match, index) => (!sourceOf(match) || visibleSources.has(sourceOf(match)!))
+  return matches.filter((match, index) => (match.matchedPlacements ?? []).every(placement =>
+    readableTargets.get(placement.profile)?.has(placement.resource))
     && ranges[index]!.every(ordinal => decisions[ordinal] === 'visible'));
 }
