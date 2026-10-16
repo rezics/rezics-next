@@ -112,7 +112,8 @@ test('an editor seals, reads and exports Open Library edition evidence through t
     const read = await call('GET', `/v1/fixed-releases/${release.release.slice(-36)}?actingSubject=${encodeURIComponent(actor)}`);
     expect(read.status, await read.clone().text()).toBe(200);
     expect((await read.json() as typeof release).externalReleases).toEqual(release.externalReleases);
-    for (const selection of [{ kind: 'fixed-release', reference: release.release, expectedPosition: release.sourcePosition },
+    for (const selection of [{ kind: 'fixed-release', reference: release.release, expectedPosition: {
+      dataEpoch: release.sourcePosition.dataEpoch, sequence: release.sourcePosition.sequence } },
       { kind: 'source-run', reference: run.run, expectedPosition: position }]) {
       await grant(`export:${selection.reference}`, 'export.create');
       const body = { profile: 'export-create-v1', actingSubject: actor, useScope: 'evaluation', selection };
