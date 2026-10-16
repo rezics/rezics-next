@@ -490,7 +490,7 @@ test('G961: reply mentions read only current Agent names from the registry', asy
   } as unknown as Pool;
   const content = {
     query: async (sql: string) => ({
-      rows: sql.includes('FROM content.reply p')
+      rows: sql.includes('FROM content.discovery_reply($1) p')
         ? [
             {
               reply: zone,
