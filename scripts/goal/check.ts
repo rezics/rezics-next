@@ -161,7 +161,10 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
   const briefPath = join(cwd, '.temp/goal/brief.md');
   const briefText = existsSync(briefPath) ? readFileSync(briefPath, 'utf8') : undefined;
   const brief = briefText === undefined ? undefined : parseBrief(briefText);
-  const tests = options.tests ?? brief?.tests ?? [];
+  // Landing adds affected tests; a surface's named stories remain mandatory on every path.
+  const tests = brief?.kind === 'surface'
+    ? [...new Set([...brief.tests ?? [], ...options.tests ?? []])]
+    : options.tests ?? brief?.tests ?? [];
   // A wave build task's rows are proved once for the whole wave, in its prove phase (docs/goals/wave.md).
   if (brief?.kind === 'surface' && !/^## Wave[ \t]*$/m.test(briefText ?? '')) {
     const selected = await selectSurface(cwd, { ...brief, tests: [...tests] }, changed);

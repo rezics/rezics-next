@@ -63,6 +63,14 @@ ${personas.map(persona => `test('${row} / ${persona}: reads catalogue', () => {}
   return { cwd, row, brief, changed, write, git, commands, runner, slotOptions, gateLaneOptions, print: () => {} };
 }
 
+test.each([{ tests: [] }, { tests: ['apps/web/features/zones/catalogue.test.ts'] }])('surface worker checks retain named stories when landing supplies tests %j', async ({ tests }) => {
+  const f = fixture();
+  const result = await workerCheck({ ...f, tests });
+  expect(result.code).toBe(0);
+  expect(result.checks.some(check => check.name === 'stories')).toBe(true);
+  expect(f.commands.some(command => command.includes('apps/web/features/zones/catalogue.stories.tsx'))).toBe(true);
+});
+
 test('surface guards follow changed inputs and cannot reappear through the affected transcript', async () => {
   const f = fixture();
   f.write('services/main/tests/api-contract.test.ts', 'export {};');
