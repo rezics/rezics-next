@@ -141,7 +141,9 @@ async function productionVisit(person: PersonaSession) {
   const media = mainMediaApi(actingSubject!, () => main);
   expect((await media.standing(manga.work)).ok).toBe(true);
   phase = 'chapter-inventory'; requestNumber = 0;
-  expect((await media.positions(manga.work)).ok).toBe(true);
+  const inventory = await media.positions(manga.work);
+  expect(inventory.ok).toBe(true);
+  if (!inventory.ok) throw new Error(inventory.failure);
   if (actingSubject) {
     phase = 'library'; requestNumber = 0;
     const loaded = await loadBooksLibrary({ main, anonymous: client(sessions.visitor), actingSubject }, {
@@ -149,6 +151,24 @@ async function productionVisit(person: PersonaSession) {
     });
     expect(loaded.overview.ok).toBe(true);
     expect(loaded.view.ok).toBe(true);
+    // The Library's disclosure opens this same chapter control. Keep both volumes' identity
+    // and the control's own compare-and-set reads instead of reshaping the proof commands.
+    const chapter = inventory.data.items.find(item => item.occurrence === second.occurrences[0])!;
+    expect(chapter).toBeDefined();
+    phase = 'chapter-selected'; requestNumber = 0;
+    const selected = await media.progress(chapter);
+    expect(selected.ok).toBe(true);
+    if (!selected.ok) throw new Error(selected.failure);
+    phase = 'chapter-mark'; requestNumber = 0;
+    const marked = await media.mark(chapter, { completed: true, position: selected.data.position, expectedVersion: selected.data.version });
+    expect(marked.ok).toBe(true);
+    if (!marked.ok) throw new Error(marked.failure);
+    phase = 'chapter-after-mark'; requestNumber = 0;
+    expect((await media.standing(manga.work)).ok).toBe(true);
+    phase = 'chapter-clear'; requestNumber = 0;
+    expect((await media.mark(chapter, { completed: false, position: null, expectedVersion: marked.data.version })).ok).toBe(true);
+    phase = 'chapter-after-clear'; requestNumber = 0;
+    expect((await media.standing(manga.work)).ok).toBe(true);
   }
   phase = 'proof'; requestNumber = 100;
 }
