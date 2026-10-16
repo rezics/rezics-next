@@ -238,6 +238,8 @@ const CLOSED_REVISION_CLASSES: Record<string, string> = {
   ReleaseRatingObservationRevision: 'A release rating observation revision is not an erasure target.',
   RightsOfferingRevision: 'A rights revision is not an erasure target.',
   RightsRecognitionRevision: 'A rights revision is not an erasure target.',
+  ScaledGlobalRatingObservationRevision: 'A scaled global rating revision is not an erasure target.',
+  ScaledRatingObservationRevision: 'A scaled Realm rating revision is not an erasure target.',
   ScopedTargetRatingObservationRevision: 'A scoped rating revision is not an erasure target.',
   StatementRevision: 'A statement revision is not an erasure target.',
   TargetRatingObservationRevision: 'A target rating revision is not an erasure target.',

@@ -40,7 +40,8 @@ function builder(receipts: Record<string, unknown>[], resolve: (targets: readonl
 test('target receipt validation rejects malformed identities, conflicting forms and malformed values before kind exclusion', async () => {
   for (const malformed of [
     { target: null }, { target: 'not-an-iri' }, { work: native() }, { main: native() },
-    { ratingSlot: 'bad-slot' }, { ratingValue: 11 }, { ratingValue: 0 }, { ratingValue: 2.5 },
+    { ratingSlot: 'bad-slot' }, { ratingValue: -1 }, { ratingValue: 1_000_001 },
+    { ratingValue: 0.0000001 }, { ratingValue: NaN }, { ratingValue: Infinity }, { ratingValue: '2.5' },
     { ratingAvailability: 'withdrawn' }, { requestDigest: 'bad-digest' }, { admissionId: 'bad-id' },
     { target: undefined, work: undefined },
   ]) {
@@ -48,6 +49,17 @@ test('target receipt validation rejects malformed identities, conflicting forms 
     const { rankings, failures } = builder([{ ...receipt, ...malformed }], async () => { probes++; return []; });
     expect(await rankings.runBatch('generation', '1')).toMatchObject({ failed: 'source-invalid', checkpoint: '0' });
     expect(failures).toEqual(['source-invalid at 1']); expect(probes).toBe(0);
+  }
+});
+
+test('target receipts accept bounded exact decimals and zero from authored rating scales', async () => {
+  for (const ratingValue of [0, 2.5, 11, 1_000_000]) {
+    let probes = 0;
+    const { rankings, failures } = builder([{ ...receipt, ratingValue }], async targets => {
+      probes++; expect(targets).toEqual([target]); return [];
+    });
+    expect(await rankings.runBatch('generation', '1')).toMatchObject({ checkpoint: '1', signals: 0, snapshotComplete: true });
+    expect(probes).toBe(1); expect(failures).toEqual([]);
   }
 });
 
