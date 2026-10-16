@@ -82,9 +82,10 @@ export async function RealmThreadRoute({ params, searchParams }: ThreadRouteProp
   const sort = parseThreadSort(search);
   const language = Array.isArray(search.language) ? search.language[0] : search.language;
   const here = threadPath(realmPathOf(view), parsed.id);
-  const props = { view, thread: parsed.id, sort, here, feed, language, cursor: parseCursor(search), client };
+  const content = <ThreadContent view={view} thread={parsed.id} sort={sort} here={here} feed={feed}
+    language={language} cursor={parseCursor(search)} client={client} />;
   return DiscussionFrame({ view, locale: resolved.locale, feed, search, client,
     here: sort === 'best' ? here : `${here}?sort=${sort}`, children:
-      <Suspense fallback={<ThreadSkeleton />}>{client ? await ThreadContent(props) : <ThreadContent {...props} />}</Suspense>,
+      <Suspense fallback={<ThreadSkeleton />}>{client ? await ThreadContent(content.props) : content}</Suspense>,
   });
 }
