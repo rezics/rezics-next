@@ -148,6 +148,31 @@ test('the explicit preparation entry imports outside the Bun test runner without
   expect(code, stderr).toBe(0);
 }, 30_000);
 
+test('confirmation checkouts retain Realm backups locally even when retained inputs belong to another checkout', async () => {
+  const script = String.raw`
+    const { root } = await import('./scripts/fixture/stack.ts');
+    const { join } = await import('node:path');
+    const { realmSourceDirectory } = await import('./tests/qa/support/realm-discussion-source-runtime.ts');
+    const { retainStoppedOwnerBackup } = await import('./scripts/load/catalogue-backup.ts');
+    if (realmSourceDirectory() !== join(root, '.temp', 'realm-discussion-sources'))
+      throw new Error('Realm backup publication escaped the running checkout');
+    try {
+      await retainStoppedOwnerBackup('confirmation-proof', 'cut',
+        join(process.env.REZICS_QA_RETAINED_ROOT, '.temp', 'realm-discussion-sources', 'backup'), Date.now());
+      throw new Error('An outside backup was accepted');
+    } catch (error) {
+      if (error.message !== 'Catalogue backups must stay in this checkout .temp') throw error;
+    }
+  `;
+  const child = Bun.spawn(['bun', '-e', script], {
+    cwd: join(import.meta.dir, '../../..'),
+    env: { ...process.env, REZICS_QA_RETAINED_ROOT: '/tmp/realm-confirmation-origin' },
+    stdout: 'pipe', stderr: 'pipe', signal: AbortSignal.timeout(20_000),
+  });
+  const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(0);
+}, 30_000);
+
 test('the source cost contract imports in the QA planner without registering persona hooks', async () => {
   const child = Bun.spawn(['bun', '-e', "import('./tests/qa/support/realm-discussion-source.ts')"], {
     cwd: join(import.meta.dir, '../../..'),
