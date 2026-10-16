@@ -1,5 +1,41 @@
 # State
 
+Checkpoint 0f97f084-1e22-49c4-b68e-d5069b9a3686 consolidates handled events
+task:G-2467:6, mail:000b9edb-0674-4f15-8490-c367ab04a85a,
+mail:8266b119-c733-447a-9d23-bb6807eed4b0 and
+mail:0c8cfaa4-7967-40d5-b761-9ca7bba4c696.
+These decisions supersede affected dispositions below; later worker and
+landing results retain their own events.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2467 | Task:G-2467:6, committed as `23d00b3d6e`, accepted the handoff through `596716eae8` for gated landing, retaining complete gate `run-h1M8vS`, 18 withdrawal stories, 11 inventory stories and inspected phone/desktop captures. The admitted inventory-story assertion retains the production link's visible Zone address; only the existing `ZoneAttachments` entry's `context` fingerprint may refresh, preserving every other field and concurrent inventory correction. Web recorded the G-2466 claim loan and started landing. Mail:000b9edb reports successful landing; its deciding turn confirmed G-2467 already verified with its brief archived and nothing left. The redundant close refused the already-verified state. The earlier G-2728 record dependency is superseded for this completed surface. No further close, landing or worker continuation. |
+| G-2330 | Mail:8266b119, committed as `2f5c34229e`, admits `apps/web/features/api/showcase.ts` for minimal delegation through the already-created anonymous `MainClient`, forwarded by the actual `WorkFrameView`. Preserve default anonymous behavior, existing fetch consumers and mapping; the supplied-client route must issue the actual request without browser-origin construction or a swallowed missing recording. Record anonymous `POST /v1/resources/showcase` with profile `work-showcase-batch-v1`, the unchanged full Work IRI and no actingSubject for all six Work overviews and the visitor's series/two-volume inventories. Regenerate whole identities together and assert that the actual frame requests showcase. The resume automatically rebased, so web stopped it and referred recovery in mail:ae5b4c96. Mail:0c8cfaa4 and committed ruling `455707d810` accept the rebase to `6bebd6551c`: all nine commits from `fde3ad8553` are preserved. Earlier no-rebase directions and that recovery hold are superseded; do not restore the pre-resume head. Program already resumed the worker and received mail:d6cc22a9 to sync the ruling. Finish all existing assertions, zero-miss replay, complete gate with affected showcase consumers, eight locales and final phone/desktop inspection. Passing recording, mapping and Library stories do not accept the missing Work-frame request. No partial acceptance or waived check. |
+| G-2226, G-2330, G-2331, G-2461 | Program owns further resumes for these four surfaces. Mail any further web ruling to Program rather than resuming the worker from web. This supersedes earlier web continuation directions for them and prevents two managers driving the same task; it accepts no later handoff or landing. |
+
+All three supplied mails are acknowledged in durable delivery history by their
+deciding turns: mail:000b9edb at 2026-10-16 16:40:16 UTC, mail:8266b119 at
+16:41:03 UTC and mail:0c8cfaa4 at 16:46:11 UTC. The task event supplied no
+incoming mail. This checkpoint acknowledges their consolidation; there is no
+new mail delivery to acknowledge.
+
+The method's measures and a bounded current status reading were read. Scope
+remains 68/68 API rows proved, with 408 proved and zero pending,
+not-applicable or missing persona cells. G-2467's verified surface adds no API
+row proof; no complete web surface-row total is supplied. The status read
+provided no fresh first-attempt share, attempts-per-landed-task distribution,
+refusal classification or tokens-per-proved-row comparison. The latest
+efficiency report remains 2026-10-13 21:49 UTC; its historical costs are not
+attributed to these events and establish no current efficiency improvement.
+The showcase decision addresses a swallowed production read with the existing
+client boundary and an actual-frame assertion. Program's continuation
+ownership removes duplicate resume authority without waiving proof.
+
+Only this file changes. This checkpoint starts no brief, worker, landing,
+closure, watcher or wait; later deliveries remain for their own event turns.
+
+## Retained checkpoint 144df2a3
+
 Checkpoint 144df2a3-084e-48ce-b280-a974044bb352 consolidates handled events
 mail:0c4251b4-faa8-49c3-b801-27a0e482dd18,
 mail:4a19f3df-3f8d-444c-9b26-7a0037fedcbf, task:G-2461:11,
