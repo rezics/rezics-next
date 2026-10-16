@@ -107,6 +107,10 @@ describe('Realm addresses', () => {
 
   test('cursors come from the URL only when well formed', () => {
     expect(parseCursor({ cursor: 'abc' })).toBe('abc');
+    for (const cursor of ['opaque:+/%?=&雪', '0', 'x'.repeat(2048)]) {
+      expect(parseCursor({ cursor })).toBe(cursor);
+    }
+    expect(parseCursor({ cursor: '' })).toBeUndefined();
     expect(parseCursor({ cursor: ['a', 'b'] })).toBeUndefined();
     expect(parseCursor({ cursor: 'x'.repeat(2049) })).toBeUndefined();
     expect(idOf('https://example.com/id/x')).toBeNull();

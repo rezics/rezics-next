@@ -43,6 +43,21 @@ test('an exact expression exception cannot cover another projection in the same 
   expect(changedContinuationGroups(continuationInventory([source(`${text}\nexport function another(other) { return other.items; }`)]), baseline)).toHaveLength(1);
 });
 
+// These readers consume a URL token or an optional metadata window, rather than
+// projecting a pageable result. Keep every exception pinned to its whole reader.
+test.each([
+  ['apps/web/features/realm/discussions-route.tsx', 'cursor: parseCursor(search)', 'cursor: parseCursor(search) + "suffix"'],
+  ['apps/web/features/realm/modules.ts', 'works.data.items.map', 'works.data.items.slice(0, 1).map'],
+  ['apps/web/features/realm/modules.ts', 'adopted.data.items : []', 'adopted.data.items.slice(0, 1) : []'],
+  ['apps/web/features/realm/ranking-recorded-page.tsx', "params.get('cursor') ?? undefined", "Number(params.get('cursor')) + 1"],
+] as const)('a reviewed Realm URL or metadata exception rejects changed data flow: %s / %s', (path, before, after) => {
+  const original = readFileSync(join(root, path), 'utf8');
+  expect(original).toContain(before);
+  expect(changedContinuationGroups(continuationInventory([source(original, path)]), accepted.violations)).toEqual([]);
+  expect(changedContinuationGroups(continuationInventory([source(original.replace(before, after), path)]), accepted.violations).length)
+    .toBeGreaterThan(0);
+});
+
 
 test('stories stay outside production inventory', () => {
   expect(continuationInventory([source('api.get().items', 'apps/web/features/example/read.stories.tsx')])).toEqual([]);

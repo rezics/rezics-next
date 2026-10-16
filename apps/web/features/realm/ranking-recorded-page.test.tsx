@@ -7,6 +7,22 @@ import { isUiLocale } from '../../i18n/define.ts';
 import { rankingRecording } from './ranking-recorded-page.tsx';
 
 const record = rankingRecord as AnswerRecord;
+
+test.each(['opaque:+/%?=&雪', '0'])('recorded request URLs preserve opaque continuation bytes: %s', cursor => {
+  const thread = record.personas.visitor.find(sample => sample.label.startsWith('visit-')
+    && new URL(sample.path, 'https://recorded.invalid').pathname.endsWith('/threads'));
+  if (!thread) throw new Error('Expected a captured visitor thread request');
+  const url = new URL(thread.path, 'https://recorded.invalid');
+  url.searchParams.set('cursor', cursor);
+  // Only vary the request URL; every captured answer stays untouched.
+  const changed = { ...record, personas: { ...record.personas,
+    visitor: record.personas.visitor.map(sample => sample === thread ? { ...sample, path: url.pathname + url.search } : sample),
+  } };
+  const transport = rankingRecording(changed, 'visitor', thread.label.replace(/-\d+$/, ''));
+  try { expect(transport.query.cursor).toBe(cursor); }
+  finally { transport.dispose(); }
+});
+
 for (const persona of answerPersonas) {
   const visits = record.personas[persona].filter(sample => /^visit-.+-1$/.test(sample.label))
     .map(sample => sample.label.slice(0, -2));

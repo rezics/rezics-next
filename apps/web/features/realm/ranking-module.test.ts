@@ -33,6 +33,22 @@ test('only a completed empty ranking becomes empty; missing, unavailable and und
   for (const state of ['missing', 'error', 'underfilled'] as const) expect(await load(state)).toEqual({ state: 'failed' });
 });
 
+test.each(['populated', 'underfilled'] as const)('missing auxiliary cards do not change a ranking window: %s', async window => {
+  const main = browserMainApi('https://contract.invalid', { fetcher: rankingModuleContractFetch(window), anonymous: true });
+  const state = await loadRankingsModule(rankingModule, { realm: rankingRealm, ref: 'ranking-garden', locale: 'en' }, {
+    cards: async () => new Map(),
+    rankings: (realm, _locale, interval, metric) => readRankingModuleAnswer(main, realm, interval, metric),
+  });
+  if (window === 'underfilled') {
+    expect(state).toEqual({ state: 'failed' });
+    return;
+  }
+  expect(state.state).toBe('ready');
+  if (state.state !== 'ready') throw new Error('Expected ranking rows without auxiliary card matches');
+  expect(state.data.tabs.map(tab => tab.items.map(item => item.work.id)))
+    .toEqual(rankingIntervals.map(() => [...rankingModuleContractCards().keys()]));
+});
+
 test('loading chart reads stay unsettled until story teardown rather than inventing HTTP 202', async () => {
   const transport = rankingModuleContractFetch('loading');
   let started!: () => void;
