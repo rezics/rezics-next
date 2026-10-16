@@ -45,7 +45,11 @@ test('common Work candidates accept exact structured sources while selected-text
   const structured = publishedStructuredWork('?work', '?main');
   expect(structured).toContain('rv:workStructurePublicationHead ?structuredDecision');
   expect(structured).toContain('rv:publicationOutcome rv:Published');
-  expect(structured).toContain('rv:disclosure rv:Public ; rv:rightsBasis rv:OriginalContribution');
+  expect(structured).toContain('rv:disclosure rv:Public ; rv:rightsBasis ?structuredBasis');
+  expect(structured).toContain('FILTER(?structuredBasis = rv:OriginalContribution || ?structuredBasis = rv:PublicDomain)');
+  expect(structured).toContain('FILTER(?structuredBasis != rv:PublicDomain || EXISTS {');
+  expect(structured).toContain('?structuredDecision rv:sourceObservation ?structuredObservation');
+  expect(structured).toContain('?structuredSource rv:sourceObservation ?structuredObservation');
   expect(structured).toContain('rv:manifest ?structuredRoot');
   expect(structured).toContain('rv:ErasedRevision');
   expect(publicWork('?work', '?main')).toContain(structured);
