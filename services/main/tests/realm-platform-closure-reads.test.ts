@@ -9,12 +9,15 @@ import { configureDisclosure, configureDisclosurePool, discloseInventory, Disclo
 import { ANONYMOUS_VIEWER, type Viewer } from '../src/modules/suitability/policy.ts';
 import { RV, hash, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { WorkReadSession, WorkReadMissing, WorkReadUnavailable, WorkReadInvalid, WorkReadMoved,
-  decodeReadCursor, type ReadRow } from '../src/modules/work/read-session.ts';
-import { readRealmBasis, readRealmHeader, readRealmLanding } from '../src/modules/realm-reads/read-realm.ts';
-import { readRealmWorks } from '../src/modules/realm-reads/read-works.ts';
-import { readRealmDecision, readRealmDecisions } from '../src/modules/realm-reads/public-decision-index.ts';
-import { readRealmZone } from '../src/modules/realm-reads/read-zone.ts';
-import { readRealmThreads, readRealmThread } from '../src/modules/realm-reply/thread-read.ts';
+  decodeReadCursor, workRead, type ReadRow } from '../src/modules/work/read-session.ts';
+import { readRealmBasis as hydrateReadRealmBasis, readRealmHeader as hydrateReadRealmHeader,
+  readRealmLanding as hydrateReadRealmLanding } from '../src/modules/realm-reads/read-realm.ts';
+import { readRealmWorks as hydrateReadRealmWorks } from '../src/modules/realm-reads/read-works.ts';
+import { readRealmDecision as hydrateReadRealmDecision, readRealmDecisions as hydrateReadRealmDecisions }
+  from '../src/modules/realm-reads/public-decision-index.ts';
+import { readRealmZone as hydrateReadRealmZone } from '../src/modules/realm-reads/read-zone.ts';
+import { readRealmThreads as hydrateReadRealmThreads, readRealmThread as hydrateReadRealmThread }
+  from '../src/modules/realm-reply/thread-read.ts';
 import { RealmReplyThreadStore } from '../src/modules/realm-reply/thread-store.ts';
 import { RealmReplyContentStore, RealmReplyUnavailable, REALM_REPLY_EVIDENCE_COST,
   type CurrentPlacementEvidenceInput } from '../src/modules/realm-reply/content-store.ts';
@@ -24,12 +27,33 @@ import { discloseNotifications } from '../src/modules/disclosure/notifications.t
 import type { NotificationSubjectReader, SubjectResolution } from '../src/modules/notification/dispatcher.ts';
 import { searchGraphSnapshot } from '../src/modules/search/snapshot-state.ts';
 import { queryPublicRealmPhrase, PublicRealmUnavailable } from '../src/modules/work/search-public.ts';
-import { readRankings } from '../src/modules/rankings/read.ts';
+import { readRankings as hydrateReadRankings } from '../src/modules/rankings/read.ts';
 import type { ReadRankingProjection } from '../src/modules/rankings/projection.ts';
-import { readZoneWorks } from '../src/modules/zone-modules/read.ts';
+import { readZoneWorks as hydrateReadZoneWorks } from '../src/modules/zone-modules/read.ts';
 import { visibleFeedSources } from '../src/modules/feed/read.ts';
 import { contentSubjectReader } from '../src/modules/notification/subjects.ts';
 import type { ContentCore, ExactReadResult } from '../../content/src/core.ts';
+
+// Each call is a distinct request attempt. Hydrators now retain Realm inputs
+// within one attempt and the workRead envelope closes their live dependencies.
+function requestReader<A extends unknown[], T>(hydrate: (session: WorkReadSession, ...args: A) => Promise<T>) {
+  return (template: WorkReadSession, ...args: A): Promise<T> => workRead(template.deps,
+    template.request, { ...template.options }, async session => {
+      session.summaries = template.summaries;
+      return hydrate(session, ...args);
+    });
+}
+const readRealmBasis = requestReader(hydrateReadRealmBasis);
+const readRealmHeader = requestReader(hydrateReadRealmHeader);
+const readRealmLanding = requestReader(hydrateReadRealmLanding);
+const readRealmWorks = requestReader(hydrateReadRealmWorks);
+const readRealmDecision = requestReader(hydrateReadRealmDecision);
+const readRealmDecisions = requestReader(hydrateReadRealmDecisions);
+const readRealmZone = requestReader(hydrateReadRealmZone);
+const readRealmThreads = requestReader(hydrateReadRealmThreads);
+const readRealmThread = requestReader(hydrateReadRealmThread);
+const readRankings = requestReader(hydrateReadRankings);
+const readZoneWorks = requestReader(hydrateReadZoneWorks);
 
 const native = (number: number) => `https://rezics.com/id/00000000-0000-4000-8000-${number.toString(16).padStart(12, '0')}`;
 const realm = native(1), space = native(2), head = native(3), work = native(4), selection = native(5), reply = native(6), zone = native(7);
@@ -73,7 +97,9 @@ function ownerSession(actor: Actor = 'anonymous', input: { private?: boolean; re
     publicSearchWriteEpoch: '0', publicSearchWriteActive: false, publicSearchDeltaAvailable: false }),
     query: async (query: string) => {
     let rows: ReadRow[];
-    if (query.includes('SELECT ?space ?realmRevision')) {
+    if (query.includes('SELECT ?epoch ?sequence WHERE')) {
+      rows = [{ epoch: binding(position.dataEpoch), sequence: binding(position.sequence) }];
+    } else if (query.includes('SELECT ?space ?realmRevision')) {
       calls.policy++;
       rows = [{ space: binding(space), realmRevision: binding(head), disclosure: binding(`${RV}${input.private ? 'Private' : 'Public'}`),
         visibility: binding(input.private ? 'private' : 'public'), mode: binding('open'),
@@ -94,7 +120,7 @@ function ownerSession(actor: Actor = 'anonymous', input: { private?: boolean; re
     objectDirectory: '.temp/realm-platform-closure-owner' } as WorkActivationEnvironment;
   if (input.reader !== false) configureDisclosure(environment, reader);
   reader.decision = target => closed && target.owner === 'graph' && target.resource === realm ? 'hidden' : 'visible';
-  const deps = { environment, access: { assertRecoveryOpen: async () => undefined, activePrincipalId: async () => native(20), realmReadProof: async () => proof || null },
+  const deps = { environment, account: { verify: async () => ({ issuer: 'account.test', subject: actor }) }, access: { assertRecoveryOpen: async () => undefined, activePrincipalId: async () => native(20), realmReadProof: async () => proof || null },
     governance: { rules: { publishedRealmRules: async () => [],
       realmHeaderRules: async () => ({ rules: [], heads: new Map() }) } },
     content: { readExactBatch: async () => { calls.content++; return []; } },
@@ -104,7 +130,8 @@ function ownerSession(actor: Actor = 'anonymous', input: { private?: boolean; re
       admitted: async () => new Map(), counts: async () => ({ counts: new Map(), complete: true }),
       votes: async () => new Map() },
   } as unknown as MainWorkDependencies;
-  const session = new WorkReadSession(deps, new Request('http://main.test/v1/realms'),
+  const session = new WorkReadSession(deps, new Request('http://main.test/v1/realms',
+    actor === 'anonymous' ? {} : { headers: { authorization: 'Bearer fixture' } }),
     actor === 'anonymous' ? { limit: 2 } : { limit: 2, actingSubject: native(20 + actors.indexOf(actor)) }, position);
   if (actor !== 'anonymous') session.principal = { issuer: 'account.test', subject: actor } as never;
   session.summaries = async ids => { calls.summary++; return ids.map(summary); };
@@ -318,8 +345,7 @@ test('hydration-fixtures-deliver-current-owner-data: closure races start from ac
 });
 
 for (const surface of ['threads', 'reply'] as const) {
-  // thread-read bodies and final delivery lack the current placement Realm disclosure adapter.
-  test.failing(`closure-during-${surface}-content-hydration: hydrated placed Content is discarded when its Realm closes`, async () => {
+  test(`closure-during-${surface}-content-hydration: hydrated placed Content is discarded when its Realm closes`, async () => {
     const owner = replyHydrationOwner();
     const read = () => surface === 'threads' ? readRealmThreads(owner.session, realm, { sort: 'top' })
       : readRealmThread(owner.session, realm, reply, 'new');
@@ -362,9 +388,11 @@ test('closure-private-landing-no-exception: request admission cannot expose a cl
   await expect(readRealmLanding(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
 });
 
-test('closure-delivery-race: a closure confirmed after summary hydration discards the Realm header', async () => {
+test('closure-delivery-race: a closure confirmed after governance hydration discards the Realm header', async () => {
   const owner = ownerSession('manager');
-  owner.session.summaries = async ids => { owner.close(); return ids.map(summary); };
+  owner.session.deps.governance!.rules!.realmHeaderRules = async () => {
+    owner.close(); return { rules: [], heads: new Map(), memberValue: null, memberRevision: null };
+  };
   await expect(readRealmHeader(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
 });
 
@@ -467,8 +495,8 @@ test.failing('reply-count-missing-reader: an uncomposed count adapter with appro
 
 function directoryOwner(ids: string[]) {
   const owner = ownerSession();
-  const records: DirectoryRow[] = ids.map((id, index) => ({ realm: id, space: native(1000 + index), profile: null,
-    rank: String(index), count_value: '0', count_revision: '1' }));
+  const records: (DirectoryRow & { matches: boolean })[] = ids.map((id, index) => ({ realm: id, space: native(1000 + index), profile: null,
+    rank: String(index), count_value: '0', count_revision: '1', matches: true }));
   const query = async (sql: string, values: unknown[] = []) => {
     let rows: object[] = [];
     if (sql.includes('FROM access.recovery_fence')) rows = [{}];

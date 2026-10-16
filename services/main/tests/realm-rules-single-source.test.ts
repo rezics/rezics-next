@@ -6,12 +6,11 @@ import { saveRealmSettings } from '../src/modules/access/realm-management-settin
 import { GovernanceRules } from '../src/modules/governance/rules.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import type { SettingsCommand } from '../src/modules/realm-admin/contract.ts';
-import { fallbackAvatar } from '../src/modules/media/summary.ts';
 import { REALM_PROFILE } from '../src/modules/realm-profile/schema.ts';
 import { realmProfileRoutes, realmProfileSchemaError } from '../src/routes/realm-profile.ts';
 import { reportRoutes } from '../src/routes/reports.ts';
 import { readRealmHeader, readRealmLanding } from '../src/modules/realm-reads/read-realm.ts';
-import { WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
+import { WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
 import { RV } from '../src/modules/work/activate.ts';
 
 const realm = 'https://rezics.com/id/00000000-0000-4000-8000-000000001504';
@@ -89,7 +88,7 @@ function settingsStore() {
     } };
 }
 
-function readSession(governance: GovernanceRules, profileRules: unknown, summaryAvailable: boolean) {
+function readSession(governance: GovernanceRules, profileRules: unknown, canReadRealm: boolean) {
   const payload = { name: { original: 'en', labels: { en: 'Readers' } },
     description: { original: 'en', labels: { en: 'Read together' } },
     iconSelection: null, bannerSelection: null, count: { kind: 'unknown', value: null },
@@ -118,12 +117,10 @@ function readSession(governance: GovernanceRules, profileRules: unknown, summary
     } } };
   const session = {
     displayLanguages: ['en'], position: { dataEpoch: 'epoch', sequence: '1' },
-    realm: async () => policy,
-    summaries: async () => summaryAvailable ? [{
-      reference: realm, status: 'available', type: 'realm',
-      name: { value: 'Readers', language: 'en', direction: 'ltr', basis: 'requested' },
-      avatar: fallbackAvatar('realm', realm),
-    }] : [{ reference: realm, status: 'unavailable' }],
+    realm: async () => {
+      if (!canReadRealm) throw new WorkReadMissing('Realm is unavailable');
+      return policy;
+    },
     query: async () => [{ name: { value: 'Readers', 'xml:lang': 'en' } }],
     deps: { environment, governance: { rules: governance }, access: {} },
   } as unknown as WorkReadSession;
