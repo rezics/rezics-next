@@ -1,6 +1,7 @@
 import type { MediaImageMetadata } from '@rezics/ui/media-image';
 import { mediaImageKey } from '@rezics/ui/media-image-key';
 import type { MainClient } from '../discover/types.ts';
+import type { AnonymousMainClient } from './main.ts';
 import { browserMainApi } from './browser.ts';
 import { imageReferenceFromUrl, mediaMetadataItems, mediaMetadataOf } from './media-metadata.ts';
 
@@ -59,7 +60,7 @@ export async function readWorkShowcase(
 }
 
 /** A Work page reads the Work's own art, with no Zone or Realm context to override it. */
-export function readOwnWorkShowcase(work: string, fetcher?: typeof fetch, anonymous?: MainClient): Promise<ReadonlyMap<string, WorkShowcase>> {
+export function readOwnWorkShowcase(work: string, fetcher?: typeof fetch, anonymous?: AnonymousMainClient): Promise<ReadonlyMap<string, WorkShowcase>> {
   return readShowcaseBatch([work], undefined, fetcher, anonymous);
 }
 
@@ -67,7 +68,7 @@ async function readShowcaseBatch(
   targets: readonly string[],
   context?: string,
   fetcher?: typeof fetch,
-  anonymous?: MainClient,
+  anonymous?: AnonymousMainClient,
 ): Promise<ReadonlyMap<string, WorkShowcase>> {
   const wanted = showcaseTargets(targets);
   if (!wanted.length) return new Map();

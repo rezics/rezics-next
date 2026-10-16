@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { indexedFiles, type AstNode } from '../lib/repo-index.ts';
 
 interface Schema { properties?: Record<string, Schema>; required?: string[]; anyOf?: Schema[]; oneOf?: Schema[]; allOf?: Schema[] }
@@ -67,15 +67,17 @@ interface Inventory {
   declarations: Match[]; blocks: Match[]; pairs: Match[];
   parameters: Match[]; typedParameters: Match[]; functions: Match[]; calls: Match[];
   source: Buffer; declarationsByName: Map<string, Match[]>;
+  anonymousClientTypes: Set<string>; localTypes: Set<string>;
 }
 const isNode = (value: unknown): value is AstNode => Boolean(value && typeof value === 'object'
   && 'type' in value && typeof value.type === 'string' && 'start' in value && typeof value.start === 'number');
 
 /** The index parses once; the guard owns the meaning of each syntax fact. Byte
  * spans preserve the source text used by the exact, named debt inventory. */
-function inventory(file: string, source: string, ast: unknown): Inventory {
+function inventory(root: string, file: string, source: string, ast: unknown): Inventory {
   const result: Inventory = { declarations: [], blocks: [], pairs: [], parameters: [],
-    typedParameters: [], functions: [], calls: [], source: Buffer.from(source), declarationsByName: new Map() };
+    typedParameters: [], functions: [], calls: [], source: Buffer.from(source), declarationsByName: new Map(),
+    anonymousClientTypes: new Set(), localTypes: new Set() };
   const textOf = (node: AstNode) => result.source.subarray(node.start, node.end).toString();
   const match = (node: AstNode, text?: string): Match => {
     let cleaned: string | undefined;
@@ -86,6 +88,28 @@ function inventory(file: string, source: string, ast: unknown): Inventory {
     if (Array.isArray(value)) { value.forEach(visit); return; }
     if (!isNode(value)) return;
     switch (value.type) {
+      case 'ImportDeclaration': {
+        const source = value.source;
+        if (isNode(source) && typeof source.value === 'string'
+          && resolve(root, dirname(file), source.value) === resolve(root, 'apps/web/features/api/main.ts')) {
+          for (const specifier of value.specifiers as unknown[]) {
+            if (!isNode(specifier) || specifier.type !== 'ImportSpecifier') continue;
+            const imported = specifier.imported, local = specifier.local;
+            if (isNode(imported) && imported.name === 'AnonymousMainClient' && isNode(local) && typeof local.name === 'string') {
+              result.anonymousClientTypes.add(local.name);
+            }
+          }
+        }
+        break;
+      }
+      case 'TSTypeAliasDeclaration':
+      case 'TSInterfaceDeclaration':
+      case 'TSTypeParameter': {
+        const name = value.id ?? value.name;
+        if (isNode(name) && typeof name.name === 'string') result.localTypes.add(name.name);
+        else if (typeof name === 'string') result.localTypes.add(name);
+        break;
+      }
       case 'VariableDeclarator': result.declarations.push(match(value)); break;
       case 'BlockStatement': result.blocks.push(match(value)); break;
       case 'Property':
@@ -106,7 +130,7 @@ function inventory(file: string, source: string, ast: unknown): Inventory {
           // members, including comments and optional/default parameter syntax.
           const span = { ...value, start: params[0]!.start, end: params.at(-1)!.end };
           result.parameters.push(match(span, `(${textOf(span)})`));
-          for (const parameter of params) if (!parameter.optional) result.typedParameters.push(match(parameter));
+          for (const parameter of params) result.typedParameters.push(match(parameter));
         }
         break;
       }
@@ -186,7 +210,7 @@ export function webActingIdentityViolations(root: string, files: string[], contr
   const readable = files.filter(file => /\bv\d+\b/.test(withoutComments(indexed[file]!.text)));
   const perFile = new Map(readable.map(file => {
     const entry = indexed[file]!;
-    return [file, inventory(file, entry.text, entry.ast)] as const;
+    return [file, inventory(root, file, entry.text, entry.ast)] as const;
   }));
   const calls = [...perFile.values()].flatMap(item => item.calls);
   const violations: ActingReadViolation[] = [];
@@ -207,7 +231,7 @@ export function webActingIdentityViolations(root: string, files: string[], contr
       return containingFunction.get(item);
     };
     const parameterOf = (name: string) => [...inventory.parameters.filter(parameter =>
-      new RegExp(`(?:\\(|,)\\s*${name}\\s*[:,)]`).test(parameter.text)
+      new RegExp(`(?:\\(|,)\\s*${name}\\s*\\??\\s*[:,)=]`).test(parameter.text)
       && parameter.range.byteOffset.end < offset && (scopeOf(parameter)?.range.byteOffset.end ?? 0) > offset),
       ...inventory.functions.filter(scope => new RegExp(`^(?:async\\s+)?${name}\\s*=>`).test(scope.text)
         && scope.range.byteOffset.start < offset && scope.range.byteOffset.end > offset)]
@@ -263,8 +287,19 @@ export function webActingIdentityViolations(root: string, files: string[], contr
         || [...expandedQuery.matchAll(/\.\.\.([A-Za-z_$][\w$]*)/g)]
           .some(match => hasActor(expand(match[1]!)) || forwardsActor(expand(match[1]!))));
       const expandedClient = expand(client).replace(/^\(\)\s*=>\s*/, '').replace(/\s/g, '');
+      // The unexported brand is produced only by the explicit anonymous adapter
+      // overloads. Require that imported type on the actual parameter binding;
+      // names, casts, unions and a shadowing persona parameter prove no authority.
+      const clientName = expandedClient.match(/^([A-Za-z_$][\w$]*)\.v\d+\b/)?.[1];
+      const brandedParameter = clientName && inventory.typedParameters.some(parameter =>
+        [...inventory.anonymousClientTypes].some(type => !inventory.localTypes.has(type)
+          && new RegExp(`^${clientName}\\??:${type}(?:=|$)`).test(code(parameter.text)))
+        && scopeOf(parameter) === scopeOf(parameterOf(clientName) ?? call)
+        && parameterOf(clientName)?.range.byteOffset.start! <= parameter.range.byteOffset.start
+        && parameterOf(clientName)?.range.byteOffset.end! >= parameter.range.byteOffset.end);
       anonymous = /^mainApiWithToken\(undefined\)(?:\(\))?\.v\d+\b/.test(expandedClient)
-        || /^browserMainApi\([^]*\banonymous:true\b[^]*\)\.v\d+\b/.test(expandedClient);
+        || /^browserMainApi\([^]*\banonymous:true\b[^]*\)\.v\d+\b/.test(expandedClient)
+        || Boolean(brandedParameter);
     } else if (/^(?:(?:globalThis|window)\.)?(?:fetch|fetcher|serverRead|serverFetch)$/.test(callee)) {
       const url = expand(args[0] ?? '');
       const queryText = [...url.matchAll(/\$\{([A-Za-z_$][\w$]*)\}/g)]

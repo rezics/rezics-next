@@ -12,6 +12,10 @@ import { SERVER_READ_LIMITS } from './server-fetch.ts';
 import { mainBodyRead } from './main-read-operation.ts';
 import { NO_PLATFORM_ACCESS, parsePlatformAccess, type PlatformAccess } from './platform-access.ts';
 
+declare const anonymousMainClient: unique symbol;
+/** Only explicit anonymous adapters produce this authority; an ordinary client cannot stand in for it. */
+export type AnonymousMainClient = MainClient & { readonly [anonymousMainClient]: true };
+
 const profileContentLanguages = cache(
   async (token: string, sessionKey: string, fetcher?: typeof fetch): Promise<string[]> => {
     if (!sessionKey) return [];
@@ -57,6 +61,8 @@ const profileContentLanguages = cache(
  * session is not consulted: no private language preference is read, so a render meant for anonymous readers
  * and crawlers is the anonymous representation.
  */
+export function mainApiWithToken(accessToken: undefined, options?: { fetcher?: typeof fetch }): AnonymousMainClient;
+export function mainApiWithToken(accessToken: string | undefined, options?: { fetcher?: typeof fetch }): MainClient;
 export function mainApiWithToken(
   accessToken: string | undefined,
   { fetcher }: { fetcher?: typeof fetch } = {},

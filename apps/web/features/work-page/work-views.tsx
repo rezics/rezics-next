@@ -4,7 +4,7 @@ import { cache, type ReactNode, Suspense } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { getMessages } from '../../i18n/server.ts';
-import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
+import { mainApiWithToken, readPlatformAccess, type AnonymousMainClient } from '../api/main.ts';
 import { operationOpen } from '../api/platform-access.ts';
 import { signInPath } from '../auth/paths.ts';
 import { browseReader } from '../discover/server.ts';
@@ -14,7 +14,6 @@ import authorZhHans from '../author/messages/zh-Hans.ts';
 import { readOpenLibraryAuthor, readOpenLibraryAuthorWorks } from '../author/read.ts';
 import type { ReaderActions } from '../catalogue/reader-actions.tsx';
 import type { RelationshipsApi } from '../relationships/types.ts';
-import type { MainClient } from '../discover/types.ts';
 import { authorSeparator, coverKindOf } from '../catalogue/work.ts';
 import { AdoptionRegion } from './adoption.tsx';
 import { AlsoEnjoyedSection } from './also-enjoyed.tsx';
@@ -103,7 +102,7 @@ async function recipePageHost(): Promise<RecipeWorkHost> {
 
 /** The request's clients and presentation inputs, also supplied unchanged by recorded surfaces. */
 export interface WorkPageClient extends SuppliedClient {
-  anonymous: MainClient;
+  anonymous: AnonymousMainClient;
   signedIn: boolean;
   avatarQuery?: string;
   pageUrl?: string | null;

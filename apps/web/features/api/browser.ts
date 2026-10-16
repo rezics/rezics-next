@@ -1,5 +1,7 @@
 import { treaty } from '@elysia/eden';
 import type { MainApp } from '@rezics/main/app';
+import type { MainClient } from '../discover/types.ts';
+import type { AnonymousMainClient } from './main.ts';
 
 /** Mount point of the BFF proxy. Main's paths continue unchanged after it. */
 export const BFF_PREFIX = '/api/main';
@@ -24,9 +26,12 @@ function recoverBrowserRead(send: typeof fetch): typeof fetch {
  * an `Idempotency-Key` header on commands exactly as Main documents it.
  * Display languages are attached by the BFF from Main when the reader is
  * signed in, and from the content-language cookie only when they are not. */
+interface BrowserMainOptions { anonymous?: boolean; cache?: RequestCache; fetcher?: typeof fetch }
+export function browserMainApi(origin: string | undefined, options: BrowserMainOptions & { anonymous: true }): AnonymousMainClient;
+export function browserMainApi(origin?: string, options?: BrowserMainOptions): MainClient;
 export function browserMainApi(
   origin: string = window.location.origin,
-  { anonymous = false, cache, fetcher }: { anonymous?: boolean; cache?: RequestCache; fetcher?: typeof fetch } = {},
+  { anonymous = false, cache, fetcher }: BrowserMainOptions = {},
 ) {
   return treaty<MainApp>(`${origin}${BFF_PREFIX}`, {
     headers: () =>

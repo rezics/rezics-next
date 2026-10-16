@@ -148,7 +148,7 @@ async function productionVisit(person: PersonaSession) {
   expect((await reads.readCredits(short(manga.work))).ok).toBe(true);
   phase = 'work-projection'; requestNumber = 0;
   expect((await readResourcePage(main, actingSubject, short(manga.work))).ok).toBe(true);
-  const host = { main, anonymous: client(sessions.visitor), actingSubject, signedIn: Boolean(actingSubject),
+  const host = { main, anonymous: browserMainApi('https://recorded.invalid', { anonymous: true, fetcher: request(sessions.visitor) }), actingSubject, signedIn: Boolean(actingSubject),
     avatarQuery: actingSubject ? `?actingSubject=${encodeURIComponent(actingSubject)}` : '',
     pageUrl: new URL(localizedPath(workHref(short(manga.work)), 'en'), 'https://rezics.com').href };
   phase = 'work-overview'; requestNumber = 0;

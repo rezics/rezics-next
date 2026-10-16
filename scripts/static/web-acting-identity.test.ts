@@ -172,6 +172,64 @@ test('a shadowed anonymous client cannot exempt an authenticated reader', () => 
   `)).toHaveLength(4);
 });
 
+const anonymousType = `import type { AnonymousMainClient } from '../../apps/web/features/api/main.ts';`;
+test('the adapter brand carries anonymous authority through required and optional supplied parameters', () => {
+  expect(inspect(`${anonymousType}
+    function page(anonymous: AnonymousMainClient) {
+      anonymous.v1.realms({ realm }).decisions.get();
+      anonymous.v1.resources.summaries.post({ resources });
+      const forwarded = anonymous;
+      forwarded.v1.resources.summaries.post({ resources });
+    }
+    const optional = (anonymous?: AnonymousMainClient) => {
+      if (anonymous) return anonymous.v1.resources.summaries.post({ resources });
+    };
+  `)).toEqual([]);
+  expect(inspect(`
+    import type { AnonymousMainClient as PublicClient } from '../../apps/web/features/api/main.ts';
+    function page(main: PublicClient) { return main.v1.resources.summaries.post({ resources }); }
+  `)).toEqual([]);
+});
+
+test('plain and persona clients cannot inherit the supplied anonymous parameter exemption', () => {
+  expect(inspect(`${anonymousType}
+    function plain(anonymous: MainClient) { anonymous.v1.resources.summaries.post({ resources }); }
+    function persona(main: MainClient, actingSubject: string) { main.v1.resources.summaries.post({ resources }); }
+    function mixed(anonymous: AnonymousMainClient | MainClient) { anonymous.v1.resources.summaries.post({ resources }); }
+    function outer(anonymous: AnonymousMainClient) {
+      function nested(anonymous: MainClient) { anonymous.v1.resources.summaries.post({ resources }); }
+      const persona = browserMainApi();
+      persona.v1.resources.summaries.post({ resources });
+    }
+  `)).toHaveLength(5);
+});
+
+test('a lookalike or shadowed type and a cast cannot manufacture the adapter brand', () => {
+  expect(inspect(`
+    type AnonymousMainClient = MainClient;
+    function page(anonymous: AnonymousMainClient) { anonymous.v1.resources.summaries.post({ resources }); }
+  `)).toHaveLength(1);
+  expect(inspect(`
+    import type { AnonymousMainClient } from './unrelated.ts';
+    function page(anonymous: AnonymousMainClient) { anonymous.v1.resources.summaries.post({ resources }); }
+  `)).toHaveLength(1);
+  expect(inspect(`${anonymousType}
+    function page<AnonymousMainClient>(anonymous: AnonymousMainClient) {
+      anonymous.v1.resources.summaries.post({ resources });
+    }
+  `)).toHaveLength(1);
+  expect(inspect(`${anonymousType}
+    const anonymous = persona as AnonymousMainClient;
+    anonymous.v1.resources.summaries.post({ resources });
+  `)).toHaveLength(1);
+});
+
+test('the anonymous brand does not bypass an operation with mandatory actingSubject', () => {
+  expect(inspect(`${anonymousType}
+    function page(anonymous: AnonymousMainClient) { anonymous.v1.graph.queries.post({ query }); }
+  `)).toHaveLength(1);
+});
+
 test('selected query identities, explicit anonymous reads and public publications remain valid', () => {
   expect(inspect(`
     const query = { actingSubject: selected };
