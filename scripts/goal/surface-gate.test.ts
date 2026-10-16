@@ -277,7 +277,7 @@ test('expected child startup failures cannot contaminate the invocation verdict'
   f.selection.units.push(sibling);
   f.selection.changed.push(sibling);
   const result = await f.run((_root, command, env) => {
-    if (!command.includes(f.file)) return { code: 0, output: '' };
+    if (!command.includes(sibling)) return { code: 0, output: '' };
     const artifacts = env!.REZICS_QA_ARTIFACT_ROOT!;
     // qa-harness.test.ts uses the inherited root for intentionally failed child runs.
     const child = join(artifacts, 'child-run');
@@ -370,7 +370,7 @@ test.each(['tests', 'guards'] as const)('%s failure also on pinned main is repor
   expect(result.code).toBe(0);
   expect(result.excused).toEqual([{ part, file: f.file, test: 'busy surface guard', reason: 'fails-on-main', revision: f.selection.main }]);
   expect(f.lines.join('\n')).toContain(`Failure on main: ${f.file} > busy surface guard (${f.selection.main})`);
-  expect(f.attempts.filter(attempt => attempt.command.includes(f.file))).toHaveLength(2);
+  expect(f.attempts.filter(attempt => attempt.command.includes(f.file))).toHaveLength(3);
   expect(f.git('worktree', 'list', '--porcelain').split('\n').filter(line => line.startsWith('worktree ')))
     .toEqual([`worktree ${f.cwd}`]);
 });
@@ -386,7 +386,7 @@ test('a branch-only failing test blocks even beside another test that fails on m
   });
   expect(result.code).toBe(1);
   expect(result.excused.map(item => item.test)).toEqual(['existing failure']);
-  expect(f.attempts.filter(attempt => attempt.command.includes(f.file))).toHaveLength(2);
+  expect(f.attempts.filter(attempt => attempt.command.includes(f.file))).toHaveLength(3);
 });
 
 test.each(['tests', 'guards'] as const)('%s file touched by the change cannot excuse main’s failure', async part => {
@@ -395,7 +395,7 @@ test.each(['tests', 'guards'] as const)('%s file touched by the change cannot ex
   const result = await f.run((_root, command) => command.includes(f.file) ? report(f.file, 'assertion') : { code: 0, output: '' });
   expect(result.code).toBe(1);
   expect(result.excused).toEqual([]);
-  expect(f.attempts.filter(attempt => attempt.command.includes(f.file))).toHaveLength(1);
+  expect(f.attempts.filter(attempt => attempt.command.includes(f.file))).toHaveLength(2);
   expect(f.attempts.every(attempt => attempt.cwd === f.cwd)).toBe(true);
 });
 
@@ -430,7 +430,7 @@ test('an owner consumer’s own artifact supplies timeout attribution even when 
   expect(f.attempts.filter(attempt => attempt.command.includes(file))).toHaveLength(2);
 });
 
-test('mixed assertion and timeout failures do not qualify for retry, and main passing blocks them', async () => {
+test('mixed assertion and timeout failures receive normal confirmation, and main passing blocks them', async () => {
   const f = gateFixture();
   const result = await f.run((root, command) => {
     if (!command.includes(f.file)) return { code: 0, output: '' };
@@ -442,7 +442,7 @@ test('mixed assertion and timeout failures do not qualify for retry, and main pa
   expect(result.code).toBe(1);
   expect(result.excused).toEqual([]);
   expect(f.attempts.every(attempt => !attempt.command.some(arg => arg.startsWith('--timeout=')))).toBe(true);
-  expect(f.attempts.filter(attempt => attempt.command.includes(f.file))).toHaveLength(2);
+  expect(f.attempts.filter(attempt => attempt.command.includes(f.file))).toHaveLength(3);
 });
 
 test('a file absent from pinned main cannot gain a baseline allowance', async () => {
@@ -453,7 +453,7 @@ test('a file absent from pinned main cannot gain a baseline allowance', async ()
   const result = await f.run((_root, command) => command.includes(file) ? report(file, 'assertion') : { code: 0, output: '' });
   expect(result.code).toBe(1);
   expect(result.excused).toEqual([]);
-  expect(f.attempts.filter(attempt => attempt.command.includes(file))).toHaveLength(1);
+  expect(f.attempts.filter(attempt => attempt.command.includes(file))).toHaveLength(2);
 });
 
 test('surface workers narrow static tools while landing keeps full workspace types and type-aware lint', async () => {
@@ -468,3 +468,51 @@ test('surface workers narrow static tools while landing keeps full workspace typ
   expect(f.commands).toContainEqual(['task', 'web:typecheck']);
   expect(f.commands).toContainEqual(['node_modules/.bin/oxlint', '--type-aware', 'apps/web/features/zones']);
 });
+
+
+test.each(['tests', 'guards'] as const)('%s confirms a candidate assertion before considering main', async part => {
+  const f = gateFixture(part);
+  // Confirmation applies to touched files too; a successful candidate is sufficient.
+  f.selection.changed.push(f.file);
+  let attempts = 0;
+  const result = await f.run((_root, command) => command.includes(f.file)
+    ? report(f.file, ++attempts === 1 ? 'assertion' : 'pass') : { code: 0, output: '' });
+  expect(result.code).toBe(0);
+  expect(attempts).toBe(2);
+  expect(f.attempts.every(attempt => attempt.cwd === f.cwd)).toBe(true);
+  expect(f.attempts.every(attempt => !attempt.command.some(arg => arg.startsWith('--timeout=')))).toBe(true);
+  expect(result.excused).toEqual([{ part, file: f.file, test: 'busy surface guard', reason: 'order-dependent',
+    revision: f.git('rev-parse', 'HEAD'), originalSeconds: 5 }]);
+});
+
+for (const part of ['tests', 'guards'] as const) {
+  test.each(['recovery', 'persistent', 'mixed'] as const)(`${part} adjudicates first-shard %s before comparing with main`, async state => {
+    const f = gateFixture(part);
+    process.env.GOAL_UNIT_GATE_BUDGET_MS = '180000';
+    const other = 'apps/web/last.test.ts';
+    f.write(other, 'export {};');
+    const files = [f.file, other];
+    f.selection[part === 'tests' ? 'units' : 'guards'] = files;
+    f.selection.stories = [];
+    f.selection.changed.push(f.file);
+    // Force two serial shards, with the failing report first and the passing report last.
+    f.write('.temp/goal-orchestration/unit-file-durations.json', JSON.stringify(Object.fromEntries(files.map(file => [file, 180_000]))));
+    let attempts = 0;
+    const result = await f.run((_root, command) => {
+      if (command.includes(other)) return report(other, 'pass');
+      if (!command.includes(f.file)) return { code: 0, output: '' };
+      attempts++;
+      const own = report(f.file, state === 'recovery' && attempts > 1 ? 'pass' : 'timeout');
+      return state !== 'mixed' ? own : { code: 1, output: own.output.replace('</testsuite>',
+        `<testcase file="${f.file}" name="assertion"><failure type="AssertionError" message="expected 2"/></testcase></testsuite>`) };
+    });
+    expect(result.code).toBe(state === 'recovery' ? 0 : 1);
+    expect(f.attempts.filter(attempt => attempt.command.some(arg => files.includes(arg))).map(attempt => files.filter(file => attempt.command.includes(file))))
+      .toEqual([[f.file], [other], [f.file]]);
+    expect(f.attempts.every(attempt => attempt.cwd === f.cwd)).toBe(true);
+    const retry = f.attempts.filter(attempt => attempt.command.includes(f.file)).at(-1)!;
+    expect(retry.command.includes('--timeout=30000')).toBe(state !== 'mixed');
+    expect(result.excused.map(item => item.reason)).toEqual(state === 'recovery' ? ['timeout-retry'] : []);
+    expect(f.lines.join('\n').includes(`Surface gate unfinished files: ${f.file}`)).toBe(state === 'persistent');
+  });
+}

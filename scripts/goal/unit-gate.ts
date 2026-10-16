@@ -538,6 +538,20 @@ function junitXml(output: string): string | undefined {
   return gateJunitBlock(output)?.xml;
 }
 
+/** Combine each invocation's final report, never earlier reports printed by its tests.
+ * Unreported/owner console results stay after the combined report so their failures still count. */
+function joinUnitOutputs(outputs: readonly string[]): string {
+  if (outputs.length < 2) return outputs[0] ?? '';
+  const blocks = outputs.map(gateJunitBlock);
+  if (!blocks.some(Boolean)) return outputs.join('\n');
+  const before = blocks.map(block => block?.before ?? '').join('\n');
+  const reports = blocks.flatMap(block => block
+    ? [block.xml.replace(/<\/?testsuites\b[^>]*>/g, '')] : []).join('\n');
+  const after = outputs.map((output, index) =>
+    dropRunSummary(stripJunitBlocks(blocks[index]?.after ?? output))).join('\n');
+  return `${before}\n${UNIT_JUNIT_MARKER}\n<testsuites>${reports}</testsuites>\n${after}`;
+}
+
 /** Text outside every JUnit block. An owner transcript joined after a block stays. */
 function stripJunitBlocks(text: string): string {
   return text.split(UNIT_JUNIT_MARKER).map((part, index) => {
@@ -867,9 +881,9 @@ function isUnitErrorLine(line: string): boolean {
  * A JUnit report names the file; the console summary after the last file does not. */
 export function unitFailureDetails(output: string, candidates: readonly string[], root?: string): UnitFailureDetail[] {
   const reported = junitFailureDetails(output, candidates, root);
-  if (reported) return reported;
-  const known = new Set(candidates);
-  const found: UnitFailureDetail[] = [];
+  const covered = reported ? junitReportedFiles(output, candidates, root) : new Set<string>();
+  const known = new Set(candidates.filter(file => !covered.has(file)));
+  const found: UnitFailureDetail[] = [...reported ?? []];
   const plain = beforeUnitSummary(output).replace(/\u001b\[[\d;]*m/g, '');
   let current: string | undefined;
   let errorLines: string[] | undefined;
@@ -1637,11 +1651,6 @@ export function gateShardRunner(owner: ReadonlySet<string>, env: NodeJS.ProcessE
 }
 
 function mergeShardResults(parts: readonly UnitShardResult[]): UnitShardResult {
-  const reports = parts.flatMap(part => {
-    const xml = junitXml(part.output);
-    return xml ? [xml.replace(/<\?xml[^>]*\?>|<\/?testsuites\b[^>]*>/g, '')] : [];
-  });
-  const output = parts.map(part => part.output).join('\n');
   return {
     done: parts.every(part => part.done),
     failing: [...new Set(parts.flatMap(part => part.failing))].sort(),
@@ -1650,7 +1659,7 @@ function mergeShardResults(parts: readonly UnitShardResult[]): UnitShardResult {
     fileErrors: parts.flatMap(part => part.fileErrors),
     runnerErrors: parts.flatMap(part => part.runnerErrors),
     files: [...new Set(parts.flatMap(part => part.files))].sort(),
-    output: reports.length ? `${output}\n${UNIT_JUNIT_MARKER}\n<testsuites>${reports.join('\n')}</testsuites>` : output,
+    output: joinUnitOutputs(parts.map(part => part.output)),
     ms: Math.max(...parts.map(part => part.ms)),
     ...(parts.every(part => part.exitCode !== undefined)
       ? { exitCode: parts.find(part => part.exitCode !== 0)?.exitCode ?? 0 } : {}),
@@ -1756,6 +1765,8 @@ async function mapPool<T, R>(items: readonly T[], concurrency: number, run: (ite
 }
 
 export interface UnitGateOptions extends TimeoutRetryOptions {
+  /** Initial candidate concurrency; confirmations and timeout retries remain serial. */
+  shards?: number;
   now?: () => number;
   durations?: ReadonlyMap<string, number>;
   historyDirectory?: string;
@@ -1782,7 +1793,7 @@ export async function runUnitGate(cwd: string, files: readonly string[], shards?
   let wave = 0;
   const snapshot = (unfinished: readonly string[], done: boolean, runnerErrors: UnitRunnerError[] = []): UnitGateResult => ({
     done, failing: [...failing].sort(), timedOut: [...timedOut].sort(), failures, fileErrors, runnerErrors,
-    unfinished: [...unfinished].sort(), output: outputs.join('\n'), passes,
+    unfinished: [...unfinished].sort(), output: joinUnitOutputs(outputs), passes,
   });
   while (pending.length) {
     if (wave > 0 && now() - startedAt >= ceiling) {
@@ -1917,7 +1928,7 @@ async function runUnitGatePass(cwd: string, files: readonly string[], shards: nu
   for (const result of results) {
     console.log(`Unit gate shard: ${result.files.length} file(s), ${result.done ? `${result.failing.length} failing` : 'unfinished'} in ${result.ms}ms`);
   }
-  const output = results.map(result => result.output).join('\n');
+  const output = joinUnitOutputs(results.map(result => result.output));
   const unfinished = results.filter(result => !result.done).flatMap(result => result.files).sort();
   const timedOut = [...new Set(results.flatMap(result => result.timedOut))].sort();
   const completed = results.filter(result => result.done);
@@ -2030,7 +2041,7 @@ export async function runUnitSide(cwd: string, files: readonly string[], side: '
   });
   const isolatedKind = (pass: UnitGatePass): UnitGateRunKind => pass.kind === 'never-started-rerun' ? 'never-started-rerun' : 'isolated-retry';
   const confirmKind = (pass: UnitGatePass): UnitGateRunKind => pass.kind === 'never-started-rerun' ? 'never-started-rerun' : 'confirm';
-  const branch = await runUnitGate(cwd, files, undefined, runShard, options);
+  const branch = await runUnitGate(cwd, files, options.shards, runShard, options);
   // Wall-clock kills have no complete report; completed files must fail only by test timeouts.
   if (branch.done) branch.timedOut = timeoutOnlyTestFiles(branch.output, branch.timedOut, cwd, branch.timedOut);
   notePasses(evidence, side, branch.passes, pass => pass.kind, cwd);

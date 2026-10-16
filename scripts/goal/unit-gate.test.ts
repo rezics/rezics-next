@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { runUnitSide, runOwnerShard, rememberSlowTests, writeUnitEvidence, timeoutOnlyTestFiles, UNIT_JUNIT_MARKER, preMergeSurfaceGate, completedUnitShard,
-  type SlowTestRecord, type UnitRunEvidence } from './unit-gate.ts';
+import { unitGateBudgetMs, runUnitGate, reportCases, runUnitSide, runOwnerShard, rememberSlowTests, writeUnitEvidence, timeoutOnlyTestFiles, UNIT_JUNIT_MARKER, preMergeSurfaceGate, completedUnitShard,
+  type UnitShardRunner, type SlowTestRecord, type UnitRunEvidence } from './unit-gate.ts';
 import { parseBrief } from './briefs.ts';
 import { mergeUnitFiles, unitFilesFromPlan } from './unit-gate.ts';
 import { repositoryGuards, selectRepositoryGuards } from '../qa/repository-guards.ts';
@@ -221,4 +221,73 @@ test('a passing file printing another run’s timeout, failure and report passes
     expect(readFileSync(join(f.cwd, 'invocations'), 'utf8').trim().split('\n')).toHaveLength(1);
     if (owner) expect(calls).toBe(1);
   }
+});
+
+
+function shardReport(file: string, state: 'pass' | 'timeout' | 'mixed') {
+  return `${UNIT_JUNIT_MARKER}\n<testsuites><testsuite>
+<testcase file="${file}" name="slow" time="5">${state === 'pass' ? '' : '<failure type="TimeoutError" message="test timed out"/>'}</testcase>
+${state === 'mixed' ? `<testcase file="${file}" name="assertion"><failure type="AssertionError" message="expected 2"/></testcase>` : ''}
+</testsuite></testsuites>`;
+}
+
+test('every shard contributes its final report while printed reports remain transcripts', async () => {
+  const f = fixture('');
+  const other = 'last.test.ts';
+  writeFileSync(join(f.cwd, other), 'export {};');
+  const files = [f.file, other];
+  const result = await runUnitGate(f.cwd, files, 1, async (cwd, group) => {
+    const file = group[0]!;
+    const output = `${shardReport(file, 'mixed')}\n${shardReport(file, file === f.file ? 'timeout' : 'pass')}`;
+    return completedUnitShard(cwd, group, file === f.file ? 1 : 0, output, 1);
+  }, { durations: new Map(files.map(file => [file, unitGateBudgetMs()])) });
+  expect(result.passes[0]?.files).toEqual(files);
+  expect(result.failing).toEqual([f.file]);
+  expect(reportCases(result.output)?.map(test => [test.file, test.name, test.failed])).toEqual([
+    [f.file, 'slow', true], [other, 'slow', false],
+  ]);
+  expect(timeoutOnlyTestFiles(result.output, result.timedOut, f.cwd)).toEqual([f.file]);
+});
+
+test.each(['recovery', 'persistent', 'mixed'] as const)('unit candidate adjudication keeps first-shard %s evidence beside a passing last shard', async state => {
+  const f = fixture('');
+  const other = 'last.test.ts';
+  writeFileSync(join(f.cwd, other), 'export {};');
+  const files = [f.file, other];
+  const attempts: { files: readonly string[]; multiplier?: number }[] = [];
+  let first = true;
+  const runner: UnitShardRunner = async (cwd, group, _deadline, options) => {
+    attempts.push({ files: [...group], multiplier: options?.testTimeoutMultiplier });
+    const file = group[0]!;
+    const kind = file === other ? 'pass' : state === 'mixed' ? 'mixed' : first || state === 'persistent' ? 'timeout' : 'pass';
+    if (file === f.file) first = false;
+    return completedUnitShard(cwd, group, kind === 'pass' ? 0 : 1, shardReport(file, kind), 1);
+  };
+  const side = await runUnitSide(f.cwd, files, 'affected', [], runner, {
+    ...f, shards: 1, durations: new Map(files.map(file => [file, unitGateBudgetMs()])),
+  });
+  expect(attempts.map(attempt => attempt.files)).toEqual([[f.file], [other], [f.file]]);
+  expect(side.runnerErrors).toEqual([]);
+  expect(side.inconclusive).toEqual(state === 'persistent' ? [f.file] : []);
+  expect(side.failing).toEqual(state === 'mixed' ? [f.file] : []);
+  expect(side.orderDependent).toEqual(state === 'recovery' ? [f.file] : []);
+  expect(attempts.at(-1)?.multiplier).toBe(state === 'mixed' ? undefined : 6);
+});
+
+test('an unreported shard retains its own console failure after report aggregation', async () => {
+  const f = fixture('');
+  const other = 'owner.test.ts';
+  writeFileSync(join(f.cwd, other), 'export {};');
+  const files = [f.file, other];
+  const result = await runUnitGate(f.cwd, files, 1, async (cwd, group) => {
+    const file = group[0]!;
+    const output = file === f.file ? shardReport(file, 'pass')
+      : `${file}:\nerror: expected owner value\n(fail) owner assertion [1ms]\n 0 pass\n 1 fail`;
+    return completedUnitShard(cwd, group, file === f.file ? 0 : 1, output, 1);
+  }, { durations: new Map(files.map(file => [file, unitGateBudgetMs()])) });
+  expect(result.failing).toEqual([other]);
+  expect(timeoutOnlyTestFiles(result.output, result.timedOut, f.cwd)).toEqual([]);
+  expect(completedUnitShard(f.cwd, files, 1, result.output, 1).failures).toEqual([
+    { file: other, test: 'owner assertion', detail: 'error: expected owner value' },
+  ]);
 });

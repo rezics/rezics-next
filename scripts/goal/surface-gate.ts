@@ -7,7 +7,7 @@ import { type Brief } from './types.ts';
 import { type CheckGroup, type CheckRunner, runCheckCommand, checkFailureLines } from './check.ts';
 import { affectedSelection } from './merge.ts';
 import {
-  mergeUnitFiles, unitFilesFromPlan, completedUnitShard, timeoutOnlyTestFiles, retryTimedOutFiles,
+  mergeUnitFiles, unitFilesFromPlan, completedUnitShard, runUnitSide, unitFailureDetails, unitFileErrorDetails,
   introducedUnitFailures, prepareUnitBaseline, removeUnitBaseline, reportCases, slowTestLine,
   ownerArtifactFiles, unitArtifactReport, timeoutRetryArg, runUnitGate, gateShardRunner, type UnitShardRunner,
 } from './unit-gate.ts';
@@ -136,7 +136,7 @@ export type SurfacePart = 'contract' | 'types' | 'lint' | 'ast' | 'tests' | 'gua
 export interface SurfaceTiming { name: SurfacePart; code: number; seconds: number; waitSeconds: number }
 export interface SurfaceExcusedTest {
   part: 'tests' | 'guards'; file: string; test: string;
-  reason: 'timeout-retry' | 'fails-on-main'; revision: string;
+  reason: 'timeout-retry' | 'order-dependent' | 'fails-on-main'; revision: string;
   originalSeconds?: number; retrySeconds?: number;
 }
 export interface SurfaceRunOptions {
@@ -157,7 +157,7 @@ export interface SurfaceRunOptions {
   evidenceDirectory?: string;
 }
 
-/** Tests and guards retry timeout-only files alone and excuse main's failures in untouched files; every other part is final. */
+/** Tests and guards share candidate confirmation with the unit gate, then compare untouched failures with main. */
 export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, options: SurfaceRunOptions = {}) {
   const root = options.evidenceDirectory ?? join(cwd, '.temp/goal/surface-gate');
   mkdirSync(root, { recursive: true });
@@ -177,12 +177,17 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
     let output = '';
     let invocation = 0;
     const notes: string[] = [];
+    const firstOutputs = new Map<string, string>();
+    const rememberFirst = (selected: readonly string[], transcript: string) => {
+      for (const file of selected) if (!firstOutputs.has(file)) firstOutputs.set(file, transcript);
+    };
     const note = (line: string) => { print(line); notes.push(line); };
     const runShard: UnitShardRunner = async (root, selected, deadline, retryOptions) => {
       const label = `${name}-${invocation++}`;
       if (!options.runner) {
         const owners = new Set(name === 'guards' ? [] : selected.filter(isQaOwnerPath));
         const result = await gateShardRunner(owners, env)(root, selected, deadline, retryOptions);
+        rememberFirst(selected, result.output);
         writeFileSync(join(directory, `${label}.log`), result.output);
         output += `\n${root}: ${selected.join(', ')}\n${result.output}\n`;
         return result;
@@ -202,40 +207,41 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
       const diagnostics = ownerArtifactFiles(artifacts, ['*/logs/owner.log']).map(path => readFileSync(path, 'utf8')).join('\n');
       result.output += `\n${diagnostics}\n${unitArtifactReport(root, ownerArtifactFiles(artifacts,
         direct ? ['unit.xml'] : ['owner.xml', '*/owner.xml']))}`;
+      rememberFirst(selected, result.output);
       output += `\n${root}: ${selected.join(', ')}\n${result.output}\n`;
       return completedUnitShard(root, selected, result.code, result.output, now() - started);
     };
-    // One surface holds one QA slot; reuse merge planning without multiplying that admission.
-    const branch = await runUnitGate(cwd, files, 1, runShard, { now });
-    if (branch.runnerErrors.length) return { code: 1, output };
-    const timeouts = branch.done ? timeoutOnlyTestFiles(branch.output, branch.timedOut, cwd) : branch.timedOut;
+    // One surface holds one QA slot; all candidate adjudication uses the unit gate's rule.
     const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).stdout.trim();
     const recovered = new Map<string, number>();
-    const retry = await retryTimedOutFiles(cwd, timeouts, 'affected', runShard, undefined, {
-      now, historyDirectory: join(directory, 'timeout-history'),
+    const branch = await runUnitSide(cwd, files, 'affected', [], runShard, {
+      now, shards: 1, historyDirectory: join(directory, 'timeout-history'),
       timeoutRetryPassed: test => {
         recovered.set(`${test.file}\0${test.test}`, test.seconds);
-        const original = reportCases(branch.output, cwd)?.find(item => item.file === test.file && item.name === test.test);
+        const original = reportCases(firstOutputs.get(test.file) ?? '', cwd)?.find(item => item.file === test.file && item.name === test.test);
         const originalSeconds = original?.durationMs === undefined ? undefined : original.durationMs / 1000;
         note(`${slowTestLine(test)}; first attempt ${originalSeconds?.toFixed(3) ?? 'unknown'}s, retry ${test.seconds.toFixed(3)}s`);
       },
-    }, branch.output);
-    for (const file of retry.passing) {
-      for (const failure of branch.failures.filter(item => item.file === file)) {
-        const first = reportCases(branch.output, cwd)?.find(item => item.file === file && item.name === failure.test);
-        excused.push({ part: name, file, test: failure.test, reason: 'timeout-retry', revision,
-          ...(first?.durationMs === undefined ? {} : { originalSeconds: first.durationMs / 1000 }),
-          retrySeconds: recovered.get(`${file}\0${failure.test}`) });
+    });
+    for (const file of branch.orderDependent) {
+      const first = firstOutputs.get(file) ?? '';
+      const recoveredFailures = [
+        ...unitFailureDetails(first, [file], cwd),
+        ...unitFileErrorDetails(first, [file], cwd).map(error => ({ file: error.file, test: '[file error]' })),
+      ];
+      for (const failure of recoveredFailures) {
+        const retrySeconds = recovered.get(`${file}\0${failure.test}`);
+        const original = reportCases(first, cwd)?.find(item => item.file === file && item.name === failure.test);
+        excused.push({ part: name, file, test: failure.test,
+          reason: retrySeconds === undefined ? 'order-dependent' : 'timeout-retry', revision,
+          ...(original?.durationMs === undefined ? {} : { originalSeconds: original.durationMs / 1000 }),
+          ...(retrySeconds === undefined ? {} : { retrySeconds }) });
+        if (retrySeconds === undefined) note(`Candidate confirmation passed: ${file} > ${failure.test}; order or load dependent, reported, not blocking`);
       }
     }
-    const unresolved = [...new Set([...branch.unfinished.filter(file => !timeouts.includes(file)), ...retry.inconclusive])];
-    if (unresolved.length) note(`Surface gate unfinished files: ${unresolved.join(', ')}`);
-    if (retry.runnerErrors.length || unresolved.length) return { code: 1, output: `${output}\n${notes.join('\n')}` };
-    const failing = [...new Set([...branch.failing, ...retry.failing])].filter(file => !retry.passing.includes(file));
-    const failures = failing.flatMap(file => (retry.failing.includes(file) ? retry.failures : branch.failures)
-      .filter(item => item.file === file));
-    const errors = failing.flatMap(file => (retry.failing.includes(file) ? retry.fileErrors : branch.fileErrors)
-      .filter(item => item.file === file));
+    if (branch.inconclusive.length) note(`Surface gate unfinished files: ${branch.inconclusive.join(', ')}`);
+    if (branch.runnerErrors.length || branch.inconclusive.length) return { code: 1, output: `${output}\n${notes.join('\n')}` };
+    const { failing, failures, fileErrors: errors } = branch;
     const changed = new Set(selection.changed);
     const candidates = failing.filter(file => !changed.has(file));
     const blocking = new Set(failing.filter(file => changed.has(file)));
