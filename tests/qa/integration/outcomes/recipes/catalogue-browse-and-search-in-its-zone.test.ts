@@ -1,3 +1,4 @@
+import { readCatalogueTail } from '../../../support/catalogue-continuation.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { recordZoneBrowseContinuation } from '../../../support/catalogue-story-reads.ts';
 import { randomUUID } from 'node:crypto';
@@ -58,7 +59,8 @@ beforeAll(async () => {
   let stable = 0;
   let position: string | undefined;
   for (;;) {
-    const ready = await answer<Page & { sourcePosition: { dataEpoch: string; sequence: string } }>(owner.main('GET', readyPath));
+    const ready = await readCatalogueTail(readyPath, path =>
+      answer<Page & { sourcePosition: { dataEpoch: string; sequence: string } }>(owner.main('GET', path)), deadline);
     const nextPosition = JSON.stringify(ready.sourcePosition);
     stable = ready.matches.kind === 'exact' ? (nextPosition === position ? stable + 1 : 1) : 0;
     position = nextPosition;
@@ -102,8 +104,12 @@ async function browse(name: PersonaName) {
       expect(page.window.complete).toBe(true);
     }
   }
-  const none = await answer<Page>(sample('search-no-match', 'GET', `${path}?q=${phrase}Missing&type=https%3A%2F%2Fschema.org%2FRecipe&language=en`));
-  expect(none.items).toEqual([]);
+  const none = await readCatalogueTail(`${path}?q=${phrase}Missing&type=https%3A%2F%2Fschema.org%2FRecipe&language=en`,
+    async (path, index) => {
+      const page = await answer<Page>(sample(index ? `search-no-match-continuation-${index}` : 'search-no-match', 'GET', path));
+      expect(page.items).toEqual([]);
+      return page;
+    });
   expect(none.nextCursor).toBeNull();
   expect(none.matches).toEqual({ value: 0, kind: 'exact' });
   if (name === 'owner') await supportingReads(sample);

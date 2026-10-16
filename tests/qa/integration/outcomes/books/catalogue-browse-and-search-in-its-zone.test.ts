@@ -1,3 +1,4 @@
+import { readCatalogueTail } from '../../../support/catalogue-continuation.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
@@ -162,8 +163,9 @@ beforeAll(async () => {
   let stable = 0;
   let position: string | undefined;
   for (;;) {
-    const ready = await answer<Page<{ id: string }> & { sourcePosition: { dataEpoch: string; sequence: string } }>(
-      owner.main('GET', readyPath));
+    const ready = await readCatalogueTail(readyPath, path =>
+      answer<Page<{ id: string }> & { sourcePosition: { dataEpoch: string; sequence: string } }>(
+        owner.main('GET', path)), deadline);
     const nextPosition = JSON.stringify(ready.sourcePosition);
     stable = ready.matches.kind === 'exact' ? (nextPosition === position ? stable + 1 : 1) : 0;
     position = nextPosition;
@@ -230,10 +232,13 @@ async function browse(name: PersonaName) {
       expect(page.matches).toEqual({ value: 21, kind: 'exact' });
     }
   }
-  const empty = await answer<Page<{ id: string }>>(sample('search-no-match', 'GET', `${root}/browse?${new URLSearchParams({
+  const empty = await readCatalogueTail(`${root}/browse?${new URLSearchParams({
     sort: 'relevance', limit: '10', type: 'https://schema.org/Book', q: `${phrase}nomatch`,
-  })}`));
-  expect(empty.items).toEqual([]);
+  })}`, async (path, index) => {
+    const page = await answer<Page<{ id: string }>>(sample(index ? `search-no-match-continuation-${index}` : 'search-no-match', 'GET', path));
+    expect(page.items).toEqual([]);
+    return page;
+  });
   expect(empty.nextCursor).toBeNull();
   expect(empty.matches).toEqual({ value: 0, kind: 'exact' });
   const first = await answer<Page<{ id: string }>>(

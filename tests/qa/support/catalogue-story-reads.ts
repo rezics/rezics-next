@@ -2,6 +2,7 @@ import { missingCatalogueStates } from '../../../apps/web/features/zones/catalog
 import { expect } from 'bun:test';
 import type { PersonaName, PersonaSession } from './personas.ts';
 import type { OutcomeRecorder } from './outcome-test.ts';
+import { readCatalogueTail } from './catalogue-continuation.ts';
 
 /** Keep the story's query and label; only the fixture Realm is allocated by setup. */
 export async function recordCatalogueStoryReads(recording: OutcomeRecorder, name: PersonaName,
@@ -11,14 +12,21 @@ export async function recordCatalogueStoryReads(recording: OutcomeRecorder, name
     && (request.state === 'populated' || request.state === 'empty'))) {
     const url = new URL(request.path, 'http://main.local');
     const path = `/v1/realms/${realm.slice(-36)}/modules/browse${url.search}`;
-    const response = await sample(request.label, request.method, path);
-    const raw = await response.text();
-    expect(response.status, `${path}: ${raw}`).toBe(200);
-    const page = JSON.parse(raw) as { items: unknown[]; window: { complete: boolean } };
-    if (request.state === 'populated') expect(page.items.length).toBeGreaterThan(0);
+    const read = async (path: string, index: number) => {
+      const label = index ? `${request.label}-continuation-${index}` : request.label;
+      const response = await sample(label, request.method, path);
+      const raw = await response.text();
+      expect(response.status, `${path}: ${raw}`).toBe(200);
+      const page = JSON.parse(raw) as { items: unknown[]; nextCursor: string | null;
+        matches: { value: number; kind: string }; window: { complete: boolean } };
+      if (request.state === 'empty') expect(page.items).toEqual([]);
+      return page;
+    };
+    if (request.state === 'populated') expect((await read(path, 0)).items.length).toBeGreaterThan(0);
     else {
-      expect(page.items).toEqual([]);
+      const page = await readCatalogueTail(path, read);
       expect(page.window.complete).toBe(true);
+      expect(page.matches).toEqual({ value: 0, kind: 'exact' });
     }
   }
   // Lagging requires control of projection progress; error requires an unavailable

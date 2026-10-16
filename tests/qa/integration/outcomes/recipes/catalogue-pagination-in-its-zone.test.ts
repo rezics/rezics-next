@@ -1,3 +1,4 @@
+import { readCatalogueTail } from '../../../support/catalogue-continuation.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
@@ -58,7 +59,8 @@ beforeAll(async () => {
   let stable = 0;
   let position: string | undefined;
   for (;;) {
-    const ready = await answer<Page & { sourcePosition: { dataEpoch: string; sequence: string } }>(owner.main('GET', readyPath));
+    const ready = await readCatalogueTail(readyPath, path =>
+      answer<Page & { sourcePosition: { dataEpoch: string; sequence: string } }>(owner.main('GET', path)), deadline);
     const nextPosition = JSON.stringify(ready.sourcePosition);
     stable = ready.matches.kind === 'exact' ? (nextPosition === position ? stable + 1 : 1) : 0;
     position = nextPosition;
