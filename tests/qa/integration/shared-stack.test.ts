@@ -26,7 +26,7 @@ interface PoolProbeEvidence {
   apps: Record<string, string>;
   compose: Record<string, string>;
   mediaFixtureRoot?: string;
-  clean: { rows: number; objectAbsent: boolean; messages: number };
+  clean: { rows: number; objectAbsent: boolean; messages: number; fusekiRetainedBytes: number };
 }
 
 async function waitUntil<T>(read: () => T | undefined, timeoutMs: number): Promise<T> {
@@ -54,7 +54,19 @@ async function runPoolProbe(): Promise<void> {
     region: apps.MAIN_S3_REGION!, accessKeyId: apps.MAIN_S3_ACCESS_KEY!, secretAccessKey: apps.MAIN_S3_SECRET_KEY!,
     prefix: 'semantic/work/' });
   const mailbox = `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}/api/v1/messages?limit=1`;
+  const container = `rezics-qa-${projectRunId}-fuseki-1`;
+  const docker = (...args: string[]) => {
+    const result = Bun.spawnSync(['docker', ...args], { stdout: 'pipe', stderr: 'pipe' });
+    expect(result.exitCode, new TextDecoder().decode(result.stderr)).toBe(0);
+    return new TextDecoder().decode(result.stdout).trim();
+  };
   try {
+    // TDB2's deleted copy-on-write pages still occupy tmpfs. A small retained
+    // file reproduces that physical storage leak without exhausting the host.
+    const fusekiRetainedBytes = Number(docker('exec', container, 'sh', '-c',
+      'if test -e /fuseki/databases/pool-reset-probe; then stat -c %s /fuseki/databases/pool-reset-probe; else echo 0; fi'));
+    expect(fusekiRetainedBytes).toBe(0);
+    docker('exec', container, 'dd', 'if=/dev/zero', 'of=/fuseki/databases/pool-reset-probe', 'bs=1M', 'count=16');
     let mediaFixtureRoot: string | undefined;
     if (probe === 'second') {
       expect(Bun.env.MAIN_OPEN_LIBRARY_FIXTURE_ROOT).toBe(root);
@@ -93,7 +105,7 @@ async function runPoolProbe(): Promise<void> {
     const evidence: PoolProbeEvidence = { projectRunId, artifactDirectory: Bun.env.REZICS_QA_ARTIFACT_DIR!,
       pid: process.pid, holderPid: process.ppid, apps, compose,
       ...(mediaFixtureRoot ? { mediaFixtureRoot } : {}),
-      clean: { rows, objectAbsent: true, messages: inbox.total } };
+      clean: { rows, objectAbsent: true, messages: inbox.total, fusekiRetainedBytes } };
     writeFileSync(join(directory, `${probe}.json`), JSON.stringify(evidence), { mode: 0o600 });
   } finally { await pool.end(); }
   if (probe === 'crash') while (true) await Bun.sleep(1000);
@@ -197,7 +209,7 @@ test.skipIf(Boolean(probe))('ordinary QA runs lease clean warm stacks and destro
     if (code !== 0) throw new Error(`Pool proof ${step} exited ${code}: ${output.slice(-6000)}`);
     const saved = evidence(step);
     expect(saved).toBeDefined();
-    expect(saved!.clean).toEqual({ rows: 0, objectAbsent: true, messages: 0 });
+    expect(saved!.clean).toEqual({ rows: 0, objectAbsent: true, messages: 0, fusekiRetainedBytes: 0 });
     return saved!;
   };
   const killTest = (pid: number) => {
