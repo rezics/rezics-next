@@ -556129,6 +556129,40 @@
                               "language": {
                                 "type": "string"
                               },
+                              "matchedPlacements": {
+                                "items": {
+                                  "properties": {
+                                    "occurrence": {
+                                      "type": "string"
+                                    },
+                                    "profile": {
+                                      "type": "string"
+                                    },
+                                    "resource": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "resource",
+                                    "work",
+                                    "occurrence",
+                                    "profile",
+                                    "title"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 512,
+                                "type": "array"
+                              },
                               "matchUnit": {
                                 "type": "string"
                               },
@@ -557883,6 +557917,40 @@
                                   "string",
                                   "null"
                                 ]
+                              },
+                              "matchedPlacements": {
+                                "items": {
+                                  "properties": {
+                                    "occurrence": {
+                                      "type": "string"
+                                    },
+                                    "profile": {
+                                      "type": "string"
+                                    },
+                                    "resource": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "resource",
+                                    "work",
+                                    "occurrence",
+                                    "profile",
+                                    "title"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 512,
+                                "type": "array"
                               },
                               "matchedText": {
                                 "type": "string"
@@ -560145,6 +560213,40 @@
                                   "string",
                                   "null"
                                 ]
+                              },
+                              "matchedPlacements": {
+                                "items": {
+                                  "properties": {
+                                    "occurrence": {
+                                      "type": "string"
+                                    },
+                                    "profile": {
+                                      "type": "string"
+                                    },
+                                    "resource": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "resource",
+                                    "work",
+                                    "occurrence",
+                                    "profile",
+                                    "title"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 512,
+                                "type": "array"
                               },
                               "matchedText": {
                                 "type": "string"
@@ -562416,6 +562518,40 @@
                                   "string",
                                   "null"
                                 ]
+                              },
+                              "matchedPlacements": {
+                                "items": {
+                                  "properties": {
+                                    "occurrence": {
+                                      "type": "string"
+                                    },
+                                    "profile": {
+                                      "type": "string"
+                                    },
+                                    "resource": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "resource",
+                                    "work",
+                                    "occurrence",
+                                    "profile",
+                                    "title"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 512,
+                                "type": "array"
                               },
                               "matchedText": {
                                 "type": "string"
@@ -564838,6 +564974,40 @@
                                   "string",
                                   "null"
                                 ]
+                              },
+                              "matchedPlacements": {
+                                "items": {
+                                  "properties": {
+                                    "occurrence": {
+                                      "type": "string"
+                                    },
+                                    "profile": {
+                                      "type": "string"
+                                    },
+                                    "resource": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "resource",
+                                    "work",
+                                    "occurrence",
+                                    "profile",
+                                    "title"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 512,
+                                "type": "array"
                               },
                               "matchedText": {
                                 "type": "string"
@@ -567271,6 +567441,40 @@
                                   "string",
                                   "null"
                                 ]
+                              },
+                              "matchedPlacements": {
+                                "items": {
+                                  "properties": {
+                                    "occurrence": {
+                                      "type": "string"
+                                    },
+                                    "profile": {
+                                      "type": "string"
+                                    },
+                                    "resource": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "resource",
+                                    "work",
+                                    "occurrence",
+                                    "profile",
+                                    "title"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 512,
+                                "type": "array"
                               },
                               "matchedText": {
                                 "type": "string"
@@ -569731,6 +569935,40 @@
                                   "string",
                                   "null"
                                 ]
+                              },
+                              "matchedPlacements": {
+                                "items": {
+                                  "properties": {
+                                    "occurrence": {
+                                      "type": "string"
+                                    },
+                                    "profile": {
+                                      "type": "string"
+                                    },
+                                    "resource": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "resource",
+                                    "work",
+                                    "occurrence",
+                                    "profile",
+                                    "title"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 512,
+                                "type": "array"
                               },
                               "matchedText": {
                                 "type": "string"
@@ -574811,6 +575049,40 @@
                               "language": {
                                 "type": "string"
                               },
+                              "matchedPlacements": {
+                                "items": {
+                                  "properties": {
+                                    "occurrence": {
+                                      "type": "string"
+                                    },
+                                    "profile": {
+                                      "type": "string"
+                                    },
+                                    "resource": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "resource",
+                                    "work",
+                                    "occurrence",
+                                    "profile",
+                                    "title"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 512,
+                                "type": "array"
+                              },
                               "matchUnit": {
                                 "type": "string"
                               },
@@ -575379,6 +575651,40 @@
                                   "string",
                                   "null"
                                 ]
+                              },
+                              "matchedPlacements": {
+                                "items": {
+                                  "properties": {
+                                    "occurrence": {
+                                      "type": "string"
+                                    },
+                                    "profile": {
+                                      "type": "string"
+                                    },
+                                    "resource": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "resource",
+                                    "work",
+                                    "occurrence",
+                                    "profile",
+                                    "title"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 512,
+                                "type": "array"
                               },
                               "matchedText": {
                                 "type": "string"
@@ -576452,6 +576758,40 @@
                                   "string",
                                   "null"
                                 ]
+                              },
+                              "matchedPlacements": {
+                                "items": {
+                                  "properties": {
+                                    "occurrence": {
+                                      "type": "string"
+                                    },
+                                    "profile": {
+                                      "type": "string"
+                                    },
+                                    "resource": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "resource",
+                                    "work",
+                                    "occurrence",
+                                    "profile",
+                                    "title"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 512,
+                                "type": "array"
                               },
                               "matchedText": {
                                 "type": "string"
@@ -577537,6 +577877,40 @@
                                   "string",
                                   "null"
                                 ]
+                              },
+                              "matchedPlacements": {
+                                "items": {
+                                  "properties": {
+                                    "occurrence": {
+                                      "type": "string"
+                                    },
+                                    "profile": {
+                                      "type": "string"
+                                    },
+                                    "resource": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "resource",
+                                    "work",
+                                    "occurrence",
+                                    "profile",
+                                    "title"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 512,
+                                "type": "array"
                               },
                               "matchedText": {
                                 "type": "string"
@@ -578770,6 +579144,40 @@
                                   "string",
                                   "null"
                                 ]
+                              },
+                              "matchedPlacements": {
+                                "items": {
+                                  "properties": {
+                                    "occurrence": {
+                                      "type": "string"
+                                    },
+                                    "profile": {
+                                      "type": "string"
+                                    },
+                                    "resource": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "resource",
+                                    "work",
+                                    "occurrence",
+                                    "profile",
+                                    "title"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 512,
+                                "type": "array"
                               },
                               "matchedText": {
                                 "type": "string"
@@ -580013,6 +580421,40 @@
                                   "string",
                                   "null"
                                 ]
+                              },
+                              "matchedPlacements": {
+                                "items": {
+                                  "properties": {
+                                    "occurrence": {
+                                      "type": "string"
+                                    },
+                                    "profile": {
+                                      "type": "string"
+                                    },
+                                    "resource": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "resource",
+                                    "work",
+                                    "occurrence",
+                                    "profile",
+                                    "title"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 512,
+                                "type": "array"
                               },
                               "matchedText": {
                                 "type": "string"
@@ -581283,6 +581725,40 @@
                                   "string",
                                   "null"
                                 ]
+                              },
+                              "matchedPlacements": {
+                                "items": {
+                                  "properties": {
+                                    "occurrence": {
+                                      "type": "string"
+                                    },
+                                    "profile": {
+                                      "type": "string"
+                                    },
+                                    "resource": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "type": "string"
+                                    },
+                                    "work": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "resource",
+                                    "work",
+                                    "occurrence",
+                                    "profile",
+                                    "title"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 512,
+                                "type": "array"
                               },
                               "matchedText": {
                                 "type": "string"
@@ -583267,6 +583743,11 @@
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                 "type": "string"
                               },
+                              "text": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              },
                               "toYear": {
                                 "maximum": 9999,
                                 "minimum": 1,
@@ -584037,6 +584518,11 @@
                               },
                               "realm": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "text": {
+                                "maxLength": 200,
+                                "minLength": 1,
                                 "type": "string"
                               },
                               "toYear": {
@@ -584811,6 +585297,11 @@
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                 "type": "string"
                               },
+                              "text": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              },
                               "toYear": {
                                 "maximum": 9999,
                                 "minimum": 1,
@@ -585101,6 +585592,40 @@
                                     "properties": {
                                       "language": {
                                         "type": "string"
+                                      },
+                                      "matchedPlacements": {
+                                        "items": {
+                                          "properties": {
+                                            "occurrence": {
+                                              "type": "string"
+                                            },
+                                            "profile": {
+                                              "type": "string"
+                                            },
+                                            "resource": {
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "type": "string"
+                                            },
+                                            "title": {
+                                              "type": "string"
+                                            },
+                                            "work": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "resource",
+                                            "work",
+                                            "occurrence",
+                                            "profile",
+                                            "title"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 512,
+                                        "type": "array"
                                       },
                                       "matchUnit": {
                                         "type": "string"
@@ -585670,6 +586195,40 @@
                                           "string",
                                           "null"
                                         ]
+                                      },
+                                      "matchedPlacements": {
+                                        "items": {
+                                          "properties": {
+                                            "occurrence": {
+                                              "type": "string"
+                                            },
+                                            "profile": {
+                                              "type": "string"
+                                            },
+                                            "resource": {
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "type": "string"
+                                            },
+                                            "title": {
+                                              "type": "string"
+                                            },
+                                            "work": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "resource",
+                                            "work",
+                                            "occurrence",
+                                            "profile",
+                                            "title"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 512,
+                                        "type": "array"
                                       },
                                       "matchedText": {
                                         "type": "string"
@@ -586743,6 +587302,40 @@
                                           "string",
                                           "null"
                                         ]
+                                      },
+                                      "matchedPlacements": {
+                                        "items": {
+                                          "properties": {
+                                            "occurrence": {
+                                              "type": "string"
+                                            },
+                                            "profile": {
+                                              "type": "string"
+                                            },
+                                            "resource": {
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "type": "string"
+                                            },
+                                            "title": {
+                                              "type": "string"
+                                            },
+                                            "work": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "resource",
+                                            "work",
+                                            "occurrence",
+                                            "profile",
+                                            "title"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 512,
+                                        "type": "array"
                                       },
                                       "matchedText": {
                                         "type": "string"
@@ -587828,6 +588421,40 @@
                                           "string",
                                           "null"
                                         ]
+                                      },
+                                      "matchedPlacements": {
+                                        "items": {
+                                          "properties": {
+                                            "occurrence": {
+                                              "type": "string"
+                                            },
+                                            "profile": {
+                                              "type": "string"
+                                            },
+                                            "resource": {
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "type": "string"
+                                            },
+                                            "title": {
+                                              "type": "string"
+                                            },
+                                            "work": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "resource",
+                                            "work",
+                                            "occurrence",
+                                            "profile",
+                                            "title"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 512,
+                                        "type": "array"
                                       },
                                       "matchedText": {
                                         "type": "string"
@@ -589061,6 +589688,40 @@
                                           "string",
                                           "null"
                                         ]
+                                      },
+                                      "matchedPlacements": {
+                                        "items": {
+                                          "properties": {
+                                            "occurrence": {
+                                              "type": "string"
+                                            },
+                                            "profile": {
+                                              "type": "string"
+                                            },
+                                            "resource": {
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "type": "string"
+                                            },
+                                            "title": {
+                                              "type": "string"
+                                            },
+                                            "work": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "resource",
+                                            "work",
+                                            "occurrence",
+                                            "profile",
+                                            "title"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 512,
+                                        "type": "array"
                                       },
                                       "matchedText": {
                                         "type": "string"
@@ -590304,6 +590965,40 @@
                                           "string",
                                           "null"
                                         ]
+                                      },
+                                      "matchedPlacements": {
+                                        "items": {
+                                          "properties": {
+                                            "occurrence": {
+                                              "type": "string"
+                                            },
+                                            "profile": {
+                                              "type": "string"
+                                            },
+                                            "resource": {
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "type": "string"
+                                            },
+                                            "title": {
+                                              "type": "string"
+                                            },
+                                            "work": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "resource",
+                                            "work",
+                                            "occurrence",
+                                            "profile",
+                                            "title"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 512,
+                                        "type": "array"
                                       },
                                       "matchedText": {
                                         "type": "string"
@@ -591574,6 +592269,40 @@
                                           "string",
                                           "null"
                                         ]
+                                      },
+                                      "matchedPlacements": {
+                                        "items": {
+                                          "properties": {
+                                            "occurrence": {
+                                              "type": "string"
+                                            },
+                                            "profile": {
+                                              "type": "string"
+                                            },
+                                            "resource": {
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "type": "string"
+                                            },
+                                            "title": {
+                                              "type": "string"
+                                            },
+                                            "work": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "resource",
+                                            "work",
+                                            "occurrence",
+                                            "profile",
+                                            "title"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 512,
+                                        "type": "array"
                                       },
                                       "matchedText": {
                                         "type": "string"
@@ -593828,6 +594557,40 @@
                                       "string",
                                       "null"
                                     ]
+                                  },
+                                  "matchedPlacements": {
+                                    "items": {
+                                      "properties": {
+                                        "occurrence": {
+                                          "type": "string"
+                                        },
+                                        "profile": {
+                                          "type": "string"
+                                        },
+                                        "resource": {
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "type": "string"
+                                        },
+                                        "title": {
+                                          "type": "string"
+                                        },
+                                        "work": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "resource",
+                                        "work",
+                                        "occurrence",
+                                        "profile",
+                                        "title"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 512,
+                                    "type": "array"
                                   },
                                   "matchedText": {
                                     "type": "string"
@@ -790747,6 +791510,40 @@
                               "string",
                               "null"
                             ]
+                          },
+                          "matchedPlacements": {
+                            "items": {
+                              "properties": {
+                                "occurrence": {
+                                  "type": "string"
+                                },
+                                "profile": {
+                                  "type": "string"
+                                },
+                                "resource": {
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "work": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "resource",
+                                "work",
+                                "occurrence",
+                                "profile",
+                                "title"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 512,
+                            "type": "array"
                           },
                           "matchedText": {
                             "type": "string"

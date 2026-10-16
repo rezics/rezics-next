@@ -1,5 +1,4 @@
-import { postBookPlacement } from '../post/patterns.ts';
-import { fallbackLanguage, realmLanguage } from './selection-heads.ts';
+import { phraseMatchPattern } from './search-phrase-pattern.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
@@ -15,7 +14,6 @@ import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE, decisionSlotIri,
 import { exactDecisionSupports, readSearchDecisionSupports } from './search-supports.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
 import { querySearchFields, rankedSearchMatches, type SearchFieldOwners } from '../search/fields.ts';
-import { publicWork } from './public-patterns.ts';
 import { assertPublicContentSearchReady, visibleContentSearchRights }
   from '../content-publication/search.ts';
 import type { RightsStore } from '../rights/store.ts';
@@ -34,7 +32,7 @@ export interface PublicMainPhraseQuery {
   author?: string;
   /** API discovery also matches current titles, taglines and credited names. */
   publicFields?: SearchFieldOwners;
-  /** A joined Content chapter must cover the current owner cut before a complete result is returned. */
+  /** A joined Content placement must cover the current owner cut before a complete result is returned. */
   contentProjection?: { content: ContentCore; cursor: ContentProjectionCursor; consumer: string };
   rights?: Pick<RightsStore, 'currentPublicDomainAssessments'>;
 }
@@ -43,10 +41,11 @@ const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const MAX_CLASSIFICATION_CANDIDATES = 256;
 
 /** One complete, bounded public Main Version phrase relation at a query snapshot. */
-export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
-  input: PublicMainPhraseQuery) {
+async function queryPublicPhrase(env: WorkActivationEnvironment,
+  input: PublicMainPhraseQuery & { context?: { kind: 'realm-local'; id: string } }) {
   const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
   if (phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)
+    || (input.context !== undefined && (input.context.kind !== 'realm-local' || !nativeId.test(input.context.id)))
     || (input.author !== undefined && !nativeId.test(input.author))
     || (input.language !== null
       && !/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(input.language))) {
@@ -54,24 +53,18 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   }
   // Quotes force a literal phrase; backslashes and quotes cannot add Lucene operators.
   const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
+  const realm = input.context?.id;
   const content = input.contentProjection;
   const contentReadiness = content
     ? await assertPublicContentSearchReady(env, content.content, content.cursor, content.consumer) : null;
-  // Readiness also fences this lineage and the recovery hold in its control read.
-  const baseIndex = await assertPublicTextReady(env.fuseki, env.lineage);
-  if (contentReadiness && (contentReadiness.graphPosition.dataEpoch !== baseIndex.dataEpoch
-    || contentReadiness.indexGeneration !== baseIndex.generation
-    || BigInt(contentReadiness.graphPosition.sequence) < BigInt(baseIndex.sequence))) {
-    throw new PublicQueryUnavailable('Content chapter readiness crossed the public text index');
-  }
-  const index = contentReadiness
-    ? { ...baseIndex, sequence: contentReadiness.graphPosition.sequence } : baseIndex;
+  // Content readiness already qualified the native index at this same graph cut.
+  const index = contentReadiness?.index ?? await assertPublicTextReady(env.fuseki, env.lineage);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
-    SELECT ?candidateCount ?epoch ?sequence ?indexGeneration ?unit ?score ?work ?main ?contribution
+    SELECT ?candidateCount ?epoch ?sequence ?indexGeneration ?phraseWork ?unit ?score ?work ?main ?contribution
       ?revision ?selection ?language ?resultWork ?resultMain ?chapterTitle ?contentProjection ?rightsBasis ?assessment
-      ?variant ?contentDecision ?contentEligibility WHERE {
+      ?variant ?contentDecision ?contentEligibility ?searchOccurrence ?searchProfile ?searchPosition ?reason WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
           rv:textIndexGeneration ?indexGeneration .
@@ -81,67 +74,27 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
         ${iri(DATASET)} rv:restoreHold true } }
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
         ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }
+      ${realm ? `GRAPH ${iri(GRAPHS.current)} {
+        ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
+        ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
+          rv:selectionPolicy ${iri(SELECTION_POLICY)} .
+      }` : ''}
       { SELECT (COUNT(?rawUnit) AS ?candidateCount) WHERE {
         { SELECT ?rawUnit WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
           (?rawUnit ?rawScore) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
         } } LIMIT ${PHRASE_HIT_PROBE} }
       } }
       OPTIONAL {
-        { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-          (?unit ?score) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
-          ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
-            rv:work ?work ; rv:mainVersion ?main ; rv:contribution ?contribution ;
-            rv:context ?main ; rv:revision ?revision ;
-            rv:selection ?selection ; rv:language ?language .
-          OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
-            rv:searchChapterTitle ?chapterTitle . }
-          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
-        }
-        GRAPH ${iri(GRAPHS.current)} {
-          ?main rv:selectionHead ?selection .
-          ${input.author ? `?contribution a rv:TextContribution ; rv:author ${iri(input.author)} .` : ''}
-        }
-        FILTER(!BOUND(?resultWork) || EXISTS { ${publicWork('?resultWork', '?resultMain')} })
-        ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
-        }
-        ${content ? `UNION {
-          GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-            (?unit ?score) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
-            ?unit a rv:MatchUnit ; rv:disclosure rv:Public ; rv:field rv:Body ;
-              rv:resource ?work ; rv:variant ?variant ; rv:revision ?contentRevision ;
-              rv:publicationDecision ?contentDecision ; rv:eligibility ?contentEligibility ;
-              rv:projection ?contentProjection ; rv:language ?language .
-          }
-          GRAPH ${iri(GRAPHS.current)} {
-            ?variant a rv:ContentVariant ; rv:resource ?work ;
-              rv:contentPublicationHead ?contentDecision ;
-              rv:publicSearchEligibilityHead ?contentEligibility .
-            ?work a rv:Post ; <http://www.w3.org/2000/01/rdf-schema#label> ?chapterTitle .
-          }
-          FILTER(LCASE(LANG(?chapterTitle)) = LCASE(?language))
-          GRAPH ${iri(GRAPHS.revisions)} {
-            ?contentEligibility a rv:ContentSearchEligibilityDecision ;
-              rv:variant ?variant ; rv:publicationDecision ?contentDecision ;
-              rv:rightsBasis ?rightsBasis ; rv:disclosure rv:Public .
-            OPTIONAL { ?contentEligibility rv:rightsAssessment ?assessment }
-            FILTER NOT EXISTS { ?contentRevision a rv:ErasedRevision }
-          }
-          ${postBookPlacement('?work', '?resultWork', '?resultMain')}
-          ${publicWork('?resultWork', '?resultMain')}
-          ${input.author ? `GRAPH ${iri(GRAPHS.current)} {
-            ?bookCredit a rv:NativeAgentCredit ; rv:work ?resultWork ; rv:agent ${iri(input.author)} ;
-              <https://schema.org/roleName> "author" . }` : ''}
-          BIND(?resultMain AS ?main)
-          BIND(?work AS ?contribution)
-          BIND(?contentRevision AS ?revision)
-          BIND(?contentDecision AS ?selection)
-          ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
-        }` : ''}
+        ${phraseMatchPattern(input, lucene)}
       }
-    }`, MAX_SEARCH_RESPONSE_BYTES);
+    } ORDER BY ?searchPosition ?searchOccurrence LIMIT 513`, MAX_SEARCH_RESPONSE_BYTES);
   await assertSameTextInstance(env.fuseki, index);
   const rows = result.results?.bindings ?? [];
-  if (!rows.length) await assertSnapshotMoved(env.fuseki, index);
+  if (rows.length >= 513) throw new PublicQueryBudgetExceeded('Search placements exceed their complete result budget');
+  if (!rows.length) {
+    await assertSnapshotMoved(env.fuseki, index);
+    if (realm) throw new PublicRealmUnavailable('Realm is unavailable');
+  }
   // Metadata commands can advance graph sequence without touching MatchUnits.
   // The relation is one later TDB2 snapshot, and the native write epoch stayed fixed.
   const relationSequence = rows[0]?.sequence?.value;
@@ -163,8 +116,8 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
     throw new PublicQueryBudgetExceeded('public phrase exceeds complete candidate budget');
   }
   const contentRows = rows.filter(row => row.contentProjection).map(row => {
-    if (!row.work) throw new PublicQueryUnavailable('Content chapter resource is missing');
-    return { row, resource: row.work.value, rightsBasis: row.rightsBasis?.value,
+    if (!row.phraseWork) throw new PublicQueryUnavailable('Content placement resource is missing');
+    return { row, resource: row.phraseWork.value, rightsBasis: row.rightsBasis?.value,
       assessment: row.assessment?.value };
   });
   const visibleContent = new Set((await visibleContentSearchRights(contentRows, input.rights)).map(item => item.row));
@@ -175,7 +128,7 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
       throw new PublicQueryUnavailable('public query result is incomplete');
     }
     if (row.resultWork && (!row.resultMain || !row.chapterTitle)) {
-      throw new PublicQueryUnavailable('chapter search identity is incomplete');
+      throw new PublicQueryUnavailable('Content placement identity is incomplete');
     }
     const score = Number(row.score.value);
     if (!Number.isFinite(score)) throw new PublicQueryUnavailable('public query score is invalid');
@@ -187,23 +140,29 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
     return { matchUnit: row.unit.value, work: row.resultWork?.value ?? row.work.value,
       mainVersion: row.resultMain?.value ?? row.main.value,
       contribution: row.contribution.value, revision: row.revision.value,
-      selection: row.selection.value, language: row.language.value, score,
-      ...(row.resultWork ? { matchedChapter: { post: row.work.value, book: row.resultWork.value,
-        title: row.chapterTitle!.value } } : {}) };
+      selection: row.selection.value, language: row.language.value, score, reason: row.reason?.value ?? 'main-fallback',
+      ...(row.searchOccurrence && row.searchProfile && row.resultWork ? {
+        matchedPlacements: [{ resource: row.phraseWork.value, work: row.resultWork.value,
+          occurrence: row.searchOccurrence.value, profile: row.searchProfile.value, title: row.chapterTitle!.value,
+          revision: row.revision.value }],
+      } : {}),
+      ...(row.resultWork && (!row.searchProfile || row.searchProfile.value === 'book-composition')
+        ? { matchedChapter: { post: row.phraseWork.value, book: row.resultWork.value,
+          title: row.chapterTitle!.value } } : {}) };
   });
-  const unique = new Set(matches.map(match => `${match.matchUnit}\0${match.work}`));
+  const unique = new Set(matches.map(match => `${match.matchUnit}\0${match.work}\0${match.matchedPlacements?.[0]?.occurrence ?? ''}`));
   if (unique.size !== matches.length) throw new PublicQueryUnavailable('public query has duplicate units');
   const fields = input.publicFields ? await querySearchFields(env, input,
     { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value }, input.publicFields) : [];
   const disclosed = await discloseSearchMatches(env, matches);
   // The qualified census counts MatchUnits, but one Content unit can reach
-  // several Book mains. Replace only disclosed matching Content units with
-  // their distinct Book mains; fences therefore gate the expansion too.
+  // several placing mains. Replace only disclosed matching Content units with
+  // their distinct placing mains; fences therefore gate the expansion too.
   // O(512) identities from this relation, with no additional owner or graph read.
   const contentUnits = new Set([...visibleContent].flatMap(row => row.unit ? [row.unit.value] : []));
   const chapterUnits = new Set<string>(), chapterMains = new Set<string>();
   for (const match of disclosed) {
-    if (!match.matchedChapter || !contentUnits.has(match.matchUnit)) continue;
+    if (!match.matchedPlacements || !contentUnits.has(match.matchUnit)) continue;
     chapterUnits.add(match.matchUnit);
     chapterMains.add(match.mainVersion);
   }
@@ -229,136 +188,15 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
       dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value } };
 }
 
-/** One complete Realm-effective phrase relation within the whole public index bound. */
+/** Main and Realm readers share one bounded candidate relation and Content ancestry. */
+export async function queryPublicMainPhrase(env: WorkActivationEnvironment, input: PublicMainPhraseQuery) {
+  return queryPublicPhrase(env, input);
+}
+
 export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
   input: PublicMainPhraseQuery & { context: { kind: 'realm-local'; id: string } }) {
-  const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
-  if (input.context?.kind !== 'realm-local' || !nativeId.test(input.context.id)
-    || phrase.length < 2 || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)
-    || (input.author !== undefined && !nativeId.test(input.author))
-    || (input.language !== null
-      && !/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(input.language))) {
-    throw new InvalidPublicQuery('invalid Realm text query');
-  }
-  const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
-  const realm = input.context.id;
-  const index = await assertPublicTextReady(env.fuseki, env.lineage);
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}>
-    PREFIX schema: <https://schema.org/>
-    PREFIX text: <http://jena.apache.org/text#>
-    SELECT ?candidateCount ?epoch ?sequence ?indexGeneration ?unit ?score ?work ?main ?contribution
-      ?revision ?selection ?language ?reason ?resultWork ?resultMain ?chapterTitle WHERE {
-      GRAPH ${iri(GRAPHS.control)} {
-        ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
-          rv:textIndexGeneration ?indexGeneration .
-      }
-      FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} {
-        ${iri(DATASET)} rv:restoreHold true } }
-      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-        ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }
-      GRAPH ${iri(GRAPHS.current)} {
-        ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
-        ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
-          rv:selectionPolicy ${iri(SELECTION_POLICY)} .
-      }
-      { SELECT (COUNT(?rawUnit) AS ?candidateCount) WHERE {
-        { SELECT ?rawUnit WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-          (?rawUnit ?rawScore) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
-        } } LIMIT ${PHRASE_HIT_PROBE} }
-      } }
-      OPTIONAL {
-        GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-          (?unit ?score) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) .
-          ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
-            rv:work ?work ; rv:mainVersion ?main ; rv:context ?unitContext ;
-            rv:contribution ?contribution ; rv:revision ?revision ;
-            rv:selection ?selection ; rv:language ?language .
-          OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
-            rv:searchChapterTitle ?chapterTitle . }
-          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
-        }
-        GRAPH ${iri(GRAPHS.current)} {
-          ?work a schema:CreativeWork ; rv:mainVersion ?main .
-          ?main a rv:MainVersion ; rv:work ?work .
-          ${input.author ? `?contribution a rv:TextContribution ; rv:author ${iri(input.author)} .` : ''}
-        }
-        OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
-          ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
-            rv:mainVersion ?main ; rv:selectionHead ?local . }
-          ${realmLanguage('?local', '?language')} }
-        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?main rv:selectionHead ?fallback }
-          ${fallbackLanguage('?fallback', '?language')} }
-        BIND(COALESCE(?local, ?fallback) AS ?effectiveSelection)
-        BIND(IF(BOUND(?local), ${iri(realm)}, ?main) AS ?effectiveContext)
-        BIND(IF(BOUND(?local), "realm-adoption", "main-fallback") AS ?reason)
-        FILTER(?selection = ?effectiveSelection && ?unitContext = ?effectiveContext)
-        FILTER(!BOUND(?resultWork) || EXISTS { ${publicWork('?resultWork', '?resultMain')} })
-        ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
-      }
-    }`, MAX_SEARCH_RESPONSE_BYTES);
-  await assertSameTextInstance(env.fuseki, index);
-  const rows = result.results?.bindings ?? [];
-  if (!rows.length) await assertSnapshotMoved(env.fuseki, index);
-  if (rows.length === 0) throw new PublicRealmUnavailable('Realm is unavailable');
-  // Realm policy/selection is read with the phrase relation at this graph cut.
-  // A stable native write epoch certifies the earlier index population proof.
-  const relationSequence = rows[0]?.sequence?.value;
-  if (!rows[0]?.candidateCount || !rows[0]?.epoch || !rows[0]?.sequence
-    || rows[0].epoch.value !== index.dataEpoch
-    || !relationSequence || !/^(0|[1-9][0-9]*)$/.test(relationSequence)
-    || BigInt(relationSequence) < BigInt(index.sequence)
-    || rows.some(row => row.epoch?.value !== index.dataEpoch
-      || row.sequence?.value !== relationSequence
-      || row.indexGeneration?.value !== index.generation
-      || row.candidateCount?.value !== rows[0]!.candidateCount!.value)) {
-    throw new PublicQueryUnavailable('Realm query snapshot is unavailable');
-  }
-  const candidateCount = Number(rows[0].candidateCount.value);
-  if (!Number.isSafeInteger(candidateCount) || candidateCount < 0) {
-    throw new PublicQueryUnavailable('Realm query candidate count is invalid');
-  }
-  if (candidateCount >= PHRASE_HIT_PROBE) {
-    throw new PublicQueryBudgetExceeded('Realm phrase exceeds complete candidate budget');
-  }
-  const sourceHeads = new Set<string>();
-  const matches = rows.filter(row => row.unit).map(row => {
-    if (!row.unit || !row.score || !row.work || !row.main || !row.contribution
-      || !row.revision || !row.selection || !row.language || !row.reason) {
-      throw new PublicQueryUnavailable('Realm query result is incomplete');
-    }
-    if (row.resultWork && (!row.resultMain || !row.chapterTitle)) {
-      throw new PublicQueryUnavailable('chapter search identity is incomplete');
-    }
-    const score = Number(row.score.value);
-    if (!Number.isFinite(score)
-      || !['realm-adoption', 'main-fallback'].includes(row.reason.value)) {
-      throw new PublicQueryUnavailable('Realm query score or selection is invalid');
-    }
-    const head = `${row.main.value}\0${row.language.value.toLowerCase()}`;
-    if (sourceHeads.has(head)) throw new PublicQueryUnavailable('Realm language search heads are ambiguous');
-    sourceHeads.add(head);
-    return { matchUnit: row.unit.value, work: row.resultWork?.value ?? row.work.value,
-      mainVersion: row.resultMain?.value ?? row.main.value, contribution: row.contribution.value,
-      revision: row.revision.value, selection: row.selection.value,
-      language: row.language.value, reason: row.reason.value, score,
-      ...(row.resultWork ? { matchedChapter: { post: row.work.value, book: row.resultWork.value,
-        title: row.chapterTitle!.value } } : {}) };
-  });
-  const unique = new Set(matches.map(match => match.matchUnit));
-  if (unique.size !== matches.length || (matches.length === 0 && rows.length !== 1)) {
-    throw new PublicQueryUnavailable('Realm query has ambiguous results');
-  }
-  const fields = input.publicFields ? await querySearchFields(env, input,
-    { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value }, input.publicFields) : [];
-  const results = rankedSearchMatches([...await discloseSearchMatches(env, matches), ...fields]);
-  if (results.length > 512) throw new PublicQueryBudgetExceeded('Combined search candidates exceed their bound');
-  return { contractVersion: '1', resultGrain: 'mainVersion' as const,
-    context: { kind: 'realm-local' as const, id: realm },
-    complete: true as const, population: index.population, total: results.length, results,
-    indexGeneration: index.generation,
-    sourcePosition: { datasetId: 'product' as const,
-      dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value } };
+  const result = await queryPublicPhrase(env, input);
+  return { ...result, context: input.context };
 }
 
 async function assertClassificationQueryScope(env: WorkActivationEnvironment,

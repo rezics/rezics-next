@@ -47,6 +47,7 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
     });
   },
   withholdUnreadableTargets: true,
+  searchableRoles: ['entry'],
   roles: ['section', 'entry'], containerRoles: ['section'], targetRoles: ['entry'],
   readingRoles: ['entry'],
   selectionRequiredRoles: [], selectionOptionalRoles: ['entry'], selectionSelectorRoles: ['entry'],

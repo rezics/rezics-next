@@ -7,13 +7,13 @@ import { WorkReadInvalid, type WorkReadSession } from '../work/read-session.ts';
 /** Conditions have exactly the same admission and evaluation as Realm browse.
  * The year index supplies a bounded window, never a sampled Realm roster. */
 export function publicationYearScope(parameters: TemplateInput['parameters']) {
-  const { realm, filter } = parameters;
+  const { realm, filter, text } = parameters;
   if (!realm) {
-    if (filter !== undefined) throw new WorkReadInvalid('Year Conditions require a Realm');
+    if (filter !== undefined || text !== undefined) throw new WorkReadInvalid('Year Conditions require a Realm');
     return null;
   }
   const plan = compileQuery({ profile: 'filter-document-v2', context: { realm }, scope: { kind: 'realm', realm },
-    filter, sort: 'newest', page: { size: 20 } });
+    filter, ...(text ? { text: { phrase: text } } : {}), sort: 'newest', page: { size: 20 } });
   if (plan.template !== 'zone-browse') throw new QueryRejected('unsupported_query_shape', 'Year Conditions require a Realm browse plan');
   return { realm, query: plan.request };
 }
@@ -23,5 +23,5 @@ export async function scopedPublicationWorks(session: WorkReadSession,
   await readRealmBasis(session, scope.realm);
   const filter = browseFilter(scope.query);
   const batch = await readBrowseBatch(session, scope.realm, works, filter, undefined, scope.query.publicationYear);
-  return new Set(browseCandidates(batch.candidates, filter, null, 'newest').found.map(row => row.work));
+  return new Set(browseCandidates(batch.candidates, filter, scope.query.q ?? null, 'newest').found.map(row => row.work));
 }

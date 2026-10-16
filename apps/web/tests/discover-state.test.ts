@@ -10,6 +10,7 @@ import {
   parseDiscoverState,
   shelvesFor,
   termShelf,
+  workTypes,
 } from '../features/discover/state.ts';
 import { failureOf, type MainClient } from '../features/discover/types.ts';
 import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
@@ -41,10 +42,10 @@ describe('discover URL state', () => {
   });
 
   test('filters parse strictly and round-trip through the address', () => {
-    const state = parseDiscoverState({ scope: 'realm', realm, context, type: 'book', term });
-    expect(state).toEqual({ scope: { kind: 'realm', realm }, context, type: 'book', term });
+    const state = parseDiscoverState({ scope: 'realm', realm, context, type: 'https://schema.org/Book', term });
+    expect(state).toEqual({ scope: { kind: 'realm', realm }, context, type: 'https://schema.org/Book', term });
     expect(discoverHref(state!)).toBe(
-      `/discover?scope=realm&realm=${realm}&context=${context}&type=book&term=${term}`,
+      `/discover?scope=realm&realm=${realm}&context=${context}&type=https%3A%2F%2Fschema.org%2FBook&term=${term}`,
     );
     expect(
       parseDiscoverState(
@@ -85,20 +86,15 @@ describe('discover shelves', () => {
   const global = { scope: { kind: 'global' as const }, context: null, type: null, term: null };
 
   test('shelves are curated by meaning and each holds one kind of Work; favorites need a rating question', () => {
-    expect(shelvesFor(global, true).map((shelf) => shelf.key)).toEqual([
-      'favorites-book',
-      'recent-book',
-      'recent-document',
-      'recent-recipe',
+    const types = workTypes().map(type => type.iri);
+    expect(types).toContain('https://schema.org/TVSeries');
+    expect(shelvesFor(global, true).map(shelf => shelf.key)).toEqual([
+      `favorites-${types[0]}`, ...types.map(type => `recent-${type}`),
     ]);
-    expect(shelvesFor(global).map((shelf) => shelf.key)).toEqual([
-      'recent-book',
-      'recent-document',
-      'recent-recipe',
-    ]);
+    expect(shelvesFor(global).map(shelf => shelf.key)).toEqual(types.map(type => `recent-${type}`));
     expect(shelvesFor({ ...global, type: 'recipe' }, true).map((shelf) => shelf.topic)).toEqual([
-      { kind: 'favorites', type: 'recipe' },
-      { kind: 'recent', type: 'recipe' },
+      { kind: 'favorites', type: 'https://schema.org/Recipe' },
+      { kind: 'recent', type: 'https://schema.org/Recipe' },
     ]);
     expect(shelvesFor({ ...global, term }, true).map((shelf) => shelf.key)).toEqual([
       `popular-${term}`,
@@ -117,7 +113,7 @@ describe('discover shelves', () => {
         },
         true,
       ).map((shelf) => shelf.key),
-    ).toEqual(['favorites-book', 'recent-book']);
+    ).toEqual(['favorites-https://schema.org/Book', 'recent-https://schema.org/Book']);
     expect(
       shelvesFor(
         {
@@ -134,7 +130,7 @@ describe('discover shelves', () => {
         type: 'book',
         conditions: { include: [], exclude: [term], match: 'all' },
       }).map((shelf) => shelf.key),
-    ).toEqual(['recent-book']);
+    ).toEqual(['recent-https://schema.org/Book']);
   });
 
   test('two Concept genres on Books keep their any Condition in the Query and page cursor', async () => {
@@ -325,4 +321,13 @@ describe('discover shelves', () => {
     } as unknown as MainClient;
     expect(await readDiscovery(throwing, {})).toEqual({ ok: false, failure: 'unavailable' });
   });
+});
+
+
+test('discovery stores served Anime type IRIs and forwards the exact filter', () => {
+  const type = 'https://schema.org/TVSeries';
+  const state = parseDiscoverState({ type });
+  expect(state?.type).toBe(type);
+  expect(parseDiscoverState({ type: 'book' })?.type).toBe('https://schema.org/Book');
+  expect(discoveryQuery(state!, shelvesFor(state!)[0]!, { limit: 10, language: 'en' }).type).toBe(type);
 });

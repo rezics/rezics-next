@@ -145,7 +145,7 @@ export const ConceptConditions: Story = {
 };
 
 export const FacetedTypes: Story = {
-  args: { parsed: state('Pride', { includeTypes: ['book'] }), initial: results(pride, {
+  args: { parsed: state('Pride', { includeTypes: ['https://schema.org/Book'] }), initial: results(pride, {
     facets: { populationBasis: 'all-filters', resultGrain: 'work',
       languages: { precision: 'exact', values: [{ value: 'en', count: 2 },
         { value: 'zh-Hans', count: 1 }] },
@@ -159,7 +159,7 @@ export const FacetedTypes: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByRole('link', { name: 'Include Books' })[0]).toHaveAttribute('aria-current', 'true');
     await expect(canvas.getAllByRole('link', { name: 'Exclude Guides' })[0]).toHaveAttribute('href',
-      '/en/search?q=Pride&include=book&exclude=document');
+      '/en/search?q=Pride&include=https%3A%2F%2Fschema.org%2FBook&exclude=https%3A%2F%2Fschema.org%2FDigitalDocument');
     // A kind or language with no matches would only narrow to nothing, so it is not offered.
     await expect(canvas.queryByRole('link', { name: 'Exclude Recipes' })).toBeNull();
     await expect(canvas.queryByRole('link', { name: /^Japanese/ })).toBeNull();
@@ -519,5 +519,20 @@ export const PhoneChinese: Story = {
   globals: { viewport: { value: 'phone' }, locale: 'zh-Hans' },
   async play() {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+
+export const MultipleContentPlacements: Story = {
+  args: { parsed: state('orbital signal'), initial: results([
+    { ...hit(21, 'Orbital anthology', 'en', { placements: [
+      { title: 'Production notes', href: resourceHref('/w/', id(22)), occurrence: 'opening', revision: 'revision-one' },
+      { title: 'Production notes', href: resourceHref('/w/', id(22)), occurrence: 'closing', revision: 'revision-one' },
+    ] }), types: ['https://schema.org/TVSeries'] },
+  ]) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByRole('link', { name: 'Production notes' })).toHaveLength(2);
+    await expect(canvas.getByRole('link', { name: 'Orbital anthology' })).toBeVisible();
   },
 };

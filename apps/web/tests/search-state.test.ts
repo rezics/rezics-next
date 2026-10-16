@@ -22,8 +22,8 @@ describe('search URL state', () => {
     expect(href).toBe(`/search?${new URLSearchParams({ q: '《西游记》 取经' })}&scope=realm&realm=${realm}&lang=zh-Hans&term=${term}`);
     expect(parseSearchState(Object.fromEntries(new URL(href, 'http://x').searchParams))).toEqual(parsed);
     expect(searchHref(global)).toBe('/search?q=Pride');
-    const selected = { ...global, includeTypes: ['book', 'recipe'] as Array<'book' | 'recipe'>,
-      excludeTypes: ['document'] as Array<'document'> };
+    const selected = { ...global, includeTypes: ['https://schema.org/Book', 'https://schema.org/Recipe'],
+      excludeTypes: ['https://schema.org/DigitalDocument'] };
     const selectedHref = searchHref(selected);
     expect(parseSearchState(Object.fromEntries(new URL(selectedHref, 'http://x').searchParams)))
       .toEqual({ ok: true, state: selected });

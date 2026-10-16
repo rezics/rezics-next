@@ -3,7 +3,8 @@ import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import { zoneWork } from '../realm/adapt.ts';
 import type { RealmView } from '../realm/realm-page.tsx';
-import type { readZoneBrowse } from '../realm/read.ts';
+import type { FilterCondition } from '../../../../model/definitions/filter-document-v1.ts';
+import type { readPublicationYearWorks } from './catalogue-facts.ts';
 import { browseHref, mainBrowseQuery, parseBrowseState } from './browse-state.ts';
 import type { BrowseModel } from './browse-view.ts';
 import type { readPublicationYears } from './catalogue-facts.ts';
@@ -18,7 +19,6 @@ export function catalogueBrowseQuery(search: Record<string, string | string[] | 
     ...year !== null ? { publicationYear: String(year) } : {} };
 }
 
-export const MEMBER_PAGES = 10;
 /** Pages of `work-publication-years` one request may read. A cap on that request's cost, not a quota. */
 export const YEAR_PAGES = 8;
 /** Matches kept from the pages this request read. A further year-read page waits for the next cursor. */
@@ -55,35 +55,32 @@ function yearHref(href: string, cursor: string | null): string {
   return search ? `${url.pathname}?${search}` : url.pathname;
 }
 
-// The roster intersection stops after MEMBER_PAGES, so a year view covers only those Works
-// and may miss the rest. Use work-publication-years with `concept` and drop the roster intersection.
-async function members(view: Extract<RealmView, { kind: 'view' }>, state: ReturnType<typeof parseBrowseState>,
-  browse: typeof readZoneBrowse): Promise<{
-  works: Map<string, ZoneWork>; incomplete: boolean; failure: 'unavailable' | null;
-}> {
-  const works = new Map<string, ZoneWork>();
-  let cursor: string | null = null;
-  for (let page = 0; page < MEMBER_PAGES; page++) {
-    const read = await browse(view.context.realm, view.context.locale, mainBrowseQuery({ ...state, cursor }));
-    if (!read.ok) return { works, incomplete: true, failure: 'unavailable' };
-    for (const item of read.data.items) works.set(item.id, zoneWork(item, view.context, item.evidence));
-    cursor = read.data.nextCursor;
-    if (!cursor) return { works, incomplete: false, failure: null };
+/** The same admitted Facet state as Realm browse, passed to the year owner. */
+export function catalogueYearScope(realm: string, state: ReturnType<typeof parseBrowseState>) {
+  const all: FilterCondition[] = [];
+  for (const facet of ['type', 'concept', 'status'] as const) {
+    if (state.filter[facet]?.length) all.push({ facet, any: state.filter[facet] });
   }
-  return { works, incomplete: cursor !== null, failure: null };
+  if (state.filter.length?.[0]) {
+    const [min, max] = state.filter.length[0].split('-');
+    all.push({ facet: 'length', range: { ...(min ? { min } : {}), ...(max ? { max } : {}) } });
+  }
+  if (state.excludedConcepts?.length) all.push({ facet: 'concept', none: state.excludedConcepts });
+  return { realm: realm.startsWith('https://rezics.com/id/') ? realm : `https://rezics.com/id/${realm}`,
+    filter: { all }, ...(state.text ? { text: state.text } : {}) };
 }
 
 /**
  * Stamps the year onto the browse model the route already built, and fills the header slot's year
  * control. The route has already loaded the view and the first browse page.
  * A selected year keeps the route's API items, counts and continuation.
- * `reads` replaces the unchanged all-years directory's year and roster reads in tests.
+ * The year query owns membership; hydration follows only its returned IDs.
  */
 export async function applyCatalogueYear({ view, search, model }: {
   view: Extract<RealmView, { kind: 'view' }>;
   search: Record<string, string | string[] | undefined>;
   model: BrowseModel;
-}, reads: { publicationYears?: typeof readPublicationYears; zoneBrowse?: typeof readZoneBrowse } = {}): Promise<{
+}, reads: { publicationYears?: typeof readPublicationYears; works?: typeof readPublicationYearWorks } = {}): Promise<{
   header: ReactNode; publicationYears: Map<string, number[]>; year: number | null;
   failure: 'unavailable' | null }> {
   const year = catalogueYearCondition(search.year);
@@ -127,20 +124,22 @@ export async function applyCatalogueYear({ view, search, model }: {
     // Directory reads belong to the server. Selected-year presentation can also
     // render in Storybook without importing their request context.
     const years = reads.publicationYears ?? (await import('./catalogue-facts.ts')).readPublicationYears;
-    const browse = reads.zoneBrowse ?? (await import('../realm/read.ts')).readZoneBrowse;
-    const roster = await members(view, { ...state, cursor: null }, browse);
-    if (roster.failure) return { header, publicationYears, year: exactYear, failure: 'unavailable' };
+    const hydrate = reads.works ?? (await import('./catalogue-facts.ts')).readPublicationYearWorks;
+    const parameters = catalogueYearScope(view.context.realm, state);
     const found: ZoneWork[] = [];
     let cursor = yearCursorOf(search.yearCursor) ?? undefined;
     let nextCursor: string | null = null;
-    // YEAR_PAGES bounds one request. Works outside this Zone are filtered after the read;
-    // the year template does not take a format or type yet.
+    // Each query page applies Realm membership and Conditions before hydration.
     for (let step = 0; step < YEAR_PAGES; step++) {
-      const listed = await years({}, cursor);
+      const listed = await years(parameters, cursor);
       if (!listed.ok) return { header, publicationYears, year: exactYear, failure: 'unavailable' };
+      const resources = [...new Set(listed.data.items.map(row => row.id))];
+      const cards = await hydrate(resources, parameters.realm);
+      if (!cards.ok) return { header, publicationYears, year: exactYear, failure: 'unavailable' };
       for (const row of listed.data.items) {
-        const work = roster.works.get(row.id);
-        if (!work) continue;
+        const summary = cards.data.get(row.id);
+        if (!summary) return { header, publicationYears, year: exactYear, failure: 'unavailable' };
+        const work = zoneWork(summary, view.context, null);
         const prior = publicationYears.get(work.id) ?? [];
         if (!prior.includes(row.year)) publicationYears.set(work.id, [...prior, row.year].sort((left, right) => right - left));
         if (!found.some(item => item.id === work.id)) found.push(work);
@@ -160,10 +159,8 @@ export async function applyCatalogueYear({ view, search, model }: {
     model.items = found;
     model.next = resume ? yearHref(listedHref, resume) : null;
     model.first = started ? listedHref : null;
-    yearControl.window = roster.works.size;
-    yearControl.bounded = roster.incomplete;
     const t = materializeData(view.zoneMessages, { locale: view.context.locale });
-    const open = roster.incomplete || nextCursor !== null;
+    const open = nextCursor !== null;
     model.complete = !open;
     model.results = open
       ? t.resultsAtLeast({ count: String(found.length) }) : t.results(found.length);

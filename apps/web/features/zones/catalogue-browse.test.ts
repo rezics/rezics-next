@@ -1,11 +1,8 @@
 import { expect, test } from 'bun:test';
-import { createElement, type ReactNode } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import type { RealmView } from '../realm/realm-page.tsx';
-import type { readZoneBrowse } from '../realm/read.ts';
-import { applyCatalogueYear, catalogueBrowseQuery, MEMBER_PAGES, YEAR_PAGES } from './catalogue-browse.tsx';
+import { applyCatalogueYear, catalogueBrowseQuery, YEAR_PAGES } from './catalogue-browse.tsx';
 import type { BrowseModel } from './browse-view.ts';
-import type { readPublicationYears } from './catalogue-facts.ts';
+import type { readPublicationYears, readPublicationYearWorks } from './catalogue-facts.ts';
 import { messages } from './messages.ts';
 
 // More members than one request can read. Each publication-year page names one of them, so the
@@ -17,12 +14,11 @@ function workId(index: number): string {
   return `https://rezics.com/id/00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
 }
 
-function card(id: string) {
-  return {
-    id, title: null, cover: null, types: [], tagline: null, completionStatus: null,
-    chapterCount: null, wordCount: null, lastUpdatedAt: null, inZone: false as const, evidence: null,
-  };
-}
+const works: typeof readPublicationYearWorks = async resources => ({ ok: true,
+  data: new Map(resources.map(reference => [reference, {
+    id: reference, title: null, cover: null, types: ['https://schema.org/TVSeries'], tagline: null,
+    completionStatus: null, chapterCount: null, wordCount: null, lastUpdatedAt: null,
+  } as never])) });
 
 function model(): BrowseModel {
   return {
@@ -47,7 +43,6 @@ test('the restored all-years directory pages the publication-year template in it
   for (let index = 0; index < WORKS; index++) {
     const key = index === 0 ? '' : `page-${index}`;
     const items = [{ id: ids[index]!, year: 1995, statement: `https://rezics.com/id/statement-${index}` }];
-    if (index === 0) items.push({ id: OTHER, year: 1995, statement: 'https://rezics.com/id/statement-other' });
     pages.set(key, { items, nextCursor: index + 1 < WORKS ? `page-${index + 1}` : null });
   }
   const calls: { cursor: string | undefined; fromYear?: number; toYear?: number }[] = [];
@@ -57,10 +52,6 @@ test('the restored all-years directory pages the publication-year template in it
     if (!page) return { ok: true as const, data: { items: [], nextCursor: null } };
     return { ok: true as const, data: page };
   }) as typeof readPublicationYears;
-  const zoneBrowse = (async () => ({
-    ok: true as const,
-    data: { items: ids.map(card), nextCursor: null },
-  })) as unknown as typeof readZoneBrowse;
 
   const seen: string[] = [];
   const readCursors: (string | undefined)[] = [];
@@ -69,7 +60,7 @@ test('the restored all-years directory pages the publication-year template in it
   for (let step = 0; step < 10; step++) {
     const before = calls.length;
     const page = model();
-    const result = await applyCatalogueYear({ view, search, model: page }, { publicationYears, zoneBrowse });
+    const result = await applyCatalogueYear({ view, search, model: page }, { publicationYears, works });
     const requested = calls.slice(before);
     expect(result.failure).toBeNull();
     expect(page.complete).toBe(page.next === null);
@@ -105,26 +96,26 @@ test('the restored all-years directory pages the publication-year template in it
   expect(search.yearCursor).toBe(`page-${YEAR_PAGES * 3}`);
 });
 
-test('a screen whose read found only other Zones\' Works still links forward to this Zone\'s Works', async () => {
-  // The year read is platform-wide, so whole screens can hold no member of this Zone.
+test('an empty scoped year window still links forward to a later matching Work', async () => {
+  // The year owner may need bounded windows before a matching Condition appears.
   const ours = [workId(1), workId(2)];
   const others = YEAR_PAGES * 2;
   const keys = Array.from({ length: others + ours.length }, (_, index) => (index === 0 ? '' : `page-${index}`));
   const pages = new Map(keys.map((key, index) => [key, {
-    items: [{ id: index < others ? `${OTHER}-${index}` : ours[index - others]!, year: 2001,
+    items: index < others ? [] : [{ id: ours[index - others]!, year: 2001,
       statement: `https://rezics.com/id/statement-${index}` }],
     nextCursor: index + 1 < keys.length ? `page-${index + 1}` : null,
   }]));
   const publicationYears = (async (_parameters, cursor) =>
     ({ ok: true as const, data: pages.get(cursor ?? '') ?? { items: [], nextCursor: null } })) as typeof readPublicationYears;
-  const zoneBrowse = (async () => ({ ok: true as const, data: { items: ours.map(card), nextCursor: null } })) as unknown as typeof readZoneBrowse;
+
 
   const seen: string[] = [];
   const screens: number[] = [];
   let search: Record<string, string> = { years: '1' };
   for (let step = 0; step < 6; step++) {
     const page = model();
-    await applyCatalogueYear({ view, search, model: page }, { publicationYears, zoneBrowse });
+    await applyCatalogueYear({ view, search, model: page }, { publicationYears, works });
     screens.push(page.items.length);
     seen.push(...page.items.map(item => item.id));
     if (!page.next) break;
@@ -137,25 +128,29 @@ test('a screen whose read found only other Zones\' Works still links forward to 
   expect(seen).toEqual(ours);
 });
 
-test('the restored all-years directory retains its roster-bound notice', async () => {
-  let pages = 0;
-  const zoneBrowse = (async () => {
-    pages += 1;
-    return { ok: true as const, data: { items: [card(workId(pages))], nextCursor: `page-${pages}` } };
-  }) as unknown as typeof readZoneBrowse;
-  const publicationYears = (async () =>
-    ({ ok: true as const, data: { items: [], nextCursor: null } })) as typeof readPublicationYears;
-  const browseHeader = (props: { year?: { bounded: boolean; window: number } | null }): ReactNode =>
-    props.year?.bounded
-      ? createElement('p', null, `first ${props.year.window} Works in the current order, and may miss others`)
-      : null;
-  const capped = { ...view, pkg: { slots: { browseHeader } } } as unknown as RealmView;
-  const result = await applyCatalogueYear(
-    { view: capped, search: { years: '1' }, model: model() },
-    { publicationYears, zoneBrowse });
-  expect(pages).toBe(MEMBER_PAGES);
-  expect(renderToStaticMarkup(result.header)).toContain(
-    `first ${MEMBER_PAGES} Works in the current order, and may miss others`);
+test('the directory hydrates returned IDs beyond the former roster and preserves the year owner scope', async () => {
+  const beyond = workId(1001);
+  let scope: unknown;
+  let hydrated: readonly string[] = [];
+  const publicationYears: typeof readPublicationYears = async parameters => {
+    scope = parameters;
+    return { ok: true, data: { items: [{ id: beyond, year: 1995, statement: workId(99) }], nextCursor: null } };
+  };
+  const hydrate: typeof readPublicationYearWorks = async (ids, realm) => {
+    hydrated = ids;
+    expect(realm).toBe(view.context.realm);
+    return works(ids, realm);
+  };
+  const page = model();
+  const result = await applyCatalogueYear({ view, search: { years: '1', q: 'orbital',
+    type: 'schema:TVSeries', status: 'completed' }, model: page }, { publicationYears, works: hydrate });
+  expect(scope).toEqual({ realm: view.context.realm, text: 'orbital', filter: { all: [
+    { facet: 'type', any: ['https://schema.org/TVSeries'] }, { facet: 'status', any: ['completed'] },
+  ] } });
+  expect(hydrated).toEqual([beyond]);
+  expect(page.items.map(item => item.id)).toEqual([beyond]);
+  expect(result.publicationYears.get(beyond)).toEqual([1995]);
+  expect(result.failure).toBeNull();
 });
 
 test('the selected year and existing Conditions go together to Zone browse', () => {

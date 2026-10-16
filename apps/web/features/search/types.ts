@@ -1,6 +1,6 @@
 import type { MainClient, ReadProblem, WorkCover, WorkName } from '../discover/types.ts';
 import type { CatalogueAuthor } from '../catalogue/work.ts';
-import { chapterHref, idOf } from '../work-page/route.ts';
+import { chapterHref, idOf, globalWorkHref } from '../work-page/route.ts';
 
 // Main's phrase page shapes (`publicPhrasePageRequest`/`publicPhrasePageResult`
 // in `services/main/src/api-contract.ts`), taken from the typed Eden client.
@@ -29,6 +29,8 @@ export interface MatchReasons {
   matchedLanguage: string | null;
   /** A chapter's text matched: the chapter Post's title and its place in the result's Book. */
   chapter: { title: string; href: string } | null;
+  /** Every disclosed occurrence of matching Content, in the owner's order. */
+  placements?: { title: string; href: string; occurrence: string; revision: string }[];
   /** Realm results: adopted by the Realm, or its Main Version because the Realm selected none. */
   realm: 'realm-adoption' | 'main-fallback' | null;
   /** Classified results: the accepted concept and whose decision placed it. */
@@ -87,6 +89,9 @@ export function searchFailureOf(status: number, code: string | undefined): Searc
 
 /** The matched chapter Post, linked by its address in the Book the result shows, which moves to its occurrence. */
 function chapterOf(match: Match): MatchReasons['chapter'] {
+  const placement = match.matchedPlacements?.find(place => place.profile === 'book-composition');
+  if (placement && idOf(placement.work)) return { title: placement.title,
+    href: chapterHref(idOf(placement.work)!, idOf(placement.occurrence) ?? placement.occurrence, match.language) };
   const book = match.matchedChapter && idOf(match.matchedChapter.book);
   const post = match.matchedChapter && idOf(match.matchedChapter.post);
   return match.matchedChapter && book && post
@@ -99,6 +104,13 @@ export function reasonsOf(match: Match): Omit<MatchReasons, 'classification'>
   return { language: match.language, field: match.matchedField ?? 'body',
     matchedText: match.matchedField && match.matchedField !== 'body' ? match.matchedText ?? null : null,
     matchedLanguage: match.matchedLanguage ?? null, chapter: chapterOf(match),
+    placements: match.matchedPlacements?.flatMap(place => {
+      const owner = idOf(place.work), source = idOf(place.resource);
+      if (!owner || !source) return [];
+      return [{ title: place.title, occurrence: place.occurrence, revision: place.revision ?? match.revision,
+        href: place.profile === 'book-composition' ? chapterHref(owner, idOf(place.occurrence) ?? place.occurrence, match.language)
+          : globalWorkHref(source) }];
+    }),
     realm: 'reason' in match && (match.reason === 'realm-adoption' || match.reason === 'main-fallback')
       ? match.reason : null,
     classification: classification ? { concept: classification.concept ?? null,

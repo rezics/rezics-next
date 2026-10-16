@@ -245,7 +245,8 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
           throw new DynamicCollectionUnavailable('Dynamic Collection is unavailable');
         }
         const saved = await readDynamicDefinition(work.environment, definition, body.revision);
-        return Response.json(await executeDynamicDefinition(work.environment, saved),
+        return Response.json(await executeDynamicDefinition(work.environment, saved, {
+          contentProjection: work.contentProjection, rights: work.rights?.store }),
           { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return routeError(error); }
     })
@@ -269,7 +270,8 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
         const saved = await readDynamicDefinition(work.environment, definition, body.definitionRevision);
         let snapshot = await readCapturedSnapshot(work.environment, body.collection);
         if (!snapshot) {
-          const executed = await executeDynamicDefinition(work.environment, saved);
+          const executed = await executeDynamicDefinition(work.environment, saved, {
+          contentProjection: work.contentProjection, rights: work.rights?.store });
           snapshot = { from: saved.revision, coverage: executed.coverage,
             members: executed.members, sourcePosition: executed.sourcePosition };
         }

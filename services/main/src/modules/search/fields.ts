@@ -1,3 +1,4 @@
+import type { SearchPlacement } from '../structure/searchable-placements.ts';
 import type { SourceAuthorNameStore } from '../source/author-name.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
@@ -37,6 +38,7 @@ export interface FieldMatch { work: string; mainVersion: string; matchUnit: stri
   matchedLanguage: string | null; reason?: string;
   /** Agent who owns a native credited name. Absent for titles and source-reported names. */
   nameOwner?: string;
+  matchedPlacements?: SearchPlacement[];
   matchedChapter?: { post: string; book: string; title: string } }
 export const normalizedSearchText = (value: string) => value.normalize('NFC').toLowerCase().trim().replace(/\s+/gu, ' ');
 export function matchesSearchText(text: string, term: string, prefix: boolean) {
@@ -48,11 +50,26 @@ export function matchesSearchText(text: string, term: string, prefix: boolean) {
 }
 const tier = { title: 3, credit: 2, tagline: 1, body: 0 } as const;
 export function rankedSearchMatches<T extends { work: string; mainVersion: string; matchUnit: string;
-  score: number; matchedField?: SearchField }>(matches: readonly T[]): T[] {
+  score: number; revision?: string; matchedField?: SearchField; matchedPlacements?: SearchPlacement[] }>(matches: readonly T[]): T[] {
   const sorted = [...matches].sort((a, b) => tier[b.matchedField ?? 'body'] - tier[a.matchedField ?? 'body']
     || b.score - a.score || a.mainVersion.localeCompare(b.mainVersion) || a.matchUnit.localeCompare(b.matchUnit));
-  const seen = new Set<string>();
-  return sorted.filter(row => { if (seen.has(row.mainVersion)) return false; seen.add(row.mainVersion); return true; });
+  const results = new Map<string, T>();
+  for (const row of sorted) if (!results.has(row.mainVersion)) results.set(row.mainVersion, { ...row });
+  // Match strength chooses the card; the relation's occurrence order chooses its locators.
+  const placements = new Map<string, Map<string, SearchPlacement>>();
+  for (const row of matches) for (const place of row.matchedPlacements ?? []) {
+    let ordered = placements.get(row.mainVersion);
+    if (!ordered) { ordered = new Map(); placements.set(row.mainVersion, ordered); }
+    ordered.set(`${place.work}\0${place.occurrence}\0${place.revision}`, place);
+  }
+  return [...results.values()].map(result => ({ ...result,
+    ...(placements.has(result.mainVersion) ? {
+      matchedPlacements: [...placements.get(result.mainVersion)!.values()].map(place => {
+        const { revision, ...locator } = place;
+        return revision === result.revision ? locator : place;
+      }),
+    } : {}),
+  }));
 }
 
 /** Current selection and disclosure precede matching, counting and ranking.

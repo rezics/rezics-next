@@ -483,15 +483,15 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
               ? await queryPublicMainTitleBody(work.environment, body)
               : body.profile === 'public-realm-classified-rated-phrase-v1'
               ? await protectClassifiedResults(work,
-                await queryPublicRealmClassifiedRatedPhrase(work.environment, { ...body, publicFields }), body.context.id)
+                await queryPublicRealmClassifiedRatedPhrase(work.environment, { ...body, publicFields, contentProjection: work.contentProjection, rights: work.rights?.store }), body.context.id)
               : body.profile === 'public-realm-phrase-v1'
-              ? await queryPublicRealmPhrase(work.environment, { ...body, publicFields })
+              ? await queryPublicRealmPhrase(work.environment, { ...body, publicFields, contentProjection: work.contentProjection, rights: work.rights?.store })
               : body.profile === 'public-main-phrase-v1'
                 ? await queryPublicMainPhrase(work.environment,
                   { ...body, publicFields, contentProjection: work.contentProjection, rights: work.rights?.store })
                 : body.profile === 'public-realm-classified-phrase-v1'
                   ? await protectClassifiedResults(work,
-                    await queryPublicRealmClassifiedPhrase(work.environment, { ...body, publicFields }), body.context.id)
+                    await queryPublicRealmClassifiedPhrase(work.environment, { ...body, publicFields, contentProjection: work.contentProjection, rights: work.rights?.store }), body.context.id)
                   : await protectClassifiedResults(work,
                     await queryPublicMainClassifiedPhrase(work.environment,
                       { ...body, publicFields, contentProjection: work.contentProjection, rights: work.rights?.store }));
@@ -560,7 +560,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
             }
             if (body.profile === 'public-realm-phrase-page-v1') {
               const relation = await decoratePhraseRelation(work.environment,
-                await present(selection, await queryPublicRealmPhrase(work.environment, { ...body, publicFields })), body);
+                await present(selection, await queryPublicRealmPhrase(work.environment, { ...body, publicFields, contentProjection: work.contentProjection, rights: work.rights?.store })), body);
               return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
                 facets: relation.facets };
             }
@@ -575,13 +575,13 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
             if (body.profile === 'public-realm-classified-phrase-page-v1') {
               const relation = await decoratePhraseRelation(work.environment,
                 await present(selection, await protectClassifiedResults(work,
-                  await queryPublicRealmClassifiedPhrase(work.environment, { ...body, publicFields }), body.context.id)), body);
+                  await queryPublicRealmClassifiedPhrase(work.environment, { ...body, publicFields, contentProjection: work.contentProjection, rights: work.rights?.store }), body.context.id)), body);
               return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
                 classificationSense: relation.classificationSense, facets: relation.facets };
             }
             const relation = await decoratePhraseRelation(work.environment,
               await present(selection, await protectClassifiedResults(work,
-                await queryPublicRealmClassifiedRatedPhrase(work.environment, { ...body, publicFields }), body.context.id)), body);
+                await queryPublicRealmClassifiedRatedPhrase(work.environment, { ...body, publicFields, contentProjection: work.contentProjection, rights: work.rights?.store }), body.context.id)), body);
             return { ...pageCompletePublicRelation(body, relation, Date.now(), selection?.generation),
               classificationSense: relation.classificationSense, facets: relation.facets,
               ratingCriterion: relation.ratingCriterion,

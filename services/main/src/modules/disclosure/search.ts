@@ -1,3 +1,4 @@
+import type { SearchPlacement } from '../structure/searchable-placements.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { currentDisclosureViewer } from './viewer.ts';
 import { discloseInventory, hasDisclosure, DisclosureUnavailable, type DisclosureTarget } from './read.ts';
@@ -9,6 +10,7 @@ export interface SearchDisclosureMatch {
   matchedField?: string;
   /** A credited name belongs to its participant, independently of the Work. */
   nameOwner?: string;
+  matchedPlacements?: SearchPlacement[];
   matchedChapter?: { post: string; book: string };
 }
 /** Gate the complete candidate relation before ranking, pagination, counts or facets.
@@ -17,7 +19,8 @@ export async function discloseSearchMatches<T extends SearchDisclosureMatch>(env
   matches: readonly T[], channel: 'search' | 'typeahead' = 'search'): Promise<T[]> {
   if (matches.length > 512) throw new DisclosureUnavailable('Search disclosure exceeds its bound');
   if (!hasDisclosure(env)) return [...matches];
-  const resources = [...new Set(matches.flatMap(match => [match.work, ...(match.matchedChapter ? [match.matchedChapter.post] : [])]))];
+  const sourceOf = (match: SearchDisclosureMatch) => match.matchedPlacements?.[0]?.resource ?? match.matchedChapter?.post;
+  const resources = [...new Set(matches.flatMap(match => [match.work, ...(sourceOf(match) ? [sourceOf(match)!] : [])]))];
   if (!resources.length) return [];
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?work ?head WHERE {
     VALUES ?work { ${resources.map(iri).join(' ')} }
@@ -31,13 +34,14 @@ export async function discloseSearchMatches<T extends SearchDisclosureMatch>(env
   for (const match of matches) {
     const selected: DisclosureTarget[] = [{ owner: 'graph', resource: match.work,
       component: 'name', revision: heads.get(match.work), nameOwner: match.nameOwner }];
-    if (match.matchedChapter) selected.push({ owner: 'graph', resource: match.matchedChapter.post,
-      component: 'name', revision: heads.get(match.matchedChapter.post) });
+    const source = sourceOf(match);
+    if (source) selected.push({ owner: 'graph', resource: source,
+      component: 'name', revision: heads.get(source) });
     if (!match.matchedField || match.matchedField === 'body') {
-      selected.push({ owner: 'content', resource: match.matchedChapter?.post ?? match.work, component: 'body',
+      selected.push({ owner: 'content', resource: source ?? match.work, component: 'body',
         revision: match.revision?.replace(/^urn:rezics:content:revision:/, '') ?? null,
         work: match.work, workRevision: heads.get(match.work) });
-      if (match.contribution && !match.matchedChapter) selected.push({ owner: 'graph', resource: match.contribution,
+      if (match.contribution && !source) selected.push({ owner: 'graph', resource: match.contribution,
         component: 'body', revision: match.revision, work: match.work, workRevision: heads.get(match.work) });
     }
     ranges.push(selected.map((_, index) => targets.length + index));

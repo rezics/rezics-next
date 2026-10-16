@@ -102,7 +102,14 @@ function matchReason(hit: SearchHit, locale: UiLocale, t: Text): { icon: typeof 
     case 'credit': return { icon: UserRoundIcon, text: matchedText
       ? withValue(name => t.matchCredit({ name }), matchedText, matchedLanguage) : t.matchCreditUnnamed };
     case 'tagline': return { icon: QuoteIcon, text: t.matchTagline };
-    case 'body': return hit.reasons.chapter
+    case 'body': if (hit.reasons.placements?.length) return { icon: FileTextIcon, text: <span>
+      {t.textMatch({ language: languageName(language, locale) })}{' · '}
+      {hit.reasons.placements.map((place, index) => <span key={`${place.occurrence}-${place.revision}`}>
+        {index ? ' · ' : ''}<Link href={place.href} lang={language}
+          className="font-medium text-foreground underline-offset-4 hover:underline">{place.title}</Link>
+      </span>)}
+    </span> };
+    return hit.reasons.chapter
       ? { icon: FileTextIcon, text: chapterMatch(hit.reasons.chapter, language, t) }
       : { icon: FileTextIcon, text: t.textMatch({ language: languageName(language, locale) }) };
   }

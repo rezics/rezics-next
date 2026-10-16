@@ -1,7 +1,7 @@
 import type { FilterCondition } from '../../../../model/definitions/filter-document-v1.ts';
 import { browseCategories } from '../catalogue/registry.ts';
 import { normalizeLanguage } from '../search/state.ts';
-import { workTypeKeys, workTypes, type WorkTypeKey } from './state.ts';
+import { workTypeIri, type WorkTypeKey } from './state.ts';
 import { browseTypeCondition, type ResourceQuery, type SectionId } from './api.ts';
 import {
   idOf,
@@ -83,9 +83,9 @@ export function parseBrowseState(params: SearchParams): BrowseState | null {
   const personalization = single(params.personalization);
   const types = (raw: string | undefined): WorkTypeKey[] | null => {
     if (raw === undefined) return [];
-    const values = raw.split(',');
-    return values.every(value => workTypeKeys.some(key => key === value))
-      && new Set(values).size === values.length ? values as WorkTypeKey[] : null;
+    const values = raw.split(',').map(workTypeIri);
+    return values.every((value): value is string => value !== null)
+      && new Set(values).size === values.length ? values : null;
   };
   const includeTypes = types(single(params.include)), excludeTypes = types(single(params.exclude));
   const rawLanguage = single(params.lang);
@@ -153,9 +153,9 @@ export function browseQuery(state: BrowseState, limit = 20): ResourceQuery {
   const all: FilterCondition[] = [];
   if (state.tab !== 'all') all.push(browseTypeCondition(state.tab));
   const typeIris = (keys: readonly WorkTypeKey[]) => keys.map(key => {
-    const type = workTypes().find(type => type.key === key);
+    const type = workTypeIri(key);
     if (!type) throw new Error(`Browse type is unavailable: ${key}`);
-    return type.iri;
+    return type;
   });
   if (state.includeTypes?.length) all.push({ facet: 'type', any: typeIris(state.includeTypes) });
   if (state.excludeTypes?.length) all.push({ facet: 'type', none: typeIris(state.excludeTypes) });

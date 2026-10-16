@@ -71,6 +71,8 @@ export interface StructureProfileRegistration {
   editScopePrefix: string;
   /** Declared external catalog terms accepted as non-content occurrence targets. */
   catalogTargetTypes?: readonly string[];
+  /** Active target uses whose selected Content may yield their owning Work in phrase search. */
+  searchableRoles?: readonly OccurrenceRole[];
   roles: readonly OccurrenceRole[];
   localReferences?: StructureReferencePolicy;
   /** Owner transitions may atomically clear references while retiring a use. */
@@ -213,6 +215,12 @@ export async function discoverStructureProfiles(directory = join(import.meta.dir
             || profile.catalogTargetTypes.some(target => !validUri(target))
             || new Set(profile.catalogTargetTypes).size !== profile.catalogTargetTypes.length)
         || !Array.isArray(profile.roles) || !Array.isArray(profile.targetRoles)
+        || profile.searchableRoles !== undefined && (!Array.isArray(profile.searchableRoles)
+          || profile.searchableRoles.some(role => !profile.targetRoles?.includes(role)
+            && !profile.optionalTargetRoles?.includes(role))
+          || new Set(profile.searchableRoles).size !== profile.searchableRoles.length
+          || profile.componentType !== 'https://rezics.com/vocab/MainVersion'
+          || profile.componentPredicate !== 'https://rezics.com/vocab/mainVersion')
         || profile.optionalTargetRoles !== undefined && !Array.isArray(profile.optionalTargetRoles)
         || profile.selectionRequiredRoles !== undefined && !Array.isArray(profile.selectionRequiredRoles)
         || profile.selectionOptionalRoles !== undefined && !Array.isArray(profile.selectionOptionalRoles)
@@ -337,4 +345,9 @@ export async function canReadStructureTargets(profile: StructureProfileRegistrat
     }
   }
   return readable;
+}
+
+/** Only owner-declared target roles take part in shared Content search ancestry. */
+export function searchableStructureProfiles(): readonly StructureProfileRegistration[] {
+  return [...profiles.values()].filter(profile => profile.searchableRoles?.length);
 }

@@ -9,7 +9,7 @@ const query = 'https://rezics.com/query/work-publication-years';
 const year = t.Optional(t.Integer({ minimum: 1, maximum: 9999 }));
 export const template = { query, revision: 1,
   request: templateRequest(query, t.Object({ fromYear: year, toYear: year,
-    realm: t.Optional(readId), filter: t.Optional(t.Unknown()) }, { additionalProperties: false })),
+    realm: t.Optional(readId), text: t.Optional(t.String({ minLength: 1, maxLength: 200 })), filter: t.Optional(t.Unknown()) }, { additionalProperties: false })),
   response: templateResponse(query, t.Object({
     id: readId, year: t.Integer({ minimum: 1, maximum: 9999 }), statement: readId,
   }, { additionalProperties: false })),

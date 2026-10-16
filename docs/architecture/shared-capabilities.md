@@ -36,17 +36,6 @@ reference, with admitted role vocabulary, keeping source-reported and confirmed
 status apart. Proof: a non-Open-Library contributor with a non-author role
 appears in public and discovery reads.
 
-## Discovery
-
-Phrase search reaches a Work from Content only through Book chapter placement
-(`post/patterns.ts`, `work/search-public.ts`, `content-publication/search.ts`).
-It should use profile-declared searchable placements. The web discovery page has
-its own type list of book, document and recipe (`apps/web/features/discover/state.ts`)
-and should read the served type registry. The year directory intersects with a
-ten-page Realm roster (`apps/web/features/zones/catalogue-browse.tsx`) and should
-pass Realm and conditions to the publication-year query. Proof: an Anime Work is
-found by phrase, filtered in discovery and listed past the roster.
-
 ## Acceptance evidence
 
 A product row passing is not evidence for this page: each repair reports its own

@@ -1,26 +1,27 @@
 import { type BrowseScope, iriOf, isUuid, parseScope, scopeQuery, type SearchParams, single,
   withQuery } from './scope.ts';
-import { creatableTypes, type TypeEntry } from '../catalogue/types.ts';
+import { registryEntries, type TypeEntry } from '../catalogue/types.ts';
 import type { DiscoveryItem, DiscoveryQuery } from './types.ts';
 
-/**
- * The filters discovery has shelf wording for, as they appear in a URL, each
- * the registry's presentation of the type it filters by (a guide is a
- * DigitalDocument). The registry supplies the type IRI and its label.
- */
-const shelfPresentations = { book: 'book', document: 'guide', recipe: 'recipe' } as const;
-export const workTypeKeys = Object.keys(shelfPresentations) as WorkTypeKey[];
-export type WorkTypeKey = keyof typeof shelfPresentations;
-
+/** A filter identity is the served type IRI. Shelf order is presentation only. */
+export type WorkTypeKey = string;
 export interface WorkTypeChoice { key: WorkTypeKey; iri: string; entry: TypeEntry }
-
-/** The types discovery can filter by, in shelf order: the registry's creatable Work type of each presentation. */
+const preferredShelves = ['book', 'guide', 'recipe'];
 export function workTypes(): readonly WorkTypeChoice[] {
-  const creatable = creatableTypes();
-  return workTypeKeys.flatMap(key => {
-    const entry = creatable.find(candidate => candidate.presentation === shelfPresentations[key]);
-    return entry ? [{ key, iri: entry.type, entry }] : [];
-  });
+  const order = (entry: TypeEntry) => {
+    const preferred = preferredShelves.indexOf(entry.presentation);
+    return preferred < 0 ? preferredShelves.length : preferred;
+  };
+  return registryEntries().filter(entry => entry.base === 'work' && !entry.default)
+    .map(entry => ({ key: entry.type, iri: entry.type, entry }))
+    .sort((a, b) => order(a.entry) - order(b.entry) || a.entry.priority - b.entry.priority
+      || a.iri.localeCompare(b.iri));
+}
+export const workTypeKeys = () => workTypes().map(type => type.iri);
+/** Migrate the three historical URL aliases without creating another type inventory. */
+export function workTypeIri(value: string): string | null {
+  return workTypes().find(type => type.iri === value
+    || type.entry.presentation === (value === 'document' ? 'guide' : value))?.iri ?? null;
 }
 
 /**
@@ -49,10 +50,10 @@ export function parseDiscoverState(params: SearchParams): DiscoverState | null {
   if (!scope || (context !== null && !isUuid(context)) || (term !== null && !isUuid(term))
     || ![...include, ...exclude].every(isUuid) || new Set([...include, ...exclude]).size
       !== include.length + exclude.length || (match !== 'all' && match !== 'any')) return null;
-  if (type !== null && !workTypeKeys.some(key => key === type)) return null;
+  if (type !== null && !workTypeIri(type)) return null;
   // Main defines no personal classification, so Mine never filters by term.
   if (scope.kind === 'mine' && term !== null) return null;
-  return { scope, context, type: type as WorkTypeKey | null, term,
+  return { scope, context, type: type === null ? null : workTypeIri(type), term,
     ...(include.length || exclude.length || match !== 'all' ? { conditions: { include, exclude, match } } : {}) };
 }
 
@@ -95,21 +96,22 @@ export function termShelf(term: string, type: WorkTypeKey | null, ranked: boolea
 
 /**
  * The shelves a state shows before genres are known. The overview leads with
- * readers' favorite books, then recently added books, guides and recipes; a
+ * readers' favorite books, then recent Works of each served type; a
  * kind shows its favorites and newest; a genre its popular and newest. Top
  * rated needs a rating question (`ranked`); Mine is the reader's own ratings.
  */
 export function shelvesFor(input: DiscoverState, ranked = false): ShelfSpec[] {
   // Without the registry no type has an IRI to filter by: show generic, unfiltered shelves.
-  const known = workTypes().length > 0;
-  const state = known || input.type === null ? input : { ...input, type: null };
+  const types = workTypeKeys();
+  const known = types.length > 0;
+  const state = { ...input, type: input.type === null ? null : workTypeIri(input.type) ?? input.type };
   if (state.conditions?.include.length || state.conditions?.exclude.length) {
     if (state.scope.kind === 'mine') {
       return ranked ? [{ key: 'mine', topic: { kind: 'mine', type: state.type }, sort: 'top-rated', type: state.type,
         term: null }] : [];
     }
-    const types = state.type ? [state.type] : known ? (['book', 'document', 'recipe'] as const) : [null];
-    return types.flatMap(type => [...(ranked ? [favorites(type)] : []), recent(type)]);
+    const selected = state.type ? [state.type] : known ? types : [null];
+    return selected.flatMap(type => [...(ranked ? [favorites(type)] : []), recent(type)]);
   }
   if (state.scope.kind === 'mine') {
     return ranked ? [{ key: 'mine', topic: { kind: 'mine', type: state.type }, sort: 'top-rated', type: state.type,
@@ -120,7 +122,7 @@ export function shelvesFor(input: DiscoverState, ranked = false): ShelfSpec[] {
   }
   if (state.type) return [...(ranked ? [favorites(state.type)] : []), recent(state.type)];
   if (!known) return [...(ranked ? [favorites(null)] : []), recent(null)];
-  return [...(ranked ? [favorites('book')] : []), recent('book'), recent('document'), recent('recipe')];
+  return [...(ranked ? [favorites(types[0]!)] : []), ...types.map(recent)];
 }
 
 /** The overview's genre shelves: the terms most often on its first books, most frequent first. */
@@ -144,8 +146,8 @@ export function discoveryQuery(state: DiscoverState, shelf: ShelfSpec, options: 
   language: string; context?: string | null; actingSubject?: string; cursor?: string }): DiscoveryQuery {
   const { scope } = state;
   const ranked = shelf.sort === 'top-rated' || scope.kind === 'mine';
-  // A type the registry cannot name leaves the shelf unfiltered rather than failing the page.
-  const typeIri = shelf.type ? workTypes().find(type => type.key === shelf.type)?.iri : undefined;
+  // A retained type filter stays explicit if the served registry is temporarily unavailable.
+  const typeIri = shelf.type ? workTypeIri(shelf.type) ?? shelf.type : undefined;
   return { scope: scope.kind, ...(scope.kind === 'realm' ? { realm: iriOf(scope.realm) } : {}),
     sort: shelf.sort, limit: options.limit, language: options.language,
     ...(ranked && options.context ? { context: iriOf(options.context) } : {}),

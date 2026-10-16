@@ -1,3 +1,6 @@
+import type { FilterDocument } from '../../../../model/definitions/filter-document-v1.ts';
+import type { CanonicalAddress } from '@rezics/model/address';
+import type { zoneWork } from '../realm/adapt.ts';
 import type { ZoneCatalogueFacts, ZoneText } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken } from '../api/main.ts';
@@ -191,9 +194,9 @@ export async function readCatalogueFacts(id: string, locale: UiLocale, count: 'e
 export interface PublicationYearRow { id: string; year: number; statement: string }
 
 /** One page of the publication-year template, newest first. A failed read is unavailable, never an empty year. */
-export async function readPublicationYears(parameters: { fromYear?: number; toYear?: number },
+export async function readPublicationYears(parameters: { fromYear?: number; toYear?: number; realm?: string; filter?: FilterDocument; text?: string },
   cursor?: string): Promise<Loaded<{ items: PublicationYearRow[]; nextCursor: string | null }>> {
-  // The year facet is intersected with an anonymous Realm roster, including continuations.
+  // Realm membership and Conditions belong to the query owner on every continuation.
   const main = mainApiWithToken(undefined);
   const answer = await settle(async () => {
     const result = await main.v1.query.post({
@@ -228,4 +231,44 @@ export function catalogueYears(stated: readonly number[], listed?: readonly numb
 
 export function catalogueText(value: string, locale: string): ZoneText {
   return zoneContentText(value, locale);
+}
+
+/** Public cards retain the header, canonical address and truthful author credits. */
+export type PublicationYearWork = Parameters<typeof zoneWork>[0];
+
+/** At most one year page (20 IDs), hydrated by the existing public readers. */
+export async function readPublicationYearWorks(resources: readonly string[], realm: string):
+  Promise<Loaded<ReadonlyMap<string, PublicationYearWork>>> {
+  if (!resources.length) return { ok: true, data: new Map() };
+  if (resources.length > 20) return { ok: false, failure: 'unavailable' };
+  const main = mainApiWithToken(undefined);
+  const summaries = await settle(() => main.v1.resources.summaries.post({
+    profile: 'resource-summary-batch-v1', resources: [...resources], context: realm,
+  }));
+  if (!summaries.ok) return summaries;
+  const cards = new Map<string, PublicationYearWork>();
+  // Small batches bound concurrent work even when a directory page is full.
+  for (let offset = 0; offset < resources.length; offset += 4) {
+    const batch = await Promise.all(resources.slice(offset, offset + 4).map(async resource => {
+      const summary = summaries.data.summaries.find(item => item.reference === resource);
+      if (!summary || summary.status !== 'available' || summary.type !== 'work') return true;
+      const id = idOf(resource);
+      if (!id) return false;
+      const [header, credits] = await Promise.all([
+        settle(() => main.v1.works({ id }).get({ query: {} })),
+        settle(() => main.v1.query.post({ profile: 'template-query-v1',
+          query: 'https://rezics.com/query/work-credits', revision: 1,
+          parameters: { roots: [resource], role: 'author' }, limit: 64 })),
+      ]);
+      if (!header.ok || !credits.ok) return false;
+      const credit = credits.data.result;
+      if (credit.profile !== 'template-result-v1' || credit.query !== 'https://rezics.com/query/work-credits'
+        || credit.nextCursor) return false;
+      cards.set(resource, { ...header.data, address: summary.address as CanonicalAddress,
+        primaryCredits: credit.items, inZone: true });
+      return true;
+    }));
+    if (batch.some(ok => !ok)) return { ok: false, failure: 'unavailable' };
+  }
+  return { ok: true, data: cards };
 }

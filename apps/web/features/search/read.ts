@@ -1,6 +1,6 @@
 import { iriOf } from '../discover/scope.ts';
 import { authorHref } from '../author/route.ts';
-import { workTypes } from '../discover/state.ts';
+import { workTypeIri } from '../discover/state.ts';
 import type { ResourceQuery } from '../../../../model/definitions/filter-document-v1.ts';
 import { type MainClient, problemCode, type WorkCover, type WorkName } from '../discover/types.ts';
 import type { SearchState } from './state.ts';
@@ -15,7 +15,7 @@ export function searchRequest(state: SearchState, continuation?: SearchContinuat
   const excluded = state.concepts?.exclude ?? [];
   // Type filters name the registry's IRIs; without the registry they cannot be stated and are left out.
   const typeIris = (keys: readonly string[] | undefined) => (keys ?? []).flatMap(key =>
-    workTypes().find(type => type.key === key)?.iri ?? []);
+    workTypeIri(key) ?? []);
   const includedTypes = typeIris(state.includeTypes), excludedTypes = typeIris(state.excludeTypes);
   const filter: NonNullable<ResourceQuery['filter']> = { all: [
     ...(includedTypes.length ? [{ facet: 'type', any: includedTypes }] : []),

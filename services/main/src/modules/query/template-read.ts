@@ -80,7 +80,7 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       contentLanguage:input.parameters.contentLanguage?.toLowerCase() ?? '',kind:input.parameters.kind ?? '',
       role:role ?? '',
       fromYear:input.parameters.fromYear ?? null,toYear:input.parameters.toYear ?? null,
-      realm:input.parameters.realm ?? null,filter:input.parameters.filter ?? null,
+      realm:input.parameters.realm ?? null,filter:input.parameters.filter ?? null,searchText:input.parameters.text ?? null,
       languages:session.displayLanguages,actor:session.options.actingSubject ?? null,limit};
     const publicationRefs=template.sourceCredits ? await sourcedPublicationCreditReferences(session,roots) : [];
     const publicationCreditIds=new Set(publicationRefs.map(ref=>ref.id));

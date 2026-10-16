@@ -20,7 +20,7 @@ export function templateResponse<const I extends string, S extends TSchema>(quer
 }
 export interface TemplateInput { profile:'template-query-v1'; query:string;revision:1;
   parameters:{ roots?:string[];contentLanguage?:string;kind?:'text-variant'|'release';fromYear?:number;toYear?:number;role?:string;
-    realm?:string;filter?:FilterDocument };
+    realm?:string;filter?:FilterDocument;text?:string };
   presentation?:{language?:string;actingSubject?:string};limit?:number;cursor?:string }
 interface ClosedEnumOption { type?: string; const?: unknown; anyOf?: ClosedEnumOption[] }
 interface ClosedEnumSchema { properties?: { parameters?: { properties?: Record<string, ClosedEnumOption> } } }

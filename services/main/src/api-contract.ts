@@ -106,12 +106,16 @@ export function problemResult(status: number) {
   return status === 429 ? capacityProblemResult() : baseProblemResult(status);
 }
 
+const searchPlacement = t.Object({ resource: t.String(), work: t.String(), occurrence: t.String(),
+  profile: t.String(), title: t.String(), revision: t.Optional(t.String()) });
+
 export const phraseMatch = t.Object({
   matchUnit: t.String(), work: t.String(), mainVersion: t.String(),
   contribution: t.String(), revision: t.String(), selection: t.String(),
   language: t.String(), score: t.Number(), types: t.Array(t.String(), { maxItems: 3 }),
   matchedField: t.Optional(t.Union(['title', 'credit', 'tagline', 'body'].map(value => t.Literal(value)))),
   matchedText: t.Optional(t.String()), matchedLanguage: t.Optional(t.Nullable(t.String())),
+  matchedPlacements: t.Optional(t.Array(searchPlacement, { maxItems: 512 })),
   matchedChapter: t.Optional(t.Object({ post: t.String(), book: t.String(), title: t.String() })),
   title: t.Optional(readName), cover: t.Optional(readAvatar),
   factObligations: t.Optional(wikiDisplayObligations),
@@ -164,6 +168,7 @@ const realmContext = t.Object({ kind: t.Literal('realm-local'), id: t.String() }
 const contentPosition = t.Object({ owner: t.Literal('content'), dataEpoch: t.String(),
   sequence: t.String({ pattern: '^[0-9]+$' }) });
 const contentPhraseMatch = t.Object({ matchUnit: t.String(), resource: t.String(),
+  matchedPlacements: t.Optional(t.Array(searchPlacement, { maxItems: 512 })),
   variant: t.String(), revision: t.String(), publicationDecision: t.String(),
   language: t.String(), score: t.Number() });
 const publicSearchAvatar = t.Union([

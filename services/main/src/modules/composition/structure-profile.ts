@@ -85,6 +85,7 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   targetReadPermission: 'work:read', targetDisclosure: 'work',
   authorizeTarget: authorizeWorkTarget,
   targetGuard: workTargetGuard, withholdUnreadableTargets: true,
+  searchableRoles: ['part'],
   roles: ['group', 'part'], targetRoles: ['part'], selectionRequiredRoles: [],
   completion: true,
   qualifiers: { part: { type: 'work-part', required: true } },

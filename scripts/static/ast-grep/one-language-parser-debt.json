@@ -253,10 +253,6 @@
       "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
     },
     {
-      "file": "services/main/src/modules/work/search-public.ts",
-      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
-    },
-    {
       "file": "services/main/src/modules/work/select-main.ts",
       "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
     },

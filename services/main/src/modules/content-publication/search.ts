@@ -1,5 +1,5 @@
 import { publicWork } from '../work/public-patterns.ts';
-import { postBookPlacement } from '../post/patterns.ts';
+import { searchablePlacement } from '../structure/searchable-placements.ts';
 import { canonicalContentLanguage, type ContentCore } from '../../../../content/src/core.ts';
 import { ContentProjectionCursor } from '../../../../content/src/projection-cursor.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
@@ -205,7 +205,7 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
     PREFIX text: <http://jena.apache.org/text#>
     PREFIX schema: <https://schema.org/>
     SELECT DISTINCT ?epoch ?sequence ?generation ?candidateCount ?unit ?score
-      ?resource ?variant ?revision ?decision ?eligibility ?language ?rightsBasis ?assessment ?parentWork WHERE {
+      ?resource ?variant ?revision ?decision ?eligibility ?language ?rightsBasis ?assessment ?parentWork ?searchOccurrence ?searchProfile ?searchTitle ?searchPosition WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ;
         rv:sequence ?sequence ; rv:textIndexGeneration ?generation . }
       FILTER(?epoch = ${lit(index.dataEpoch)} && ?sequence = ${index.sequence}
@@ -230,9 +230,11 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
         GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ;
           rv:resource ?resource ; rv:contentPublicationHead ?decision ;
           rv:publicSearchEligibilityHead ?eligibility . }
-        OPTIONAL { ${postBookPlacement('?resource', '?parentWork', '?parentMain')} }
-        # Keep the placing Book bound for disclosure; an unreadable Book cannot
-        # turn a chapter hit into an unparented Content hit.
+        OPTIONAL { ${searchablePlacement('?resource', '?parentWork', '?parentMain', '?revision')}
+          GRAPH ${iri(GRAPHS.current)} { ?resource <http://www.w3.org/2000/01/rdf-schema#label> ?searchTitle }
+          FILTER(LCASE(LANG(?searchTitle)) = LCASE(?language)) }
+        # Keep every placing Work bound for disclosure; unreadable ancestry cannot
+        # turn a placed hit into an unparented Content hit.
         FILTER(!BOUND(?parentWork) || EXISTS { ${publicWork('?parentWork', '?parentMain')} })
         GRAPH ${iri(GRAPHS.revisions)} { ?eligibility a rv:ContentSearchEligibilityDecision ;
           rv:variant ?variant ; rv:publicationDecision ?decision ;
@@ -240,9 +242,10 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
           OPTIONAL { ?eligibility rv:rightsAssessment ?assessment } }
         ${language ? `FILTER(?language = ${lit(language)})` : ''}
       }
-    }`, MAX_SEARCH_RESPONSE_BYTES);
+    } ORDER BY ?searchPosition ?searchOccurrence LIMIT 513`, MAX_SEARCH_RESPONSE_BYTES);
   await assertSameTextInstance(env.fuseki, index);
   const rows = result.results?.bindings ?? [];
+  if (rows.length >= 513) throw new ContentSearchBudgetExceeded('Content placements exceed their complete result budget');
   const first = rows[0];
   const value = (row: typeof first, key: string) => row?.[key]?.value;
   await assertQuerySnapshotMoved(env.fuseki, index, rows, 'generation');
@@ -269,18 +272,31 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
       variant: row.variant.value, revision: row.revision.value,
       publicationDecision: row.decision.value, language: row.language.value, score,
       parentWork: value(row, 'parentWork'),
+      ...(row.parentWork && row.searchOccurrence && row.searchProfile && row.searchTitle ? {
+        matchedPlacements: [{ resource: row.resource.value, work: row.parentWork.value,
+          occurrence: row.searchOccurrence.value, profile: row.searchProfile.value, title: row.searchTitle.value }],
+      } : {}),
       rightsBasis: value(row, 'rightsBasis'), assessment: value(row, 'assessment') };
   });
-  if (new Set(matches.map(match => `${match.matchUnit}\0${match.parentWork ?? ''}`)).size !== matches.length) {
+  if (new Set(matches.map(match => `${match.matchUnit}\0${match.parentWork ?? ''}\0${match.matchedPlacements?.[0]?.occurrence ?? ''}`)).size !== matches.length) {
     throw new ContentProjectionUnavailable('Content phrase result has duplicate units');
   }
   const disclosed = await discloseSearchMatches(env, matches.map(match => ({ ...match,
     work: match.parentWork ?? match.resource,
-    ...(match.parentWork ? { matchedChapter: { post: match.resource, book: match.parentWork } } : {}),
   })));
-  const visible = (await visibleContentSearchRights(disclosed, rights))
+  const eligible = (await visibleContentSearchRights(disclosed, rights))
     .map(({ rightsBasis: _rightsBasis, assessment: _assessment, work: _work,
-      parentWork: _parentWork, matchedChapter: _matchedChapter, ...match }) => match);
+      ...match }) => match);
+  // Preserve one Content hit per placing Work; combine repeated uses within that Work.
+  const byUnit = new Map<string, (typeof eligible)[number]>();
+  for (const match of eligible) {
+    const key = `${match.matchUnit}\0${match.parentWork ?? ''}`;
+    const prior = byUnit.get(key);
+    if (!prior) byUnit.set(key, match);
+    else if (match.matchedPlacements) prior.matchedPlacements = [
+      ...(prior.matchedPlacements ?? []), ...match.matchedPlacements];
+  }
+  const visible = [...byUnit.values()].map(({ parentWork: _parentWork, ...match }) => match);
   const [sourceAfter, checkpointAfter] = await Promise.all([
     content.ownerPosition(), cursor.read(consumer),
   ]);
@@ -302,5 +318,5 @@ export async function assertPublicContentSearchReady(env: WorkActivationEnvironm
   content: ContentCore, cursor: ContentProjectionCursor, consumer: string) {
   const { source, index } = await prepareContentSearch(env, content, cursor, consumer);
   return { graphPosition: { dataEpoch: index.dataEpoch, sequence: index.sequence },
-    contentPosition: source, indexGeneration: index.generation };
+    contentPosition: source, indexGeneration: index.generation, index };
 }

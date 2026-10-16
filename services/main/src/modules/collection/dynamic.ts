@@ -1,4 +1,5 @@
 import { readWorkComponentState } from '../work/history.ts';
+import type { PublicMainPhraseQuery } from '../work/search-public.ts';
 import { queryPublicMainPhrase, queryPublicRealmPhrase } from '../work/search-public.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -74,12 +75,13 @@ export async function readDynamicDefinition(env: WorkActivationEnvironment, defi
 
 /** Public search returns a complete relation or fails closed; only this bounded prefix is captured. */
 export async function executeDynamicDefinition(env: WorkActivationEnvironment,
-  saved: Awaited<ReturnType<typeof readDynamicDefinition>>) {
+  saved: Awaited<ReturnType<typeof readDynamicDefinition>>,
+  readers: Pick<PublicMainPhraseQuery, 'contentProjection' | 'rights'> = {}) {
   const relation = saved.query.context
     ? await queryPublicRealmPhrase(env, { phrase: saved.query.phrase,
-      language: saved.query.language, context: saved.query.context })
+      language: saved.query.language, context: saved.query.context, ...readers })
     : await queryPublicMainPhrase(env, { phrase: saved.query.phrase,
-      language: saved.query.language });
+      language: saved.query.language, ...readers });
   const selected = relation.results.slice(0, saved.resultBudget);
   return { definition: saved.definition, revision: saved.revision,
     total: relation.total, coverage: relation.total <= saved.resultBudget ? 'complete' as const : 'partial' as const,

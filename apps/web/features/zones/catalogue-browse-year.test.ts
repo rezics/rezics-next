@@ -11,6 +11,7 @@ import { applyCatalogueYear, catalogueBrowseQuery } from './catalogue-browse.tsx
 import { browseModel } from './browse-view.ts';
 import { parseBrowseState } from './browse-state.ts';
 import { messages } from './messages.ts';
+import { readPublicationYearWorks } from './catalogue-facts.ts';
 
 const view = {
   kind: 'view',
@@ -93,6 +94,7 @@ const calls: { realm: string; query: Record<string, unknown> }[] = [];
 let transport: (query: Record<string, unknown>) => unknown;
 const directoryCalls: Record<string, unknown>[] = [];
 let directoryTransport: (body: Record<string, unknown>) => unknown;
+let creditCursor: string | null = null;
 const restoreMainExports = replaceModule(import.meta.resolve('../api/main.ts'), mainExports, {
   mainApiWithToken: () => ({
     v1: {
@@ -107,8 +109,18 @@ const restoreMainExports = replaceModule(import.meta.resolve('../api/main.ts'), 
         },
       }),
       facets: { get: async () => ({ data: { facets: [] }, error: null }) },
+      resources: { summaries: { post: async ({ resources }: { resources: string[] }) => ({
+        data: { summaries: resources.map(reference => ({ reference, status: 'available', type: 'work',
+          address: null })) }, error: null,
+      }) } },
+      works: ({ id }: { id: string }) => ({ get: async () => ({
+        data: rawWork(Number(id.slice(-12))), error: null,
+      }) }),
       query: {
         post: async (body: Record<string, unknown>) => {
+          if (body.query === 'https://rezics.com/query/work-credits') return {
+            data: { result: { profile: 'template-result-v1', query: body.query, items: [], nextCursor: creditCursor } }, error: null,
+          };
           directoryCalls.push(body);
           return { data: { result: directoryTransport(body) }, error: null };
         },
@@ -252,15 +264,26 @@ test('the real all-years route retains the previous publication-year template an
   expect(model.items.map((item) => item.id)).toEqual([olderAdoption.id, newestAdoption.id]);
   expect(calls).toEqual([
     { realm: native(999), query: {} },
-    { realm: native(999), query: {} },
   ]);
   expect(directoryCalls).toEqual([
     {
       profile: 'template-query-v1',
       query: 'https://rezics.com/query/work-publication-years',
       revision: 1,
-      parameters: {},
+      parameters: { realm: native(999), filter: { all: [] } },
       limit: 20,
     },
   ]);
+});
+
+// A bounded credit read may refuse a card; it must never publish a partial author list.
+test('year cards refuse incomplete credits instead of presenting partial authorship', async () => {
+  creditCursor = 'more-authors';
+  try {
+    expect(await readPublicationYearWorks([native(201)], native(999)))
+      .toEqual({ ok: false, failure: 'unavailable' });
+  } finally { creditCursor = null; }
+  const complete = await readPublicationYearWorks([native(201)], native(999));
+  expect(complete.ok).toBe(true);
+  if (complete.ok) expect(complete.data.get(native(201))?.primaryCredits).toEqual([]);
 });

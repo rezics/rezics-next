@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import type { SearchPlacement } from '../src/modules/structure/searchable-placements.ts';
 import { matchesSearchText, rankedSearchMatches, querySearchFields, fenceSearchFields,
   type SearchFieldOwners } from '../src/modules/search/fields.ts';
 import { workRead, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
@@ -14,6 +15,24 @@ test('title priority is independent of body term frequency and each Work has one
   expect(rankedSearchMatches([{ ...base, matchedField: 'body', score: 100_000 },
     { ...base, matchedField: 'title' }, { ...base, mainVersion: 'other', matchedField: 'credit' }])
     .map(row => [row.mainVersion, row.matchedField])).toEqual([['main', 'title'], ['other', 'credit']]);
+});
+
+test('ranking retains occurrence order and exact revisions across matching Content sources', () => {
+  const first: SearchPlacement = { resource: 'opening-source', work: 'anthology', occurrence: 'opening',
+    profile: 'section-list-v1', title: 'Opening notes', revision: 'opening-revision' };
+  const last: SearchPlacement = { resource: 'closing-source', work: 'anthology', occurrence: 'closing',
+    profile: 'section-list-v1', title: 'Closing notes', revision: 'closing-revision' };
+  const base = { work: 'anthology', mainVersion: 'main' };
+  const results = rankedSearchMatches([
+    { ...base, matchUnit: 'opening-unit', score: 1, revision: first.revision, matchedPlacements: [first] },
+    { ...base, matchUnit: 'closing-unit', score: 10, revision: last.revision, matchedPlacements: [last] },
+  ]);
+  expect(results).toHaveLength(1);
+  expect(results[0]?.matchUnit).toBe('closing-unit');
+  expect(results[0]?.matchedPlacements).toEqual([first, {
+    resource: last.resource, work: last.work, occurrence: last.occurrence,
+    profile: last.profile, title: last.title,
+  }]);
 });
 
 test('prefix completion handles literal punctuation, case, word starts and unspaced CJK titles', () => {

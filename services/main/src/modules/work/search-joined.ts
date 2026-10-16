@@ -1,11 +1,10 @@
-import { mainSearchMatches } from './selection-search.ts';
+import { phraseMatchPattern } from './search-phrase-pattern.ts';
 import { discloseSearchMatches } from '../disclosure/search.ts';
-import { fallbackLanguage, realmLanguage } from './selection-heads.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance, MAX_SEARCH_RESPONSE_BYTES,
-  PHRASE_HIT_PROBE } from './search-readiness.ts';
+  PHRASE_HIT_PROBE, SearchSnapshotMoved } from './search-readiness.ts';
 import { SELECTION_POLICY } from '../space/create.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
 import { classificationModelRevisions } from '../classification/vocabulary.ts';
@@ -15,16 +14,18 @@ import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY,
   RATING_STANDING_CADENCE } from '../rating/context.ts';
 import { STANDING_RATING_OBSERVATION_PROFILE } from '../rating/observation.ts';
 import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
-  PublicRealmUnavailable } from './search-public.ts';
+  PublicRealmUnavailable, type PublicMainPhraseQuery } from './search-public.ts';
 import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE }
   from '../statement/schema.ts';
 import { exactDecisionSupports, readSearchDecisionSupports } from './search-supports.ts';
 import { querySearchFields, rankedSearchMatches, type SearchFieldOwners } from '../search/fields.ts';
 
+import { assertPublicContentSearchReady, visibleContentSearchRights } from '../content-publication/search.ts';
+
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const MAX_SLOTS = 100;
 
-export interface PublicRealmClassifiedRatedPhraseQuery {
+export interface PublicRealmClassifiedRatedPhraseQuery extends PublicMainPhraseQuery {
   context: { kind: 'realm-local'; id: string };
   phrase: string;
   language: string | null;
@@ -51,7 +52,9 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   }
   const realm = input.context.id;
   const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
-  const index = await assertPublicTextReady(env.fuseki, env.lineage);
+  const content = input.contentProjection;
+  const readiness = content ? await assertPublicContentSearchReady(env, content.content, content.cursor, content.consumer) : null;
+  const index = readiness?.index ?? await assertPublicTextReady(env.fuseki, env.lineage);
   const fields = input.publicFields ? await querySearchFields(env, input, index, input.publicFields) : [];
   // Both body and current field candidates pass through the same native
   // classification/rating join. Deduplicate units before that join.
@@ -69,7 +72,9 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
     SELECT DISTINCT ?epoch ?sequence ?indexGeneration ?candidateCount ?ratingPopulation ?ratingRows
       ?ratingUniqueSlots ?ratingValidRows ?unit ?score ?work ?main
       ?contribution ?revision ?selection ?language ?reason ?decision ?application
-      ?source ?sourceContext ?ratingCount ?ratingSum ?ratingTargetPopulation ?key ?concept WHERE {
+      ?source ?sourceContext ?ratingCount ?ratingSum ?ratingTargetPopulation ?key ?concept
+      ?phraseWork ?resultWork ?resultMain ?chapterTitle ?contentProjection ?rightsBasis ?assessment
+      ?searchOccurrence ?searchProfile ?searchPosition WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
           rv:textIndexGeneration ?indexGeneration . }
@@ -151,30 +156,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         }
       }
       OPTIONAL {
-        ${phrasePattern('?unit', '?score')}
-        GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-          ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
-            rv:work ?work ; rv:mainVersion ?main ; rv:context ?unitContext ;
-            rv:contribution ?contribution ; rv:revision ?revision ;
-            rv:selection ?selection ; rv:language ?language .
-          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
-        }
-        GRAPH ${iri(GRAPHS.current)} {
-          ?work a schema:CreativeWork ; rv:mainVersion ?main .
-          ?main a rv:MainVersion ; rv:work ?work .
-          ${input.author ? `?contribution a rv:TextContribution ; rv:author ${iri(input.author)} .` : ''}
-        }
-        OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
-          ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
-            rv:mainVersion ?main ; rv:selectionHead ?localSelection . }
-          ${realmLanguage('?localSelection', '?language')} }
-        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?main rv:selectionHead ?fallbackSelection }
-          ${fallbackLanguage('?fallbackSelection', '?language')} }
-        BIND(COALESCE(?localSelection, ?fallbackSelection) AS ?effectiveSelection)
-        BIND(IF(BOUND(?localSelection), ${iri(realm)}, ?main) AS ?effectiveContext)
-        BIND(IF(BOUND(?localSelection), "realm-adoption", "main-fallback") AS ?reason)
-        FILTER(?selection = ?effectiveSelection && ?unitContext = ?effectiveContext)
-        ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
+        ${phraseMatchPattern(input, lucene, phrasePattern('?unit', '?score'))}
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(realm)} rv:classificationContext ?classificationContext .
           ${iri(input.sense)} rv:expression ?expression .
@@ -242,9 +224,10 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         FILTER(?ratingCount > 0 && 10 * ?ratingSum >=
           ${input.minimumMeanTimes10} * ?ratingCount)
       }
-    }`, MAX_SEARCH_RESPONSE_BYTES);
+    } ORDER BY ?searchPosition ?searchOccurrence LIMIT 513`, MAX_SEARCH_RESPONSE_BYTES);
   await assertSameTextInstance(env.fuseki, index);
   const rows = result.results?.bindings ?? [];
+  if (rows.length >= 513) throw new PublicQueryBudgetExceeded('Joined placements exceed their complete budget');
   await assertQuerySnapshotMoved(env.fuseki, index, rows, 'indexGeneration');
   const first = rows[0];
   if (!first) throw new PublicRealmUnavailable('Realm or joined query scope is unavailable');
@@ -275,7 +258,10 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   if (auditCounts.some(value => !Number.isSafeInteger(value) || value !== ratingPopulation)) {
     throw new PublicQueryUnavailable('standing rating heads are incomplete or ambiguous');
   }
-  const matches = rows.filter(row => row.unit).map(row => {
+  const contentRows = rows.filter(row => row.contentProjection).map(row => ({ row,
+    resource: row.phraseWork?.value ?? '', rightsBasis: row.rightsBasis?.value, assessment: row.assessment?.value }));
+  const visibleContent = new Set((await visibleContentSearchRights(contentRows, input.rights)).map(item => item.row));
+  const matches = rows.filter(row => row.unit && (!row.contentProjection || visibleContent.has(row))).map(row => {
     if (!row.unit || !row.score || !row.work || !row.main || !row.contribution
       || !row.revision || !row.selection || !row.language || !row.reason
       || !row.decision || !row.source || !row.sourceContext
@@ -299,6 +285,11 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
       mainVersion: row.main.value, contribution: row.contribution.value,
       revision: row.revision.value, selection: row.selection.value,
       language: row.language.value, reason: row.reason.value, score,
+      ...(row.searchOccurrence && row.searchProfile && row.phraseWork && row.chapterTitle ? {
+        matchedPlacements: [{ resource: row.phraseWork.value, work: row.work.value,
+          occurrence: row.searchOccurrence.value, profile: row.searchProfile.value,
+          title: row.chapterTitle.value, revision: row.revision.value }],
+      } : {}),
       classification: { sense: input.sense, decision: row.decision.value,
         application: null, source: row.source.value,
         sourceContext: row.sourceContext.value,
@@ -306,14 +297,13 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
       rating: { context: input.ratingContext, count, sum, mean: sum / count,
         precision: { kind: 'exact-rational' as const, numerator: sum, denominator: count } } };
   });
-  if (new Set(matches.map(match => match.matchUnit)).size !== matches.length
-    || (matches.length === 0 && rows.length !== 1)) {
+  if (new Set(matches.map(match => `${match.matchUnit}\0${match.work}\0${match.matchedPlacements?.[0]?.occurrence ?? ''}`)).size !== matches.length) {
     throw new PublicQueryUnavailable('joined public query has ambiguous results');
   }
   const byUnit = new Map(fields.map(row => [row.matchUnit, row]));
   const disclosed = await discloseSearchMatches(env, matches.map(match => ({ ...match,
     ...byUnit.get(match.matchUnit) })));
-  const selected = fields.length ? rankedSearchMatches(disclosed) : mainSearchMatches(disclosed);
+  const selected = rankedSearchMatches(disclosed);
   const supports = await readSearchDecisionSupports(env,
     { dataEpoch: first.epoch.value, sequence: first.sequence.value },
     selected.map(match => ({ mainVersion: match.mainVersion,
@@ -325,6 +315,17 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         match.classification.decision),
       supportingStatementCount: exactDecisionSupports(supports, match.mainVersion,
         match.classification.decision).length } }));
+  if (content && readiness) {
+    const [sourceAfter, checkpointAfter] = await Promise.all([
+      content.content.ownerPosition(), content.cursor.read(content.consumer),
+    ]);
+    if (sourceAfter.dataEpoch !== readiness.contentPosition.dataEpoch
+      || sourceAfter.sequence !== readiness.contentPosition.sequence
+      || checkpointAfter.dataEpoch !== readiness.contentPosition.dataEpoch
+      || checkpointAfter.sequence !== readiness.contentPosition.sequence) {
+      throw new SearchSnapshotMoved('Content source moved during joined search');
+    }
+  }
   return { profile: 'public-realm-classified-rated-phrase-v1' as const,
     contractVersion: '1', resultGrain: 'mainVersion' as const,
     context: input.context, classificationSense: input.sense,
