@@ -39,10 +39,10 @@ export const registeredHiddenIdReads = [
 /** Writes have their own outcome proofs; they do not run in the read-only equality fixture.
  * About-posts covers hidden/absent targets (404) and hidden/absent openers (ordinary posting). */
 export const registeredHiddenIdWrites = [
+  'POST /v1/realms/{realm}/about-posts',
   // Retained collection resume compares another Person's file with an absent
   // file in native-exchange-disclosure.test.ts, without dispatching any row.
   'POST /v1/recipes/file-imports',
-  'POST /v1/realms/{realm}/about-posts',
 ] as const;
 /** Parent-output equality, proved at the owner tier in realm-reply-threads,
  * realm-reply-profile and realm-reply-parent-disclosure tests. These cases
@@ -82,7 +82,7 @@ export const registeredHiddenIdOperations = [...registeredHiddenIdReads, ...regi
   ...registeredHiddenRecipeExportReads,
   ...registeredHiddenExchangeReads,
   ...registeredHiddenWorkContributionReads,
-  ...registeredHiddenIdWrites].sort();
+  ...registeredHiddenIdWrites].sort((left, right) => left.localeCompare(right));
 
 // The posting contract declares disclosure inputs, separately from its observed
 // revision and route coordinates. Do not invent scalar-id debt for unrelated writes.
