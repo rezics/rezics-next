@@ -1,3 +1,5 @@
+import type { MembershipChange } from '../../src/modules/access/memberships.ts';
+import type { SetStatementDecisionInput } from '../../src/modules/statement/graph.ts';
 import type { Loss } from './authority-classes.ts';
 import { afterAll, beforeAll, beforeEach, expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
@@ -23,7 +25,8 @@ export let legacyController: Member;
 let selfHostedRun: string | undefined;
 const savedEnvironment = { ...process.env };
 export type Member = Awaited<ReturnType<MediaStack['member']>>;
-export type { Loss, Scenario, ReplayEntry } from './authority-classes.ts';
+export type { Loss, Scenario, ReplayEntry, PrincipalLoss, PrincipalReplayEntry,
+  RealmMembershipLoss, RealmMembershipReplayEntry, StatementAcceptanceLoss, StatementAcceptanceReplayEntry } from './authority-classes.ts';
 
 export function initializeReplayFixtures() {
   beforeAll(async () => {
@@ -112,6 +115,38 @@ export async function loseGrant(member: Member, grant: string, loss: Loss) {
   if (loss === 'expired') await expireFixtureAuthority(stack.accessPool, member.actor);
   else await reduceFixtureGrant(stack.accessPool, grant, { active: false });
 }
+export type RealmMembershipLossInput = Pick<MembershipChange,
+  'ownerSubject' | 'expectedGeneration' | 'expectedPolicyRevision'>;
+
+// Use the membership owner so its generation, consent and dependent-authority
+// fences apply. The caller supplies the current episode from its lawful setup.
+export async function loseRealmMembership(member: Member, input: RealmMembershipLossInput) {
+  const response = await member.send('POST', '/v1/access/membership-changes', {
+    profile: 'access-membership-change-v1', ...input,
+    kind: 'realm', memberSubject: member.actor, action: 'leave',
+  });
+  expect(response.status, await response.clone().text()).toBe(200);
+  const result = await response.json() as { state: string; generation: string };
+  expect(result.state).toBe('left');
+  expect(result.generation).not.toBe(input.expectedGeneration);
+}
+
+export type StatementAcceptanceLossInput = Pick<SetStatementDecisionInput, 'target' | 'acceptance'> & {
+  expectedDecisionHead: string;
+};
+
+// An explicit rejection supersedes the accepted head. Withdrawal can inherit
+// global acceptance, so it cannot establish this loss for every Realm scope.
+export async function loseStatementAcceptance(reviewer: Member, input: StatementAcceptanceLossInput) {
+  const response = await reviewer.send('POST', '/v1/statement-decisions', {
+    profile: 'statement-decision-v1', ...input, actingSubject: reviewer.actor, outcome: 'rejected',
+  });
+  expect([200, 201], await response.clone().text()).toContain(response.status);
+  const result = await response.json() as { outcome: string; decision: string };
+  expect(result.outcome).toBe('rejected');
+  expect(result.decision).not.toBe(input.expectedDecisionHead);
+}
+
 export async function proposal(member: Member, externalId: string, title: string, revision: number) {
   const deps = stack.composition.dependencies;
   const raw = Buffer.from(JSON.stringify({ key: `/works/${externalId}`, type: { key: '/type/work' },

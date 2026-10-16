@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { authorityLosses, type AuthorityLoss, type NonReplayEntry, type ReplayEntry, type AnyReplayEntry, type ResourceScenario } from './authority-classes.ts';
+import { authorityLosses, buildReplayScenario, type AuthorityLoss, type NonReplayEntry, type ReplayEntry, type AnyReplayEntry, type ResourceScenario } from './authority-classes.ts';
 import { assertCurrentAuthority, nonReplayControls, replayControls, registerReplayCases, validateReplayEntry } from './driver.ts';
 import { commandCoverage, discoverPublicCommands, type PublicCommand, type ReplayArea } from './public-callers.ts';
 
@@ -17,9 +18,12 @@ class SavedOwner {
   clock = 0;
   active = true;
   consumed = false;
+  realmMember = true;
+  statementAccepted = true;
   answerVersion = 1;
   minted = 0;
   refusedWrites = 0;
+  commandEffects = 0;
   saved = new Map<string, { body: string; result: { resource: string; version: number } }>();
   constructor(readonly resourceIdentity: boolean, readonly leakKey?: string,
     readonly changedBody: 'saved-result' | 'conflict' = 'saved-result', readonly corrupt = false) {}
@@ -27,7 +31,8 @@ class SavedOwner {
   async execute(key: string, body: string, credential = this.credential) {
     const receipt = this.saved.get(this.resourceIdentity ? 'realm-init:realm' : key);
     if (receipt && key === this.leakKey && body === 'original') return receipt.result;
-    if (credential !== this.credential || this.revoked || this.clock >= this.expiresAt || !this.active || this.consumed) {
+    if (credential !== this.credential || this.revoked || this.clock >= this.expiresAt || !this.active || this.consumed
+      || !this.realmMember || !this.statementAccepted) {
       if (this.corrupt) this.refusedWrites += 1;
       throw new Denied('current authority unavailable');
     }
@@ -35,6 +40,7 @@ class SavedOwner {
       if (body !== receipt.body && (!this.resourceIdentity || this.changedBody === 'conflict')) throw new Conflict('body conflict');
       return { ...receipt.result, replayed: true };
     }
+    this.commandEffects += 1;
     const result = { resource: 'realm', version: this.answerVersion };
     this.saved.set(this.resourceIdentity ? 'realm-init:realm' : key, { body, result });
     return result;
@@ -44,14 +50,17 @@ class SavedOwner {
     if (loss === 'expired') this.clock = this.expiresAt;
     else if (loss === 'revoked') this.revoked = true;
     else if (loss === 'principal-inactive') this.active = false;
-    else this.consumed = true;
+    else if (loss === 'consumed') this.consumed = true;
+    else if (loss === 'realm-membership-lost') this.realmMember = false;
+    else if (loss === 'statement-not-accepted') this.statementAccepted = false;
+    else throw new Error(`Unknown loss: ${loss}`);
   }
 
   scenario(credential?: string) {
     return {
       command: (fresh?: boolean, changed?: boolean) => this.execute(fresh ? 'another-key' : 'original-key', changed ? 'changed' : 'original', credential),
       lose: (loss: AuthorityLoss) => this.lose(loss),
-      snapshot: async () => ({ receipts: [...this.saved.entries()], refusedWrites: this.refusedWrites }),
+      snapshot: async () => ({ receipts: [...this.saved.entries()], refusedWrites: this.refusedWrites, commandEffects: this.commandEffects }),
       advance: async () => { this.answerVersion += 1; },
     };
   }
@@ -88,6 +97,15 @@ function resourceEntry(leakKey?: string, changedBody: 'saved-result' | 'conflict
     requestBuilder: async () => new SavedOwner(true, leakKey, changedBody, corrupt).resourceScenario() };
 }
 
+function realmMembershipEntry(leakKey?: string, corrupt = false): Extract<AnyReplayEntry, { authorityClass: 'realm-membership' }> {
+  return { ...metadata, authorityClass: 'realm-membership',
+    requestBuilder: async () => new SavedOwner(false, leakKey, 'saved-result', corrupt).scenario() };
+}
+function statementAcceptanceEntry(leakKey?: string, corrupt = false): Extract<AnyReplayEntry, { authorityClass: 'statement-acceptance' }> {
+  return { ...metadata, authorityClass: 'statement-acceptance',
+    requestBuilder: async () => new SavedOwner(false, leakKey, 'saved-result', corrupt).scenario() };
+}
+
 async function prove(entry: AnyReplayEntry, loss: AuthorityLoss) {
   assertCurrentAuthority(entry, await replayControls(entry, 'saved receipt', loss));
 }
@@ -107,30 +125,96 @@ registerReplayCases((['controller', 'domain-grant'] as const).map(legacyFactory)
 registerReplayCases([{ ...legacyFactory('domain-grant'), family: 'legacy registered saved disclosure',
   registration: 'registered-failing', requestBuilder: async () => new SavedOwner(false, 'original-key').scenario() }]);
 
+const evidenceRoot = resolve(import.meta.dir, '../../../../.temp/goal/replay-driver');
+mkdirSync(evidenceRoot, { recursive: true });
+const evidence = mkdtempSync(join(evidenceRoot, 'stand-ins-'));
+writeFileSync(join(evidence, 'source.json'), JSON.stringify({ qaRun: process.env.REZICS_QA_RUN_ID ?? null,
+  sources: Object.fromEntries(['authority-classes.ts', 'driver.ts', 'driver.test.ts', 'fixtures.ts'].map(file =>
+    [file, createHash('sha256').update(readFileSync(join(import.meta.dir, file))).digest('hex')])),
+}, null, 2), { flag: 'wx' });
+console.log(`Replay driver stand-in evidence: ${evidence}`);
+
+registerReplayCases([realmMembershipEntry(), statementAcceptanceEntry()].map(entry => ({
+  ...entry, family: `current ${entry.authorityClass}`,
+})), evidence);
+registerReplayCases([realmMembershipEntry('original-key'), statementAcceptanceEntry('original-key')].map(entry => ({
+  ...entry, family: `disclosing ${entry.authorityClass}`, registration: 'registered-failing' as const,
+})), evidence);
+
 test('legacy factory typing cannot bypass declarations for a new authority class', () => {
   expect(() => validateReplayEntry(legacyFactory('principal'))).toThrow();
   expect(() => validateReplayEntry(legacyFactory('capability'))).toThrow();
   expect(() => validateReplayEntry(legacyFactory('resource-identity'))).toThrow();
 });
 
-for (const makeEntry of [principalEntry, capabilityEntry, resourceEntry]) {
+for (const makeEntry of [principalEntry, capabilityEntry, resourceEntry, realmMembershipEntry, statementAcceptanceEntry]) {
   const sample = makeEntry();
   for (const loss of authorityLosses(sample)) {
     test(`${sample.authorityClass} / ${loss}: current refusal passes and a saved disclosure fails`, async () => {
-      await prove(makeEntry(), loss);
+      const current = makeEntry();
+      const passing = await replayControls(current, 'saved receipt', loss);
+      assertCurrentAuthority(current, passing);
       const broken = makeEntry('original-key');
       const controls = await replayControls(broken, 'saved receipt', loss);
       expect(() => assertCurrentAuthority(broken, controls)).toThrow();
+      writeFileSync(join(evidence, `${sample.authorityClass}-${loss}.json`),
+        JSON.stringify({ passing, disclosing: controls }, (_key, value: unknown) => value instanceof Error
+          ? { name: value.name, message: value.message } : value, 2), { flag: 'wx' });
     });
   }
 }
 
-for (const entry of [principalEntry(undefined, true), capabilityEntry(undefined, true, true), resourceEntry(undefined, 'saved-result', true)]) {
+for (const entry of [principalEntry(undefined, true), capabilityEntry(undefined, true, true), resourceEntry(undefined, 'saved-result', true),
+  realmMembershipEntry(undefined, true), statementAcceptanceEntry(undefined, true)]) {
   for (const loss of authorityLosses(entry)) test(`${entry.authorityClass} / ${loss}: refusal must preserve stored state`, async () => {
     await expect(prove(entry, loss)).rejects.toThrow();
   });
 }
 
+for (const [makeEntry, loss] of [[realmMembershipEntry, 'realm-membership-lost'],
+  [statementAcceptanceEntry, 'statement-not-accepted']] as const) {
+  test(`${loss}: dispatches exactly the named loss without ending a credential or grant`, async () => {
+    const owner = new SavedOwner(false);
+    const dispatched: AuthorityLoss[] = [];
+    const entry = makeEntry();
+    entry.requestBuilder = async (_subcase: string, requested: AuthorityLoss) => {
+      expect(requested).toBe(loss);
+      return { ...owner.scenario(), lose: async (reduction: AuthorityLoss) => { dispatched.push(reduction); await owner.lose(reduction); } };
+    };
+    expect(authorityLosses(entry)).toEqual([loss]);
+    await prove(entry, loss);
+    expect(dispatched).toEqual([loss]);
+    expect(owner.realmMember).toBe(loss !== 'realm-membership-lost');
+    expect(owner.statementAccepted).toBe(loss !== 'statement-not-accepted');
+    expect(owner.active).toBe(true);
+    expect(owner.revoked).toBe(false);
+    expect(owner.clock).toBeLessThan(owner.expiresAt);
+    expect(owner.consumed).toBe(false);
+  });
+  test(`${loss}: ordinary refusal class and message must match exactly`, async () => {
+    for (const wrong of [new Error('current authority unavailable'), new Denied('different refusal')]) {
+      const entry = makeEntry();
+      entry.requestBuilder = async () => {
+        const fixture = new SavedOwner(false).scenario();
+        return { ...fixture, command: async (fresh, changed) => {
+          try { return await fixture.command(fresh, changed); }
+          catch (error) { if (!fresh && !changed && error instanceof Denied) throw wrong; throw error; }
+        } };
+      };
+      await expect(prove(entry, loss)).rejects.toThrow();
+    }
+  });
+  test(`${loss}: rejects empty, duplicate, wrong-class and invented expiry losses`, async () => {
+    for (const losses of [[], [loss, loss], ['expired'], ['revoked'],
+      [loss === 'realm-membership-lost' ? 'statement-not-accepted' : 'realm-membership-lost']]) {
+      const entry = { ...makeEntry(), losses } as AnyReplayEntry;
+      expect(() => validateReplayEntry(entry)).toThrow();
+    }
+    await expect(buildReplayScenario(makeEntry(), 'saved receipt', 'revoked')).rejects.toThrow('Unregistered');
+    await expect(buildReplayScenario(principalEntry(), 'saved receipt', loss)).rejects.toThrow('Unregistered');
+    await expect(buildReplayScenario(capabilityEntry(), 'saved receipt', loss)).rejects.toThrow('Unregistered');
+  });
+}
 test('resource identity refuses the other request key after loss too', async () => {
   await expect(prove(resourceEntry('another-key'), 'revoked')).rejects.toThrow();
 });

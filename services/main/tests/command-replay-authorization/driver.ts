@@ -81,7 +81,7 @@ export function assertCurrentAuthority(row: AnyReplayEntry, proof: Awaited<Retur
 }
 
 export function validateReplayEntry(entry: AnyReplayEntry) {
-  expect(['controller', 'domain-grant', 'principal', 'capability', 'resource-identity']).toContain(entry.authorityClass);
+  expect(['controller', 'domain-grant', 'principal', 'capability', 'resource-identity', 'realm-membership', 'statement-acceptance']).toContain(entry.authorityClass);
   expect(entry.subcases.length).toBeGreaterThan(0);
   expect(entry.owners.length).toBeGreaterThan(0);
   expect(entry.scope.trim().length).toBeGreaterThan(0);
@@ -89,7 +89,9 @@ export function validateReplayEntry(entry: AnyReplayEntry) {
   const losses = authorityLosses(entry);
   expect(losses.length).toBeGreaterThan(0);
   expect(new Set(losses).size).toBe(losses.length);
-  const allowed: AuthorityLoss[] = entry.authorityClass === 'principal' ? ['expired', 'revoked', 'principal-inactive']
+  const allowed: AuthorityLoss[] = entry.authorityClass === 'realm-membership' ? ['realm-membership-lost']
+    : entry.authorityClass === 'statement-acceptance' ? ['statement-not-accepted']
+    : entry.authorityClass === 'principal' ? ['expired', 'revoked', 'principal-inactive']
     : capabilityReplayEntry(entry) && entry.singleUse ? ['expired', 'revoked', 'consumed'] : ['expired', 'revoked'];
   for (const loss of losses) expect(allowed).toContain(loss);
   if (entry.authorityClass === 'principal' || entry.authorityClass === 'capability') {
