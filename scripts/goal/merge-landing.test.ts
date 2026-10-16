@@ -4,9 +4,10 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { type Ledger, type Task } from './types.ts';
 import { landedTaskCommit } from './merge-normalise.ts';
+import { fusekiImageTag, stampFusekiImage } from '../dev/fuseki-image.ts';
 
 const fixtures: ReturnType<typeof createFixture>[] = [];
-function createFixture() {
+function createFixture(fuseki = false) {
   const scratch = join(import.meta.dir, '../../.temp/merge-landing');
   mkdirSync(scratch, { recursive: true });
   const directory = mkdtempSync(join(scratch, 'case-'));
@@ -24,6 +25,35 @@ function createFixture() {
   mkdirSync(join(directory, 'scripts/goal'), { recursive: true });
   for (const file of ['dedupe-imports.ts', 'composition-roots.ts']) copyFileSync(join(import.meta.dir, file), join(directory, 'scripts/goal', file));
   writeFileSync(join(directory, '.gitignore'), '.temp/\nnode_modules/\n');
+  if (fuseki) {
+    const put = (path: string, text: string) => {
+      mkdirSync(join(directory, path, '..'), { recursive: true });
+      writeFileSync(join(directory, path), text);
+    };
+    put('infra/jena/Dockerfile', 'ARG FUSEKI_VERSION=5.4.0\nCOPY infra/jena/command-module /build\n');
+    put('infra/jena/command-module/pom.xml', '<artifactId>fuseki-command</artifactId><version>1.0.0</version>');
+    put('infra/jena/command-module/one.txt', 'base one\n');
+    put('infra/jena/command-module/two.txt', 'base two\n');
+    put('infra/dev/compose.yaml', 'services:\n  fuseki:\n    image: rezics/fuseki:initial\n    restart: always\n');
+    put('scripts/dev/release-manifest.ts', "export const pins = {\n    fuseki: 'rezics/fuseki:initial',\n  fusekiModule: '1.0.0',\n};\n");
+    put('docs/development/toolchain.md', 'Authored toolchain guidance.\n\n| Source | Image and digest |\n| --- | --- |\n| Compose | `rezics/fuseki:initial` |\n');
+    stampFusekiImage(directory, false);
+    const image = fusekiImageTag(directory);
+    writeFileSync(join(directory, 'docs/development/toolchain.md'), readFileSync(join(directory, 'docs/development/toolchain.md'), 'utf8').replace('rezics/fuseki:initial', image));
+    put('scripts/generate.ts', `import { readFileSync, writeFileSync } from 'node:fs';
+      import { spawnSync } from 'node:child_process';
+      import { stampFusekiImage, fusekiImageTag } from ${JSON.stringify(join(import.meta.dir, '../dev/fuseki-image.ts'))};
+      const root = process.cwd(), check = process.argv.includes('--check');
+      stampFusekiImage(root, check);
+      const path = 'docs/development/toolchain.md', text = readFileSync(path, 'utf8');
+      const next = text.replace(/rezics\\/fuseki:[^\\x60\\s]+/g, fusekiImageTag(root));
+      if (check && next !== text) throw new Error('stale toolchain pin');
+      if (!check) {
+        writeFileSync(path, next);
+        if (spawnSync('task', ['jena:image'], { stdio: 'inherit' }).status !== 0) process.exit(1);
+      }
+    `);
+  }
   git('add', '.'); git('commit', '-qm', 'Initial fixture');
   const base = git('rev-parse', 'HEAD');
   const worktree = join(directory, '.temp/tree');
@@ -52,8 +82,15 @@ function createFixture() {
   const ready = join(directory, '.temp/gate-ready');
   const release = join(directory, '.temp/gate-release');
   writeFileSync(join(bin, 'task'), `#!/usr/bin/env bun
-    import { existsSync, writeFileSync } from 'node:fs';
+    import { existsSync, readFileSync, writeFileSync } from 'node:fs';
     const args = process.argv.slice(2);
+    const imageFile = process.env.FIXTURE_IMAGE_FILE;
+    if (imageFile) {
+      const image = /image: (\\S+)/.exec(readFileSync('infra/dev/compose.yaml', 'utf8'))[1];
+      if (args[0] === 'jena:image') { writeFileSync(imageFile, image); process.exit(0); }
+      if (!existsSync(imageFile) || readFileSync(imageFile, 'utf8') !== image) throw new Error('gate reached before the image was built');
+      writeFileSync(imageFile + '.gate', image);
+    }
     const kind = process.env.FIXTURE_GATE;
     if ((kind === 'types' && args.some(arg => arg.endsWith(':typecheck')))
       || (kind === 'units' && !args.includes('--list'))) {
@@ -63,7 +100,11 @@ function createFixture() {
     }
     if (args.includes('--list')) console.log('Affected since HEAD: fixture\\n  unit: scripts/fixture.test.ts');
   `);
-  writeFileSync(join(bin, 'docker'), '#!/bin/sh\nexit 0\n');
+  writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
+    import { existsSync, readFileSync } from 'node:fs';
+    const file = process.env.FIXTURE_IMAGE_FILE;
+    process.exit(!file || existsSync(file) && readFileSync(file, 'utf8') === process.argv.at(-1) ? 0 : 1);
+  `);
   chmodSync(join(bin, 'task'), 0o755); chmodSync(join(bin, 'docker'), 0o755);
   writeFileSync(join(worktree, 'scripts/fixture.test.ts'), '');
   // The selector needs a present file in the clean task branch.
@@ -85,8 +126,8 @@ function createFixture() {
   return current;
 }
 
-function fixture() {
-  const current = createFixture();
+function fixture(fuseki = false) {
+  const current = createFixture(fuseki);
   fixtures.push(current);
   return current;
 }
@@ -106,6 +147,64 @@ afterEach(async () => {
     await Promise.all(f.children.map(child => child.exited));
     rmSync(f.directory, { recursive: true, force: true });
   }
+});
+
+for (const wave of [false, true]) test(`landing resolves generated Fuseki pins and builds the combined image before gating (${wave ? 'merge' : 'rebase'})`, async () => {
+  const f = fixture(true);
+  const pin = (root: string) => {
+    stampFusekiImage(root, false);
+    const path = join(root, 'docs/development/toolchain.md');
+    writeFileSync(path, readFileSync(path, 'utf8').replace(/rezics\/fuseki:[^`\s]+/g, fusekiImageTag(root)));
+  };
+  writeFileSync(join(f.task.worktree, 'infra/jena/command-module/one.txt'), 'worker one\n');
+  pin(f.task.worktree);
+  f.git('-C', f.task.worktree, 'add', '.'); f.git('-C', f.task.worktree, 'commit', '-qm', 'Worker Fuseki input');
+  writeFileSync(join(f.task.worktree, 'infra/jena/command-module/one.txt'), 'worker one revised\n');
+  pin(f.task.worktree);
+  f.git('-C', f.task.worktree, 'add', '.'); f.git('-C', f.task.worktree, 'commit', '-qm', 'Revise worker Fuseki input');
+  const workerPin = fusekiImageTag(f.task.worktree);
+  if (wave) {
+    // A real merge in the submitted branch selects the merge path in the landing tool.
+    f.git('checkout', '-qb', 'side');
+    writeFileSync(join(f.directory, 'side.txt'), 'side\n');
+    f.git('add', '.'); f.git('commit', '-qm', 'Side branch');
+    f.git('checkout', '-q', 'main');
+    f.git('-C', f.task.worktree, 'merge', '--no-ff', '-qm', 'Composed branch', 'side');
+  }
+  writeFileSync(join(f.directory, 'infra/jena/command-module/two.txt'), 'main two\n');
+  pin(f.directory);
+  f.git('add', '.'); f.git('commit', '-qm', 'Main Fuseki input');
+  const mainPin = fusekiImageTag(f.directory);
+  const imageFile = join(f.directory, '.temp/built-image');
+  const result = await f.start(['merge', f.task.id, '--allow-scope'], { FIXTURE_IMAGE_FILE: imageFile }).result;
+  expect(result.code, result.stderr).toBe(0);
+  expect(f.ledger().tasks[f.task.id]!.state).toBe('merged');
+  const expected = fusekiImageTag(f.directory);
+  expect(expected).not.toBe(workerPin);
+  expect(expected).not.toBe(mainPin);
+  for (const path of ['infra/dev/compose.yaml', 'scripts/dev/release-manifest.ts', 'docs/development/toolchain.md']) {
+    expect(readFileSync(join(f.directory, path), 'utf8')).toContain(expected);
+  }
+  expect(readFileSync(imageFile, 'utf8')).toBe(expected);
+  expect(readFileSync(imageFile + '.gate', 'utf8')).toBe(expected);
+  expect(f.git('-C', f.task.worktree, 'status', '--porcelain')).toBe('');
+}, 60_000);
+
+test('a generated Fuseki pin conflict never resolves an authored Compose conflict', async () => {
+  const f = fixture(true);
+  for (const [root, input, restart] of [[f.task.worktree, 'one', 'on-failure'], [f.directory, 'two', 'unless-stopped']] as const) {
+    writeFileSync(join(root, `infra/jena/command-module/${input}.txt`), `${input} changed\n`);
+    const compose = join(root, 'infra/dev/compose.yaml');
+    writeFileSync(compose, readFileSync(compose, 'utf8').replace('restart: always', `restart: ${restart}`));
+    stampFusekiImage(root, false);
+    f.git('-C', root, 'add', '.'); f.git('-C', root, 'commit', '-qm', 'Authored Compose change with generated pin');
+  }
+  const head = f.git('-C', f.task.worktree, 'rev-parse', 'HEAD');
+  const result = await f.start(['merge', f.task.id, '--allow-scope']).result;
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain('infra/dev/compose.yaml');
+  expect(f.git('-C', f.task.worktree, 'rev-parse', 'HEAD')).toBe(head);
+  expect(f.git('-C', f.task.worktree, 'status', '--porcelain')).toBe('');
 });
 
 for (const kind of ['types', 'units']) {

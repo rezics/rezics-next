@@ -18,6 +18,7 @@ import { advanceLandingReview, finishLandingRebase, startLandingRebase } from '.
 import { readDirectoryLease, tryAcquireDirectoryLease, type AcquiredDirectoryLease } from '../qa/process/lease.ts';
 import { type CheckOptions } from './check.ts';
 import { runMergeTrain, trainEvent, type TrainContext } from './merge-train.ts';
+import { continueFusekiPinConflicts } from './fuseki-merge.ts';
 
 export function readMergeEvents(): RecordedMerge[] {
   const eventPath = join(stateDir, 'merges.jsonl');
@@ -466,9 +467,14 @@ async function mergeUnderLease(id: string, flags: Set<string>, expectedHead?: st
     // A branch that already resolved main by merging (a wave) would replay every commit under a linear
     // rebase and meet conflicts its merges settled; it takes main by merge instead.
     const merging = git(task.worktree, ['rev-list', '--merges', '--count', `${originalBase}..HEAD`]) !== '0';
-    const rebase = merging
+    let rebase = merging
       ? spawnSync('git', ['-c', 'core.editor=true', 'merge', '--no-edit', trainBase], { cwd: task.worktree, encoding: 'utf8' })
       : spawnSync('git', ['rebase', '--onto', trainBase, originalBase], { cwd: task.worktree, encoding: 'utf8' });
+    while (rebase.status !== 0) {
+      const continued = continueFusekiPinConflicts(task.worktree, trainBase, merging);
+      if (!continued) break;
+      rebase = continued;
+    }
     if (rebase.status !== 0) {
       const conflicted = git(task.worktree, ['diff', '--name-only', '--diff-filter=U'], true);
       git(task.worktree, merging ? ['merge', '--abort'] : ['rebase', '--abort'], true);
@@ -575,8 +581,8 @@ async function mergeUnderLease(id: string, flags: Set<string>, expectedHead?: st
         if (typeof merge === 'string') throw new Error(merge);
         if (!merge) return;
         const installed = reinstallStaleDependencies(merge.worktree);
-        const failure = installed ?? missingPinnedImage(merge.worktree, root)
-          ?? regenerateGeneratedOutputs(merge) ?? missingPinnedImage(merge.worktree, root);
+        // Generation stamps the combined Fuseki inputs and builds their image before any gate uses it.
+        const failure = installed ?? regenerateGeneratedOutputs(merge) ?? missingPinnedImage(merge.worktree, root);
         if (failure) {
           await withLedger(ledger => refuse(taskOf(ledger, id), failure));
           throw new Error(failure);
