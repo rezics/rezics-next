@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { isValidElement, type ReactNode } from 'react';
 import { fromPlainText } from '@rezics/document';
 import declaration from '../../../../../scripts/qa/cases/outcomes/games/catalogue-browse-and-search-in-its-zone.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { recordCatalogueStoryReads } from '../../../support/catalogue-story-reads.ts';
+import { readCatalogueTail } from '../../../support/catalogue-continuation.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(60_000);
@@ -82,7 +84,9 @@ async function caughtUpBrowse(sample: ReturnType<typeof recording.session>, labe
   let attempt = 0;
   let observed: Page;
   do {
-    observed = await answer<Page>(sample(`${label}-readiness-${attempt++}`, 'GET', path));
+    const readiness = `${label}-readiness-${attempt++}`;
+    observed = await readCatalogueTail(path, (next, page) => answer<Page>(sample(
+      page ? `${readiness}-continuation-${page}` : readiness, 'GET', next)));
     if (observed.window.complete && observed.matches.kind === 'exact'
       && (!committed || observed.sourcePosition.dataEpoch === committed.dataEpoch
         && BigInt(observed.sourcePosition.sequence) >= BigInt(committed.sequence))) return observed;
@@ -96,6 +100,7 @@ async function caughtUpBrowse(sample: ReturnType<typeof recording.session>, labe
   })}`);
 }
 const games: Work[] = [];
+const adoptedWorks: Work[] = [];
 const phrase = `Gamegarden${randomUUID().replaceAll('-', '')}`;
 let unadopted: Work;
 let unadoptedSelection: Selection;
@@ -162,21 +167,23 @@ beforeAll(async () => {
   await role({ kind: 'role', roleId: editorRole, name: 'Game catalogue editors', permissions: ['publication.adopt'] });
   await role({ kind: 'assignment', roleId: editorRole, member: sessions.owner.actingSubject,
     assigned: true, validUntil: new Date(Date.now() + 3_600_000).toISOString() });
-  for (let index = 0; index < 4; index++) {
-    const game = await createGame(`${phrase} ${index}`, index === 3 ? 'Book' : 'VideoGame');
+  // Cross the production reader's default page size without injecting a limit.
+  for (let index = 0; index < 22; index++) {
+    const game = await createGame(`${phrase} ${index}`, index < 3 ? 'VideoGame' : 'Book');
     const selection = await publish(game);
     await fixture(sessions.owner.main('POST', '/v1/publication-selections', {
       ...selection, profile: 'realm-local-selection-v1',
       context: { kind: 'realm-local', id: sessions.realm }, mainVersion: game.mainVersion,
       selectionBasis: 'realm-manager-review',
     }), 201);
-    if (index !== 3) games.push(game);
+    adoptedWorks.push(game);
+    if (index < 3) games.push(game);
   }
   unadopted = await createGame(`${phrase} published but not adopted`);
   unadoptedSelection = await publish(unadopted);
   await role({ kind: 'assignment', roleId: editorRole, member: sessions.owner.actingSubject, assigned: false,
     validUntil: new Date(Date.now() + 3_600_000).toISOString() });
-}, 180_000);
+}, 360_000);
 
 async function catalogue(name: PersonaName) {
   const person = sessions[name];
@@ -229,6 +236,7 @@ async function catalogue(name: PersonaName) {
     expect(adopted).toMatchObject({ work: unadopted.work, realm: sessions.realm,
       publicationDecision: unadoptedSelection.publicationDecision });
     games.push(unadopted);
+    adoptedWorks.push(unadopted);
     const curated = await caughtUpBrowse(sample, 'curated-search',
       `${root}?${new URLSearchParams({ q: 'published but not adopted', type: 'https://schema.org/VideoGame' })}`,
       adopted.sourcePosition);
@@ -255,6 +263,102 @@ async function catalogue(name: PersonaName) {
     }
   }
   if (name === 'member') await supportingReads(person, sample, sampledCards);
+  await productionVisits(name);
+}
+
+/** Capture the route's own requests; session credentials remain owned by PersonaSession. */
+async function productionVisits(name: PersonaName) {
+  const { mainApiWithToken } = await import('../../../../../apps/web/features/api/main.ts');
+  const { RealmBrowseRoute } = await import('../../../../../apps/web/features/realm/routes.tsx');
+  const { realmFrameReads } = await import('../../../../../apps/web/features/realm/read.ts');
+  const { ZoneBrowse } = await import('../../../../../apps/web/features/zones/browse.tsx');
+  const { RealmMembership } = await import('../../../../../apps/web/features/realm/membership.tsx');
+  const { mainRelationships } = await import('../../../../../apps/web/features/relationships/api.ts');
+  type Model = import('../../../../../apps/web/features/zones/browse-view.ts').BrowseModel;
+  type Membership = import('react').ComponentProps<typeof RealmMembership>;
+  const person = sessions[name];
+  let pageLabel = '';
+  const retained = new Map<string, Promise<Response>>();
+  const labelOf = (url: URL) => {
+    if (url.pathname.endsWith('/modules/browse')) return pageLabel;
+    if (url.pathname === '/v1/addresses/resolve') return 'frame-address';
+    if (/\/v1\/realms\/[^/]+$/.test(url.pathname)) return 'frame-realm-header';
+    if (url.pathname.startsWith('/v1/follows/')) return 'frame-follow';
+    const tail = url.pathname.split('/').at(-1);
+    const cursor = url.searchParams.get('cursor') ?? url.searchParams.get('after');
+    return `frame-${tail}${cursor ? `-${cursor}` : ''}`;
+  };
+  const transport = (personal: boolean): typeof fetch => (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    const label = labelOf(url);
+    const key = `${label}:${personal}:${request.method}:${url.pathname}${url.search}`;
+    let pending = retained.get(key);
+    if (!pending) {
+      expect(request.method).toBe('GET');
+      const headers = Object.fromEntries([...request.headers].filter(([header]) =>
+        !['authorization', 'cookie', 'x-session-key'].includes(header)));
+      pending = recording.session(name, personal ? person : sessions.visitor)(label,
+        request.method, url.pathname + url.search, undefined, undefined, { headers });
+      retained.set(key, pending);
+    }
+    return (await pending).clone();
+  }) as typeof fetch;
+  const fetcher = transport(false);
+  const main = mainApiWithToken(undefined, { fetcher });
+  const personal = name === 'visitor' ? main : mainApiWithToken('persona-session', { fetcher: transport(true) });
+  const client = { main, personal, signedIn: name !== 'visitor', actingSubject: person.actingSubject ?? undefined };
+  const frame = realmFrameReads({ ...client, keepProblem: false });
+  const siteKey = short(sessions.zone);
+  const resolved = await frame.resolveRealm(siteKey, 'en', 'site');
+  expect(resolved.kind).toBe('realm');
+  if (resolved.kind !== 'realm') throw new Error(`Games site did not resolve: ${resolved.kind}`);
+  function find<T>(node: ReactNode, match: (node: import('react').ReactElement) => T | null): T | null {
+    if (Array.isArray(node)) return node.map(item => find(item, match)).find(Boolean) ?? null;
+    if (!isValidElement<{ children?: ReactNode }>(node)) return null;
+    return match(node) ?? Object.values(node.props).map(child => find(child, match)).find(Boolean) ?? null;
+  }
+  const addresses: [string, Record<string, string>][] = [
+    ['page-browse-default', {}],
+    ...(['newest', 'updated'] as const).map(sort => [`page-browse-${sort}`, { sort }] as [string, Record<string, string>]),
+    ['page-search-default', { q: phrase }],
+    ...(['newest', 'updated', 'relevance'] as const).map(sort =>
+      [`page-search-${sort}`, { q: phrase, sort }] as [string, Record<string, string>]),
+    ['page-search-no-match', { q: `${phrase}nomatch` }],
+  ];
+  for (const [label, address] of addresses) {
+    let search = address;
+    const ids: string[] = [], cursors = new Set<string>();
+    for (let index = 0; ; index++) {
+      pageLabel = index ? `${label}-continuation-${index}` : label;
+      const rendered = await RealmBrowseRoute({ params: Promise.resolve({ locale: 'en', realm: siteKey }),
+        searchParams: Promise.resolve(search) }, undefined, client);
+      const model = find<Model>(rendered, node => node.type === ZoneBrowse ? (node.props as { model: Model }).model : null);
+      if (!model) {
+        const answers = await Promise.all([...retained].filter(([key]) => key.startsWith(`${pageLabel}:`))
+          .map(async ([key, pending]) => { const response = await pending;
+            return { request: key, status: response.status, answer: await response.clone().text() }; }));
+        throw new Error(`Games production page did not render: ${JSON.stringify({ name, pageLabel, search, answers })}`);
+      }
+      const membership = find<Membership>(rendered, node => node.type === RealmMembership ? node.props as Membership : null);
+      if (membership?.signedIn && membership.actingSubject
+        && (!membership.initial || membership.initial.following === null || membership.initial.level == null)) {
+        await mainRelationships(membership.actingSubject, { origin: 'http://main.local', fetch: transport(true) })
+          .state(membership.realm);
+      }
+      ids.push(...model.items.map(work => work.id));
+      if (!model.next) break;
+      const next = new URL(model.next, 'http://web.local');
+      const cursor = next.searchParams.get('cursor');
+      expect(cursor).toBeTruthy();
+      expect(cursors.has(cursor!)).toBe(false);
+      cursors.add(cursor!);
+      for (const [key, value] of Object.entries(address)) expect(next.searchParams.get(key)).toBe(value);
+      search = Object.fromEntries(next.searchParams);
+    }
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.slice().sort()).toEqual((label === 'page-search-no-match' ? [] : adoptedWorks.map(work => work.work)).sort());
+    if (label !== 'page-search-no-match') expect(cursors.size).toBeGreaterThan(0);
+  }
 }
 
 async function supportingReads(person: PersonaSession, sample: ReturnType<typeof recording.session>, cards: Set<string>) {
