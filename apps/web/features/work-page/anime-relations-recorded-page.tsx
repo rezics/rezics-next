@@ -19,3 +19,4 @@ export function AnimeRelationsSections({ view, workRef, id, query, locale, pageM
       workRef={workRef} current={id} query={query} locale={locale} t={t} pageMessages={pageMessages} />
   </>;
 }
+
