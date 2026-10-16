@@ -1,3 +1,4 @@
+import type { VerifiedCreditOccurrence } from './credit-evidence.ts';
 import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -328,7 +329,7 @@ export class OpenLibraryConversionStore {
   }
 
   async verifiedRead(principalId: string, conversionId: string): Promise<{
-    conversion: OpenLibraryConversion; observation: StagedSourceObservation } | null> {
+    conversion: OpenLibraryConversion; observation: StagedSourceObservation; credits: VerifiedCreditOccurrence[] | null } | null> {
     const conversion = await this.read(principalId, conversionId);
     if (!conversion) return null;
     const observation = await this.intake.read(principalId,
@@ -340,7 +341,8 @@ export class OpenLibraryConversionStore {
       || stable(conversion.fieldInventory) !== stable(projected.fieldInventory)) {
       throw new SourceConversionUnavailable('source conversion differs from retained observation');
     }
-    return { conversion, observation };
+    return { conversion, observation, credits: conversion.projection.authorRefs?.map(ref => ({ ...ref,
+      provider: 'open-library', namespace: 'author', role: 'author' as const })) ?? null };
   }
 
   async compare(principalId: string, baseId: string, candidateId: string):

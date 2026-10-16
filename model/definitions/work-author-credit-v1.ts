@@ -12,7 +12,7 @@ export const workAuthorCreditDeclaration = {
   },
   binding: {
     required: ['credit', 'revision', 'work', 'work-head', 'key', 'ordinal', 'actor', 'receipt', 'scope', 'epoch', 'intent'],
-    optional: ['source-role'],
+    optional: ['source-role', 'provider', 'namespace', 'role'],
     roles: ['credit', 'revision'],
     demandedBy: ['<https://rezics.com/vocab/AuthorCredit>', '<https://rezics.com/vocab/AuthorCreditRevision>'],
   },

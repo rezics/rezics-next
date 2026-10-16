@@ -163422,6 +163422,9 @@
                                           ],
                                           "type": "object"
                                         },
+                                        "namespace": {
+                                          "type": "string"
+                                        },
                                         "ordinal": {
                                           "type": "integer"
                                         },
@@ -163438,6 +163441,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -163552,6 +163557,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -163638,7 +163645,15 @@
                                       "type": "null"
                                     },
                                     "role": {
-                                      "const": "author",
+                                      "enum": [
+                                        "author",
+                                        "director",
+                                        "artist",
+                                        "animation-studio",
+                                        "translator",
+                                        "editor",
+                                        "transcriber"
+                                      ],
                                       "type": "string"
                                     }
                                   },
@@ -219351,6 +219366,9 @@
                                                         ],
                                                         "type": "object"
                                                       },
+                                                      "namespace": {
+                                                        "type": "string"
+                                                      },
                                                       "ordinal": {
                                                         "type": "integer"
                                                       },
@@ -219367,6 +219385,8 @@
                                                           "director",
                                                           "artist",
                                                           "animation-studio",
+                                                          "translator",
+                                                          "editor",
                                                           "transcriber"
                                                         ],
                                                         "type": "string"
@@ -219481,6 +219501,8 @@
                                                           "director",
                                                           "artist",
                                                           "animation-studio",
+                                                          "translator",
+                                                          "editor",
                                                           "transcriber"
                                                         ],
                                                         "type": "string"
@@ -219567,7 +219589,15 @@
                                                     "type": "null"
                                                   },
                                                   "role": {
-                                                    "const": "author",
+                                                    "enum": [
+                                                      "author",
+                                                      "director",
+                                                      "artist",
+                                                      "animation-studio",
+                                                      "translator",
+                                                      "editor",
+                                                      "transcriber"
+                                                    ],
                                                     "type": "string"
                                                   }
                                                 },
@@ -255047,6 +255077,9 @@
                                           ],
                                           "type": "object"
                                         },
+                                        "namespace": {
+                                          "type": "string"
+                                        },
                                         "ordinal": {
                                           "type": "integer"
                                         },
@@ -255063,6 +255096,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -255177,6 +255212,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -255263,7 +255300,15 @@
                                       "type": "null"
                                     },
                                     "role": {
-                                      "const": "author",
+                                      "enum": [
+                                        "author",
+                                        "director",
+                                        "artist",
+                                        "animation-studio",
+                                        "translator",
+                                        "editor",
+                                        "transcriber"
+                                      ],
                                       "type": "string"
                                     }
                                   },
@@ -558042,6 +558087,9 @@
                                               ],
                                               "type": "object"
                                             },
+                                            "namespace": {
+                                              "type": "string"
+                                            },
                                             "ordinal": {
                                               "type": "integer"
                                             },
@@ -558058,6 +558106,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -558172,6 +558222,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -558258,7 +558310,15 @@
                                           "type": "null"
                                         },
                                         "role": {
-                                          "const": "author",
+                                          "enum": [
+                                            "author",
+                                            "director",
+                                            "artist",
+                                            "animation-studio",
+                                            "translator",
+                                            "editor",
+                                            "transcriber"
+                                          ],
                                           "type": "string"
                                         }
                                       },
@@ -560338,6 +560398,9 @@
                                               ],
                                               "type": "object"
                                             },
+                                            "namespace": {
+                                              "type": "string"
+                                            },
                                             "ordinal": {
                                               "type": "integer"
                                             },
@@ -560354,6 +560417,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -560468,6 +560533,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -560554,7 +560621,15 @@
                                           "type": "null"
                                         },
                                         "role": {
-                                          "const": "author",
+                                          "enum": [
+                                            "author",
+                                            "director",
+                                            "artist",
+                                            "animation-studio",
+                                            "translator",
+                                            "editor",
+                                            "transcriber"
+                                          ],
                                           "type": "string"
                                         }
                                       },
@@ -562643,6 +562718,9 @@
                                               ],
                                               "type": "object"
                                             },
+                                            "namespace": {
+                                              "type": "string"
+                                            },
                                             "ordinal": {
                                               "type": "integer"
                                             },
@@ -562659,6 +562737,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -562773,6 +562853,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -562859,7 +562941,15 @@
                                           "type": "null"
                                         },
                                         "role": {
-                                          "const": "author",
+                                          "enum": [
+                                            "author",
+                                            "director",
+                                            "artist",
+                                            "animation-studio",
+                                            "translator",
+                                            "editor",
+                                            "transcriber"
+                                          ],
                                           "type": "string"
                                         }
                                       },
@@ -565099,6 +565189,9 @@
                                               ],
                                               "type": "object"
                                             },
+                                            "namespace": {
+                                              "type": "string"
+                                            },
                                             "ordinal": {
                                               "type": "integer"
                                             },
@@ -565115,6 +565208,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -565229,6 +565324,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -565315,7 +565412,15 @@
                                           "type": "null"
                                         },
                                         "role": {
-                                          "const": "author",
+                                          "enum": [
+                                            "author",
+                                            "director",
+                                            "artist",
+                                            "animation-studio",
+                                            "translator",
+                                            "editor",
+                                            "transcriber"
+                                          ],
                                           "type": "string"
                                         }
                                       },
@@ -567566,6 +567671,9 @@
                                               ],
                                               "type": "object"
                                             },
+                                            "namespace": {
+                                              "type": "string"
+                                            },
                                             "ordinal": {
                                               "type": "integer"
                                             },
@@ -567582,6 +567690,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -567696,6 +567806,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -567782,7 +567894,15 @@
                                           "type": "null"
                                         },
                                         "role": {
-                                          "const": "author",
+                                          "enum": [
+                                            "author",
+                                            "director",
+                                            "artist",
+                                            "animation-studio",
+                                            "translator",
+                                            "editor",
+                                            "transcriber"
+                                          ],
                                           "type": "string"
                                         }
                                       },
@@ -570060,6 +570180,9 @@
                                               ],
                                               "type": "object"
                                             },
+                                            "namespace": {
+                                              "type": "string"
+                                            },
                                             "ordinal": {
                                               "type": "integer"
                                             },
@@ -570076,6 +570199,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -570190,6 +570315,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -570276,7 +570403,15 @@
                                           "type": "null"
                                         },
                                         "role": {
-                                          "const": "author",
+                                          "enum": [
+                                            "author",
+                                            "director",
+                                            "artist",
+                                            "animation-studio",
+                                            "translator",
+                                            "editor",
+                                            "transcriber"
+                                          ],
                                           "type": "string"
                                         }
                                       },
@@ -575776,6 +575911,9 @@
                                               ],
                                               "type": "object"
                                             },
+                                            "namespace": {
+                                              "type": "string"
+                                            },
                                             "ordinal": {
                                               "type": "integer"
                                             },
@@ -575792,6 +575930,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -575906,6 +576046,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -575992,7 +576134,15 @@
                                           "type": "null"
                                         },
                                         "role": {
-                                          "const": "author",
+                                          "enum": [
+                                            "author",
+                                            "director",
+                                            "artist",
+                                            "animation-studio",
+                                            "translator",
+                                            "editor",
+                                            "transcriber"
+                                          ],
                                           "type": "string"
                                         }
                                       },
@@ -576883,6 +577033,9 @@
                                               ],
                                               "type": "object"
                                             },
+                                            "namespace": {
+                                              "type": "string"
+                                            },
                                             "ordinal": {
                                               "type": "integer"
                                             },
@@ -576899,6 +577052,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -577013,6 +577168,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -577099,7 +577256,15 @@
                                           "type": "null"
                                         },
                                         "role": {
-                                          "const": "author",
+                                          "enum": [
+                                            "author",
+                                            "director",
+                                            "artist",
+                                            "animation-studio",
+                                            "translator",
+                                            "editor",
+                                            "transcriber"
+                                          ],
                                           "type": "string"
                                         }
                                       },
@@ -578002,6 +578167,9 @@
                                               ],
                                               "type": "object"
                                             },
+                                            "namespace": {
+                                              "type": "string"
+                                            },
                                             "ordinal": {
                                               "type": "integer"
                                             },
@@ -578018,6 +578186,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -578132,6 +578302,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -578218,7 +578390,15 @@
                                           "type": "null"
                                         },
                                         "role": {
-                                          "const": "author",
+                                          "enum": [
+                                            "author",
+                                            "director",
+                                            "artist",
+                                            "animation-studio",
+                                            "translator",
+                                            "editor",
+                                            "transcriber"
+                                          ],
                                           "type": "string"
                                         }
                                       },
@@ -579269,6 +579449,9 @@
                                               ],
                                               "type": "object"
                                             },
+                                            "namespace": {
+                                              "type": "string"
+                                            },
                                             "ordinal": {
                                               "type": "integer"
                                             },
@@ -579285,6 +579468,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -579399,6 +579584,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -579485,7 +579672,15 @@
                                           "type": "null"
                                         },
                                         "role": {
-                                          "const": "author",
+                                          "enum": [
+                                            "author",
+                                            "director",
+                                            "artist",
+                                            "animation-studio",
+                                            "translator",
+                                            "editor",
+                                            "transcriber"
+                                          ],
                                           "type": "string"
                                         }
                                       },
@@ -580546,6 +580741,9 @@
                                               ],
                                               "type": "object"
                                             },
+                                            "namespace": {
+                                              "type": "string"
+                                            },
                                             "ordinal": {
                                               "type": "integer"
                                             },
@@ -580562,6 +580760,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -580676,6 +580876,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -580762,7 +580964,15 @@
                                           "type": "null"
                                         },
                                         "role": {
-                                          "const": "author",
+                                          "enum": [
+                                            "author",
+                                            "director",
+                                            "artist",
+                                            "animation-studio",
+                                            "translator",
+                                            "editor",
+                                            "transcriber"
+                                          ],
                                           "type": "string"
                                         }
                                       },
@@ -581850,6 +582060,9 @@
                                               ],
                                               "type": "object"
                                             },
+                                            "namespace": {
+                                              "type": "string"
+                                            },
                                             "ordinal": {
                                               "type": "integer"
                                             },
@@ -581866,6 +582079,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -581980,6 +582195,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -582066,7 +582283,15 @@
                                           "type": "null"
                                         },
                                         "role": {
-                                          "const": "author",
+                                          "enum": [
+                                            "author",
+                                            "director",
+                                            "artist",
+                                            "animation-studio",
+                                            "translator",
+                                            "editor",
+                                            "transcriber"
+                                          ],
                                           "type": "string"
                                         }
                                       },
@@ -583659,6 +583884,8 @@
                                   "director",
                                   "artist",
                                   "animation-studio",
+                                  "translator",
+                                  "editor",
                                   "transcriber"
                                 ],
                                 "type": "string"
@@ -584436,6 +584663,8 @@
                                   "director",
                                   "artist",
                                   "animation-studio",
+                                  "translator",
+                                  "editor",
                                   "transcriber"
                                 ],
                                 "type": "string"
@@ -585213,6 +585442,8 @@
                                   "director",
                                   "artist",
                                   "animation-studio",
+                                  "translator",
+                                  "editor",
                                   "transcriber"
                                 ],
                                 "type": "string"
@@ -586320,6 +586551,9 @@
                                                       ],
                                                       "type": "object"
                                                     },
+                                                    "namespace": {
+                                                      "type": "string"
+                                                    },
                                                     "ordinal": {
                                                       "type": "integer"
                                                     },
@@ -586336,6 +586570,8 @@
                                                         "director",
                                                         "artist",
                                                         "animation-studio",
+                                                        "translator",
+                                                        "editor",
                                                         "transcriber"
                                                       ],
                                                       "type": "string"
@@ -586450,6 +586686,8 @@
                                                         "director",
                                                         "artist",
                                                         "animation-studio",
+                                                        "translator",
+                                                        "editor",
                                                         "transcriber"
                                                       ],
                                                       "type": "string"
@@ -586536,7 +586774,15 @@
                                                   "type": "null"
                                                 },
                                                 "role": {
-                                                  "const": "author",
+                                                  "enum": [
+                                                    "author",
+                                                    "director",
+                                                    "artist",
+                                                    "animation-studio",
+                                                    "translator",
+                                                    "editor",
+                                                    "transcriber"
+                                                  ],
                                                   "type": "string"
                                                 }
                                               },
@@ -587427,6 +587673,9 @@
                                                       ],
                                                       "type": "object"
                                                     },
+                                                    "namespace": {
+                                                      "type": "string"
+                                                    },
                                                     "ordinal": {
                                                       "type": "integer"
                                                     },
@@ -587443,6 +587692,8 @@
                                                         "director",
                                                         "artist",
                                                         "animation-studio",
+                                                        "translator",
+                                                        "editor",
                                                         "transcriber"
                                                       ],
                                                       "type": "string"
@@ -587557,6 +587808,8 @@
                                                         "director",
                                                         "artist",
                                                         "animation-studio",
+                                                        "translator",
+                                                        "editor",
                                                         "transcriber"
                                                       ],
                                                       "type": "string"
@@ -587643,7 +587896,15 @@
                                                   "type": "null"
                                                 },
                                                 "role": {
-                                                  "const": "author",
+                                                  "enum": [
+                                                    "author",
+                                                    "director",
+                                                    "artist",
+                                                    "animation-studio",
+                                                    "translator",
+                                                    "editor",
+                                                    "transcriber"
+                                                  ],
                                                   "type": "string"
                                                 }
                                               },
@@ -588546,6 +588807,9 @@
                                                       ],
                                                       "type": "object"
                                                     },
+                                                    "namespace": {
+                                                      "type": "string"
+                                                    },
                                                     "ordinal": {
                                                       "type": "integer"
                                                     },
@@ -588562,6 +588826,8 @@
                                                         "director",
                                                         "artist",
                                                         "animation-studio",
+                                                        "translator",
+                                                        "editor",
                                                         "transcriber"
                                                       ],
                                                       "type": "string"
@@ -588676,6 +588942,8 @@
                                                         "director",
                                                         "artist",
                                                         "animation-studio",
+                                                        "translator",
+                                                        "editor",
                                                         "transcriber"
                                                       ],
                                                       "type": "string"
@@ -588762,7 +589030,15 @@
                                                   "type": "null"
                                                 },
                                                 "role": {
-                                                  "const": "author",
+                                                  "enum": [
+                                                    "author",
+                                                    "director",
+                                                    "artist",
+                                                    "animation-studio",
+                                                    "translator",
+                                                    "editor",
+                                                    "transcriber"
+                                                  ],
                                                   "type": "string"
                                                 }
                                               },
@@ -589813,6 +590089,9 @@
                                                       ],
                                                       "type": "object"
                                                     },
+                                                    "namespace": {
+                                                      "type": "string"
+                                                    },
                                                     "ordinal": {
                                                       "type": "integer"
                                                     },
@@ -589829,6 +590108,8 @@
                                                         "director",
                                                         "artist",
                                                         "animation-studio",
+                                                        "translator",
+                                                        "editor",
                                                         "transcriber"
                                                       ],
                                                       "type": "string"
@@ -589943,6 +590224,8 @@
                                                         "director",
                                                         "artist",
                                                         "animation-studio",
+                                                        "translator",
+                                                        "editor",
                                                         "transcriber"
                                                       ],
                                                       "type": "string"
@@ -590029,7 +590312,15 @@
                                                   "type": "null"
                                                 },
                                                 "role": {
-                                                  "const": "author",
+                                                  "enum": [
+                                                    "author",
+                                                    "director",
+                                                    "artist",
+                                                    "animation-studio",
+                                                    "translator",
+                                                    "editor",
+                                                    "transcriber"
+                                                  ],
                                                   "type": "string"
                                                 }
                                               },
@@ -591090,6 +591381,9 @@
                                                       ],
                                                       "type": "object"
                                                     },
+                                                    "namespace": {
+                                                      "type": "string"
+                                                    },
                                                     "ordinal": {
                                                       "type": "integer"
                                                     },
@@ -591106,6 +591400,8 @@
                                                         "director",
                                                         "artist",
                                                         "animation-studio",
+                                                        "translator",
+                                                        "editor",
                                                         "transcriber"
                                                       ],
                                                       "type": "string"
@@ -591220,6 +591516,8 @@
                                                         "director",
                                                         "artist",
                                                         "animation-studio",
+                                                        "translator",
+                                                        "editor",
                                                         "transcriber"
                                                       ],
                                                       "type": "string"
@@ -591306,7 +591604,15 @@
                                                   "type": "null"
                                                 },
                                                 "role": {
-                                                  "const": "author",
+                                                  "enum": [
+                                                    "author",
+                                                    "director",
+                                                    "artist",
+                                                    "animation-studio",
+                                                    "translator",
+                                                    "editor",
+                                                    "transcriber"
+                                                  ],
                                                   "type": "string"
                                                 }
                                               },
@@ -592394,6 +592700,9 @@
                                                       ],
                                                       "type": "object"
                                                     },
+                                                    "namespace": {
+                                                      "type": "string"
+                                                    },
                                                     "ordinal": {
                                                       "type": "integer"
                                                     },
@@ -592410,6 +592719,8 @@
                                                         "director",
                                                         "artist",
                                                         "animation-studio",
+                                                        "translator",
+                                                        "editor",
                                                         "transcriber"
                                                       ],
                                                       "type": "string"
@@ -592524,6 +592835,8 @@
                                                         "director",
                                                         "artist",
                                                         "animation-studio",
+                                                        "translator",
+                                                        "editor",
                                                         "transcriber"
                                                       ],
                                                       "type": "string"
@@ -592610,7 +592923,15 @@
                                                   "type": "null"
                                                 },
                                                 "role": {
-                                                  "const": "author",
+                                                  "enum": [
+                                                    "author",
+                                                    "director",
+                                                    "artist",
+                                                    "animation-studio",
+                                                    "translator",
+                                                    "editor",
+                                                    "transcriber"
+                                                  ],
                                                   "type": "string"
                                                 }
                                               },
@@ -593531,6 +593852,9 @@
                                                   ],
                                                   "type": "object"
                                                 },
+                                                "namespace": {
+                                                  "type": "string"
+                                                },
                                                 "ordinal": {
                                                   "type": "integer"
                                                 },
@@ -593547,6 +593871,8 @@
                                                     "director",
                                                     "artist",
                                                     "animation-studio",
+                                                    "translator",
+                                                    "editor",
                                                     "transcriber"
                                                   ],
                                                   "type": "string"
@@ -593661,6 +593987,8 @@
                                                     "director",
                                                     "artist",
                                                     "animation-studio",
+                                                    "translator",
+                                                    "editor",
                                                     "transcriber"
                                                   ],
                                                   "type": "string"
@@ -593747,7 +594075,15 @@
                                               "type": "null"
                                             },
                                             "role": {
-                                              "const": "author",
+                                              "enum": [
+                                                "author",
+                                                "director",
+                                                "artist",
+                                                "animation-studio",
+                                                "translator",
+                                                "editor",
+                                                "transcriber"
+                                              ],
                                               "type": "string"
                                             }
                                           },
@@ -594682,6 +595018,9 @@
                                                   ],
                                                   "type": "object"
                                                 },
+                                                "namespace": {
+                                                  "type": "string"
+                                                },
                                                 "ordinal": {
                                                   "type": "integer"
                                                 },
@@ -594698,6 +595037,8 @@
                                                     "director",
                                                     "artist",
                                                     "animation-studio",
+                                                    "translator",
+                                                    "editor",
                                                     "transcriber"
                                                   ],
                                                   "type": "string"
@@ -594812,6 +595153,8 @@
                                                     "director",
                                                     "artist",
                                                     "animation-studio",
+                                                    "translator",
+                                                    "editor",
                                                     "transcriber"
                                                   ],
                                                   "type": "string"
@@ -594898,7 +595241,15 @@
                                               "type": "null"
                                             },
                                             "role": {
-                                              "const": "author",
+                                              "enum": [
+                                                "author",
+                                                "director",
+                                                "artist",
+                                                "animation-studio",
+                                                "translator",
+                                                "editor",
+                                                "transcriber"
+                                              ],
                                               "type": "string"
                                             }
                                           },
@@ -595788,6 +596139,9 @@
                                                   ],
                                                   "type": "object"
                                                 },
+                                                "namespace": {
+                                                  "type": "string"
+                                                },
                                                 "ordinal": {
                                                   "type": "integer"
                                                 },
@@ -595804,6 +596158,8 @@
                                                     "director",
                                                     "artist",
                                                     "animation-studio",
+                                                    "translator",
+                                                    "editor",
                                                     "transcriber"
                                                   ],
                                                   "type": "string"
@@ -595918,6 +596274,8 @@
                                                     "director",
                                                     "artist",
                                                     "animation-studio",
+                                                    "translator",
+                                                    "editor",
                                                     "transcriber"
                                                   ],
                                                   "type": "string"
@@ -596004,7 +596362,15 @@
                                               "type": "null"
                                             },
                                             "role": {
-                                              "const": "author",
+                                              "enum": [
+                                                "author",
+                                                "director",
+                                                "artist",
+                                                "animation-studio",
+                                                "translator",
+                                                "editor",
+                                                "transcriber"
+                                              ],
                                               "type": "string"
                                             }
                                           },
@@ -597103,6 +597469,9 @@
                                                       ],
                                                       "type": "object"
                                                     },
+                                                    "namespace": {
+                                                      "type": "string"
+                                                    },
                                                     "ordinal": {
                                                       "type": "integer"
                                                     },
@@ -597119,6 +597488,8 @@
                                                         "director",
                                                         "artist",
                                                         "animation-studio",
+                                                        "translator",
+                                                        "editor",
                                                         "transcriber"
                                                       ],
                                                       "type": "string"
@@ -597233,6 +597604,8 @@
                                                         "director",
                                                         "artist",
                                                         "animation-studio",
+                                                        "translator",
+                                                        "editor",
                                                         "transcriber"
                                                       ],
                                                       "type": "string"
@@ -597319,7 +597692,15 @@
                                                   "type": "null"
                                                 },
                                                 "role": {
-                                                  "const": "author",
+                                                  "enum": [
+                                                    "author",
+                                                    "director",
+                                                    "artist",
+                                                    "animation-studio",
+                                                    "translator",
+                                                    "editor",
+                                                    "transcriber"
+                                                  ],
                                                   "type": "string"
                                                 }
                                               },
@@ -597842,6 +598223,9 @@
                                             ],
                                             "type": "object"
                                           },
+                                          "namespace": {
+                                            "type": "string"
+                                          },
                                           "ordinal": {
                                             "type": "integer"
                                           },
@@ -597858,6 +598242,8 @@
                                               "director",
                                               "artist",
                                               "animation-studio",
+                                              "translator",
+                                              "editor",
                                               "transcriber"
                                             ],
                                             "type": "string"
@@ -597972,6 +598358,8 @@
                                               "director",
                                               "artist",
                                               "animation-studio",
+                                              "translator",
+                                              "editor",
                                               "transcriber"
                                             ],
                                             "type": "string"
@@ -663055,6 +663443,9 @@
                                           ],
                                           "type": "object"
                                         },
+                                        "namespace": {
+                                          "type": "string"
+                                        },
                                         "ordinal": {
                                           "type": "integer"
                                         },
@@ -663071,6 +663462,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -663185,6 +663578,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -663271,7 +663666,15 @@
                                       "type": "null"
                                     },
                                     "role": {
-                                      "const": "author",
+                                      "enum": [
+                                        "author",
+                                        "director",
+                                        "artist",
+                                        "animation-studio",
+                                        "translator",
+                                        "editor",
+                                        "transcriber"
+                                      ],
                                       "type": "string"
                                     }
                                   },
@@ -667534,6 +667937,9 @@
                                               ],
                                               "type": "object"
                                             },
+                                            "namespace": {
+                                              "type": "string"
+                                            },
                                             "ordinal": {
                                               "type": "integer"
                                             },
@@ -667550,6 +667956,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -667664,6 +668072,8 @@
                                                 "director",
                                                 "artist",
                                                 "animation-studio",
+                                                "translator",
+                                                "editor",
                                                 "transcriber"
                                               ],
                                               "type": "string"
@@ -667750,7 +668160,15 @@
                                           "type": "null"
                                         },
                                         "role": {
-                                          "const": "author",
+                                          "enum": [
+                                            "author",
+                                            "director",
+                                            "artist",
+                                            "animation-studio",
+                                            "translator",
+                                            "editor",
+                                            "transcriber"
+                                          ],
                                           "type": "string"
                                         }
                                       },
@@ -669115,6 +669533,9 @@
                                           ],
                                           "type": "object"
                                         },
+                                        "namespace": {
+                                          "type": "string"
+                                        },
                                         "ordinal": {
                                           "type": "integer"
                                         },
@@ -669131,6 +669552,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -669245,6 +669668,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -669331,7 +669756,15 @@
                                       "type": "null"
                                     },
                                     "role": {
-                                      "const": "author",
+                                      "enum": [
+                                        "author",
+                                        "director",
+                                        "artist",
+                                        "animation-studio",
+                                        "translator",
+                                        "editor",
+                                        "transcriber"
+                                      ],
                                       "type": "string"
                                     }
                                   },
@@ -672408,6 +672841,9 @@
                                           ],
                                           "type": "object"
                                         },
+                                        "namespace": {
+                                          "type": "string"
+                                        },
                                         "ordinal": {
                                           "type": "integer"
                                         },
@@ -672424,6 +672860,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -672538,6 +672976,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -672624,7 +673064,15 @@
                                       "type": "null"
                                     },
                                     "role": {
-                                      "const": "author",
+                                      "enum": [
+                                        "author",
+                                        "director",
+                                        "artist",
+                                        "animation-studio",
+                                        "translator",
+                                        "editor",
+                                        "transcriber"
+                                      ],
                                       "type": "string"
                                     }
                                   },
@@ -791650,6 +792098,9 @@
                                           ],
                                           "type": "object"
                                         },
+                                        "namespace": {
+                                          "type": "string"
+                                        },
                                         "ordinal": {
                                           "type": "integer"
                                         },
@@ -791666,6 +792117,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -791780,6 +792233,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -791866,7 +792321,15 @@
                                       "type": "null"
                                     },
                                     "role": {
-                                      "const": "author",
+                                      "enum": [
+                                        "author",
+                                        "director",
+                                        "artist",
+                                        "animation-studio",
+                                        "translator",
+                                        "editor",
+                                        "transcriber"
+                                      ],
                                       "type": "string"
                                     }
                                   },
@@ -793053,6 +793516,9 @@
                                           ],
                                           "type": "object"
                                         },
+                                        "namespace": {
+                                          "type": "string"
+                                        },
                                         "ordinal": {
                                           "type": "integer"
                                         },
@@ -793069,6 +793535,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -793183,6 +793651,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -793269,7 +793739,15 @@
                                       "type": "null"
                                     },
                                     "role": {
-                                      "const": "author",
+                                      "enum": [
+                                        "author",
+                                        "director",
+                                        "artist",
+                                        "animation-studio",
+                                        "translator",
+                                        "editor",
+                                        "transcriber"
+                                      ],
                                       "type": "string"
                                     }
                                   },
@@ -803812,7 +804290,6 @@
                           "type": "string"
                         },
                         "namespace": {
-                          "const": "author",
                           "type": "string"
                         },
                         "nativeOrdinal": {
@@ -803827,7 +804304,6 @@
                           "type": "string"
                         },
                         "provider": {
-                          "const": "open-library",
                           "type": "string"
                         },
                         "revision": {
@@ -803839,7 +804315,14 @@
                           "type": "string"
                         },
                         "role": {
-                          "const": "author",
+                          "enum": [
+                            "author",
+                            "translator",
+                            "editor",
+                            "director",
+                            "artist",
+                            "animation-studio"
+                          ],
                           "type": "string"
                         },
                         "sequence": {
@@ -804785,7 +805268,6 @@
                               "type": "string"
                             },
                             "namespace": {
-                              "const": "author",
                               "type": "string"
                             },
                             "nativeOrdinal": {
@@ -804800,7 +805282,6 @@
                               "type": "string"
                             },
                             "provider": {
-                              "const": "open-library",
                               "type": "string"
                             },
                             "revision": {
@@ -804812,7 +805293,14 @@
                               "type": "string"
                             },
                             "role": {
-                              "const": "author",
+                              "enum": [
+                                "author",
+                                "translator",
+                                "editor",
+                                "director",
+                                "artist",
+                                "animation-studio"
+                              ],
                               "type": "string"
                             },
                             "sequence": {
@@ -805065,7 +805553,6 @@
                               "type": "string"
                             },
                             "namespace": {
-                              "const": "author",
                               "type": "string"
                             },
                             "nativeOrdinal": {
@@ -805080,7 +805567,6 @@
                               "type": "string"
                             },
                             "provider": {
-                              "const": "open-library",
                               "type": "string"
                             },
                             "revision": {
@@ -805092,7 +805578,14 @@
                               "type": "string"
                             },
                             "role": {
-                              "const": "author",
+                              "enum": [
+                                "author",
+                                "translator",
+                                "editor",
+                                "director",
+                                "artist",
+                                "animation-studio"
+                              ],
                               "type": "string"
                             },
                             "sequence": {
@@ -846874,7 +847367,6 @@
                                   "type": "string"
                                 },
                                 "namespace": {
-                                  "const": "author",
                                   "type": "string"
                                 },
                                 "nativeOrdinal": {
@@ -846889,7 +847381,6 @@
                                   "type": "string"
                                 },
                                 "provider": {
-                                  "const": "open-library",
                                   "type": "string"
                                 },
                                 "revision": {
@@ -846901,7 +847392,14 @@
                                   "type": "string"
                                 },
                                 "role": {
-                                  "const": "author",
+                                  "enum": [
+                                    "author",
+                                    "translator",
+                                    "editor",
+                                    "director",
+                                    "artist",
+                                    "animation-studio"
+                                  ],
                                   "type": "string"
                                 },
                                 "sequence": {
@@ -848890,7 +849388,6 @@
                                       "type": "string"
                                     },
                                     "namespace": {
-                                      "const": "author",
                                       "type": "string"
                                     },
                                     "nativeOrdinal": {
@@ -848905,7 +849402,6 @@
                                       "type": "string"
                                     },
                                     "provider": {
-                                      "const": "open-library",
                                       "type": "string"
                                     },
                                     "revision": {
@@ -848917,7 +849413,14 @@
                                       "type": "string"
                                     },
                                     "role": {
-                                      "const": "author",
+                                      "enum": [
+                                        "author",
+                                        "translator",
+                                        "editor",
+                                        "director",
+                                        "artist",
+                                        "animation-studio"
+                                      ],
                                       "type": "string"
                                     },
                                     "sequence": {
@@ -850108,7 +850611,6 @@
                                       "type": "string"
                                     },
                                     "namespace": {
-                                      "const": "author",
                                       "type": "string"
                                     },
                                     "nativeOrdinal": {
@@ -850123,7 +850625,6 @@
                                       "type": "string"
                                     },
                                     "provider": {
-                                      "const": "open-library",
                                       "type": "string"
                                     },
                                     "revision": {
@@ -850135,7 +850636,14 @@
                                       "type": "string"
                                     },
                                     "role": {
-                                      "const": "author",
+                                      "enum": [
+                                        "author",
+                                        "translator",
+                                        "editor",
+                                        "director",
+                                        "artist",
+                                        "animation-studio"
+                                      ],
                                       "type": "string"
                                     },
                                     "sequence": {
@@ -901412,6 +901920,41 @@
                               "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
                               "type": "string"
                             },
+                            "ordinal": {
+                              "maximum": 127,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "participant": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "key": {
+                                  "maxLength": 200,
+                                  "minLength": 1,
+                                  "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "external-reference",
+                                  "type": "string"
+                                },
+                                "namespace": {
+                                  "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "provider",
+                                "namespace",
+                                "key"
+                              ],
+                              "type": "object"
+                            },
                             "role": {
                               "enum": [
                                 "author",
@@ -901425,7 +901968,6 @@
                             }
                           },
                           "required": [
-                            "agent",
                             "role"
                           ],
                           "type": "object"
@@ -901615,6 +902157,41 @@
                               "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
                               "type": "string"
                             },
+                            "ordinal": {
+                              "maximum": 127,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "participant": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "key": {
+                                  "maxLength": 200,
+                                  "minLength": 1,
+                                  "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "external-reference",
+                                  "type": "string"
+                                },
+                                "namespace": {
+                                  "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "provider",
+                                "namespace",
+                                "key"
+                              ],
+                              "type": "object"
+                            },
                             "role": {
                               "enum": [
                                 "author",
@@ -901628,7 +902205,6 @@
                             }
                           },
                           "required": [
-                            "agent",
                             "role"
                           ],
                           "type": "object"
@@ -901818,6 +902394,41 @@
                               "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
                               "type": "string"
                             },
+                            "ordinal": {
+                              "maximum": 127,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "participant": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "key": {
+                                  "maxLength": 200,
+                                  "minLength": 1,
+                                  "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "external-reference",
+                                  "type": "string"
+                                },
+                                "namespace": {
+                                  "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "provider",
+                                "namespace",
+                                "key"
+                              ],
+                              "type": "object"
+                            },
                             "role": {
                               "enum": [
                                 "author",
@@ -901831,7 +902442,6 @@
                             }
                           },
                           "required": [
-                            "agent",
                             "role"
                           ],
                           "type": "object"
@@ -903175,6 +903785,41 @@
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
                                     "type": "string"
                                   },
+                                  "ordinal": {
+                                    "maximum": 127,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "participant": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "key": {
+                                        "maxLength": 200,
+                                        "minLength": 1,
+                                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "external-reference",
+                                        "type": "string"
+                                      },
+                                      "namespace": {
+                                        "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                                        "type": "string"
+                                      },
+                                      "provider": {
+                                        "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "provider",
+                                      "namespace",
+                                      "key"
+                                    ],
+                                    "type": "object"
+                                  },
                                   "role": {
                                     "enum": [
                                       "author",
@@ -903188,7 +903833,6 @@
                                   }
                                 },
                                 "required": [
-                                  "agent",
                                   "role"
                                 ],
                                 "type": "object"
@@ -903397,6 +904041,41 @@
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
                                     "type": "string"
                                   },
+                                  "ordinal": {
+                                    "maximum": 127,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "participant": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "key": {
+                                        "maxLength": 200,
+                                        "minLength": 1,
+                                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "external-reference",
+                                        "type": "string"
+                                      },
+                                      "namespace": {
+                                        "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                                        "type": "string"
+                                      },
+                                      "provider": {
+                                        "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "provider",
+                                      "namespace",
+                                      "key"
+                                    ],
+                                    "type": "object"
+                                  },
                                   "role": {
                                     "enum": [
                                       "author",
@@ -903410,7 +904089,6 @@
                                   }
                                 },
                                 "required": [
-                                  "agent",
                                   "role"
                                 ],
                                 "type": "object"
@@ -903619,6 +904297,41 @@
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$",
                                     "type": "string"
                                   },
+                                  "ordinal": {
+                                    "maximum": 127,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "participant": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "key": {
+                                        "maxLength": 200,
+                                        "minLength": 1,
+                                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "external-reference",
+                                        "type": "string"
+                                      },
+                                      "namespace": {
+                                        "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                                        "type": "string"
+                                      },
+                                      "provider": {
+                                        "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "provider",
+                                      "namespace",
+                                      "key"
+                                    ],
+                                    "type": "object"
+                                  },
                                   "role": {
                                     "enum": [
                                       "author",
@@ -903632,7 +904345,6 @@
                                   }
                                 },
                                 "required": [
-                                  "agent",
                                   "role"
                                 ],
                                 "type": "object"
@@ -912339,6 +913051,9 @@
                                           ],
                                           "type": "object"
                                         },
+                                        "namespace": {
+                                          "type": "string"
+                                        },
                                         "ordinal": {
                                           "type": "integer"
                                         },
@@ -912355,6 +913070,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -912469,6 +913186,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -912555,7 +913274,15 @@
                                       "type": "null"
                                     },
                                     "role": {
-                                      "const": "author",
+                                      "enum": [
+                                        "author",
+                                        "director",
+                                        "artist",
+                                        "animation-studio",
+                                        "translator",
+                                        "editor",
+                                        "transcriber"
+                                      ],
                                       "type": "string"
                                     }
                                   },
@@ -916549,143 +917276,383 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "agent": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "credit": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "expectedWorkHead": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "native-agent-credit-v1",
-                    "type": "string"
-                  },
-                  "role": {
-                    "enum": [
-                      "author",
-                      "translator",
-                      "editor",
-                      "director",
-                      "artist",
-                      "animation-studio"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "agent": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "credit": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedWorkHead": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "native-agent-credit-v1",
+                        "type": "string"
+                      },
+                      "role": {
+                        "enum": [
+                          "author",
+                          "translator",
+                          "editor",
+                          "director",
+                          "artist",
+                          "animation-studio"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "credit",
+                      "agent",
+                      "role",
+                      "expectedWorkHead",
+                      "actingSubject"
                     ],
-                    "type": "string"
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "credit": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedWorkHead": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "ordinal": {
+                        "maximum": 127,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "participant": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "key": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "external-reference",
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                            "type": "string"
+                          },
+                          "provider": {
+                            "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "provider",
+                          "namespace",
+                          "key"
+                        ],
+                        "type": "object"
+                      },
+                      "profile": {
+                        "const": "native-agent-credit-v1",
+                        "type": "string"
+                      },
+                      "role": {
+                        "enum": [
+                          "author",
+                          "translator",
+                          "editor",
+                          "director",
+                          "artist",
+                          "animation-studio"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "credit",
+                      "participant",
+                      "role",
+                      "expectedWorkHead",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "credit",
-                  "agent",
-                  "role",
-                  "expectedWorkHead",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "agent": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "credit": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "expectedWorkHead": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "native-agent-credit-v1",
-                    "type": "string"
-                  },
-                  "role": {
-                    "enum": [
-                      "author",
-                      "translator",
-                      "editor",
-                      "director",
-                      "artist",
-                      "animation-studio"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "agent": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "credit": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedWorkHead": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "native-agent-credit-v1",
+                        "type": "string"
+                      },
+                      "role": {
+                        "enum": [
+                          "author",
+                          "translator",
+                          "editor",
+                          "director",
+                          "artist",
+                          "animation-studio"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "credit",
+                      "agent",
+                      "role",
+                      "expectedWorkHead",
+                      "actingSubject"
                     ],
-                    "type": "string"
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "credit": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedWorkHead": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "ordinal": {
+                        "maximum": 127,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "participant": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "key": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "external-reference",
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                            "type": "string"
+                          },
+                          "provider": {
+                            "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "provider",
+                          "namespace",
+                          "key"
+                        ],
+                        "type": "object"
+                      },
+                      "profile": {
+                        "const": "native-agent-credit-v1",
+                        "type": "string"
+                      },
+                      "role": {
+                        "enum": [
+                          "author",
+                          "translator",
+                          "editor",
+                          "director",
+                          "artist",
+                          "animation-studio"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "credit",
+                      "participant",
+                      "role",
+                      "expectedWorkHead",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "credit",
-                  "agent",
-                  "role",
-                  "expectedWorkHead",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "agent": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "credit": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "expectedWorkHead": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "native-agent-credit-v1",
-                    "type": "string"
-                  },
-                  "role": {
-                    "enum": [
-                      "author",
-                      "translator",
-                      "editor",
-                      "director",
-                      "artist",
-                      "animation-studio"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "agent": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "credit": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedWorkHead": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "native-agent-credit-v1",
+                        "type": "string"
+                      },
+                      "role": {
+                        "enum": [
+                          "author",
+                          "translator",
+                          "editor",
+                          "director",
+                          "artist",
+                          "animation-studio"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "credit",
+                      "agent",
+                      "role",
+                      "expectedWorkHead",
+                      "actingSubject"
                     ],
-                    "type": "string"
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "credit": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedWorkHead": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "ordinal": {
+                        "maximum": 127,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "participant": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "key": {
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "external-reference",
+                            "type": "string"
+                          },
+                          "namespace": {
+                            "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                            "type": "string"
+                          },
+                          "provider": {
+                            "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "provider",
+                          "namespace",
+                          "key"
+                        ],
+                        "type": "object"
+                      },
+                      "profile": {
+                        "const": "native-agent-credit-v1",
+                        "type": "string"
+                      },
+                      "role": {
+                        "enum": [
+                          "author",
+                          "translator",
+                          "editor",
+                          "director",
+                          "artist",
+                          "animation-studio"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "credit",
+                      "participant",
+                      "role",
+                      "expectedWorkHead",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "credit",
-                  "agent",
-                  "role",
-                  "expectedWorkHead",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -916698,12 +917665,50 @@
                 "schema": {
                   "properties": {
                     "agent": {
+                      "~elyTyp": 7,
+                      "nullable": true,
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "credit": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
+                    },
+                    "ordinal": {
+                      "type": "integer"
+                    },
+                    "participant": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "key": {
+                          "maxLength": 200,
+                          "minLength": 1,
+                          "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "external-reference",
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                          "type": "string"
+                        },
+                        "provider": {
+                          "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "provider",
+                        "namespace",
+                        "key"
+                      ],
+                      "type": "object"
                     },
                     "profile": {
                       "const": "native-agent-credit-v1",
@@ -916773,12 +917778,50 @@
                 "schema": {
                   "properties": {
                     "agent": {
+                      "~elyTyp": 7,
+                      "nullable": true,
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "credit": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
+                    },
+                    "ordinal": {
+                      "type": "integer"
+                    },
+                    "participant": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "key": {
+                          "maxLength": 200,
+                          "minLength": 1,
+                          "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "external-reference",
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                          "type": "string"
+                        },
+                        "provider": {
+                          "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "provider",
+                        "namespace",
+                        "key"
+                      ],
+                      "type": "object"
                     },
                     "profile": {
                       "const": "native-agent-credit-v1",
@@ -918244,6 +919287,9 @@
                                           ],
                                           "type": "object"
                                         },
+                                        "namespace": {
+                                          "type": "string"
+                                        },
                                         "ordinal": {
                                           "type": "integer"
                                         },
@@ -918260,6 +919306,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -918374,6 +919422,8 @@
                                             "director",
                                             "artist",
                                             "animation-studio",
+                                            "translator",
+                                            "editor",
                                             "transcriber"
                                           ],
                                           "type": "string"
@@ -918460,7 +919510,15 @@
                                       "type": "null"
                                     },
                                     "role": {
-                                      "const": "author",
+                                      "enum": [
+                                        "author",
+                                        "director",
+                                        "artist",
+                                        "animation-studio",
+                                        "translator",
+                                        "editor",
+                                        "transcriber"
+                                      ],
                                       "type": "string"
                                     }
                                   },
@@ -921312,7 +922370,6 @@
                       "type": "string"
                     },
                     "namespace": {
-                      "const": "author",
                       "type": "string"
                     },
                     "nativeOrdinal": {
@@ -921327,7 +922384,6 @@
                       "type": "string"
                     },
                     "provider": {
-                      "const": "open-library",
                       "type": "string"
                     },
                     "revision": {
@@ -921339,7 +922395,14 @@
                       "type": "string"
                     },
                     "role": {
-                      "const": "author",
+                      "enum": [
+                        "author",
+                        "translator",
+                        "editor",
+                        "director",
+                        "artist",
+                        "animation-studio"
+                      ],
                       "type": "string"
                     },
                     "sequence": {
@@ -928942,6 +930005,9 @@
                                 ],
                                 "type": "object"
                               },
+                              "namespace": {
+                                "type": "string"
+                              },
                               "ordinal": {
                                 "type": "integer"
                               },
@@ -928958,6 +930024,8 @@
                                   "director",
                                   "artist",
                                   "animation-studio",
+                                  "translator",
+                                  "editor",
                                   "transcriber"
                                 ],
                                 "type": "string"
@@ -929072,6 +930140,8 @@
                                   "director",
                                   "artist",
                                   "animation-studio",
+                                  "translator",
+                                  "editor",
                                   "transcriber"
                                 ],
                                 "type": "string"
@@ -956841,7 +957911,6 @@
                               "type": "string"
                             },
                             "namespace": {
-                              "const": "author",
                               "type": "string"
                             },
                             "nativeOrdinal": {
@@ -956856,7 +957925,6 @@
                               "type": "string"
                             },
                             "provider": {
-                              "const": "open-library",
                               "type": "string"
                             },
                             "revision": {
@@ -956868,7 +957936,14 @@
                               "type": "string"
                             },
                             "role": {
-                              "const": "author",
+                              "enum": [
+                                "author",
+                                "translator",
+                                "editor",
+                                "director",
+                                "artist",
+                                "animation-studio"
+                              ],
                               "type": "string"
                             },
                             "sequence": {
@@ -957121,7 +958196,6 @@
                               "type": "string"
                             },
                             "namespace": {
-                              "const": "author",
                               "type": "string"
                             },
                             "nativeOrdinal": {
@@ -957136,7 +958210,6 @@
                               "type": "string"
                             },
                             "provider": {
-                              "const": "open-library",
                               "type": "string"
                             },
                             "revision": {
@@ -957148,7 +958221,14 @@
                               "type": "string"
                             },
                             "role": {
-                              "const": "author",
+                              "enum": [
+                                "author",
+                                "translator",
+                                "editor",
+                                "director",
+                                "artist",
+                                "animation-studio"
+                              ],
                               "type": "string"
                             },
                             "sequence": {

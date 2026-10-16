@@ -17,7 +17,8 @@ import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { discardUnpublishedWorkObjects, stagedWorkObjectCandidates, type StagedWorkObjectCandidates } from './object-gc.ts';
 import { sealMetadataWorkAdmission } from './seal.ts';
 import { readWorkTerminalReceipt, workReceiptIri, type WorkTerminalReceipt } from './receipt.ts';
-import { nativeCreditRole } from './read-contract.ts';
+import { authorCreditTriples, creditProfile } from './author-credit.ts';
+import { externalCreditParticipant, nativeCreditRole } from './read-contract.ts';
 import { CONTINUITY, DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit,
   metadataWorkRequestDigest, normalizeWorkSemanticTypes, prepareComponentWithCandidates, prepareWorkComponentWithCandidates, type WorkActivationEnvironment } from './activate.ts';
 
@@ -44,7 +45,8 @@ export const catalogueImportInput = t.Object({
   description: t.Optional(t.Object({ value: text(4000), language }, closed)),
   aliases: t.Array(namedText, { maxItems: 8 }),
   semanticTypes: t.Array(t.String(), { maxItems: 3, uniqueItems: true }),
-  credits: t.Array(t.Object({ agent: native, expectedAgentHead: t.Optional(native),
+  credits: t.Array(t.Object({ agent: t.Optional(native), expectedAgentHead: t.Optional(native),
+    participant: t.Optional(externalCreditParticipant), ordinal: t.Optional(t.Integer({ minimum: 0, maximum: 127 })),
     role: nativeCreditRole }, closed), { maxItems: 8 }),
   classifications: t.Array(t.Object({ concept: native, definition: native,
     expectedDecisionHead: t.Null(), outcome: t.Union([t.Literal('accepted'), t.Literal('rejected')]) }, closed), { maxItems: 8 }),
@@ -66,7 +68,9 @@ function checked(input: CatalogueImportInput): CatalogueImportInput {
     return { value: row.value, language: tag };
   };
   const tag = canonicalLanguage(input.language);
-  if (!tag || new Set(input.credits.map(row => `${row.agent}\0${row.role}`)).size !== input.credits.length
+  if (!tag || input.credits.some(row => row.agent ? row.participant !== undefined || row.ordinal !== undefined
+      : !row.participant || row.expectedAgentHead !== undefined)
+    || new Set(input.credits.map(row => JSON.stringify([row.agent ?? row.participant, row.role]))).size !== input.credits.length
     || new Set(input.classifications.map(row => `${row.concept}\0${row.definition}`)).size !== input.classifications.length)
     throw new InvalidCatalogueImport('Languages and credit/classification slots must be valid and unique');
   const result: CatalogueImportInput = { profile: input.profile, ...(input.work ? { work: input.work } : {}),
@@ -75,7 +79,7 @@ function checked(input: CatalogueImportInput): CatalogueImportInput {
     ...(input.localizedTitle ? { localizedTitle: normalize(input.localizedTitle) } : {}),
     ...(input.description ? { description: normalize(input.description) } : {}),
     semanticTypes: [...input.semanticTypes].sort(),
-    credits: input.credits.map(row => ({ agent: row.agent, role: row.role,
+    credits: input.credits.map(row => ({ ...(row.agent ? { agent: row.agent } : { participant: row.participant, ordinal: row.ordinal ?? 0 }), role: row.role,
       ...(row.expectedAgentHead ? { expectedAgentHead: row.expectedAgentHead } : {}) })),
     classifications: input.classifications.map(row => ({ concept: row.concept, definition: row.definition,
       expectedDecisionHead: null, outcome: row.outcome })) };
@@ -97,7 +101,8 @@ function validation(profile: keyof typeof profileRegistry, role: string, focus: 
   const pin = profileRegistry[profile];
   const shape = `https://rezics.com/definition/${profile}/${role}-shape`;
   if (!(pin.shapes as readonly string[]).includes(shape)) throw new Error(`Unreviewed catalogue shape ${shape}`);
-  return { profile, sha256: pin.sha256, shape, focus, graphs: [GRAPHS.current, GRAPHS.revisions],
+  return { profile, sha256: pin.sha256, shape, focus, graphs: profile === 'work-author-credit-v1'
+    ? [GRAPHS.current, GRAPHS.revisions, GRAPHS.receipts, GRAPHS.control] : [GRAPHS.current, GRAPHS.revisions],
     ...(binding ? { binding } : {}) };
 }
 export async function prepareCatalogueImport(env: WorkActivationEnvironment, admission: RegisteredAdmission, input: CatalogueImportInput, candidates: StagedWorkObjectCandidates[], agentHeads: Map<string, string>, files?: WorkFileStaging): Promise<CatalogueBulkEnvelope> {
@@ -118,7 +123,7 @@ export async function prepareCatalogueImport(env: WorkActivationEnvironment, adm
     validation('work-kind-v3', 'work', [work]),
   ];
   const current: string[] = [], revisions: string[] = [], guards: string[] = [];
-  const missing = [...new Set(input.credits.filter(row => !row.expectedAgentHead && !agentHeads.has(row.agent)).map(row => row.agent))];
+  const missing = [...new Set(input.credits.flatMap(row => row.agent && !row.expectedAgentHead && !agentHeads.has(row.agent) ? [row.agent] : []))];
   if (missing.length) {
     const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?agent ?head WHERE {
       VALUES ?agent { ${missing.map(iri).join(' ')} }
@@ -127,16 +132,28 @@ export async function prepareCatalogueImport(env: WorkActivationEnvironment, adm
     for (const row of rows) if (row.agent && row.head) agentHeads.set(row.agent.value, row.head.value);
   }
   for (const [index, credit] of input.credits.entries()) {
-    const agentHead = credit.expectedAgentHead ?? agentHeads.get(credit.agent);
-    // An unavailable Agent makes the candidate's guarded creation stale. It
-    // never leaves a Work without the explicit attribution the caller supplied.
-    const expectedAgentHead = agentHead ?? identity(admission.id, `absent-agent:${index}`);
     const id = identity(admission.id, `credit:${index}`), head = identity(admission.id, `credit-revision:${index}`);
-    current.push(`${iri(id)} a rv:NativeAgentCredit ; rv:work ${iri(work)} ; rv:agent ${iri(credit.agent)} ; rv:creditRevision ${iri(head)} ; schema:roleName ${lit(credit.role)} .`);
-    revisions.push(`${iri(head)} a rv:NativeAgentCreditRevision, rv:RevisionAnchor ; rv:component ${iri(id)} ; rv:work ${iri(work)} ; rv:agent ${iri(credit.agent)} ; schema:roleName ${lit(credit.role)} ; rv:workRevision ${iri(revision)} ; rv:agentRevision ${iri(expectedAgentHead)} ; rv:modelRevision <https://rezics.com/definition/native-agent-credit-v1> ; rv:shapeRevision <https://rezics.com/definition/native-agent-credit-v1> ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .`);
-    guards.push(`GRAPH ${iri(GRAPHS.current)} { ${iri(credit.agent)} a rv:Agent ; rv:head ${iri(expectedAgentHead)} }
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(expectedAgentHead)} a rv:RevisionAnchor ; rv:component ${iri(credit.agent)} }`);
-    validations.push(validation('native-agent-credit-v1', 'credit', [id]), validation('native-agent-credit-v1', 'revision', [head]));
+    const value = { work, credit: id, revision: head, expectedHead: revision,
+      actingSubject: admission.actingSubject, role: credit.role, sourceKey: credit.participant?.key ?? '',
+      sourceRoleKey: null, nativeOrdinal: credit.ordinal ?? 0,
+      ...(credit.agent ? { agent: credit.agent } : { provider: credit.participant!.provider, namespace: credit.participant!.namespace }) };
+    const triples = authorCreditTriples(value, env.lineage.dataEpoch, '?next');
+    current.push(triples.current);
+    revisions.push(triples.revision);
+    if (credit.agent) {
+      const agentHead = credit.expectedAgentHead ?? agentHeads.get(credit.agent);
+      // An unavailable Agent makes guarded creation stale; the supplied attribution is atomic with the Work.
+      const expectedAgentHead = agentHead ?? identity(admission.id, `absent-agent:${index}`);
+      revisions.push(`${iri(head)} rv:agentRevision ${iri(expectedAgentHead)} .`);
+      guards.push(`GRAPH ${iri(GRAPHS.current)} { ${iri(credit.agent)} a rv:Agent ; rv:head ${iri(expectedAgentHead)} }
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(expectedAgentHead)} a rv:RevisionAnchor ; rv:component ${iri(credit.agent)} }`);
+    }
+    const binding = credit.agent ? undefined : { credit: id, revision: head, work, 'work-head': revision,
+      provider: credit.participant!.provider, namespace: credit.participant!.namespace, role: credit.role,
+      key: credit.participant!.key, ordinal: String(credit.ordinal ?? 0), actor: admission.actingSubject,
+      receipt, scope: admission.scope, epoch: admission.authorityEpoch, intent: work };
+    validations.push(validation(creditProfile(value), 'credit', [id], binding),
+      validation(creditProfile(value), 'revision', [head], binding));
   }
   for (const [index, row] of input.classifications.entries()) {
     const statement = identity(admission.id, `statement:${index}`);
@@ -184,10 +201,12 @@ export async function prepareCatalogueImport(env: WorkActivationEnvironment, adm
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(head)} ?hp${index} ?hv${index} } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} ?dp${index} ?dv${index} } }`);
   }
+  const creditReceipt = input.credits.map((credit, index) =>
+    `${iri(receipt)} rv:${credit.agent ? 'nativeCredit' : 'authorCredit'} ${iri(identity(admission.id, `credit:${index}`))} ; rv:expectedHead ${iri(revision)} ; rv:creditRevision ${iri(identity(admission.id, `credit-revision:${index}`))} ; rv:sourceIntent ${iri(work)} .`).join('\n');
   const expiryGuard = `FILTER(NOW() < ${lit(admission.expiresAt)}^^<http://www.w3.org/2001/XMLSchema#dateTime>)`;
   const workManifest = await manifest(work, { mainVersion: main, continuityProfile: CONTINUITY,
-    ...input, creditHeads: Object.fromEntries(input.credits.map((credit,index) => [credit.agent,
-      credit.expectedAgentHead ?? agentHeads.get(credit.agent) ?? identity(admission.id, `absent-agent:${index}`)])) });
+    ...input, creditHeads: Object.fromEntries(input.credits.flatMap((credit,index) => credit.agent ? [[credit.agent,
+      credit.expectedAgentHead ?? agentHeads.get(credit.agent) ?? identity(admission.id, `absent-agent:${index}`)]] : [])) });
   const commonGuard = `GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
@@ -214,7 +233,7 @@ export async function prepareCatalogueImport(env: WorkActivationEnvironment, adm
         ${iri(mainRevision)} a rv:RevisionAnchor ; rv:component ${iri(main)} ; rv:operation ${iri(operation)} ; rv:manifest ${iri(`urn:rezics:sha256:${mainManifest}`)} ; rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
         ${revisions.join('\n')}
       }
-      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ${receiptFields} ; rv:outcome rv:Succeeded ; rv:operation ${iri(operation)} ; rv:work ${iri(work)} ; rv:mainVersion ${iri(main)} ; rv:workRevision ${iri(revision)} ; rv:mainRevision ${iri(mainRevision)} . }
+      GRAPH ${iri(GRAPHS.receipts)} { ${creditReceipt} ${iri(receipt)} ${receiptFields} ; rv:outcome rv:Succeeded ; rv:operation ${iri(operation)} ; rv:work ${iri(work)} ; rv:mainVersion ${iri(main)} ; rv:workRevision ${iri(revision)} ; rv:mainRevision ${iri(mainRevision)} . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
         ${iri(event)} a rv:WorkCreatedEvent ; rv:ordinal 0 ; rv:action "work.create" ; rv:receipt ${iri(receipt)} ; rv:operation ${iri(operation)} ; rv:work ${iri(work)} . }
     } WHERE { ${commonGuard} ${expiryGuard}

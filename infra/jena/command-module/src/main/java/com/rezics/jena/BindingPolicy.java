@@ -424,13 +424,18 @@ final class BindingPolicy {
     }
 
     private void authorCredit() {
-        if (!("work:edit:" + arg("work")).equals(arg("scope"))
-            || !arg("key").matches("/authors/OL[1-9][0-9]{0,11}A")
+        boolean catalogue = "work:create:catalogue-import".equals(arg("scope"));
+        if ((!catalogue && !("work:edit:" + arg("work")).equals(arg("scope")))
+            || arg("key").isEmpty() || arg("key").length() > 200
+            || arg("key").chars().anyMatch(c -> c < 32 || c == 127)
             || !arg("ordinal").matches("[0-9]{1,3}"))
             throw new IllegalArgumentException("invalid author credit binding");
         for (String role : List.of("credit", "revision")) {
             exact(role, RV + "work", iri(arg("work")));
             exact(role, RV + "externalKey", text(arg("key")));
+            exact(role, RV + "externalProvider", text(arg("provider") == null ? "open-library" : arg("provider")));
+            exact(role, RV + "externalNamespace", text(arg("namespace") == null ? "author" : arg("namespace")));
+            exact(role, "https://schema.org/roleName", text(arg("role") == null ? "author" : arg("role")));
             exact(role, "https://schema.org/position", NodeFactory.createLiteralByValue(
                 Integer.parseInt(arg("ordinal")), org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
             if (arg("source-role") == null) absent(role, RV + "sourceRoleKey");
@@ -441,8 +446,9 @@ final class BindingPolicy {
         exact("revision", RV + "workRevision", iri(arg("work-head")));
         exact("revision", RV + "confirmedBy", iri(arg("actor")));
         at(arg("work-head"), RV + "component", iri(arg("work")));
-        at(arg("receipt"), RV + "authorCredit", iri(role("credit")));
-        at(arg("receipt"), RV + "creditRevision", iri(role("revision")));
+        if (catalogue) at(arg("receipt"), RV + "commandFamily", text("work-catalogue-import-v1"));
+        check(arg("receipt"), RV + "authorCredit", iri(role("credit")), !catalogue);
+        check(arg("receipt"), RV + "creditRevision", iri(role("revision")), !catalogue);
         at(arg("receipt"), RV + "work", iri(arg("work")));
         at(arg("receipt"), RV + "workRevision", iri(arg("work-head")));
         at(arg("receipt"), RV + "expectedHead", iri(arg("work-head")));

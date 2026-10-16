@@ -68,7 +68,8 @@ function constraints(profile: ProfileDefinition): string {
     })),
   );
 }
-// Recorded before moving graph constraints and their registry metadata to Turtle companions.
+// Reviewed constraints and source bytes before the trailing author comment.
+// Credit qualification widens its admitted values; address profiles retain their pins.
 const original = {
   'work-address-claim-v1': {
     source: '0447720e2e33c0f1a71259488f1710c0c837039a1a4f1931c8c1bed92f2848df',
@@ -89,8 +90,8 @@ const original = {
     counts: [7, 10],
   },
   'work-author-credit-v1': {
-    source: '369b1c406b627053c612fff0c97fe18353e633df2b8128746cb4463273369281',
-    constraints: '7c480c1edf72a33e052be8a0c27d16ae42f8915742d564acd58fca53cbea70c8',
+    source: '340930b712ff376dc6ff5435be5d1620b83e20c03eedbbf8bd337fac91ef703c',
+    constraints: '6f7a4f46348d9b636a2dc6845ce01025bf099a4eb3a9a7f3950eae75252086cb',
     roles: ['credit', 'revision'],
     counts: [13, 20],
   },
@@ -225,7 +226,7 @@ test('Work address and credit discovery preserves 98 constraints, ten roles and 
   }
   const registry = selectedRegistry(commandProfiles(authoredProfiles).manifest);
   expect(digest(JSON.stringify(registry))).toBe(
-    'b6cc426b72e60d3e3c53e1586c3ab58c4927f33bbf64fa76b51f70be8145ea92',
+    'b8da96d1cb9e30a2cfec1e051c3c7e8f77a3277ac5b47a3e0896822faac75094',
   );
   expect(selectedRegistry(published.manifest)).toEqual(registry);
   for (const [, module] of modules) {
@@ -307,7 +308,7 @@ test('RouteBinding canonical discriminators preserve merged, retired, redirect a
       'epoch',
       'intent',
     ],
-    optional: ['source-role'],
+    optional: ['source-role', 'provider', 'namespace', 'role'],
     roles: ['credit', 'revision'],
   });
   expect(registry.bindingDemands).toEqual([
@@ -475,22 +476,21 @@ test('author credit literals, source keys and positions retain exact types and b
     ['revision', creditRevision()],
   ] as const) {
     expect(await accepts(id, role, valid)).toBe(true);
+    expect(await accepts(id, role, { ...valid, 'schema:roleName': ['translator'],
+      'rv:externalProvider': ['vndb'], 'rv:externalNamespace': ['staff'], 'rv:externalKey': ['s42'] })).toBe(true);
     for (const position of [0, 127])
       expect(await accepts(id, role, { ...valid, 'schema:position': [position] })).toBe(true);
     for (const value of [[-1], [128], [1.5], ['0'], [null], [], null, 0])
       expect(await accepts(id, role, { ...valid, 'schema:position': value })).toBe(false);
     for (const [path, value] of [
       ['schema:roleName', `${rv}author`],
-      ['schema:roleName', 'translator'],
       ['rv:externalProvider', `${rv}open-library`],
-      ['rv:externalProvider', 'wikidata'],
       ['rv:externalNamespace', `${rv}author`],
-      ['rv:externalNamespace', 'work'],
-      ['rv:externalKey', '/authors/OL0A'],
-      ['rv:externalKey', '/authors/OL1W'],
-      ['rv:externalKey', 'OL1A'],
-      ['rv:externalKey', '/authors/OL1234567890123A'],
       ['rv:sourceRoleKey', 'x'.repeat(201)],
+      ['rv:externalKey', 'x'.repeat(201)],
+      ['rv:externalKey', ''],
+      ['schema:roleName', 'invented-role'],
+      ['rv:externalProvider', 'Invalid Provider'],
     ] as const)
       expect(await accepts(id, role, { ...valid, [path]: [value] })).toBe(false);
     expect(

@@ -16,17 +16,18 @@ test('a Work reads author, director, artist and animation studio through the cre
     const head = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(created.work)} rv:head ?head } }`)).results!.bindings[0]!.head!.value;
     const author = native();
+    const sourceKey = `/authors/OL${Date.now()}A`;
     const adopted = await adoptAuthorCredit(stack.env, {
       verify: async () => member.principal,
     }, stack.access, new Request('http://main.local/credits', {
       headers: { authorization: `Bearer ${member.token}` },
     }), {
       work: created.work, credit: author, revision: native(), expectedHead: head,
-      sourceKey: '/authors/OL1A', sourceRoleKey: null, nativeOrdinal: 0, actingSubject: member.actor,
+      sourceKey, sourceRoleKey: null, nativeOrdinal: 0, actingSubject: member.actor,
     }, native(), randomUUID());
     expect(adopted.receipt.credit).toBe(author);
     const posted: Record<string, string> = { author };
-    for (const role of ['director', 'artist', 'animation-studio', 'translator'] as const) {
+    for (const role of ['director', 'artist', 'animation-studio', 'translator', 'editor'] as const) {
       const credit = native();
       const response = await member.send('POST', `/v1/works/${created.work.slice(-36)}/agent-credits`, {
         profile: 'native-agent-credit-v1', credit, agent: member.actor, role,
@@ -52,11 +53,11 @@ test('a Work reads author, director, artist and animation studio through the cre
     const page = await read();
     expect(page.status, page.text).toBe(200);
     const items = page.body.result!.items;
-    expect(items.map(item => item.role)).toEqual([...WORK_CREDIT_ROLES]);
-    expect(items.map(item => item.id)).toEqual(WORK_CREDIT_ROLES.map(role => posted[role]));
+    expect(items.map(item => item.role)).toEqual(WORK_CREDIT_ROLES.filter(role => role !== 'transcriber'));
+    expect(items.map(item => item.id)).toEqual(WORK_CREDIT_ROLES.filter(role => role !== 'transcriber').map(role => posted[role]));
     expect(items[0]).toMatchObject({
       role: 'author', participantKind: 'external-reference', provider: 'open-library',
-      key: '/authors/OL1A', ordinal: 0, agent: null, displayName: null, handle: null,
+      key: sourceKey, ordinal: 0, agent: null, displayName: null, handle: null,
     });
     expect(items[0]!.confirmation).toBeUndefined();
     for (const item of items.slice(1)) {

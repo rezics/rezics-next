@@ -130,7 +130,7 @@ function fixture() {
         return { rows: state.oversize ? Array.from({ length: 257 }, () => candidates[0]!) : rows,
           more: remaining.length > rows.length };
       },
-      confirmed: async () => new Set([`${work}\0/authors/OL1A`]),
+      confirmed: async (_epoch: string, refs: { key: string }[]) => new Set(refs.flatMap((ref,index) => ref.key === '/authors/OL1A' ? [String(index)] : [])),
     },
     sourceAdoptions: { authorReferences: async (roots: string[]) => {
       expect(roots).toEqual([work]);

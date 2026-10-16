@@ -7,7 +7,7 @@ import { DATASET, GRAPHS, RV, hash, iri, lit, IdempotencyConflict,
 import { PendingAdmittedWork } from './create-admitted.ts';
 import { readWorkEditTerminalReceipt, sealMetadataWorkEditAdmission, workEditReceiptIri } from './edit.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
-import { authorCreditValidations, readAuthorCredit, AuthorCreditConflict,
+import { authorCreditValidations, readCreditValue, AuthorCreditConflict,
   AuthorCreditInvalid, AuthorCreditUnavailable } from './author-credit.ts';
 
 const NATIVE = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -34,17 +34,19 @@ export function authorCreditRetirementDigest(input: Omit<AuthorCreditRetirementI
     actingSubject: input.actingSubject, reason: input.reason }));
 }
 
-async function origin(env: WorkActivationEnvironment, credit: string, revision: string) {
-  const data = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt ?intent ?authority WHERE {
-    GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:authorCredit ${iri(credit)} ;
-      rv:creditRevision ${iri(revision)} ; rv:sourceIntent ?intent ;
-      rv:authorityEpoch ?authority ; rv:outcome rv:Succeeded . } } LIMIT 2`, 4096);
+export async function creditOrigin(env: WorkActivationEnvironment, credit: string, revision: string) {
+  const data = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?receipt ?intent ?authority ?scope WHERE {
+    GRAPH ${iri(GRAPHS.receipts)} { ?receipt (rv:authorCredit|rv:nativeCredit) ${iri(credit)} ;
+      rv:creditRevision ${iri(revision)} ; rv:admittedScope ?scope ;
+      rv:authorityEpoch ?authority ; rv:outcome rv:Succeeded .
+      FILTER NOT EXISTS { ?receipt rv:retirementReason ?reason }
+      OPTIONAL { ?receipt rv:sourceIntent ?sourceIntent } BIND(COALESCE(?sourceIntent, ${iri(credit)}) AS ?intent) } } LIMIT 2`, 4096);
   const rows = data.results?.bindings ?? [];
   if (rows.length !== 1 || !rows[0]?.receipt || !rows[0].intent || !rows[0].authority) {
     throw new AuthorCreditUnavailable('original credit receipt is unavailable');
   }
   return { receipt: rows[0].receipt.value, intent: rows[0].intent.value,
-    authorityEpoch: rows[0].authority.value };
+    authorityEpoch: rows[0].authority.value, scope: rows[0].scope!.value };
 }
 
 export async function readAuthorCreditRetirement(env: WorkActivationEnvironment,
@@ -52,7 +54,7 @@ export async function readAuthorCreditRetirement(env: WorkActivationEnvironment,
   if (!NATIVE.test(credit)) throw new AuthorCreditInvalid('invalid credit identity');
   const data = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt ?work ?revision ?head ?reason
     ?admission ?digest ?epoch ?sequence WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ${iri(credit)} a rv:AuthorCredit ; rv:retiredBy ?receipt . }
+    GRAPH ${iri(GRAPHS.current)} { ${iri(credit)} rv:retiredBy ?receipt . }
     GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:authorCredit ${iri(credit)} ;
       rv:creditRevision ?revision ; rv:work ?work ; rv:expectedHead ?head ;
       rv:workRevision ?head ; rv:retirementReason ?reason ; rv:admissionId ?admission ;
@@ -83,9 +85,9 @@ export async function retireAuthorCredit(env: WorkActivationEnvironment,
   const digest = authorCreditRetirementDigest(intent);
   const principal = await account.verify(request, ['work:edit']);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
-  const credit = await readAuthorCredit(env, input.credit, input.revision);
+  const credit = await readCreditValue(env, input.credit, input.revision, input.actingSubject);
   if (!credit || credit.work !== input.work) throw new AuthorCreditConflict('credit identity differs');
-  const original = await origin(env, input.credit, input.revision);
+  const original = await creditOrigin(env, input.credit, input.revision);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
     scope: `work:edit:${input.work}`, action: 'work.edit', idempotencyKey, requestDigest: digest });
   const prior = await readAuthorCreditRetirement(env, input.credit);
@@ -110,7 +112,7 @@ export async function retireAuthorCredit(env: WorkActivationEnvironment,
       const batch = `urn:rezics:outbox:${hash(receipt)}`;
       const event = `urn:rezics:event:${hash(`${receipt}\0author-credit-retired`)}`;
       const validations = await authorCreditValidations(env, credit, original.receipt,
-        original.authorityEpoch, original.intent);
+        original.authorityEpoch, original.intent, original.scope);
       const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
         DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
         INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -130,8 +132,7 @@ export async function retireAuthorCredit(env: WorkActivationEnvironment,
         WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
           rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
           GRAPH ${iri(GRAPHS.current)} { ${iri(input.work)} a schema:CreativeWork ;
-            rv:head ${iri(input.expectedHead)} . ${iri(input.credit)} a rv:AuthorCredit ;
-            rv:work ${iri(input.work)} ; rv:creditRevision ${iri(input.revision)} . }
+            rv:head ${iri(input.expectedHead)} . ${iri(input.credit)} rv:work ${iri(input.work)} ; rv:creditRevision ${iri(input.revision)} . }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(input.work)} rv:protectionHead ?p } }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(input.credit)} rv:retiredBy ?r } }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }

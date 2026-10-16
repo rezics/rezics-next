@@ -9,7 +9,8 @@ import { adoptAuthorCredit, authorCreditDigest, readAuthorCredit, readAuthorCred
 import { readAuthorCreditRetirement } from '../work/author-credit-retirement.ts';
 import type { SourceAuthorNameStore } from './author-name.ts';
 import { compareSourceChildren, sourceChildOccurrence } from './child-correspondence.ts';
-import type { OpenLibraryConversionStore } from './open-library-conversion.ts';
+import type { CreditEvidenceReader, VerifiedCreditOccurrence } from './credit-evidence.ts';
+import type { NativeCreditRole } from '../work/read-contract.ts';
 import type { SourceNativeWorkProposalStore } from './native-work-proposal.ts';
 import type { SourceChildCorrespondenceStore } from './record-child-correspondence.ts';
 import type { StagedSourceObservation } from './intake.ts';
@@ -30,6 +31,7 @@ export interface AdoptSourceAuthorCreditInput {
 export interface AuthorCreditIntentRow {
   id: string; principal_id: string; work: string; idempotency_key: string; request_digest: string;
   request: AdoptSourceAuthorCreditInput; proposal_id: string; conversion_id: string; record_id: string;
+  source_provider: string | null; source_namespace: string | null; credit_role: NativeCreditRole | null;
   occurrence: string; source_ordinal: number; source_key: string; source_role_key: string | null;
   correspondence_id: string | null; base_support_id: string | null; credit: string; credit_revision: string;
   authority_proof: WorkEditAuthorityProof; created_at: Date;
@@ -70,7 +72,8 @@ export function sourceAuthorCreditRequestDigest(work: string, input: AdoptSource
 export function creditValue(row: AuthorCreditIntentRow): AuthorCreditValue {
   return { work: row.work, credit: row.credit, revision: row.credit_revision,
     expectedHead: row.request.expectedHead, sourceKey: row.source_key, sourceRoleKey: row.source_role_key,
-    nativeOrdinal: row.request.nativeOrdinal, actingSubject: row.request.actingSubject };
+    nativeOrdinal: row.request.nativeOrdinal, actingSubject: row.request.actingSubject,
+    ...(row.source_provider ? { provider: row.source_provider, namespace: row.source_namespace!, role: row.credit_role! } : {}) };
 }
 
 function conflict(error: unknown): never {
@@ -82,12 +85,12 @@ function conflict(error: unknown): never {
 
 export class SourceAuthorCreditStore {
   constructor(private readonly pool: Pool, private readonly proposals: SourceNativeWorkProposalStore,
-    private readonly conversions: OpenLibraryConversionStore,
+    private readonly conversions: CreditEvidenceReader,
     private readonly correspondences: SourceChildCorrespondenceStore,
     private readonly env: WorkActivationEnvironment,
     private readonly account: Pick<AccountAssertionVerifier, 'verify'>,
     private readonly access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'withWorkEditAuthority'>,
-    private readonly names?: Pick<SourceAuthorNameStore, 'publish'>) {}
+    private readonly names?: Pick<SourceAuthorNameStore, 'publishCredit'>) {}
 
   async intent(principalId: string, supportId: string): Promise<AuthorCreditIntentRow | null> {
     const row = (await this.pool.query<AuthorCreditIntentRow>(
@@ -102,7 +105,7 @@ export class SourceAuthorCreditStore {
     const evidence = await this.conversions.verifiedRead(principalId, id(input.conversion));
     if (!evidence || proposal.record !== evidence.observation.record
       || proposal.observation !== evidence.observation.observation) throw new AuthorCreditUnavailable('source evidence differs');
-    const authors = evidence.conversion.projection.authorRefs;
+    const authors = evidence.credits;
     const child = authors?.[input.sourceOrdinal];
     if (!authors || !child || evidence.conversion.fieldInventory.find(field => field.field === 'authors')?.disposition !== 'source-reference'
       || sourceChildOccurrence(evidence.observation.observation, 'authors', input.sourceOrdinal) !== input.occurrence
@@ -112,7 +115,8 @@ export class SourceAuthorCreditStore {
     return { proposal, child };
   }
 
-  private async base(principalId: string, input: AdoptSourceAuthorCreditInput, record: string) {
+  private async base(principalId: string, input: AdoptSourceAuthorCreditInput, record: string,
+    candidateCredit: VerifiedCreditOccurrence) {
     if (!input.baseSupport) {
       if (input.correspondence) throw new AuthorCreditConflict('initial occurrence has no correspondence');
       return { row: null, kind: 'initial' as const };
@@ -121,7 +125,11 @@ export class SourceAuthorCreditStore {
     if (!row || row.base_support_id) throw new AuthorCreditConflict('base must be an original credit support');
     const evidence = await this.evidence(principalId, row.request);
     if (!evidence) throw new AuthorCreditUnavailable('base source proof is missing');
-    if (row.source_key !== input.confirmedSourceKey || row.source_role_key !== input.confirmedRoleKey
+    if ((row.source_provider ?? 'open-library') !== evidence.child.provider
+      || (row.source_namespace ?? 'author') !== evidence.child.namespace || (row.credit_role ?? 'author') !== evidence.child.role
+      || evidence.child.provider !== candidateCredit.provider || evidence.child.namespace !== candidateCredit.namespace
+      || evidence.child.role !== candidateCredit.role
+      || row.source_key !== input.confirmedSourceKey || row.source_role_key !== input.confirmedRoleKey
       || row.request.nativeOrdinal !== input.nativeOrdinal) throw new AuthorCreditConflict('support cannot rewrite a native credit');
     if (url(row.record_id) !== record) {
       if (input.correspondence) throw new AuthorCreditConflict('cross-record correspondence is unsupported');
@@ -186,7 +194,7 @@ export class SourceAuthorCreditStore {
     if (prior && (prior.request_digest !== digest || prior.work !== work)) throw new AuthorCreditConflict('credit intent changed');
     const evidence = await this.evidence(principalId, input);
     if (!evidence) return null;
-    const base = await this.base(principalId, input, evidence.proposal.record);
+    const base = await this.base(principalId, input, evidence.proposal.record, evidence.child);
     if (base.row && base.row.work !== work) throw new AuthorCreditConflict('base belongs to another Work');
     const original = base.row ? await this.read(principalId, base.row.id) : null;
     if (base.row && !original) throw new AuthorCreditUnavailable('base credit is not committed');
@@ -203,7 +211,8 @@ export class SourceAuthorCreditStore {
     const generated: AuthorCreditValue = { work, credit: base.row?.credit ?? url(Bun.randomUUIDv7()),
       revision: base.row?.credit_revision ?? url(Bun.randomUUIDv7()), expectedHead: input.expectedHead,
       sourceKey: evidence.child.sourceKey, sourceRoleKey: evidence.child.roleKey,
-      nativeOrdinal: input.nativeOrdinal, actingSubject: input.actingSubject };
+      nativeOrdinal: input.nativeOrdinal, actingSubject: input.actingSubject,
+      provider: evidence.child.provider, namespace: evidence.child.namespace, role: evidence.child.role };
     const intentId = Bun.randomUUIDv7();
     authorCreditDigest(generated, url(intentId));
     const client = await this.pool.connect();
@@ -222,12 +231,13 @@ export class SourceAuthorCreditStore {
           const saved = await client.query(`INSERT INTO source.author_credit_intent
             (id,principal_id,work,idempotency_key,request_digest,request,proposal_id,conversion_id,record_id,
              occurrence,source_ordinal,source_key,source_role_key,correspondence_id,base_support_id,
-             credit,credit_revision,authority_proof)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) ON CONFLICT DO NOTHING`,
+             credit,credit_revision,authority_proof,source_provider,source_namespace,credit_role)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) ON CONFLICT DO NOTHING`,
           [intentId, principalId, work, key, digest, JSON.stringify(input), id(input.proposal), id(input.conversion),
             id(evidence.proposal.record), input.occurrence, input.sourceOrdinal, evidence.child.sourceKey,
             evidence.child.roleKey, input.correspondence ? id(input.correspondence) : null, base.row?.id ?? null,
-            generated.credit, generated.revision, JSON.stringify(proof)]);
+            generated.credit, generated.revision, JSON.stringify(proof),
+            generated.provider, generated.namespace, generated.role]);
           const selected = (await client.query<AuthorCreditIntentRow>(
             'SELECT * FROM source.author_credit_intent WHERE principal_id = $1 AND idempotency_key = $2', [principalId, key])).rows[0];
           if (!selected || selected.request_digest !== digest) throw new AuthorCreditConflict('occurrence or key is already reserved');
@@ -257,7 +267,8 @@ export class SourceAuthorCreditStore {
     }
     const support = await this.read(principalId, row.id);
     if (!support) throw new AuthorCreditUnavailable('credit support did not complete');
-    await this.names?.publish(row.source_key, row.work);
+    await this.names?.publishCredit({ provider: row.source_provider ?? 'open-library',
+      namespace: row.source_namespace ?? 'author', key: row.source_key }, row.work);
     return { support, replayed: !inserted };
   }
 
@@ -269,7 +280,7 @@ export class SourceAuthorCreditStore {
     if (!app) return null;
     const evidence = await this.evidence(principalId, row.request);
     if (!evidence) throw new AuthorCreditUnavailable('source credit evidence unavailable');
-    const base = await this.base(principalId, row.request, evidence.proposal.record);
+    const base = await this.base(principalId, row.request, evidence.proposal.record, evidence.child);
     const origin = base.row ?? row;
     const native = await readAuthorCredit(this.env, row.credit, row.credit_revision);
     const proof = await readAuthorCreditReceipt(this.env, app.admission_id);
@@ -278,6 +289,9 @@ export class SourceAuthorCreditStore {
       || proof.credit !== row.credit || proof.revision !== row.credit_revision || proof.work !== row.work
       || proof.dataEpoch !== app.data_epoch || proof.sequence !== app.sequence
       || native.dataEpoch !== app.data_epoch || native.sequence !== app.sequence
+      || native.provider !== (row.source_provider ?? 'open-library') || native.namespace !== (row.source_namespace ?? 'author')
+      || native.role !== (row.credit_role ?? 'author')
+      || native.provider !== evidence.child.provider || native.namespace !== evidence.child.namespace || native.role !== evidence.child.role
       || native.sourceKey !== row.source_key || native.sourceRoleKey !== row.source_role_key
       || native.nativeOrdinal !== row.request.nativeOrdinal || native.expectedHead !== origin.request.expectedHead
       || native.actingSubject !== origin.request.actingSubject || native.work !== row.work

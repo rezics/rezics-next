@@ -1,3 +1,4 @@
+import { nativeCreditRole } from '../work/read-contract.ts';
 import { t } from 'elysia';
 
 const native = t.String({ pattern: '^https://rezics.com/id/[0-9a-f-]{36}$' });
@@ -11,8 +12,8 @@ export const authorCreditBody = t.Object({ profile: t.Literal('source-author-cre
 export const nativeAuthorCreditResult = t.Object({ profile: t.Literal('work-author-credit-v1'),
   work: native, credit: native, revision: native, expectedHead: native, actingSubject: native,
   sourceKey: t.String(), sourceRoleKey: t.Nullable(t.String()), nativeOrdinal: t.Integer(),
-  role: t.Literal('author'), participantKind: t.Literal('external-reference'),
-  provider: t.Literal('open-library'), namespace: t.Literal('author'), control: t.Literal('human-confirmed'),
+  role: nativeCreditRole, participantKind: t.Literal('external-reference'),
+  provider: t.String(), namespace: t.String(), control: t.Literal('human-confirmed'),
   rightsStatus: t.Literal('undetermined'), dataEpoch: t.String(), sequence: t.String() });
 export const authorCreditSupportResult = t.Object({ profile: t.Literal('source-author-credit-support-v1'),
   state: t.Union([t.Literal('recorded'), t.Literal('withdrawn')]), support: native, work: native,

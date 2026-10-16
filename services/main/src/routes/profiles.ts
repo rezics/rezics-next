@@ -2,7 +2,7 @@ import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { workRead, WorkReadLimit } from '../modules/work/read-session.ts';
 import { pendingOperation } from '../api-contract.ts';
-import { pageFields, pageQuery, readId, readPosition, readQuery, readUuid } from '../modules/work/read-contract.ts';
+import { externalCreditParticipant, pageFields, pageQuery, readId, readPosition, readQuery, readUuid } from '../modules/work/read-contract.ts';
 import { agentProfile, creditedWork, creditRole, libraryContribution, libraryRating,
   PROFILE_READ_COST, profileHandle, shelfCollection } from '../modules/profiles/read-contract.ts';
 import { readAgent, readAgentCollections, readAgentWorks, readHandle } from '../modules/profiles/read.ts';
@@ -159,8 +159,13 @@ export function profileRoutes(work: MainWorkDependencies) {
       catch (error) { return readError(error); }
     })
     .post('/v1/works/:id/agent-credits', { params,
-      body: t.Object({ profile: t.Literal('native-agent-credit-v1'), credit: readId, agent: readId,
-        role: creditRole, expectedWorkHead: readId, actingSubject: readId }, { additionalProperties: false }),
+      body: t.Union([
+        t.Object({ profile: t.Literal('native-agent-credit-v1'), credit: readId, agent: readId,
+          role: creditRole, expectedWorkHead: readId, actingSubject: readId }, { additionalProperties: false }),
+        t.Object({ profile: t.Literal('native-agent-credit-v1'), credit: readId, participant: externalCreditParticipant,
+          ordinal: t.Optional(t.Integer({ minimum: 0, maximum: 127 })),
+          role: creditRole, expectedWorkHead: readId, actingSubject: readId }, { additionalProperties: false }),
+      ]),
       response: transportResponses(openApiOperations["/v1/works/{id}/agent-credits"].post, { 200: creditResult, 201: creditResult, 202: pendingOperation, ...workReadProblems }, 'POST'),
     }, async ({ request, params: path, body }) => {
       try {
@@ -171,7 +176,8 @@ export function profileRoutes(work: MainWorkDependencies) {
     });
 }
 const creditResult = t.Object({ profile: t.Literal('native-agent-credit-v1'), credit: readId,
-  revision: readId, work: readId, agent: readId, role: creditRole, replayed: t.Boolean(), sourcePosition: readPosition });
+  revision: readId, work: readId, agent: t.Nullable(readId), participant: t.Optional(externalCreditParticipant),
+  ordinal: t.Optional(t.Integer()), role: creditRole, replayed: t.Boolean(), sourcePosition: readPosition });
 const listingState = t.Object({ listing: resourceListing, version: t.Integer({ minimum: 0 }),
   changedAt: t.Nullable(t.String()), replayed: t.Optional(t.Boolean()) });
 function listingError(error: unknown): Response {

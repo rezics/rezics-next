@@ -27,6 +27,10 @@ final class AuthorCreditPolicy {
         }
         return value;
     }
+    private static boolean credit(DatasetGraph data, Node graph, Node subject) {
+        return data.contains(graph, subject, RDF.type.asNode(), rv("AuthorCredit"))
+            || data.contains(graph, subject, RDF.type.asNode(), rv("NativeAgentCredit"));
+    }
     private static String retirement(DatasetGraph data, CommandPolicy.Plan plan, UpdateModify modify) {
         Node current = uri(CommandPolicy.CURRENT), revisions = uri(CommandPolicy.REVISIONS),
             receipts = uri(CommandPolicy.RECEIPTS);
@@ -40,7 +44,7 @@ final class AuthorCreditPolicy {
         if (!credit.isURI() || !receipt.isURI() || plan.current().size() != 1
             || !plan.current().contains(credit.getURI()) || !plan.revisions().isEmpty()
             || data.contains(current, credit, rv("retiredBy"), Node.ANY)
-            || !data.contains(current, credit, RDF.type.asNode(), rv("AuthorCredit")))
+            || !credit(data, current, credit))
             return "author credit retirement target differs";
         for (Quad quad : modify.getDeleteQuads()) if (current.equals(quad.getGraph())
             || revisions.equals(quad.getGraph())) return "retirement cannot rewrite native history";
@@ -72,12 +76,13 @@ final class AuthorCreditPolicy {
         if (plan.request().getOperations().getFirst() instanceof UpdateModify modify) {
             boolean retirement = modify.getInsertQuads().stream().anyMatch(quad ->
                 current.equals(quad.getGraph()) && rv("retiredBy").equals(quad.getPredicate())
-                && data.contains(current, quad.getSubject(), RDF.type.asNode(), rv("AuthorCredit")));
+                && credit(data, current, quad.getSubject()));
             if (retirement) return retirement(data, plan, modify);
         }
-        for (String subject : plan.current()) if (data.contains(current, uri(subject), RDF.type.asNode(), rv("AuthorCredit")))
+        for (String subject : plan.current()) if (credit(data, current, uri(subject)))
             return "author credit is immutable";
-        for (String subject : plan.revisions()) if (data.contains(revisions, uri(subject), RDF.type.asNode(), rv("AuthorCreditRevision")))
+        for (String subject : plan.revisions()) if ((data.contains(revisions, uri(subject), RDF.type.asNode(), rv("AuthorCreditRevision"))
+            || data.contains(revisions, uri(subject), RDF.type.asNode(), rv("NativeAgentCreditRevision"))))
             return "author credit revision is immutable";
         if (!(plan.request().getOperations().getFirst() instanceof UpdateModify modify)) return null;
         Node work = null, head = null;
@@ -91,8 +96,20 @@ final class AuthorCreditPolicy {
             }
         }
         if (!credit) return null;
-        if (work == null || head == null || !work.isURI() || !head.isURI()
-            || !data.contains(current, work, RDF.type.asNode(), uri("https://schema.org/CreativeWork"))
+        if (work == null || head == null || !work.isURI() || !head.isURI())
+            return "author credit Work basis is incomplete";
+        // Initial catalogue attribution shares the transaction that creates its
+        // Work. Subsequent assertions must name the existing exact Work head.
+        boolean createsWork = modify.getInsertQuads().stream().anyMatch(quad ->
+            uri(CommandPolicy.RECEIPTS).equals(quad.getGraph())
+            && rv("commandFamily").equals(quad.getPredicate()) && quad.getObject().isLiteral()
+            && "work-catalogue-import-v1".equals(quad.getObject().getLiteralLexicalForm()));
+        if (createsWork) {
+            Node insertedWork = work, insertedHead = head;
+            if (!modify.getInsertQuads().contains(new Quad(current, insertedWork, RDF.type.asNode(), uri("https://schema.org/CreativeWork")))
+                || !modify.getInsertQuads().contains(new Quad(current, insertedWork, rv("head"), insertedHead)))
+                return "initial credit Work basis differs";
+        } else if (!data.contains(current, work, RDF.type.asNode(), uri("https://schema.org/CreativeWork"))
             || !data.contains(current, work, rv("head"), head)
             || data.contains(current, work, rv("protectionHead"), Node.ANY))
             return "author credit Work head or protection differs";
@@ -100,7 +117,7 @@ final class AuthorCreditPolicy {
             return "author credit requires a fresh current subject";
         for (String subject : plan.revisions()) if (data.contains(revisions, uri(subject), Node.ANY, Node.ANY))
             return "author credit requires a fresh revision";
-        if (plan.current().size() != 1 || plan.revisions().size() != 1)
+        if (!createsWork && (plan.current().size() != 1 || plan.revisions().size() != 1))
             return "author credit footprint differs";
         return null;
     }

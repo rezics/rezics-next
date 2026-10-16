@@ -1,6 +1,7 @@
-import { namedDiscoveryCredits } from '../discovery/credits.ts';
+import { creditIdentity, namedDiscoveryCredits } from '../discovery/credits.ts';
 import { DISCOVERY_COST, type DiscoveryCredit, type ProjectedCredit } from '../discovery/contract.ts';
 import { readAuthorNames, sourceReportedCredits } from '../source/author-name-read.ts';
+import { isNativeCreditRole, type NativeCreditRole } from '../work/credit-roles.ts';
 import { GRAPHS, iri, MAX_WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { workSemanticTypes } from '../work/work-kinds.ts';
 import { metadataComponent, METADATA_PROFILE } from '../work/metadata-schema.ts';
@@ -14,28 +15,29 @@ import type { FeedReadFrame } from './frame.ts';
 import { readAgentCards, type AgentCard } from '../profiles/read.ts';
 import { readDeletedPersonAttributions, type CreditAttribution } from '../profiles/attribution.ts';
 
-/** Every author credit of the Works, Agents first, then Open Library authors by position; 64 per Work at most. */
-const authorCreditsQuery = (ids: readonly string[]) => `SELECT ?work ?id ?revision ?key ?ordinal ?agent WHERE {
+/** Confirmed contributors, preserving role and qualified identity; 64 per Work at most. */
+const authorCreditsQuery = (ids: readonly string[]) => `SELECT ?work ?id ?revision ?key ?ordinal ?agent ?role ?provider ?namespace WHERE {
     VALUES ?work { ${ids.map(iri).join(' ')} }
     { GRAPH ${iri(GRAPHS.current)} { ?id a rv:AuthorCredit ; rv:work ?work ;
-        rv:creditRevision ?revision ; schema:roleName "author" ; rv:externalProvider "open-library" ;
-        rv:externalNamespace "author" ; rv:externalKey ?key ; schema:position ?ordinal ; rv:editControl rv:HumanConfirmed . }
+        rv:creditRevision ?revision ; schema:roleName ?role ; rv:externalProvider ?provider ;
+        rv:externalNamespace ?namespace ; rv:externalKey ?key ; schema:position ?ordinal ; rv:editControl rv:HumanConfirmed . }
       GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:AuthorCreditRevision ; rv:component ?id ;
-        rv:work ?work ; rv:externalKey ?key ; schema:position ?ordinal .
-        FILTER NOT EXISTS { ?revision a rv:ErasedRevision } } }
+        rv:work ?work ; schema:roleName ?role ; rv:externalProvider ?provider ; rv:externalNamespace ?namespace ;
+        rv:externalKey ?key ; schema:position ?ordinal . FILTER NOT EXISTS { ?revision a rv:ErasedRevision } } }
     UNION
     { GRAPH ${iri(GRAPHS.current)} { ?id a rv:NativeAgentCredit ; rv:work ?work ;
-        rv:creditRevision ?revision ; rv:agent ?agent ; schema:roleName "author" . }
+        rv:creditRevision ?revision ; rv:agent ?agent ; schema:roleName ?role . }
       GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:NativeAgentCreditRevision ; rv:component ?id ;
-        rv:work ?work ; rv:agent ?agent ; schema:roleName "author" .
-        FILTER NOT EXISTS { ?revision a rv:ErasedRevision } } }
+        rv:work ?work ; rv:agent ?agent ; schema:roleName ?role . FILTER NOT EXISTS { ?revision a rv:ErasedRevision } } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?id rv:retiredBy ?retirement } }
   } ORDER BY ?work ?ordinal STR(?id) LIMIT ${ids.length * 64 + 1}`;
 
 /** Card kinds that are an author's news: their Work published or added, and a new chapter or update of it. */
 export const AUTHOR_NEWS_KINDS: readonly FeedKind[] = ['work', 'added', 'contribution'];
 
 /** A credit as the author a reader follows: the Agent, or the keyed Open Library author. */
-export interface CreditedAuthor { agent: string | null; key: string | null }
+export interface CreditedAuthor { agent: string | null; key: string | null;
+  role?: string; provider?: string | null; namespace?: string }
 
 /** Card kinds that are a Realm's own act, whoever carried it out: a pick or a decision. */
 const REALM_ACT_KINDS: readonly FeedKind[] = ['adoption', 'decision'];
@@ -50,8 +52,9 @@ const REALM_ACT_KINDS: readonly FeedKind[] = ['adoption', 'decision'];
 export function followIdentities(source: Pick<FeedSource, 'kind' | 'realm' | 'zone' | 'work' | 'actor'>,
   authors: readonly CreditedAuthor[] = []): string[] {
   const credited = AUTHOR_NEWS_KINDS.includes(source.kind)
-    ? authors.slice(0, DISCOVERY_COST.primaryCredits).map(author => author.agent
-      ?? (author.key ? externalAuthorFollow(author.key) : null)) : [];
+    ? authors.slice(0, DISCOVERY_COST.primaryCredits).filter(author => !author.role || author.role === 'author')
+      .map(author => author.agent ?? (author.key && (!author.provider || author.provider === 'open-library')
+        && (!author.namespace || author.namespace === 'author') ? externalAuthorFollow(author.key) : null)) : [];
   const act = REALM_ACT_KINDS.includes(source.kind);
   const ids = [...new Set([...credited, act ? null : source.actor, source.realm, source.zone, source.work,
     act ? source.actor : null].filter((id): id is string => !!id))];
@@ -71,21 +74,23 @@ export async function feedWorkAuthors(session: WorkReadSession, works: readonly 
   if (!ids.length) return authors;
   const rows = await session.query(authorCreditsQuery(ids), ids.length * 64 + 1);
   if (rows.length > ids.length * 64 || rows.some(row => !row.work || !ids.includes(row.work.value) || !row.id
-    || !row.agent === !row.key)) throw new WorkReadUnavailable('Feed credits are ambiguous');
+    || !row.role || !isNativeCreditRole(row.role.value)
+    || (!row.agent && (!row.provider || !row.namespace)) || !row.agent === !row.key)) throw new WorkReadUnavailable('Feed credits are ambiguous');
   const confirmed = new Map(ids.map(work => [work, [] as (CreditedAuthor & { id: string; ordinal: number | null })[]]));
   for (const row of rows) {
     const list = confirmed.get(row.work!.value)!;
     if (list.length < DISCOVERY_COST.primaryCredits) list.push({ id: row.id!.value, agent: row.agent?.value ?? null,
-      key: row.key?.value ?? null, ordinal: row.agent ? null : Number(row.ordinal?.value) });
+      key: row.key?.value ?? null, role: row.role?.value, provider: row.provider?.value ?? null,
+      namespace: row.namespace?.value, ordinal: row.agent ? null : Number(row.ordinal?.value) });
   }
   const reported = await sourceReportedCredits(session, ids);
   for (const work of ids) {
     const own = confirmed.get(work)!;
-    const keys = new Set(own.flatMap(credit => credit.key ? [credit.key] : []));
+    const keys = new Set(own.map(credit => creditIdentity({ ...credit, role: credit.role ?? 'author', provider: credit.provider ?? null })));
     authors.set(work, [...own, ...(reported.get(work) ?? []).filter(credit =>
-      credit.participantKind === 'external-reference' && !keys.has(credit.key))]
+      credit.participantKind === 'external-reference' && !keys.has(creditIdentity(credit)))]
       .sort((a, b) => (a.ordinal ?? -1) - (b.ordinal ?? -1) || a.id.localeCompare(b.id))
-      .slice(0, DISCOVERY_COST.primaryCredits).map(credit => ({ agent: credit.agent, key: credit.key })));
+      .slice(0, DISCOVERY_COST.primaryCredits).map(credit => ({ agent: credit.agent, key: credit.key, role: credit.role, provider: credit.provider, namespace: 'namespace' in credit ? credit.namespace : undefined })));
   }
   return authors;
 }
@@ -184,23 +189,25 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
       || a.id!.value.localeCompare(b.id!.value));
   const creditSignature = (rows: typeof creditRows) => {
     if (rows.length > ids.length * 64 || rows.some(row => !row.work || !ids.includes(row.work.value)
-      || !row.id || !row.revision || (!row.agent && (!row.key || !/^\d+$/.test(row.ordinal?.value ?? '')
+      || !row.id || !row.revision || !row.role || !isNativeCreditRole(row.role.value)
+      || (!row.agent && (!row.provider || !row.namespace)) || (!row.agent && (!row.key || !/^\d+$/.test(row.ordinal?.value ?? '')
         || !Number.isSafeInteger(Number(row.ordinal?.value)))) || (row.agent && (row.key || row.ordinal)))
       || new Set(rows.map(row => row.id!.value)).size !== rows.length) {
       throw new WorkReadUnavailable('Feed credits are ambiguous');
     }
     return rows.map(row => [row.work!.value, row.id!.value, row.revision!.value, row.key?.value ?? null,
-      row.ordinal?.value ?? null, row.agent?.value ?? null]);
+      row.ordinal?.value ?? null, row.agent?.value ?? null, row.role?.value ?? null,
+      row.provider?.value ?? null, row.namespace?.value ?? null]);
   };
   const originalCredits = creditSignature(creditRows);
   const credits = new Map<string, ProjectedCredit[]>(ids.map(work => [work, []]));
   for (const row of creditRows) {
     const selected = credits.get(row.work!.value)!;
     if (selected.length >= DISCOVERY_COST.primaryCredits) continue;
-    selected.push(row.agent ? { id: row.id!.value, role: 'author', participantKind: 'agent',
+    selected.push(row.agent ? { id: row.id!.value, role: row.role!.value as NativeCreditRole, participantKind: 'agent',
       provider: null, key: null, ordinal: null, agent: row.agent.value, displayName: null, handle: null }
-      : { id: row.id!.value, role: 'author', participantKind: 'external-reference',
-        provider: 'open-library', key: row.key!.value, ordinal: Number(row.ordinal!.value),
+      : { id: row.id!.value, role: row.role!.value as NativeCreditRole, participantKind: 'external-reference',
+        provider: row.provider!.value, namespace: row.namespace!.value, key: row.key!.value, ordinal: Number(row.ordinal!.value),
         agent: null, displayName: null, handle: null });
   }
   const reported = await sourceReportedCredits(session, ids);
@@ -225,7 +232,7 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
   };
   const names = await readCreditNames(actors);
   const sourceNames = await readAuthorNames(session, [...credits.values()].flat().flatMap(credit =>
-    credit.key !== null ? [credit.key] : []));
+    credit.key !== null && credit.provider === 'open-library' && (credit.namespace ?? 'author') === 'author' ? [credit.key] : []));
   const excerpts = new Map<string, { excerpt: string | null; language: string | null }>();
   for (const work of ids) {
     const raw = states.get(work);
@@ -256,13 +263,13 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
   }
   for (const work of ids) {
     const confirmed = credits.get(work) ?? [];
-    const confirmedKeys = new Set(confirmed.flatMap(credit => credit.key !== null ? [credit.key] : []));
+    const confirmedKeys = new Set(confirmed.map(creditIdentity));
     const merged = [...confirmed, ...(reported.get(work) ?? []).filter(credit =>
-      credit.participantKind === 'external-reference' && !confirmedKeys.has(credit.key))]
+      credit.participantKind === 'external-reference' && !confirmedKeys.has(creditIdentity(credit)))]
       .sort((a, b) => (a.ordinal ?? -1) - (b.ordinal ?? -1) || a.id.localeCompare(b.id))
       .slice(0, DISCOVERY_COST.primaryCredits);
     const authors = merged.flatMap(credit => {
-      if (!credit.agent) return [{ ...credit, ...sourceNames.get(credit.key!) } as DiscoveryCredit];
+      if (!credit.agent) return [{ ...credit, ...(credit.provider === 'open-library' && (credit.namespace ?? 'author') === 'author' ? sourceNames.get(credit.key!) : undefined) } as DiscoveryCredit];
       const name = names.get(credit.agent);
       return name ? [{ ...credit, ...name } as DiscoveryCredit] : [];
     });

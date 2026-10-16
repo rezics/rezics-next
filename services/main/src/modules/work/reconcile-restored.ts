@@ -590,8 +590,8 @@ export async function reconcileRetainedWorkCreate(
         throw new RetainedEffectConflict('Retained catalogue request digest differs');
       const heads = new Map(Object.entries(raw.creditHeads && typeof raw.creditHeads === 'object'
         ? raw.creditHeads as Record<string,string> : {}));
-      for (const credit of input.credits) if (credit.expectedAgentHead) heads.set(credit.agent,credit.expectedAgentHead);
-      if (input.credits.some(credit => !heads.has(credit.agent)))
+      for (const credit of input.credits) if (credit.agent && credit.expectedAgentHead) heads.set(credit.agent,credit.expectedAgentHead);
+      if (input.credits.some(credit => credit.agent && !heads.has(credit.agent)))
         throw new RetainedEffectConflict('Retained catalogue attribution is incomplete');
       catalogue = await prepareCatalogueImport({...env,lineage: {...env.lineage,dataEpoch: coverage.dataEpoch}},
         {id: receipt.admissionId,principalId: admitted.principal_id,actingSubject: admitted.acting_subject,

@@ -21,15 +21,18 @@ export const outboxEventHandlers: readonly OwnerOutboxEventHandler[] = [{
       throw new Error('Native credit event differs from its admission receipt');
     }
     const rows = (await fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-      SELECT ?credit ?revision ?work ?agent ?role ?head WHERE {
+      SELECT ?credit ?revision ?work ?agent ?role ?head ?provider ?namespace ?key ?ordinal WHERE {
         GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:nativeCredit ?credit ; rv:creditRevision ?revision ;
           rv:work ?work ; rv:workRevision ?head ; rv:expectedHead ?head . }
-        GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:NativeAgentCreditRevision, rv:RevisionAnchor ;
-          rv:component ?credit ; rv:work ?work ; rv:agent ?agent ; schema:roleName ?role ;
-          rv:workRevision ?head ; rv:dataEpoch ${lit(batch.dataEpoch)} ; rv:sequence ${batch.sequence} . }
+        GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:RevisionAnchor ;
+          rv:component ?credit ; rv:work ?work ; schema:roleName ?role ;
+          rv:workRevision ?head ; rv:dataEpoch ${lit(batch.dataEpoch)} ; rv:sequence ${batch.sequence} .
+          { ?revision a rv:NativeAgentCreditRevision ; rv:agent ?agent } UNION
+          { ?revision a rv:AuthorCreditRevision ; rv:externalProvider ?provider ; rv:externalNamespace ?namespace ;
+            rv:externalKey ?key ; schema:position ?ordinal } }
       } LIMIT 2`, 8192)).results?.bindings ?? [];
     const row = rows[0];
-    if (rows.length !== 1 || !row?.credit || !row.revision || !row.work || !row.agent || !row.role || !row.head
+    if (rows.length !== 1 || !row?.credit || !row.revision || !row.work || (!row.agent && (!row.provider || !row.namespace || !row.key || !row.ordinal)) || !row.role || !row.head
       || scope !== `work:edit:${row.work.value}`) throw new Error('Native credit event has no retained attribution');
     return { specversion: '1.0', id: eventId, source: 'https://rezics.com/services/main',
       type: 'com.rezics.agent.credit-created.v1', datacontenttype: 'application/json',
@@ -37,6 +40,7 @@ export const outboxEventHandlers: readonly OwnerOutboxEventHandler[] = [{
         sequence: batch.sequence }, routingEpoch: batch.routingEpoch, ordinal,
       receipt: { id: receipt, action: 'work.edit', outcome: 'succeeded', admissionId, requestDigest: digest,
         authorityEpoch, scope, work: row.work.value, expectedHead: row.head.value, credit: row.credit.value,
-        revision: row.revision.value, agent: row.agent.value, role: row.role.value } } };
+        revision: row.revision.value, ...(row.agent ? { agent: row.agent.value } : { participant: { kind: 'external-reference', provider: row.provider!.value,
+          namespace: row.namespace!.value, key: row.key!.value }, ordinal: Number(row.ordinal!.value) }), role: row.role.value } } };
   },
 }];

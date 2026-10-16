@@ -6,7 +6,7 @@ import { accessClient, controlRead, controlTransaction } from '../access/topolog
 import { runWorkerTick } from '../../worker-tick.ts';
 import { FIRST_PUBLICATION_TYPE, invertedPublicationYear } from './year-fact.ts';
 
-/** Same sequence as TemplateIndexService.CREDIT_ROLES. Translator and editor sort after the public page. */
+/** Same sequence as TemplateIndexService.CREDIT_ROLES. Public roles retain their physical ranks. */
 export const CREDIT_SEEK_ROLES = ['author', 'director', 'artist', 'animation-studio', 'translator', 'editor', 'transcriber'] as const;
 /** Role rank, then a three-digit ordinal, then the credit id. An unknown role or a non 1–3 digit ordinal is not posted. */
 export function creditSeekKey(role: string, ordinal: string | number | null | undefined, id: string): string | null {
@@ -156,12 +156,12 @@ export class TemplateSeekIndex {
               }
               continue;
             }
-            if(type===`${RV}AuthorCredit` && entity.terms.retiredBy?.length) continue;
+            if((type===`${RV}AuthorCredit` || type===`${RV}NativeAgentCredit`) && entity.terms.retiredBy?.length) continue;
             const creditType = type===`${RV}AuthorCredit` || type===`${RV}NativeAgentCredit`;
             // Author credits written before creditKey existed still post. Native credits require the ranked key.
             const key = type===`${RV}RealmPublicationSlot` ? entity.terms.realm?.[0]
               : creditType ? entity.terms.creditKey?.[0] ?? (type===`${RV}AuthorCredit`
-                ? creditSeekKey('author', entity.terms.ordinal?.[0] ?? '', entity.id) ?? undefined : undefined)
+                ? creditSeekKey(entity.terms.roleName?.[0] ?? 'author', entity.terms.ordinal?.[0] ?? '', entity.id) ?? undefined : undefined)
               : entity.id;
             if (creditType && !key) continue;
             if (!key) throw new WorkReadUnavailable('Physical slot lacks its Realm');
@@ -296,12 +296,19 @@ export class TemplateSeekIndex {
     const boundary=boundaries.sort(compare)[0];
     return {rows:found.sort(compare).filter(row=>!boundary || compare(row,boundary)<=0),more:boundaries.length>0};
   }
-  async confirmed(epoch:string, roots:string[], keys:string[]): Promise<Set<string>> {
-    if(keys.length>128) throw new WorkReadUnavailable('Source key batch exceeds its bound');
-    const rows=await (accessClient(this.pool) ?? this.pool).query<{ anchor:string; external_key:string }>(`SELECT wanted.anchor,wanted.external_key FROM
-      unnest($3::text[],$4::text[]) wanted(anchor,external_key) CROSS JOIN LATERAL (
-        SELECT 1 FROM access.template_seek_entry WHERE epoch=$1 AND type=$2
-          AND anchor=wanted.anchor AND external_key=wanted.external_key LIMIT 1) present`,[epoch,`${RV}AuthorCredit`,roots,keys]);
-    return new Set(rows.rows.map(row=>`${row.anchor}\0${row.external_key}`));
+  async confirmed(epoch:string, refs: {work:string;key:string;provider:string;namespace?:string;role:string}[]): Promise<Set<string>> {
+    if(refs.length>128) throw new WorkReadUnavailable('Source key batch exceeds its bound');
+    const rows=await (accessClient(this.pool) ?? this.pool).query<{ ordinal:number }>(`SELECT wanted.ordinal::int FROM
+      unnest($3::text[],$4::text[],$5::text[],$6::text[],$7::text[]) WITH ORDINALITY
+        wanted(anchor,external_key,provider,namespace,role,ordinal) CROSS JOIN LATERAL (
+        SELECT 1 FROM access.template_seek_entry i JOIN access.template_seek_entity e
+          ON e.epoch=i.epoch AND e.graph=i.graph AND e.id=i.id
+        WHERE i.epoch=$1 AND i.type=$2 AND i.anchor=wanted.anchor AND i.external_key=wanted.external_key
+          AND COALESCE(e.payload->'externalProvider'->>0,'open-library')=wanted.provider
+          AND COALESCE(e.payload->'externalNamespace'->>0,'author')=wanted.namespace
+          AND COALESCE(e.payload->'roleName'->>0,'author')=wanted.role LIMIT 1) present`,
+      [epoch,`${RV}AuthorCredit`,refs.map(ref=>ref.work),refs.map(ref=>ref.key),refs.map(ref=>ref.provider),
+        refs.map(ref=>ref.namespace ?? 'author'),refs.map(ref=>ref.role)]);
+    return new Set(rows.rows.map(row=>String(row.ordinal-1)));
   }
 }

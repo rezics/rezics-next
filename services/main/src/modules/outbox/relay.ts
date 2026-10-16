@@ -1245,10 +1245,10 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
       throw new OutboxIncomplete('author credit retirement event differs from receipt');
     }
     const graph = await fuseki.query(`PREFIX rv: <${RV}> ASK {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(credit)} a rv:AuthorCredit ; rv:work ${iri(work)} ;
+      GRAPH ${iri(GRAPHS.current)} { ${iri(credit)} rv:work ${iri(work)} ;
         rv:creditRevision ${iri(revision)} ; rv:retiredBy ${iri(receiptId)} . }
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:AuthorCreditRevision ;
-        rv:component ${iri(credit)} . }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a ?creditRevisionKind ; rv:component ${iri(credit)} .
+        VALUES ?creditRevisionKind { rv:AuthorCreditRevision rv:NativeAgentCreditRevision } }
     }`);
     if (!graph.boolean) throw new OutboxIncomplete('native author credit retirement is missing');
     return { specversion: '1.0', id: eventId, source: SOURCE,

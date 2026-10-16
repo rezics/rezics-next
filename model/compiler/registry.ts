@@ -288,7 +288,8 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
     triple('credit', 'creditRevision', 'revision');
     triple('revision', 'component', 'credit');
     fields('revision', { work: 'work', 'work-head': 'workRevision', key: 'externalKey',
-      ordinal: 'https://schema.org/position', actor: 'confirmedBy', 'source-role': 'sourceRoleKey' });
+      ordinal: 'https://schema.org/position', actor: 'confirmedBy', 'source-role': 'sourceRoleKey',
+      provider: 'externalProvider', namespace: 'externalNamespace', role: 'https://schema.org/roleName' });
     receipt('revision', 'creditRevision');
     fields('receipt', { intent: 'sourceIntent' });
   } else if (profile === 'translation-link-v1' || /^work-derivation(?:-unresolved)?-v[12]$/.test(profile)) {

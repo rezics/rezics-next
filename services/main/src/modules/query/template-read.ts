@@ -152,8 +152,8 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       const allowed=await scopedPublicationWorks(session,yearScope,[...new Set(candidates.map(row=>row.id))]);
       candidates=candidates.filter(row=>allowed.has(row.id));
     }
-    const confirmed=refs.length ? await deps.templateSeek!.confirmed(session.position.dataEpoch,refs.map(ref=>ref.work),refs.map(ref=>ref.key)) : new Set<string>();
-    const source=refs.map(ref=>({...ref,confirmed:confirmed.has(`${ref.work}\0${ref.key}`)}));
+    const confirmed=refs.length ? await deps.templateSeek!.confirmed(session.position.dataEpoch,refs) : new Set<string>();
+    const source=refs.map((ref,index)=>({...ref,confirmed:confirmed.has(String(index))}));
     if(template.sourceCredits) {
       const cutoff=candidates.at(-1)?.key;
       const added=source.map(ref=>{
@@ -232,6 +232,7 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       // Publication attribution includes explicitly unknown names. Its provider
       // key never belongs to the external author-name owner's namespace.
       if(publicationCreditIds.has(candidate.id)) return [];
+      if(row.provider && (row.provider.value !== 'open-library' || (row.namespace && row.namespace.value !== 'author'))) return [];
       return authorFields.map(name=>row[name]?.value).filter((key):key is string=>!!key);
     })) : new Map();
     const items=page.flatMap(candidate=> {
@@ -244,7 +245,7 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
           item[name]=summary[field.path];
         } else if('author' in field) {
           const value=(field.fallbackTerm ? row[field.fallbackTerm]?.value : undefined)
-            ?? names.get(row[field.author]?.value ?? '')?.[field.path];
+            ?? (row.provider && (row.provider.value !== 'open-library' || (row.namespace && row.namespace.value !== 'author')) ? undefined : names.get(row[field.author]?.value ?? '')?.[field.path]);
           if(value===undefined && field.optional) continue;
           item[name]=value ?? null;
         } else {

@@ -1589,7 +1589,7 @@ export const profileRegistry = {
     ]
   },
   "work-author-credit-v1": {
-    "sha256": "40f7566879e80c782d418972aec38b5c1699ee0727c8eb56c128b719c606eb4a",
+    "sha256": "c24cb44e45b1b096f5a26862e4fe6ecd1aa862db2af26c33f1a6cb624bf1e732",
     "file": "shapes/work-author-credit-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/work-author-credit-v1/credit-shape",

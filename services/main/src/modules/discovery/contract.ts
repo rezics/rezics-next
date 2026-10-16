@@ -2,6 +2,7 @@ import { t } from 'elysia';
 import type { Static } from 'typebox';
 import {
   creditItem,
+  workCreditRole,
   pageFields,
   pageQuery,
   readId,
@@ -70,7 +71,7 @@ export const discoveryCredit = t.Union([
   creditItem,
   t.Object({
     id: readId,
-    role: t.Literal('author'),
+    role: workCreditRole,
     participantKind: t.Literal('agent'),
     provider: t.Null(),
     key: t.Null(),
@@ -84,15 +85,15 @@ export const discoveryCredit = t.Union([
 ]);
 export type DiscoveryCredit = Static<typeof discoveryCredit>;
 
-/** A card names an author Agent. Other roles stay on the credit read. */
+/** A card names a participant while preserving the admitted attribution role. */
 export function namedAuthorCredit(
   credit: { id: string; role: string; agent: string | null },
   name: { displayName: string; handle: string | null; address?: Static<typeof canonicalAddress>;
     identityStatus?: 'active' | 'deleted' },
 ): DiscoveryCredit | undefined {
-  if (credit.role !== 'author' || !credit.agent) return undefined;
+  if (!credit.agent) return undefined;
   return {
-    id: credit.id, role: 'author', participantKind: 'agent', provider: null, key: null, ordinal: null,
+    id: credit.id, role: credit.role as Static<typeof workCreditRole>, participantKind: 'agent', provider: null, key: null, ordinal: null,
     agent: credit.agent, displayName: name.displayName, handle: name.handle,
     identityStatus: name.identityStatus ?? 'active',
     ...(name.address ? { address: name.address } : {}),
@@ -102,7 +103,7 @@ export type ProjectedCredit =
   | Static<typeof creditItem>
   | {
       id: string;
-      role: 'author';
+      role: Static<typeof workCreditRole>;
       participantKind: 'agent';
       provider: null;
       key: null;

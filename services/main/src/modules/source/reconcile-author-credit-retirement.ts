@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
-import { authorCreditValidations, readAuthorCredit, readAuthorCreditReceipt } from '../work/author-credit.ts';
-import { authorCreditRetirementDigest, readAuthorCreditRetirement } from '../work/author-credit-retirement.ts';
+import { authorCreditValidations, readCreditValue } from '../work/author-credit.ts';
+import { authorCreditRetirementDigest, creditOrigin, readAuthorCreditRetirement } from '../work/author-credit-retirement.ts';
 import { workEditReceiptIri } from '../work/edit.ts';
 import { heldMainRecovery, recoveryCursor, reconciledCursor, RetainedEffectConflict } from '../work/reconcile-restored.ts';
 import { relayRetainedEventAt, type MainCloudEvent, type RelayCoverage } from '../outbox/relay.ts';
@@ -50,26 +50,11 @@ export async function reconcileRetainedAuthorCreditRetirement(env: WorkActivatio
       || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence) {
       throw new RetainedEffectConflict('Access admission differs from retirement');
     }
-    const native = await readAuthorCredit(env, credit, revision);
-    if (!native || native.work !== work || native.expectedHead !== head) {
+    const native = await readCreditValue(env, credit, revision, admitted.acting_subject);
+    if (!native || native.work !== work) {
       throw new RetainedEffectConflict('original native credit must recover first');
     }
-    const originalRows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt ?admission ?intent ?authority WHERE {
-      GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:authorCredit ${iri(credit)} ;
-        rv:creditRevision ${iri(revision)} ; rv:sourceIntent ?intent ;
-        rv:admissionId ?admission ; rv:authorityEpoch ?authority ; rv:outcome rv:Succeeded . }
-    } LIMIT 3`, 4096)).results?.bindings ?? [];
-    const original = originalRows[0];
-    if (originalRows.length !== 1 || !original?.receipt || !original.admission || !original.intent
-      || !original.authority || original.receipt.value !== workEditReceiptIri(original.admission.value)) {
-      throw new RetainedEffectConflict('original credit receipt is unavailable');
-    }
-    const originalReceipt = await readAuthorCreditReceipt(env, original.admission.value);
-    if (!originalReceipt || originalReceipt.receipt !== original.receipt.value
-      || originalReceipt.sourceIntent !== original.intent.value
-      || originalReceipt.authorityEpoch !== original.authority.value) {
-      throw new RetainedEffectConflict('original credit proof differs');
-    }
+    const original = await creditOrigin(env, credit, revision);
     const prior = await readAuthorCreditRetirement(env, credit);
     if (!prior) {
       const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
@@ -97,15 +82,15 @@ export async function reconcileRetainedAuthorCreditRetirement(env: WorkActivatio
           rv:restoreCutover ${iri(marker)} . ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
           rv:priorSequence ?saved . ${recovery.bind} }
           GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a schema:CreativeWork ; rv:head ${iri(head)} .
-            ${iri(credit)} a rv:AuthorCredit ; rv:work ${iri(work)} ; rv:creditRevision ${iri(revision)} . }
+            ${iri(credit)} rv:work ${iri(work)} ; rv:creditRevision ${iri(revision)} . }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:protectionHead ?p } }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(credit)} rv:retiredBy ?r } }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ?b rv:dataEpoch ${lit(coverage.dataEpoch)} ;
             rv:sequence ${sequence} } }
         }`;
-      const validations = await authorCreditValidations(env, native, originalReceipt.receipt,
-        originalReceipt.authorityEpoch, originalReceipt.sourceIntent);
+      const validations = await authorCreditValidations(env, native, original.receipt,
+        original.authorityEpoch, original.intent, original.scope);
       const result = await env.fuseki.commandWithReceipt({ receipt: receipt.id, digest, update,
         validations, deadlineMs: 10_000 });
       if (result.status !== 'committed') {

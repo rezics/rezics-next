@@ -7,6 +7,7 @@ import { agentAddress } from '../agent/handle.ts';
 import { readDeletedPersonAttributions, type CreditAttribution } from '../profiles/attribution.ts';
 import { sourceReportedCredits } from '../source/author-name-read.ts';
 import { DISCOVERY_COST, type ProjectedWork } from './contract.ts';
+import { isNativeCreditRole, type NativeCreditRole } from '../work/credit-roles.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
 
 export const DISCOVERY_CREDIT_BATCH_COST = { works: 64, queries: 1, rows: 192 } as const;
@@ -17,21 +18,23 @@ export async function primaryDiscoveryCreditBatch(session: WorkReadSession, work
   if (unique.length > DISCOVERY_CREDIT_BATCH_COST.works) throw new WorkReadUnavailable('Discovery credit batch is out of bounds');
   const result = new Map<string, ProjectedWork['primaryCredits']>();
   if (!unique.length) return result;
-  const seeks = unique.map(work => `{ SELECT ?work ?id ?key ?ordinal ?agent WHERE { BIND(${iri(work)} AS ?work)
+  const seeks = unique.map(work => `{ SELECT ?work ?id ?key ?ordinal ?agent ?role ?provider ?namespace WHERE { BIND(${iri(work)} AS ?work)
     { GRAPH ${iri(GRAPHS.current)} { ?id a rv:AuthorCredit ; rv:work ${iri(work)} ;
-        rv:creditRevision ?revision ; schema:roleName "author" ; rv:externalProvider "open-library" ;
-        rv:externalNamespace "author" ; rv:externalKey ?key ; schema:position ?ordinal ; rv:editControl rv:HumanConfirmed . }
+        rv:creditRevision ?revision ; schema:roleName ?role ; rv:externalProvider ?provider ;
+        rv:externalNamespace ?namespace ; rv:externalKey ?key ; schema:position ?ordinal ; rv:editControl rv:HumanConfirmed . }
       GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:AuthorCreditRevision ; rv:component ?id ;
-        rv:work ${iri(work)} ; rv:externalKey ?key ; schema:position ?ordinal .
+        rv:work ${iri(work)} ; schema:roleName ?role ; rv:externalProvider ?provider ;
+        rv:externalNamespace ?namespace ; rv:externalKey ?key ; schema:position ?ordinal .
         FILTER NOT EXISTS { ?revision a rv:ErasedRevision } } }
     UNION
     { GRAPH ${iri(GRAPHS.current)} { ?id a rv:NativeAgentCredit ; rv:work ${iri(work)} ;
-        rv:creditRevision ?revision ; rv:agent ?agent ; schema:roleName "author" . }
+        rv:creditRevision ?revision ; rv:agent ?agent ; schema:roleName ?role . }
       GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:NativeAgentCreditRevision ; rv:component ?id ;
-        rv:work ${iri(work)} ; rv:agent ?agent ; schema:roleName "author" .
+        rv:work ${iri(work)} ; rv:agent ?agent ; schema:roleName ?role .
         FILTER NOT EXISTS { ?revision a rv:ErasedRevision } } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?id rv:retiredBy ?retirement } }
   } ORDER BY ?ordinal STR(?id) LIMIT ${DISCOVERY_COST.primaryCredits} }`).join(' UNION ');
-  const all = await session.query(`SELECT ?work ?id ?key ?ordinal ?agent WHERE { ${seeks} }`,
+  const all = await session.query(`SELECT ?work ?id ?key ?ordinal ?agent ?role ?provider ?namespace WHERE { ${seeks} }`,
     unique.length * DISCOVERY_COST.primaryCredits);
   if (all.some(row => !row.work || !unique.includes(row.work.value))) {
     throw new WorkReadUnavailable('Discovery credit Work is incomplete');
@@ -39,21 +42,22 @@ export async function primaryDiscoveryCreditBatch(session: WorkReadSession, work
   const reports = await sourceReportedCredits(session, unique);
   for (const work of unique) {
     const rows = all.filter(row => row.work?.value === work);
-    if (rows.some(row => !row.id || (!row.agent && (!row.key || !/^\d+$/.test(row.ordinal?.value ?? '')
+    if (rows.some(row => !row.id || !row.role || !isNativeCreditRole(row.role.value)
+      || (!row.agent && (!row.provider || !row.namespace)) || (!row.agent && (!row.key || !/^\d+$/.test(row.ordinal?.value ?? '')
       || !Number.isSafeInteger(Number(row.ordinal?.value)))) || (row.agent && (row.key || row.ordinal)))
       || new Set(rows.map(row => row.id!.value)).size !== rows.length) {
       throw new WorkReadUnavailable('Discovery credits are ambiguous');
     }
     const confirmed: ProjectedWork['primaryCredits'] = rows.map(row => row.agent
-      ? { id: row.id!.value, role: 'author', participantKind: 'agent',
+      ? { id: row.id!.value, role: row.role!.value as NativeCreditRole, participantKind: 'agent',
       provider: null, key: null, ordinal: null, agent: row.agent.value, displayName: null, handle: null }
-      : ({ id: row.id!.value, role: 'author', participantKind: 'external-reference',
-      provider: 'open-library', key: row.key!.value, ordinal: Number(row.ordinal!.value),
+      : ({ id: row.id!.value, role: row.role!.value as NativeCreditRole, participantKind: 'external-reference',
+      provider: row.provider!.value, namespace: row.namespace!.value, key: row.key!.value, ordinal: Number(row.ordinal!.value),
       agent: null, displayName: null, handle: null }));
     const reported = reports.get(work) ?? [];
-    const confirmedKeys = new Set(confirmed.flatMap(credit => credit.key !== null ? [credit.key] : []));
+    const confirmedKeys = new Set(confirmed.map(credit => creditIdentity(credit)));
     result.set(work, [...confirmed, ...reported.filter(credit =>
-      credit.participantKind === 'external-reference' && !confirmedKeys.has(credit.key))]
+      credit.participantKind === 'external-reference' && !confirmedKeys.has(creditIdentity(credit)))]
       .sort((a, b) => (a.ordinal ?? -1) - (b.ordinal ?? -1) || a.id.localeCompare(b.id))
       .slice(0, DISCOVERY_COST.primaryCredits));
   }
@@ -119,4 +123,9 @@ export async function namedDiscoveryCredits(session: WorkReadSession,
     for (const agent of liveAgents) if (!current?.has(agent)) named.delete(agent);
   }
   return named;
+}
+
+/** Source reports and confirmations coalesce only for the same qualified participant and role. */
+export function creditIdentity(credit: { provider: string | null; namespace?: string; key: string | null; role: string }) {
+  return JSON.stringify([credit.provider, credit.namespace ?? 'author', credit.key, credit.role]);
 }

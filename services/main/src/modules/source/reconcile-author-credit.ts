@@ -66,11 +66,12 @@ export async function reconcileRetainedAuthorCredit(env: WorkActivationEnvironme
     const proposal = await proposals.read(row.principal_id, row.proposal_id)
       .catch(() => { throw new RetainedEffectConflict('source proposal graph must recover first'); });
     const evidence = await conversions.verifiedRead(row.principal_id, row.conversion_id);
-    const child = evidence?.conversion.projection.authorRefs?.[row.source_ordinal];
+    const child = evidence?.credits?.[row.source_ordinal];
     if (!proposal || !evidence || proposal.record !== `https://rezics.com/id/${row.record_id}`
       || proposal.conversion !== evidence.conversion.conversion || proposal.proposal !== row.request.proposal
       || proposal.conversion !== row.request.conversion || !child || child.sourceKey !== value.sourceKey
-      || child.roleKey !== value.sourceRoleKey || row.request.sourceOrdinal !== row.source_ordinal
+      || child.provider !== (value.provider ?? 'open-library') || child.namespace !== (value.namespace ?? 'author')
+      || child.role !== (value.role ?? 'author') || child.roleKey !== value.sourceRoleKey || row.request.sourceOrdinal !== row.source_ordinal
       || row.request.occurrence !== row.occurrence
       || sourceChildOccurrence(evidence.observation.observation, 'authors', row.source_ordinal) !== row.occurrence) {
       throw new RetainedEffectConflict('retained source occurrence differs');
@@ -113,6 +114,8 @@ export async function reconcileRetainedAuthorCredit(env: WorkActivationEnvironme
     if (!checked || !native || checked.requestDigest !== digest || checked.dataEpoch !== coverage.dataEpoch
       || checked.sequence !== sequence || checked.credit !== value.credit || checked.revision !== value.revision
       || native.sourceKey !== value.sourceKey || native.sourceRoleKey !== value.sourceRoleKey
+      || native.provider !== (value.provider ?? 'open-library') || native.namespace !== (value.namespace ?? 'author')
+      || native.role !== (value.role ?? 'author')
       || native.nativeOrdinal !== value.nativeOrdinal || native.actingSubject !== value.actingSubject
       || native.work !== value.work || native.expectedHead !== value.expectedHead
       || BigInt(await reconciledCursor(env, marker) ?? '-1') < BigInt(sequence)) {

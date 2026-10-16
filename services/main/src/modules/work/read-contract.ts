@@ -106,22 +106,17 @@ export const versionItem = t.Object({ id: readId,
   contribution: readId, revision: readId, selected: t.Boolean() });
 export const adoptionItem = t.Object({ realm: readId, name: readName, selection: readId,
   contribution: readId, language: t.String() });
-/** Stored native-agent roles. Translator and editor stay writable and are not on the public credit page. */
-export const NATIVE_CREDIT_ROLES = ['author', 'translator', 'editor', 'director', 'artist', 'animation-studio'] as const;
-/** Public credit page order; hidden native roles retain their existing seek ranks. */
-export const WORK_CREDIT_ROLES = ['author', 'director', 'artist', 'animation-studio', 'transcriber'] as const;
-export type NativeCreditRole = typeof NATIVE_CREDIT_ROLES[number];
-export type WorkCreditRole = typeof WORK_CREDIT_ROLES[number];
+export { NATIVE_CREDIT_ROLES, WORK_CREDIT_ROLES, isNativeCreditRole, type NativeCreditRole, type WorkCreditRole } from './credit-roles.ts';
 export const nativeCreditRole = t.Union([
   t.Literal('author'), t.Literal('translator'), t.Literal('editor'),
   t.Literal('director'), t.Literal('artist'), t.Literal('animation-studio'),
 ]);
 export const workCreditRole = t.Union([
-  t.Literal('author'), t.Literal('director'), t.Literal('artist'), t.Literal('animation-studio'), t.Literal('transcriber'),
+  t.Literal('author'), t.Literal('director'), t.Literal('artist'), t.Literal('animation-studio'), t.Literal('translator'), t.Literal('editor'), t.Literal('transcriber'),
 ]);
-export function isNativeCreditRole(role: string): role is NativeCreditRole {
-  return (NATIVE_CREDIT_ROLES as readonly string[]).includes(role);
-}
+export const externalCreditParticipant = t.Object({ kind: t.Literal('external-reference'),
+  provider: t.String({ pattern: '^[a-z][a-z0-9-]{0,63}$' }), namespace: t.String({ pattern: '^[a-z][a-z0-9-]{0,63}$' }),
+  key: t.String({ minLength: 1, maxLength: 200, pattern: '^[^\\u0000-\\u001f\\u007f]+$' }) }, { additionalProperties: false });
 const creditName = {
   displayName: t.Nullable(t.String({ minLength: 1, maxLength: 200 })),
   handle: t.Null(),
@@ -131,7 +126,7 @@ const creditName = {
 export const creditItem = t.Union([
   t.Object({
     id: readId, role: workCreditRole,
-    participantKind: t.Literal('external-reference'), provider: t.String(),
+    participantKind: t.Literal('external-reference'), provider: t.String(), namespace: t.Optional(t.String()),
     key: t.String(), ordinal: t.Integer(), agent: t.Null(), ...creditName,
   }),
   t.Object({

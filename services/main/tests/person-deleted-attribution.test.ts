@@ -53,7 +53,7 @@ function fixture(options: { tombstone?: boolean; localBasis?: boolean } = {}) {
       mainHead: term(id(23)), public: term('true') }];
     if (body.includes('SELECT * WHERE')) return [
       { part: term('pointer'), work: term(work) },
-      { part: term('credit'), work: term(work), id: term(id(10)), revision: term(id(30)), agent: term(deleted) },
+      { part: term('credit'), work: term(work), id: term(id(10)), revision: term(id(30)), agent: term(deleted), role: term('author') },
     ];
     if (body.includes('NativeAgentCredit')) return [{ work: term(work), id: term(id(10)), revision: term(id(30)),
       agent: term(deleted), role: term('author') }];

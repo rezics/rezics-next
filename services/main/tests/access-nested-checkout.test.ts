@@ -211,7 +211,7 @@ test('ordinary owner callbacks reuse the checkout for aliases, nested owner auth
     expect(await index.keys(epoch, [key])).toEqual(delta.bases);
     const page = await index.candidates(epoch, [key], null, 10);
     expect(page.rows.map(row => row.id)).toEqual([actor]);
-    expect(await index.confirmed(epoch, [work], ['reader'])).toEqual(new Set([`${work}\0reader`]));
+    expect(await index.confirmed(epoch, [{ work, key: 'reader', provider: 'open-library', namespace: 'author', role: 'author' }])).toEqual(new Set(['0']));
     throw new Error('owner rolls back');
   })).rejects.toThrow('owner rolls back');
   expect((await index.candidates(epoch, [key], null, 10)).rows).toEqual([]);

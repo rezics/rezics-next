@@ -71,6 +71,10 @@ export class SourceAuthorNameStore {
     private readonly fetcher: typeof fetch = fetch,
     private readonly publication?: Pick<FusekiClient, 'query' | 'sourceAuthorNames'>) {}
 
+  async publishCredit(reference: { provider: string; namespace: string; key: string }, target: string) {
+    if (reference.provider === 'open-library' && reference.namespace === 'author') await this.publish(reference.key, target);
+  }
+
   async publish(author: string, target?: string) {
     if (this.publication) await publishSourceAuthorName(this.publication,
       { read: key => this.publicationHead(key) }, author, target);

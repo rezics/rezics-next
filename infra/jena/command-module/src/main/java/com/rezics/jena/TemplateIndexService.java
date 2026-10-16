@@ -35,7 +35,7 @@ final class TemplateIndexService {
         DATE_PUBLISHED = "https://schema.org/datePublished",
         GLOBAL_CONTEXT = "urn:rezics:classification-context:global";
     private static final int PUBLICATION_BOUND = 16;
-    private static final List<String> PROPERTIES = List.of("work", "mainVersion", "realm", "externalKey", "language", "publicationHead", "publicationDecision", "contribution", "selectedDraft", "selectionHead", "creditRevision", "retiredBy");
+    private static final List<String> PROPERTIES = List.of("work", "mainVersion", "realm", "externalKey", "externalProvider", "externalNamespace", "language", "publicationHead", "publicationDecision", "contribution", "selectedDraft", "selectionHead", "creditRevision", "retiredBy");
     record Entity(String graph, String id, Map<String,List<String>> terms) {}
     record Key(String graph, String predicate, String anchor, String type) {}
 

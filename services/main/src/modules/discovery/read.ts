@@ -90,7 +90,8 @@ export async function discoveryCards(session: WorkReadSession, page: readonly Di
   const creditNames = await optionalPreview(session, () => namedDiscoveryCredits(session,
     [...credits.values()].flat(), DISCOVERY_COST.pageSize, true));
   const sourceNames = await optionalPreview(session, () => readAuthorNames(session, [...credits.values()].flat()
-    .flatMap(credit => credit.participantKind === 'external-reference' ? [credit.key] : []), true));
+    .flatMap(credit => credit.participantKind === 'external-reference' && credit.provider === 'open-library'
+      && (!credit.namespace || credit.namespace === 'author') ? [credit.key] : []), true));
   const concepts = [...new Set(page.flatMap(row => [
     ...(row.payload.classifications ?? []).map(tag => tag.concept),
     ...(row.payload.classification ? [row.payload.classification.concept] : []),
@@ -133,7 +134,7 @@ export async function discoveryCards(session: WorkReadSession, page: readonly Di
       ...(unavailablePreviews.length ? { unavailablePreviews } : {}),
       primaryCredits: (cardCredits ?? []).flatMap((credit): DiscoveryCredit[] => {
         if (credit.participantKind === 'external-reference') return [{ ...credit,
-          displayName: null, nameSource: undefined, ...sourceNames?.get(credit.key) }];
+          displayName: null, nameSource: undefined, ...(credit.provider === 'open-library' && (!credit.namespace || credit.namespace === 'author') ? sourceNames?.get(credit.key) : {}) }];
         const name = creditNames?.get(credit.agent);
         const named = name && namedAuthorCredit(credit, name);
         return named ? [named] : [];

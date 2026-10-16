@@ -1,3 +1,4 @@
+import { primaryDiscoveryCreditBatch } from '../discovery/credits.ts';
 import { observeSearchPhase } from './operation-evidence.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { namedDiscoveryCredits } from '../discovery/credits.ts';
@@ -10,7 +11,7 @@ import { GRAPHS, iri } from '../work/activate.ts';
 import { metadataComponent, METADATA_PROFILE, type SerialStatus } from '../work/metadata-schema.ts';
 import { parsedMetadataState, selectedMetadata } from '../work/metadata-read.ts';
 import { SearchSnapshotMoved } from '../work/search-readiness.ts';
-import { readAuthorNames, sourceReportedCredits } from '../source/author-name-read.ts';
+import { readAuthorNames } from '../source/author-name-read.ts';
 import { WorkReadMoved } from '../work/read-session.ts';
 import { searchPageRatings } from './ratings.ts';
 import { searchCardReadDependencies } from './card-reads.ts';
@@ -80,63 +81,13 @@ export async function searchPageSerial(session: WorkReadSession, works: readonly
 export async function searchPageCredits(session: WorkReadSession, works: readonly string[], preview = false,
   unavailable = new Set<string>()) {
   if (works.length > SEARCH_CARD_COST.works) throw new WorkReadUnavailable('Search credit page exceeds its bound');
-  const result = new Map<string, ProjectedCredit[]>(works.map(work => [work, []]));
-  if (!works.length) return result;
-  const rows = await session.query(`SELECT ?work ?id ?key ?ordinal ?agent WHERE {
-    VALUES ?work { ${works.map(iri).join(' ')} }
-    { GRAPH ${iri(GRAPHS.current)} { ?id a rv:AuthorCredit ; rv:work ?work ;
-        rv:creditRevision ?revision ; schema:roleName "author" ; rv:externalProvider "open-library" ;
-        rv:externalNamespace "author" ; rv:externalKey ?key ; schema:position ?ordinal ; rv:editControl rv:HumanConfirmed . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:AuthorCreditRevision ; rv:component ?id ;
-        rv:work ?work ; rv:externalKey ?key ; schema:position ?ordinal .
-        FILTER NOT EXISTS { ?revision a rv:ErasedRevision } } }
-    UNION
-    { GRAPH ${iri(GRAPHS.current)} { ?id a rv:NativeAgentCredit ; rv:work ?work ;
-        rv:creditRevision ?revision ; rv:agent ?agent ; schema:roleName "author" . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:NativeAgentCreditRevision ; rv:component ?id ;
-        rv:work ?work ; rv:agent ?agent ; schema:roleName "author" .
-        FILTER NOT EXISTS { ?revision a rv:ErasedRevision } } }
-  } ORDER BY STR(?work) ?ordinal STR(?id) LIMIT ${SEARCH_CARD_COST.creditRows + 1}`,
-  SEARCH_CARD_COST.creditRows);
-  const seen = new Map<string, string>();
-  const damaged = new Set<string>();
-  // A UNION of independently bounded fact subqueries does not retain their order.
-  rows.sort((a, b) => (a.work?.value ?? '').localeCompare(b.work?.value ?? '')
-    || Number(a.ordinal?.value ?? -1) - Number(b.ordinal?.value ?? -1)
-    || (a.id?.value ?? '').localeCompare(b.id?.value ?? ''));
-  for (const row of rows) {
-    const own = result.get(row.work?.value ?? '');
-    if (!own || !row.id || seen.has(row.id.value) || (row.agent && (row.key || row.ordinal))
-      || (!row.agent && (!row.key || !/^\d+$/.test(row.ordinal?.value ?? '')
-        || !Number.isSafeInteger(Number(row.ordinal?.value))))) {
-      if (!preview) throw new WorkReadUnavailable('Search credits are ambiguous');
-      if (!row.work || !works.includes(row.work.value)) throw new WorkReadUnavailable('Search credits have no owner');
-      damaged.add(row.work.value);
-      const prior = row.id && seen.get(row.id.value);
-      if (prior) damaged.add(prior);
-      continue;
-    }
-    seen.set(row.id.value, row.work!.value);
-    if (own.length >= DISCOVERY_COST.primaryCredits) continue;
-    own.push(row.agent ? { id: row.id.value, role: 'author', participantKind: 'agent',
-      provider: null, key: null, ordinal: null, agent: row.agent.value,
-      displayName: null, handle: null } : { id: row.id.value, role: 'author',
-      participantKind: 'external-reference', provider: 'open-library', key: row.key!.value,
-      ordinal: Number(row.ordinal!.value), agent: null, displayName: null, handle: null });
+  const read = () => primaryDiscoveryCreditBatch(session, works);
+  const credits = preview ? await optionalPreview(session, read) : await read();
+  if (!credits) {
+    for (const work of works) unavailable.add(work);
+    return new Map<string, ProjectedCredit[]>();
   }
-  const reported = preview ? await optionalPreview(session, () => sourceReportedCredits(session, works, 3, true))
-    : await sourceReportedCredits(session, works);
-  if (reported === null) for (const work of works) unavailable.add(work);
-  for (const [work, candidates] of reported ?? []) {
-    const confirmed = result.get(work)!;
-    const confirmedKeys = new Set(confirmed.flatMap(credit => credit.key !== null ? [credit.key] : []));
-    result.set(work, [...confirmed, ...candidates.filter(credit =>
-      credit.participantKind === 'external-reference' && !confirmedKeys.has(credit.key))]
-      .sort((a, b) => (a.ordinal ?? -1) - (b.ordinal ?? -1) || a.id.localeCompare(b.id))
-      .slice(0, DISCOVERY_COST.primaryCredits));
-  }
-  for (const work of damaged) { result.delete(work); unavailable.add(work); }
-  return result;
+  return credits;
 }
 
 /** Named primary authors for a page of Works: native Agents by their public
@@ -148,7 +99,8 @@ export async function searchPageAuthors(session: WorkReadSession, works: readonl
   const readNames = () => namedDiscoveryCredits(session, [...credits.values()].flat(), SEARCH_CARD_COST.works, preview);
   const names = preview ? await optionalPreview(session, readNames) : await readNames();
   const readSources = () => readAuthorNames(session, [...credits.values()].flat()
-    .flatMap(credit => credit.participantKind === 'external-reference' ? [credit.key] : []), preview);
+    .flatMap(credit => credit.participantKind === 'external-reference' && credit.provider === 'open-library'
+      && (!credit.namespace || credit.namespace === 'author') ? [credit.key] : []), preview);
   const sourceNames = preview ? await optionalPreview(session, readSources) : await readSources();
   for (const [work, own] of credits) {
     if (own.some(credit => credit.agent && !names?.has(credit.agent))
@@ -157,7 +109,7 @@ export async function searchPageAuthors(session: WorkReadSession, works: readonl
   const values = new Map(works.filter(work => credits.has(work))
     .map(work => [work, (credits.get(work) ?? []).flatMap((credit): DiscoveryCredit[] => {
     if (credit.participantKind === 'external-reference') return [{ ...credit,
-      ...(preview ? { displayName: null, nameSource: undefined } : {}), ...sourceNames?.get(credit.key) }];
+      ...(preview ? { displayName: null, nameSource: undefined } : {}), ...(credit.provider === 'open-library' && (!credit.namespace || credit.namespace === 'author') ? sourceNames?.get(credit.key) : {}) }];
     const name = names?.get(credit.agent);
     const named = name && namedAuthorCredit(credit, name);
     return named ? [named] : [];

@@ -28,7 +28,7 @@ test('work credit roles are a closed list in public order and an unknown role is
   for (const role of WORK_CREDIT_ROLES) {
     expect(Value.Check(template.request, { ...request, parameters: { roots: [root], role } })).toBe(true);
   }
-  for (const role of ['translator', 'editor', 'cast', '']) {
+  for (const role of ['cast', '']) {
     expect(Value.Check(template.request, { ...request, parameters: { roots: [root], role } })).toBe(false);
   }
 });
@@ -74,8 +74,8 @@ test('the Open Library credit fixture and its author evidence stay the regressio
   expect(sparql).toContain('a rv:AuthorCreditRevision');
   expect(sparql).toContain('a rv:NativeAgentCredit');
   expect(sparql).toContain('BIND("source-reported" AS ?confirmation)');
-  expect(sparql).toContain('FILTER(!BOUND(?_role) || ?_role = "author")');
-  for (const role of WORK_CREDIT_ROLES) expect(sparql).toContain(`"${role}"`);
+  expect(sparql).toContain('FILTER(!BOUND(?_role) || ?_role = ?role)');
+  for (const role of NATIVE_CREDIT_ROLES) expect(sparql).toContain(`"${role}"`);
   expect(sparql).not.toContain('?_kind');
 });
 

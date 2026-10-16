@@ -106,7 +106,7 @@ const priorSourcePins = [
   ['work-address-claim-v1', '17326364438e3f150c7ff8e02e37e51596bed52049282f7b40a120c520503617'],
   ['work-address-disposition-v1', '9c4f852c5ff565984ef8a1c228d2c580b58c98c8e397cfdfb5305800fdc676de'],
   ['work-address-lifecycle-v1', '4057be5cb9790c3aa94c846707224cbe7c211f1eb3b3f17f03ecb3b039715134'],
-  ['work-author-credit-v1', '40f7566879e80c782d418972aec38b5c1699ee0727c8eb56c128b719c606eb4a'],
+  ['work-author-credit-v1', 'c24cb44e45b1b096f5a26862e4fe6ecd1aa862db2af26c33f1a6cb624bf1e732'],
   ['work-derivation-unresolved-v1', 'd47d816b777674c9142e2b7b3238f6728d4e89a072268a46acc0303cb992ad52'],
   ['work-derivation-v1', '27e4e0f2871f58bd1b7434dff809342721109220daec1b5b0f817da8abf176df'],
   ['work-reference-block-v1', 'c72c3a6b828632aeddc1a3078dead4dd0dfd0f989fca550530ad850dbcb9b9a0'],

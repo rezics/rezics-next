@@ -23,19 +23,6 @@ the boundary. Exact versions, order, unknown authorship, truthful credit, rights
 evidence, private, refused and revoked states, idempotent recovery and bounded
 cost are preserved.
 
-## Source adoption and credit
-
-Credit is split by provider and role. External credit adoption accepts only
-Open Library author occurrences, a SQL constraint and SHACL shape enforce it, a
-separate native Agent owner repeats admission and revision, and public and
-discovery readers recognise each representation and filter roles
-(`source/author-credit.ts`, `work/author-credit.ts`, `profiles/credits.ts`,
-`query/templates/work-credits.rq`, `discovery/credits.ts`). The native credit
-owner should accept either a native Agent or a provider-qualified external
-reference, with admitted role vocabulary, keeping source-reported and confirmed
-status apart. Proof: a non-Open-Library contributor with a non-author role
-appears in public and discovery reads.
-
 ## Acceptance evidence
 
 A product row passing is not evidence for this page: each repair reports its own
