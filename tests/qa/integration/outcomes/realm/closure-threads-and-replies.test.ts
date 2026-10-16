@@ -1,3 +1,6 @@
+import '../../../../../apps/web/tests/support/official-package-fixture.ts';
+import { closureThreadsRoute } from '../../../../../apps/web/features/realm/realm-closure-threads-recorded-page.tsx';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { recordJapaneseReads } from '../../../support/recorded-locale-visit.ts';
 import { recordRealmDiscussion } from '../../../support/realm-discussion-recording.ts';
@@ -209,7 +212,7 @@ beforeAll(async () => {
 afterAll(async () => {
   globalThis.fetch = originalFetch;
   try { await recording.publish(); }
-  finally { await closed?.close(); }
+  finally { await closed?.close(); await live?.close(); }
 });
 
 function paths(realm: string, target: Work, first: Reply, child: Reply, person: PersonaSession) {
@@ -336,6 +339,28 @@ async function productionVisit(name: PersonaName) {
   // Proxy sets SPACE_MISSING_HEADER: metadata and discussionView stop before
   // Realm frame, thread, reply and command clients can send anything further.
   if (page.kind !== 'missing') throw new Error(`Closed discussion reached ${page.kind}`);
+  for (const [entry, realm, thread] of [
+    ['closed-list', closed.realm], ['closed-thread', closed.realm, opener.reply],
+    ['closed-descendant', closed.realm, descendant.reply], ['absent-list', absentRealm],
+    ['live-list', live.realm], ['live-thread', live.realm, liveOpener.reply],
+  ] as const) {
+    let index = 0;
+    const fetcher = (async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const headers = new Headers(init?.headers);
+      headers.delete('authorization');
+      const caller = init?.credentials === 'same-origin' ? person : closed.visitor;
+      return recording.session(name, caller)(`${entry}-${++index}`, init?.method ?? 'GET',
+        url.pathname.replace(/^\/api\/main/, '') + url.search, undefined, undefined,
+        { headers: Object.fromEntries(headers) });
+    }) as typeof fetch;
+    await closureThreadsRoute(fetcher, name !== 'visitor', short(realm), thread && short(thread));
+    if (entry.startsWith('live') && person.actingSubject) await mainRelationships(person.actingSubject,
+      { origin: 'https://recorded.invalid/api/main', fetch: fetcher }).state(realm, 'realm');
+  }
+  await recording.session(name, person)('live-thread-identity', 'GET',
+    `${root(live)}/threads/${short(liveOpener.reply)}?sort=best&${acting(person)}`);
+
 }
 
 async function qualify(name: PersonaName) {
