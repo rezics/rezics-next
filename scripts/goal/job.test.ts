@@ -155,21 +155,22 @@ test('a stalled sequence command times out, kills its process group and wakes wi
     [process.execPath, '-e', 'console.log("first passed")'],
     [process.execPath, '-e', `await Bun.write(${JSON.stringify(ready)}, String(process.pid)); await Bun.sleep(30000)`],
     [process.execPath, '-e', `await Bun.write(${JSON.stringify(remaining)}, 'ran')`],
-  ]), 1, 500);
+  ]), 1, 3000); // Include the cold executor import before the command's own wait.
   const store = new JobStore(jobDirectory(f.cwd));
   try {
     await until(() => existsSync(ready));
     const stalled = processIdentity(Number(readFileSync(ready, 'utf8')))!;
-    await until(() => store.all()[0]!.phase === 'woken' && existsSync(f.wakes));
+    await until(() => store.all()[0]!.phase === 'woken' && existsSync(f.wakes), 10_000);
     await until(() => !processAlive(stalled));
     await f.pass();
     const wakes = readFileSync(f.wakes, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { args: string[] });
     expect(wakes).toHaveLength(1);
     expect(store.all()[0]!.code).toBe(124);
+    expect(store.all()[0]!.resultClass).toBe('timeout');
     expect(wakes[0]!.args.at(-1)).toContain('timed out');
     expect(existsSync(remaining)).toBe(false);
   } finally { store.close(); }
-});
+}, 20_000);
 
 test('a lost sequence owner fails the active command and wakes without starting the remaining commands', async () => {
   const f = processFixture(); const ready = join(f.cwd, 'ready'); const remaining = join(f.cwd, 'must-not-run');
