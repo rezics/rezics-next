@@ -4,7 +4,7 @@ import { realmActor, realmIdPattern, realmManager, realmTransaction } from './re
 import { RealmAdminDenied, RealmAdminInvalid, RealmAdminStale } from '../realm-admin/contract.ts';
 import { visibleNames } from '../disclosure/name-policy.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
-import { DisclosureStore, disclosurePoolReader } from '../disclosure/read.ts';
+import { DisclosureStore, disclosurePoolReader, resolveDisclosureSelections } from '../disclosure/read.ts';
 import { PersonPreferencesStore } from '../preferences/store.ts';
 import { readRealmPolicy } from '../space/policy.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
@@ -52,8 +52,10 @@ export class AccessRealmRoster {
         page.map(row => row.member), disclosureViewer(principal)) : new Set<string>();
       // Publication and listing consent do not override a completed closure.
       // Reuse the exact Realm head already read within the two-graph-read cap.
-      const decisions = await this.disclosure.read([{ owner: 'graph', resource: realm,
-        component: 'record', revision: end.realmRevision, context: realm }], disclosureViewer(principal), 'read', client);
+      const selections = await resolveDisclosureSelections(this.env, [{ owner: 'graph', resource: realm,
+        component: 'record', revision: end.realmRevision, context: realm }]);
+      const decisions = await this.disclosure.read(selections.map(selection => ({ ...selection.target,
+        ancestry: selection.ancestry })), disclosureViewer(principal), 'read', client);
       if (decisions.length !== 1) throw new Error('Realm disclosure is incomplete');
       if (decisions[0] !== 'visible') throw new RealmAdminDenied('Realm is unavailable');
       return { items: page.map(row => ({ agent: row.member,
