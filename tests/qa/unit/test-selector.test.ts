@@ -14,16 +14,17 @@ test('explicit web, Accounts and shared UI stories wait for host admission befor
     const expected = selectTestCommand(args);
     let release!: () => void;
     const waiting = new Promise<void>(done => { release = done; });
-    let requested = false;
+    let admitted!: () => void;
+    const requested = new Promise<void>(done => { admitted = done; });
     const launches: [string, string[]][] = [];
     const result = dispatchTest(args, { deadline: 1234, env: { REZICS_STACK_PROFILE: 'qa' }, admission: async (need, options) => {
       expect(need).toEqual({ vm: 0, host: 4 * GiB, hostReserve: 8 * GiB, vmReserve: 0 });
       expect(options.deadline).toBe(1234);
-      requested = true;
+      admitted();
       await waiting;
     }, runner: async command => { launches.push(command); return 7; } });
-    await Promise.resolve();
-    expect(requested).toBe(true);
+    // Preflight and profile discovery may await before admission is requested.
+    await Promise.race([requested, result.then(() => { throw new Error('Launch finished before admission'); })]);
     expect(launches).toEqual([]);
     release();
     expect(await result).toBe(7);
