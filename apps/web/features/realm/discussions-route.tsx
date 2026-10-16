@@ -4,6 +4,7 @@ import { parseThreadSort, parseThreadWindow } from '../feed/thread.ts';
 import { DiscussionCollection, DiscussionFrame, discussionView, readerMain, realmPathOf, type Search } from './discussion-page.tsx';
 import { DiscussionBoards, DiscussionListContent, DiscussionListSkeleton } from './discussion-content.tsx';
 import { discussionListHref, realmDiscussionReads, type DiscussionQuery } from './discussion-read.ts';
+import type { RealmReadClient } from './read.ts';
 import type { RealmView } from './realm-page.tsx';
 import { RealmRankingBody } from './ranking-route.tsx';
 import { parseCursor } from './route.ts';
@@ -27,9 +28,9 @@ async function Threads({ view, query, feed }: { view: RealmView; query: Discussi
   </>;
 }
 
-export async function RealmDiscussionsRoute({ params, searchParams }: RealmRouteProps) {
+export async function RealmDiscussionsRoute({ params, searchParams }: RealmRouteProps, client?: RealmReadClient) {
   const [{ locale, realm }, search] = await Promise.all([params, searchParams]);
-  const resolved = await discussionView(locale, realm, search as Search);
+  const resolved = await discussionView(locale, realm, search as Search, '', client);
   if ('page' in resolved) return resolved.page;
   const { view, feed } = resolved;
   const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;

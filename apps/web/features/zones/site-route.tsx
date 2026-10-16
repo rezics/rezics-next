@@ -49,6 +49,7 @@ import { realmDiscovery } from '../address/space-read.ts';
 import { EntityPage } from '../entity-page/entity-page.tsx';
 import type { SiteMountCut, SitePresentationCut } from './site-cuts.ts';
 import { MemberList } from './site-pages.tsx';
+import { ZoneEditSiteLink } from '../zone-editor/edit-site-link.tsx';
 import { showcaseEditorOpen, ZoneEditLink } from '../zone-editor/edit-link.tsx';
 import { ZoneSiteRecordedCredit } from './zone-site-recorded-page.tsx';
 import { mapZoneSiteHome, zoneSiteRouteMissing } from './zone-site-recorded-page.ts';
@@ -202,7 +203,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps, cli
       reference={resolved.reference} />;
   if (resolved.kind === 'join')
     return privateJoinPage(resolved.page, locale, siteHref(locale, space, path));
-  if (!resolved.realm) return standaloneSite(resolved, locale, path, search, space);
+  if (!resolved.realm) return standaloneSite(resolved, locale, path, search, space, client);
   const communityProps = {
     params: Promise.resolve({ locale, realm: space }),
     searchParams: Promise.resolve(search),
@@ -443,8 +444,9 @@ async function standaloneSite(
   path: readonly string[],
   search: Search,
   space: string,
+  client?: RealmReadClient,
 ): Promise<ReactNode> {
-  if (!path.length) return publishedIndependentZoneHome(resolved, locale, space);
+  if (!path.length) return publishedIndependentZoneHome(resolved, locale, space, client);
   const [route, presentation, messages, workMessages] = await Promise.all([
     readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search)),
     readCompletePresentation(resolved.zone),
@@ -540,15 +542,20 @@ async function publishedIndependentZoneHome(
   resolved: Extract<SiteResolution, { kind: 'site' }>,
   locale: import('../../i18n/define.ts').UiLocale,
   space: string,
+  client?: RealmReadClient,
 ): Promise<ReactNode> {
   const [session, messages, zoneMessages] = await Promise.all([
-    readSession(),
+    client ? null : readSession(),
     getMessages('realm', locale),
     getMessages('zones', locale),
   ]);
-  const actingSubject = session?.agent.status === 'selected' ? session.agent.agent.iri : undefined;
-  const token = actingSubject ? (await cookies()).get(ACCESS_COOKIE)?.value : undefined;
-  const visit = await readIndependentZoneHome(independentZoneHomeBoundary({
+  const actingSubject = client?.actingSubject ?? (session?.agent.status === 'selected' ? session.agent.agent.iri : undefined);
+  const token = actingSubject && !client ? (await cookies()).get(ACCESS_COOKIE)?.value : undefined;
+  const visit = await readIndependentZoneHome(independentZoneHomeBoundary(client ? {
+    main: client.main, actingSubject, editorClient: client.personal,
+    production: { resolveSite: (space, locale) => realmFrameReads({ main: client.main }).resolveSite(space, locale),
+      readCompletePresentation: zone => realmFrameReads({ main: client.main }).readCompletePresentation(zone) },
+  } : {
     production: { resolveSite, readCompletePresentation },
     actingSubject,
     editorOpen: actingSubject ? async (zoneId, subject) => {
@@ -563,6 +570,11 @@ async function publishedIndependentZoneHome(
       : null;
   }
   if (visit.kind !== 'published' && visit.kind !== 'empty') notFound();
+  if (client) return independentZoneSiteFrame(independentZoneFrameModel(visit.presentation, visit.zone,
+    visit.zoneId, visit.ref, locale, messages.home, parseTheme(undefined)), undefined,
+    visit.editor?.ok ? <ZoneEditSiteLink space={visit.ref}>{(await getMessages('manage', locale)).editSite}</ZoneEditSiteLink> : null,
+    independentZoneHomeBody({ mapped: visit.mapped, presentation: visit.presentation, zone: visit.zone,
+      zoneId: visit.zoneId, ref: visit.ref, locale, messages: zoneMessages }));
   return <StandaloneZoneSiteFrame zone={visit.zone} zoneId={visit.zoneId} address={visit.ref} locale={locale}
     messages={messages} presentation={visit.presentation}>
     {independentZoneHomeBody({

@@ -54,10 +54,11 @@ export async function discussionView(
   ref: string,
   search: Search,
   rest = '',
+  client?: RealmReadClient,
 ): Promise<{ view: RealmView; locale: UiLocale; feed: FeedMessages } | { page: ReactNode }> {
   if (!isUiLocale(locale)) notFound();
   const [view, feed] = await Promise.all([
-    loadRealmView(ref, locale, search),
+    loadRealmView(ref, locale, search, 'community', client),
     getMessages('feed', locale),
   ]);
   if (view.kind === 'missing') notFound();

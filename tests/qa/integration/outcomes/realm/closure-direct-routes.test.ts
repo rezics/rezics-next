@@ -276,7 +276,7 @@ async function reads(name: PersonaName) {
   for (let index = 0; index < closedPaths.length; index++) {
     const path = closedPaths[index]!;
     const control = before.get(`${name}:${path}`)!;
-    const liveAnswer = await observe(person, livePaths[index]!);
+    const liveAnswer = await recorded(`live-${['realm-header', 'realm-works', 'realm-decisions', 'realm-decision', 'realm-zone'][index]}`, livePaths[index]!);
     if (control.status !== 200 || liveAnswer.status !== 200)
       failures.push(`Live control GET ${path}: before ${control.status} ${control.body}; independent ${liveAnswer.status} ${liveAnswer.body}`);
     const label = ['realm-header', 'realm-works', 'realm-decisions', 'realm-decision', 'realm-zone'][index]!;
@@ -298,11 +298,11 @@ async function reads(name: PersonaName) {
   concealed(failures, teaser, await observe(privateRealm[name], teaser),
     await observe(privateRealm[name], `/v1/realms/${short(absentRealm)}/join-page?${acting(privateRealm[name])}`));
   // A Realm adoption is not ancestry for this independent public publication.
-  const independent = await observe(person, `/v1/works/${short(adopted.work)}?${acting(person)}`);
+  const independent = await recorded('independent-work', `/v1/works/${short(adopted.work)}?${acting(person)}`);
   if (independent.status !== 200)
     failures.push(`Independent GET /v1/works/${short(adopted.work)}: ${independent.status} ${independent.body}`);
   const publicationPath = `/v1/main-versions/${short(adopted.mainVersion)}/selection`;
-  const publication = await observe(person, publicationPath);
+  const publication = await recorded('independent-publication', publicationPath);
   if (publication.status !== 200 || (JSON.parse(publication.body) as { body?: string }).body !==
       'An original fixture story by the owner Person, published independently.')
     failures.push(`Independent publication GET ${publicationPath}: ${publication.status} ${publication.body}`);
@@ -435,6 +435,11 @@ async function productionVisit(name: PersonaName) {
         ...(resolved.realm ? [frame.resolveRealm(key, 'en', 'site'),
           ...(person.actingSubject ? [readSession()] : [])] : []),
       ]);
+      if (!resolved.realm && person.actingSubject) {
+        const state = await named(`${label}-site-session-agent`, () => main.v1.me['session-agent'].get());
+        const subject = state.data?.sessionAgent.eligible ? state.data.sessionAgent.actingSubject : undefined;
+        if (subject) await named(`${label}-site-editor`, () => main.v1.zones({ id: resolved.zone })['showcase-editor'].get({ query: { actingSubject: subject } }));
+      }
     }
     await entry('home', short(closed.realm));
     await entry('decisions', short(closed.realm));

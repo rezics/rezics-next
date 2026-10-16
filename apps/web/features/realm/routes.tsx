@@ -180,8 +180,8 @@ function failure(view: RealmView, tab: CommunityPage, reason: ReadFailure, refer
   );
 }
 
-export function RealmHomeRoute(props: RealmRouteProps) {
-  return RealmDiscussionsRoute(props);
+export function RealmHomeRoute(props: RealmRouteProps, client?: RealmReadClient) {
+  return RealmDiscussionsRoute(props, client);
 }
 
 export function SiteHomeRoute(props: RealmRouteProps, loadView?: typeof loadRealmView) {
@@ -375,7 +375,7 @@ export function RealmBrowseRoute(
   );
 }
 
-export function RealmDecisionsRoute(props: RealmRouteProps) {
+export function RealmDecisionsRoute(props: RealmRouteProps, client?: RealmReadClient) {
   return realmRoute(props, 'decisions', async (view, locale, search) => {
     const decision = parseDecision(search);
     const works = await readRealmWorks(view.context.realm, locale);
@@ -411,7 +411,7 @@ export function RealmDecisionsRoute(props: RealmRouteProps) {
         decisions={page.data.items.map((item) => zoneDecision(item, view.context, titled))}
       />
     );
-  });
+  }, false, undefined, client);
 }
 
 export function RealmAboutRoute(props: RealmRouteProps) {
