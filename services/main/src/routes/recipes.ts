@@ -752,6 +752,9 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           coverage: { scope: `recipe-file-import-v1:${intent}`, complete: true, omittedFields: [] },
           rightsEvidence: { basis: 'unknown', note: 'User supplied this Recipe file for the Work.' },
         });
+        await work.sourceIntake.bindImportCustody(principalId, retained.observation.observation, {
+          resourceId: header.owner, revisionId: query.expectedHead,
+        });
         const parsed = importRecipe(accepted.source, retained.observation.observation);
         const written = await writeRecipeImport(work, request, { structure,
           expectedHead: query.expectedHead, actingSubject: query.actingSubject,

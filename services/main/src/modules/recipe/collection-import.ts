@@ -65,6 +65,9 @@ export async function importCollectionRecipe(deps: MainWorkDependencies, request
     title: { value: recipe.title, language: recipe.language }, language: recipe.language,
     document: recipe.document, privateImport: { sourceObservation: retained.observation.observation,
       sourceDigest: retained.observation.byteDigest! } }, step('content'));
+  await deps.sourceIntake.bindImportCustody(principalId, retained.observation.observation, {
+    resourceId: post.post, revisionId: post.revisionId, contentRevisionId: post.revisionId,
+  });
   let revision = composition.revision;
   for (let offset = 0; offset < recipe.parsed.ingredients.length; offset += 16) {
     const result = await changeAdmittedComposition(deps.environment, deps.account, deps.access, request,
@@ -143,6 +146,9 @@ export async function importCollectionRecipe(deps: MainWorkDependencies, request
         document: { ...recipe.document, doc: { type: 'doc', content: [...recipe.document.doc.content!, ...imageBlocks] } } });
     if (!saved.revisionId) throw new ReaderImportUnavailable('Recipe photo Content is pending');
     contentRevision = saved.revisionId;
+    await deps.sourceIntake.bindImportCustody(principalId, retained.observation.observation, {
+      resourceId: post.post, revisionId: contentRevision, contentRevisionId: contentRevision,
+    });
   }
   const instruction = await changeAdmittedComposition(deps.environment, deps.account, deps.access, request,
     { structure, actingSubject: actor, expectedHead: revision,

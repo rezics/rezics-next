@@ -103,18 +103,6 @@ occurrences. Fixed releases and sealed exports accept only VNDB evidence shapes
 should verify a provider-neutral external release reference. Proof: a non-Recipe
 composition exports past 255 pins, and a non-VNDB release link seals and exports.
 
-## Erasure custody
-
-Source byte erasure finds imported files only under the `rezics/recipe-file`
-provider (`services/content/migrations/2131_recipe_file_source_erasure.sql`,
-`erasure/content.ts`, `erasure/reconcile.ts`). Paprika and Mela collection
-imports keep their bytes under their own provider, so erasure does not remove
-them, and restore does not prove their absence. Every import should record an
-owner-validated binding from observation to resource and revision, and
-destruction, the immutability guard and the restore proof should use that one
-binding. Proof: erasure removes a collection import's bytes and restore proves
-they stay absent.
-
 ## Acceptance evidence
 
 Shared grant and disclosure obligations are listed under the Recipe hub row

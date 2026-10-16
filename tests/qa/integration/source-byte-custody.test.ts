@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import sharp from 'sharp';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -9,16 +10,19 @@ import { Pool } from 'pg';
 import { personaSessions, type PersonaSessions } from '../support/personas.ts';
 import { grantPersonaFixtureAuthority } from '../support/persona-fixture-authority.ts';
 import { startPostgresCluster } from '../support/postgres-cluster.ts';
+import { assertReplayedCommentSourcesTerminal } from '../../../services/main/src/modules/work/content-recovery-coverage.ts';
 import { applyContentErasure } from '../../../services/main/src/modules/erasure/content.ts';
 import type { RecipeCollectionOutcome } from '../../../services/main/src/modules/recipe/collection-import.ts';
 
 let sessions: PersonaSessions;
 let content: Pool;
 let access: Pool;
+let image: string;
 beforeAll(async () => {
   sessions = await personaSessions('public'); // Starts the real composeMain composition.
   content = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
   access = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
+  image = (await sharp(randomBytes(640 * 480 * 3), { raw: { width: 640, height: 480, channels: 3 } }).png().toBuffer()).toString('base64');
 }, 240_000);
 afterAll(async () => { await content?.end(); await access?.end(); await sessions?.close(); });
 const short = (value: string) => value.slice(-36);
@@ -33,8 +37,8 @@ for (const provider of ['paprika', 'mela'] as const) {
     const owner = sessions.owner;
     const marker = `PRIVATE-SOURCE-${randomUUID()}`;
     const original = provider === 'paprika'
-      ? { uid: randomUUID(), name: marker, ingredients: '1 cup water', directions: 'Boil.', notes: marker }
-      : { id: randomUUID(), title: marker, ingredients: '1 cup water', instructions: 'Boil.', notes: marker };
+      ? { uid: randomUUID(), name: marker, ingredients: '1 cup water', directions: 'Boil.', notes: marker, photo_data: image }
+      : { id: randomUUID(), title: marker, ingredients: '1 cup water', instructions: 'Boil.', notes: marker, images: [image] };
     const bytes = Buffer.from(JSON.stringify(original));
     const format = provider === 'paprika' ? 'paprikarecipes' : 'melarecipe';
     const upload = () => owner.main('POST', `/v1/recipes/file-imports?actingSubject=${encodeURIComponent(owner.actingSubject!)}&format=${format}`,
@@ -43,6 +47,7 @@ for (const provider of ['paprika', 'mela'] as const) {
       headers: { 'content-type': 'application/octet-stream' } });
     const imported = (await json<{ items: RecipeCollectionOutcome[] }>(upload())).items[0]!;
     expect(imported.status).toBe('imported');
+    expect(imported.photos[0]?.use).toBeTruthy();
     expect((await json<{ items: RecipeCollectionOutcome[] }>(upload())).items[0]).toEqual({ ...imported, replayed: true });
     const observation = short(imported.sourceObservation), revisionId = imported.content.revisionId;
     const read = (pool: Pool) => pool.query(`SELECT retention, raw_bytes, byte_digest, rights_evidence
@@ -82,13 +87,17 @@ for (const provider of ['paprika', 'mela'] as const) {
         [revisionId, erased.erasureId, erased.erasureEpoch]);
       const open = () => restoredPool.query(`SELECT revision_id::text FROM verification.open_evidence_source_revisions($1::uuid[])`, [[revisionId]]);
       expect((await open()).rows).toEqual([{ revision_id: revisionId }]);
+      const terminal = () => assertReplayedCommentSourcesTerminal(restoredPool, [revisionId], erased.erasureId, erased.erasureEpoch);
+      await expect(terminal()).rejects.toThrow('erased source selectors remain');
       const replay = () => applyContentErasure(restoredPool, { preservationAccess: access, resourceId: imported.content.post,
         revisionIds: [revisionId], erasureId: erased.erasureId, erasureEpoch: erased.erasureEpoch });
       await replay();
       expect((await open()).rows).toEqual([]);
       expect(await read(restoredPool)).toEqual(await read(content));
+      await terminal();
       await replay();
       expect((await open()).rows).toEqual([]);
+      await terminal();
     } finally {
       await restoredPool.end(); restored.remove(); rmSync(directory, { recursive: true, force: true });
     }

@@ -287,6 +287,68 @@ export class SourceIntakeStore {
     } finally { if (!borrowed) client.release(); }
   }
 
+  /** Internal import-owner handoff, after the adapter resolves its admitted
+   * resource and exact revision. Content validates its own provenance in SQL;
+   * Structure callers supply the owner and source revision they just admitted.
+   * An ordinary retained Source observation is independent evidence until this
+   * handoff explicitly places it in the importing resource's custody. */
+  async bindImportCustody(principalId: string, observation: string, binding: {
+    resourceId: string; revisionId: string; contentRevisionId?: string;
+  }): Promise<void> {
+    const observationId = observation.replace('https://rezics.com/id/', '');
+    if (!UUID.test(principalId) || !UUID.test(observationId)
+      || !binding.resourceId || !binding.revisionId
+      || (binding.contentRevisionId && (!UUID.test(binding.contentRevisionId)
+        || binding.revisionId !== binding.contentRevisionId))) {
+      throw new SourceIntakeInvalid('invalid source import custody');
+    }
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
+      // Match erasure's revision-before-observation lock order. A retry after
+      // interrupted import can bind a tombstone, then clear bytes under its
+      // original journal identity in this same transaction.
+      if (binding.contentRevisionId) await client.query(
+        'SELECT id FROM content.revision WHERE id = $1 FOR UPDATE', [binding.contentRevisionId]);
+      const owned = (await client.query<{ source_revision: string | null }>(
+        'SELECT source_revision FROM source.observation WHERE id = $1 AND principal_id = $2 FOR UPDATE',
+        [observationId, principalId])).rows[0];
+      if (!owned || (!binding.contentRevisionId && owned.source_revision !== binding.revisionId)) {
+        throw new SourceIntakeConflict('source custody differs from the admitted import');
+      }
+      if ((await client.query(`SELECT 1 FROM source.import_custody
+        WHERE observation_id = $1 AND resource_id <> $2 LIMIT 1`, [observationId, binding.resourceId])).rowCount) {
+        throw new SourceIntakeConflict('source import custody changed intent');
+      }
+      await client.query(`INSERT INTO source.import_custody
+        (observation_id, resource_id, revision_id, content_revision_id)
+        SELECT $1,$2,$3,$4 WHERE NOT EXISTS (
+          SELECT 1 FROM source.import_custody WHERE observation_id = $1 AND revision_id = $3)
+        ON CONFLICT (observation_id, revision_id) DO NOTHING`,
+      [observationId, binding.resourceId, binding.revisionId, binding.contentRevisionId ?? null]);
+      const custody = (await client.query<{ resource_id: string; revision_id: string; content_revision_id: string | null }>(
+        'SELECT resource_id, revision_id, content_revision_id FROM source.import_custody WHERE observation_id = $1 AND revision_id = $2',
+        [observationId, binding.revisionId])).rows[0];
+      if (!custody || custody.resource_id !== binding.resourceId || custody.revision_id !== binding.revisionId
+        || custody.content_revision_id !== (binding.contentRevisionId ?? null)) {
+        throw new SourceIntakeConflict('source import custody changed intent');
+      }
+      if (binding.contentRevisionId) {
+        const tombstone = (await client.query<{ erasure_id: string; erasure_epoch: string }>(
+          'SELECT erasure_id, erasure_epoch::text FROM content.revision_erasure WHERE revision_id = $1',
+          [binding.contentRevisionId])).rows[0];
+        if (tombstone) await client.query('SELECT verification.erase_evidence_sources($1::uuid[], $2::uuid, $3::bigint)',
+          [[binding.contentRevisionId], tombstone.erasure_id, tombstone.erasure_epoch]);
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { if (!borrowed) client.release(); }
+  }
+
   async read(principalId: string, observationId: string): Promise<StagedSourceObservation | null> {
     if (!UUID.test(principalId) || !UUID.test(observationId)) {
       throw new SourceIntakeInvalid('invalid source identity');

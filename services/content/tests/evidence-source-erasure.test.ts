@@ -74,6 +74,8 @@ async function retainedRecipeFile(pool: Pool, principal: string, work: string, b
     retention, raw_bytes, byte_digest, coverage, rights_evidence)
     VALUES ($1, $2, $3, 'work-head', 'application/ld+json', 'retained', $4, $5, '{}', '{}')`,
   [id, record, principal, bytes, byteDigest]);
+  await pool.query(`INSERT INTO source.import_custody (observation_id, resource_id, revision_id)
+    VALUES ($1,$2,'work-head')`, [id, work]);
   return id;
 }
 
