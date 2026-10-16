@@ -107,23 +107,27 @@ async function storyStates(name: PersonaName) {
     if (!empty.ok) throw new Error('Empty ranking read failed');
     expect(empty.data.items).toEqual([]);
     expect(empty.data.nextCursor).toBeNull();
-    await captureVisit(stateRealm, name, `visit-${sort}-${window}-empty`, { sort, window });
     expect(await storyRanking(absentRealm, name, sort, window, `${sort}-${window}-missing`, undefined, 404))
       .toMatchObject({ ok: false, failure: 'missing' });
-    await captureVisit(absentRealm, name, `visit-${sort}-${window}-missing`, { sort, window });
     const invalid = await storyRanking(publicRealm, name, sort, window,
       `${sort}-${window}-invalid-cursor`, 'contract:another-viewer:page-2', 400);
     expect(invalid).toMatchObject({ ok: false, failure: 'invalid' });
-    await captureVisit(publicRealm, name, `visit-${sort}-${window}-invalid-cursor`, {
-      sort, window, cursor: 'contract:another-viewer:page-2',
-    });
+    await Promise.all([
+      captureVisit(stateRealm, name, `visit-${sort}-${window}-empty`, { sort, window }),
+      captureVisit(absentRealm, name, `visit-${sort}-${window}-missing`, { sort, window }),
+      captureVisit(publicRealm, name, `visit-${sort}-${window}-invalid-cursor`, {
+        sort, window, cursor: 'contract:another-viewer:page-2',
+      }),
+    ]);
   }
   await captureVisit(publicRealm, name, 'visit-ranking-module', { sort: 'best', window: 'all' }, true);
   await captureVisit(stateRealm, name, 'visit-ranking-module-empty', { sort: 'best', window: 'all' }, true);
   if (name === 'visitor') for (const locale of uiLocales) {
     if (locale === 'en') continue;
-    await captureVisit(publicRealm, name, `visit-best-all@${locale}`, { sort: 'best', window: 'all' }, false, locale);
-    await captureVisit(publicRealm, name, `visit-ranking-module@${locale}`, { sort: 'best', window: 'all' }, true, locale);
+    await Promise.all([
+      captureVisit(publicRealm, name, `visit-best-all@${locale}`, { sort: 'best', window: 'all' }, false, locale),
+      captureVisit(publicRealm, name, `visit-ranking-module@${locale}`, { sort: 'best', window: 'all' }, true, locale),
+    ]);
   }
   for (const interval of ['day', 'week', 'month'] as const) {
     const main = recordedMainClient(recording, name, person, `ranking-module-${interval}`);
