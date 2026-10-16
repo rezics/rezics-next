@@ -60,7 +60,7 @@ for (const persona of personas) {
       const { realm, query } = requestOf(sample);
       // Equality includes titles and language, Work/revision identity, native credits,
       // source position, exact/lower-bound counts and the complete opaque cursor.
-      expect(await readZoneBrowse(realm, 'en', query, main)).toEqual({ ok: true, data: sample.answer });
+      expect(await readZoneBrowse(realm, 'en', query, main)).toEqual({ ok: true, data: sample.answer as ZoneBrowsePage });
     }
     expect(JSON.stringify(record.personas[persona])).toBe(before);
   });
@@ -77,6 +77,7 @@ for (const persona of personas) {
     const client = mainApiWithToken(undefined, { fetcher: replay.fetcher });
     const page = await readZoneBrowse(realm, 'en', query, client);
     expect(page).toEqual({ ok: false, failure: 'invalid', status: sample.status, problem: sample.answer });
+    if (page.ok) throw new Error('The recorded unsupported query must fail');
     const mapped = buildBrowsePage({ page, facets: await readFacets(client), base: '/en/z/games/browse',
       zoneName: 'Games', state: parseBrowseState({ sort: 'relevance' }),
       context: { realm, ref: realm, locale: 'en' }, locale: 'en', messages: zoneMessagesFor('en') });
