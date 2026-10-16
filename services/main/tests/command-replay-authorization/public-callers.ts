@@ -23,6 +23,10 @@ export function discoverPublicCommands(root: string) {
   const program = ts.createProgram(files, { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.Preserve,
     moduleResolution: ts.ModuleResolutionKind.Bundler, allowImportingTsExtensions: true, skipLibCheck: true });
   const checker = program.getTypeChecker();
+  const stringValue = (node: ts.Node) => {
+    const type = checker.getTypeAtLocation(node);
+    return type.isStringLiteral() ? type.value : undefined;
+  };
   const functionLike = (node: ts.Node): node is ts.FunctionLikeDeclaration =>
     ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node) || ts.isArrowFunction(node)
       || ts.isFunctionExpression(node);
@@ -84,16 +88,24 @@ export function discoverPublicCommands(root: string) {
     const inspect = (node: ts.Node) => {
       if (ts.isPropertyAssignment(node) && ts.isStringLiteral(node.name) && node.name.text.startsWith('/v1/')
         && ts.isObjectLiteralExpression(node.initializer)) {
-        for (const method of node.initializer.properties) if (ts.isPropertyAssignment(method)
-          && ts.isObjectLiteralExpression(method.initializer)) {
-          const exposure = method.initializer.properties.find(prop => ts.isPropertyAssignment(prop)
-            && prop.name.getText() === 'exposure');
-          if (exposure && ts.isPropertyAssignment(exposure) && ts.isStringLiteral(exposure.initializer)) {
-            const key = method.initializer.properties.find(prop => ts.isPropertyAssignment(prop)
-              && prop.name.getText() === 'idempotencyKey');
+        for (const method of node.initializer.properties) if (ts.isPropertyAssignment(method)) {
+          const policy = checker.getTypeAtLocation(method.initializer);
+          const exposure = policy.getProperty('exposure');
+          const exposureType = exposure && checker.getTypeOfSymbolAtLocation(exposure, method.initializer);
+          const inlineExposure = ts.isObjectLiteralExpression(method.initializer)
+            ? method.initializer.properties.find(prop => ts.isPropertyAssignment(prop)
+              && prop.name.getText() === 'exposure') : undefined;
+          const exposureValue = inlineExposure && ts.isPropertyAssignment(inlineExposure)
+            && ts.isStringLiteral(inlineExposure.initializer) ? inlineExposure.initializer.text
+            : exposureType?.isStringLiteral() ? exposureType.value : undefined;
+          if (exposureValue) {
+            const key = policy.getProperty('idempotencyKey');
+            const keyDeclaration = key?.valueDeclaration;
             contracts.set(`${method.name.getText().toUpperCase()} ${normalize(node.name.text)}`, {
-              exposure: exposure.initializer.text,
-              idempotencyKey: !!key && ts.isPropertyAssignment(key) && key.initializer.kind !== ts.SyntaxKind.FalseKeyword,
+              exposure: exposureValue,
+              idempotencyKey: !!key && !(keyDeclaration && ts.isPropertyAssignment(keyDeclaration)
+                && keyDeclaration.initializer.kind === ts.SyntaxKind.FalseKeyword)
+                && checker.typeToString(checker.getTypeOfSymbolAtLocation(key, method.initializer)) !== 'false',
             });
           }
         }
@@ -102,17 +114,24 @@ export function discoverPublicCommands(root: string) {
     };
     inspect(source);
     const routes = (node: ts.Node) => {
-      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
-        && ['post', 'put', 'patch', 'delete'].includes(node.expression.name.text)
-        && node.arguments[0] && ts.isStringLiteral(node.arguments[0])) {
-        const operation = `${node.expression.name.text.toUpperCase()} ${normalize(node.arguments[0].text)}`;
+      const method = ts.isCallExpression(node) && (ts.isPropertyAccessExpression(node.expression)
+        ? node.expression.name.text : ts.isElementAccessExpression(node.expression)
+          ? stringValue(node.expression.argumentExpression) : undefined);
+      const pathArgument = ts.isCallExpression(node) ? node.arguments[0] : undefined;
+      const path = pathArgument && (ts.isStringLiteral(pathArgument) || ts.isPropertyAccessExpression(pathArgument))
+        ? stringValue(pathArgument) : undefined;
+      if (ts.isCallExpression(node) && method && ['post', 'put', 'patch', 'delete'].includes(method) && path) {
+        const operation = `${method.toUpperCase()} ${normalize(path)}`;
         const contract = contracts.get(operation);
         if (contract?.exposure === 'public') {
           const handler = node.arguments.find(arg => functionLike(arg));
           const factory = node.arguments.at(-1);
+          const returnedHandlers = factory && ts.isCallExpression(factory)
+            ? checker.getTypeAtLocation(factory).getCallSignatures().flatMap(signature =>
+              signature.declaration && functionLike(signature.declaration) ? [signature.declaration] : []) : [];
           const callbacks = factory && ts.isCallExpression(factory)
             ? factory.arguments.flatMap(arg => functionLike(arg) ? [arg] : []) : [];
-          if (handler && functionLike(handler) || callbacks.length) {
+          if (handler && functionLike(handler) || returnedHandlers.length || callbacks.length) {
             const paths: string[][] = [];
             const reachableOwners: string[] = [];
             const visited = new Set<ts.Node>();
@@ -125,12 +144,12 @@ export function discoverPublicCommands(root: string) {
               for (const target of edges(current)) walk(target, next);
             };
             if (handler && functionLike(handler)) walk(handler, []);
-            else {
+            else if (callbacks.length) {
               // Factory callbacks establish owner reachability; the tracer cannot
               // prove that the returned handler invokes each saved-result branch.
               for (const callback of callbacks) walk(callback, []);
               paths.length = 0;
-            }
+            } else for (const returned of returnedHandlers) walk(returned, []);
             inventory.push({ operation, caller: relative(root, source.fileName), paths, reachableOwners,
               idempotencyKey: contract.idempotencyKey });
           } else inventory.push({ operation, caller: relative(root, source.fileName), paths: [], reachableOwners: [],

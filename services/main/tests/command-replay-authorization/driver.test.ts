@@ -275,12 +275,20 @@ test('discovery reads the contract key and saved-result path separately from non
   try {
     const routes = join(directory, 'services/main/src/routes');
     mkdirSync(routes, { recursive: true });
+    writeFileSync(join(routes, 'contract.ts'), `
+      const policy = { exposure: 'public', idempotencyKey: true } as const;
+      export const operation = { method: 'put', path: '/v1/contract', policy } as const;
+      export const privatePolicy = { exposure: 'platform:operators' } as const;
+    `);
     writeFileSync(join(routes, 'example.ts'), `
+      import { operation, privatePolicy } from './contract.ts';
       export const openApiOperations = {
         '/v1/saved': { post: { exposure: 'public', idempotencyKey: true } },
         '/v1/repeated': { put: { exposure: 'public' } },
         '/v1/factory': { post: { exposure: 'public', idempotencyKey: true } },
         '/v1/private': { post: { exposure: 'platform:operators' } },
+        '/v1/contract': { put: operation.policy },
+        '/v1/private-contract': { put: privatePolicy },
       };
       class Owner { saved() { return { replayed: true }; } repeated() { return { executed: true }; } }
       const owner = new Owner();
@@ -290,14 +298,21 @@ test('discovery reads the contract key and saved-result path separately from non
       const handler = (callback: () => unknown) => callback;
       app.post('/v1/factory', handler(() => owner.saved()));
       app.post('/v1/private', () => owner.saved());
+      const makeHandler = (owner: Owner) => () => owner.saved();
+      app[operation.method](operation.path, makeHandler(owner));
+      app.put('/v1/private-contract', makeHandler(owner));
     `);
     const inventory = discoverPublicCommands(directory);
-    expect(inventory.map(row => row.operation)).toEqual(['POST /v1/saved', 'PUT /v1/repeated', 'POST /v1/factory']);
+    expect(inventory.map(row => row.operation)).toEqual(['POST /v1/saved', 'PUT /v1/repeated', 'POST /v1/factory', 'PUT /v1/contract']);
     expect(inventory[0]!.idempotencyKey).toBe(true);
     expect(inventory[0]!.paths).toHaveLength(1);
     expect(inventory[1]!.idempotencyKey).toBe(false);
     expect(inventory[1]!.paths).toEqual([]);
     expect(inventory[1]!.reachableOwners).toContain('routes/example.ts#Owner.repeated');
     expect(inventory[2]!.reachableOwners).toContain('routes/example.ts#Owner.saved');
+    expect(inventory[2]!.paths).toEqual([]);
+    expect(inventory[3]!.idempotencyKey).toBe(true);
+    expect(inventory[3]!.paths).toHaveLength(1);
+    expect(inventory[3]!.reachableOwners).toContain('routes/example.ts#Owner.saved');
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });

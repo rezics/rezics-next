@@ -1,10 +1,11 @@
 import type { ReplayEntry } from './fixtures.ts';
+import { entries as recipeCollections } from './recipe-collections.entries.ts';
 
 export const entries: ReplayEntry[] = [];
 
 export const area = "media";
 export const moduleOwners = ["media", "resources", "recipes", "catalog"];
-export const replayEntries = entries;
+export const replayEntries = [...entries, ...recipeCollections];
 export const coveredOperations = replayEntries.map(entry => entry.operation);
 export const uncoveredOperations: string[] = [
   "POST /v1/media/publications",
