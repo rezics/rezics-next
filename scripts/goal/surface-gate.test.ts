@@ -92,6 +92,28 @@ test('surface selection reports every missing requirement on its own line', asyn
     .toContain('surface requires rows: naming outcomes proved on main');
 });
 
+test('a surface records its named row through the stack harness and an outcome failure blocks stories', async () => {
+  const f = fixture();
+  const outcome = `tests/qa/integration/outcomes/${f.row}.test.ts`;
+  const selected = await selectSurface(f.cwd, { ...f.brief, tests: [...f.brief.tests!, outcome] }, f.changed);
+  expect(selected?.refusals).toEqual([]);
+  expect(selected?.selection?.outcomes).toEqual([outcome]);
+  expect(selected?.selection?.units).not.toContain(outcome);
+  const result = await runSurfaceGate(f.cwd, selected!.selection!, { ...f, runner: async (command, cwd, log, env) => {
+    await f.runner(command, cwd, log, env);
+    return { code: command.includes(outcome) ? 1 : 0, output: 'outcome proof' };
+  } });
+  expect(result.code).toBe(1);
+  expect(result.checks.at(-1)?.name).toBe('tests');
+  expect(f.commands.filter(command => command.includes(outcome))).toEqual([['bun', 'scripts/qa/test.ts', outcome]]);
+  expect(f.commands.some(command => command.includes('apps/web/features/zones/catalogue.stories.tsx'))).toBe(false);
+  f.write('tests/qa/integration/outcomes/books/other.test.ts', 'export {};');
+  const unrelated = await selectSurface(f.cwd, { ...f.brief,
+    tests: [...f.brief.tests!, 'tests/qa/integration/outcomes/books/other.test.ts'] }, f.changed);
+  expect(unrelated?.selection).toBeUndefined();
+  expect(unrelated?.refusals.some(line => line.includes('books/other.test.ts'))).toBe(true);
+});
+
 test('a branch cannot prove its own row; absent, pending and missing-persona main declarations refuse', async () => {
   for (const state of ['absent', 'pending', 'missing']) {
     const f = fixture();
