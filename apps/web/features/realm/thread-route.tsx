@@ -12,13 +12,14 @@ import { mainApiWithToken } from '../api/main.ts';
 import {
   DiscussionFrame,
   discussionView,
+  discussionClient,
   readerMain,
   realmPathOf,
   replyModeOf,
   type Search,
 } from './discussion-page.tsx';
-import type { RealmView } from './realm-page.tsx';
-import { resolveRealm } from './read.ts';
+import type { RealmReplay, RealmView } from './realm-page.tsx';
+import { resolveRealm, type RealmReadClient } from './read.ts';
 import { parseAddressSegment } from '../address/path.ts';
 import { idOf, parseCursor } from './route.ts';
 import { realmMetadata } from './routes.tsx';
@@ -60,8 +61,8 @@ export async function realmThreadMetadata({
   };
 }
 
-async function ThreadContent(props: { view: RealmView; thread: string; sort: ThreadSort; here: string; feed: FeedMessages; language?: string; cursor?: string }) {
-  const read = await realmDiscussionReads(await readerMain(props.view), props.view.realm.realm,
+async function ThreadContent(props: { view: RealmView; thread: string; sort: ThreadSort; here: string; feed: FeedMessages; language?: string; cursor?: string; client?: RealmReadClient }) {
+  const read = await realmDiscussionReads(await readerMain(props.view, props.client), props.view.realm.realm,
     props.view.reader.actingSubject ?? undefined).thread(props.thread, props.sort, props.language, props.cursor);
   if (!read.ok && read.failure === 'missing') notFound();
   return <RealmThreadContent sort={props.sort} here={props.here} feed={props.feed} language={props.language}
@@ -70,27 +71,20 @@ async function ThreadContent(props: { view: RealmView; thread: string; sort: Thr
     read={read} replyMode={replyModeOf(props.view)} />;
 }
 
-export async function RealmThreadRoute({ params, searchParams }: ThreadRouteProps) {
+export async function RealmThreadRoute({ params, searchParams }: ThreadRouteProps, host?: RealmReadClient | RealmReplay) {
   const [{ locale, realm, thread }, search] = await Promise.all([params, searchParams]);
   const parsed = parseAddressSegment(thread);
   if (!parsed || parsed.kind === 'alias') notFound();
-  const resolved = await discussionView(locale, realm, search, `/${thread}`);
+  const resolved = await discussionView(locale, realm, search, `/${thread}`, host);
   if ('page' in resolved) return resolved.page;
   const { view, feed } = resolved;
+  const client = discussionClient(view, host);
   const sort = parseThreadSort(search);
   const language = Array.isArray(search.language) ? search.language[0] : search.language;
   const here = threadPath(realmPathOf(view), parsed.id);
-  return (
-    <DiscussionFrame
-      view={view}
-      locale={resolved.locale}
-      feed={feed}
-      search={search}
-      here={sort === 'best' ? here : `${here}?sort=${sort}`}
-    >
-      <Suspense fallback={<ThreadSkeleton />}>
-        <ThreadContent view={view} thread={parsed.id} sort={sort} here={here} feed={feed} language={language} cursor={parseCursor(search)} />
-      </Suspense>
-    </DiscussionFrame>
-  );
+  const props = { view, thread: parsed.id, sort, here, feed, language, cursor: parseCursor(search), client };
+  return DiscussionFrame({ view, locale: resolved.locale, feed, search, client,
+    here: sort === 'best' ? here : `${here}?sort=${sort}`, children:
+      <Suspense fallback={<ThreadSkeleton />}>{client ? await ThreadContent(props) : <ThreadContent {...props} />}</Suspense>,
+  });
 }

@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { isUiLocale, type UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { getMessages } from '../../i18n/server.ts';
+import { browserMainApi } from '../api/browser.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { signInPath } from '../auth/paths.ts';
@@ -20,6 +21,7 @@ import {
   privateJoinPage,
   RealmFrame,
   type RealmView,
+  type RealmReplay,
 } from './realm-page.tsx';
 import { spaceHref } from '../address/path.ts';
 import { realmHref } from './route.ts';
@@ -54,7 +56,7 @@ export async function discussionView(
   ref: string,
   search: Search,
   rest = '',
-  client?: RealmReadClient,
+  client?: RealmReadClient | RealmReplay,
 ): Promise<{ view: RealmView; locale: UiLocale; feed: FeedMessages } | { page: ReactNode }> {
   if (!isUiLocale(locale)) notFound();
   const [view, feed] = await Promise.all([
@@ -77,7 +79,15 @@ export async function discussionView(
 }
 
 /** Main as the reader: their token when they act as an Agent, so their votes and private Realms come back. */
-export async function readerMain(view: RealmView) {
+export function discussionClient(view: RealmView, host?: RealmReadClient | RealmReplay): RealmReadClient | undefined {
+  if (!host || !('read' in host)) return host;
+  return { main: browserMainApi(host.origin, { anonymous: true, fetcher: host.fetch }),
+    personal: host.personal, signedIn: view.reader.signedIn,
+    actingSubject: view.reader.actingSubject ?? undefined, fetch: host.fetch };
+}
+
+export async function readerMain(view: RealmView, client?: RealmReadClient) {
+  if (client) return view.reader.actingSubject ? client.personal ?? client.main : client.main;
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
   return mainApiWithToken(view.reader.actingSubject ? token : undefined);
 }
