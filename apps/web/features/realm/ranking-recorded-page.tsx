@@ -19,7 +19,11 @@ export function rankingRecording(record: AnswerRecord, persona: AnswerPersona, v
     .sort((a, b) => Number(a.label.slice(visit.length + 1)) - Number(b.label.slice(visit.length + 1)));
   if (!samples.length) throw new Error(`Missing ranking visit: ${persona}/${visit}`);
   const address = samples.find(sample => sample.path.startsWith('/v1/addresses/resolve?'));
-  const ref = address && new URL(address.path, 'https://recorded.invalid').searchParams.get('key');
+  // Anonymous UUID visits read the Realm directly without resolving an address.
+  const realm = samples.map(sample => new URL(sample.path, 'https://recorded.invalid').pathname)
+    .find(path => /^\/v1\/realms\/[^/]+$/.test(path));
+  const ref = address ? new URL(address.path, 'https://recorded.invalid').searchParams.get('key')
+    : realm && decodeURIComponent(realm.slice('/v1/realms/'.length));
   if (!ref) throw new Error(`Ranking visit has no address: ${persona}/${visit}`);
   const thread = samples.find(sample => new URL(sample.path, 'https://recorded.invalid').pathname.endsWith('/threads'));
   const params = new URL(thread?.path ?? '/', 'https://recorded.invalid').searchParams;
