@@ -66,6 +66,7 @@ async function library(canvasElement: HTMLElement, persona: MangaLibraryPersona)
   await expect(canvas.getByText('2 chapters completed')).toBeVisible();
   await document.fonts.ready;
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  canvas.getByRole('heading', { level: 3, name: title(persona) }).scrollIntoView({ block: 'center' });
   return canvas;
 }
 
