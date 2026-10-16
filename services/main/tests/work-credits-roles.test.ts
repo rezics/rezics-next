@@ -18,8 +18,8 @@ const request = {
 
 test('work credit roles are a closed list in public order and an unknown role is refused', () => {
   expect(closedStringEnum(template.request, 'role')).toEqual([...WORK_CREDIT_ROLES]);
-  expect(CREDIT_SEEK_ROLES.slice(0, 4)).toEqual([...WORK_CREDIT_ROLES]);
-  expect([...CREDIT_SEEK_ROLES].sort()).toEqual([...NATIVE_CREDIT_ROLES].sort());
+  expect(CREDIT_SEEK_ROLES.filter(role => (WORK_CREDIT_ROLES as readonly string[]).includes(role))).toEqual([...WORK_CREDIT_ROLES]);
+  expect(CREDIT_SEEK_ROLES.filter(role => role !== 'transcriber').sort()).toEqual([...NATIVE_CREDIT_ROLES].sort());
   const open = templateRequest('https://rezics.com/query/example', t.Object({
     roots: templateParameters.roots, role: t.Optional(t.String()),
   }, { additionalProperties: false }));
@@ -44,6 +44,7 @@ test('credit seek keys rank author, director, artist and animation studio before
     creditSeekKey('animation-studio', 0, second),
     creditSeekKey('translator', 99, first),
     creditSeekKey('editor', 0, second),
+    creditSeekKey('transcriber', 0, first),
   ];
   expect(keys).toEqual([...keys].sort());
   expect(creditSeekKey('author', 2, first)! < creditSeekKey('author', 2, second)!).toBe(true);

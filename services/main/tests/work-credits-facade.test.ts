@@ -57,6 +57,11 @@ function fixture() {
     }
   };
   class Graph extends FusekiClient {
+    override async commandHealth() {
+      meter();
+      return { moduleVersion: 'fixture', instanceId: 'fixture', publicSearchWriteEpoch: '0',
+        publicSearchWriteActive: false, profiles: { 'work-metadata-v1': 'metadata-profile' } };
+    }
     override async query(query: string): Promise<SparqlResult> {
       meter(); state.queries.push(query);
       if (query.includes('SELECT ?resource ?head WHERE')) {
@@ -66,6 +71,11 @@ function fixture() {
       }
       if (query.includes('SELECT ?epoch ?sequence WHERE'))
         return { results: { bindings: [{ epoch: literal('epoch'), sequence: literal(state.sequence) }] } };
+      if (query.includes('SELECT ?head ?main ?mainHead ?metadataHead ?publicationHead'))
+        return { results: { bindings: [{ head: uri(head), main: uri(main), mainHead: uri(id(5)),
+          public: literal(String(state.public)) }] } };
+      if (query.includes('SELECT ?structuredDecision ?structuredSource') || query.includes('SELECT ?selection ?language'))
+        return { results: { bindings: [] } };
       if (query.includes('SELECT ?root ?main ?head ?mainHead ?public')) {
         expect(query).toContain(`VALUES ?root { <${work}> }`);
         expect(query).toContain('LIMIT 2');
