@@ -2,6 +2,9 @@ import { contentConnection, contentSessionClient } from '../../../../content/src
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { SourceIntakeStore, StagedSourceObservation } from './intake.ts';
+import { mappedNativeDisposition } from './mapped-values.ts';
+import { projectRegisteredSourceMapping } from './provider-adapters.ts';
+import type { MappedSourceConversion, MappedSourceValues, VerifiedMappedSource } from './mapped-values.ts';
 
 export class SourceConversionInvalid extends Error {}
 export class SourceConversionUnavailable extends Error {}
@@ -38,7 +41,7 @@ export interface OpenLibraryConversion {
 }
 
 export interface OpenLibraryConversionDrift {
-  profile: 'open-library-work-source-drift-v1';
+  profile: 'open-library-work-source-drift-v1' | 'source-mapped-drift-v1';
   state: 'staged';
   record: string;
   baseConversion: string;
@@ -49,7 +52,7 @@ export interface OpenLibraryConversionDrift {
   candidateSourceRevision: string | null;
   representationChanged: boolean;
   fields: Array<{ field: string; status: 'added' | 'removed' | 'changed' | 'unchanged';
-    baseDisposition: Disposition | null; candidateDisposition: Disposition | null }>;
+    baseDisposition: string | null; candidateDisposition: string | null }>;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -143,10 +146,29 @@ export function projectOpenLibraryWork(observation: StagedSourceObservation):
       description, authorRefs: authors, subjects }, fieldInventory };
 }
 
-interface ConversionRow {
-  id: string; observation_id: string; mapping_revision: typeof OPEN_LIBRARY_WORK_MAPPING;
-  source_digest: string; projection: OpenLibraryWorkProjection;
-  field_inventory: OpenLibraryFieldInventory[]; created_at: Date;
+/** The provider adapter translates its own shape; shared owners see only slots and occurrences. */
+export function mappedOpenLibraryWork(projection: OpenLibraryWorkProjection): MappedSourceValues {
+  return { title: { grain: 'work', field: 'title', pointer: '/title',
+    slot: 'work-metadata-v1#title:en', value: projection.title },
+  semanticTypes: ['https://schema.org/Book'],
+  fields: projection.description === null ? [] : [{ grain: 'work', field: 'description',
+    pointer: '/description', slot: 'work-editorial-field-v1#synopsis', value: projection.description }],
+  children: [{ field: 'authors', grain: 'work', slot: null,
+    values: projection.authorRefs?.map((ref, ordinal) => ({ ...ref, pointer: `/authors/${ordinal}`,
+      value: ref.sourceKey })) ?? null },
+  { field: 'subjects', grain: 'work', slot: 'work-native-child-v1#subjects',
+    values: projection.subjects?.map((sourceKey, ordinal) => ({ sourceKey, roleKey: null,
+      pointer: `/subjects/${ordinal}`, value: sourceKey })) ?? null }],
+  sourceOnlyFields: ['description', 'authors', 'subjects'] };
+}
+
+interface StoredConversionRow {
+  id: string; observation_id: string; mapping_revision: string;
+  source_digest: string; projection: unknown; field_inventory: unknown; created_at: Date;
+}
+interface ConversionRow extends StoredConversionRow {
+  mapping_revision: typeof OPEN_LIBRARY_WORK_MAPPING; projection: OpenLibraryWorkProjection;
+  field_inventory: OpenLibraryFieldInventory[];
 }
 
 function result(row: ConversionRow): OpenLibraryConversion {
@@ -170,6 +192,90 @@ function stable(value: unknown, depth = 0): string {
 
 export class OpenLibraryConversionStore {
   constructor(private readonly pool: Pool, private readonly intake: SourceIntakeStore) {}
+
+  /** Shared evidence boundary. Legacy projection bytes remain unchanged for exact receipts. */
+  async mappedRead(principalId: string, conversionId: string): Promise<VerifiedMappedSource | null> {
+    if (!UUID.test(principalId) || !UUID.test(conversionId)) {
+      throw new SourceConversionInvalid('invalid source conversion identity');
+    }
+    const row = (await contentConnection(this.pool).query<StoredConversionRow>(`SELECT * FROM source.conversion
+      WHERE id = $1 AND principal_id = $2`, [conversionId, principalId])).rows[0];
+    if (!row) return null;
+    if (row.mapping_revision === OPEN_LIBRARY_WORK_MAPPING) {
+      const evidence = await this.verifiedRead(principalId, conversionId);
+      if (!evidence) return null;
+      const values = mappedOpenLibraryWork(evidence.conversion.projection);
+      return { observation: evidence.observation, values, legacy: evidence.conversion, conversion: {
+        ...evidence.conversion, profile: 'source-mapped-conversion-v1', projection: values,
+        fieldInventory: evidence.conversion.fieldInventory.map(field => ({ ...field, grain: 'work' })) } };
+    }
+    const observation = await this.intake.read(principalId, row.observation_id);
+    if (!observation) throw new SourceConversionUnavailable('source conversion lost its observation');
+    const projected = await this.projectMapped(observation, row.mapping_revision);
+    if (row.source_digest !== observation.byteDigest || stable(row.projection) !== stable(projected.values)
+      || stable(row.field_inventory) !== stable(projected.inventory)) {
+      throw new SourceConversionUnavailable('source conversion differs from retained observation');
+    }
+    const conversion: MappedSourceConversion = { profile: 'source-mapped-conversion-v1', state: 'staged',
+      conversion: `https://rezics.com/id/${row.id}`, observation: observation.observation,
+      mappingRevision: row.mapping_revision, sourceDigest: row.source_digest,
+      projection: projected.values, fieldInventory: projected.inventory, createdAt: row.created_at.toISOString() };
+    return { conversion, observation, values: projected.values };
+  }
+
+  private async projectMapped(observation: StagedSourceObservation, mapping: string) {
+    const projected = projectRegisteredSourceMapping(observation, mapping);
+    const declarations = (await contentConnection(this.pool).query<{ provider: string; namespace: string;
+      grain: string; field_key: string; disposition: string; native_target: string | null }>(`
+      SELECT m.provider,m.namespace,d.grain,d.field_key,d.disposition,d.native_target
+      FROM source.field_mapping m JOIN source.field_disposition d USING (mapping_revision)
+      WHERE m.mapping_revision = $1 LIMIT 1025`, [mapping])).rows;
+    if (!declarations.length || declarations.length > 1024 || declarations.some(row =>
+      row.provider !== observation.provider || row.namespace !== observation.namespace)) {
+      throw new SourceConversionUnavailable('mapping identity differs from observation');
+    }
+    for (const field of projected.inventory) {
+      const declared = declarations.find(row => row.grain === field.grain && row.field_key === field.field);
+      if (field.disposition !== (declared?.disposition ?? 'unsupported')) {
+        throw new SourceConversionUnavailable('field inventory differs from sealed mapping');
+      }
+    }
+    for (const field of [projected.values.title, ...projected.values.fields,
+      ...projected.values.children.filter(child => child.slot !== null)]) {
+      if (!declarations.some(row => row.grain === field.grain && row.field_key === field.field
+        && mappedNativeDisposition(row, field.slot))) {
+        throw new SourceConversionUnavailable('mapped native slot differs from sealed mapping');
+      }
+    }
+    return projected;
+  }
+
+  async convertMapped(principalId: string, observationId: string, mapping: string):
+    Promise<{ conversion: MappedSourceConversion; replayed: boolean } | null> {
+    if (!UUID.test(principalId) || !UUID.test(observationId)) {
+      throw new SourceConversionInvalid('invalid source conversion identity');
+    }
+    if (mapping === OPEN_LIBRARY_WORK_MAPPING) {
+      const result = await this.convert(principalId, observationId);
+      if (!result) return null;
+      return { conversion: (await this.mappedRead(principalId, result.conversion.conversion.slice(-36)))!.conversion,
+        replayed: result.replayed };
+    }
+    const observation = await this.intake.read(principalId, observationId);
+    if (!observation) return null;
+    const projected = await this.projectMapped(observation, mapping);
+    const inserted = await contentConnection(this.pool).query(`INSERT INTO source.conversion
+      (id,observation_id,principal_id,mapping_revision,source_digest,projection,field_inventory)
+      VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (observation_id,mapping_revision) DO NOTHING`,
+    [Bun.randomUUIDv7(), observationId, principalId, mapping, observation.byteDigest,
+      JSON.stringify(projected.values), JSON.stringify(projected.inventory)]);
+    const row = (await contentConnection(this.pool).query<{ id: string }>(`SELECT id FROM source.conversion
+      WHERE observation_id=$1 AND mapping_revision=$2 AND principal_id=$3`,
+    [observationId, mapping, principalId])).rows[0];
+    if (!row) throw new SourceConversionUnavailable('source conversion is unavailable');
+    return { conversion: (await this.mappedRead(principalId, row.id))!.conversion,
+      replayed: inserted.rowCount === 0 };
+  }
 
   async convert(principalId: string, observationId: string):
     Promise<{ conversion: OpenLibraryConversion; replayed: boolean } | null> {
@@ -243,11 +349,13 @@ export class OpenLibraryConversionStore {
       throw new SourceConversionInvalid('invalid source conversion identity');
     }
     const [baseEvidence, candidateEvidence] = await Promise.all([
-      this.verifiedRead(principalId, baseId), this.verifiedRead(principalId, candidateId),
+      this.mappedRead(principalId, baseId), this.mappedRead(principalId, candidateId),
     ]);
     if (!baseEvidence || !candidateEvidence) return null;
-    const { conversion: base, observation: baseObservation } = baseEvidence;
-    const { conversion: candidate, observation: candidateObservation } = candidateEvidence;
+    const { observation: baseObservation } = baseEvidence;
+    const base = baseEvidence.legacy ?? baseEvidence.conversion;
+    const { observation: candidateObservation } = candidateEvidence;
+    const candidate = candidateEvidence.legacy ?? candidateEvidence.conversion;
     if (baseObservation.record !== candidateObservation.record) {
       throw new SourceConversionInvalid('source conversions have different record identities');
     }
@@ -269,7 +377,8 @@ export class OpenLibraryConversionStore {
             || baseDisposition !== candidateDisposition ? 'changed' : 'unchanged';
         return { field, status, baseDisposition, candidateDisposition };
       });
-    return { profile: 'open-library-work-source-drift-v1', state: 'staged',
+    return { profile: baseEvidence.legacy && candidateEvidence.legacy
+      ? 'open-library-work-source-drift-v1' : 'source-mapped-drift-v1', state: 'staged',
       record: baseObservation.record, baseConversion: base.conversion,
       candidateConversion: candidate.conversion, baseObservation: base.observation,
       candidateObservation: candidate.observation,

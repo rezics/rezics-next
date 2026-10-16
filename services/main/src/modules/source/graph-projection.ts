@@ -5,51 +5,64 @@ import { DATASET, GRAPHS, RV, hash, iri, lit,
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { OpenLibraryConversionStore, type OpenLibraryConversion }
   from './open-library-conversion.ts';
+import type { MappedSourceConversion, MappedSourceValues } from './mapped-values.ts';
 import type { StagedSourceObservation } from './intake.ts';
 import { sourceReificationValidations, sourceStatementTriples }
   from './reification.ts';
 
+type GraphConversion = OpenLibraryConversion | MappedSourceConversion;
 const SOURCE = 'urn:rezics:graph:source';
 const PROFILE = 'source-open-library-work-v1';
-const SHAPE = `https://rezics.com/definition/${PROFILE}`;
 
 export class SourceGraphUnavailable extends Error {}
 
 export interface SourceGraphProjection {
-  profile: 'open-library-work-source-graph-v1';
+  profile: 'open-library-work-source-graph-v1' | 'source-mapped-graph-v1';
   state: 'staged';
   record: string;
   observation: string;
   conversion: string;
   sourceDigest: string;
-  projection: OpenLibraryConversion['projection'];
+  projection: OpenLibraryConversion['projection'] | MappedSourceValues;
   receipt: string;
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
 }
 
-export function sourceProjectionIdentity(conversion: OpenLibraryConversion) {
+export function sourceProjectionIdentity(conversion: GraphConversion) {
   const receipt = `urn:rezics:receipt:source-projection:${hash(`source-reification-v1\0${conversion.conversion}`)}`;
-  const digest = hash(JSON.stringify({ family: 'source-open-library-work-v1', reification: 'source-reification-v1',
+  const digest = hash(JSON.stringify({ family: conversion.profile === 'source-mapped-conversion-v1' ? 'source-mapped-values-v1' : 'source-open-library-work-v1', reification: 'source-reification-v1',
     conversion: conversion.conversion, observation: conversion.observation,
     mappingRevision: conversion.mappingRevision, sourceDigest: conversion.sourceDigest,
     projection: conversion.projection, fieldInventory: conversion.fieldInventory }));
   return { receipt, digest };
 }
 
-export function legacySourceProjectionIdentity(conversion: OpenLibraryConversion) {
+export function legacySourceProjectionIdentity(conversion: GraphConversion) {
   const receipt = `urn:rezics:receipt:source-projection:${hash(conversion.conversion)}`;
-  const digest = hash(JSON.stringify({ family: 'source-open-library-work-v1',
+  const digest = hash(JSON.stringify({ family: conversion.profile === 'source-mapped-conversion-v1' ? 'source-mapped-values-v1' : 'source-open-library-work-v1',
     conversion: conversion.conversion, observation: conversion.observation,
     mappingRevision: conversion.mappingRevision, sourceDigest: conversion.sourceDigest,
     projection: conversion.projection, fieldInventory: conversion.fieldInventory }));
   return { receipt, digest };
 }
 
-export function sourceBaseTriples(conversion: OpenLibraryConversion,
+export function sourceBaseTriples(conversion: GraphConversion,
   observation: StagedSourceObservation): string {
   const record = iri(observation.record);
   const observed = iri(observation.observation);
   const converted = iri(conversion.conversion);
+  if (conversion.profile === 'source-mapped-conversion-v1') {
+    return `${record} a rv:SourceRecord ; rv:sourceProvider ${lit(observation.provider)} ;
+      rv:sourceNamespace ${lit(observation.namespace)} ; rv:sourceExternalId ${lit(observation.externalId)} .
+      ${observed} a rv:SourceObservation ; rv:sourceRecord ${record} ;
+        rv:sourceByteDigest ${lit(conversion.sourceDigest)} ;
+        rv:sourceRightsBasis ${lit(observation.rightsEvidence.basis)} ;
+        rv:sourceRightsNote ${lit(observation.rightsEvidence.note)} .
+      ${converted} a rv:SourceConversion ; rv:sourceObservation ${observed} ;
+        rv:sourceByteDigest ${lit(conversion.sourceDigest)} ;
+        rv:sourceMappingRevision ${lit(conversion.mappingRevision)} ;
+        rv:sourceMappedValuesJson ${lit(JSON.stringify(conversion.projection))} .`;
+  }
   const value = conversion.projection;
   return `${record} a rv:SourceRecord ; rv:sourceProvider "open-library" ;
     rv:sourceNamespace "work" ; rv:sourceExternalId ${lit(observation.externalId)} .
@@ -70,12 +83,14 @@ export function sourceBaseTriples(conversion: OpenLibraryConversion,
       ${value.description !== null ? `; rv:sourceDescription ${lit(value.description)}` : ''} .`;
 }
 
-export function sourceTriples(conversion: OpenLibraryConversion,
+export function sourceTriples(conversion: GraphConversion,
   observation: StagedSourceObservation): string {
-  return `${sourceBaseTriples(conversion, observation)}\n${sourceStatementTriples(conversion, observation)}`;
+  const statements = conversion.profile === 'source-mapped-conversion-v1' ? ''
+    : sourceStatementTriples(conversion, observation);
+  return `${sourceBaseTriples(conversion, observation)}\n${statements}`;
 }
 
-function update(lineage: GraphLineage, conversion: OpenLibraryConversion,
+function update(lineage: GraphLineage, conversion: GraphConversion,
   observation: StagedSourceObservation, receipt: string, digest: string): string {
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0source`)}`;
@@ -110,13 +125,13 @@ function update(lineage: GraphLineage, conversion: OpenLibraryConversion,
     }`;
 }
 
-function projectionResult(conversion: OpenLibraryConversion,
+function projectionResult(conversion: GraphConversion,
   observation: StagedSourceObservation, receipt: string,
   position: { datasetId: string; dataEpoch: string; sequence: string }): SourceGraphProjection {
   if (position.datasetId !== DATASET || !/^(0|[1-9][0-9]*)$/.test(position.sequence)) {
     throw new SourceGraphUnavailable('source projection position differs');
   }
-  return { profile: 'open-library-work-source-graph-v1', state: 'staged',
+  return { profile: conversion.profile === 'source-mapped-conversion-v1' ? 'source-mapped-graph-v1' : 'open-library-work-source-graph-v1', state: 'staged',
     record: observation.record, observation: observation.observation,
     conversion: conversion.conversion, sourceDigest: conversion.sourceDigest,
     projection: conversion.projection, receipt,
@@ -128,18 +143,27 @@ export class OpenLibrarySourceGraph {
   constructor(private readonly fuseki: FusekiClient, private readonly lineage: GraphLineage,
     private readonly conversions: OpenLibraryConversionStore) {}
 
+  private async graphEvidence(principalId: string, conversionId: string) {
+    const evidence = await this.conversions.mappedRead(principalId, conversionId);
+    return evidence ? { conversion: evidence.legacy ?? evidence.conversion, observation: evidence.observation } : null;
+  }
+
   async project(principalId: string, conversionId: string): Promise<SourceGraphProjection | null> {
-    const evidence = await this.conversions.verifiedRead(principalId, conversionId);
+    const evidence = await this.graphEvidence(principalId, conversionId);
     if (!evidence) return null;
     const { conversion, observation } = evidence;
     const { receipt, digest } = sourceProjectionIdentity(conversion);
     await assertGraphAdmissionOpen(this.fuseki, this.lineage);
-    const validations = await profileValidations(this.fuseki, PROFILE, [
-      { shape: `${SHAPE}/record-shape`, focus: [observation.record], graphs: [SOURCE] },
-      { shape: `${SHAPE}/observation-shape`, focus: [observation.observation], graphs: [SOURCE] },
-      { shape: `${SHAPE}/conversion-shape`, focus: [conversion.conversion], graphs: [SOURCE] },
+    const profile = conversion.profile === 'source-mapped-conversion-v1' ? 'source-mapped-values-v1' : PROFILE;
+    const shape = `https://rezics.com/definition/${profile}`;
+    const validations = await profileValidations(this.fuseki, profile, [
+      { shape: `${shape}/record-shape`, focus: [observation.record], graphs: [SOURCE] },
+      { shape: `${shape}/observation-shape`, focus: [observation.observation], graphs: [SOURCE] },
+      { shape: `${shape}/conversion-shape`, focus: [conversion.conversion], graphs: [SOURCE] },
     ]);
-    validations.push(...await sourceReificationValidations(this.fuseki, conversion, observation));
+    if (conversion.profile !== 'source-mapped-conversion-v1') {
+      validations.push(...await sourceReificationValidations(this.fuseki, conversion, observation));
+    }
     const result = await this.fuseki.commandWithReceipt({ receipt, digest,
       update: update(this.lineage, conversion, observation, receipt, digest),
       validations, deadlineMs: 10_000 });
@@ -153,18 +177,18 @@ export class OpenLibrarySourceGraph {
   }
 
   async read(principalId: string, conversionId: string): Promise<SourceGraphProjection | null> {
-    const evidence = await this.conversions.verifiedRead(principalId, conversionId);
+    const evidence = await this.graphEvidence(principalId, conversionId);
     if (!evidence) return null;
     return this.readVerified(evidence.conversion, evidence.observation);
   }
 
   async readReified(principalId: string, conversionId: string): Promise<SourceGraphProjection | null> {
-    const evidence = await this.conversions.verifiedRead(principalId, conversionId);
+    const evidence = await this.graphEvidence(principalId, conversionId);
     if (!evidence) return null;
     return this.readVerified(evidence.conversion, evidence.observation, false);
   }
 
-  private async readVerified(conversion: OpenLibraryConversion,
+  private async readVerified(conversion: GraphConversion,
     observation: StagedSourceObservation, preferLegacy = true): Promise<SourceGraphProjection | null> {
     const { receipt, digest } = sourceProjectionIdentity(conversion);
     const { receipt: legacyReceipt, digest: legacyDigest } = legacySourceProjectionIdentity(conversion);

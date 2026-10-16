@@ -1,3 +1,4 @@
+import { MAPPING_REVISION } from './mapped-values.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type RegisteredAdmission } from '../access/admission.ts';
@@ -24,7 +25,7 @@ export class NativeFieldUnavailable extends Error {}
 
 export interface NativeFieldSourceBasis {
   record: string; observation: string; conversion: string;
-  mapping: 'open-library-work-map-v1';
+  mapping: string;
 }
 export interface NativeFieldControlIntent {
   profile: 'work-editorial-field-control-v1'; work: string; field: 'synopsis';
@@ -61,7 +62,7 @@ export function nativeFieldDigest(intent: NativeFieldControlIntent): string {
     || (intent.basis.head === null) !== (intent.basis.contentHead === null)
     || (intent.origin === 'human') !== (intent.source === null)
     || !['human', 'source'].includes(intent.origin)
-    || (intent.source !== null && (intent.source.mapping !== 'open-library-work-map-v1'
+    || (intent.source !== null && (!MAPPING_REVISION.test(intent.source.mapping)
       || ![intent.source.record, intent.source.observation, intent.source.conversion]
         .every(value => NATIVE.test(value))))) throw new NativeFieldInvalid('invalid field-control intent');
   return hash(JSON.stringify({ profile: intent.profile, work: intent.work, field: intent.field,

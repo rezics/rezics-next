@@ -1026,6 +1026,18 @@ export const SourceFieldStatementV1StatementShapeSchema = Type.Object({ "@id": T
 
 export type SourceFieldStatementV1StatementShape = Static<typeof SourceFieldStatementV1StatementShapeSchema>;
 
+export const SourceMappedValuesV1RecordShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, contains: Type.Literal("https://rezics.com/vocab/SourceRecord") }), "rv:sourceProvider": Type.Array(Type.String({"maxLength":100}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:sourceNamespace": Type.Array(Type.String({"maxLength":100}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:sourceExternalId": Type.Array(Type.String({"maxLength":200}), { uniqueItems: true, minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type SourceMappedValuesV1RecordShape = Static<typeof SourceMappedValuesV1RecordShapeSchema>;
+
+export const SourceMappedValuesV1ObservationShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, contains: Type.Literal("https://rezics.com/vocab/SourceObservation") }), "rv:sourceRecord": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:sourceByteDigest": Type.Array(Type.String({"pattern":"^[0-9a-f]{64}$"}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:sourceRightsBasis": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:sourceRightsNote": Type.Array(Type.String({"maxLength":1024}), { uniqueItems: true, minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type SourceMappedValuesV1ObservationShape = Static<typeof SourceMappedValuesV1ObservationShapeSchema>;
+
+export const SourceMappedValuesV1ConversionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, contains: Type.Literal("https://rezics.com/vocab/SourceConversion") }), "rv:sourceObservation": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:sourceByteDigest": Type.Array(Type.String({"pattern":"^[0-9a-f]{64}$"}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:sourceMappingRevision": Type.Array(Type.String({"maxLength":100}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:sourceMappedValuesJson": Type.Array(Type.String({"maxLength":131072}), { uniqueItems: true, minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type SourceMappedValuesV1ConversionShape = Static<typeof SourceMappedValuesV1ConversionShapeSchema>;
+
 export const SourceOpenLibraryWorkV1RecordShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, contains: Type.Literal("https://rezics.com/vocab/SourceRecord") }), "rv:sourceProvider": Type.Array(Type.Literal("open-library"), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:sourceNamespace": Type.Array(Type.Literal("work"), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:sourceExternalId": Type.Array(Type.String({"minLength":4,"maxLength":16,"pattern":"^OL[1-9][0-9]{0,11}W$"}), { uniqueItems: true, minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type SourceOpenLibraryWorkV1RecordShape = Static<typeof SourceOpenLibraryWorkV1RecordShapeSchema>;
@@ -1683,6 +1695,9 @@ export const shapeSchemas = {
   "https://rezics.com/definition/semantic-rule-v1/dependency-shape": SemanticRuleV1DependencyShapeSchema,
   "https://rezics.com/definition/semantic-rule-v1/dependency-page-shape": SemanticRuleV1DependencyPageShapeSchema,
   "https://rezics.com/definition/source-field-statement-v1/statement-shape": SourceFieldStatementV1StatementShapeSchema,
+  "https://rezics.com/definition/source-mapped-values-v1/record-shape": SourceMappedValuesV1RecordShapeSchema,
+  "https://rezics.com/definition/source-mapped-values-v1/observation-shape": SourceMappedValuesV1ObservationShapeSchema,
+  "https://rezics.com/definition/source-mapped-values-v1/conversion-shape": SourceMappedValuesV1ConversionShapeSchema,
   "https://rezics.com/definition/source-open-library-work-v1/record-shape": SourceOpenLibraryWorkV1RecordShapeSchema,
   "https://rezics.com/definition/source-open-library-work-v1/observation-shape": SourceOpenLibraryWorkV1ObservationShapeSchema,
   "https://rezics.com/definition/source-open-library-work-v1/conversion-shape": SourceOpenLibraryWorkV1ConversionShapeSchema,

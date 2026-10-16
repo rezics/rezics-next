@@ -13,7 +13,7 @@ test('author refresh preserves provenance through lost capture responses, failur
   try {
     await migrateContent(pool);
     const intake = new SourceIntakeStore(pool), principal = randomUUID();
-    intake.reserveOpenLibrarySlot = async () => {};
+    intake.reserveProviderSlot = async () => {};
     const key = `/authors/OL${Number(String(Date.now()).slice(-10))}A`;
     let count = 0, revision = 10, displayName: string | undefined = 'A factual name';
     let status = 200, malformed = false;

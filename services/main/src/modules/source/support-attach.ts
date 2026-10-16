@@ -1,3 +1,4 @@
+import { mappedNativeDisposition } from './mapped-values.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../access/admission.ts';
@@ -88,8 +89,7 @@ export function checkedFieldEvidence(row: EvidenceRow | undefined, input: Pick<A
     || !row.coverage.complete || !/^application\/(?:json|ld\+json)(?:;|$)/i.test(row.media_type)
     || hash(row.raw_bytes) !== row.byte_digest || row.source_digest !== row.byte_digest
     || row.provider !== row.mapping_provider || row.namespace !== row.mapping_namespace
-    || row.mapping_grain !== input.grain || row.native_target !== input.slot
-    || !['native', 'lossy'].includes(row.disposition)) {
+    || row.mapping_grain !== input.grain || !mappedNativeDisposition(row, input.slot)) {
     throw new FieldWithdrawalUnavailable('complete mapped source field is unavailable');
   }
   if (!Array.isArray(row.field_inventory) || !row.field_inventory.some(item => item

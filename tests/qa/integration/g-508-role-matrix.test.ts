@@ -54,7 +54,7 @@ test('G508: role matrix gates kinds, retyping, every import entry point and publ
       return Response.json({ key: '/works/OL1W', type: { key: '/type/work' }, title: 'Imported Work' });
     }) as typeof fetch;
     const intake = new SourceIntakeStore(content);
-    intake.reserveOpenLibrarySlot = async () => {};
+    intake.reserveProviderSlot = async () => {};
     const main = createMainApp(h.fuseki, { environment: h.env, account: h.verifier, access,
       platformAccess: new AccessExposure(h.accessPool),
       actingContexts: contexts, roles: new AccessRoles(h.accessPool),

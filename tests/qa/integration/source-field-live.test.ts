@@ -17,7 +17,7 @@ test('LIVE04: retained Open Library versions expose reordered or reused child ke
     const intake = new SourceIntakeStore(h.pool);
     const workId = 'OL45804W';
     const capture = async (revision: number | null) => {
-      await intake.reserveOpenLibrarySlot();
+      await intake.reserveProviderSlot({ provider: 'open-library', intervalMs: 1000, maxQueueMs: 3000 });
       const url = `https://openlibrary.org/works/${workId}.json${revision === null ? '' : `?v=${revision}`}`;
       const response = await fetch(url, { headers: { accept: 'application/json',
         'user-agent': 'REZICS-source-capture/1 (single-record version evidence)' },

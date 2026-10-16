@@ -74,7 +74,7 @@ export async function identityHarness(options: { realAccount?: boolean;
     sourceFieldWithdrawals: stores.withdrawal, sourceScores: stores.score,
     ...(options.acquisition ? { sourceAcquisitions: sourceAcquisitionServices(pool,
       { fetcher: options.acquisition === 'live' ? fetch : provider.fetch,
-        reserve: options.acquisition === 'live' ? () => intake.reserveOpenLibrarySlot() : async () => {} }) }
+        reserve: options.acquisition === 'live' ? () => intake.reserveProviderSlot({ provider: 'open-library', intervalMs: 1000, maxQueueMs: 3000 }) : async () => {} }) }
       : {}) } as unknown as MainWorkDependencies;
   // This app mounts source routes directly. Bind the same exposure gate Main
   // uses so a catalogue-import call is closed until the grant above is visible.

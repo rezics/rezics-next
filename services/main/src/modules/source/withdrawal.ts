@@ -1,3 +1,5 @@
+import { OpenLibraryConversionStore } from './open-library-conversion.ts';
+import { SourceIntakeStore } from './intake.ts';
 import type { Pool } from 'pg';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { checkedFieldEvidence, checkedFieldNativeValue,
@@ -147,6 +149,16 @@ export class SourceFieldWithdrawalStore {
       } catch { throw new FieldWithdrawalUnavailable('field attachment evidence is unavailable'); }
     }
     if (row.receipt?.profile === 'source-field-native-certificate-v1') {
+      const evidence = row.conversion_id ? await new OpenLibraryConversionStore(this.pool,
+        new SourceIntakeStore(this.pool)).mappedRead(principalId, row.conversion_id) : null;
+      const field = evidence?.values.fields.find(item => item.slot === row.slot
+        && item.grain === row.grain && item.field === row.source_field);
+      if (!field || evidence?.observation.record !== iri(row.record_id)
+        || evidence.conversion.mappingRevision !== row.mapping_revision
+        || hash(JSON.stringify(field.value)) !== row.value_digest) {
+        throw new FieldWithdrawalUnavailable('mapped Source value differs from native field certificate');
+      }
+
       if (!this.env || row.slot !== 'work-editorial-field-v1#synopsis'
         || !row.admission_id || !row.graph_receipt || !row.native_revision
         || !row.data_epoch || !row.sequence || !row.value_digest

@@ -7,6 +7,8 @@ import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import org.apache.jena.atlas.json.JSON;
+import org.apache.jena.atlas.json.JsonObject;
 import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.sparql.core.DatasetGraph;
@@ -27,6 +29,8 @@ final class SourceProjectionPolicy {
         RV + "sourceKey", RV + "sourceTitle", RV + "sourceDescription",
         RV + "sourceAuthorRefsJson", RV + "sourceSubjectsJson", RV + "sourceByteDigest",
         RV + "sourceMappingRevision", RV + "sourceStatement");
+    private static final Set<String> MAPPED_CONVERSION = Set.of(RDF.type.getURI(), RV + "sourceObservation",
+        RV + "sourceByteDigest", RV + "sourceMappingRevision", RV + "sourceMappedValuesJson");
     private static final Set<String> STATEMENT = Set.of(RDF.type.getURI(),
         "http://www.w3.org/1999/02/22-rdf-syntax-ns#subject",
         "http://www.w3.org/1999/02/22-rdf-syntax-ns#predicate",
@@ -54,7 +58,7 @@ final class SourceProjectionPolicy {
         if (!nativeId(record) || !nativeId(observation) || !nativeId(conversion)
             || record.equals(observation) || record.equals(conversion) || observation.equals(conversion)
             || !plan.source().containsAll(Set.of(record.getURI(), observation.getURI(), conversion.getURI()))
-            || !text(digest, "[0-9a-f]{64}") || !text(mapping, "open-library-work-map-v1")
+            || !text(digest, "[0-9a-f]{64}") || !text(mapping, "[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}")
             || !data.contains(RECEIPTS, own, rv("outcome"), rv("Succeeded")))
             return "source projection receipt identity differs";
         if (!data.contains(SOURCE, record, RDF.type.asNode(), rv("SourceRecord"))
@@ -66,57 +70,65 @@ final class SourceProjectionPolicy {
             || !digest.equals(one(data, SOURCE, conversion, "sourceByteDigest"))
             || !mapping.equals(one(data, SOURCE, conversion, "sourceMappingRevision")))
             return "source projection graph links differ from receipt";
-        Node external = one(data, SOURCE, record, "sourceExternalId");
-        Node key = one(data, SOURCE, conversion, "sourceKey");
-        if (external == null || !external.isLiteral() || key == null || !key.isLiteral()
-            || !key.getLiteralLexicalForm().equals("/works/" + external.getLiteralLexicalForm()))
-            return "source Work key differs from record identity";
+        Node mapped = one(data, SOURCE, conversion, "sourceMappedValuesJson");
         Set<Node> statements = new LinkedHashSet<>();
-        var links = data.find(SOURCE, conversion, rv("sourceStatement"), Node.ANY);
-        while (links.hasNext()) {
-            Node statement = links.next().getObject();
-            if (!statement.isURI() || !statement.getURI().matches(
-                "urn:rezics:source-statement:[0-9a-f]{64}") || !statements.add(statement))
-                return "source statement link is invalid";
+        if (mapped != null) {
+            if (!mapped.isLiteral() || mapped.getLiteralLexicalForm().length() > 131072
+                || !plan.source().equals(Set.of(record.getURI(), observation.getURI(), conversion.getURI()))
+                || sourceTitle(data, conversion) == null)
+                return "mapped source projection footprint or title differs";
+        } else {
+            Node external = one(data, SOURCE, record, "sourceExternalId");
+            Node key = one(data, SOURCE, conversion, "sourceKey");
+            if (external == null || !external.isLiteral() || key == null || !key.isLiteral()
+                || !key.getLiteralLexicalForm().equals("/works/" + external.getLiteralLexicalForm()))
+                return "source Work key differs from record identity";
+            var links = data.find(SOURCE, conversion, rv("sourceStatement"), Node.ANY);
+            while (links.hasNext()) {
+                Node statement = links.next().getObject();
+                if (!statement.isURI() || !statement.getURI().matches(
+                    "urn:rezics:source-statement:[0-9a-f]{64}") || !statements.add(statement))
+                    return "source statement link is invalid";
+            }
+            Node title = one(data, SOURCE, conversion, "sourceTitle");
+            Node description = one(data, SOURCE, conversion, "sourceDescription");
+            if (statements.size() != (description == null ? 1 : 2)
+                || !plan.source().equals(union(Set.of(record.getURI(), observation.getURI(), conversion.getURI()),
+                    statements.stream().map(Node::getURI).collect(java.util.stream.Collectors.toSet()))))
+                return "source statement footprint differs";
+            boolean titleSeen = false;
+            boolean descriptionSeen = false;
+            for (Node statement : statements) {
+                Node predicate = one(data, SOURCE, statement, RDF_PREDICATE);
+                Node object = one(data, SOURCE, statement, RDF_OBJECT);
+                Node sourceField = one(data, SOURCE, statement, "sourceField");
+                boolean isTitle = rv("sourceTitle").equals(predicate) && title != null && title.equals(object)
+                    && text(sourceField, "title");
+                boolean isDescription = rv("sourceDescription").equals(predicate) && description != null
+                    && description.equals(object) && text(sourceField, "description");
+                String field = isTitle ? "title" : isDescription ? "description" : "";
+                String expectedStatement = "urn:rezics:source-statement:" + hash(
+                    conversion.getURI() + "\0" + field + "\0" + digest.getLiteralLexicalForm());
+                if ((!isTitle && !isDescription) || !data.contains(SOURCE, statement, RDF.type.asNode(),
+                        rdf("Statement"))
+                    || !expectedStatement.equals(statement.getURI())
+                    || !conversion.equals(one(data, SOURCE, statement, RDF_SUBJECT))
+                    || !observation.equals(one(data, SOURCE, statement, "sourceObservation"))
+                    || !observation.equals(one(data, SOURCE, statement, PROV_DERIVED))
+                    || !digest.equals(one(data, SOURCE, statement, "sourceByteDigest"))
+                    || !mapping.equals(one(data, SOURCE, statement, "sourceMappingRevision"))
+                    || !text(one(data, SOURCE, statement, "fieldDisposition"), "structured-source-only")
+                    || !text(one(data, SOURCE, statement, "dispositionReason"),
+                        "Source evidence requires separate explicit acceptance before native use."))
+                    return "source statement differs from retained evidence";
+                titleSeen |= isTitle;
+                descriptionSeen |= isDescription;
+            }
+            if (!titleSeen || (description != null && !descriptionSeen))
+                return "source statement fields are incomplete";
         }
-        Node title = one(data, SOURCE, conversion, "sourceTitle");
-        Node description = one(data, SOURCE, conversion, "sourceDescription");
-        if (statements.size() != (description == null ? 1 : 2)
-            || !plan.source().equals(union(Set.of(record.getURI(), observation.getURI(), conversion.getURI()),
-                statements.stream().map(Node::getURI).collect(java.util.stream.Collectors.toSet()))))
-            return "source statement footprint differs";
-        boolean titleSeen = false;
-        boolean descriptionSeen = false;
-        for (Node statement : statements) {
-            Node predicate = one(data, SOURCE, statement, RDF_PREDICATE);
-            Node object = one(data, SOURCE, statement, RDF_OBJECT);
-            Node sourceField = one(data, SOURCE, statement, "sourceField");
-            boolean isTitle = rv("sourceTitle").equals(predicate) && title != null && title.equals(object)
-                && text(sourceField, "title");
-            boolean isDescription = rv("sourceDescription").equals(predicate) && description != null
-                && description.equals(object) && text(sourceField, "description");
-            String field = isTitle ? "title" : isDescription ? "description" : "";
-            String expectedStatement = "urn:rezics:source-statement:" + hash(
-                conversion.getURI() + "\0" + field + "\0" + digest.getLiteralLexicalForm());
-            if ((!isTitle && !isDescription) || !data.contains(SOURCE, statement, RDF.type.asNode(),
-                    rdf("Statement"))
-                || !expectedStatement.equals(statement.getURI())
-                || !conversion.equals(one(data, SOURCE, statement, RDF_SUBJECT))
-                || !observation.equals(one(data, SOURCE, statement, "sourceObservation"))
-                || !observation.equals(one(data, SOURCE, statement, PROV_DERIVED))
-                || !digest.equals(one(data, SOURCE, statement, "sourceByteDigest"))
-                || !mapping.equals(one(data, SOURCE, statement, "sourceMappingRevision"))
-                || !text(one(data, SOURCE, statement, "fieldDisposition"), "structured-source-only")
-                || !text(one(data, SOURCE, statement, "dispositionReason"),
-                    "Source evidence requires separate explicit acceptance before native use."))
-                return "source statement differs from retained evidence";
-            titleSeen |= isTitle;
-            descriptionSeen |= isDescription;
-        }
-        if (!titleSeen || (description != null && !descriptionSeen))
-            return "source statement fields are incomplete";
         for (Map.Entry<Node, Set<String>> role : Map.of(record, RECORD,
-            observation, OBSERVATION, conversion, CONVERSION).entrySet()) {
+            observation, OBSERVATION, conversion, mapped == null ? CONVERSION : MAPPED_CONVERSION).entrySet()) {
             var quads = data.find(SOURCE, role.getKey(), Node.ANY, Node.ANY);
             while (quads.hasNext()) {
                 var quad = quads.next();
@@ -138,6 +150,43 @@ final class SourceProjectionPolicy {
             }
         }
         return null;
+    }
+
+    /** Native owners consume the adapter's private mapped values; legacy receipts keep their exact representation. */
+    static String sourceTitle(DatasetGraph data, Node conversion) {
+        Node legacy = one(data, SOURCE, conversion, "sourceTitle");
+        if (legacy != null) return legacy.isLiteral() ? legacy.getLiteralLexicalForm() : null;
+        JsonObject mapped = mappedValues(data, conversion);
+        try { return mapped == null ? null : ProfileRegistry.required(mapped.get("title").getAsObject(), "value"); }
+        catch (RuntimeException invalid) { return null; }
+    }
+
+    static String sourceField(DatasetGraph data, Node conversion, String slot) {
+        Node legacy = one(data, SOURCE, conversion, "sourceDescription");
+        if (legacy != null && slot.equals("work-editorial-field-v1#synopsis"))
+            return legacy.isLiteral() ? legacy.getLiteralLexicalForm() : null;
+        JsonObject mapped = mappedValues(data, conversion);
+        if (mapped == null) return null;
+        try {
+            var fields = mapped.get("fields").getAsArray();
+            if (fields.size() > 128) return null;
+            String value = null;
+            for (var item : fields) {
+                JsonObject field = item.getAsObject();
+                if (slot.equals(ProfileRegistry.required(field, "slot"))) {
+                    if (value != null) return null;
+                    value = ProfileRegistry.required(field, "value");
+                }
+            }
+            return value;
+        } catch (RuntimeException invalid) { return null; }
+    }
+
+    private static JsonObject mappedValues(DatasetGraph data, Node conversion) {
+        Node mapped = one(data, SOURCE, conversion, "sourceMappedValuesJson");
+        if (mapped == null || !mapped.isLiteral() || mapped.getLiteralLexicalForm().length() > 131072) return null;
+        try { return JSON.parse(mapped.getLiteralLexicalForm()); }
+        catch (RuntimeException invalid) { return null; }
     }
 
     private static Set<String> union(Set<String> base, Set<String> additional) {

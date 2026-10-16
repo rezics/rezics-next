@@ -25,16 +25,6 @@ cost are preserved.
 
 ## Source adoption and credit
 
-Source adoption consumes Open Library's conversion shape. Proposals assume Book,
-child correspondence knows only authors and subjects, and synopsis application
-and native title and field control require the Open Library mapping
-(`source/native-work-proposal.ts`, `source/child-correspondence.ts`,
-`source/field-application.ts`, `source/field-control-native.ts`,
-`work/title-control.ts`). Intake embeds that provider's capture validation and
-rate schedule. Conversions should expose verified mapped values, types and child
-occurrences, and adoption should consume those through the existing field
-support machinery. Proof: a second provider adopts a Work, a child and a field.
-
 Credit is split by provider and role. External credit adoption accepts only
 Open Library author occurrences, a SQL constraint and SHACL shape enforce it, a
 separate native Agent owner repeats admission and revision, and public and

@@ -1,0 +1,28 @@
+# Exact private adapter evidence. These nodes confer no native identity or reuse rights.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/source-mapped-values-v1/record-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:SourceRecord ] ;
+    sh:property [ sh:path rv:sourceProvider ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 100 ] ;
+    sh:property [ sh:path rv:sourceNamespace ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 100 ] ;
+    sh:property [ sh:path rv:sourceExternalId ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 200 ] .
+
+<https://rezics.com/definition/source-mapped-values-v1/observation-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:SourceObservation ] ;
+    sh:property [ sh:path rv:sourceRecord ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SourceRecord ] ;
+    sh:property [ sh:path rv:sourceByteDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:sourceRightsBasis ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sourceRightsNote ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 1024 ] .
+
+<https://rezics.com/definition/source-mapped-values-v1/conversion-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:SourceConversion ] ;
+    sh:property [ sh:path rv:sourceObservation ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SourceObservation ] ;
+    sh:property [ sh:path rv:sourceByteDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:sourceMappingRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 100 ] ;
+    sh:property [ sh:path rv:sourceMappedValuesJson ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 131072 ] .

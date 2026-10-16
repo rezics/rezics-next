@@ -133,7 +133,7 @@ final class TitleControlPolicy {
                     || !ProfileRegistry.required(source, "mapping").equals(text(one(data, SOURCE, conversion, rv("sourceMappingRevision")))))
                     return error("source observation or mapping differs");
                 if (action.equals("work.title.apply")) {
-                    if (!ProfileRegistry.required(intent, "title").equals(text(one(data, SOURCE, conversion, rv("sourceTitle")))))
+                    if (!ProfileRegistry.required(intent, "title").equals(SourceProjectionPolicy.sourceTitle(data, conversion)))
                         return error("source title differs from retained conversion");
                     if (old == null) {
                         if (!ProfileRegistry.required(source, "initialHead").equals(head.getURI())

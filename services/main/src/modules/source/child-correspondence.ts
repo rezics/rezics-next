@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { SourceConversionInvalid, type OpenLibraryConversionStore,
-  type OpenLibraryWorkProjection } from './open-library-conversion.ts';
+import { SourceConversionInvalid } from './open-library-conversion.ts';
+import type { MappedConversionReader } from './mapped-values.ts';
 
-type ChildField = 'authors' | 'subjects';
+type ChildField = string;
 type ChildStatus = 'matched' | 'changed' | 'added' | 'removed' | 'ambiguous' | 'unresolved';
 
 export interface SourceChildOccurrence {
@@ -15,7 +15,7 @@ export interface SourceChildOccurrence {
 }
 
 export interface SourceChildCorrespondence {
-  profile: 'open-library-work-child-correspondence-v1';
+  profile: 'open-library-work-child-correspondence-v1' | 'source-mapped-child-correspondence-v1';
   state: 'assessed';
   record: string;
   baseConversion: string;
@@ -25,11 +25,6 @@ export interface SourceChildCorrespondence {
 }
 
 type Child = { sourceKey: string; roleKey: string | null };
-
-function children(projection: OpenLibraryWorkProjection, field: ChildField): Child[] | null {
-  if (field === 'authors') return projection.authorRefs;
-  return projection.subjects?.map(sourceKey => ({ sourceKey, roleKey: null })) ?? null;
-}
 
 export function sourceChildOccurrence(observation: string, field: ChildField, ordinal: number): string {
   const digest = createHash('sha256').update(JSON.stringify({ observation, field, ordinal }))
@@ -79,22 +74,23 @@ function assessedField(field: ChildField, baseObservation: string,
 }
 
 /** Observation-qualified positions are never silently promoted to native child IDs. */
-export async function compareSourceChildren(conversions: OpenLibraryConversionStore,
+export async function compareSourceChildren(conversions: MappedConversionReader,
   principalId: string, baseId: string, candidateId: string):
   Promise<SourceChildCorrespondence | null> {
   const [base, candidate] = await Promise.all([
-    conversions.verifiedRead(principalId, baseId),
-    conversions.verifiedRead(principalId, candidateId),
+    conversions.mappedRead(principalId, baseId),
+    conversions.mappedRead(principalId, candidateId),
   ]);
   if (!base || !candidate) return null;
   if (base.observation.record !== candidate.observation.record) {
     throw new SourceConversionInvalid('source child comparisons require one SourceRecord');
   }
-  return { profile: 'open-library-work-child-correspondence-v1', state: 'assessed',
+  return { profile: base.legacy && candidate.legacy ? 'open-library-work-child-correspondence-v1'
+    : 'source-mapped-child-correspondence-v1', state: 'assessed',
     record: base.observation.record, baseConversion: base.conversion.conversion,
     candidateConversion: candidate.conversion.conversion,
-    fields: (['authors', 'subjects'] as const).map(field => assessedField(field,
+    fields: [...new Set([...base.values.children, ...candidate.values.children].map(child => child.field))].map(field => assessedField(field,
       base.observation.observation, candidate.observation.observation,
-      children(base.conversion.projection, field),
-      children(candidate.conversion.projection, field))) };
+      base.values.children.find(child => child.field === field)?.values ?? null,
+      candidate.values.children.find(child => child.field === field)?.values ?? null)) };
 }

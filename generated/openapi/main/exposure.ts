@@ -684,6 +684,7 @@ export const operationExposures = {
   "postV1SourcesIdentity-corrections": "platform:catalogue-import",
   "postV1SourcesIntakes": "platform:catalogue-import",
   "postV1SourcesNative-child-supportsBySupportWithdrawals": "platform:catalogue-import",
+  "postV1SourcesObservationsByObservationConversions": "platform:catalogue-import",
   "postV1SourcesObservationsByObservationConversionsOpen-library-work": "platform:catalogue-import",
   "postV1SourcesObservationsByObservationDerivation": "platform:wiki-agents",
   "postV1SourcesObservationsByObservationDisposition": "platform:wiki-agents",

@@ -805431,10 +805431,7 @@
                             "type": "string"
                           },
                           "field": {
-                            "enum": [
-                              "authors",
-                              "subjects"
-                            ],
+                            "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                             "type": "string"
                           }
                         },
@@ -805449,7 +805446,10 @@
                       "type": "array"
                     },
                     "profile": {
-                      "const": "open-library-work-child-correspondence-v1",
+                      "enum": [
+                        "open-library-work-child-correspondence-v1",
+                        "source-mapped-child-correspondence-v1"
+                      ],
                       "type": "string"
                     },
                     "record": {
@@ -806229,17 +806229,6 @@
                         "properties": {
                           "baseDisposition": {
                             "~elyTyp": 7,
-                            "enum": [
-                              "source-identity",
-                              "candidate-fact",
-                              "source-expression",
-                              "source-reference",
-                              "source-terms",
-                              "source-metadata",
-                              "retained-only",
-                              "unmapped-retained",
-                              null
-                            ],
                             "nullable": true,
                             "type": [
                               "string",
@@ -806248,17 +806237,6 @@
                           },
                           "candidateDisposition": {
                             "~elyTyp": 7,
-                            "enum": [
-                              "source-identity",
-                              "candidate-fact",
-                              "source-expression",
-                              "source-reference",
-                              "source-terms",
-                              "source-metadata",
-                              "retained-only",
-                              "unmapped-retained",
-                              null
-                            ],
                             "nullable": true,
                             "type": [
                               "string",
@@ -806289,7 +806267,10 @@
                       "type": "array"
                     },
                     "profile": {
-                      "const": "open-library-work-source-drift-v1",
+                      "enum": [
+                        "open-library-work-source-drift-v1",
+                        "source-mapped-drift-v1"
+                      ],
                       "type": "string"
                     },
                     "record": {
@@ -807034,137 +807015,346 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "conversion": {
-                      "type": "string"
-                    },
-                    "createdAt": {
-                      "type": "string"
-                    },
-                    "fieldInventory": {
-                      "items": {
-                        "properties": {
-                          "disposition": {
-                            "enum": [
-                              "source-identity",
-                              "candidate-fact",
-                              "source-expression",
-                              "source-reference",
-                              "source-terms",
-                              "source-metadata",
-                              "retained-only",
-                              "unmapped-retained"
-                            ],
-                            "type": "string"
-                          },
-                          "field": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "field",
-                          "disposition"
-                        ],
-                        "type": "object"
-                      },
-                      "type": "array"
-                    },
-                    "mappingRevision": {
-                      "const": "open-library-work-map-v1",
-                      "type": "string"
-                    },
-                    "observation": {
-                      "type": "string"
-                    },
-                    "profile": {
-                      "const": "open-library-work-source-conversion-v1",
-                      "type": "string"
-                    },
-                    "projection": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "authorRefs": {
-                          "~elyTyp": 7,
+                        "conversion": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "fieldInventory": {
                           "items": {
                             "properties": {
-                              "roleKey": {
-                                "~elyTyp": 7,
-                                "nullable": true,
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
+                              "disposition": {
+                                "enum": [
+                                  "source-identity",
+                                  "candidate-fact",
+                                  "source-expression",
+                                  "source-reference",
+                                  "source-terms",
+                                  "source-metadata",
+                                  "retained-only",
+                                  "unmapped-retained"
+                                ],
+                                "type": "string"
                               },
-                              "sourceKey": {
+                              "field": {
                                 "type": "string"
                               }
                             },
                             "required": [
-                              "sourceKey",
-                              "roleKey"
+                              "field",
+                              "disposition"
                             ],
                             "type": "object"
                           },
-                          "nullable": true,
-                          "type": [
-                            "array",
-                            "null"
-                          ]
+                          "type": "array"
                         },
-                        "description": {
-                          "~elyTyp": 7,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "sourceKey": {
+                        "mappingRevision": {
+                          "const": "open-library-work-map-v1",
                           "type": "string"
                         },
-                        "subjects": {
-                          "~elyTyp": 7,
-                          "items": {
-                            "type": "string"
-                          },
-                          "nullable": true,
-                          "type": [
-                            "array",
-                            "null"
-                          ]
+                        "observation": {
+                          "type": "string"
                         },
-                        "title": {
+                        "profile": {
+                          "const": "open-library-work-source-conversion-v1",
+                          "type": "string"
+                        },
+                        "projection": {
+                          "properties": {
+                            "authorRefs": {
+                              "~elyTyp": 7,
+                              "items": {
+                                "properties": {
+                                  "roleKey": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "sourceKey": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "sourceKey",
+                                  "roleKey"
+                                ],
+                                "type": "object"
+                              },
+                              "nullable": true,
+                              "type": [
+                                "array",
+                                "null"
+                              ]
+                            },
+                            "description": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "sourceKey": {
+                              "type": "string"
+                            },
+                            "subjects": {
+                              "~elyTyp": 7,
+                              "items": {
+                                "type": "string"
+                              },
+                              "nullable": true,
+                              "type": [
+                                "array",
+                                "null"
+                              ]
+                            },
+                            "title": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "sourceKey",
+                            "title",
+                            "description",
+                            "authorRefs",
+                            "subjects"
+                          ],
+                          "type": "object"
+                        },
+                        "sourceDigest": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "staged",
                           "type": "string"
                         }
                       },
                       "required": [
-                        "sourceKey",
-                        "title",
-                        "description",
-                        "authorRefs",
-                        "subjects"
+                        "profile",
+                        "state",
+                        "conversion",
+                        "observation",
+                        "mappingRevision",
+                        "sourceDigest",
+                        "projection",
+                        "fieldInventory",
+                        "createdAt"
                       ],
                       "type": "object"
                     },
-                    "sourceDigest": {
-                      "type": "string"
-                    },
-                    "state": {
-                      "const": "staged",
-                      "type": "string"
+                    {
+                      "properties": {
+                        "conversion": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "fieldInventory": {
+                          "items": {
+                            "properties": {
+                              "disposition": {
+                                "type": "string"
+                              },
+                              "field": {
+                                "type": "string"
+                              },
+                              "grain": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "grain",
+                              "field",
+                              "disposition"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "mappingRevision": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "source-mapped-conversion-v1",
+                          "type": "string"
+                        },
+                        "projection": {
+                          "properties": {
+                            "children": {
+                              "items": {
+                                "properties": {
+                                  "field": {
+                                    "type": "string"
+                                  },
+                                  "grain": {
+                                    "type": "string"
+                                  },
+                                  "slot": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "values": {
+                                    "~elyTyp": 7,
+                                    "items": {
+                                      "properties": {
+                                        "pointer": {
+                                          "type": "string"
+                                        },
+                                        "roleKey": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "sourceKey": {
+                                          "type": "string"
+                                        },
+                                        "value": {}
+                                      },
+                                      "required": [
+                                        "sourceKey",
+                                        "roleKey",
+                                        "pointer",
+                                        "value"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "nullable": true,
+                                    "type": [
+                                      "array",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "field",
+                                  "grain",
+                                  "slot",
+                                  "values"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "fields": {
+                              "items": {
+                                "properties": {
+                                  "field": {
+                                    "type": "string"
+                                  },
+                                  "grain": {
+                                    "type": "string"
+                                  },
+                                  "pointer": {
+                                    "type": "string"
+                                  },
+                                  "slot": {
+                                    "type": "string"
+                                  },
+                                  "value": {}
+                                },
+                                "required": [
+                                  "grain",
+                                  "field",
+                                  "pointer",
+                                  "slot",
+                                  "value"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "semanticTypes": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "sourceOnlyFields": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "title": {
+                              "properties": {
+                                "field": {
+                                  "type": "string"
+                                },
+                                "grain": {
+                                  "type": "string"
+                                },
+                                "pointer": {
+                                  "type": "string"
+                                },
+                                "slot": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "grain",
+                                "field",
+                                "pointer",
+                                "slot",
+                                "value"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "semanticTypes",
+                            "fields",
+                            "children",
+                            "sourceOnlyFields"
+                          ],
+                          "type": "object"
+                        },
+                        "sourceDigest": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "staged",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "conversion",
+                        "observation",
+                        "mappingRevision",
+                        "sourceDigest",
+                        "projection",
+                        "fieldInventory",
+                        "createdAt"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "profile",
-                    "state",
-                    "conversion",
-                    "observation",
-                    "mappingRevision",
-                    "sourceDigest",
-                    "projection",
-                    "fieldInventory",
-                    "createdAt"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -807884,7 +808074,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "profile": {
-                    "const": "open-library-native-work-proposal-v1",
+                    "enum": [
+                      "open-library-native-work-proposal-v1",
+                      "source-native-work-proposal-v1"
+                    ],
                     "type": "string"
                   }
                 },
@@ -807899,7 +808092,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "profile": {
-                    "const": "open-library-native-work-proposal-v1",
+                    "enum": [
+                      "open-library-native-work-proposal-v1",
+                      "source-native-work-proposal-v1"
+                    ],
                     "type": "string"
                   }
                 },
@@ -807914,7 +808110,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "profile": {
-                    "const": "open-library-native-work-proposal-v1",
+                    "enum": [
+                      "open-library-native-work-proposal-v1",
+                      "source-native-work-proposal-v1"
+                    ],
                     "type": "string"
                   }
                 },
@@ -807967,11 +808166,17 @@
                         "graphReceipt": {
                           "type": "string"
                         },
+                        "mappingRevision": {
+                          "type": "string"
+                        },
                         "observation": {
                           "type": "string"
                         },
                         "profile": {
-                          "const": "open-library-native-work-proposal-v1",
+                          "enum": [
+                            "open-library-native-work-proposal-v1",
+                            "source-native-work-proposal-v1"
+                          ],
                           "type": "string"
                         },
                         "proposal": {
@@ -808015,36 +808220,18 @@
                           "type": "string"
                         },
                         "semanticTypes": {
-                          "items": false,
-                          "minItems": 1,
-                          "prefixItems": [
-                            {
-                              "const": "https://schema.org/Book",
-                              "type": "string"
-                            }
-                          ],
+                          "items": {
+                            "type": "string"
+                          },
                           "type": "array"
                         },
                         "sourceDigest": {
                           "type": "string"
                         },
                         "sourceOnlyFields": {
-                          "items": false,
-                          "minItems": 3,
-                          "prefixItems": [
-                            {
-                              "const": "description",
-                              "type": "string"
-                            },
-                            {
-                              "const": "authors",
-                              "type": "string"
-                            },
-                            {
-                              "const": "subjects",
-                              "type": "string"
-                            }
-                          ],
+                          "items": {
+                            "type": "string"
+                          },
                           "type": "array"
                         },
                         "state": {
@@ -808069,6 +808256,7 @@
                         "semanticTypes",
                         "semanticTypeBasis",
                         "sourceOnlyFields",
+                        "mappingRevision",
                         "rightsEvidence",
                         "rightsStatus",
                         "graphReceipt",
@@ -808130,11 +808318,17 @@
                         "graphReceipt": {
                           "type": "string"
                         },
+                        "mappingRevision": {
+                          "type": "string"
+                        },
                         "observation": {
                           "type": "string"
                         },
                         "profile": {
-                          "const": "open-library-native-work-proposal-v1",
+                          "enum": [
+                            "open-library-native-work-proposal-v1",
+                            "source-native-work-proposal-v1"
+                          ],
                           "type": "string"
                         },
                         "proposal": {
@@ -808178,36 +808372,18 @@
                           "type": "string"
                         },
                         "semanticTypes": {
-                          "items": false,
-                          "minItems": 1,
-                          "prefixItems": [
-                            {
-                              "const": "https://schema.org/Book",
-                              "type": "string"
-                            }
-                          ],
+                          "items": {
+                            "type": "string"
+                          },
                           "type": "array"
                         },
                         "sourceDigest": {
                           "type": "string"
                         },
                         "sourceOnlyFields": {
-                          "items": false,
-                          "minItems": 3,
-                          "prefixItems": [
-                            {
-                              "const": "description",
-                              "type": "string"
-                            },
-                            {
-                              "const": "authors",
-                              "type": "string"
-                            },
-                            {
-                              "const": "subjects",
-                              "type": "string"
-                            }
-                          ],
+                          "items": {
+                            "type": "string"
+                          },
                           "type": "array"
                         },
                         "state": {
@@ -808232,6 +808408,7 @@
                         "semanticTypes",
                         "semanticTypeBasis",
                         "sourceOnlyFields",
+                        "mappingRevision",
                         "rightsEvidence",
                         "rightsStatus",
                         "graphReceipt",
@@ -809182,73 +809359,221 @@
                       "type": "string"
                     },
                     "profile": {
-                      "const": "open-library-work-source-graph-v1",
+                      "enum": [
+                        "open-library-work-source-graph-v1",
+                        "source-mapped-graph-v1"
+                      ],
                       "type": "string"
                     },
                     "projection": {
-                      "properties": {
-                        "authorRefs": {
-                          "~elyTyp": 7,
-                          "items": {
-                            "properties": {
-                              "roleKey": {
-                                "~elyTyp": 7,
-                                "nullable": true,
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "authorRefs": {
+                              "~elyTyp": 7,
+                              "items": {
+                                "properties": {
+                                  "roleKey": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "sourceKey": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "sourceKey",
+                                  "roleKey"
+                                ],
+                                "type": "object"
                               },
-                              "sourceKey": {
-                                "type": "string"
-                              }
+                              "nullable": true,
+                              "type": [
+                                "array",
+                                "null"
+                              ]
                             },
-                            "required": [
-                              "sourceKey",
-                              "roleKey"
-                            ],
-                            "type": "object"
+                            "description": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "sourceKey": {
+                              "type": "string"
+                            },
+                            "subjects": {
+                              "~elyTyp": 7,
+                              "items": {
+                                "type": "string"
+                              },
+                              "nullable": true,
+                              "type": [
+                                "array",
+                                "null"
+                              ]
+                            },
+                            "title": {
+                              "type": "string"
+                            }
                           },
-                          "nullable": true,
-                          "type": [
-                            "array",
-                            "null"
-                          ]
+                          "required": [
+                            "sourceKey",
+                            "title",
+                            "description",
+                            "authorRefs",
+                            "subjects"
+                          ],
+                          "type": "object"
                         },
-                        "description": {
-                          "~elyTyp": 7,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "sourceKey": {
-                          "type": "string"
-                        },
-                        "subjects": {
-                          "~elyTyp": 7,
-                          "items": {
-                            "type": "string"
+                        {
+                          "properties": {
+                            "children": {
+                              "items": {
+                                "properties": {
+                                  "field": {
+                                    "type": "string"
+                                  },
+                                  "grain": {
+                                    "type": "string"
+                                  },
+                                  "slot": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "values": {
+                                    "~elyTyp": 7,
+                                    "items": {
+                                      "properties": {
+                                        "pointer": {
+                                          "type": "string"
+                                        },
+                                        "roleKey": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "sourceKey": {
+                                          "type": "string"
+                                        },
+                                        "value": {}
+                                      },
+                                      "required": [
+                                        "sourceKey",
+                                        "roleKey",
+                                        "pointer",
+                                        "value"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "nullable": true,
+                                    "type": [
+                                      "array",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "field",
+                                  "grain",
+                                  "slot",
+                                  "values"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "fields": {
+                              "items": {
+                                "properties": {
+                                  "field": {
+                                    "type": "string"
+                                  },
+                                  "grain": {
+                                    "type": "string"
+                                  },
+                                  "pointer": {
+                                    "type": "string"
+                                  },
+                                  "slot": {
+                                    "type": "string"
+                                  },
+                                  "value": {}
+                                },
+                                "required": [
+                                  "grain",
+                                  "field",
+                                  "pointer",
+                                  "slot",
+                                  "value"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "semanticTypes": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "sourceOnlyFields": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "title": {
+                              "properties": {
+                                "field": {
+                                  "type": "string"
+                                },
+                                "grain": {
+                                  "type": "string"
+                                },
+                                "pointer": {
+                                  "type": "string"
+                                },
+                                "slot": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "grain",
+                                "field",
+                                "pointer",
+                                "slot",
+                                "value"
+                              ],
+                              "type": "object"
+                            }
                           },
-                          "nullable": true,
-                          "type": [
-                            "array",
-                            "null"
-                          ]
-                        },
-                        "title": {
-                          "type": "string"
+                          "required": [
+                            "title",
+                            "semanticTypes",
+                            "fields",
+                            "children",
+                            "sourceOnlyFields"
+                          ],
+                          "type": "object"
                         }
-                      },
-                      "required": [
-                        "sourceKey",
-                        "title",
-                        "description",
-                        "authorRefs",
-                        "subjects"
-                      ],
-                      "type": "object"
+                      ]
                     },
                     "receipt": {
                       "type": "string"
@@ -810013,7 +810338,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "profile": {
-                    "const": "source-open-library-work-v1",
+                    "enum": [
+                      "source-open-library-work-v1",
+                      "source-mapped-values-v1"
+                    ],
                     "type": "string"
                   }
                 },
@@ -810028,7 +810356,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "profile": {
-                    "const": "source-open-library-work-v1",
+                    "enum": [
+                      "source-open-library-work-v1",
+                      "source-mapped-values-v1"
+                    ],
                     "type": "string"
                   }
                 },
@@ -810043,7 +810374,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "profile": {
-                    "const": "source-open-library-work-v1",
+                    "enum": [
+                      "source-open-library-work-v1",
+                      "source-mapped-values-v1"
+                    ],
                     "type": "string"
                   }
                 },
@@ -810069,73 +810403,221 @@
                       "type": "string"
                     },
                     "profile": {
-                      "const": "open-library-work-source-graph-v1",
+                      "enum": [
+                        "open-library-work-source-graph-v1",
+                        "source-mapped-graph-v1"
+                      ],
                       "type": "string"
                     },
                     "projection": {
-                      "properties": {
-                        "authorRefs": {
-                          "~elyTyp": 7,
-                          "items": {
-                            "properties": {
-                              "roleKey": {
-                                "~elyTyp": 7,
-                                "nullable": true,
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "authorRefs": {
+                              "~elyTyp": 7,
+                              "items": {
+                                "properties": {
+                                  "roleKey": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "sourceKey": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "sourceKey",
+                                  "roleKey"
+                                ],
+                                "type": "object"
                               },
-                              "sourceKey": {
-                                "type": "string"
-                              }
+                              "nullable": true,
+                              "type": [
+                                "array",
+                                "null"
+                              ]
                             },
-                            "required": [
-                              "sourceKey",
-                              "roleKey"
-                            ],
-                            "type": "object"
+                            "description": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "sourceKey": {
+                              "type": "string"
+                            },
+                            "subjects": {
+                              "~elyTyp": 7,
+                              "items": {
+                                "type": "string"
+                              },
+                              "nullable": true,
+                              "type": [
+                                "array",
+                                "null"
+                              ]
+                            },
+                            "title": {
+                              "type": "string"
+                            }
                           },
-                          "nullable": true,
-                          "type": [
-                            "array",
-                            "null"
-                          ]
+                          "required": [
+                            "sourceKey",
+                            "title",
+                            "description",
+                            "authorRefs",
+                            "subjects"
+                          ],
+                          "type": "object"
                         },
-                        "description": {
-                          "~elyTyp": 7,
-                          "nullable": true,
-                          "type": [
-                            "string",
-                            "null"
-                          ]
-                        },
-                        "sourceKey": {
-                          "type": "string"
-                        },
-                        "subjects": {
-                          "~elyTyp": 7,
-                          "items": {
-                            "type": "string"
+                        {
+                          "properties": {
+                            "children": {
+                              "items": {
+                                "properties": {
+                                  "field": {
+                                    "type": "string"
+                                  },
+                                  "grain": {
+                                    "type": "string"
+                                  },
+                                  "slot": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "values": {
+                                    "~elyTyp": 7,
+                                    "items": {
+                                      "properties": {
+                                        "pointer": {
+                                          "type": "string"
+                                        },
+                                        "roleKey": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "sourceKey": {
+                                          "type": "string"
+                                        },
+                                        "value": {}
+                                      },
+                                      "required": [
+                                        "sourceKey",
+                                        "roleKey",
+                                        "pointer",
+                                        "value"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "nullable": true,
+                                    "type": [
+                                      "array",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "field",
+                                  "grain",
+                                  "slot",
+                                  "values"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "fields": {
+                              "items": {
+                                "properties": {
+                                  "field": {
+                                    "type": "string"
+                                  },
+                                  "grain": {
+                                    "type": "string"
+                                  },
+                                  "pointer": {
+                                    "type": "string"
+                                  },
+                                  "slot": {
+                                    "type": "string"
+                                  },
+                                  "value": {}
+                                },
+                                "required": [
+                                  "grain",
+                                  "field",
+                                  "pointer",
+                                  "slot",
+                                  "value"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "semanticTypes": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "sourceOnlyFields": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "title": {
+                              "properties": {
+                                "field": {
+                                  "type": "string"
+                                },
+                                "grain": {
+                                  "type": "string"
+                                },
+                                "pointer": {
+                                  "type": "string"
+                                },
+                                "slot": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "grain",
+                                "field",
+                                "pointer",
+                                "slot",
+                                "value"
+                              ],
+                              "type": "object"
+                            }
                           },
-                          "nullable": true,
-                          "type": [
-                            "array",
-                            "null"
-                          ]
-                        },
-                        "title": {
-                          "type": "string"
+                          "required": [
+                            "title",
+                            "semanticTypes",
+                            "fields",
+                            "children",
+                            "sourceOnlyFields"
+                          ],
+                          "type": "object"
                         }
-                      },
-                      "required": [
-                        "sourceKey",
-                        "title",
-                        "description",
-                        "authorRefs",
-                        "subjects"
-                      ],
-                      "type": "object"
+                      ]
                     },
                     "receipt": {
                       "type": "string"
@@ -811119,10 +811601,7 @@
                     "type": "boolean"
                   },
                   "field": {
-                    "enum": [
-                      "authors",
-                      "subjects"
-                    ],
+                    "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                     "type": "string"
                   },
                   "profile": {
@@ -811167,10 +811646,7 @@
                     "type": "boolean"
                   },
                   "field": {
-                    "enum": [
-                      "authors",
-                      "subjects"
-                    ],
+                    "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                     "type": "string"
                   },
                   "profile": {
@@ -811215,10 +811691,7 @@
                     "type": "boolean"
                   },
                   "field": {
-                    "enum": [
-                      "authors",
-                      "subjects"
-                    ],
+                    "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                     "type": "string"
                   },
                   "profile": {
@@ -811274,10 +811747,7 @@
                           "type": "string"
                         },
                         "field": {
-                          "enum": [
-                            "authors",
-                            "subjects"
-                          ],
+                          "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                           "type": "string"
                         },
                         "profile": {
@@ -811358,10 +811828,7 @@
                           "type": "string"
                         },
                         "field": {
-                          "enum": [
-                            "authors",
-                            "subjects"
-                          ],
+                          "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                           "type": "string"
                         },
                         "profile": {
@@ -812356,10 +812823,7 @@
                       "type": "string"
                     },
                     "field": {
-                      "enum": [
-                        "authors",
-                        "subjects"
-                      ],
+                      "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                       "type": "string"
                     },
                     "profile": {
@@ -825937,7 +826401,7 @@
                           "type": "string"
                         },
                         "field": {
-                          "const": "subjects",
+                          "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                           "type": "string"
                         },
                         "nativeOrdinal": {
@@ -826006,7 +826470,7 @@
                       "type": "string"
                     },
                     "field": {
-                      "const": "subjects",
+                      "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                       "type": "string"
                     },
                     "headGuarantee": {
@@ -826904,7 +827368,7 @@
                               "type": "string"
                             },
                             "field": {
-                              "const": "subjects",
+                              "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                               "type": "string"
                             },
                             "nativeOrdinal": {
@@ -826973,7 +827437,7 @@
                           "type": "string"
                         },
                         "field": {
-                          "const": "subjects",
+                          "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                           "type": "string"
                         },
                         "headGuarantee": {
@@ -827118,7 +827582,7 @@
                               "type": "string"
                             },
                             "field": {
-                              "const": "subjects",
+                              "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                               "type": "string"
                             },
                             "nativeOrdinal": {
@@ -827187,7 +827651,7 @@
                           "type": "string"
                         },
                         "field": {
-                          "const": "subjects",
+                          "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                           "type": "string"
                         },
                         "headGuarantee": {
@@ -829034,6 +829498,1420 @@
                         "code"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "const": "platform_access_unavailable",
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": 503,
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-rezics-exposure": "platform:catalogue-import"
+      }
+    },
+    "/v1/sources/observations/{observation}/conversions": {
+      "post": {
+        "operationId": "postV1SourcesObservationsByObservationConversions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "observation",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "profile": {
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "profile": {
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "profile": {
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "profile"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "conversion": {
+                      "properties": {
+                        "conversion": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "fieldInventory": {
+                          "items": {
+                            "properties": {
+                              "disposition": {
+                                "type": "string"
+                              },
+                              "field": {
+                                "type": "string"
+                              },
+                              "grain": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "grain",
+                              "field",
+                              "disposition"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "mappingRevision": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "source-mapped-conversion-v1",
+                          "type": "string"
+                        },
+                        "projection": {
+                          "properties": {
+                            "children": {
+                              "items": {
+                                "properties": {
+                                  "field": {
+                                    "type": "string"
+                                  },
+                                  "grain": {
+                                    "type": "string"
+                                  },
+                                  "slot": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "values": {
+                                    "~elyTyp": 7,
+                                    "items": {
+                                      "properties": {
+                                        "pointer": {
+                                          "type": "string"
+                                        },
+                                        "roleKey": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "sourceKey": {
+                                          "type": "string"
+                                        },
+                                        "value": {}
+                                      },
+                                      "required": [
+                                        "sourceKey",
+                                        "roleKey",
+                                        "pointer",
+                                        "value"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "nullable": true,
+                                    "type": [
+                                      "array",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "field",
+                                  "grain",
+                                  "slot",
+                                  "values"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "fields": {
+                              "items": {
+                                "properties": {
+                                  "field": {
+                                    "type": "string"
+                                  },
+                                  "grain": {
+                                    "type": "string"
+                                  },
+                                  "pointer": {
+                                    "type": "string"
+                                  },
+                                  "slot": {
+                                    "type": "string"
+                                  },
+                                  "value": {}
+                                },
+                                "required": [
+                                  "grain",
+                                  "field",
+                                  "pointer",
+                                  "slot",
+                                  "value"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "semanticTypes": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "sourceOnlyFields": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "title": {
+                              "properties": {
+                                "field": {
+                                  "type": "string"
+                                },
+                                "grain": {
+                                  "type": "string"
+                                },
+                                "pointer": {
+                                  "type": "string"
+                                },
+                                "slot": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "grain",
+                                "field",
+                                "pointer",
+                                "slot",
+                                "value"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "semanticTypes",
+                            "fields",
+                            "children",
+                            "sourceOnlyFields"
+                          ],
+                          "type": "object"
+                        },
+                        "sourceDigest": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "staged",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "conversion",
+                        "observation",
+                        "mappingRevision",
+                        "sourceDigest",
+                        "projection",
+                        "fieldInventory",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "conversion",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "conversion": {
+                      "properties": {
+                        "conversion": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "fieldInventory": {
+                          "items": {
+                            "properties": {
+                              "disposition": {
+                                "type": "string"
+                              },
+                              "field": {
+                                "type": "string"
+                              },
+                              "grain": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "grain",
+                              "field",
+                              "disposition"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "mappingRevision": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "source-mapped-conversion-v1",
+                          "type": "string"
+                        },
+                        "projection": {
+                          "properties": {
+                            "children": {
+                              "items": {
+                                "properties": {
+                                  "field": {
+                                    "type": "string"
+                                  },
+                                  "grain": {
+                                    "type": "string"
+                                  },
+                                  "slot": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "values": {
+                                    "~elyTyp": 7,
+                                    "items": {
+                                      "properties": {
+                                        "pointer": {
+                                          "type": "string"
+                                        },
+                                        "roleKey": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        },
+                                        "sourceKey": {
+                                          "type": "string"
+                                        },
+                                        "value": {}
+                                      },
+                                      "required": [
+                                        "sourceKey",
+                                        "roleKey",
+                                        "pointer",
+                                        "value"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "nullable": true,
+                                    "type": [
+                                      "array",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "field",
+                                  "grain",
+                                  "slot",
+                                  "values"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "fields": {
+                              "items": {
+                                "properties": {
+                                  "field": {
+                                    "type": "string"
+                                  },
+                                  "grain": {
+                                    "type": "string"
+                                  },
+                                  "pointer": {
+                                    "type": "string"
+                                  },
+                                  "slot": {
+                                    "type": "string"
+                                  },
+                                  "value": {}
+                                },
+                                "required": [
+                                  "grain",
+                                  "field",
+                                  "pointer",
+                                  "slot",
+                                  "value"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "semanticTypes": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "sourceOnlyFields": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "title": {
+                              "properties": {
+                                "field": {
+                                  "type": "string"
+                                },
+                                "grain": {
+                                  "type": "string"
+                                },
+                                "pointer": {
+                                  "type": "string"
+                                },
+                                "slot": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "grain",
+                                "field",
+                                "pointer",
+                                "slot",
+                                "value"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "semanticTypes",
+                            "fields",
+                            "children",
+                            "sourceOnlyFields"
+                          ],
+                          "type": "object"
+                        },
+                        "sourceDigest": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "staged",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "conversion",
+                        "observation",
+                        "mappingRevision",
+                        "sourceDigest",
+                        "projection",
+                        "fieldInventory",
+                        "createdAt"
+                      ],
+                      "type": "object"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "conversion",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "currentHead": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "detail": {
+                          "maxLength": 512,
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": 400,
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "validation": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "constraint": {
+                              "~elyTyp": 7,
+                              "maxLength": 180,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "path": {
+                              "~elyTyp": 7,
+                              "maxLength": 180,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "constraint"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "const": "invalid_request",
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": 400,
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "type": "string"
+                            },
+                            "currentHead": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "detail": {
+                              "maxLength": 512,
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": 401,
+                              "type": "number"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "validation": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "constraint": {
+                                  "~elyTyp": 7,
+                                  "maxLength": 180,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "path": {
+                                  "~elyTyp": 7,
+                                  "maxLength": 180,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "constraint"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "title",
+                            "status",
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "invalid_account_assertion",
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": 401,
+                              "type": "number"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "title",
+                            "status",
+                            "code"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "unauthorized",
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": 401,
+                              "type": "number"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "title",
+                            "status",
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "invalid_account_assertion",
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": 401,
+                              "type": "number"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "title",
+                            "status",
+                            "code"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "currentHead": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "detail": {
+                          "maxLength": 512,
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": 403,
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "validation": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "constraint": {
+                              "~elyTyp": 7,
+                              "maxLength": 180,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "path": {
+                              "~elyTyp": 7,
+                              "maxLength": 180,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "constraint"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "const": "platform_closed",
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": 403,
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "validation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "constraint": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "path": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "constraint"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "validation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "constraint": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "path": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "constraint"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "validation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "constraint": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "path": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "constraint"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "rate_limited",
+                      "type": "string"
+                    },
+                    "family": {
+                      "enum": [
+                        "write",
+                        "upload",
+                        "report",
+                        "correspondence",
+                        "search",
+                        "provider",
+                        "address"
+                      ],
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 429,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "family"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 429"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "currentHead": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "detail": {
+                          "maxLength": 512,
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": 500,
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "validation": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "constraint": {
+                              "~elyTyp": 7,
+                              "maxLength": 180,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "path": {
+                              "~elyTyp": 7,
+                              "maxLength": 180,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "constraint"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "const": "internal_error",
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": 500,
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "code": {
+                                  "type": "string"
+                                },
+                                "currentHead": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "detail": {
+                                  "maxLength": 512,
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "const": 503,
+                                  "type": "number"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string"
+                                },
+                                "validation": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "constraint": {
+                                      "~elyTyp": 7,
+                                      "maxLength": 180,
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "path": {
+                                      "~elyTyp": 7,
+                                      "maxLength": 180,
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "path",
+                                    "constraint"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "title",
+                                "status",
+                                "code"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "code": {
+                                  "const": "types_unavailable",
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "const": 503,
+                                  "type": "number"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "title",
+                                "status",
+                                "code"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "const": "rate_limit_unavailable",
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": 503,
+                              "type": "number"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "title",
+                            "status",
+                            "code"
+                          ],
+                          "type": "object"
+                        }
+                      ]
                     },
                     {
                       "additionalProperties": false,
@@ -836367,11 +838245,17 @@
                     "graphReceipt": {
                       "type": "string"
                     },
+                    "mappingRevision": {
+                      "type": "string"
+                    },
                     "observation": {
                       "type": "string"
                     },
                     "profile": {
-                      "const": "open-library-native-work-proposal-v1",
+                      "enum": [
+                        "open-library-native-work-proposal-v1",
+                        "source-native-work-proposal-v1"
+                      ],
                       "type": "string"
                     },
                     "proposal": {
@@ -836415,36 +838299,18 @@
                       "type": "string"
                     },
                     "semanticTypes": {
-                      "items": false,
-                      "minItems": 1,
-                      "prefixItems": [
-                        {
-                          "const": "https://schema.org/Book",
-                          "type": "string"
-                        }
-                      ],
+                      "items": {
+                        "type": "string"
+                      },
                       "type": "array"
                     },
                     "sourceDigest": {
                       "type": "string"
                     },
                     "sourceOnlyFields": {
-                      "items": false,
-                      "minItems": 3,
-                      "prefixItems": [
-                        {
-                          "const": "description",
-                          "type": "string"
-                        },
-                        {
-                          "const": "authors",
-                          "type": "string"
-                        },
-                        {
-                          "const": "subjects",
-                          "type": "string"
-                        }
-                      ],
+                      "items": {
+                        "type": "string"
+                      },
                       "type": "array"
                     },
                     "state": {
@@ -836469,6 +838335,7 @@
                     "semanticTypes",
                     "semanticTypeBasis",
                     "sourceOnlyFields",
+                    "mappingRevision",
                     "rightsEvidence",
                     "rightsStatus",
                     "graphReceipt",
@@ -837263,25 +839130,10 @@
                       ]
                     },
                     "semanticTypes": {
-                      "anyOf": [
-                        {
-                          "items": false,
-                          "minItems": 0,
-                          "prefixItems": [],
-                          "type": "array"
-                        },
-                        {
-                          "items": false,
-                          "minItems": 1,
-                          "prefixItems": [
-                            {
-                              "const": "https://schema.org/Book",
-                              "type": "string"
-                            }
-                          ],
-                          "type": "array"
-                        }
-                      ]
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
                     },
                     "sourceConversion": {
                       "type": "string"
@@ -838208,25 +840060,10 @@
                           ]
                         },
                         "semanticTypes": {
-                          "anyOf": [
-                            {
-                              "items": false,
-                              "minItems": 0,
-                              "prefixItems": [],
-                              "type": "array"
-                            },
-                            {
-                              "items": false,
-                              "minItems": 1,
-                              "prefixItems": [
-                                {
-                                  "const": "https://schema.org/Book",
-                                  "type": "string"
-                                }
-                              ],
-                              "type": "array"
-                            }
-                          ]
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
                         },
                         "sourceConversion": {
                           "type": "string"
@@ -838407,25 +840244,10 @@
                           ]
                         },
                         "semanticTypes": {
-                          "anyOf": [
-                            {
-                              "items": false,
-                              "minItems": 0,
-                              "prefixItems": [],
-                              "type": "array"
-                            },
-                            {
-                              "items": false,
-                              "minItems": 1,
-                              "prefixItems": [
-                                {
-                                  "const": "https://schema.org/Book",
-                                  "type": "string"
-                                }
-                              ],
-                              "type": "array"
-                            }
-                          ]
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
                         },
                         "sourceConversion": {
                           "type": "string"
@@ -844470,7 +846292,7 @@
                                   "type": "string"
                                 },
                                 "field": {
-                                  "const": "subjects",
+                                  "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                                   "type": "string"
                                 },
                                 "nativeOrdinal": {
@@ -844539,7 +846361,7 @@
                               "type": "string"
                             },
                             "field": {
-                              "const": "subjects",
+                              "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                               "type": "string"
                             },
                             "headGuarantee": {
@@ -846486,7 +848308,7 @@
                                       "type": "string"
                                     },
                                     "field": {
-                                      "const": "subjects",
+                                      "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                                       "type": "string"
                                     },
                                     "nativeOrdinal": {
@@ -846555,7 +848377,7 @@
                                   "type": "string"
                                 },
                                 "field": {
-                                  "const": "subjects",
+                                  "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                                   "type": "string"
                                 },
                                 "headGuarantee": {
@@ -847704,7 +849526,7 @@
                                       "type": "string"
                                     },
                                     "field": {
-                                      "const": "subjects",
+                                      "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                                       "type": "string"
                                     },
                                     "nativeOrdinal": {
@@ -847773,7 +849595,7 @@
                                   "type": "string"
                                 },
                                 "field": {
-                                  "const": "subjects",
+                                  "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                                   "type": "string"
                                 },
                                 "headGuarantee": {
@@ -930629,7 +932451,7 @@
                         "type": "string"
                       },
                       "mapping": {
-                        "const": "open-library-work-map-v1",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$",
                         "type": "string"
                       },
                       "observation": {
@@ -930751,7 +932573,7 @@
                         "type": "string"
                       },
                       "mapping": {
-                        "const": "open-library-work-map-v1",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$",
                         "type": "string"
                       },
                       "observation": {
@@ -930873,7 +932695,7 @@
                         "type": "string"
                       },
                       "mapping": {
-                        "const": "open-library-work-map-v1",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$",
                         "type": "string"
                       },
                       "observation": {
@@ -938521,7 +940343,7 @@
                       "type": "string"
                     },
                     "field": {
-                      "const": "subjects",
+                      "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                       "type": "string"
                     },
                     "nativeOrdinal": {
@@ -955634,7 +957456,7 @@
                     "type": "string"
                   },
                   "field": {
-                    "const": "subjects",
+                    "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                     "type": "string"
                   },
                   "nativeOrdinal": {
@@ -955721,7 +957543,7 @@
                     "type": "string"
                   },
                   "field": {
-                    "const": "subjects",
+                    "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                     "type": "string"
                   },
                   "nativeOrdinal": {
@@ -955808,7 +957630,7 @@
                     "type": "string"
                   },
                   "field": {
-                    "const": "subjects",
+                    "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                     "type": "string"
                   },
                   "nativeOrdinal": {
@@ -955892,7 +957714,7 @@
                               "type": "string"
                             },
                             "field": {
-                              "const": "subjects",
+                              "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                               "type": "string"
                             },
                             "nativeOrdinal": {
@@ -955961,7 +957783,7 @@
                           "type": "string"
                         },
                         "field": {
-                          "const": "subjects",
+                          "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                           "type": "string"
                         },
                         "headGuarantee": {
@@ -956106,7 +957928,7 @@
                               "type": "string"
                             },
                             "field": {
-                              "const": "subjects",
+                              "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                               "type": "string"
                             },
                             "nativeOrdinal": {
@@ -956175,7 +957997,7 @@
                           "type": "string"
                         },
                         "field": {
-                          "const": "subjects",
+                          "pattern": "^[A-Za-z][A-Za-z0-9:_.-]{0,99}$",
                           "type": "string"
                         },
                         "headGuarantee": {
@@ -962212,7 +964034,7 @@
                           "type": "string"
                         },
                         "mapping": {
-                          "const": "open-library-work-map-v1",
+                          "pattern": "^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$",
                           "type": "string"
                         },
                         "observation": {

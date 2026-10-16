@@ -48,7 +48,7 @@ test('G-382 Open Library author pages list public credited Works with projected 
         remote_ids: { wikidata: 'Q36322', goodreads: '1265', isni: 'not an ISNI' } }],
       [coKey, { name: 'Margaret Drabble' }]]);
     const intake = new SourceIntakeStore(stack.contentPool);
-    intake.reserveOpenLibrarySlot = async () => {};
+    intake.reserveProviderSlot = async () => {};
     const names = new SourceAuthorNameStore(stack.contentPool, intake, (async (url: string | URL | Request) => {
       const author = new URL(String(url)).pathname.replace(/\.json$/u, '');
       return Response.json({ key: author, type: { key: '/type/author' }, revision: 3, ...records.get(author) });

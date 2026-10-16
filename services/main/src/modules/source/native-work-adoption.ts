@@ -41,7 +41,7 @@ export interface NativeWorkSourceAdoption {
   sourceRecord: string;
   sourceConversion: string;
   adoptedFields: ['title'] | ['title', 'semanticTypes'];
-  semanticTypes: [] | ['https://schema.org/Book'];
+  semanticTypes: string[];
   semanticTypeBasis: 'source-record-type' | null;
   title: string;
   titleLanguage: string;
@@ -671,7 +671,7 @@ export class SourceNativeWorkAdoptionStore {
       const nativeIntent: TitleControlIntent = { work, expectedHead: input.expectedHead, basis: input.titleControl,
         action: 'work.title.apply', title: input.confirmedTitle, ...(input.language === undefined ? {} : { language: input.language }), source: { binding: support.binding,
           record: candidate.record, observation: candidate.observation, conversion: candidate.conversion,
-          proposal: candidate.proposal, mapping: 'open-library-work-map-v1', initialHead: support.adoptedAtRevision } };
+          proposal: candidate.proposal, mapping: candidate.mappingRevision, initialHead: support.adoptedAtRevision } };
       const keyDigest = hash(`${work}\0${candidateProposalId}`);
       const key = `source-title-${keyDigest.slice(0,8)}-${keyDigest.slice(8,12)}-${keyDigest.slice(12,16)}-${keyDigest.slice(16,20)}-${keyDigest.slice(20,32)}`;
       const principal = await this.account.verify(request, ['source:adopt', 'work:edit']);
@@ -758,7 +758,7 @@ export class SourceNativeWorkAdoptionStore {
     const intent: TitleControlIntent = { work, expectedHead: input.expectedHead, basis: input.titleControl,
       action: 'work.title.return', title, source: { binding: support.binding, record: candidate.record,
         observation: candidate.observation, conversion: candidate.conversion, proposal: candidate.proposal,
-        mapping: 'open-library-work-map-v1', initialHead: support.adoptedAtRevision } };
+        mapping: candidate.mappingRevision, initialHead: support.adoptedAtRevision } };
     const digest = titleControlDigest(intent);
     const principal = await this.account.verify(request, ['source:adopt', 'work:edit']);
     // Current, separate authority precedes the Source reservation, including replay.

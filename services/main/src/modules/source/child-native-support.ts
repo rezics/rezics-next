@@ -7,7 +7,7 @@ import { adoptNativeChild, nativeChildDigest, readNativeChild, readNativeChildRe
   NativeChildConflict, NativeChildInvalid, NativeChildUnavailable,
   type NativeChildValue, type NativeChildReceipt } from './child-native.ts';
 import { compareSourceChildren, sourceChildOccurrence } from './child-correspondence.ts';
-import type { OpenLibraryConversionStore } from './open-library-conversion.ts';
+import { CHILD_FIELD, type MappedConversionReader } from './mapped-values.ts';
 import type { SourceNativeWorkProposalStore } from './native-work-proposal.ts';
 import type { SourceChildCorrespondenceStore } from './record-child-correspondence.ts';
 
@@ -19,14 +19,14 @@ const id = (value: string) => value.split('/').at(-1)!;
 const url = (value: string) => `https://rezics.com/id/${value}`;
 
 export interface AdoptSourceNativeChildInput {
-  profile: 'source-native-child-adoption-v1'; field: 'subjects'; proposal: string;
+  profile: 'source-native-child-adoption-v1'; field: string; proposal: string;
   conversion: string; occurrence: string;
   sourceOrdinal: number; confirmedSourceKey: string; nativeOrdinal: number;
   expectedHead: string; actingSubject: string; baseSupport: string | null;
   correspondence: string | null; confirmedUse: 'factual-reference-only';
 }
 export interface NativeChildIntentRow {
-  id: string; principal_id: string; work: string; field_key: 'subjects';
+  id: string; principal_id: string; work: string; field_key: string;
   idempotency_key: string; request_digest: string; request: AdoptSourceNativeChildInput;
   proposal_id: string; conversion_id: string; record_id: string; occurrence: string;
   source_ordinal: number; source_key: string; native_ordinal: number;
@@ -41,7 +41,7 @@ interface WithdrawalRow { id: string; intent_id: string; principal_id: string;
 export function nativeChildSupportDigest(work: string, input: AdoptSourceNativeChildInput): string {
   if (![work, input.proposal, input.conversion, input.expectedHead, input.actingSubject]
     .every(value => NATIVE.test(value)) || input.profile !== 'source-native-child-adoption-v1'
-    || input.field !== 'subjects'
+    || !CHILD_FIELD.test(input.field)
     || (input.baseSupport !== null && !NATIVE.test(input.baseSupport))
     || (input.correspondence !== null && !NATIVE.test(input.correspondence))
     || !OCCURRENCE.test(input.occurrence)
@@ -66,7 +66,7 @@ export function nativeChildValue(row: NativeChildIntentRow): NativeChildValue {
 }
 
 /** Field-keyed Source intents are reserved before dispatch; exact retry repairs the certificate.
- * Cost: one bounded conversion (at most 128 subjects), one source proposal and optional
+ * Cost: one bounded conversion (at most 128 child occurrences), one source proposal and optional
  * base/correspondence by indexed ID, one Work-head read, one Access admission and one
  * constant-size graph command. Read and withdrawal use indexed support/certificate
  * lookups and one native child revision. Work is O(B + A + log N), where B is the
@@ -76,7 +76,7 @@ export function nativeChildValue(row: NativeChildIntentRow): NativeChildValue {
 export class SourceNativeChildStore {
   constructor(private readonly pool: Pool,
     private readonly proposals: SourceNativeWorkProposalStore,
-    private readonly conversions: OpenLibraryConversionStore,
+    private readonly conversions: MappedConversionReader,
     private readonly correspondences: SourceChildCorrespondenceStore,
     private readonly env: WorkActivationEnvironment,
     private readonly account: Pick<AccountAssertionVerifier, 'verify'>,
@@ -92,16 +92,17 @@ export class SourceNativeChildStore {
     const proposal = await this.proposals.read(principalId, id(input.proposal));
     if (!proposal) return null;
     if (proposal.conversion !== input.conversion) throw new NativeChildConflict('proposal/conversion pair differs');
-    const verified = await this.conversions.verifiedRead(principalId, id(input.conversion));
+    const verified = await this.conversions.mappedRead(principalId, id(input.conversion));
     if (!verified || proposal.record !== verified.observation.record
       || proposal.observation !== verified.observation.observation) {
       throw new NativeChildUnavailable('source child evidence is unavailable');
     }
-    const children = verified.conversion.projection.subjects;
+    const mapped = verified.values.children.find(child => child.field === input.field);
+    const children = mapped?.values;
     const child = children?.[input.sourceOrdinal];
-    if (!children || child === undefined || child !== input.confirmedSourceKey
-      || verified.conversion.fieldInventory.find(field => field.field === 'subjects')?.disposition !== 'source-terms'
-      || sourceChildOccurrence(verified.observation.observation, 'subjects', input.sourceOrdinal)
+    if (!children || child === undefined || child.sourceKey !== input.confirmedSourceKey
+      || mapped?.slot !== `work-native-child-v1#${input.field}`
+      || sourceChildOccurrence(verified.observation.observation, input.field, input.sourceOrdinal)
         !== input.occurrence) {
       throw new NativeChildConflict('complete exact source child occurrence is required');
     }

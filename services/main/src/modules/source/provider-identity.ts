@@ -1,3 +1,4 @@
+import { decodedProviderIdentity } from './provider-adapters.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 
@@ -99,9 +100,7 @@ export class ProviderIdentityStore {
       throw new ProviderIdentityUnavailable('complete retained identity observation is unavailable');
     }
     const value = evidenceValue(evidence.raw_bytes, path);
-    if (value !== evidence.to_external_id
-      && !(evidence.provider === 'open-library' && evidence.namespace === 'work'
-        && value === `/works/${evidence.to_external_id}`)) {
+    if (decodedProviderIdentity(evidence.provider, evidence.namespace, value) !== evidence.to_external_id) {
       throw new ProviderIdentityConflict('retained identity value differs from destination');
     }
   }

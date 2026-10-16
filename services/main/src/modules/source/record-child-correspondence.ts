@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { compareSourceChildren, type SourceChildCorrespondence,
   type SourceChildOccurrence } from './child-correspondence.ts';
-import type { OpenLibraryConversionStore } from './open-library-conversion.ts';
+import { CHILD_FIELD, type MappedConversionReader } from './mapped-values.ts';
 
 export class SourceChildCorrespondenceInvalid extends Error {}
 export class SourceChildCorrespondenceConflict extends Error {}
@@ -14,7 +14,7 @@ export interface RecordedSourceChildCorrespondence {
   record: string;
   baseConversion: string;
   candidateConversion: string;
-  field: 'authors' | 'subjects';
+  field: string;
   baseOccurrence: string;
   candidateOccurrence: string;
   baseOrdinal: number;
@@ -26,7 +26,7 @@ export interface RecordedSourceChildCorrespondence {
 interface Row {
   id: string; principal_id: string; record_id: string;
   base_conversion_id: string; candidate_conversion_id: string;
-  field: 'authors' | 'subjects'; base_occurrence: string;
+  field: string; base_occurrence: string;
   candidate_occurrence: string; base_ordinal: number; candidate_ordinal: number;
   source_key: string; idempotency_key: string; created_at: Date;
 }
@@ -38,7 +38,7 @@ const url = (id: string): string => `https://rezics.com/id/${id}`;
 const id = (uri: string): string => uri.split('/').at(-1)!;
 
 function selectedPair(comparison: SourceChildCorrespondence,
-  field: 'authors' | 'subjects', baseOccurrence: string, candidateOccurrence: string):
+  field: string, baseOccurrence: string, candidateOccurrence: string):
   { base: SourceChildOccurrence; candidate: SourceChildOccurrence } {
   const children = comparison.fields.find(item => item.field === field);
   const base = children?.base.find(item => item.occurrence === baseOccurrence);
@@ -64,7 +64,7 @@ function result(row: Row): RecordedSourceChildCorrespondence {
 
 export class SourceChildCorrespondenceStore {
   constructor(private readonly pool: Pool,
-    private readonly conversions: OpenLibraryConversionStore) {}
+    private readonly conversions: MappedConversionReader) {}
 
   private async verified(row: Row): Promise<RecordedSourceChildCorrespondence> {
     const comparison = await compareSourceChildren(this.conversions, row.principal_id,
@@ -89,13 +89,13 @@ export class SourceChildCorrespondenceStore {
 
   async record(principalId: string, key: string, input: {
     baseConversion: string; candidateConversion: string;
-    field: 'authors' | 'subjects'; baseOccurrence: string;
+    field: string; baseOccurrence: string;
     candidateOccurrence: string }):
     Promise<{ correspondence: RecordedSourceChildCorrespondence; replayed: boolean } | null> {
     if (!UUID.test(principalId) || !UUID.test(input.baseConversion)
       || !UUID.test(input.candidateConversion) || !KEY.test(key)
       || input.baseConversion === input.candidateConversion
-      || !['authors', 'subjects'].includes(input.field)
+      || !CHILD_FIELD.test(input.field)
       || !OCCURRENCE.test(input.baseOccurrence)
       || !OCCURRENCE.test(input.candidateOccurrence)) {
       throw new SourceChildCorrespondenceInvalid('invalid child correspondence request');

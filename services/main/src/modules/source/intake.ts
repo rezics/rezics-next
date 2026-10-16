@@ -1,3 +1,4 @@
+import { checkedSourceCapture } from './provider-adapters.ts';
 import { contentSessionClient } from '../../../../content/src/connection.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
@@ -23,7 +24,7 @@ export interface ManualSourceIntake {
 }
 
 export interface SourceCapture {
-  profile: 'open-library-work-acquisition-v1' | 'open-library-author-acquisition-v1';
+  profile: string;
   url: string;
   status: 200;
   etag: string | null;
@@ -164,7 +165,12 @@ export class SourceIntakeStore {
     this.rawRetentionGate = gate;
   }
 
-  async reserveOpenLibrarySlot(): Promise<void> {
+  async reserveProviderSlot(rate: { provider: string; intervalMs: number; maxQueueMs: number }): Promise<void> {
+    if (!/^[a-z0-9][a-z0-9-]{0,99}$/.test(rate.provider)
+      || !Number.isSafeInteger(rate.intervalMs) || rate.intervalMs < 1 || rate.intervalMs > 60_000
+      || !Number.isSafeInteger(rate.maxQueueMs) || rate.maxQueueMs < 0 || rate.maxQueueMs > 60_000) {
+      throw new SourceIntakeInvalid('invalid provider rate policy');
+    }
     const borrowed = contentSessionClient(this.pool);
     const client = borrowed ?? await this.pool.connect();
     let delayMs = 0;
@@ -172,16 +178,16 @@ export class SourceIntakeStore {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query(`INSERT INTO source.provider_rate_gate (provider, next_at)
-        VALUES ('open-library', clock_timestamp()) ON CONFLICT (provider) DO NOTHING`);
+        VALUES ($1, clock_timestamp()) ON CONFLICT (provider) DO NOTHING`, [rate.provider]);
       const gate = await client.query<{ delay_ms: number }>(`
         SELECT GREATEST(0, EXTRACT(EPOCH FROM (next_at - clock_timestamp())) * 1000)::float8
           AS delay_ms FROM source.provider_rate_gate
-        WHERE provider = 'open-library' FOR UPDATE`);
+        WHERE provider = $1 FOR UPDATE`, [rate.provider]);
       delayMs = gate.rows[0]?.delay_ms ?? 0;
-      if (delayMs > 3_000) throw new SourceProviderRateLimited('Open Library request queue is full');
+      if (delayMs > rate.maxQueueMs) throw new SourceProviderRateLimited('provider request queue is full');
       await client.query(`UPDATE source.provider_rate_gate
-        SET next_at = GREATEST(next_at, clock_timestamp()) + interval '1 second'
-        WHERE provider = 'open-library'`);
+        SET next_at = GREATEST(next_at, clock_timestamp()) + $2 * interval '1 millisecond'
+        WHERE provider = $1`, [rate.provider, rate.intervalMs]);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -220,23 +226,7 @@ export class SourceIntakeStore {
       if (!permitted) throw new SourceIntakeInvalid('provider terms prohibit raw response retention');
     }
     const { bytes, digest: byteDigest } = checkedInput(input);
-    const authorCapture = capture?.profile === 'open-library-author-acquisition-v1';
-    const capturePath = authorCapture ? 'authors' : 'works';
-    if (capture && ((!authorCapture && capture.profile !== 'open-library-work-acquisition-v1')
-      || capture.status !== 200
-      || !(authorCapture ? /^OL[1-9][0-9]{0,11}A$/ : /^OL[1-9][0-9]{0,11}W$/).test(input.externalId)
-      || input.provider !== 'open-library' || input.namespace !== (authorCapture ? 'author' : 'work')
-      || ![ `https://openlibrary.org/${capturePath}/${input.externalId}.json`,
-        ...(input.sourceRevision?.startsWith('open-library-revision:')
-          && /^[1-9][0-9]{0,8}$/.test(input.sourceRevision.slice(22))
-          ? [`https://openlibrary.org/${capturePath}/${input.externalId}.json?v=${input.sourceRevision.slice(22)}`]
-          : []) ].includes(capture.url)
-      || input.retention !== 'retained'
-      || !Number.isFinite(Date.parse(capture.fetchedAt))
-      || [capture.etag, capture.lastModified].some(value => value !== null
-        && (typeof value !== 'string' || value.length > 200)))) {
-      throw new SourceIntakeInvalid('invalid source capture metadata');
-    }
+    if (capture) checkedSourceCapture(input, capture);
     const manualDigest = manualSourceIntakeDigest(input);
     const requestDigest = capture ? createHash('sha256').update(JSON.stringify({
       family: 'source-acquisition-v1', manualDigest, capture })).digest('hex') : manualDigest;

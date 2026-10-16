@@ -1,3 +1,4 @@
+import { OPEN_LIBRARY_RATE } from './modules/source/open-library.ts';
 import { createWorkActivationEnvironment } from './modules/work/activate.ts';
 import { AccessExposure } from './modules/access/exposure.ts';
 import { PostgresReceiptCustodyStore, ReceiptCustody } from './modules/outbox/receipt-custody.ts';
@@ -555,7 +556,7 @@ export async function composeMain(input: ComposeMainInput) {
     openLibraryFetch,
     recipeSourceConversions: new RecipeSourceConversionStore(contentPool, sourceIntake),
     sourceAcquisitions: sourceAcquisitionServices(contentPool,
-      { reserve: () => sourceIntake.reserveOpenLibrarySlot(),
+      { reserve: () => sourceIntake.reserveProviderSlot(OPEN_LIBRARY_RATE),
         fetcher: openLibraryFetch,
         rawRetentionPermitted: (provider, namespace) => rightsStore.rawRetentionPermitted(provider, namespace) }),
     sourceConversions,

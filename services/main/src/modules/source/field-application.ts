@@ -4,7 +4,7 @@ import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../access/admis
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { hash } from '../work/activate.ts';
 import { RightsDenied, type RightsStore } from '../rights/store.ts';
-import type { OpenLibraryConversionStore } from './open-library-conversion.ts';
+import type { MappedConversionReader } from './mapped-values.ts';
 import type { SourceNativeWorkAdoptionStore } from './native-work-adoption.ts';
 import { changeNativeFieldControl, nativeFieldDigest, readNativeFieldReceipt,
   NativeFieldConflict, NativeFieldUnavailable, type NativeFieldControlIntent,
@@ -28,7 +28,7 @@ export class SourceFieldApplicationStore {
     private readonly account: Pick<AccountAssertionVerifier, 'verify'>,
     private readonly access: Pick<AccessAdmissionRegistry,
       'withWorkEditAuthority' | 'register' | 'claim' | 'recordGraphOutcome' | 'issueTitleAdmission'>,
-    private readonly conversions: OpenLibraryConversionStore,
+    private readonly conversions: MappedConversionReader,
     private readonly adoptions: SourceNativeWorkAdoptionStore,
     private readonly withdrawals: SourceFieldWithdrawalStore,
     private readonly rights: Pick<RightsStore, 'sourceSynopsisRestricted'>) {}
@@ -40,14 +40,15 @@ export class SourceFieldApplicationStore {
       throw new NativeFieldConflict('invalid source field application');
     }
     const source = intent.source;
-    const evidence = await this.conversions.verifiedRead(principalId, short(source.conversion));
+    const evidence = await this.conversions.mappedRead(principalId, short(source.conversion));
+    const mappedField = evidence?.values.fields.find(field => field.slot === SLOT);
     const binding = await this.adoptions.readSupport(principalId, intent.work);
     if (!evidence || !binding) throw new NativeFieldUnavailable('Source evidence is unavailable');
     if (binding.state !== 'recorded' || binding.sourceRecord !== source.record
       || evidence.observation.record !== source.record
       || evidence.observation.observation !== source.observation
       || evidence.conversion.conversion !== source.conversion
-      || evidence.conversion.projection.description !== intent.value
+      || mappedField?.value !== intent.value
       || evidence.conversion.mappingRevision !== source.mapping) {
       throw new NativeFieldConflict('Source description or binding changed');
     }
@@ -108,11 +109,11 @@ export class SourceFieldApplicationStore {
               (id,support_id,ordinal,principal_id,action,conversion_id,mapping_revision,
                grain,source_field,source_occurrence,value_digest,expected_head,control_intent,
                acting_subject,authority_proof,native_idempotency_key,idempotency_key,request_digest)
-              VALUES ($1,$2,$3,$4,'apply',$5,$6,'work','description',NULL,$7,$8,$9,$10,$11,$12,$13,$14)`,
+              VALUES ($1,$2,$3,$4,'apply',$5,$6,$15,$16,NULL,$7,$8,$9,$10,$11,$12,$13,$14)`,
             [stepId, support.id, support.step_count + 1, principalId, short(source.conversion),
               source.mapping, valueDigest, intent.expectedWorkHead,
               JSON.stringify(controlIntent), intent.actingSubject, JSON.stringify(proof),
-              nativeKey, key, requestDigest]);
+              nativeKey, key, requestDigest, mappedField!.grain, mappedField!.field]);
             await client.query('COMMIT');
             inserted = true;
             return { id: stepId, support_id: support.id, request_digest: requestDigest,

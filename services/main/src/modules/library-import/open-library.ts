@@ -1,4 +1,5 @@
 import { importedRightsAssessments } from '../rights/import-policy.ts';
+import { OPEN_LIBRARY_RATE } from '../source/open-library.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { commandError, problem } from '../../routes/problems.ts';
 import { checkedOpenLibraryWorkId, fetchOpenLibraryWork } from '../source/open-library.ts';
@@ -99,7 +100,7 @@ export async function adoptLibrarySource(
       }
       if (!observation) {
         await work.libraryImport!.takeBudget(body.actingSubject, 'acquisition');
-        await work.sourceIntake!.reserveOpenLibrarySlot();
+        await work.sourceIntake!.reserveProviderSlot(OPEN_LIBRARY_RATE);
         const captured = await fetchOpenLibraryWork(workId, work.openLibraryFetch ?? fetch);
         observation = (
           await work.sourceIntake!.submit(principalId, key, captured.input, captured.capture)

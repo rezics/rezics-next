@@ -99,7 +99,7 @@ test('G428: adoption reuses source intent and returns the adopted native Work', 
     rights: { store: { assessSourceImport: async (binding: { work: string }, assessments: unknown[]) => {
       expect(binding.work).toBe(iri('000000000004')); expect(assessments).toHaveLength(6); assessed++;
     } } },
-    sourceIntake: { replay: async () => observation, reserveOpenLibrarySlot: async () => { acquired++; },
+    sourceIntake: { replay: async () => observation, reserveProviderSlot: async () => { acquired++; },
       submit: async () => { acquired++; return { observation }; } },
     sourceConversions: { convert: async () => { converted++;
       return { conversion: { conversion: iri('000000000002') } }; } },
@@ -138,7 +138,7 @@ test('G428: first adoption captures Open Library through Main and a retry does n
       expect(binding.work).toBe(iri('000000000004')); expect(assessments).toHaveLength(6); assessed++;
     } } },
     sourceIntake: { replay: async () => stored ? observation : null,
-      reserveOpenLibrarySlot: async () => {},
+      reserveProviderSlot: async () => {},
       submit: async (_principal: string, _key: string, input: { externalId: string }) => {
         expect(input.externalId).toBe('OL45804W'); stored = true; return { observation };
       } },

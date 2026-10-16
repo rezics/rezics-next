@@ -6,6 +6,7 @@ import { heldMainRecovery, recoveryCursor, reconciledCursor, RetainedEffectConfl
 import { relayRetainedEventAt, RelayCheckpointConflict, type RelayCoverage,
   type SourceBoundaryCloudEvent } from '../outbox/relay.ts';
 import { OpenLibraryConversionStore } from './open-library-conversion.ts';
+import { MAPPING_REVISION } from './mapped-values.ts';
 import { SourceIntakeStore } from './intake.ts';
 import { sourceReificationValidations } from './reification.ts';
 import { OpenLibrarySourceGraph, legacySourceProjectionIdentity,
@@ -13,8 +14,6 @@ import { OpenLibrarySourceGraph, legacySourceProjectionIdentity,
   from './graph-projection.ts';
 
 const SOURCE = 'urn:rezics:graph:source';
-const PROFILE = 'source-open-library-work-v1';
-const SHAPE = `https://rezics.com/definition/${PROFILE}`;
 const SOURCE_ID = /^https:\/\/rezics\.com\/id\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
 /** Rebuild one retained source projection at its original position while graph admission is held. */
@@ -43,7 +42,7 @@ export async function reconcileRetainedSourceProjection(
     || data.batchId !== batch.batchId || data.routingEpoch !== batch.routingEpoch
     || batch.eventCount !== 1
     || receipt.action !== 'source.project' || receipt.outcome !== 'succeeded'
-    || receipt.mappingRevision !== 'open-library-work-map-v1'
+    || !MAPPING_REVISION.test(receipt.mappingRevision ?? '')
     || !conversionId || !SOURCE_ID.test(receipt.record)
     || !SOURCE_ID.test(receipt.observation)
     || eventId !== `urn:rezics:event:${hash(`${receipt.id}\0source`)}`
@@ -64,9 +63,10 @@ export async function reconcileRetainedSourceProjection(
     throw new RetainedEffectConflict('retained source conversion is unavailable');
   }
   const conversions = new OpenLibraryConversionStore(contentPool, new SourceIntakeStore(contentPool));
-  const evidence = await conversions.verifiedRead(principalId, conversionId);
+  const evidence = await conversions.mappedRead(principalId, conversionId);
   if (!evidence) throw new RetainedEffectConflict('retained source evidence is unavailable');
-  const { conversion, observation } = evidence;
+  const { observation } = evidence;
+  const conversion = evidence.legacy ?? evidence.conversion;
   const expected = sourceProjectionIdentity(conversion);
   const legacy = legacySourceProjectionIdentity(conversion);
   const exactReceipt = (expected.receipt === receipt.id && expected.digest === receipt.requestDigest)
@@ -85,12 +85,16 @@ export async function reconcileRetainedSourceProjection(
   const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
   const recovery = recoveryCursor(marker, sequence, paired);
   if (!fullyReified) {
-    const validations = await profileValidations(env.fuseki, PROFILE, [
-      { shape: `${SHAPE}/record-shape`, focus: [observation.record], graphs: [SOURCE] },
-      { shape: `${SHAPE}/observation-shape`, focus: [observation.observation], graphs: [SOURCE] },
-      { shape: `${SHAPE}/conversion-shape`, focus: [conversion.conversion], graphs: [SOURCE] },
+    const profile = evidence.legacy ? 'source-open-library-work-v1' : 'source-mapped-values-v1';
+    const shape = `https://rezics.com/definition/${profile}`;
+    const validations = await profileValidations(env.fuseki, profile, [
+      { shape: `${shape}/record-shape`, focus: [observation.record], graphs: [SOURCE] },
+      { shape: `${shape}/observation-shape`, focus: [observation.observation], graphs: [SOURCE] },
+      { shape: `${shape}/conversion-shape`, focus: [conversion.conversion], graphs: [SOURCE] },
     ]);
-    validations.push(...await sourceReificationValidations(env.fuseki, conversion, observation));
+    if (evidence.legacy) {
+      validations.push(...await sourceReificationValidations(env.fuseki, evidence.legacy, observation));
+    }
     const update = `PREFIX rv: <${RV}>
       PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
       PREFIX prov: <http://www.w3.org/ns/prov#>

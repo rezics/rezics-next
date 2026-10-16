@@ -1280,6 +1280,20 @@ export const profileRegistry = {
       "statement"
     ]
   },
+  "source-mapped-values-v1": {
+    "sha256": "afd7c8513194b4971af0362f6784d22ff56a93eab3def29f32431dc74ffd6548",
+    "file": "shapes/source-mapped-values-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/source-mapped-values-v1/record-shape",
+      "https://rezics.com/definition/source-mapped-values-v1/observation-shape",
+      "https://rezics.com/definition/source-mapped-values-v1/conversion-shape"
+    ],
+    "focusRoles": [
+      "record",
+      "observation",
+      "conversion"
+    ]
+  },
   "source-open-library-work-v1": {
     "sha256": "460460ddffc2e3f6f8384402d54e521bef4f179b9ac6897fac98641acbc4390b",
     "file": "shapes/source-open-library-work-v1.ttl",

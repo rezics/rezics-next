@@ -1097,6 +1097,11 @@
       "file": "shapes/source-field-statement-v1.ttl"
     },
     {
+      "id": "source-mapped-values-v1",
+      "sha256": "afd7c8513194b4971af0362f6784d22ff56a93eab3def29f32431dc74ffd6548",
+      "file": "shapes/source-mapped-values-v1.ttl"
+    },
+    {
       "id": "source-open-library-work-v1",
       "sha256": "460460ddffc2e3f6f8384402d54e521bef4f179b9ac6897fac98641acbc4390b",
       "file": "shapes/source-open-library-work-v1.ttl"
@@ -4379,6 +4384,7 @@
     "contexts/semantic-resource-v1.jsonld": "1e4076b5fccc395826ee5cbb8c0336972f5d787dcb5be5c713ccdd87b1529541",
     "contexts/semantic-rule-v1.jsonld": "f275d7bc7a7fca4f1408e983e0dac046d98754cbd7de7ec74550360581be006f",
     "contexts/source-field-statement-v1.jsonld": "9154e0e5683d657545fdd38d1a148151dbb8310b2c7b4e3b728f7f1199cc2d98",
+    "contexts/source-mapped-values-v1.jsonld": "1656aa47cecd2cd4cd89fe63626a678bcd84946e6956b93f6b5e3154f36f0aba",
     "contexts/source-open-library-work-v1.jsonld": "7f19c2c76b00224ad9037200f328e60e78b19f6857006d3001212d1ee7ac8b22",
     "contexts/source-reification-v1.jsonld": "8bbf1269642d326a80b8d660e8933b14653aaaad3a5531187771aad0bdd15f8c",
     "contexts/space-realm-v1.jsonld": "11b2e0d772fb9798323054e575677d80b22c7d9ba42b0dbe46ed35b9543c16fc",
@@ -4522,6 +4528,7 @@
     "shapes/semantic-resource-v1.ttl": "0ebbb7cd1f04b9adb75ecb0504013195561e38a8e59a398937b95e3c679bfd99",
     "shapes/semantic-rule-v1.ttl": "bf01a1cebd44c8ec698e408e49fe2bd08cb41aeccb8ffb88b2bf99fadbba29a2",
     "shapes/source-field-statement-v1.ttl": "bc6c6397fb9ec6e4bf6bb44ffd933bf1abeaa7b83eb1939c57d32f438a2dcfb7",
+    "shapes/source-mapped-values-v1.ttl": "afd7c8513194b4971af0362f6784d22ff56a93eab3def29f32431dc74ffd6548",
     "shapes/source-open-library-work-v1.ttl": "460460ddffc2e3f6f8384402d54e521bef4f179b9ac6897fac98641acbc4390b",
     "shapes/source-reification-v1.ttl": "70f30519cefdb502ee86281b6edcdf18b7ced37209a90058113727abc521884c",
     "shapes/space-realm-v1.ttl": "cccf212a73f4816603b0a1e55c1b0eb9b037f8794e576105e38fab65cb99218c",
@@ -4569,8 +4576,8 @@
     "shapes/zone-capability-v1.ttl": "a7296e09f052999c0578caa2894ebdbd272cedd04357e4f291e2506e73eed611",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "decd75103b8d9887a563ca200fb116b620c62e328c80d6b85cad5a5dad251dd1",
-    "packages/model/src/generated/schemas.ts": "c69a261b023cd3db44b42bd1f0d18dc3770aa49f6076b9470653e470fe066c17",
-    "packages/model/src/generated/vocabulary.ts": "b77f7a34baa975b67620377a5bb348a198b7d0c11780991fa932063f20fe313e"
+    "packages/model/src/generated/profiles.ts": "d136e554a2d2b9b603f20a7d5f94435d07f79b512f6e2e27c3184788f2142439",
+    "packages/model/src/generated/schemas.ts": "b40901546a30f06277a4e5c5fa87d06a9440a2e18d7c871cf3f85e9d02387b97",
+    "packages/model/src/generated/vocabulary.ts": "c81346b7964ab255ed9312849c771072e9210157d4139a7852a639a7871513b4"
   }
 }

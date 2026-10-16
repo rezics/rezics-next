@@ -1,3 +1,4 @@
+import { MAPPING_REVISION } from '../source/mapped-values.ts';
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PoolClient } from 'pg';
@@ -28,7 +29,7 @@ const NATIVE = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export interface TitleControlBasis extends EditorialControlBasis {}
 export interface TitleSourceBasis {
   binding: string; record: string; observation: string; conversion: string; proposal: string;
-  mapping: 'open-library-work-map-v1'; initialHead: string;
+  mapping: string; initialHead: string;
 }
 export interface TitleControlIntent {
   work: string; expectedHead: string; basis: TitleControlBasis;
@@ -531,7 +532,7 @@ export function titleControlDigest(intent: TitleControlIntent): string {
     || (intent.action === 'work.edit' ? intent.source !== null : !intent.source)) {
     throw new TitleControlInvalid('title origin differs from the admitted operation');
   }
-  if (intent.source && (intent.source.mapping !== 'open-library-work-map-v1'
+  if (intent.source && (!MAPPING_REVISION.test(intent.source.mapping)
     || ![intent.source.binding, intent.source.record, intent.source.observation,
       intent.source.conversion, intent.source.proposal, intent.source.initialHead].every(value => NATIVE.test(value)))) {
     throw new TitleControlInvalid('exact source basis is required');

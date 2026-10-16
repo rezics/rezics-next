@@ -163,11 +163,12 @@ final class EditorialFieldPolicy {
         Node record = uri(ProfileRegistry.required(source, "record"));
         Node observation = uri(ProfileRegistry.required(source, "observation"));
         Node conversion = uri(ProfileRegistry.required(source, "conversion"));
-        if (!"open-library-work-map-v1".equals(ProfileRegistry.required(source, "mapping"))
+        String mapping = ProfileRegistry.required(source, "mapping");
+        if (!mapping.matches("[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}")
             || !record.equals(one(data, SOURCE, observation, rv("sourceRecord")))
             || !observation.equals(one(data, SOURCE, conversion, rv("sourceObservation")))
-            || !"open-library-work-map-v1".equals(text(one(data, SOURCE, conversion, rv("sourceMappingRevision"))))
-            || !value.equals(text(one(data, SOURCE, conversion, rv("sourceDescription"))))) return false;
+            || !mapping.equals(text(one(data, SOURCE, conversion, rv("sourceMappingRevision"))))
+            || !value.equals(SourceProjectionPolicy.sourceField(data, conversion, "work-editorial-field-v1#synopsis"))) return false;
         if (oldControl != null) {
             if (!rv("SourceManaged").equals(one(data, REVISIONS, oldControl, rv("controlMode")))) return false;
             JsonObject prior = JSON.parse(text(one(data, REVISIONS, oldControl, rv("controlIntent")))).get("source").getAsObject();

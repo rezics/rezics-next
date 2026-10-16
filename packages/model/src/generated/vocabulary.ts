@@ -1157,6 +1157,7 @@ export const iri = {
   "rv:sourceMainRevision": "https://rezics.com/vocab/sourceMainRevision",
   "rv:sourceMainVersion": "https://rezics.com/vocab/sourceMainVersion",
   "rv:SourceManaged": "https://rezics.com/vocab/SourceManaged",
+  "rv:sourceMappedValuesJson": "https://rezics.com/vocab/sourceMappedValuesJson",
   "rv:sourceMappingRevision": "https://rezics.com/vocab/sourceMappingRevision",
   "rv:sourceNamespace": "https://rezics.com/vocab/sourceNamespace",
   "rv:sourceObservation": "https://rezics.com/vocab/sourceObservation",

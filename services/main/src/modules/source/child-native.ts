@@ -8,6 +8,8 @@ import { readWorkEditTerminalReceipt, sealMetadataWorkEditAdmission,
   workEditReceiptIri } from '../work/edit.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 
+import { CHILD_FIELD } from './mapped-values.ts';
+
 const PROFILE = 'work-native-child-v1';
 const SHAPE = `https://rezics.com/definition/${PROFILE}`;
 const NATIVE = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -17,7 +19,7 @@ export class NativeChildConflict extends Error {}
 export class NativeChildUnavailable extends Error {}
 
 export interface NativeChildValue {
-  work: string; child: string; revision: string; field: 'subjects'; sourceKey: string;
+  work: string; child: string; revision: string; field: string; sourceKey: string;
   nativeOrdinal: number; expectedHead: string; actingSubject: string; sourceIntent: string;
 }
 export interface NativeChildReceipt {
@@ -28,7 +30,7 @@ export interface NativeChildReceipt {
 
 export function nativeChildDigest(value: NativeChildValue): string {
   if (![value.work, value.child, value.revision, value.expectedHead, value.actingSubject,
-    value.sourceIntent].every(item => NATIVE.test(item)) || value.field !== 'subjects'
+    value.sourceIntent].every(item => NATIVE.test(item)) || !CHILD_FIELD.test(value.field)
     || !value.sourceKey || value.sourceKey.length > 200
     || /[\u0000-\u001f\u007f]/.test(value.sourceKey)
     || !Number.isInteger(value.nativeOrdinal) || value.nativeOrdinal < 0 || value.nativeOrdinal > 127) {
@@ -58,7 +60,7 @@ export async function readNativeChild(env: WorkActivationEnvironment,
   const row = rows[0]!;
   if (rows.length !== 1 || !row.work || !row.head || !row.field || !row.key
     || !row.position || !row.actor || !row.epoch || !row.sequence
-    || row.field.value !== 'subjects') throw new NativeChildUnavailable('native child differs');
+    || !CHILD_FIELD.test(row.field.value)) throw new NativeChildUnavailable('native child differs');
   return { profile: PROFILE, state: row.retirement ? 'retired' : 'active', work: row.work.value,
     child, revision, field: row.field.value, sourceKey: row.key.value,
     nativeOrdinal: Number(row.position.value), expectedHead: row.head.value,

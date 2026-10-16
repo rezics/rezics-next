@@ -1,3 +1,4 @@
+import { OPEN_LIBRARY_RATE } from './open-library.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { t } from 'elysia';
@@ -238,7 +239,7 @@ export class SourceAuthorNameStore {
       const captureKey = `author-name:${requestDigest}:${digest(`${principalId}:${key}`)}`;
       let observation = await this.intake.replay(principalId, captureKey);
       if (!observation) {
-        await this.intake.reserveOpenLibrarySlot();
+        await this.intake.reserveProviderSlot(OPEN_LIBRARY_RATE);
         const fetched = await fetchOpenLibraryJson(`${author}.json`, this.fetcher);
         if (!fetched.ok) throw new OpenLibraryAcquisitionUnavailable(`Author acquisition failed: ${fetched.reason}`);
         const projected = projectOpenLibraryAuthor(author, fetched.parsed);

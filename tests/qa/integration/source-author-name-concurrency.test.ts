@@ -24,7 +24,7 @@ afterAll(async () => {
 
 function store(connection = pool) {
   const intake = new SourceIntakeStore(connection);
-  intake.reserveOpenLibrarySlot = async () => {};
+  intake.reserveProviderSlot = async () => {};
   return new SourceAuthorNameStore(connection, intake, (async (url: string | URL | Request) => {
     const key = new URL(String(url)).pathname.replace(/\.json$/, '');
     return Response.json({

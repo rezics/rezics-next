@@ -1,4 +1,30 @@
 import type { ManualSourceIntake, SourceCapture } from './intake.ts';
+import { SourceIntakeInvalid } from './intake.ts';
+
+export const OPEN_LIBRARY_RATE = { provider: 'open-library', intervalMs: 1000, maxQueueMs: 3000 } as const;
+
+export function openLibraryIdentityValue(value: unknown): unknown {
+  return typeof value === 'string' && /^\/works\/OL[1-9][0-9]{0,11}W$/.test(value)
+    ? value.slice('/works/'.length) : value;
+}
+
+export function checkedOpenLibraryCapture(input: ManualSourceIntake, capture: SourceCapture): void {
+  const author = capture.profile === 'open-library-author-acquisition-v1';
+  const path = author ? 'authors' : 'works';
+  if ((!author && capture.profile !== 'open-library-work-acquisition-v1') || capture.status !== 200
+    || !(author ? /^OL[1-9][0-9]{0,11}A$/ : /^OL[1-9][0-9]{0,11}W$/).test(input.externalId)
+    || input.provider !== 'open-library' || input.namespace !== (author ? 'author' : 'work')
+    || ![`https://openlibrary.org/${path}/${input.externalId}.json`,
+      ...(input.sourceRevision?.startsWith('open-library-revision:')
+        && /^[1-9][0-9]{0,8}$/.test(input.sourceRevision.slice(22))
+        ? [`https://openlibrary.org/${path}/${input.externalId}.json?v=${input.sourceRevision.slice(22)}`] : [])]
+      .includes(capture.url)
+    || input.retention !== 'retained' || !Number.isFinite(Date.parse(capture.fetchedAt))
+    || [capture.etag, capture.lastModified].some(value => value !== null
+      && (typeof value !== 'string' || value.length > 200))) {
+    throw new SourceIntakeInvalid('invalid source capture metadata');
+  }
+}
 
 export class OpenLibraryAcquisitionInvalid extends Error {}
 export class OpenLibraryAcquisitionMissing extends Error {}

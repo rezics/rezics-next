@@ -1,0 +1,56 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rv:sourceByteDigest": {
+      "@id": "https://rezics.com/vocab/sourceByteDigest"
+    },
+    "rv:sourceExternalId": {
+      "@id": "https://rezics.com/vocab/sourceExternalId"
+    },
+    "rv:sourceMappedValuesJson": {
+      "@id": "https://rezics.com/vocab/sourceMappedValuesJson"
+    },
+    "rv:sourceMappingRevision": {
+      "@id": "https://rezics.com/vocab/sourceMappingRevision"
+    },
+    "rv:sourceNamespace": {
+      "@id": "https://rezics.com/vocab/sourceNamespace"
+    },
+    "rv:sourceObservation": {
+      "@id": "https://rezics.com/vocab/sourceObservation",
+      "@type": "@id"
+    },
+    "rv:sourceProvider": {
+      "@id": "https://rezics.com/vocab/sourceProvider"
+    },
+    "rv:sourceRecord": {
+      "@id": "https://rezics.com/vocab/sourceRecord",
+      "@type": "@id"
+    },
+    "rv:sourceRightsBasis": {
+      "@id": "https://rezics.com/vocab/sourceRightsBasis"
+    },
+    "rv:sourceRightsNote": {
+      "@id": "https://rezics.com/vocab/sourceRightsNote"
+    }
+  }
+}

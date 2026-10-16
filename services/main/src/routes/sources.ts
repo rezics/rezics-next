@@ -1,3 +1,4 @@
+import { OPEN_LIBRARY_RATE } from '../modules/source/open-library.ts';
 import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
 import { SourceIntakeConflict, SourceIntakeInvalid } from '../modules/source/intake.ts';
@@ -36,6 +37,7 @@ export const openApiOperations = {
   '/v1/sources/conversions/{base}/child-correspondences/{candidate}': { get: { exposure: 'platform:catalogue-import', rateLimitFamily: 'read' } },
   '/v1/sources/conversions/{base}/drift/{candidate}': { get: { exposure: 'platform:catalogue-import', rateLimitFamily: 'read' } },
   '/v1/sources/conversions/{conversion}': { get: { exposure: 'platform:catalogue-import', rateLimitFamily: 'read' } },
+  '/v1/sources/observations/{observation}/conversions': { post: { exposure: 'platform:catalogue-import', rateLimitFamily: 'write' } },
   '/v1/sources/observations/{observation}/conversions/open-library-work': { post: { exposure: 'platform:catalogue-import', rateLimitFamily: 'write' } },
 } as const;
 
@@ -126,10 +128,22 @@ const sourceConversionResult = t.Object({ profile: t.Literal('open-library-work-
   createdAt: t.String(),
 });
 
+const mappedSourceValue = t.Object({ grain: t.String(), field: t.String(), pointer: t.String(),
+  slot: t.String(), value: t.Unknown() });
+const mappedSourceValues = t.Object({ title: t.Object({ ...mappedSourceValue.properties, value: t.String() }),
+  semanticTypes: t.Array(t.String()), fields: t.Array(mappedSourceValue),
+  children: t.Array(t.Object({ field: t.String(), grain: t.String(), slot: t.Nullable(t.String()),
+    values: t.Nullable(t.Array(t.Object({ sourceKey: t.String(), roleKey: t.Nullable(t.String()),
+      pointer: t.String(), value: t.Unknown() }))) })), sourceOnlyFields: t.Array(t.String()) });
+const mappedConversionResult = t.Object({ profile: t.Literal('source-mapped-conversion-v1'), state: t.Literal('staged'),
+  conversion: t.String(), observation: t.String(), mappingRevision: t.String(), sourceDigest: t.String(),
+  projection: mappedSourceValues, fieldInventory: t.Array(t.Object({ grain: t.String(), field: t.String(),
+    disposition: t.String(), reason: t.Optional(t.String()) })), createdAt: t.String() });
+
 const sourceConversionWriteResult = t.Object({ conversion: sourceConversionResult,
   replayed: t.Boolean() });
 
-const sourceDriftResult = t.Object({ profile: t.Literal('open-library-work-source-drift-v1'),
+const sourceDriftResult = t.Object({ profile: t.Union([t.Literal('open-library-work-source-drift-v1'), t.Literal('source-mapped-drift-v1')]),
   state: t.Literal('staged'), record: t.String(),
   baseConversion: t.String(), candidateConversion: t.String(),
   baseObservation: t.String(), candidateObservation: t.String(),
@@ -137,8 +151,8 @@ const sourceDriftResult = t.Object({ profile: t.Literal('open-library-work-sourc
   representationChanged: t.Boolean(),
   fields: t.Array(t.Object({ field: t.String(), status: t.Union([
     t.Literal('added'), t.Literal('removed'), t.Literal('changed'), t.Literal('unchanged') ]),
-    baseDisposition: t.Nullable(sourceDisposition),
-    candidateDisposition: t.Nullable(sourceDisposition),
+    baseDisposition: t.Nullable(t.String()),
+    candidateDisposition: t.Nullable(t.String()),
   })) });
 
 const sourceChildOccurrence = t.Object({ occurrence: t.String(), ordinal: t.Number(),
@@ -148,11 +162,10 @@ const sourceChildOccurrence = t.Object({ occurrence: t.String(), ordinal: t.Numb
   correspondence: t.Nullable(t.String()) });
 
 const sourceChildCorrespondenceResult = t.Object({
-  profile: t.Literal('open-library-work-child-correspondence-v1'),
+  profile: t.Union([t.Literal('open-library-work-child-correspondence-v1'), t.Literal('source-mapped-child-correspondence-v1')]),
   state: t.Literal('assessed'), record: t.String(),
   baseConversion: t.String(), candidateConversion: t.String(),
-  fields: t.Array(t.Object({ field: t.Union([t.Literal('authors'),
-    t.Literal('subjects')]), coverage: t.Union([t.Literal('complete'),
+  fields: t.Array(t.Object({ field: t.String({ pattern: '^[A-Za-z][A-Za-z0-9:_.-]{0,99}$' }), coverage: t.Union([t.Literal('complete'),
       t.Literal('unavailable')]), base: t.Array(sourceChildOccurrence),
     candidate: t.Array(sourceChildOccurrence) })) });
 
@@ -160,7 +173,7 @@ const recordedSourceChildCorrespondenceResult = t.Object({
   profile: t.Literal('source-child-correspondence-v1'),
   state: t.Literal('recorded'), correspondence: t.String(), record: t.String(),
   baseConversion: t.String(), candidateConversion: t.String(),
-  field: t.Union([t.Literal('authors'), t.Literal('subjects')]),
+  field: t.String({ pattern: '^[A-Za-z][A-Za-z0-9:_.-]{0,99}$' }),
   baseOccurrence: t.String(), candidateOccurrence: t.String(),
   baseOrdinal: t.Number(), candidateOrdinal: t.Number(),
   sourceKey: t.String(), createdAt: t.String(),
@@ -169,22 +182,21 @@ const recordedSourceChildCorrespondenceResult = t.Object({
 const recordedSourceChildCorrespondenceWriteResult = t.Object({
   correspondence: recordedSourceChildCorrespondenceResult, replayed: t.Boolean() });
 
-const sourceGraphResult = t.Object({ profile: t.Literal('open-library-work-source-graph-v1'),
+const sourceGraphResult = t.Object({ profile: t.Union([t.Literal('open-library-work-source-graph-v1'), t.Literal('source-mapped-graph-v1')]),
   state: t.Literal('staged'), record: t.String(), observation: t.String(),
   conversion: t.String(), sourceDigest: t.String(),
-  projection: sourceConversionResult.properties.projection, receipt: t.String(),
+  projection: t.Union([sourceConversionResult.properties.projection, mappedSourceValues]), receipt: t.String(),
   sourcePosition: t.Object({ datasetId: t.Literal('product'),
     dataEpoch: t.String(), sequence: t.String() }) });
 
 const sourceProposalResult = t.Object({
-  profile: t.Literal('open-library-native-work-proposal-v1'),
+  profile: t.Union([t.Literal('open-library-native-work-proposal-v1'), t.Literal('source-native-work-proposal-v1')]),
   state: t.Literal('proposed'), proposal: t.String(),
   target: t.Literal('new-native-work'), record: t.String(),
   observation: t.String(), conversion: t.String(), sourceDigest: t.String(),
-  candidateTitle: t.String(), semanticTypes: t.Tuple([t.Literal('https://schema.org/Book')]),
+  candidateTitle: t.String(), semanticTypes: t.Array(t.String()),
   semanticTypeBasis: t.Literal('source-record-type'),
-  sourceOnlyFields: t.Tuple([t.Literal('description'), t.Literal('authors'),
-    t.Literal('subjects')]), rightsEvidence: sourceRightsEvidence,
+  sourceOnlyFields: t.Array(t.String()), mappingRevision: t.String(), rightsEvidence: sourceRightsEvidence,
   rightsStatus: t.Literal('undetermined'), graphReceipt: t.String(),
   graphPosition: t.Object({ datasetId: t.Literal('product'),
     dataEpoch: t.String(), sequence: t.String() }), createdAt: t.String(),
@@ -203,7 +215,7 @@ const sourceAdoptionResult = t.Object({
   binding: t.String(), proposal: t.String(), sourceRecord: t.String(),
   sourceConversion: t.String(), adoptedFields: t.Union([
     t.Tuple([t.Literal('title')]), t.Tuple([t.Literal('title'), t.Literal('semanticTypes')])]),
-  semanticTypes: t.Union([t.Tuple([]), t.Tuple([t.Literal('https://schema.org/Book')])]),
+  semanticTypes: t.Array(t.String()),
   semanticTypeBasis: t.Nullable(t.Literal('source-record-type')),
   title: t.String(), titleLanguage: t.String(), titleLanguageAtActivation: t.String(),
   titleLanguageBasis: t.Union([t.Literal('explicit'), t.Literal('work'),
@@ -359,6 +371,25 @@ export function sourceRoutes(work: MainWorkDependencies) {
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return providerIdentityError(error); }
     })
+    .post('/v1/sources/observations/:observation/conversions', {
+      params: t.Object({ observation: groupUuid }),
+      body: t.Object({ profile: t.String({ pattern: '^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$' }) },
+        { additionalProperties: false }),
+      response: transportResponses(openApiOperations["/v1/sources/observations/{observation}/conversions"].post,
+        { 200: t.Object({ conversion: mappedConversionResult, replayed: t.Boolean() }),
+          201: t.Object({ conversion: mappedConversionResult, replayed: t.Boolean() }),
+          ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'POST'),
+    }, async ({ request, params, body }) => {
+      try {
+        if (!work.sourceConversions) return problem(503, 'source_conversion_unavailable', 'Source conversion owner is unavailable');
+        const principal = await work.account.verify(request, ['source:convert']);
+        const principalId = await work.access.activePrincipalId(principal);
+        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const result = await work.sourceConversions.convertMapped(principalId, params.observation, body.profile);
+        if (!result) return problem(404, 'source_observation_unavailable', 'Source observation is unavailable');
+        return Response.json(result, { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return commandError(error); }
+    })
     .post('/v1/sources/observations/:observation/conversions/open-library-work', {
       params: t.Object({ observation: groupUuid }),
       body: t.Object({ profile: t.Literal('open-library-work-map-v1') },
@@ -382,7 +413,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/sources/conversions/:conversion', {
       params: t.Object({ conversion: groupUuid }),
-      response: transportResponses(openApiOperations["/v1/sources/conversions/{conversion}"].get, { 200: sourceConversionResult, ...authorizedReadProblems,
+      response: transportResponses(openApiOperations["/v1/sources/conversions/{conversion}"].get, { 200: t.Union([sourceConversionResult, mappedConversionResult]), ...authorizedReadProblems,
         422: problemResult(422) }, 'GET'),
     }, async ({ request, params }) => {
       try {
@@ -392,7 +423,8 @@ export function sourceRoutes(work: MainWorkDependencies) {
         const principal = await work.account.verify(request, ['source:read']);
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
-        const result = await work.sourceConversions.read(principalId, params.conversion);
+        const evidence = await work.sourceConversions.mappedRead(principalId, params.conversion);
+        const result = evidence?.legacy ?? evidence?.conversion;
         if (!result) return problem(404, 'source_conversion_unavailable',
           'Source conversion is unavailable');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
@@ -437,7 +469,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
     .post('/v1/sources/correspondences', {
       body: t.Object({ profile: t.Literal('source-child-correspondence-v1'),
         baseConversion: groupUuid, candidateConversion: groupUuid,
-        field: t.Union([t.Literal('authors'), t.Literal('subjects')]),
+        field: t.String({ pattern: '^[A-Za-z][A-Za-z0-9:_.-]{0,99}$' }),
         baseOccurrence: t.String({ pattern: '^urn:rezics:source-occurrence:[0-9a-f]{64}$' }),
         candidateOccurrence: t.String({ pattern: '^urn:rezics:source-occurrence:[0-9a-f]{64}$' }),
         confirmedSameSourceChild: t.Literal(true),
@@ -481,7 +513,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/sources/conversions/:conversion/source-graph', {
       params: t.Object({ conversion: groupUuid }),
-      body: t.Object({ profile: t.Literal('source-open-library-work-v1') },
+      body: t.Object({ profile: t.Union([t.Literal('source-open-library-work-v1'), t.Literal('source-mapped-values-v1')]) },
         { additionalProperties: false }),
       response: transportResponses(openApiOperations["/v1/sources/conversions/{conversion}/source-graph"].post, { 200: sourceGraphResult, ...writeProblems,
         404: problemResult(404), 422: problemResult(422) }, 'POST'),
@@ -517,7 +549,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/sources/conversions/:conversion/proposals/native-work', {
       params: t.Object({ conversion: groupUuid }),
-      body: t.Object({ profile: t.Literal('open-library-native-work-proposal-v1') },
+      body: t.Object({ profile: t.Union([t.Literal('open-library-native-work-proposal-v1'), t.Literal('source-native-work-proposal-v1')]) },
         { additionalProperties: false }),
       response: transportResponses(openApiOperations["/v1/sources/conversions/{conversion}/proposals/native-work"].post, { 200: sourceProposalWriteResult, 201: sourceProposalWriteResult,
         ...writeProblems, 404: problemResult(404), 409: problemResult(409),
@@ -624,7 +656,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
           return Response.json({ observation: prior, replayed: true },
             { headers: { 'cache-control': 'no-store' } });
         }
-        await work.sourceIntake.reserveOpenLibrarySlot();
+        await work.sourceIntake.reserveProviderSlot(OPEN_LIBRARY_RATE);
         const captured = await fetchOpenLibraryWork(workId, work.openLibraryFetch ?? fetch);
         const result = await work.sourceIntake.submit(principalId, key,
           captured.input, captured.capture);

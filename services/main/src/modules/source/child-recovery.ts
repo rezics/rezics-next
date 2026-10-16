@@ -127,15 +127,16 @@ export async function reconcileRetainedNativeChild(env: WorkActivationEnvironmen
       const proposals = new SourceNativeWorkProposalStore(contentPool, graph, conversions);
       const proposal = await proposals.read(row.principal_id, row.proposal_id)
         .catch(() => { throw new RetainedEffectConflict('source proposal must recover first'); });
-      const evidence = await conversions.verifiedRead(row.principal_id, row.conversion_id);
-      const subject = evidence?.conversion.projection.subjects?.[row.source_ordinal];
+      const evidence = await conversions.mappedRead(row.principal_id, row.conversion_id);
+      const mapped = evidence?.values.children.find(child => child.field === row.field_key);
+      const subject = mapped?.values?.[row.source_ordinal];
       if (!proposal || !evidence || proposal.record !== `https://rezics.com/id/${row.record_id}`
         || proposal.proposal !== row.request.proposal || proposal.conversion !== row.request.conversion
         || proposal.observation !== evidence.observation.observation
         || row.request.conversion !== evidence.conversion.conversion
-        || row.field_key !== 'subjects' || subject !== row.source_key
+        || mapped?.slot !== `work-native-child-v1#${row.field_key}` || subject?.sourceKey !== row.source_key
         || row.request.occurrence !== row.occurrence
-        || sourceChildOccurrence(evidence.observation.observation, 'subjects', row.source_ordinal) !== row.occurrence) {
+        || sourceChildOccurrence(evidence.observation.observation, row.field_key, row.source_ordinal) !== row.occurrence) {
         throw new RetainedEffectConflict('retained source child occurrence differs');
       }
       const application = (await contentPool.query<{ graph_receipt: string; admission_id: string;

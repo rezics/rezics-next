@@ -53,19 +53,19 @@ export const openApiOperations = {
 } as const;
 
 const nativeChildBody = t.Object({ profile: t.Literal('source-native-child-adoption-v1'),
-  field: t.Literal('subjects'), proposal: groupAgent,
+  field: t.String({ pattern: '^[A-Za-z][A-Za-z0-9:_.-]{0,99}$' }), proposal: groupAgent,
   conversion: groupAgent, occurrence: t.String(), sourceOrdinal: t.Integer({ minimum: 0, maximum: 127 }),
   confirmedSourceKey: t.String({ minLength: 1, maxLength: 200 }),
   nativeOrdinal: t.Integer({ minimum: 0, maximum: 127 }), expectedHead: groupAgent,
   actingSubject: groupAgent, baseSupport: t.Nullable(groupAgent), correspondence: t.Nullable(groupAgent),
   confirmedUse: t.Literal('factual-reference-only') }, { additionalProperties: false });
 const nativeChildResult = t.Object({ profile: t.String(), state: t.String(), work: groupAgent,
-  child: groupAgent, revision: groupAgent, field: t.Literal('subjects'),
+  child: groupAgent, revision: groupAgent, field: t.String({ pattern: '^[A-Za-z][A-Za-z0-9:_.-]{0,99}$' }),
   sourceKey: t.String(), nativeOrdinal: t.Integer(), expectedHead: groupAgent,
   actingSubject: groupAgent, dataEpoch: t.String(), sequence: t.String(),
   retiredBy: t.Nullable(t.String()) });
 const nativeChildSupport = t.Object({ profile: t.String(), state: t.String(), support: groupAgent,
-  work: groupAgent, field: t.Literal('subjects'), child: nativeChildResult,
+  work: groupAgent, field: t.String({ pattern: '^[A-Za-z][A-Za-z0-9:_.-]{0,99}$' }), child: nativeChildResult,
   proposal: groupAgent, conversion: groupAgent, record: groupAgent,
   observation: groupAgent, sourceOccurrence: t.String(), sourceOrdinal: t.Integer(),
   sourceKey: t.String(), correspondence: t.Nullable(groupAgent), baseSupport: t.Nullable(groupAgent),
@@ -90,7 +90,7 @@ const synopsisBasis = t.Object({ contentHead: t.Nullable(groupAgent),
   head: t.Nullable(groupAgent), epoch: t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' }),
   protection: t.Nullable(groupAgent) }, { additionalProperties: false });
 const synopsisSource = t.Object({ record: groupAgent, observation: groupAgent,
-  conversion: groupAgent, mapping: t.Literal('open-library-work-map-v1') },
+  conversion: groupAgent, mapping: t.String({ pattern: '^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$' }) },
 { additionalProperties: false });
 const synopsisState = t.Object({ profile: t.Literal('work-editorial-field-control-v1'),
   work: groupAgent, field: t.Literal('synopsis'), slot: t.String(), workHead: groupAgent,
@@ -135,7 +135,7 @@ function fieldError(error: unknown): Response {
 }
 
 const titleSourceBasis = t.Object({ binding: t.String(), record: t.String(), observation: t.String(),
-  conversion: t.String(), proposal: t.String(), mapping: t.Literal('open-library-work-map-v1'), initialHead: t.String() });
+  conversion: t.String(), proposal: t.String(), mapping: t.String({ pattern: '^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$' }), initialHead: t.String() });
 
 const titleControlState = t.Object({ work: t.String(), contentHead: t.String(), basis: titleControlBasis,
   mode: t.Union([t.Literal('unestablished'), t.Literal('source-managed'), t.Literal('human-controlled')]),
@@ -308,7 +308,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
           const principal = await work.account.verify(request, ['source:adopt', 'work:edit']);
           const principalId = await work.access.activePrincipalId(principal);
           if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
-          const visible = await work.sourceConversions?.verifiedRead(principalId,
+          const visible = await work.sourceConversions?.mappedRead(principalId,
             body.source.conversion.split('/').at(-1)!);
           if (!visible) return problem(404, 'field_source_unavailable', 'Source evidence is unavailable');
           const result = await work.sourceFieldApplications.apply(principal, principalId, request,

@@ -25,7 +25,7 @@ test('title, localized title, tagline and retained author facts match current pu
     const actor = await stack.member('writer');
     const intake = new SourceIntakeStore(stack.contentPool);
     let requests = 0, revision = 1, displayName: string | undefined = 'Jane Austen';
-    intake.reserveOpenLibrarySlot = async () => {};
+    intake.reserveProviderSlot = async () => {};
     const names = new SourceAuthorNameStore(stack.contentPool, intake, (async (url: RequestInfo | URL) => {
       expect(String(url)).toBe('https://openlibrary.org/authors/OL1A.json');
       requests++;
