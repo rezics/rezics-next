@@ -21,7 +21,7 @@ export const recipeCases: CaseDeclarations = {
     { tier: 'unit', file: 'tests/qa/unit/recipe-export.test.ts',
       name: 'RECIPE03: exact Schema.org export preserves grouped step order and unparsed source residuals' },
     { tier: 'unit', file: 'tests/qa/unit/recipe-export.test.ts',
-      name: 'RECIPE03: export rejects work beyond its declared occurrence bound' },
+      name: 'RECIPE03: unbounded projection retains source observations past the old occurrence bound' },
   ],
   RECIPE04: [{ tier: 'integration', file: 'tests/qa/integration/recipe-realm-variants.test.ts',
     name: 'RECIPE04: two Realms independently adopt published Recipe variants of one Main Version' }],
