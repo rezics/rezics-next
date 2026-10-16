@@ -4,21 +4,20 @@ Use `task goal -- status`, `coordinator status`, `planning` and the current
 briefs for live task disposition and scope. This page retains decisions and
 unverified obligations; it is not an operational run log.
 
-Wave/1 and wave/2 are on main. The erasure and restore consumers passed on
-physical fixtures (completion and production), the OPS10 restore campaign and
-the release image start passed from a clean checkout, and 67 of the 68 launch
-rows are declared proved. The program's completion still needs these, each
-owned by an open task in the ledger:
+Waves 1 to 3 are on main, and the operations Goal is closed. The program's
+completion still needs these, each owned by an open task in the ledger:
 
-- wave/3 merges into main through its merge candidate and confirmation. The
-  candidate merged main without introducing a failure, and wave/3 was
-  fast-forwarded to it; wave/3's own red unit and owner files (155 cases in
-  49 files) are repaired by cause on that branch first;
-- main's scheduled confirmation passes every launch row, including Realm
-  ranking (its retained-data fix lands first) and Realm closure search;
-- the Realm ranking surface lands (Realm rules has landed);
-- the erasure drill reruns green from a clean checkout after wave/3, and the
-  operations, api and web Goals close.
+- main's confirmation passes every launch row, including the Realm, Visual Novel
+  browse and Recipe cells that the cleanup race, read-basis and load failures
+  stopped; then the api Goal closes;
+- the remaining web surfaces land, and the web Goal closes;
+- the shared-capability repairs for credit and discovery land with their
+  cross-domain proofs (source adoption, publication, Structure, exchange,
+  release, import identifiers and erasure custody have landed);
+- gate selection, shard adjudication, harness-test isolation and landing
+  conflict recovery are repaired. Gates fail on shared harness tests that the
+  change cannot affect, and that failure class costs more gate time than any
+  other; the repair briefs carry the research findings.
 
 Shared capabilities are implemented once ([platform thesis](../../product/platform-thesis.md)).
 The program inventories, across every in-scope vertical and source, the shared
