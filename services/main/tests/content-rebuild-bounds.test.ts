@@ -336,13 +336,17 @@ test('rebuild verification pages variants and binds each receipt join', async ()
     for (const query of proofs) {
       expect(query).toContain(`VALUES ?${variable}`);
       assertReceiptJoinsBound(query, variable);
-      const receiptBinding = receiptTriples(optionalGroups(query)
-        .find(group => group.includes('?receipt'))!);
+      const receiptGroups = optionalGroups(query).filter(group => group.includes('?receipt'));
+      const receiptBinding = receiptTriples(receiptGroups[0]!);
       expect(receiptBinding).toContainEqual(['?receipt', `rv:${receiptPredicate}`, `?${variable}`]);
       if (variable === 'publication') {
-        expect(receiptBinding).toContainEqual(['?receipt', 'a', 'rv:OperationReceipt']);
-        expect(receiptBinding).toContainEqual(['?receipt', 'rv:outcome', 'rv:Succeeded']);
-        expect(receiptBinding).toContainEqual(['?receipt', 'rv:contentRevision', '?publicationRevision']);
+        // Inventory every claimant before validating its fields, including a
+        // malformed duplicate. Eligibility receipts have no preparation.
+        expect(receiptBinding).toContainEqual(['?receipt', 'rv:contentPreparation', '?publicationPreparation']);
+        const proofTriples = receiptGroups.flatMap(receiptTriples);
+        expect(proofTriples).toContainEqual(['?receipt', 'a', 'rv:OperationReceipt']);
+        expect(proofTriples).toContainEqual(['?receipt', 'rv:outcome', '?rOutcome']);
+        expect(proofTriples).toContainEqual(['?receipt', 'rv:contentRevision', '?rRevision']);
       }
       expect(query).not.toContain(`LIMIT ${50_001}`);
     }
