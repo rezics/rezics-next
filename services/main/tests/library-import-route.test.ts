@@ -70,6 +70,7 @@ test('G428: exhausted reader adoption budget refuses before acquisition', async 
     libraryImport: { withOpenLibraryWork: async (_id: string, action: () => Promise<unknown>) => action(),
       adoptedOpenLibraryWork: async () => null,
       takeBudget: async () => { throw new ReaderImportBudgetExceeded('acquisition'); } },
+    rights: { store: { assessOpenLibraryImport: async () => { throw new Error('budget refusal must precede assessment'); } } },
     sourceIntake: { replay: async () => null }, sourceConversions: {}, sourceGraph: {},
     sourceProposals: {}, sourceAdoptions: {},
     openLibraryFetch: (async () => { fetched++; return Response.json({}); }) as unknown as typeof fetch,
@@ -85,7 +86,7 @@ test('G428: exhausted reader adoption budget refuses before acquisition', async 
 });
 
 test('G428: adoption reuses source intent and returns the adopted native Work', async () => {
-  let acquired = 0, converted = 0, projected = 0, proposed = 0, adopted = 0;
+  let acquired = 0, converted = 0, projected = 0, proposed = 0, adopted = 0, assessed = 0;
   const observation = { observation: iri('000000000001'), provider: 'open-library',
     namespace: 'work', externalId: 'OL45804W', capture: { profile: 'open-library-work-acquisition-v1' } };
   const app = sourceOwner({
@@ -96,6 +97,9 @@ test('G428: adoption reuses source intent and returns the adopted native Work', 
       '0194f314-9280-767f-89a6-000000000099' },
     libraryImport: { withOpenLibraryWork: async (_id: string, action: () => Promise<unknown>) => action(),
       adoptedOpenLibraryWork: async () => null, takeBudget: async () => {} },
+    rights: { store: { assessOpenLibraryImport: async (work: string, workId: string) => {
+      expect([work, workId]).toEqual([iri('000000000004'), 'OL45804W']); assessed++;
+    } } },
     sourceIntake: { replay: async () => observation, reserveOpenLibrarySlot: async () => { acquired++; },
       submit: async () => { acquired++; return { observation }; } },
     sourceConversions: { convert: async () => { converted++;
@@ -113,11 +117,11 @@ test('G428: adoption reuses source intent and returns the adopted native Work', 
   }));
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ work: iri('000000000004'), replayed: true });
-  expect([acquired, converted, projected, proposed, adopted]).toEqual([0, 1, 1, 1, 1]);
+  expect([acquired, converted, projected, proposed, adopted, assessed]).toEqual([0, 1, 1, 1, 1, 1]);
 });
 
 test('G428: first adoption captures Open Library through Main and a retry does not fetch twice', async () => {
-  let captured = 0;
+  let captured = 0, assessed = 0;
   let stored = false;
   const observation = { observation: iri('000000000001'), provider: 'open-library', namespace: 'work',
     externalId: 'OL45804W', capture: { profile: 'open-library-work-acquisition-v1' } };
@@ -131,6 +135,9 @@ test('G428: first adoption captures Open Library through Main and a retry does n
       expect(url).toBe('https://openlibrary.org/works/OL45804W.json');
       return Response.json({ key: '/works/OL45804W', type: { key: '/type/work' }, title: 'Frankenstein' });
     }) as typeof fetch,
+    rights: { store: { assessOpenLibraryImport: async (work: string, workId: string) => {
+      expect([work, workId]).toEqual([iri('000000000004'), 'OL45804W']); assessed++;
+    } } },
     sourceIntake: { replay: async () => stored ? observation : null,
       reserveOpenLibrarySlot: async () => {},
       submit: async (_principal: string, _key: string, input: { externalId: string }) => {
@@ -150,4 +157,5 @@ test('G428: first adoption captures Open Library through Main and a retry does n
   expect((await app.handle(request())).status).toBe(200);
   expect((await app.handle(request())).status).toBe(200);
   expect(captured).toBe(1);
+  expect(assessed).toBe(2);
 });

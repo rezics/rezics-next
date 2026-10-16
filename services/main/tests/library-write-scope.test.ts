@@ -262,7 +262,7 @@ test('import match retention rechecks write consent before saving a row', async 
 test('retained row adoption admits library writers only with catalogue creation consent too', async () => {
   const operation = mutations.find(item => item.path.endsWith('/adoptions'))!;
   for (const createConsent of [false, true]) {
-    let adoptedLookups = 0;
+    let adoptedLookups = 0, assessed = 0;
     const row = unmatchedRow();
     row.match = { kind: 'not-found', work: null, target: null, candidates: [], truncated: false,
       openLibraryAvailability: 'available', openLibrary: [{ workId: 'OL45804W', title: 'Book', authors: [], coverId: null }] };
@@ -274,10 +274,14 @@ test('retained row adoption admits library writers only with catalogue creation 
         adoptedOpenLibraryWork: async () => { adoptedLookups++; return work; },
       },
       sourceIntake: { replay: async () => null },
+      rights: { store: { assessOpenLibraryImport: async (adopted: string, workId: string) => {
+        expect([adopted, workId]).toEqual([work, 'OL45804W']); assessed++;
+      } } },
     });
     const response = await respond(libraryImportsRoutes(state.deps), request(operation));
     expect(response.status).toBe(createConsent ? 200 : 401);
     expect(adoptedLookups).toBe(createConsent ? 1 : 0);
+    expect(assessed).toBe(createConsent ? 1 : 0);
     expect(state.required).toEqual([['work:read', 'library:write'], ['work:read', 'work:create']]);
     expect(await response.json()).toMatchObject(createConsent
       ? { work, replayed: true } : { code: 'account_assertion_denied' });
