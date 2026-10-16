@@ -204,7 +204,8 @@ for (const persona of ['stranger', 'member', 'owner', 'moderator', 'operator'] a
       const main = browserMainApi('https://record.invalid', { fetcher: replay.fetcher });
       const query = new URL(selections.find(item => item.label === 'management-address')!.path, 'https://record.invalid').searchParams;
       const actor = query.get('actingSubject')!;
-      const frame = await readZoneManagementFrame(main, query.get('key')!, 'en', actor);
+      const entry = selections.find(item => item.label === 'management-configuration')!.path.split('/')[3]!;
+      const frame = await readZoneManagementFrame(main, entry, 'en', actor);
       expect(frame.authoring.kind).toBe(persona === 'owner' || persona === 'operator' ? 'ready' : 'failure');
       const view = await zoneRealmAttachmentView({ main, anonymous: browserMainApi('https://record.invalid', { anonymous: true, fetcher: replay.fetcher }),
         actingSubject: actor, locale: 'en', signInHref: '/en/sign-in', loadAuthoring: async () => frame.authoring });

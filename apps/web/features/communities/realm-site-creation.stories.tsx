@@ -158,7 +158,7 @@ function existingRealmStory(): Story {
       const named = record.personas.owner.find(item => item.label === 'creation-attached-route-name')!.answer as { name: { value: string } };
       await expect(editor.getByText(named.name.value, { exact: true })).toBeVisible();
       await expect(editor.getByText(copy.realmAttached)).toBeVisible();
-      await expect(editor.getByRole('button', { name: copy.realmRemove })).toBeEnabled();
+      await waitFor(() => expect(editor.getByRole('button', { name: copy.realmRemove })).toBeEnabled());
       const identity = record.personas.owner.find(item => item.label === 'page-agent-profile')!.answer as { displayName: string };
       await expect(page.getByText(identity.displayName, { exact: true })).toBeVisible();
       await expect(requests).toHaveLength(6);
