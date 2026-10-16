@@ -1,15 +1,14 @@
+import { readAnimeRelationsConnections } from '../work-page/anime-relations-recorded-page.ts';
+import { AnimeRelationsSections } from '../work-page/anime-relations-recorded-page.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import { idOf, iriOf } from '../work-page/route.ts';
 import { buttonVariants } from '@rezics/ui/button';
 import Link from '../shell/localized-link.tsx';
 import { EditEntry } from '../work-levels-edit/edit-entry.tsx';
-import { ConnectionsSection, type Franchise } from './connections.tsx';
 import { EditionsSection, ReleaseCard } from './editions.tsx';
 import { copyOf } from './messages.ts';
-import { PartsSection } from './parts.tsx';
 import { ReleaseFailure, ReleaseView } from './release-page.tsx';
-import { franchisesOf } from './relation-rows.ts';
 import {
   namesOf,
   readCollectionMembers,
@@ -24,127 +23,26 @@ import {
   readWholes,
 } from './read.ts';
 import type { ConnectionsQuery, EditionsQuery } from './route.ts';
-import type { Loaded, PartsPage, Realization, ReleasePage, Summary } from './types.ts';
+import type { Loaded, Realization, ReleasePage } from './types.ts';
 
 const outline = buttonVariants({ variant: 'outline', size: 'sm' });
 
 // Server compositions for the Work-level routes. Each read is Main's; the page
 // only decides which reads a URL asks for, and in what bounds.
 
-/**
- * The members a franchise's current page lists (Main's page, 12 at a time) and, at the parts grain,
- * the first page of each member's parts; a member with more parts links to its own page for them.
- */
-export const FRANCHISE_PAGE = { members: 12, partsPerMember: 12 } as const;
+export { FRANCHISE_PAGE } from '../work-page/anime-relations-recorded-page.ts';
 
-async function franchisesFor(
-  summaries: readonly Summary[],
-  query: ConnectionsQuery,
-): Promise<Franchise[]> {
-  const chosen = summaries.filter(
-    (item) => item.status === 'available' && item.type === 'collection',
-  );
-  return Promise.all(
-    chosen.map(async (summary) => {
-      const collection = summary.reference.slice(-36);
-      const members = await readCollectionMembers(collection, {
-        limit: FRANCHISE_PAGE.members,
-        after: query.franchise === collection ? query.membersAfter : undefined,
-      });
-      const parts = new Map<string, Loaded<PartsPage>>();
-      if (query.grain === 'parts' && members.ok) {
-        await Promise.all(
-          members.data.members
-            .flatMap((member) => (member.target ? [member.target] : []))
-            .map(async (target) => {
-              parts.set(
-                target,
-                await readParts(target.slice(-36), { limit: FRANCHISE_PAGE.partsPerMember }),
-              );
-            }),
-        );
-      }
-      return { collection: summary, members, parts };
-    }),
-  );
-}
-
-export async function ConnectionsPage({
-  workRef,
-  id,
-  query,
-  locale,
-  pageMessages,
-}: {
-  workRef: string;
-  id: string;
-  query: ConnectionsQuery;
-  locale: UiLocale;
-  pageMessages: WorkPageMessages;
+export async function ConnectionsPage({ workRef, id, query, locale, pageMessages }: {
+  workRef: string; id: string; query: ConnectionsQuery; locale: UiLocale; pageMessages: WorkPageMessages;
 }) {
-  const t = copyOf(locale);
-  // Independent reads start their dependent reads immediately: an unavailable
-  // sibling cannot consume the page budget needed to name a disclosed result.
-  const [partResult, wholeResult, relationResult] = await Promise.all([
-    readParts(id, { parent: query.parent, after: query.partsAfter, limit: 50 }).then(
-      async (parts) => ({
-        parts,
-        names: await namesOf(parts.ok ? parts.data.parts.flatMap((part) => part.work ?? []) : []),
-      }),
-    ),
-    readWholes(id, { after: query.wholesAfter }).then(async (wholes) => ({
-      wholes,
-      names: await namesOf(wholes.ok ? wholes.data.wholes.map((whole) => whole.work) : []),
-    })),
-    readRelations(id, { after: query.relationsAfter, limit: 20 }).then(async (relations) => {
-      const people = relations.ok ? readPeople(relations.data.items) : undefined;
-      const franchises = await franchisesFor(
-        relations.ok ? franchisesOf(relations.data.items) : [],
-        query,
-      );
-      const references = franchises.flatMap((franchise) => [
-        ...(franchise.members.ok
-          ? franchise.members.data.members.flatMap((member) => member.target ?? [])
-          : []),
-        ...[...franchise.parts.values()].flatMap((read) =>
-          read.ok ? read.data.parts.flatMap((part) => part.work ?? []) : [],
-        ),
-      ]);
-      const names = await namesOf(references);
-      return { relations, franchises, names, people: await people };
-    }),
-  ]);
-  const { parts } = partResult;
-  const { wholes } = wholeResult;
-  const { relations, franchises, people } = relationResult;
-  const names = new Map([...partResult.names, ...wholeResult.names, ...relationResult.names]);
-  return (
-    <div className="grid gap-10">
-      <EditEntry workRef={workRef} id={id} section="parts" locale={locale} />
-      <PartsSection
-        parts={parts}
-        wholes={wholes}
-        names={names}
-        workRef={workRef}
-        query={query}
-        locale={locale}
-        t={t}
-        pageMessages={pageMessages}
-      />
-      <ConnectionsSection
-        relations={relations}
-        franchises={franchises}
-        names={names}
-        people={people}
-        workRef={workRef}
-        current={id}
-        query={query}
-        locale={locale}
-        t={t}
-        pageMessages={pageMessages}
-      />
-    </div>
-  );
+  const view = await readAnimeRelationsConnections({
+    readParts, readWholes, readRelations, namesOf, readPeople, readCollectionMembers,
+  }, id, query);
+  return <div className="grid gap-10">
+    <EditEntry workRef={workRef} id={id} section="parts" locale={locale} />
+    <AnimeRelationsSections view={view} workRef={workRef} id={id} query={query}
+      locale={locale} pageMessages={pageMessages} />
+  </div>;
 }
 
 /** The realizations the loaded ones follow (translations of a text on another page), so each names its source language. */

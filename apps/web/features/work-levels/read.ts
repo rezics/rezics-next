@@ -1,23 +1,15 @@
 import { cache } from 'react';
 import { readWorkParts, readWorkRealizations, readWorkRelations, readWorkWholes } from '../work-page/anime-hub-recorded-page.ts';
 import { settle } from '../work-page/books-edition-page.read.ts';
-import { reader, readReviewer } from '../work-page/read.ts';
-import { agentsOf, relationRows } from './relation-rows.ts';
-import type { CollectionMember, CollectionMembers, Loaded, Names, PartsPage, RealizationPage, Realization,
-  People, RelationEntry, RelationsPage, Release, ReleasePage, Summary, WholesPage } from './types.ts';
+import { reader } from '../work-page/read.ts';
+import { animeRelationsReads } from '../work-page/anime-relations-recorded-page.ts';
+import type { CollectionMembers, Loaded, Names, PartsPage, RealizationPage, Realization,
+  People, RelationEntry, RelationsPage, Release, ReleasePage, WholesPage } from './types.ts';
 
 // Server reads for the Work-level pages. Each returns a `Loaded` result instead
 // of throwing, so one section's failure never takes down another. Main decides
 // disclosure for public parts, wholes and relations reads. Collection reads
 // still require an acting Agent.
-
-/** The acting Agent a read needs, or the reason the reader has none. */
-async function actor() {
-  const current = await reader();
-  return current.actingSubject
-    ? { ...current, actingSubject: current.actingSubject, failure: null }
-    : { ...current, failure: (current.signedIn ? 'identity' : 'sign-in') as 'identity' | 'sign-in' };
-}
 
 export async function readParts(id: string, query: { parent?: string; after?: string; limit?: number }):
   Promise<Loaded<PartsPage>> {
@@ -39,13 +31,7 @@ export async function readRelations(id: string, query: { after?: string; limit?:
 /** The members a franchise Collection places, in the order Main keeps them. */
 export async function readCollectionMembers(collection: string, query: { after?: string; limit?: number }):
   Promise<Loaded<CollectionMembers>> {
-  const current = await actor();
-  if (current.failure) return { ok: false, failure: current.failure };
-  const page = await settle(() => current.main.v1.collections({ id: collection }).get({ query: {
-    actingSubject: current.actingSubject, after: query.after, limit: query.limit } }), query.after);
-  if (!page.ok) return page;
-  const members = (page.data.occurrences as CollectionMember[]).filter(item => item.role === 'member' && item.target);
-  return { ok: true, data: { collection: page.data.collection, members, next: page.data.next } };
+  return animeRelationsReads(await reader()).readCollectionMembers(collection, query);
 }
 
 /**
@@ -53,17 +39,7 @@ export async function readCollectionMembers(collection: string, query: { after?:
  * the reading position (`all` or an occurrence IRI) Main withholds later names for; omitted, Main chooses.
  */
 export const readNames = cache(async (resources: string, position?: string): Promise<Names> => {
-  const refs = [...new Set(resources.split(' ').filter(Boolean))];
-  const { main, actingSubject } = await reader();
-  const names = new Map<string, Summary>();
-  for (let offset = 0; offset < refs.length; offset += 64) {
-    const batch = refs.slice(offset, offset + 64);
-    const answer = await settle(() => main.v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
-      resources: batch, ...(position ? { position } : {}),
-      ...(actingSubject ? { actingSubject } : {}) }));
-    if (answer.ok) for (const summary of answer.data.summaries) names.set(summary.reference, summary);
-  }
-  return names;
+  return animeRelationsReads(await reader()).readNames(resources, position);
 });
 
 /** `readNames` over a list; the cache key is the sorted, joined list and the position, so one request shares one call per position. */
@@ -109,6 +85,5 @@ export async function readReleaseWork(release: string): Promise<Loaded<{ work: s
 
 /** The contributors a relation page names as REZICS Agents, with the name and handle their profile link needs; one Agent Main will not name stays a bare key. */
 export async function readPeople(entries: readonly RelationEntry[]): Promise<People> {
-  const found = await Promise.all(agentsOf(relationRows(entries)).map(async agent => [agent, await readReviewer(agent)] as const));
-  return new Map(found.flatMap(([agent, person]) => (person ? [[agent, person] as const] : [])));
+  return animeRelationsReads(await reader()).readPeople(entries);
 }

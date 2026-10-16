@@ -3,9 +3,15 @@ import { randomUUID } from 'node:crypto';
 import hub from '../../../../../scripts/qa/cases/outcomes/anime/anime-manga-and-vn-hub-parts-wholes-and-relations.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
-import { readDatedAnimeHub, readWorkParts, readWorkWholes, readWorkRelations } from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
+import { readDatedAnimeHub, readWorkParts, readWorkWholes } from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
 import { readSuppliedContents } from '../../../../../apps/web/features/work-page/games-hub-recorded-page.ts';
 import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
+import { animeRelationsReads, readAnimeRelationsConnections } from '../../../../../apps/web/features/work-page/anime-relations-recorded-page.ts';
+import { booksEditionReads, readBooksEditionStatus } from '../../../../../apps/web/features/work-page/books-edition-page.read.ts';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
+import { seedTypes, typeEntry } from '../../../../../apps/web/features/catalogue/types.ts';
+import { progressControl } from '../../../../../apps/web/features/tracking/medium-progress.tsx';
+import { standingOf } from '../../../../../apps/web/features/tracking/episodes.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -322,16 +328,42 @@ async function visit(name: PersonaName) {
     const main = browserMainApi('http://record.invalid', { anonymous: !person.actingSubject, fetcher });
     const host = { main, actingSubject: person.actingSubject ?? undefined };
     const id = short(work.work);
+    const registry = await main.v1.types.get();
+    if (registry.data) seedTypes(registry.data);
     const page = await readDatedAnimeHub(main, host.actingSubject, id);
     if (faults.length) throw faults[0];
     if (!page.header.ok) continue;
     await Promise.all([
-      readWorkParts(main, host.actingSubject, id, { limit: 50 }),
-      readWorkWholes(main, host.actingSubject, id),
-      readWorkRelations(main, host.actingSubject, id, { limit: 20 }),
+      readAnimeRelationsConnections(animeRelationsReads(host), id, { grain: 'series' }),
+      readWorkParts(main, host.actingSubject, id, { limit: 7 }),
+      readWorkWholes(main, host.actingSubject, id, { limit: 3 }),
       readSuppliedContents(host, id, {}),
-      host.actingSubject ? mainTrackingApi(host.actingSubject, () => main).relations(work.work) : null,
+      readBooksEditionStatus(booksEditionReads(host), id, 'en'),
+      host.actingSubject ? mainRelationships(host.actingSubject, {
+        origin: `http://record.invalid${BFF_PREFIX}`, fetch: fetcher,
+      }).state(work.work, 'work') : null,
     ]);
+    if (host.actingSubject) {
+      const tracking = mainTrackingApi(host.actingSubject, () => main);
+      const [preference] = await Promise.all([
+        tracking.preference(work.work), tracking.editions(work.work), tracking.relations(work.work),
+        tracking.definition('correspondence-equivalent'),
+      ]);
+      await tracking.series(work.work, preference.ok ? preference.data?.language ?? 'en' : 'en');
+      if (tracking.media) {
+        const types = await tracking.media.types(work.work);
+        if (types.ok || types.failure !== 'missing') {
+          const choice = await progressControl(tracking.media, tracking.episodes ?? null, work.work,
+            types.ok && types.data ? typeEntry(types.data)?.presentation ?? null : null);
+          if (choice.kind === 'episodes' && tracking.episodes) await standingOf(tracking.episodes, work.work);
+          else if (choice.kind === 'chapters') {
+            const standing = await tracking.media.standing(work.work);
+            if (standing.ok && !standing.data.opened) await tracking.media.positions(work.work);
+          } else if (choice.kind === 'work') await tracking.media.workStanding(work.work);
+          else if (choice.kind === 'game') throw new Error(`Unrecorded route-based game control for ${work.work}`);
+        }
+      }
+    }
     if (faults.length) throw faults[0];
   }
 }
