@@ -182,6 +182,7 @@ beforeAll(async () => {
   const delegated = await role(sessions.member, true);
   try { await answer(configure(sessions.member, visits.member.zone, visits.member.zoneRevision, sessions.realm)); }
   finally { await role(sessions.member, false, delegated); }
+  await publishHome(visits.member, sessions.member);
   // The moderator ends created; the later operator refusal uses the retained fixture attachment.
   sites.operator = { ...created, zone: sessions.zone };
   visits.operator = { ...sites.operator, space: sessions.zone };
