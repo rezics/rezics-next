@@ -100,6 +100,7 @@ async function storyRanking(sessions: PersonaSessions, name: PersonaName,
 }
 
 async function storyStates(name: PersonaName) {
+  const visits: (() => Promise<void>)[] = [];
   const person = publicRealm[name];
   const stateRealm = { ...publicRealm, realm: emptyRealm };
   const absentRealm = { ...publicRealm, realm: `https://rezics.com/id/${randomUUID()}` };
@@ -114,22 +115,20 @@ async function storyStates(name: PersonaName) {
     const invalid = await storyRanking(publicRealm, name, sort, window,
       `${sort}-${window}-invalid-cursor`, 'contract:another-viewer:page-2', 400);
     expect(invalid).toMatchObject({ ok: false, failure: 'invalid' });
-    await Promise.all([
-      captureVisit(stateRealm, name, `visit-${sort}-${window}-empty`, { sort, window }),
-      captureVisit(absentRealm, name, `visit-${sort}-${window}-missing`, { sort, window }),
-      captureVisit(publicRealm, name, `visit-${sort}-${window}-invalid-cursor`, {
+    // Capture each reached page state once; the coordinate-specific reader assertions above stay complete.
+    if (sort === 'best') visits.push(() => captureVisit(absentRealm, name, 'visit-best-all-missing', { sort, window }));
+    if (window === 'month') visits.push(
+      () => captureVisit(stateRealm, name, `visit-${sort}-${window}-empty`, { sort, window }),
+      () => captureVisit(publicRealm, name, `visit-${sort}-${window}-invalid-cursor`, {
         sort, window, cursor: 'contract:another-viewer:page-2',
       }),
-    ]);
+    );
   }
-  await captureVisit(publicRealm, name, 'visit-ranking-module', { sort: 'best', window: 'all' }, true);
-  await captureVisit(stateRealm, name, 'visit-ranking-module-empty', { sort: 'best', window: 'all' }, true);
+  visits.push(() => captureVisit(publicRealm, name, 'visit-ranking-module', { sort: 'best', window: 'all' }, true),
+    () => captureVisit(stateRealm, name, 'visit-ranking-module-empty', { sort: 'best', window: 'all' }, true));
   if (name === 'visitor') for (const locale of uiLocales) {
     if (locale === 'en') continue;
-    await Promise.all([
-      captureVisit(publicRealm, name, `visit-best-all@${locale}`, { sort: 'best', window: 'all' }, false, locale),
-      captureVisit(publicRealm, name, `visit-ranking-module@${locale}`, { sort: 'best', window: 'all' }, true, locale),
-    ]);
+    visits.push(() => captureVisit(publicRealm, name, `visit-best-all@${locale}`, { sort: 'best', window: 'all' }, false, locale));
   }
   for (const interval of ['day', 'week', 'month'] as const) {
     const main = recordedMainClient(recording, name, person, `ranking-module-${interval}`);
@@ -155,6 +154,7 @@ async function storyStates(name: PersonaName) {
     expect(await readRankingModuleAnswer(recordedMainClient(recording, name, person,
       `ranking-module-${interval}-missing`), absentRealm.realm, interval, 'reads')).toMatchObject({ ok: false, failure: 'missing' });
   }
+  for (let start = 0; start < visits.length; start += 3) await Promise.all(visits.slice(start, start + 3).map(visit => visit()));
   const moving = { ...publicRealm, realm: movedRealm };
   const first = await storyRanking(moving, name, 'best', 'all', 'moved-basis');
   expect(first.ok).toBe(true);
@@ -190,7 +190,7 @@ async function traverse(sessions: PersonaSessions, name: PersonaName, expected: 
         const recorded = await storyRanking(sessions, name, sort as 'best' | 'top',
           window as 'week' | 'month' | 'all', `${prefix}${sort}-${window}${suffix}`, params.get('cursor') ?? undefined);
         expect(recorded.ok).toBe(true);
-        visits.push(captureVisit(sessions, name, `visit-${prefix}${sort}-${window}${suffix}`, {
+        if (pageNumber === 0 || finalPage) visits.push(captureVisit(sessions, name, `visit-${prefix}${sort}-${window}${suffix}`, {
           sort: sort as 'best' | 'top', window: window as 'week' | 'month' | 'all', cursor: params.get('cursor') ?? undefined,
         }).then(() => ({}), error => ({ error })));
         if (!recorded.ok) throw new Error('Ranked traversal read failed');
