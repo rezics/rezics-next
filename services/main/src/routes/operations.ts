@@ -1,5 +1,6 @@
 import { transportResponses } from '../transport-responses.ts';
-import { Elysia, t, problem, type Context } from 'elysia';
+import { Elysia, t, type Context } from 'elysia';
+import { problem } from './problems.ts';
 import { BackpressureSaturated, BackpressureUnavailable,
   type AdmissionLease, type LeaseOutcome } from '../operations/admission-budget.ts';
 import { contentProjectionPositions, OperationsBackpressure,
@@ -37,15 +38,12 @@ function refusal(error: unknown, set: Context['set']) {
   if (error instanceof BackpressureSaturated) {
     set.headers['cache-control'] = 'no-store';
     set.headers['retry-after'] = String(error.retryAfterSeconds);
-    return problem(503, { code: 'backpressure_saturated',
-      type: 'https://rezics.com/problems/backpressure_saturated',
-      title: `The ${error.lane} budget is saturated; retry later` });
+    return problem(503, 'backpressure_saturated', `The ${error.lane} budget is saturated; retry later`,
+      { 'retry-after': String(error.retryAfterSeconds) });
   }
   if (error instanceof BackpressureUnavailable) {
     set.headers['cache-control'] = 'no-store';
-    return problem(503, { code: 'backpressure_unavailable',
-      type: 'https://rezics.com/problems/backpressure_unavailable',
-      title: `The ${error.lane} budget cannot be observed` });
+    return problem(503, 'backpressure_unavailable', `The ${error.lane} budget cannot be observed`);
   }
   return undefined;
 }
