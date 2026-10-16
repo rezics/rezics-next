@@ -16,7 +16,10 @@ recording or prove step explicitly.
 Begin with the brief's failing outcome tests and the files most likely to
 change. Read further only when the evidence requires it, make the smallest
 change that satisfies the outcome, avoid unrelated cleanup, run the checks
-below, and stop when the outcome's tests pass.
+below, and stop when the outcome's tests pass. When several tests fail, take
+every failure from one run of the affected tests, name each cause, and fix the
+independent ones together before the next run; a failure in a test's setup is
+diagnosed before any full gate reruns.
 
 Deliver the brief's outcome completely before you stop. Make reasonable
 assumptions, state them in the handoff, and keep going; do not stop to ask. If
