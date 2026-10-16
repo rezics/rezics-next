@@ -201,6 +201,7 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
   catch { throw new InvalidContentPhrase('invalid public Content language'); }
   const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
   const { source, index, proof } = await prepareContentSearch(env, content, cursor, consumer);
+  const placements = await searchablePlacement(env, lucene, '?resource', '?parentWork', '?parentMain', '?revision');
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX text: <http://jena.apache.org/text#>
     PREFIX schema: <https://schema.org/>
@@ -230,7 +231,7 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
         GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ;
           rv:resource ?resource ; rv:contentPublicationHead ?decision ;
           rv:publicSearchEligibilityHead ?eligibility . }
-        OPTIONAL { ${searchablePlacement('?resource', '?parentWork', '?parentMain', '?revision')}
+        OPTIONAL { ${placements}
           GRAPH ${iri(GRAPHS.current)} { ?resource <http://www.w3.org/2000/01/rdf-schema#label> ?searchTitle }
           FILTER(LCASE(LANG(?searchTitle)) = LCASE(?language)) }
         # Keep every placing Work bound for disclosure; unreadable ancestry cannot

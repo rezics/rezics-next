@@ -1,3 +1,4 @@
+import { searchablePlacement } from '../structure/searchable-placements.ts';
 import { phraseMatchPattern } from './search-phrase-pattern.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
@@ -59,6 +60,8 @@ async function queryPublicPhrase(env: WorkActivationEnvironment,
     ? await assertPublicContentSearchReady(env, content.content, content.cursor, content.consumer) : null;
   // Content readiness already qualified the native index at this same graph cut.
   const index = contentReadiness?.index ?? await assertPublicTextReady(env.fuseki, env.lineage);
+  const placements = content ? await searchablePlacement(env, lucene,
+    '?phraseWork', '?resultWork', '?resultMain', '?contentRevision') : undefined;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
@@ -85,7 +88,7 @@ async function queryPublicPhrase(env: WorkActivationEnvironment,
         } } LIMIT ${PHRASE_HIT_PROBE} }
       } }
       OPTIONAL {
-        ${phraseMatchPattern(input, lucene)}
+        ${phraseMatchPattern(input, lucene, undefined, placements)}
       }
     } ORDER BY ?searchPosition ?searchOccurrence LIMIT 513`, MAX_SEARCH_RESPONSE_BYTES);
   await assertSameTextInstance(env.fuseki, index);

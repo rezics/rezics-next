@@ -10,7 +10,7 @@ import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '
 import { resolvePreparedGroups } from './group-root.ts';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { encodeReadCursor, decodeReadCursor, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
-import { readPublishedStructuredWorkSource } from '../work/public-patterns.ts';
+import { readPublishedStructuredWorkSource, type PublishedStructuredWorkSource } from '../work/public-patterns.ts';
 import { qualifierKeyTree, qualifierKeyPrefix, qualifierKeyOf, requireQualifierKeyIndex, resolvePreparedQualifierKeys,
   QUALIFIER_KEY_COST, type QualifierKey } from './qualifier-index.ts';
 
@@ -39,7 +39,15 @@ export async function selectWorkCompositionRevision(session: WorkReadSession,
   try { source = await read(); }
   catch (cause) { throw new WorkReadUnavailable('Published Structure source is unavailable', { cause }); }
   session.observeDependency(`composition-publication:${header.work}:${header.component}`, source, read);
-  if (!source || source.structure !== header.structure
+  return publishedCompositionRevision(header, source, requestedRevision);
+}
+
+/** The publication owner's exact source is the sole public revision selection.
+ * Shared readers may batch the source read, but cannot substitute a moving head. */
+export function publishedCompositionRevision(header: CompositionHeader,
+  source: PublishedStructuredWorkSource | null, requestedRevision?: string): string {
+  if (!source || source.work !== header.work || source.mainVersion !== header.component
+    || source.structure !== header.structure
     || source.structureProfile !== structureProfileFor(header.profile).graphProfile
     || requestedRevision && requestedRevision !== source.structureRevision) {
     throw new CompositionUnavailable('Composition is unavailable');

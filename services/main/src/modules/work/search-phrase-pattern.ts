@@ -1,4 +1,3 @@
-import { searchablePlacement } from '../structure/searchable-placements.ts';
 import { fallbackLanguage, realmLanguage } from './selection-heads.ts';
 import { GRAPHS, iri, lit } from './activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
@@ -8,7 +7,7 @@ import type { PublicMainPhraseQuery } from './search-public.ts';
 
 /** The same selected native text and profile-declared Content relation for every phrase reader.
  * Keep this inside the reader's graph snapshot, including classification/rating joins. */
-export function phraseMatchPattern(input: PublicMainPhraseQuery & { context?: { id: string } }, lucene: string, candidates?: string) {
+export function phraseMatchPattern(input: PublicMainPhraseQuery & { context?: { id: string } }, lucene: string, candidates?: string, placements = 'FILTER(false)') {
   const realm = input.context?.id;
   const content = input.contentProjection;
   const matches = candidates ?? `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
@@ -66,7 +65,7 @@ export function phraseMatchPattern(input: PublicMainPhraseQuery & { context?: { 
             OPTIONAL { ?contentEligibility rv:rightsAssessment ?assessment }
             FILTER NOT EXISTS { ?contentRevision a rv:ErasedRevision }
           }
-          ${searchablePlacement('?phraseWork', '?resultWork', '?resultMain', '?contentRevision')}
+          ${placements}
           ${publicWork('?resultWork', '?resultMain')}
           ${realm ? `OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
             ?contentSlot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;

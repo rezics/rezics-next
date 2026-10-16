@@ -1,3 +1,4 @@
+import { searchablePlacement } from '../structure/searchable-placements.ts';
 import { phraseMatchPattern } from './search-phrase-pattern.ts';
 import { discloseSearchMatches } from '../disclosure/search.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
@@ -66,6 +67,8 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
       } GROUP BY ${unit} }`
     : `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
         (${unit} ${score}) text:query (rv:searchBody ${lit(lucene)} ${PHRASE_HIT_PROBE}) }`;
+  const placements = content ? await searchablePlacement(env, lucene,
+    '?phraseWork', '?resultWork', '?resultMain', '?contentRevision') : undefined;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
     PREFIX text: <http://jena.apache.org/text#>
@@ -156,7 +159,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         }
       }
       OPTIONAL {
-        ${phraseMatchPattern(input, lucene, phrasePattern('?unit', '?score'))}
+        ${phraseMatchPattern(input, lucene, phrasePattern('?unit', '?score'), placements)}
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(realm)} rv:classificationContext ?classificationContext .
           ${iri(input.sense)} rv:expression ?expression .

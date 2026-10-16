@@ -33,12 +33,6 @@ test('an Anime section list finds each searchable Content placement through comp
     const structure = await json<{ structure: string; revision: string }>(await actor.send('POST',
       '/v1/compositions', { profile: 'section-list-v1', work: owner.work,
         mainVersion: owner.mainVersion, actingSubject: actor.actor }), 201);
-    const changed = await json<{ occurrences: string[] }>(await actor.send('POST',
-      `/v1/compositions/${short(structure.structure)}/changes`, {
-        profile: 'section-list-v1', actingSubject: actor.actor, expectedHead: structure.revision,
-        operations: [0, 1].map(index => ({ op: 'insert', role: 'entry', parent: structure.structure,
-          position: 'last', target: source.work, qualifier: { note: `Use ${index}` } })),
-      }));
     for (const [scope, action] of [['draft', 'draft'], ['publish', 'publish'],
       ['search-eligibility', 'search-eligibility']] as const) {
       await actor.grant(`content:${scope}:${source.work}`, `content.${action}`);
@@ -57,6 +51,26 @@ test('an Anime section list finds each searchable Content placement through comp
       profile: 'content-search-eligibility-v1', resourceId: source.work, variantId,
       publicationDecision: published.decision, expectedEligibilityHead: null,
       actingSubject: actor.actor, rightsBasis: 'original-contribution', disclosure: 'public' }), 201);
+    const changed = await json<{ revision: string; occurrences: string[] }>(await actor.send('POST',
+      `/v1/compositions/${short(structure.structure)}/changes`, {
+        profile: 'section-list-v1', actingSubject: actor.actor, expectedHead: structure.revision,
+        operations: [0, 1].map(index => ({ op: 'insert', role: 'entry', parent: structure.structure,
+          position: 'last', target: source.work, qualifier: { note: `Use ${index}` },
+          selection: { mode: 'fixed-revision', revision: draft.revisionId,
+            selector: { grain: 'content', variantId, revision: draft.revisionId } } })),
+      }));
+    // Public search consumes the same explicitly published Structure root as
+    // the anonymous composition reader, rather than its editable draft head.
+    await actor.grant(`work:publish:${owner.work}`, 'work.publish');
+    const heads = (await stack.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?head WHERE { GRAPH <urn:rezics:graph:current> { <${owner.work}> rv:head ?head } }`)).results!.bindings;
+    await json(await actor.send('POST', '/v1/work-publications', {
+      profile: 'work-structure-publication-v1', operation: 'publish', work: owner.work,
+      actingSubject: actor.actor, expectedWorkHead: heads[0]!.head!.value,
+      expectedMainVersion: owner.mainVersion, structure: structure.structure,
+      expectedStructureHead: changed.revision, expectedPublicationHead: null,
+      rightsBasis: 'original-contribution', disclosure: 'public',
+    }), 201);
     const command = new FusekiClient(Bun.env.FUSEKI_URL!, Bun.env.FUSEKI_MAINTENANCE_TOKEN!, Bun.env.FUSEKI_COMMAND_TOKEN!);
     const relayEnv = { ...stack.env, fuseki: command };
     await stack.contentCursor.initialize(stack.contentConsumer);
@@ -78,6 +92,21 @@ test('an Anime section list finds each searchable Content placement through comp
     for (const hit of page.results) expect(hit).toMatchObject({ revision: `urn:rezics:content:revision:${draft.revisionId}`,
       matchedPlacements: expect.arrayContaining([{ resource: source.work, work: owner.work, profile: 'section-list-v1', occurrence: changed.occurrences[0], title: 'Production notes' }]) });
     expect(stack.fuseki.queries - before).toBeLessThanOrEqual(40);
+    // A later draft removes an admitted use and introduces an unadmitted use.
+    // Search must retain the old exact occurrences and their original order.
+    const removed = await json<{ revision: string }>(await actor.send('POST', `/v1/compositions/${short(structure.structure)}/changes`, {
+      profile: 'section-list-v1', expectedHead: changed.revision, actingSubject: actor.actor,
+      operations: [{ op: 'remove', occurrence: changed.occurrences[0] }],
+    }));
+    await json(await actor.send('POST', `/v1/compositions/${short(structure.structure)}/changes`, {
+      profile: 'section-list-v1', expectedHead: removed.revision, actingSubject: actor.actor,
+      operations: [{ op: 'insert', role: 'entry', parent: structure.structure, position: 'last',
+          target: source.work, qualifier: { note: 'Unpublished replacement' } }],
+    }));
+    const retained = await json<typeof page>(await query());
+    expect(retained.results).toEqual(page.results);
+    expect(retained.results.flatMap(hit => hit.matchedPlacements?.map(place => place.occurrence) ?? []))
+      .toEqual(changed.occurrences);
     // Public Content eligibility does not publish its source Work into the
     // Main Work phrase-search relation.
     const privateSource = await stack.privateWork(actor.actor, 'Private production notes');
