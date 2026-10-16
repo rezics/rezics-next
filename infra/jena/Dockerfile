@@ -62,7 +62,10 @@ COPY --chmod=0755 infra/jena/compact-tdb2.sh /usr/local/bin/tdb2-compact
 COPY generated/model/manifest.json /fuseki/profiles/manifest.json
 COPY generated/model/shapes/ /fuseki/profiles/shapes/
 RUN mkdir -p /fuseki/databases/rezics/tdb2 /fuseki/databases/rezics/lucene \
-    && chown -R 10001:10001 /fuseki
+    && chown -R 10001:10001 /fuseki \
+    # Worktree umasks must not make assemblers or profiles unreadable when
+    # operators run the image with the owner UID of a mounted data volume.
+    && chmod -R u=rwX,go=rX /fuseki
 USER 10001:10001
 WORKDIR /fuseki
 EXPOSE 3030
