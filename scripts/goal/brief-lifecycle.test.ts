@@ -13,7 +13,9 @@ function repository() {
   const scratch = join(import.meta.dir, '../../.temp/brief-lifecycle');
   mkdirSync(scratch, { recursive: true });
   const dir = mkdtempSync(join(scratch, 'repo-'));
-  const env = { PATH: process.env.PATH, CLAUDECODE: process.env.CLAUDECODE, GOAL_ID: 'alpha' };
+  const plan = join(dir, '.temp/unit-plan');
+  const env = { PATH: process.env.PATH, CLAUDECODE: process.env.CLAUDECODE, GOAL_ID: 'alpha', GOAL_TEST_PLAN: plan,
+    GOAL_MEMORY_FLOOR_GIB: '0', GOAL_GATE_LANES: '25' };
   const git = (...args: string[]) => {
     const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
     expect(result.status, result.stderr).toBe(0);
@@ -33,6 +35,7 @@ function repository() {
   const ledger: Ledger = { tasks: {}, goals: { alpha: { manager: 'fixture', startedAt: '2026-10-13T00:00:00Z' } } };
   const save = () => write('.temp/goal-orchestration/ledger.json', JSON.stringify(ledger));
   save();
+  writeFileSync(plan, '');
   return { dir, git, write, ledger, save,
     run: (args: string[], overrides: Record<string, string> = {}) => spawnSync(process.execPath, [cli, ...args],
       { cwd: dir, env: { ...env, ...overrides }, encoding: 'utf8' }),

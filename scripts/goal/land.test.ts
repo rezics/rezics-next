@@ -151,8 +151,8 @@ try { await landTask(process.argv[2]!, false, { lanes: 0, timeoutMs: 0, now: () 
 catch (error) { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); }`);
   write('.temp/bin/git', `#!/usr/bin/env bun
 const args = process.argv.slice(2);
-if (process.env.INTERRUPT_REBASE && args[0] === 'rebase' && args[1] === 'main') {
-  const stopped = Bun.spawnSync(['/usr/bin/git', 'rebase', '--exec', 'false', 'main'], { cwd: process.cwd() });
+if (process.env.INTERRUPT_REBASE && args[0] === 'rebase' && (args[1] === 'main' || args[1] === '--onto')) {
+  const stopped = Bun.spawnSync(['/usr/bin/git', 'rebase', '--exec', 'false', ...args.slice(1)], { cwd: process.cwd() });
   if (stopped.exitCode !== 1) throw new Error('fixture did not stop inside a rebase');
   process.kill(process.ppid, 'SIGKILL');
   process.exit(0);

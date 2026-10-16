@@ -37,14 +37,14 @@ test('a rebase stopped by an index lock lands with its accepted review after tha
   } finally { r.cleanup(); }
 });
 
-test('main touching gated files after the retry gate is recorded and land goes on next time', () => {
+test('main changing outside the train is recorded and land goes on next time', () => {
   const r = repo({ files: { 'value.test.ts': "import { test } from 'bun:test'; test('value', () => {});\n" } });
   try {
     const plan = join(r.dir, '.temp/plan.txt');
     writeFileSync(plan, '  unit: value.test.ts\n');
     const stopped = r.run('land', { GATE_MAIN_ADVANCE: 'yes', GOAL_TEST_PLAN: plan });
     expect(stopped.status).toBe(1);
-    expect(stopped.stderr).toContain('main touched task or gated files again');
+    expect(stopped.stderr).toContain('main changed outside the merge train');
     expect(r.ledger().tasks[r.task.id]!.mergeStop).toMatchObject({ kind: 'main-moved', landing: true });
     const landed = r.run('land', { REVIEW_EXIT: '1' });
     expect(landed.status).toBe(0);

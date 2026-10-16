@@ -3442,28 +3442,15 @@ ${edit}
         writeFileSync(plan, `  unit: ${file}\n${boundary === 'main-gated-file' || boundary === 'main-renamed-gated-file' ? `  unit: ${gatedFile}\n` : ''}`);
         const log = join(r.dir, '.temp/unit-log');
         const result = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '1' });
-        const refusal = boundary === 'task' || boundary === 'sharer' || boundary === 'main-overlap-twice';
-        expect(result.status).toBe(refusal ? 1 : 0);
-        if (refusal) {
-          expect(result.stderr).toContain(boundary === 'main-overlap-twice' ? 'main touched task or gated files again' : 'changed during the unit gate; retry merge');
-          expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
-          expect(existsSync(join(r.dir, file))).toBe(false);
-          if (boundary === 'task' || boundary === 'sharer') expect(r.git('rev-parse', 'main')).toBe(before);
-        } else {
-          expect(result.stderr).toBe('');
-          expect(r.ledger().tasks[task.id]!.state).toBe('merged');
-          expect(existsSync(join(r.dir, file))).toBe(true);
-          expect(result.stdout).toContain(boundary === 'main-unrelated' ? 'existing gate remains valid' : 're-running the gate once');
-          if (boundary === 'main-changed-file') expect(readFileSync(join(r.dir, sharedFile), 'utf8')).toContain('export const task = 1;');
-        }
+        // Raw commits bypass the cumulative queue. Refuse them rather than claiming that a
+        // gate on a different tree is valid; manager commits use the train command instead.
+        expect(result.status, result.stderr).toBe(1);
+        expect(result.stderr).toContain(boundary.startsWith('main-') ? 'main changed outside the merge train' : 'changed during the unit gate; retry merge');
+        expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+        expect(existsSync(join(r.dir, file))).toBe(false);
+        if (boundary === 'task' || boundary === 'sharer') expect(r.git('rev-parse', 'main')).toBe(before);
         const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-        expect(runs).toHaveLength(boundary.startsWith('main-') && boundary !== 'main-unrelated' ? 2 : 1);
-        const eventsPath = join(r.dir, '.temp/goal-orchestration/merges.jsonl');
-        if (!refusal) {
-          const event = JSON.parse(readFileSync(eventsPath, 'utf8').trim());
-          expect(event.before).not.toBe(before);
-          expect(event.after).toBe(r.git('rev-parse', 'main'));
-        }
+        expect(runs).toHaveLength(1);
       } finally { r.cleanup(); }
     });
   }
@@ -5258,15 +5245,18 @@ describe('goalctl archive', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
-  test('commits only the removed briefs and leaves what peers staged', () => {
+  test('queues only the removed briefs and leaves main and peer staging unchanged', () => {
     const dir = repo();
     try {
       writeFileSync(join(dir, 'peer.ts'), 'staged by a peer');
       git(dir, 'add', 'peer.ts');
-      removeFromTree(dir, ['docs/goals/g/tasks/G-001.md'], 'Archive the closed brief G-001');
-      expect(existsSync(join(dir, 'docs/goals/g'))).toBe(false);
-      expect(existsSync(join(dir, 'docs'))).toBe(false);
-      expect(git(dir, 'show', '--name-status', '--format=%s', 'HEAD').split('\n'))
+      const head = git(dir, 'rev-parse', 'HEAD');
+      const id = removeFromTree(dir, ['docs/goals/g/tasks/G-001.md'], 'Archive the closed brief G-001');
+      expect(existsSync(join(dir, 'docs/goals/g/tasks/G-001.md'))).toBe(true);
+      expect(git(dir, 'rev-parse', 'HEAD')).toBe(head);
+      const train = JSON.parse(readFileSync(join(dir, '.temp/goal-orchestration/train.json'), 'utf8'));
+      expect(train.entries.map((entry: { id: string }) => entry.id)).toEqual([id]);
+      expect(git(dir, 'show', '--name-status', '--format=%s', `refs/goal-manager/${id}`).split('\n'))
         .toEqual(['Archive the closed brief G-001', '', 'D\tdocs/goals/g/tasks/G-001.md']);
       expect(git(dir, 'diff', '--cached', '--name-only')).toBe('peer.ts');
     } finally { rmSync(dir, { recursive: true, force: true }); }

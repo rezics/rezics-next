@@ -9,6 +9,8 @@ import { type LandScope } from './land.ts';
 import { processAlive } from '../qa/process/identity.ts';
 import { directoryLeaseHeld, type AcquiredDirectoryLease, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { worktreeBase } from './tree-currency.ts';
+import { queueManagerCommit } from './manager-commit.ts';
+import { trainEvent } from './merge-train.ts';
 
 /** A peer may briefly hold the shared index. Retry only that conflict; the lock belongs to Git, never us. */
 export function retryGitIndexLock<T extends { status: number | null; stderr: string | null }>(run: () => T,
@@ -58,7 +60,7 @@ export function archiveFiles(repo: string, files: readonly { path: string; conte
   }
 }
 
-/** Deletes files and commits their removal with any accompanying link edits, leaving whatever else peers have staged. */
+/** Queues file removals and accompanying link edits in their repository train, preserving peer staging. */
 export function removeFromTree(repo: string, paths: readonly string[], message: string,
   edited: readonly string[] = []): string | undefined {
   const tracked = paths.filter(path => git(repo, ['ls-files', '--', path], true) !== '');
@@ -70,8 +72,8 @@ export function removeFromTree(repo: string, paths: readonly string[], message: 
     }
   }
   if (!tracked.length) return undefined;
-  git(repo, ['commit', '-q', '--only', '-m', message, '--', ...tracked, ...edited]);
-  return git(repo, ['rev-parse', 'HEAD']);
+  const directory = join(dirname(git(repo, ['rev-parse', '--path-format=absolute', '--git-common-dir'])), '.temp/goal-orchestration');
+  return queueManagerCommit(repo, directory, [...tracked, ...edited], message);
 }
 
 /** `file:line:text` of tracked files that mention any of `needles` (fixed strings), outside `exclude` globs
@@ -477,12 +479,23 @@ export function dirLockHeld(path: string, alive: (pid: number) => boolean): bool
 }
 
 export async function acquireDir(path: string, timeoutMs: number, label: string): Promise<AcquiredDirectoryLease> {
-  const deadline = Date.now() + timeoutMs;
+  const started = Date.now();
+  const deadline = started + timeoutMs;
   let announced = false;
+  let waited = false;
   for (;;) {
     const acquired = tryAcquireDirectoryLease(path, { alive: candidate => pidAlive(candidate) });
-    if (acquired !== 'held') return acquired;
-    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}`);
+    const timing = { id: process.env.GOAL_TASK_ID ?? process.env.GOAL_ID ?? 'program', token: `pid:${process.pid}`, lock: label };
+    if (acquired !== 'held') {
+      if (waited) trainEvent(stateDir, { ...timing, event: 'lock-wait-end', seconds: (Date.now() - started) / 1000 });
+      return acquired;
+    }
+    if (!waited) trainEvent(stateDir, { ...timing, event: 'lock-wait-start' });
+    waited = true;
+    if (Date.now() > deadline) {
+      trainEvent(stateDir, { ...timing, event: 'lock-wait-end', seconds: (Date.now() - started) / 1000, reason: 'timeout' });
+      throw new Error(`Timed out waiting for ${label}`);
+    }
     if (!announced && timeoutMs > 60_000) { console.error(`waiting for ${label}`); announced = true; }
     await Bun.sleep(label === 'ledger lock' ? 100 : 3000);
   }
