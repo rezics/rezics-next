@@ -78,6 +78,21 @@ writeFileSync('.temp/launched.json', JSON.stringify({ brief: readFileSync('.temp
 }
 
 describe('resume registers brief claims', () => {
+  test.each(['on', 'off'])('preserves the manager auto-land choice %s when refreshing brief claims', async choice => {
+    const repo = repository();
+    try {
+      repo.brief(choice === 'off' ? { land: 'auto' } : {});
+      const ledger = repo.ledger();
+      ledger.tasks[repo.task.id]!.state = 'exited';
+      repo.save(ledger);
+      expect(repo.run('auto-land', repo.task.id, choice).status).toBe(0);
+      const result = repo.run('resume', repo.task.id, '-m', 'Continue.');
+      expect(result.status).toBe(0);
+      expect(repo.ledger().tasks[repo.task.id]!.land).toBe(choice === 'on' ? 'auto' : undefined);
+      await repo.launched();
+    } finally { repo.dispose(); }
+  });
+
   test.each([
     ['a path added', { paths: '[kept.ts, dropped.ts, added.ts]' }, 'paths'],
     ['a path dropped', { paths: '[kept.ts]' }, 'paths'],
@@ -117,8 +132,9 @@ describe('resume registers brief claims', () => {
       const current = repo.ledger().tasks[repo.task.id]!;
       const expected = parseBrief(text);
       for (const key of ['kind', 'rows', 'title', 'effort', 'cases', 'tests', 'refs', 'operations',
-        'migrations', 'shared', 'land'] as const) expect(current[key]).toEqual(expected[key]);
-      expect(result.stdout).toContain('claims updated: kind, rows, title, effort, cases, tests, refs, operations, migrations, shared, land');
+        'migrations', 'shared'] as const) expect(current[key]).toEqual(expected[key]);
+      expect(current.land).toBeUndefined();
+      expect(result.stdout).toContain('claims updated: kind, rows, title, effort, cases, tests, refs, operations, migrations, shared');
       expect((await repo.launched()).brief).toBe(text);
       expect(readFileSync(join(repo.task.worktree, '.temp/ref/evidence.md'), 'utf8')).toBe('new evidence');
     } finally { repo.dispose(); }
@@ -145,7 +161,7 @@ describe('resume registers brief claims', () => {
     } finally { repo.dispose(); }
   });
 
-  test('registers a relocated main brief and clears an optional claim it no longer states', async () => {
+  test('registers a relocated main brief and keeps the current landing choice', async () => {
     const repo = repository();
     try {
       const ledger = repo.ledger();
@@ -159,8 +175,8 @@ describe('resume registers brief claims', () => {
       const result = repo.run('resume', repo.task.id, '-m', 'Continue.');
       expect(result.status).toBe(0);
       expect(repo.ledger().tasks[repo.task.id]!.brief).toBe(relocated);
-      expect(repo.ledger().tasks[repo.task.id]!.land).toBeUndefined();
-      expect(result.stdout).toContain('claims updated: brief, land');
+      expect(repo.ledger().tasks[repo.task.id]!.land).toBe('auto');
+      expect(result.stdout).toContain('claims updated: brief');
       expect((await repo.launched()).brief).toBe(text);
     } finally { repo.dispose(); }
   });

@@ -662,15 +662,17 @@ function assertClaimIdentity(task: Task, source: ReturnType<typeof readClaimBrie
 }
 
 function replacementClaims(task: Task, ledger: Ledger, source: ReturnType<typeof readClaimBrief>, flags: Set<string>,
-  onlyChanged = false) {
+  resuming = false) {
   const { brief, absolute } = source;
   assertClaimIdentity(task, source);
   const claims = { kind: brief.kind, rows: brief.rows, title: brief.title, effort: brief.effort, cases: brief.cases, paths: brief.paths,
     tests: brief.tests, refs: brief.refs, operations: brief.operations,
-    migrations: brief.migrations, shared: brief.shared, depends: brief.depends, brief: absolute, land: brief.land };
+    migrations: brief.migrations, shared: brief.shared, depends: brief.depends, brief: absolute,
+    // Dispatch or an explicit reclaim takes the brief's default; resume keeps the manager's current choice.
+    land: resuming ? task.land : brief.land };
   const changed = Object.entries(claims).filter(([key, value]) => !isDeepStrictEqual(task[key as keyof Task], value))
     .map(([key]) => key);
-  if (onlyChanged && !changed.length) return { claims, changed };
+  if (resuming && !changed.length) return { claims, changed };
   const added = { ...brief, paths: brief.paths.filter(path => !task.paths.includes(path)) };
   const conflicts = briefClaimConflicts(brief, Object.values(ledger.tasks), task.goal);
   // Another Goal's area is likewise checked for added paths only: a held path was admitted, with `--allow-area`
