@@ -18,8 +18,8 @@ import type { MangaLibraryPersona } from './manga-collection-recorded-page.ts';
 const state = parseLibraryState({ shelf: 'reading', view: 'grid' });
 
 /** `/library`'s production reader and page, with the replaying client supplied at its session boundary. */
-export function MangaCollectionRecordedPage({ main, persona, actingSubject, year, locale = 'en' }: {
-  main: MainClient; persona: MangaLibraryPersona; actingSubject: string; year: number; locale?: UiLocale;
+export function MangaCollectionRecordedPage({ main, anonymous, persona, actingSubject, year, locale = 'en' }: {
+  main: MainClient; anonymous: MainClient; persona: MangaLibraryPersona; actingSubject: string; year: number; locale?: UiLocale;
 }) {
   const [loaded, setLoaded] = useState<{
     main: MainClient; actingSubject: string; locale: UiLocale; year: number;
@@ -27,11 +27,11 @@ export function MangaCollectionRecordedPage({ main, persona, actingSubject, year
   } | null>(null);
   useEffect(() => {
     let mounted = true;
-    void loadBooksLibrary({ main, anonymous: main, actingSubject }, { state, locale, year, first: false }).then(page => {
+    void loadBooksLibrary({ main, anonymous, actingSubject }, { state, locale, year, first: false }).then(page => {
       if (mounted) setLoaded({ main, actingSubject, locale, year, page });
     });
     return () => { mounted = false; };
-  }, [main, actingSubject, year, locale]);
+  }, [main, anonymous, actingSubject, year, locale]);
   const page = loaded?.main === main && loaded.actingSubject === actingSubject && loaded.locale === locale
     && loaded.year === year ? loaded.page : null;
   const actions = useMemo(() => page ? createReaderStore({ actingSubject, main: () => main,

@@ -1,3 +1,5 @@
+import { localizedPath } from '../../../../../apps/web/i18n/locale.ts';
+import { workHref } from '../../../../../apps/web/features/work-page/route.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
@@ -10,6 +12,12 @@ import { booksEditionReads } from '../../../../../apps/web/features/work-page/bo
 import { loadBooksLibrary } from '../../../../../apps/web/features/library/books-library-recorded-page.ts';
 import { parseLibraryState } from '../../../../../apps/web/features/library/state.ts';
 import { mainMediaApi } from '../../../../../apps/web/features/tracking/media-api.ts';
+import { createReaderStore } from '../../../../../apps/web/features/catalogue/reader-store.ts';
+import { readResourcePage } from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
+import { mangaWorkVisit } from '../../../../../apps/web/features/tracking/manga-collection-recorded-page.work.tsx';
+import { finishMangaSlots } from '../../../../../apps/web/features/tracking/manga-collection-recorded-page.test-support.ts';
+import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 type Work = { work: string; mainVersion: string };
@@ -123,12 +131,13 @@ afterAll(async () => { await recording.publish(); await sessions?.close(); await
 
 /** Reach the production readers with the same HTTP boundary as the session client. */
 async function productionVisit(person: PersonaSession) {
-  const client = (session: PersonaSession) => browserMainApi('https://recorded.invalid', { fetcher: (async (input, init) => {
+  const request = (session: PersonaSession) => (async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
     const raw = await request.text();
     return session.main(request.method, url.pathname.slice(BFF_PREFIX.length) + url.search,
       raw ? JSON.parse(raw) : undefined, request.headers.get('idempotency-key') ?? undefined);
-  }) as typeof fetch });
+  }) as typeof fetch;
+  const client = (session: PersonaSession) => browserMainApi('https://recorded.invalid', { fetcher: request(session) });
   const main = client(person), actingSubject = person.actingSubject ?? undefined;
   const reads = booksEditionReads({ main, actingSubject });
   phase = 'work-header'; requestNumber = 0;
@@ -137,6 +146,38 @@ async function productionVisit(person: PersonaSession) {
   expect((await reads.readAgentCredits(short(manga.work))).ok).toBe(true);
   phase = 'work-credits'; requestNumber = 0;
   expect((await reads.readCredits(short(manga.work))).ok).toBe(true);
+  phase = 'work-projection'; requestNumber = 0;
+  expect((await readResourcePage(main, actingSubject, short(manga.work))).ok).toBe(true);
+  const host = { main, anonymous: client(sessions.visitor), actingSubject, signedIn: Boolean(actingSubject),
+    avatarQuery: actingSubject ? `?actingSubject=${encodeURIComponent(actingSubject)}` : '',
+    publicFetch: request(sessions.visitor), pageUrl: new URL(localizedPath(workHref(short(manga.work)), 'en'), 'https://rezics.com').href };
+  phase = 'work-overview'; requestNumber = 0;
+  const overview = await mangaWorkVisit(host, short(manga.work), 'overview');
+  expect(overview.ok).toBe(true);
+  if (!overview.ok) throw new Error(overview.failure);
+  await finishMangaSlots(overview.page);
+  if (actingSubject) {
+    // The existing mounted edition and series controls use these same production adapters.
+    const tracking = mainTrackingApi(actingSubject, () => main);
+    await tracking.preference(manga.work);
+    await tracking.editions(manga.work);
+    await tracking.relations(manga.work);
+    await tracking.definition('correspondence-equivalent');
+    await tracking.series(manga.work, 'en');
+    await mainMediaApi(actingSubject, () => main).types(manga.work);
+    await mainMediaApi(actingSubject, () => main).standing(manga.work);
+    await mainMediaApi(actingSubject, () => main).positions(manga.work);
+    await mainRelationships(actingSubject, { origin: 'https://recorded.invalid/api/main', fetch: request(person) })
+      .state(manga.work, 'work');
+  } else {
+    for (const [name, work] of [['inventory-series', manga], ['inventory-volume1', volume1], ['inventory-volume2', volume2]] as const) {
+      phase = name; requestNumber = 0;
+      const inventoryPage = await mangaWorkVisit(host, short(work.work), 'contents');
+      expect(inventoryPage.ok).toBe(true);
+      if (!inventoryPage.ok) throw new Error(inventoryPage.failure);
+      await finishMangaSlots(inventoryPage.page);
+    }
+  }
   phase = 'chapter-standing'; requestNumber = 0;
   const media = mainMediaApi(actingSubject!, () => main);
   expect((await media.standing(manga.work)).ok).toBe(true);
@@ -169,6 +210,13 @@ async function productionVisit(person: PersonaSession) {
     expect((await media.mark(chapter, { completed: false, position: null, expectedVersion: marked.data.version })).ok).toBe(true);
     phase = 'chapter-after-clear'; requestNumber = 0;
     expect((await media.standing(manga.work)).ok).toBe(true);
+    phase = 'status-change'; requestNumber = 0;
+    const actions = createReaderStore({ main: () => main, actingSubject, seed: loaded.view.ok ? loaded.view.data.seed : {} });
+    expect(await actions.setStatus(manga.work, 'read')).toBe(true);
+    expect(actions.stateOf(manga.work).status).toBe('read');
+    phase = 'status-return'; requestNumber = 0;
+    expect(await actions.setStatus(manga.work, 'reading')).toBe(true);
+    expect(actions.stateOf(manga.work).status).toBe('reading');
   }
   phase = 'proof'; requestNumber = 100;
 }

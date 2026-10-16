@@ -1,8 +1,11 @@
+import { localizedPath } from '../../i18n/locale.ts';
+import { workHref } from '../work-page/route.ts';
 import { describe, expect, test } from 'bun:test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import answers from '../../../../tests/qa/fixtures/outcomes/manga/collection-tracking-and-progress.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { seedServedTypes } from '../catalogue/type-fixtures.ts';
+import { createReaderStore } from '../catalogue/reader-store.ts';
 import { loadBooksLibrary } from '../library/books-library-recorded-page.ts';
 import { parseLibraryState } from '../library/state.ts';
 import type { ShelfStatus } from '../library/types.ts';
@@ -10,7 +13,9 @@ import { recordedFetch } from '../stories/recorded-fetch.ts';
 import { booksEditionReads } from '../work-page/books-edition-page.read.ts';
 import type { AgentCreditPage, WorkHeader } from '../work-page/types.ts';
 import { readAnimeReaderState } from '../work-page/anime-hub-recorded-page.ts';
-import { mangaCollectionSample, mangaCollectionSelections, type MangaLibraryPersona } from './manga-collection-recorded-page.ts';
+import { mangaCollectionSample, mangaCollectionSelections, mangaWorkSelections, type MangaLibraryPersona } from './manga-collection-recorded-page.ts';
+import { mangaWorkVisit } from './manga-collection-recorded-page.work.tsx';
+import { finishMangaSlots } from './manga-collection-recorded-page.test-support.ts';
 import { mainMediaApi } from './media-api.ts';
 import { progressControl } from './medium-progress.tsx';
 
@@ -25,7 +30,13 @@ function identity(persona: AnswerPersona) {
 
 function replay(persona: MangaLibraryPersona) {
   const transport = recordedFetch(record, persona, mangaCollectionSelections(record, persona), { pathPrefix: BFF_PREFIX, sequence: true });
-  return { ...transport, main: browserMainApi('https://recorded.invalid', { fetcher: transport.fetcher }) };
+  const commands: { path: string; body: unknown }[] = [];
+  const fetcher = (async (input, init) => {
+    const request = new Request(input, init);
+    if (request.method === 'PUT') commands.push({ path: new URL(request.url).pathname, body: await request.clone().json() });
+    return transport.fetcher(input, init);
+  }) as typeof fetch;
+  return { ...transport, commands, main: browserMainApi('https://recorded.invalid', { fetcher }) };
 }
 
 describe('Manga collection through the production Library and chapter readers', () => {
@@ -88,6 +99,17 @@ describe('Manga collection through the production Library and chapter readers', 
         const clear = await media.mark(chapter, { completed: false, position: null, expectedVersion: 3 });
         expect(clear).toMatchObject({ ok: true, data: { completed: false, version: 4, position: null } });
         expect(await media.standing(work)).toEqual(standing);
+        const actions = createReaderStore({ main: () => wire.main, actingSubject: actingSubject!, seed: loaded.view.data.seed });
+        const workIri = `https://rezics.com/id/${work}`;
+        expect(await actions.setStatus(workIri, 'read')).toBe(true);
+        expect(actions.stateOf(workIri).status).toBe('read');
+        const changed = mangaCollectionSample(record, persona, 'status-change-1').answer as {
+          version: number;
+        };
+        expect(await actions.setStatus(workIri, 'reading')).toBe(true);
+        expect(actions.stateOf(workIri).status).toBe('reading');
+        expect(wire.commands.at(-1)).toEqual({ path: `${BFF_PREFIX}/v1/works/${work}/reader-status`,
+          body: { actingSubject, status: 'reading', expectedVersion: changed.version } });
       } finally { wire.dispose(); }
     });
 
@@ -121,4 +143,79 @@ describe('Manga collection through the production Library and chapter readers', 
       expect(await readAnimeReaderState(main, undefined, work)).toBeNull();
     } finally { transport.dispose(); }
   });
+});
+
+
+describe('Manga Work frame and public inventory through the production composition', () => {
+  for (const persona of ['visitor', ...personas] as const) {
+    test(`${persona}: reads the actual overview and frame without a replay miss`, async () => {
+      const transport = recordedFetch(record, persona, mangaWorkSelections(record, persona, 'work-overview'), {
+        pathPrefix: BFF_PREFIX, sequence: true,
+      });
+      const misses: string[] = [];
+      const requests: { method: string; path: string; body: unknown }[] = [];
+      const fetcher = (async (input, init) => {
+        const request = new Request(input, init);
+        requests.push({ method: request.method, path: new URL(request.url).pathname,
+          body: request.method === 'GET' ? undefined : await request.clone().json() });
+        try { return await transport.fetcher(input, init); }
+        catch (error) { misses.push(String(error)); throw error; }
+      }) as typeof fetch;
+      const main = browserMainApi('https://recorded.invalid', { fetcher });
+      const { work, actingSubject } = identity(persona);
+      try {
+        const visit = await mangaWorkVisit({ main, anonymous: browserMainApi('https://recorded.invalid', { fetcher, anonymous: true }),
+          actingSubject, signedIn: persona !== 'visitor', publicFetch: fetcher,
+          avatarQuery: actingSubject ? `?actingSubject=${encodeURIComponent(actingSubject)}` : '',
+          pageUrl: new URL(localizedPath(workHref(work), 'en'), 'https://rezics.com').href }, work, 'overview');
+        expect(visit.ok).toBe(true);
+        if (!visit.ok) throw new Error(visit.failure);
+        await finishMangaSlots(visit.page);
+        expect(requests).toContainEqual({ method: 'POST', path: `${BFF_PREFIX}/v1/resources/showcase`,
+          body: { profile: 'work-showcase-batch-v1', targets: [visit.work.id] } });
+        expect(visit.work).toEqual(mangaCollectionSample(record, persona, 'work-header-1').answer as WorkHeader);
+        const credits = await visit.page.props.credits.props.children;
+        expect(credits.props.agentCredits).toEqual({ ok: true,
+          data: mangaCollectionSample(record, persona, 'work-agent-credits-1').answer });
+        expect(visit.page.props.signedIn).toBe(persona !== 'visitor');
+        expect(visit.page.props.actingSubject).toBe(actingSubject ?? null);
+        expect(misses).toEqual([]);
+      } finally { transport.dispose(); }
+    });
+  }
+  for (const surface of ['inventory-series', 'inventory-volume1', 'inventory-volume2'] as const) {
+    test(`visitor: actual public ${surface} keeps its recorded identity and chapter inventory`, async () => {
+      const transport = recordedFetch(record, 'visitor', mangaWorkSelections(record, 'visitor', surface), {
+        pathPrefix: BFF_PREFIX, sequence: true,
+      });
+      const misses: string[] = [];
+      const requests: { method: string; path: string; body: unknown }[] = [];
+      const fetcher = (async (input, init) => {
+        const request = new Request(input, init);
+        requests.push({ method: request.method, path: new URL(request.url).pathname,
+          body: request.method === 'GET' ? undefined : await request.clone().json() });
+        try { return await transport.fetcher(input, init); }
+        catch (error) { misses.push(String(error)); throw error; }
+      }) as typeof fetch;
+      const main = browserMainApi('https://recorded.invalid', { fetcher, anonymous: true });
+      const sample = mangaCollectionSample(record, 'visitor', `${surface}-1`);
+      const id = new URL(sample.path, 'https://recorded.invalid').pathname.split('/').at(-1)!;
+      try {
+        const visit = await mangaWorkVisit({ main, anonymous: main, signedIn: false, publicFetch: fetcher,
+          pageUrl: new URL(localizedPath(workHref(id, 'contents'), 'en'), 'https://rezics.com').href }, id, 'contents');
+        expect(visit.ok).toBe(true);
+        if (!visit.ok) throw new Error(visit.failure);
+        await finishMangaSlots(visit.page);
+        expect(requests).toContainEqual({ method: 'POST', path: `${BFF_PREFIX}/v1/resources/showcase`,
+          body: { profile: 'work-showcase-batch-v1', targets: [visit.work.id] } });
+        expect(visit.work).toEqual(sample.answer as WorkHeader);
+        expect(visit.page.props.signedIn).toBe(false);
+        expect(visit.page.props.actingSubject).toBeNull();
+        const contents = visit.page.props.children;
+        expect(contents.props.contents.ok).toBe(true);
+        expect(contents.props.contents.data.items).toHaveLength(2);
+        expect(misses).toEqual([]);
+      } finally { transport.dispose(); }
+    });
+  }
 });
