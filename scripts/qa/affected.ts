@@ -342,6 +342,70 @@ function referenceIndex(paths: readonly string[], sources: Map<string, string>) 
     .flatMap(needle => [...(matches.get(needle) ?? [])]))].filter(source => source !== path);
 }
 
+/** Literal paths passed to file/process operations are runtime inputs. Registry
+ * entries can validate an input without changing their importers.
+ * Follow local path bindings too (including join/resolve and command arrays). */
+function sourceReferences(file: string, text: string): { literals: string[]; runtime: string[] } {
+  const ts = createRequire(import.meta.url)('typescript-6') as typeof import('typescript-6');
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  const bindings = new Map<string, import('typescript-6').Expression>();
+  const allLiterals = new Set<string>();
+  const operations = new Set(['readFile', 'readFileSync', 'readdir', 'readdirSync',
+    'open', 'openSync', 'existsSync', 'stat', 'statSync', 'lstat', 'lstatSync',
+    'createReadStream', 'file', 'spawn', 'spawnSync', 'execFile', 'execFileSync',
+    'fork', 'repositoryFiles', 'repositoryGlob']);
+  const collectBindings = (node: import('typescript-6').Node) => {
+    if (ts.isStringLiteralLike(node)) allLiterals.add(node.text);
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer)
+      bindings.set(node.name.text, node.initializer);
+    // Preserve aliases of runtime operations imported from their owning modules.
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
+      && /^(?:node:)?(?:fs(?:\/promises)?|child_process)$/.test(node.moduleSpecifier.text)) {
+      const imports = node.importClause?.namedBindings;
+      if (imports && ts.isNamedImports(imports)) for (const specifier of imports.elements)
+        if (operations.has((specifier.propertyName ?? specifier.name).text)) operations.add(specifier.name.text);
+    }
+    ts.forEachChild(node, collectBindings);
+  };
+  collectBindings(source);
+  const literals = new Set<string>();
+  const visited = new Set<import('typescript-6').Node>();
+  const collectLiterals = (node: import('typescript-6').Node) => {
+    if (visited.has(node)) return;
+    visited.add(node);
+    if (ts.isStringLiteralLike(node)) literals.add(node.text);
+    if (ts.isIdentifier(node)) {
+      const binding = bindings.get(node.text);
+      if (binding) collectLiterals(binding);
+    }
+    ts.forEachChild(node, collectLiterals);
+  };
+  const visit = (node: import('typescript-6').Node) => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const name = ts.isIdentifier(callee) ? callee.text
+        : ts.isPropertyAccessExpression(callee) ? callee.name.text : undefined;
+      if (name && operations.has(name)) for (const argument of node.arguments) collectLiterals(argument);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return { literals: [...allLiterals], runtime: [...literals] };
+}
+
+function referencesInput(literal: string, path: string, data: boolean, patterns = false): boolean {
+  if (literal.includes(path)) return true;
+  if (!data) return false;
+  // A directory reader can consume a changed file, but a neighboring filename
+  // is not a reference to every other file in its directory.
+  const directory = dirname(path);
+  const withoutSlash = literal.replace(/\/$/, '');
+  if (directory !== '.' && (withoutSlash === directory || withoutSlash.endsWith(`/${directory}`))) return true;
+  if (patterns && literal.includes('*') && new Bun.Glob(literal).match(path)) return true;
+  const name = basename(path);
+  return name.length >= 12 && /[-_]/.test(name) && literal.includes(name);
+}
+
 /** Workspaces with a `<workspace>:typecheck` task, by the directories whose sources they check. Each task checks one
  * TypeScript project: Task stops at the first failing command, so a second project would hide its errors.
  * A longer root owns a file that also sits under a shorter one, so dataset tools are not checked as ordinary scripts. */
@@ -477,7 +541,24 @@ export function planAffected(input: {
     return checks;
   };
   const seeds = new Set<string>();
+  const referencedTests = new Set<string>();
   const referencedBy = referenceIndex(plan.changed, input.sources);
+  const sourceInputs = new Map<string, ReturnType<typeof sourceReferences>>();
+  const addReferences = (path: string, data: boolean, frontendOnly = false) => {
+    let referenced = false;
+    for (const source of referencedBy(path, data)) {
+      if (frontendOnly && !frontendWorkspace(source)) continue;
+      if (!sourceInputs.has(source)) sourceInputs.set(source, sourceReferences(source, input.sources.get(source)!));
+      const inputs = sourceInputs.get(source)!;
+      if (!inputs.literals.some(literal => referencesInput(literal, path, data, true))) continue;
+      referenced = true;
+      // A test can validate a registry directly. That does not make modules
+      // importing the test or its registry runtime consumers of the input.
+      if (testFile.test(source)) referencedTests.add(source);
+      if (inputs.runtime.some(literal => referencesInput(literal, path, data))) seeds.add(source);
+    }
+    return referenced;
+  };
   // Proofs consume their declared module or complete-image COPY set.
   // Stack-tier widening for infra/jena stays in place. An unreadable COPY line
   // fails closed by selecting every registry file, so planning itself still finishes.
@@ -517,8 +598,7 @@ export function planAffected(input: {
       if (frontendWorkspace(path) === 'apps/about') continue;
       if (!codeFile.test(path)) {
         if (input.exists(path)) seeds.add(path);
-        for (const source of referencedBy(path, true))
-          if (frontendWorkspace(source)) seeds.add(source);
+        addReferences(path, true, true);
         continue;
       }
     }
@@ -543,15 +623,18 @@ export function planAffected(input: {
           .flatMap(([, importers]) => [...importers]))
           seeds.add(importer);
       // Scripts started as subprocesses are referenced by path rather than imported.
-      for (const source of referencedBy(path, false)) seeds.add(source);
+      addReferences(path, false);
       continue;
     }
-    const references = referencedBy(path, true);
-    if (!references.length) {
+    const imported = reverse.has(path) || unresolvedImporters.has(path);
+    if (imported) {
+      seeds.add(path);
+      for (const importer of unresolvedImporters.get(path) ?? []) seeds.add(importer);
+    }
+    if (!addReferences(path, true) && !imported) {
       widen(affectedTiers, `${path}: unclassified input with no code reference`);
       continue;
     }
-    for (const source of references) seeds.add(source);
   }
   if (nativeModuleCopyUnsupported) for (const file of inputSelectedNativeTests) matchedNative.add(file);
   for (const file of matchedNative) if (input.exists(file)) seeds.add(file);
@@ -564,6 +647,7 @@ export function planAffected(input: {
     for (const importer of reverse.get(current) ?? [])
       if (!affected.has(importer)) queue.push(importer);
   }
+  for (const file of referencedTests) affected.add(file);
   if (nativeCopies) for (const file of inputSelectedNativeTests) if (!matchedNative.has(file)) affected.delete(file);
   if (input.nativeModuleDockerfile !== undefined) {
     plan.nativeModuleCopySelection = nativeModuleCopyUnsupported

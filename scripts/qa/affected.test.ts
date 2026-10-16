@@ -122,3 +122,23 @@ test('registry references are validation leaves; runtime data and subprocess inp
   // An actual import of data is a runtime edge even without a textual reader.
   expect(plan([data], [{ source: registryTest, dependencies: [edge(data)] }]).tests.unit).toContain(registryTest);
 });
+
+test('directory inputs select directory readers without selecting readers of neighboring files', () => {
+  const data = 'services/main/data/retained-record.json';
+  const directoryReader = 'services/main/src/directory-reader.ts';
+  const neighborReader = 'services/main/src/neighbor-reader.ts';
+  const directoryTest = 'tests/qa/unit/directory-reader.test.ts';
+  const neighborTest = 'tests/qa/unit/neighbor-reader.test.ts';
+  const result = planAffected({ base: 'abc', changed: [data],
+    sources: new Map([
+      [directoryReader, "readFileSync(join(root, 'services/main/data/', name));"],
+      [neighborReader, "readFileSync('services/main/data/other-record.json');"],
+      [neighborTest, "const example = 'services/main/data/other-record.json';"],
+    ]),
+    graph: [
+      { source: directoryTest, dependencies: [edge(directoryReader)] },
+      { source: neighborTest, dependencies: [edge(neighborReader)] },
+    ], exists: () => true, typecheckRoot: '.temp/affected-empty-root' });
+  expect(result.tests.unit).toEqual([directoryTest]);
+  expect(result.widened).toEqual([]);
+});
