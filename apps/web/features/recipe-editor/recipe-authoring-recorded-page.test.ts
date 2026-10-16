@@ -424,7 +424,7 @@ test('publishing the imported recipe does not grant original-contribution rights
   expect(posted.error?.status).toBe(403);
   expect(posted.error?.value).toMatchObject({ title: problem.title, code: problem.code });
   expect(body.rightsBasis).toBe('original-contribution');
-  expect(problem.code).toBe('authority_denied');
+  expect(problem.code).toBe('rights_denied');
 });
 
 test('the exchange visit frame opens the owner editor and refuses everyone else', async () => {

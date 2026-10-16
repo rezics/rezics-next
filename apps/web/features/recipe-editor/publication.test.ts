@@ -58,7 +58,7 @@ test.each(['pending', 'lost'] as const)('a %s publication retries the exact body
 test('a readable imported structure remains a draft when original publication is refused', async () => {
   seedServedTypes();
   const fake = fakeMain({ recipe: startRecipe });
-  const problem = { type: 'about:blank', status: 403, code: 'authority_denied', title: 'Unknown file rights', detail: 'Not an original contribution' };
+  const problem = { type: 'about:blank', status: 403, code: 'rights_denied', title: 'Unknown file rights', detail: 'Not an original contribution' };
   fake.main().v1['work-publications'].post = Object.assign(async () => fixtureAnswer(403, { ...problem, status: 403 as const }), { '~path': '/v1/work-publications' }) as MainClient['v1']['work-publications']['post'];
   const publisher = createRecipePublisher({ main: fake.main, work, actingSubject, recipe: () => startRecipe });
   expect(await publisher.publish()).toEqual({ kind: 'refused', refusal: 'denied' });

@@ -139,7 +139,7 @@ async function exchangeRecipe(name: PersonaName) {
   expect(page.occurrences.every(item => item.sourceKey?.startsWith(imported.sourceObservation))).toBe(true);
   // File possession carries no publication grant or claim of original authorship.
   expect(await answer<{ code: string }>(sample('publication-denied', 'POST', '/v1/work-publications', publish(importedRecipe, person)), 403))
-    .toMatchObject({ code: 'authority_denied' });
+    .toMatchObject({ code: 'rights_denied' });
   await answer(recording.session(name, sessions.visitor)('imported-recipe-concealed', 'GET', `/v1/recipes/works/${short(own.work)}`), 404);
   const second = await destination(person, sample, 'observation-destination');
   destinations.get(name)!.push({ prefix: 'observation-destination', recipe: second });

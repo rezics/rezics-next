@@ -46,7 +46,7 @@ function ContractVisit({ scenario, locale }: { scenario: Scenario; locale: UiLoc
     if (scenario === 'save-refusal') fake.interference.writeStatus = 403;
     if (scenario === 'publication-denied') {
       fake.main().v1['work-publications'].post = Object.assign(async () => fixtureAnswer(403, {
-        type: 'about:blank', title: 'Imported file rights are unknown', code: 'authority_denied', status: 403 as const,
+        type: 'about:blank', title: 'Imported file rights are unknown', code: 'rights_denied', status: 403 as const,
         detail: 'This imported Structure is not an original contribution.',
       }), { '~path': '/v1/work-publications' }) as MainClient['v1']['work-publications']['post'];
     }
