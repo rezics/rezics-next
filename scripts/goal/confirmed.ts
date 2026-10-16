@@ -47,6 +47,7 @@ export interface ConfirmationRecord {
   startedAt: string;
   recordedAt: string;
   outcomes: ConfirmedOutcome[];
+  stopped?: string;
 }
 
 function writeRecord(path: string, record: ConfirmationRecord): void {
@@ -88,7 +89,8 @@ export function confirmationRecord(manifest: Manifest,
     outcomes.push({ rowId: declaration.rowId, persona, file, test: title, status, expectedFailure, reading });
   }
   const record: ConfirmationRecord = { version: 1, runId: manifest.runId, atCommit: manifest.atCommit,
-    startedAt: manifest.startedAt, recordedAt, outcomes };
+    startedAt: manifest.startedAt, recordedAt, outcomes,
+    ...('stopped' in manifest && typeof manifest.stopped === 'string' ? { stopped: manifest.stopped } : {}) };
   return record;
 }
 

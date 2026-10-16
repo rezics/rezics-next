@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { expect, test } from 'bun:test';
 import { loadOutcomes } from '../qa/cases/outcomes.ts';
 import { parseJUnit } from '../qa/acceptance.ts';
-import { releaseDirectoryLease, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
+import { readDirectoryLease, releaseDirectoryLease, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { confirmationRunning, confirmationStatus, parseConfirmationArgs, runConfirmation, scheduleConfirmation } from './confirm.ts';
 import { cellReading, cellReadings, latestConfirmation } from './confirmed.ts';
 import type { ConfirmationOptions } from './confirm.ts';
@@ -203,14 +203,17 @@ test('only a timeout is retried, once, after both primary lanes drain; failures 
   } finally { f.cleanup(); }
 });
 
-test('a dead confirmation lease is reclaimed, a live lease refuses a second run, and preflight failure leaves cells not run', async () => {
+test('a dead confirmation lease is reclaimed, a queued request can be stopped, and preflight failure leaves cells not run', async () => {
   const f = fixture();
   mkdirSync(f.stateDir, { recursive: true });
   const lock = join(f.stateDir, 'confirm.lock');
   try {
     const acquired = tryAcquireDirectoryLease(lock);
     expect(acquired).not.toBe('held');
-    await expect(runConfirmation(f.options)).rejects.toThrow('already running');
+    const controller = new AbortController();
+    const queued = runConfirmation({ ...f.options, signal: controller.signal });
+    controller.abort();
+    await expect(queued).rejects.toThrow('stopped while queued');
     if (acquired !== 'held') acquired.release();
     mkdirSync(lock);
     writeFileSync(join(lock, 'identity.json'), JSON.stringify({ pid: 2147483647, token: 'dead' }));
@@ -235,6 +238,154 @@ function fakeOutcomeRunner(): NonNullable<ConfirmationOptions['runner']> {
       artifactPaths: [directory], queueMs: 0, testMs: 0, totalMs: 0 };
   };
 }
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+for (const at of [undefined, 'main']) test(`a request ${at ? 'with --at' : 'without --at'} preempts a scheduled run after its active batches clean up`, async () => {
+  const f = fixture();
+  const ready = deferred();
+  const gates = [deferred(), deferred()];
+  let scheduledBatches = 0;
+  let active = 0;
+  let requestedBatches = 0;
+  let scheduled: ReturnType<typeof runConfirmation> | undefined;
+  let requested: ReturnType<typeof runConfirmation> | undefined;
+  const controller = new AbortController();
+  try {
+    let token = '';
+    expect(scheduleConfirmation({ repo: f.directory, stateDir: f.stateDir,
+      spawn: reservation => { token = reservation; return process.pid; } })).toBe(true);
+    scheduled = runConfirmation({ ...f.options, runId: 'scheduled', leaseToken: token, runner: async (...args) => {
+      const index = scheduledBatches++;
+      active++;
+      if (active === 2) ready.resolve();
+      try { await gates[index]!.promise; return await fakeOutcomeRunner()(...args); }
+      finally { active--; }
+    } });
+    await ready.promise;
+    const lease = readDirectoryLease(join(f.stateDir, 'confirm.lock'));
+    requested = runConfirmation({ ...f.options, runId: 'requested', at, signal: controller.signal,
+      prepare: async () => {
+        expect(active).toBe(0);
+        expect(scheduledBatches).toBe(2);
+        expect(latestConfirmation(join(f.stateDir, 'confirm/scheduled'))?.stopped).toBe('preempted');
+        return { ok: true, artifactPaths: [] };
+      }, runner: async (...args) => {
+        requestedBatches++;
+        expect(scheduleConfirmation({ repo: f.directory, stateDir: f.stateDir, now: Date.now() + 10_000_000,
+          spawn: () => { throw new Error('Must not start during the requested run'); } })).toBe(false);
+        return fakeOutcomeRunner()(...args);
+      } });
+    gates[0]!.resolve();
+    // One drained lane must not start another batch while the second lane finishes.
+    await Bun.sleep(10);
+    expect(scheduledBatches).toBe(2);
+    expect(requestedBatches).toBe(0);
+    expect(readDirectoryLease(join(f.stateDir, 'confirm.lock'))?.token).toBe(lease?.token);
+    gates[1]!.resolve();
+    const [partial, complete] = await Promise.all([scheduled, requested]);
+    expect(partial.stopped).toBe('preempted');
+    expect(partial.status).toBe('incomplete');
+    expect(partial.partial).toBe(true);
+    expect(partial.batches.filter(batch => batch.state === 'pending')).toHaveLength(3);
+    expect(complete.stopped).toBeUndefined();
+    expect(requestedBatches).toBe(5);
+    expect(confirmationRunning(f.stateDir)).toBe(false);
+  } finally {
+    controller.abort();
+    for (const gate of gates) gate.resolve();
+    await Promise.allSettled([scheduled, requested]);
+    f.cleanup();
+  }
+});
+
+test('a scheduled run cannot reserve the gap before a queued request acquires the lease; dead tickets do not block it', async () => {
+  const f = fixture();
+  const controller = new AbortController();
+  const lease = tryAcquireDirectoryLease(join(f.stateDir, 'confirm.lock'));
+  if (lease === 'held') throw new Error('Fixture lease held');
+  const requested = runConfirmation({ ...f.options, signal: controller.signal, runner: fakeOutcomeRunner() });
+  try {
+    lease.release();
+    expect(confirmationRunning(f.stateDir)).toBe(false);
+    expect(scheduleConfirmation({ repo: f.directory, stateDir: f.stateDir,
+      spawn: () => { throw new Error('Must not start ahead of the queued request'); } })).toBe(false);
+    controller.abort();
+    await expect(requested).rejects.toThrow('stopped while queued');
+    const dead = join(f.stateDir, 'confirm-requests/dead');
+    mkdirSync(dead);
+    writeFileSync(join(dead, 'identity.json'), JSON.stringify({ pid: 2147483647, token: 'dead' }));
+    expect(scheduleConfirmation({ repo: f.directory, stateDir: f.stateDir, spawn: () => process.pid })).toBe(true);
+    const reserved = readDirectoryLease(join(f.stateDir, 'confirm.lock'))!;
+    releaseDirectoryLease(join(f.stateDir, 'confirm.lock'), reserved.token!);
+  } finally { controller.abort(); await Promise.allSettled([requested]); lease.release(); f.cleanup(); }
+});
+
+for (const signal of ['SIGTERM', 'SIGINT'] as const) test(`${signal} drains every active lane, records a stopped run, and releases both leases`, async () => {
+  const f = fixture();
+  const ready = join(f.directory, '.temp/ready');
+  const drain = join(f.directory, '.temp/drain');
+  const cleaned = join(f.directory, '.temp/cleaned');
+  const script = join(f.directory, '.temp/stop.ts');
+  mkdirSync(dirname(script), { recursive: true });
+  writeFileSync(script, `
+    import { existsSync, writeFileSync } from 'node:fs';
+    import { runConfirmation } from ${JSON.stringify(join(import.meta.dir, 'confirm.ts'))};
+    import { loadOutcomes } from ${JSON.stringify(join(import.meta.dir, '../qa/cases/outcomes.ts'))};
+    let active = 0, dispatched = 0, cleanups = 0;
+    const manifest = await runConfirmation({
+      repo: ${JSON.stringify(f.directory)}, stateDir: ${JSON.stringify(f.stateDir)},
+      checkoutRoot: ${JSON.stringify(f.options.checkoutRoot)}, slots: 2, runId: 'stopped',
+      prepare: async () => ({ ok: true, artifactPaths: [] }),
+      outcomeRegistry: async root => [...(await loadOutcomes({ root, registry:
+        ['pass', 'fail', 'still', 'now', 'skip'].map(capability => ({ kind: 'books', capability })) })).values()],
+      runner: async (_checkout, batch) => {
+        dispatched++;
+        if (++active === 2) writeFileSync(${JSON.stringify(ready)}, 'ready');
+        try {
+          while (!existsSync(${JSON.stringify(drain)})) await Bun.sleep(5);
+          return { code: 0, outcomes: { [batch.files[0]]: 'passed' }, artifactPaths: [], queueMs: 0, testMs: 0, totalMs: 0 };
+        } finally {
+          active--; cleanups++;
+          writeFileSync(${JSON.stringify(cleaned)}, String(cleanups));
+        }
+      },
+    });
+    if (dispatched !== 2 || active !== 0 || cleanups !== 2 || !manifest.partial) process.exit(2);
+  `);
+  const child = Bun.spawn([process.execPath, script], { stdout: 'pipe', stderr: 'pipe' });
+  const errors = new Response(child.stderr).text();
+  try {
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(ready) && child.exitCode === null && Date.now() < deadline) await Bun.sleep(10);
+    expect(existsSync(ready)).toBe(true);
+    child.kill(signal);
+    // Wait for the handler to acknowledge the stop before releasing the doubles.
+    await Bun.sleep(50);
+    expect(child.exitCode).toBeNull();
+    expect(confirmationRunning(f.stateDir)).toBe(true);
+    writeFileSync(drain, 'finish cleanup');
+    expect(await child.exited, await errors).toBe(0);
+    expect(readFileSync(cleaned, 'utf8')).toBe('2');
+    const record = latestConfirmation(join(f.stateDir, 'confirm/stopped'))!;
+    expect(record.stopped).toBe(signal);
+    expect(latestConfirmation(f.stateDir)).toBeUndefined();
+    expect(confirmationStatus(f.stateDir, Date.now(), 'stopped')).toContain(`Stopped: ${signal}`);
+    expect(confirmationRunning(f.stateDir)).toBe(false);
+    expect(existsSync(join(f.stateDir, 'confirm/stopped/lock'))).toBe(false);
+    expect(existsSync(join(f.stateDir, 'confirm-requests')) &&
+      (await import('node:fs')).readdirSync(join(f.stateDir, 'confirm-requests')).length).toBe(0);
+  } finally {
+    writeFileSync(drain, 'finish cleanup');
+    if (child.exitCode === null) child.kill('SIGKILL');
+    await child.exited;
+    f.cleanup();
+  }
+});
 
 test('an explicit revision pins its declarations, isolates the judge, and reports its cells during and after execution', async () => {
   const f = fixture();

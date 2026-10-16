@@ -786,7 +786,7 @@ function attributeDeadlineHang(batch: Batch, result: Execution): string[] {
 }
 
 async function command(checkout: string, args: string[], logPath: string, timeoutMs = 7 * 3_600_000,
-  env: NodeJS.ProcessEnv = process.env): Promise<number> {
+  env: NodeJS.ProcessEnv = process.env, drainOnSignal = false): Promise<number> {
   const temporary = diskDirectory(join(checkout, '.temp/tmp'), 'subprocess TMPDIR');
   diskDirectory(dirname(logPath), 'log directory');
   mkdirSync(dirname(logPath), { recursive: true });
@@ -814,7 +814,9 @@ async function command(checkout: string, args: string[], logPath: string, timeou
     };
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; stopChild(); }, timeoutMs);
-    const forward = () => { stopChild(); };
+    // Confirmation owns graceful stop at its batch boundary. Let QA finish its
+    // stack cleanup before the confirmation releases the shared reservation.
+    const forward = () => { if (!drainOnSignal) stopChild(); };
     process.on('SIGINT', forward);
     process.on('SIGTERM', forward);
     try {
@@ -950,7 +952,12 @@ export function regressionBatchArtifactPaths(reported: readonly string[], artifa
 }
 
 /** A shorter deadline cap lets the harness prove timeout cleanup without extending tier budgets. */
-export interface RegressionBatchOptions { deadlineCapMs?: number; env?: NodeJS.ProcessEnv }
+export interface RegressionBatchOptions {
+  deadlineCapMs?: number;
+  env?: NodeJS.ProcessEnv;
+  /** Stop dispatch at the confirmation boundary while this batch cleans up normally. */
+  drainOnSignal?: boolean;
+}
 
 export async function runBatch(checkout: string, batch: Batch, directory: string, shards: number, slotLimit: number,
   artifactRoot?: string, options: RegressionBatchOptions = {}): Promise<Execution> {
@@ -978,7 +985,7 @@ export async function runBatch(checkout: string, batch: Batch, directory: string
   const env = regressionBatchEnvironment(options.env ?? process.env, shards, slotLimit, artifactRoot, budgetMs, batch.tests);
   if (nativeProof) env[admittedCommandBudgetEnv] = String(effectiveDeadlineMs);
   const code = await command(checkout, regressionBatchCommand(batch, report, junitXmlPath), join(directory, 'runner.log'),
-    outerDeadlineMs, env);
+    outerDeadlineMs, env, options.drainOnSignal);
   const metadata = existsSync(report) ? json<Execution>(report) : { queuedAt: started, startedAt: started, finishedAt: Date.now(),
     queueMs: 0, testMs: Date.now() - started, totalMs: Date.now() - started, artifactPaths: [] };
   const artifactPaths = regressionBatchArtifactPaths(metadata.artifactPaths, artifactRoot);
