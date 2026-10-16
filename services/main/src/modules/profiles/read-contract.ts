@@ -52,7 +52,8 @@ export const libraryRating = t.Object({ id: readId, revision: readId, work: t.Nu
   availability: t.Union([t.Literal('available'), t.Literal('withdrawn')]),
   scale: t.Object({ min: t.Literal(1), max: t.Literal(5), step: t.Literal(1) }) });
 
-/** Shared metered graph envelope. Agent reads use 3 graph calls and one Media
+/** Shared metered graph envelope. Agent reads use 4 graph calls (one profile
+ * query and three version probes) and one Media
  * avatar slot probe; collections
  * use 5; Work pages use ≤8 plus at most one serial batch, one type batch and
  * 20 bounded standing rating reads when a Context is selected. Library hydration

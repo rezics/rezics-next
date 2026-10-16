@@ -67,7 +67,9 @@ test('G238: native Agent profiles, credits and library enforce disclosure, autho
     const headerResponse = await call('GET', root);
     expect(headerResponse.headers.get('cache-control')).toContain('no-store');
     const header = await json<{ id: string; displayName: string; kind: string; handle: string | null }>(headerResponse);
-    expect(stack.fuseki.queries - before).toBe(3);
+    // request-fence-cost.test.ts requires three version probes, including the
+    // close after live owner checks, in addition to the one profile query.
+    expect(stack.fuseki.queries - before).toBe(4);
     expect(header).toMatchObject({ id: person.agent, kind: 'person', displayName: 'Public pen name' });
     expect(header.handle).toBeNull();
     const serialized = JSON.stringify(header);
