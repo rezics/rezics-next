@@ -438,7 +438,13 @@ async function productionVisit(name: PersonaName) {
       if (!resolved.realm && person.actingSubject) {
         const state = await named(`${label}-site-session-agent`, () => main.v1.me['session-agent'].get());
         const subject = state.data?.sessionAgent.eligible ? state.data.sessionAgent.actingSubject : undefined;
-        if (subject) await named(`${label}-site-editor`, () => main.v1.zones({ id: resolved.zone })['showcase-editor'].get({ query: { actingSubject: subject } }));
+        if (subject) {
+          await requestLabels.run((_method, path) => {
+            const after = new URL(path, origin).searchParams.get('after');
+            return after ? `${label}-site-presentation-${after}` : `${label}-site-presentation`;
+          }, () => realmFrameReads({ main: anonymous, personal: main, actingSubject: subject }).readCompletePresentation(resolved.zone));
+          await named(`${label}-site-editor`, () => main.v1.zones({ id: resolved.zone })['showcase-editor'].get({ query: { actingSubject: subject } }));
+        }
       }
     }
     await entry('home', short(closed.realm));

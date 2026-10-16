@@ -552,9 +552,7 @@ async function publishedIndependentZoneHome(
   const actingSubject = client?.actingSubject ?? (session?.agent.status === 'selected' ? session.agent.agent.iri : undefined);
   const token = actingSubject && !client ? (await cookies()).get(ACCESS_COOKIE)?.value : undefined;
   const visit = await readIndependentZoneHome(independentZoneHomeBoundary(client ? {
-    main: client.main, actingSubject, editorClient: client.personal,
-    production: { resolveSite: (space, locale) => realmFrameReads({ main: client.main }).resolveSite(space, locale),
-      readCompletePresentation: zone => realmFrameReads({ main: client.main }).readCompletePresentation(zone) },
+    main: client.main, personal: client.personal, actingSubject, editorClient: client.personal,
   } : {
     production: { resolveSite, readCompletePresentation },
     actingSubject,
