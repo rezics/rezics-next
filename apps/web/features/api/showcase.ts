@@ -1,6 +1,7 @@
 import type { MediaImageMetadata } from '@rezics/ui/media-image';
 import { mediaImageKey } from '@rezics/ui/media-image-key';
 import type { MainClient } from '../discover/types.ts';
+import { browserMainApi } from './browser.ts';
 import { imageReferenceFromUrl, mediaMetadataItems, mediaMetadataOf } from './media-metadata.ts';
 
 type Result<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }>
@@ -58,24 +59,29 @@ export async function readWorkShowcase(
 }
 
 /** A Work page reads the Work's own art, with no Zone or Realm context to override it. */
-export function readOwnWorkShowcase(work: string, main?: MainClient): Promise<ReadonlyMap<string, WorkShowcase>> {
-  return readShowcaseBatch([work], undefined, main);
+export function readOwnWorkShowcase(work: string, fetcher?: typeof fetch): Promise<ReadonlyMap<string, WorkShowcase>> {
+  return readShowcaseBatch([work], undefined, fetcher);
 }
 
 async function readShowcaseBatch(
   targets: readonly string[],
   context?: string,
-  client?: MainClient,
+  fetcher?: typeof fetch,
 ): Promise<ReadonlyMap<string, WorkShowcase>> {
   const wanted = showcaseTargets(targets);
   if (!wanted.length) return new Map();
   try {
-    const main = client ?? (await import('./main.ts')).mainApiWithToken(undefined);
-    const { data, error } = await main.v1.resources.showcase.post({
-      profile: 'work-showcase-batch-v1',
+    const body = {
+      profile: 'work-showcase-batch-v1' as const,
       targets: wanted,
       ...(context ? { context } : {}),
-    });
+    };
+    const { data, error } = fetcher
+      ? await browserMainApi(undefined, { anonymous: true, fetcher }).v1.resources.showcase.post(body)
+      : await (async () => {
+        const { mainApiWithToken } = await import('./main.ts');
+        return mainApiWithToken(undefined).v1.resources.showcase.post(body);
+      })();
     if (error || !data || !data.complete) return new Map();
     const admitted = new Set(wanted);
     return new Map(

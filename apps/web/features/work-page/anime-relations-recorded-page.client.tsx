@@ -67,7 +67,7 @@ export function AnimeRelationsRecordedPage({ main, fetcher, actingSubject, id, v
         view === 'contents' ? readSuppliedContents(host, id, {}) : null,
         readBooksEditionStatus(editionReads, id, locale),
         readAnimeRelationsRatings(host, id, EVERYONE),
-        readOwnWorkShowcase(work.id, main),
+        readOwnWorkShowcase(work.id, fetcher),
         experience.kind === 'book' ? readSuppliedStart(host, id, work.id, async () => {
           if (!work.selectedLanguage) throw new Error('This visit needs the production text-version read');
           return work.selectedLanguage;
@@ -78,7 +78,7 @@ export function AnimeRelationsRecordedPage({ main, fetcher, actingSubject, id, v
       const words = materializeData(t, { locale });
       const authors = coverAuthors(page.agentCredits, page.credits, key => words.openLibraryAuthor({ key }));
       const action = nextAction({ start, preference: identity.preference, progress: identity.progress.ok ? identity.progress : null,
-        releases: page.releases.ok ? page.releases.data.items.length : 0 });
+        releases: page.releases.ok ? page.releases.data.count.value : 0 });
       const actions = actingSubject ? createReaderStore({ actingSubject, seed: page.seed ?? {}, main: () => main }) : undefined;
       setContent(<WorkFrame workRef={id} work={work} experience={experience} locale={locale} messages={t}
         signedIn={Boolean(actingSubject)} actingSubject={page.seed ? actingSubject : undefined}
