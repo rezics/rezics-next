@@ -113,7 +113,7 @@ export async function preMergeWorkerCheck(merge: PreparedMerge, completed: Check
   // Small fixture repositories without a worker harness still exercise the legacy gates.
   if (!existsSync(join(merge.worktree, harness)) && !existsSync(join(root, harness))) return;
   const options: CheckOptions = { cwd: merge.worktree, treePrepared: true, changed: merge.committed,
-    tests: merge.tests, completed, timing };
+    tests: merge.tests, completed, timing, absoluteInference: true };
   const code = await new Promise<number>(resolveExit => {
     const child = spawn(process.execPath, ['-e',
       `const { workerCheck, parseCheckArgs } = await import('./${harness}');

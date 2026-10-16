@@ -15,6 +15,7 @@ import { repositoryGuardSelectionLine } from '../qa/repository-guards.ts';
 import * as repositoryGuardRunner from '../qa/repository-guards.ts';
 import { workerTypeCommands } from '../qa/worker-types.ts';
 import { inferenceGateCommand, needsInferenceGate } from '../api/inference-cost.ts';
+import { workerInferenceCheck } from './inference-check.ts';
 import { withGateLane, withSlot, type SlotRunOptions, type GateLaneOptions } from './qa-slots.ts';
 import { type loadOutcomes, personas, type RowOutcomes } from '../qa/cases/outcomes.ts';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath } from '../qa/acceptance.ts';
@@ -141,6 +142,9 @@ export interface SurfaceExcusedTest {
 export interface SurfaceRunOptions {
   /** Worker checks narrow static tools; landing retains its full gate. */
   workerStatic?: boolean;
+  absoluteInference?: boolean;
+  /** Revision already used by the worker's changed-file selection. */
+  inferenceBase?: string;
   runner?: CheckRunner;
   print?: (line: string) => void;
   now?: () => number;
@@ -282,7 +286,10 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
         code = result.code;
         output = result.output;
       } else for (const command of commands) {
-        const result = await run(command, cwd, join(directory, `${name}-${commands.indexOf(command)}.log`), env);
+        const commandLog = join(directory, `${name}-${commands.indexOf(command)}.log`);
+        const result = options.workerStatic && !options.absoluteInference && command === inferenceGateCommand
+          ? await workerInferenceCheck(cwd, commandLog, env, run, print, options.inferenceBase)
+          : await run(command, cwd, commandLog, env);
         output += result.output;
         if (result.code) { code = result.code; break; }
       }
@@ -308,7 +315,7 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
   const staticParts: [SurfacePart, string[][]][] = [
     ...(only.includes('types') ? [['types', [
       ...(options.workerStatic ? workerTypeCommands(cwd, selection.changed) : [['task', 'web:typecheck']]),
-      ...(needsInferenceGate(selection.changed) ? [[...inferenceGateCommand]] : []),
+      ...(needsInferenceGate(selection.changed) ? [inferenceGateCommand] : []),
     ]] as [SurfacePart, string[][]]] : []),
     ...(only.includes('lint') ? [
       ['lint', directories.length ? [options.workerStatic
