@@ -29,7 +29,8 @@ import { referenceDisclosure, semanticReaderOnly } from '../target/disclosed-ref
 import { queryTargetRatingAggregate } from '../rating/target-aggregate.ts';
 import { queryRatingRollup } from '../rating/rollup-read.ts';
 import { resolveRatingTarget } from '../rating/target.ts';
-import { WorkReadSession, withWorkReadSession, WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
+import { WorkReadSession, withWorkReadSession, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
+  encodeReadCursor, decodeReadCursor } from '../work/read-session.ts';
 import { ExportDenied } from './store.ts';
 import { AccountAssertionInsufficientScope } from '../account/verify-assertion.ts';
 import { RatingObservationUnavailable } from '../rating/observation.ts';
@@ -415,9 +416,20 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
     const env = deps.structureObjects
       ? { ...deps.env, structureObjects: deps.structureObjects } : deps.env;
     if ((await unverifiedWorks(deps.env, [work])).size) throw new ExportSourceNotFound('Work awaits catalogue verification');
+    const binding = { structure: selection.structure, seal: selection.reference };
+    // A retained manifest hashes a stable boundary, never a request cursor's
+    // random encryption nonce. The seal owner still validates the exact cut.
+    let after: string | undefined;
+    if (selection.after) {
+      const boundary = Buffer.from(selection.after, 'base64url');
+      if (boundary.toString('base64url') !== selection.after || !boundary.length) {
+        throw new ExportStale('composition export cursor is invalid');
+      }
+      after = encodeReadCursor(binding, selection.expectedPosition, boundary.toString('utf8'));
+    }
     let page: Awaited<ReturnType<typeof readCompositionSeal>>;
     try { page = await readCompositionSeal(env, { structure: selection.structure,
-      seal: selection.reference, after: selection.after, limit: 100,
+      seal: selection.reference, after, limit: 100,
       canReadTarget: target => deps.canReadWork(principal, actingSubject, target) }); }
     catch (error) {
       if (error instanceof CompositionUnavailable) throw new ExportSourceNotFound(error.message);
@@ -425,8 +437,10 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
     }
     pinned(page.sourcePosition, selection.expectedPosition, deps.env.lineage.dataEpoch, 'composition seal');
     const { pins, coverage, structureRevision: revision } = page;
+    const next = page.next ? Buffer.from(decodeReadCursor(page.next, binding,
+      page.sourcePosition)!.after).toString('base64url') : null;
     const rootData = { structure: selection.structure, seal: selection.reference,
-      structureRevision: revision, coverage, after: selection.after ?? null, next: page.next ?? null,
+      structureRevision: revision, coverage, after: selection.after ?? null, next,
       exportActor: actingSubject };
     const position = selection.expectedPosition;
     for (let offset = 0; offset < pins.length; offset += 128) {
