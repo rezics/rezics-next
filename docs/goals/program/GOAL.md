@@ -33,7 +33,7 @@ decisions; the ledger supplies live status.
 
 | Goal | Outcome |
 | --- | --- |
-| [API](../api/GOAL.md) | Every launch row is proved through the API for each persona. |
+| API (closed 2026-10-16) | Every launch row is proved through the API for each persona; main's confirmation passed all 408 cells. |
 | [Web](../web/GOAL.md) | Every proved row has a surface. |
 | Operations (closed 2026-10-16) | Erasure and restore are proved on physical fixtures and deployment is prepared; see the [operations runbooks](../../operations/README.md). |
 

@@ -28,9 +28,6 @@ Design documents do not claim that a capability or deployment is complete.
 - [Program Goal](goals/program/GOAL.md) — Program outcome and boundaries; read when working for that Goal.
 - [State](goals/program/state.md) — Program retained decisions and unproved obligations; read for continuation, then check live ledger status.
 - [Waves: build, then prove](goals/wave.md) — Build and prove phase boundaries; read only for wave work.
-- [Web Goal](goals/web/GOAL.md) — Web outcome and boundaries; read when working for that Goal.
-- [Later](goals/web/later.md) — Web deferred findings; read before promoting or briefing a related defect.
-- [Web checkpoint](goals/web/state.md) — Web retained decisions and unproved obligations; read for continuation, then check live ledger status.
 - [Goal worker protocol](goals/worker.md) — Worker authority and handoff; read when assigned a Goal task.
 
 ## Architecture
