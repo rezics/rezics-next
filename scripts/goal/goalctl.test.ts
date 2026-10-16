@@ -267,15 +267,16 @@ describe('goalctl briefs', () => {
     expect(resumeDecisionError(steps, '')).toContain('two fix rounds exhausted');
   });
 
-  test('mechanisms require a design note read by program, with an actual UTC date', async () => {
+  test('mechanisms require substantive reviewed design with a real date', async () => {
     const mechanism = { ...parseBrief(brief), kind: 'mechanism' as const };
-    for (const markdown of ['', '## Design note\n', '## Design note\nRead by program: 2026-10-13\n',
+    for (const markdown of ['', '## Design note\n', '## Design note\nReviewed: 2026-10-13\n',
       '## Design note\nProtect every reader.\n', '## Design note\nProtect every reader.\nRead by owner: 2026-10-13\n',
-      '## Design note\nProtect every reader.\nRead by program: someday\n',
-      '## Design note\nProtect every reader.\nRead by program: 2026-02-30\n',
-      '## Design note\nProtect every reader.\n## Checks\nRead by program: 2026-10-13\n']) {
+      '## Design note\nProtect every reader.\nReviewed: someday\n',
+      '## Design note\nProtect every reader.\nReviewed: 2026-02-30\n',
+      '## Design note\nProtect every reader.\n## Checks\nReviewed: 2026-10-13\n']) {
       expect((await dispatchMethodErrors(mechanism, markdown)).join()).toContain('non-empty ## Design note');
     }
+    expect(await dispatchMethodErrors(mechanism, '## Design note\nProtect every reader and writer.\nReviewed: 2026-10-13\n')).toEqual([]);
     expect(await dispatchMethodErrors(mechanism, '## Design note\nProtect every reader and writer.\nRead by program: 2026-10-13\n')).toEqual([]);
     for (const kind of ['outcome', 'surface', 'tooling'] as const) {
       expect(await dispatchMethodErrors({ ...parseBrief(brief), kind }, '')).toEqual([]);
@@ -2182,7 +2183,7 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
       '--session-id', 's', '-n', 'g-042']));
   });
 
-  test('pins GPT-6.1 Sol and the reasoning effort for Codex workers in their worktree', () => {
+  test('pins GPT-6.1 Sol and the reasoning effort for Codex workers in their worktree', () => withTestAccounts(() => {
     const [program, args] = launchCommand({ id: 'G-081', effort: 'xhigh', session: '', prompt: 'p', resume: false,
       engine: 'codex', worktree: '/w', lastMessage: '/r/last.md' });
     expect(program).toBe('codex');
@@ -2209,7 +2210,7 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
       if (previous === undefined) delete process.env.GOAL_CODEX_COMPACT_TOKENS;
       else process.env.GOAL_CODEX_COMPACT_TOKENS = previous;
     }
-  });
+  }));
 
   test('runs Sol on a configured Codex account with the same flags', () => withTestAccounts(() => {
     const [program, args] = launchCommand({ id: 'G-101', effort: 'max', session: '', prompt: 'p', resume: false,
@@ -2238,7 +2239,7 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
     }
   });
 
-  test('pins GPT-6 Luna through Codex and Grok 4.7 in bypass mode for simpler workers', () => {
+  test('pins GPT-6 Luna through Codex and Grok 4.7 in bypass mode for simpler workers', () => withTestAccounts(() => {
     const luna = launchCommand({ id: 'G-094', effort: 'high', session: '', prompt: 'p', resume: false,
       engine: 'luna', worktree: '/w', lastMessage: '/r/l.md' });
     expect(luna[0]).toBe('codex');
@@ -2248,7 +2249,7 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
     expect(program).toBe('grok');
     expect(args).toEqual(expect.arrayContaining(['-m', 'grok-4.7', '--permission-mode', 'bypassPermissions',
       '--no-subagents', '--output-format', 'json', '--cwd', '/w', '-r', 's']));
-  });
+  }));
 
   test('accepts the efforts each engine supports and rejects unknown engines', () => {
     const brief = (engine: string, effort: string) =>
@@ -4420,9 +4421,9 @@ process.exit(0);
       const text = readFileSync(brief, 'utf8').replace('kind: tooling', 'kind: mechanism');
       writeFileSync(brief, text);
       const refused = r.run(['dispatch', brief, '--dry-run']);
-      expect(refused.status).toBe(1); expect(refused.stderr).toContain('Read by program: YYYY-MM-DD');
+      expect(refused.status).toBe(1); expect(refused.stderr).toContain('Reviewed: YYYY-MM-DD');
       expect(r.ledger().tasks['G-001']).toBeUndefined();
-      writeFileSync(brief, text + '\n## Design note\n\nBound every reader and writer through the existing owner.\nRead by program: 2026-10-13\n');
+      writeFileSync(brief, text + '\n## Design note\n\nBound every reader and writer through the existing owner.\nReviewed: 2026-10-13\n');
       expect(r.run(['dispatch', brief, '--dry-run']).status).toBe(0);
     } finally { r.cleanup(); }
   });
@@ -5290,18 +5291,19 @@ test('QA slot settings migrate once and the environment can override one process
     const state = join(root, '.temp/goal-orchestration');
     mkdirSync(state, { recursive: true });
     const slots = join(state, 'qa-slots');
-    expect(qaSlotCount(slots, {})).toBe(3);
+    const settingsEnv = { GOAL_SETTINGS_DIRECTORY: join(root, '.goalctl') };
+    expect(qaSlotCount(slots, settingsEnv)).toBe(3);
     writeFileSync(join(state, 'qa-slot-count'), '6\n');
-    expect(qaSlotCount(slots, {})).toBe(6);
+    expect(qaSlotCount(slots, settingsEnv)).toBe(6);
     expect(existsSync(join(state, 'qa-slot-count.migrated'))).toBe(true);
-    expect(qaSlotCount(slots, { GOAL_QA_SLOTS: '2' })).toBe(2);
+    expect(qaSlotCount(slots, { ...settingsEnv, GOAL_QA_SLOTS: '2' })).toBe(2);
     writeFileSync(join(state, 'qa-slot-count'), 'many\n');
-    expect(qaSlotCount(slots, {})).toBe(6);
+    expect(qaSlotCount(slots, settingsEnv)).toBe(6);
     writeFileSync(join(root, '.goalctl/settings.user.json'), JSON.stringify({ version: 1, qaSlots: 'many' }));
-    expect(() => qaSlotCount(slots, {})).toThrow('qaSlots');
+    expect(() => qaSlotCount(slots, settingsEnv)).toThrow('qaSlots');
     rmSync(join(root, '.goalctl/settings.user.json'));
-    expect(qaSlotCount(slots, {})).toBe(3);
-    expect(Number.isNaN(qaSlotCount(slots, { GOAL_QA_SLOTS: 'x' }))).toBe(true);
+    expect(qaSlotCount(slots, settingsEnv)).toBe(3);
+    expect(Number.isNaN(qaSlotCount(slots, { ...settingsEnv, GOAL_QA_SLOTS: 'x' }))).toBe(true);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -5343,6 +5345,8 @@ describe('gate lanes', () => {
     mkdirSync(state, { recursive: true });
     const directory = join(state, 'gate-lanes');
     const previous = process.env.GOAL_GATE_LANES;
+    const previousSettings = process.env.GOAL_SETTINGS_DIRECTORY;
+    process.env.GOAL_SETTINGS_DIRECTORY = join(root, '.goalctl');
     delete process.env.GOAL_GATE_LANES;
     const waiting = async (): Promise<string> => {
       const notes: string[] = [];
@@ -5370,6 +5374,8 @@ describe('gate lanes', () => {
     } finally {
       if (previous === undefined) delete process.env.GOAL_GATE_LANES;
       else process.env.GOAL_GATE_LANES = previous;
+      if (previousSettings === undefined) delete process.env.GOAL_SETTINGS_DIRECTORY;
+      else process.env.GOAL_SETTINGS_DIRECTORY = previousSettings;
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -5378,6 +5384,8 @@ describe('gate lanes', () => {
     const root = mkdtempSync(join(tmpdir(), 'gate-lanes-'));
     const directory = join(root, 'lanes');
     const previous = process.env.GOAL_GATE_LANES;
+    const previousSettings = process.env.GOAL_SETTINGS_DIRECTORY;
+    process.env.GOAL_SETTINGS_DIRECTORY = join(root, '.goalctl');
     delete process.env.GOAL_GATE_LANES;
     const entered: string[] = [];
     const release = new Map<string, () => void>();
@@ -5474,6 +5482,8 @@ describe('gate lanes', () => {
       await Promise.allSettled(pending);
       if (previous === undefined) delete process.env.GOAL_GATE_LANES;
       else process.env.GOAL_GATE_LANES = previous;
+      if (previousSettings === undefined) delete process.env.GOAL_SETTINGS_DIRECTORY;
+      else process.env.GOAL_SETTINGS_DIRECTORY = previousSettings;
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -6415,7 +6425,7 @@ describe('Goal coordinator enrollment CLI', () => {
     expect(coordinatorEnrollmentOptions([...enrollment, ...ownerFlag]).engine).toBe('codex');
   }));
 
-  test('requires an explicit positive integer PID and refuses a vanished previous owner', () => {
+  test('requires an explicit positive integer PID and refuses a vanished previous owner', () => withTestAccounts(() => {
     expect(() => coordinatorEnrollmentOptions(enrollment)).toThrow('--previous-owner-pid <pid>');
     for (const pid of ['0', '-1', '1.5', 'NaN', 'Infinity', '+1', ' 1', '1e3', '9007199254740992']) {
       expect(() => coordinatorEnrollmentOptions([...enrollment, '--previous-owner-pid', pid])).toThrow('positive integer PID');
@@ -6425,9 +6435,9 @@ describe('Goal coordinator enrollment CLI', () => {
     const pid = exited.pid;
     expect(() => coordinatorEnrollmentOptions([...enrollment, '--previous-owner-pid', String(pid)]))
       .toThrow(`Cannot establish the live previous owner ${pid}`);
-  });
+  }));
 
-  test('rejects duplicate, unknown and valueless options and invalid launch selections', () => {
+  test('rejects duplicate, unknown and valueless options and invalid launch selections', () => withTestAccounts(() => {
     const valid = [...enrollment, ...ownerFlag];
     for (const extra of [['--previous-owner-pid', String(process.pid)], ['--unknown', 'value'], ['--tmux-socket'],
       ['--tmux-socket', '--engine', 'codex']]) {
@@ -6440,7 +6450,7 @@ describe('Goal coordinator enrollment CLI', () => {
     expect(() => coordinatorEnrollmentOptions([...valid, '--model', 'gpt-6.1-sol'])).toThrow('--model is only for --engine claude');
     expect(() => coordinatorEnrollmentOptions([...enrollment.slice(0, 4), 'invalid', ...enrollment.slice(5), ...ownerFlag]))
       .toThrow('Enrollment requires');
-  });
+  }));
 });
 
 describe('Goal mail CLI', () => {
@@ -6510,8 +6520,8 @@ describe('registered Goal mail lifecycle', () => {
     const invoke = (args: string[]) => {
       const result = spawnSync(process.execPath,[join(import.meta.dir,'goalctl.ts'),'mail',...args],{
         cwd:join(import.meta.dir,'../..'),encoding:'utf8',
-        env:{...process.env,GOAL_MAIL_STATE_DIR:directory,GOAL_ID:'program'}});
-      expect(result.status).toBe(0);
+        env:{...cliEnvironment(directory),GOAL_MAIL_STATE_DIR:directory,GOAL_ID:'program'}});
+      expect(result.status, result.stderr).toBe(0);
       return result.stdout.trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
     };
     try {

@@ -27,7 +27,7 @@ explicit, speaker object/relation, object and default selections, then Global.
 
 ## Scope and evaluator
 
-Decision 52, maintainer and product manager, 2026-10-04. What a claim or rating
+What a claim or rating
 is about and who judges it are kept in separate fields, even where they share a
 dimension such as time or language. Two tests sort a field:
 

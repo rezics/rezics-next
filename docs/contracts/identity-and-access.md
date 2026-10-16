@@ -81,13 +81,13 @@ representation creates no voting weight. See the
 
 ## Visible is not permitted
 
-Decision 4, maintainer, 2026-09-29. Every Zone remains visible, while role and
+Every Zone remains visible, while role and
 trust gate creation. Ordinary participants browse, rate, shelve, review, discuss
 and report; contributors may create provisional, unverified Works under the
 [catalogue quality pipeline](identity-correction.md#catalogue-quality-pipeline)
-(decision 50); administrator-appointed editors maintain the catalogue with
+; administrator-appointed editors maintain the catalogue with
 history. Administrators create administrator-only kinds, Zones and official
-Realms, run imports and appoint editors (decision 4). These are product roles,
+Realms, run imports and appoint editors. These are product roles,
 not permission implied by a visible control.
 
 Permission-backed translations need explicit publication eligibility. A private
@@ -98,7 +98,7 @@ the publication basis, and installed Access profiles above remain authoritative.
 
 ## One authority model
 
-Decision 8, maintainer's YouTube model, 2026-09-29. Account signs the operator in;
+Account signs the operator in;
 the operator represents a Person or Organization Agent; the Agent grants resource
 authority; app and AI credentials only narrow it. [YouTube channel permissions](https://support.google.com/youtube/answer/9481328?hl=en)
 are the precedent for delegated management without sharing the owner's private

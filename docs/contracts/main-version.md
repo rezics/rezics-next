@@ -31,7 +31,6 @@ exact release must never imply coverage that its manifest did not seal.
 
 ## Durable custody
 
-Decision 10, product manager under maintainer delegation, 2026-09-29.
 People must be able to recover what they authored and what they read. Existing
 immutable revision and release owners above supply the basis; the remaining
 custody work is stable block locators, historical dependency manifests,

@@ -93,7 +93,6 @@ physical engine work or mixed-load latency at rollout scale. The
 
 ## Multilingual retrieval direction
 
-Decision 18, product manager under maintainer delegation, 2026-09-29.
 Build one retrieval capability on Jena/Lucene: per-language analysis, aliases
 and readings, Simplified/Traditional folding, and Works, people, Realms, posts
 and Concepts in cross-entity results. Main owns typo recovery and discovery with

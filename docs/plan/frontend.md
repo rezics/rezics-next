@@ -8,9 +8,6 @@ Revise it as slices are used in a real browser.
 
 ## Principles
 
-Revised 2026-09-28 after the maintainer compared the first slices with the old
-site, Reddit and Goodreads: they exposed the model instead of the content.
-
 - **Content first, model inside.** Readers see covers, titles, authors,
   ratings in words they know, and what people are saying. Scopes, Contexts,
   generations, count bounds and identifiers stay internal; scope appears only
@@ -34,8 +31,7 @@ site, Reddit and Goodreads: they exposed the model instead of the content.
 
 ## Home
 
-Decided 2026-09-28 from research into Reddit, the old site's feed and published
-critiques of Goodreads: people come back to track what they read and to get the
+Readers return to track what they read and to get the
 next chapter, then to keep up with communities, then to discover.
 
 - **Frame.** Left: the sidebar (see [Sidebar](#sidebar)). Centre: a **Continue** strip (each item opens
@@ -50,14 +46,12 @@ next chapter, then to keep up with communities, then to discover.
 - **One compact control line** under the tabs, as Reddit's: a `Best ▾` menu
   (Best, New, Top; Top adds its period menu on the same line), a `Filters`
   popover (a sheet on phones) with active filters as removable chips on the
-  same line. Sorts are not spread into separate buttons. The maintainer
-  revised this on 2026-09-28: the separate sort pills and chip rows cost two
-  rows of density. Home has one view and no card/compact switch (maintainer,
-  later that day): copying Reddit's view modes adds a choice nobody needs.
+  same line. Keep one compact control row and one Home view, without a
+  card/compact switch.
 - **Best** rewards real readers and recent activity but keeps small Realms
   visible: scores are normalised within each Realm and no Realm fills a page.
   The versioned constants live in `services/main/src/modules/feed/ranking.ts`.
-- **Posts: X's treatment, Reddit's anatomy** (maintainer, 2026-09-28). No card
+- **Posts: X's treatment, Reddit's anatomy**. No card
   frame and no framed feed container: rows separated by a divider, the whole
   row clickable and tinted on hover (X uses about 3% ink). REZICS posts have
   titles, belong to a Realm and are about a Work, so they keep Reddit's order
@@ -68,21 +62,15 @@ next chapter, then to keep up with communities, then to discover.
   kind-specific action. The title is the post's subject: a discussion's title,
   "Chapter 212 · its title", a review. Main's feed item has a single `target`
   today, so a discussion shows its Work's title and its own title as the
-  excerpt; the API separates the post from the Work it is about. A text post
-  measured 237–303 px tall on desktop with seven stacked rows. The first
-  rework went too far, to about 80–110 px, and the maintainer found it cramped:
-  posts breathe like X's, with X's padding, type size and line height, and
+  excerpt; the API separates the post from the Work it is about. Posts breathe like X's, with X's padding, type size and line height, and
   generous space between meta, title, preview, attachment and actions.
   Comfort wins over fitting more rows. Dense lists belong to catalogues
   (search results, shelves), which may offer a list or grid of Works; they are
   not a feed mode. Repeated updates collapse into
   one post; shelving and ratings without text never become posts; chapter
   posts hide spoilers past the reader's position.
-- **Who a post leads with** (maintainer, 2026-09-28). REZICS is not purely
-  Realm-centric. Reddit locks a person's identity inside subreddits, which is
-  why no CEO's official account, head of state or individual creator is known
-  there; on REZICS the person is the speaker and the Realm the venue that
-  hosts them. A post's meta line shows both, and either may come first; the
+- **Who a post leads with**. REZICS is not purely
+  Realm-centric. The person is the speaker and the Realm is the venue. A post's meta line shows both, and either may come first; the
   one that leads gets the icon, the first place and bold type:
   1. the person, when the reader follows them;
   2. *future feature*: the person, when they are a verified or notable
@@ -113,7 +101,7 @@ next chapter, then to keep up with communities, then to discover.
 
 ## Sidebar
 
-Maintainer, 2026-10-02. The sidebar is built from the reader's relationships
+The sidebar is built from the reader's relationships
 ([Follow, Join and notification](../contracts/community-interactions.md#follow-join-and-notification)),
 in this order:
 
@@ -132,7 +120,7 @@ notification bell (All, Highlights, Off) and an overflow with Mute and Block.
 
 ## Discover
 
-Maintainer, 2026-10-02. Discover is one browse over every resource type, the
+Discover is one browse over every resource type, the
 same capability as a Zone's browse with the whole catalogue as its population:
 one Query compiler, one card set. Type is a Facet: All, Works, Communities,
 Sites, People, Lists and Topics. The communities directory is Discover's
@@ -159,7 +147,7 @@ Communities tab; `/r` redirects there.
 
 ## Collections at any size
 
-Maintainer, 2026-10-02. An unbounded collection never renders as a fixed slice.
+An unbounded collection never renders as a fixed slice.
 Wherever a list can grow (Realms, Concepts, members, follows, chapters,
 editions, rating populations), the UI offers search, continuation, a meaningful
 order and an exact or "at least" count; a preview of a few items links to the
@@ -176,7 +164,7 @@ those parameters, which contract tests check.
 
 ## Work page
 
-Maintainer, 2026-09-30: the Work page is a core entry and the hub; the wiki Zone
+the Work page is a core entry and the hub; the wiki Zone
 is its deep end ([wiki+](../product/goal.md#wiki-the-flagship)). Bangumi's
 subject page is the reference; its density is not. The order below comes from
 R52's benchmark of Bangumi, VNDB, AniList, MyAnimeList, Douban, Letterboxd,
@@ -238,20 +226,18 @@ spoiler boundary, and read or write a review that names its target.
 
 ## Zones
 
-Decided 2026-09-28 from KadoKado (the maintainer's reference), the old site
-and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
+Zone layouts draw on specialist catalogues and publishing sites.
 
 - **A Zone is a routed site over shared resources**: its own routes,
   navigation, templates, documents and saved views over the one catalogue, as
   a franchise wiki or a specialist catalogue needs
   ([routed sites](../product/platform-thesis.md#zones-are-routed-sites),
-  revised 2026-09-30). A Realm's publication is one preset: named editorial
+  shared site model). A Realm's publication is one preset: named editorial
   modules that read the Realm's curation, where every pick links to the
   decision behind it and covers carry a one-line hook, as KadoKado's do. A
   single configurable home page on fixed Realm tabs could hold neither a wiki
   nor a catalogue.
-- **Each Zone presents information the way its field's best site does**
-  (maintainer, 2026-09-28). The point of a Zone is its information layout,
+- **Each Zone presents information the way its field's best site does**. The point of a Zone is its information layout,
   not its colours, and it is never Home's post feed. Fiction and Books follow
   novel sites such as 起点, 晋江, KadoKado and Royal Road: rankings, categories,
   update lists with the latest chapter, status and length. Games follow Steam.
@@ -261,7 +247,6 @@ and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
   vertical needs a fitting listing, browse and detail presentation, with fields
   from Main's generic projection, never a per-domain payload: per-domain
   payloads are how per-domain fact tables entered the backend. The
-  maintainer's 2026-09-29
   [vertical-engine decision](../product/platform-thesis.md#the-vertical-engine-is-the-product)
   refines how: shared default pages and templates, with slot overrides for the
   core families, rather than copied per-vertical implementations. Under
@@ -272,7 +257,7 @@ and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
   A Zone changes colours or type only when it explicitly asks to; until one
   can, the host applies only a Zone's structure tokens, and a test keeps
   package CSS to the platform's colours and faces.
-- **Browse beside the home** (2026-09-28, after Modrinth's search). Every Zone
+- **Browse beside the home**. Every Zone
   has a browse route, by default `/z/<space>/browse`
   ([routers](../contracts/space.md#surfaces-and-routers)): search, Facet Conditions, sort and a list or grid,
   each a link with its own URL. Every browse Condition is an admitted Facet
@@ -306,8 +291,7 @@ and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
   Works are the generic resource page inside the frame or the package's
   `entity` slot, chosen by Main's page projection and never by a type; their
   data are the reads Main returned, and a read that failed leaves its part out.
-- **Scoped judgments on pages** (2026-10-05, decisions 51–53 of the
-  [semantic model](../contracts/semantic-model.md#identities-variants-and-projections)).
+- **Scoped judgments on pages**).
   A subject's page keeps its own question and every place it has been rated in
   apart: one region holds the subject's figure, the choice of a place to rate it
   in, each place's figure and, per Work, a combined view that names its formula
@@ -351,7 +335,7 @@ each language version of a public page has its own indexable URL with
 the route. [URLs and SEO](../product/urls-and-seo.md) owns durable identifiers,
 aliases and readable suffixes, canonical redirects and eligible alternates. Signed out, a
 language select and a theme button sit in the header; signed in, they live in
-the account menu and settings. The account menu (maintainer, 2026-10-02) puts
+the account menu and settings. The account menu puts
 identity first (the acting Agent and switching), then profile, library, Studio
 and notifications, then **Language ›**, **Appearance ›** and **Content
 preferences ›**, then settings, account and sign out. On desktop the arrows
@@ -360,9 +344,7 @@ control, as YouTube's account sheet does. Content languages and adult-content
 switches are settings, reached from Content preferences, not quick toggles. Zones may carry their
 own themes, which people can turn off.
 
-**Natively multilingual, not bilingual** (manager, 2026-09-28, after the
-maintainer's review and a full audit found en and zh-Hans complete and the six
-other locales about a quarter English). Every UI string ships in all eight
+**Native multilingual content.** Every UI string ships in all eight
 locales in the change that adds it; a missing key fails the check instead of
 falling back silently. Content takes any BCP 47 language: no shape, enum,
 check constraint or seed type may fix a set of languages, and no text is
@@ -373,8 +355,7 @@ folding). The demo seed is native too: Works, people, communities and reviews
 in several languages with translated titles and more than one language version,
 each in its own language, never two glued together.
 
-**Names show in the reader's language, one at a time** (maintainer,
-2026-09-28, after "Fiction · 小说" appeared site-wide). Realm, Zone,
+**Names show in the reader's language, one at a time.** Realm, Zone,
 Organization and Concept names, rule titles and descriptions are stored per
 language (open BCP 47 tags, one marked original), never glued into one string.
 A read picks each field independently in this order: the page's explicit
@@ -425,7 +406,7 @@ service's API on the same origin, so the Account session cookie never lives on
 a product origin. It is not indexed, so its locale comes from `?hl=`, a cookie
 and `Accept-Language` rather than a path prefix.
 
-Maintainer, 2026-10-01: sign-up uses **Display name**, email, password and
+sign-up uses **Display name**, email, password and
 confirmation in separate full-width rows, followed by the policy acceptance
 and submit action. Account's name is a nickname/display name, not a legal-name
 requirement or automatic public Agent name. Birth date is requested when a
@@ -466,7 +447,6 @@ reviewed in light and dark, desktop and phone, English and a CJK locale.
 
 ## Presentation modes and settings
 
-Decision 16, product manager under maintainer delegation, 2026-09-29.
 Simple, Advanced and reserved Agent mode are viewing Account preferences:
 feature override, then global default, then Simple. The API never takes a mode,
 and modes grant no authority. Advanced increases density in the spirit of GitHub;

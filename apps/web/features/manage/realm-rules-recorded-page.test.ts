@@ -2,13 +2,16 @@ import { afterEach, expect, test } from 'bun:test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import rulesRecord from '../../../../tests/qa/fixtures/outcomes/realm/rules.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
-import { readPublishedRealmHeader } from '../realm/read.ts';
+import { readPublishedRealmHeader, realmFrameReads } from '../realm/read.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
 import { saveSettings } from './commands.ts';
-import { publishedRealmRules } from './realm-rules-recorded-page.ts';
+import { publishedRealmRules, readRealmRulesSettings } from './realm-rules-recorded-page.ts';
+import { rulesPageClient } from './realm-rules-recorded-page-client.ts';
+import { mainRelationships, RelationshipError } from '../relationships/api.ts';
+import { readCurrentRequest } from '../space-access/request-state.ts';
 import { readAgents, readRealmHeader, readSettings } from './read.ts';
-import { readPrivateSpaceJoinPage } from './settings-api.ts';
+import { readPrivateSpaceJoinPage, spaceAccessApi } from './settings-api.ts';
 import type { MainClient, RealmHeader, SettingsView } from './types.ts';
 import { uuidOf } from './types.ts';
 
@@ -295,4 +298,103 @@ test('an accepted amendment shows the recorded receipt', async () => {
   expect(command.expectedRulesRevision).toBe(revisionOf(before.settings.ruleBasis.revision, 'previous rules'));
   expect(sample.status).toBe(201);
   expect(saved.data.replayed).toBe(false);
+});
+
+for (const persona of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
+  for (const scope of ['public', 'private'] as const) {
+    test(`${persona} ${scope} rules use the production frame resolution and exact recorded requests`, async () => {
+      const labels = [`${scope}-page-frame-address`, `${scope}-page-frame-realm-header`,
+        ...scope === 'private' ? [persona === 'visitor' ? 'private-page-join-page' : 'private-page-rules-header',
+          ...['stranger', 'operator'].includes(persona) ? ['private-page-join-page'] : []] : []];
+      const replay = recordedFetch(record, persona, labels.map(label => ({ label,
+        state: sampleOf(persona, label).status >= 400 ? 'error' : 'populated' })), { pathPrefix: BFF_PREFIX });
+      disposals.push(replay.dispose);
+      const address = sampleOf(persona, `${scope}-page-frame-address`);
+      const key = new URL(address.path, 'https://recorded.invalid').searchParams.get('key');
+      if (!key) throw new Error('Recorded frame address has no key');
+      const actor = persona === 'visitor' ? undefined
+        : actingSubject(sampleOf(persona, `${scope}-page-management-header`).path);
+      const client = rulesPageClient(replay.fetcher, actor);
+      const resolved = await realmFrameReads({ ...client }).resolveRealm(key, 'en');
+      const admitted = scope === 'public' || ['member', 'owner', 'moderator'].includes(persona);
+      expect(resolved.kind).toBe(admitted ? 'realm' : 'join');
+      if (resolved.kind === 'realm') {
+        const { header } = headerOf(persona, scope === 'public' ? 'public-page-frame-realm-header' : 'private-page-rules-header');
+        expect(resolved.header).toEqual(header);
+        expect(publishedRealmRules(resolved.header.rules)?.[0]?.body).toBe(header.rules?.[0]?.body.value);
+      } else if (resolved.kind === 'join') {
+        expect<unknown>(resolved.page).toEqual(objectAnswer(persona, 'private-page-join-page'));
+        const problem = problemOf(persona, 'private-page-frame-realm-header');
+        expect(resolved.problem).toEqual({ status: problem.sample.status, code: problem.code, title: problem.title });
+      } else throw new Error(`Unexpected recorded resolution: ${resolved.kind}`);
+    });
+  }
+}
+
+for (const persona of ['stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
+  test(`${persona} production settings access controls the rules read and preserves refusal details`, async () => {
+    const labels = ['public-page-management-space-direct', 'public-page-management-access-header',
+      'public-page-management-space-settings', ...persona === 'owner' ? ['public-page-management-rule-settings'] : []];
+    const client = clientFor(persona, labels.map(label => ({ label,
+      state: sampleOf(persona, label).status >= 400 ? 'error' : 'populated' })), false);
+    const sample = sampleOf(persona, 'public-page-management-access-header');
+    const loaded = await readRealmRulesSettings(client, realmId(sample.path), actingSubject(sample.path));
+    if (persona === 'owner') {
+      expect(loaded.kind).toBe('settings');
+      if (loaded.kind !== 'settings') throw new Error('The recorded manager was refused');
+      expect<unknown>(loaded.settings).toEqual(objectAnswer(persona, 'public-page-management-rule-settings'));
+      expect<unknown>(loaded.access).toEqual(objectAnswer(persona, 'public-page-management-space-settings'));
+      expect(loaded.settings.ruleBasis).toEqual(settingsOf(persona, 'rule-settings').settings.ruleBasis);
+    } else {
+      const refused = problemOf(persona, 'public-page-management-space-settings');
+      expect(loaded.kind).toBe('access-failure');
+      if (loaded.kind !== 'access-failure') throw new Error('The recorded reader acquired settings authority');
+      expect(loaded.result).toEqual({ ok: false, failure: 'denied',
+        status: refused.sample.status, title: refused.title, code: refused.code,
+        problem: objectAnswer(persona, 'public-page-management-space-settings') });
+    }
+  });
+}
+
+test('owner production settings reader preserves the recorded empty rules and basis', async () => {
+  const labels = ['space-direct', 'access-header', 'space-settings', 'rule-settings'].map(part => `empty-page-management-${part}`);
+  const client = clientFor('owner', labels.map(label => ({ label,
+    state: sampleOf('owner', label).status >= 400 ? 'error' : 'populated' })), false);
+  const sample = sampleOf('owner', 'empty-page-management-access-header');
+  const loaded = await readRealmRulesSettings(client, realmId(sample.path), actingSubject(sample.path));
+  expect(loaded.kind).toBe('settings');
+  if (loaded.kind !== 'settings') throw new Error('The recorded empty rules were refused');
+  expect<unknown>(loaded.settings).toEqual(objectAnswer('owner', 'empty-page-management-rule-settings'));
+  expect(loaded.settings.settings.rules).toEqual([]);
+  expect(loaded.settings.ruleBasis).toEqual(settingsOf('owner', 'empty-page-management-rule-settings').settings.ruleBasis);
+});
+
+for (const persona of ['stranger', 'operator'] as const) {
+  test(`${persona} private rules landing reads recorded own-request unavailability before enabling its form`, async () => {
+    const label = 'private-page-own-join-requests';
+    const sample = sampleOf(persona, label);
+    const client = clientFor(persona, [{ label, state: 'error' }], false);
+    const api = spaceAccessApi(() => client, realmId(sample.path), realmId(sample.path), actingSubject(sample.path));
+    const refusal = await api.mine(null);
+    expect(refusal).toEqual({ ok: false, failure: 'missing', status: sample.status,
+      title: problemOf(persona, label).title, code: problemOf(persona, label).code,
+      problem: objectAnswer(persona, label) });
+    expect(await readCurrentRequest(api)).toEqual({ ok: true, data: { entry: null, state: 'available' } });
+  });
+}
+
+test('owner private rules follow refresh preserves the recorded unavailable status', async () => {
+  const label = 'private-page-follow-detail';
+  const sample = sampleOf('owner', label);
+  const replay = recordedFetch(record, 'owner', [{ label, state: 'error' }], { pathPrefix: BFF_PREFIX });
+  disposals.push(replay.dispose);
+  const query = new URL(sample.path, 'https://recorded.invalid').searchParams;
+  const target = query.get('target');
+  if (!target) throw new Error('Recorded follow read has no target');
+  const api = mainRelationships(actingSubject(sample.path), { fetch: replay.fetcher });
+  let caught: unknown;
+  try { await api.state(target); } catch (error) { caught = error; }
+  expect(caught).toBeInstanceOf(RelationshipError);
+  expect((caught as RelationshipError).status).toBe(sample.status);
+  expect(sample.status).toBe(404);
 });

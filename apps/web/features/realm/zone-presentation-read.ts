@@ -189,7 +189,7 @@ export type RealmResolution =
       siteRef?: string;
     }
   | { kind: 'missing' }
-  | { kind: 'join'; page: JoinPage }
+  | { kind: 'join'; page: JoinPage; problem?: import('../manage/types.ts').ServiceProblem }
   | { kind: 'unavailable'; failure?: ReadFailure; reference?: string };
 
 export type SiteResolution =

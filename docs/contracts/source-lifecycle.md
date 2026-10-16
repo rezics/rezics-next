@@ -21,7 +21,7 @@ See [content governance](content-governance.md#rights-complaints) and [erasure](
 
 ## Platform imports and user contributions
 
-Decision 55, maintainer, 2026-10-09. The platform answers for what it imports
+The platform answers for what it imports
 itself. An operator import publishes what the source licenses, and facts only
 where the licence is unknown. It never imports posts the source's users wrote
 for themselves, such as reviews, blogs or comments. Every imported fact or text
@@ -95,7 +95,7 @@ mapping, query and export qualification separate; see [source acceptance](../tes
 
 ## Import rollout
 
-Decision 26, maintainer, 2026-09-29. Imports write only through Main commands;
+Imports write only through Main commands;
 qualification uses functional tests, not large import campaigns. Start with
 downloadable dumps from VNDB, Open Library, Wikidata, Bangumi, MusicBrainz core
 and the old site. The later [vertical-engine seeds](../product/platform-thesis.md#one-graph-many-language-fronts)

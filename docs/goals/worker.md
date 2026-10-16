@@ -3,13 +3,13 @@
 You are a headless worker started by a Goal manager through `task goal -- dispatch`,
 working in your own worktree on a `goal/<id>` branch. Your brief
 (`.temp/goal/brief.md`, or `.temp/goal/brief-<id>.md` in a shared worktree) is the
-task. Priority when guidance differs: the brief, then this page, then `AGENTS.md`
-and other documents. Documents record practice; the code is the truth.
+task. [AGENTS.md](../../AGENTS.md) states instruction precedence. Check tooling
+behavior against its code; update a practice that no longer fits.
 
 A wave build task (a brief with a `## Wave` section, or a resume that says so)
 follows [Waves](wave.md) instead of the Scope, Checks and landing parts of this
-page. It is not bounded by claims, its own or another task's, and it starts no
-QA stack.
+page. It is not bounded by claims, its own or another task's, and its ordinary build phase starts no QA stack. The brief can authorize a
+recording or prove step explicitly.
 
 ## Finish the work
 
@@ -39,12 +39,10 @@ makes, stop and report that instead of building it.
   Other needed work goes under PROPOSED TASKS, not into your diff.
 - Name files, tests and identifiers by capability or acceptance ID, never by
   task ID; comments state reasons, not task IDs.
-- Never push, never touch the main checkout or `.temp/vault/`, never rebase or
+- For an ordinary worker task, never push, never touch the main checkout or `.temp/vault/`, never rebase or
   merge `main`: the manager rebases and merges. Edit with paths relative to
-  your worktree root. An absolute path that starts at the main checkout and
-  does not pass through `.temp/worktrees/<id>/` writes into the checkout the
-  shared stack hot-reloads from; a patch tool accepted three such paths on
-  2026-10-11 and the stack served them for an hour.
+  your worktree root. Translate a main-checkout path into your worktree before
+  editing it.
 - `/tmp` on this host is RAM: never put checkouts, `node_modules` or bulk data
   there. Use your worktree's `.temp` (or a short directory on disk when a path
   must be short).
@@ -56,16 +54,15 @@ makes, stop and report that instead of building it.
   waits for one host-wide build per tag. `task gen`, stack startup and dev refresh
   use the same command implementation. Native tests run separately in the gate
   and wave proof through `module-test`.
-- Generated files (`generated/**`, `packages/model/src/generated/**`, the Fuseki
-  image stamp in `infra/dev/compose.yaml`) are not committed: run `task gen`
-  when you need them, restore them before handoff. A changed route contract
-  also needs `task web:typecheck`; list web follow-ups under OWNER CHANGES.
-- A new Main route lives in a claimed route module, registered with one import
-  and one `.use()` line in `services/main/src/app.ts` (union-merged: only add
-  lines). It declares its `exposure` (`public` or `platform:<group>`; a new
-  `public` operation is reviewed by trust-ops), its rate-limit family, and
-  `openApiOperations`. Owner stores wire through `services/main/src/index.ts`
-  and `routes/dependencies.ts`, also add-only.
+- Generated artifacts follow the [generator and merge gate](../../scripts/goal/merge.ts).
+  Run `task gen` when authored contracts change; do not hand-edit derived files.
+  The gate regenerates and commits its results. A route-contract change also
+  needs `task web:typecheck`; list consumer follow-ups under OWNER CHANGES.
+- Main routes declare exposure, rate-limit family and OpenAPI operations beside
+  their handler. Follow [Main composition](../../services/main/src/app.ts) and
+  [route dependencies](../../services/main/src/routes/dependencies.ts) for wiring;
+  append only where the union merge driver is configured. The API Goal owns
+  public exposure decisions; there is no separate trust-ops Goal to wait for.
 - Migrations: use any free number; `goalctl merge` renumbers above `main` and
   rewrites references in your changed files. When widening a shared CHECK,
   start from its latest definition on `main` and keep every value.
@@ -76,114 +73,25 @@ makes, stop and report that instead of building it.
 
 ## Tests and checks
 
-Fixtures grant access through `grantFixtureAuthority`; the guard refuses a new direct write.
-
-An outcome test states what one kind of person gets from the public API of a
-real stack; it mocks none of our own modules. If your task writes outcome
-tests, write one for each persona the brief names and show that each fails on
-`main` for the stated reason. If your task implements, make those tests pass
-and do not edit them: a test that asks for the wrong thing goes back to the
-manager with the reason. Other tests go with the code they cover, at the lowest
-tier that proves it. Prove your own work, nothing wider:
-
-```sh
-task goal -- job -- task goal -- check     # before a handoff: types, type-aware lint, ast-grep, the brief's tests and guards
-task goal -- check --only types,lint       # a subset while you work: types, lint, tests, guards
-task goal -- test <your test files>        # one file or a few while you work; one QA slot, also for files of several tiers; never --heavy for your own files
-task goal -- test --affected --list | tail -n 40   # what else your change reaches; do not run it
-```
-
-`check` prints `ok` or `failed` for each check and, for a failed one, only the
-failing cases and the first lines of each error; the whole output is in the file
-it names under `.temp/goal/check/`. It checks what the merge gate checks, from
-the gate's own functions. A brief names its test files in the frontmatter list
-`tests:`; without it `check` runs no test file and says so. Run it through
-`job` and read the summary when it finishes inline or wakes your session.
-
-Run `task goal -- job -- task goal -- check` once before you hand off `done`; it includes the
-repository-wide rules of `task guards` (about two minutes). On 2026-10-11 two
-thirds of the landings that a gate stopped failed one of these rules, after a
-review had already been spent on them.
-
-The gate may run from an agent session, where `CLAUDECODE=1` makes `bun test`
-print only failures and the summary. A test that runs `bun test` in a child
-asserts its exit status or a JUnit report, never the printed test names; check
-such a file once with `CLAUDECODE=1` set.
-
-Tests are what this host runs short of, not workers. Name every file a step
-needs in one `task goal -- test` call: one call starts one stack, and a stack
-costs about half a minute and a turn in a host-wide queue before any test runs.
-Prove a change at the lowest tier that proves it: a unit or owner test needs no
-stack. Run a passing file again only after a change that could affect it. A web
-build, `depcruise`, type-aware lint or a fresh install takes 2 to 3 GiB: run
-one at a time and not during your own QA run.
-
-After `task goal -- test <story file>`, read the PNGs under the run's `story-screenshots` directory to review your own change by eye; do not add screenshot helpers to stories.
-
-List affected tests outside your claim in the handoff; the manager and the
-program regression run them. Do not run whole tiers, `task qa`, Storybook suites
-or browser journeys unless the brief asks. Backend work starts no dev server.
-Frontend work checks changed screens with one dev server at a time against the
-shared backend (`task web:dev`, `task urls`) and stops it before handoff. In a
-shared worktree, start nothing; use what `.temp/goal/shared.md` lists and commit
-only your paths with `git commit --only`.
-
-## Tokens
-
-Every model call resends your whole context, so a session's cost grows with the
-square of its length. Read several files in one command. Bound what a command
-prints (`rg -m`, `sed -n` ranges, `| tail -n 40`); never print a whole log or
-list. Do not read again what you already have. A command's output is cut at about
-16,000 characters, so ask for the part you need. `task --summary <task>`
-describes one task; `task --list` prints every one.
-
-`task operation -- <query>` answers where a Main API operation lives without a
-search: its operationId, method and path, exposure, rate-limit family, whether
-it takes a bearer and an idempotency key, the route's file and line, and the
-test files that call it. The query is part of an operationId or of a path;
-`--json` prints the same as data.
-
-Run any command expected to take over a minute through
-`task goal -- job -- <command…>`, including checks, QA-stack tests and queued
-type checks. Declare all remaining checks that need no intervention as one ordered
-sequence, rather than parking separately for each:
-
-```sh
-task goal -- job --then 'task docs:check' --then 'task goal -- check' -- task goal -- test scripts/goal/job.test.ts
-```
-
-The command after `--` runs first; each `--then` is a quoted shell command, run
-in order in the same worktree with the existing admission, its own log and a
-four-hour deadline per command. The owner stops at the first nonzero exit,
-signal, lost executor or timeout and wakes you once with the failed command,
-exit status and first error lines. When every command passes, it wakes you once
-with one result line and log path per command. A lost owner also fails the
-sequence; remaining commands never start. A plain job keeps its existing behavior.
-
-The whole sequence runs inline for up to 20 seconds. Set the tool call's
-`yield_time_ms` to exactly `30000` (30 seconds), including an orchestration
-wrapper's yield when using one: one call returns the result or `PARKED`, with
-no polling. If it finishes, read its result; otherwise it prints `PARKED job:<id>; end your turn with
-RESULT: parked`. End that turn immediately with `RESULT: parked`, without a
-handoff, polling, reading logs or starting more work. The detached executor keeps
-the same command running or queued under its existing admission and, when it
-ends, resumes your same session with its exit status, bounded failure lines
-and log path. The coordinator pass retries a missed wake or queued admission;
-both use the same durable continuation claim, so they cannot wake twice.
-Continue from that result; a wake consumes no fix round. A refused wake or a
-wait over 45 minutes goes to your Goal's manager.
+Load the [Goal worker execution skill](../../.agents/skills/goal-worker/SKILL.md)
+when running checks or a command that can take over a minute. It owns targeted
+QA, recorded jobs and the parked-turn procedure. A wave uses its own skill.
+[AGENTS.md](../../AGENTS.md) owns proportional tests and preparation budgets;
+the brief adds its required checks.
 
 ## After a review
 
 A finding that blocks arrives with a test that fails on your branch. Make it
 pass, name the class of the defect, search your whole change for every other
-site of that class and fix them all. Then read the diff of your own fix as a
-reviewer would before you hand off: of the findings later rounds returned on
-2026-10-11, 44% were defects in the fix itself and 38% the same class at
-another site. A task gets two fix rounds; say plainly when the second cannot
+site of that class and fix them all. Then read the diff of your fix as a reviewer before handing off. A task gets two fix rounds; say plainly when the second cannot
 close it.
 
 ## Handoff
+
+If an instruction file makes you pause, ask, stop or change direction, name
+and link the exact file in the handoff, quote the instruction and explain its
+effect. Distinguish an explicit requirement from your interpretation. Existing
+authorization still applies; do not turn a guideline into a new approval gate.
 
 Commit each step as soon as it stands, because a session can end without
 warning and the next session only sees what is in the tree. Leave the worktree

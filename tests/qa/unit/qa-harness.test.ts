@@ -397,7 +397,7 @@ test.each([
 });
 
 /** Run the CLI entrypoint; replace only disposable stack lifecycle commands. */
-function startupHarness(directory: string) {
+function startupHarness(directory: string, inheritedEnvironment: NodeJS.ProcessEnv = process.env) {
   const executable = join(directory, 'bun');
   const slots = join(directory, 'slots');
   const control = join(directory, 'control');
@@ -525,9 +525,13 @@ function startupHarness(directory: string) {
   const children: ReturnType<typeof Bun.spawn>[] = [];
   const launch = (name: string, args: string[], extraEnv: NodeJS.ProcessEnv = {}) => {
     const child = Bun.spawn([process.execPath, ...args], {
-      cwd: root, stdout: 'pipe', stderr: 'pipe', env: { ...process.env,
-        PATH: `${directory}:${process.env.PATH}`, GOAL_QA_SLOT_DIRECTORY: slots, GOAL_QA_SLOTS: '1',
+      cwd: root, stdout: 'pipe', stderr: 'pipe', env: { ...inheritedEnvironment,
+        PATH: `${directory}:${inheritedEnvironment.PATH}`, GOAL_QA_SLOT_DIRECTORY: slots, GOAL_QA_SLOTS: '1',
         GOAL_QA_WAIT_DIR: join(slots, 'waiters'), GOAL_QA_HEAVY_RUN: '0', GOAL_IN_SLOT: '0',
+        REZICS_QA_ARTIFACT_ROOT: join(directory, 'artifacts'), REZICS_FIXTURE_ROOT: join(directory, 'fixture'),
+        G727_LAUNCH_PROFILE: undefined, G727_LAUNCH_SOURCE_RUN_ID: undefined, G727_LAUNCH_FIXTURE: undefined,
+        ERASURE_CAMPAIGN_PROFILE: undefined, ERASURE_CAMPAIGN_FIXTURE: undefined,
+        ERASURE_CAMPAIGN_SOURCES: undefined, ERASURE_CAMPAIGN_COPY: undefined,
         REZICS_QA_MEMORY_DEADLINE: String(Date.now() + PROCESS_HANG_MS),
         QA_HARNESS_CONTROL: control, QA_HARNESS_NAME: name, ...extraEnv,
       },
@@ -548,9 +552,13 @@ function startupHarness(directory: string) {
   } };
 }
 
-async function until(predicate: () => boolean, description: string): Promise<void> {
+async function until(predicate: () => boolean, description: string,
+  run?: { child: ReturnType<typeof Bun.spawn>; output: Promise<string[]> }): Promise<void> {
   const deadline = Date.now() + PROCESS_HANG_MS;
   while (!predicate()) {
+    if (run && run.child.exitCode !== null) {
+      throw new Error(`Runner exited ${run.child.exitCode} while waiting for ${description}: ${(await run.output).join('\n')}`);
+    }
     if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${description}`);
     await Bun.sleep(10);
   }
@@ -747,7 +755,7 @@ test('an erasure-only selection prepares its default small fixture before the sh
     expect(preparation?.args).toContain('--profile');
     expect(preparation?.args).toContain('small');
     expect(shard?.values.ERASURE_CAMPAIGN_FIXTURE).toBe('fixture-erasure-prepared');
-    expect(shard?.values.REZICS_FIXTURE_ROOT).toBe(join(root, '.temp', 'fixture'));
+    expect(shard?.values.REZICS_FIXTURE_ROOT).toBe(join(directory, 'fixture'));
     expect(events.findIndex(event => event.phase === 'prepare'))
       .toBeLessThan(events.findIndex(event => event.phase === 'stack-up'));
   } finally { await harness.stop(); rmSync(directory, { recursive: true, force: true }); }
@@ -844,20 +852,23 @@ test('failed small-fixture preparation stops before any erasure shard starts', a
 
 test('finished fixture preparation releases its lease before drill startup admission', async () => {
   const directory = mkdtempSync(join(root, '.temp', 'qa-preparation-stack-transition-'));
-  const harness = startupHarness(directory);
+  // A surrounding gate's retained source must not bypass this preparation.
+  const harness = startupHarness(directory, { ...process.env,
+    G727_LAUNCH_SOURCE_RUN_ID: 'inherited-source', G727_LAUNCH_FIXTURE: 'inherited-fixture',
+  });
   const drill = [...selfManagedFaultFiles].find(file => file.endsWith('launch-drill.test.ts'))!;
   try {
     expect(drill).toBeDefined();
     const run = harness.startGoal('preparation', [drill], {
-      G727_LAUNCH_PROFILE: 'small', G727_LAUNCH_SOURCE_RUN_ID: '', G727_LAUNCH_FIXTURE: '',
+      G727_LAUNCH_PROFILE: 'small',
     });
-    await until(() => existsSync(join(harness.control, 'preparation-prepared')), 'stopped prepared source');
-    await until(() => qaWaitStatusLines(harness.slots).some(line => line.includes('Waiting; QA memory:')), 'drill memory wait');
+    await until(() => existsSync(join(harness.control, 'preparation-prepared')), 'stopped prepared source', run);
+    await until(() => qaWaitStatusLines(harness.slots).some(line => line.includes('Waiting; QA memory:')), 'drill memory wait', run);
     expect(existsSync(join(harness.slots, '0'))).toBe(false);
     const other = await acquireQaSlots(harness.slots, 1, { GOAL_QA_SLOTS: '1' }, process.pid, { deadline: Date.now() });
     other.release();
     writeFileSync(join(harness.control, 'preparation-memory'), '');
-    await until(() => existsSync(join(harness.control, 'preparation-started')), 'drill startup after admission');
+    await until(() => existsSync(join(harness.control, 'preparation-started')), 'drill startup after admission', run);
     expect(existsSync(join(harness.slots, '0'))).toBe(true);
     writeFileSync(join(harness.control, 'preparation-finish'), '');
     expect(await run.child.exited).toBe(1);

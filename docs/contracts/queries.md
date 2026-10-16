@@ -2,7 +2,7 @@
 
 ## Vocabulary
 
-Decided by the maintainer on 2026-09-28. The terms follow RDF, SKOS and faceted
+The terms follow RDF, SKOS and faceted
 search. Anything a reader can filter by is a Resource; what differs is the path
 from the queried Resource to it.
 
@@ -34,7 +34,7 @@ For example, fiction based on Blue Archive with a female lead, as Global reads i
 
 ## Decisions
 
-- **Structural type is not grouping.** The 2026-09-29
+- **Structural type is not grouping.** The
   [open-vocabulary decision](classification.md#restricted-structure-and-open-vocabulary)
   distinguishes registered structural types from descriptive types without
   behaviour. Genre, form and topic remain Concepts: a web novel is a Book
@@ -67,7 +67,7 @@ discriminants named `kind` are unaffected. A persisted profile id such as
 
 ## Concepts and value pages
 
-Decided by the maintainer on 2026-09-28. Tags were clear because one mechanism
+Tags were clear because one mechanism
 served every use: a tag opened the list of what carried it, and several tags
 combined as all, any or none. That experience stays, generalized to every value.
 
@@ -108,7 +108,7 @@ viewer's Access; none can enlarge another, and a detail route checks the same
 membership. A Zone is a [routed site](../product/platform-thesis.md#zones-are-routed-sites)
 over shared resources, so a fixed Realm is not its boundary: one Zone may span
 several domains and Realms, and a Realm's Context selects acceptance, not
-population (2026-09-30). Named terms resolve through an explicit,
+population. Named terms resolve through an explicit,
 speaker, entry or Global policy before compiling their admitted definitions;
 equal-priority meanings remain ambiguous. Saved Filters retain exact
 DefinitionRefs and Context revisions. A new Concept cannot erase another's
@@ -152,7 +152,6 @@ own type-name tables.
 
 ## Complete traversal
 
-Decision 12, product manager under maintainer delegation, 2026-09-29.
 Previews, ranked retrieval and exhaustive inventories are different promises.
 Every inventory continues through its whole population and states count precision
 and freshness. A request bound is never a product limit. This matters for exports,

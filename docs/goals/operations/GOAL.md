@@ -9,7 +9,7 @@ areas:
   - docs/operations/**
 ---
 
-# Operations
+# Operations Goal
 
 Status: started by the [program](../program/GOAL.md) on 2026-10-13 15:34 UTC with the
 restore, drill and release work that does not depend on the erasure contract. The
@@ -21,13 +21,13 @@ erasure and recovery contracts; [state.md](state.md) lists the work carried over
 What an operator must be able to do is proved on physical fixtures, not on
 doubles:
 
-- **Erasure.** A person's private copies and personal data are gone from live
+- Erasure. A person's private copies and personal data are gone from live
   storage, from the search index and from a restored backup, inside the 30-day
   retention window; the proof restores a backup taken before the erasure and
   shows the erased data absent after replay.
-- **Restore.** The stack is rebuilt from backup artifacts alone, on a schedule,
+- Restore. The stack is rebuilt from backup artifacts alone, on a schedule,
   and serves reads and writes afterwards.
-- **Deployment preparation.** The release image starts with what the code
+- Deployment preparation. The release image starts with what the code
   imports, and the [production plan](../../operations/deployment.md) is current.
 
 The method's shape holds here too: the outcome is a drill that fails first and

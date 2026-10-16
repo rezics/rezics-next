@@ -112,7 +112,6 @@ registration grants no Resource rights and is limited to Main and the declared
 agent scope ceiling. Client metadata documents need a separately qualified
 discovery profile.
 
-Decision 14, product manager under maintainer delegation, 2026-09-29.
 Each supported capability is to declare authority, inputs, outcomes, pagination,
 retry/recovery, SDK/MCP mapping and the human journey: discover, act, confirm,
 return, recover, leave. Internal and deferred capabilities retain a reason.
@@ -128,7 +127,6 @@ than exposing one undifferentiated tool per endpoint.
 
 ## Developers and phones
 
-Decision 25, product manager under maintainer delegation, 2026-09-29.
 Deliver the registry-generated portal, an external TypeScript SDK, scoped
 personal/delegated credentials, [RFC 9457 errors](https://www.rfc-editor.org/rfc/rfc9457.html)
 and durable event replay. Responsive web is the first mobile client, with optional

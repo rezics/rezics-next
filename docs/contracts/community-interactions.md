@@ -31,7 +31,7 @@ presence in the product map can count as delivered.
 
 ## Follow, Join and notification
 
-Maintainer, 2026-10-02. Three relationships, and never one word for two of them:
+Three relationships, and never one word for two of them:
 
 | Product term | Meaning | Target | Effect |
 | --- | --- | --- | --- |
@@ -81,7 +81,6 @@ Follow, Join, Leave, Invite, Ignore and Block.
 
 ## Community completeness
 
-Decision 20, product manager under maintainer delegation, 2026-09-29.
 Reach Reddit-level task completeness through independent posts in any content
 language, follow distinct from join, newcomer trust and budgets, moderation
 cases with correspondence, rules per language, founder activation and reviewed

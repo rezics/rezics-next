@@ -9,6 +9,7 @@ import { getMessages, getTranslation } from '../../i18n/server.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
+import { spaceAccessApi } from '../manage/settings-api.ts';
 import { ZoneBrowse } from '../zones/browse.tsx';
 import {
   parseBrowseState,
@@ -123,11 +124,17 @@ async function realmRoute(
   if (view.kind === 'unavailable')
     return <RealmUnavailable messages={await getMessages('realm', locale)} failure={view.failure} reference={view.reference} />;
   if (view.kind === 'join')
-    return privateJoinPage(
-      view.page,
-      locale,
-      site ? siteHref(locale, realm, tab === 'home' ? [] : [tab]) : realmHref(locale, realm, tab),
-    );
+    return <>
+      {view.problem ? <p role="alert" className="mx-auto w-full max-w-2xl px-4 pt-8 sm:px-6"
+        data-status={view.problem.status} data-problem-code={view.problem.code}>{view.problem.title}</p> : null}
+      {await privateJoinPage(
+        view.page,
+        locale,
+        site ? siteHref(locale, realm, tab === 'home' ? [] : [tab]) : realmHref(locale, realm, tab),
+        client ? { actingSubject: client.actingSubject,
+          api: spaceAccessApi(() => client.personal ?? client.main, view.page.space, view.page.id, client.actingSubject ?? '') } : undefined,
+      )}
+    </>;
   const frame = {
     view,
     tab: site ? null : tab === 'rules' || tab === 'members' ? 'about' : tab,
@@ -490,7 +497,7 @@ export function RealmAboutRoute(props: RealmRouteProps) {
   });
 }
 
-export function RealmRulesRoute(props: RealmRouteProps) {
+export function RealmRulesRoute(props: RealmRouteProps, client?: RealmReadClient) {
   return realmRoute(props, 'rules', async (view, locale) => (
     <RealmAbout
       only="rules"
@@ -504,13 +511,13 @@ export function RealmRulesRoute(props: RealmRouteProps) {
       messages={view.messages}
       rules={publishedRealmRules(view.realm.header.rules)}
     />
-  ));
+  ), false, loadRealmView, client);
 }
 
-export function RealmMembersRoute(props: RealmRouteProps) {
+export function RealmMembersRoute(props: RealmRouteProps, client?: RealmReadClient) {
   return realmRoute(props, 'members', async (view, locale, search) => {
     const cursor = parseCursor(search);
-    const roster = await readRoster(view.context.realm, cursor);
+    const roster = await readRoster(view.context.realm, cursor, client?.main);
     if (!roster.ok) return failure(view, 'members', roster.failure, roster.reference);
     const people = rosterPeople(roster.data.items, view.messages.memberUnnamed, (agent) =>
       resourceHref('/a/', agent),
@@ -534,5 +541,5 @@ export function RealmMembersRoute(props: RealmRouteProps) {
         />
       </RealmAbout>
     );
-  });
+  }, false, loadRealmView, client);
 }

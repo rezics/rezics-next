@@ -1,4 +1,6 @@
+import '../../../../../apps/web/tests/support/official-package-fixture.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
 import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
 import { readAddress } from '../../../../../apps/web/features/address/client.ts';
@@ -12,6 +14,8 @@ import {
   personaSessions, type PersonaName, type PersonaSession, type PersonaSessions,
 } from '../../../support/personas.ts';
 
+const { closureRosterClient, closureRosterRoute } = await import('../../../../../apps/web/features/realm/realm-closure-roster-recorded-page.tsx');
+
 setDefaultTimeout(180_000);
 const recording = new OutcomeRecorder(declaration);
 const requestLabels = new AsyncLocalStorage<(path: string) => string>();
@@ -24,10 +28,6 @@ const absentRealm = `https://rezics.com/id/${randomUUID()}`;
 const short = (id: string) => id.slice(-36);
 const root = (sessions: PersonaSessions) => `/v1/realms/${short(sessions.realm)}`;
 type Answer = { status: number; body: string };
-async function observe(person: PersonaSession, path: string): Promise<Answer> {
-  const response = await person.main('GET', path);
-  return { status: response.status, body: await response.text() };
-}
 async function command<T>(
   person: PersonaSession, method: string, path: string, body?: unknown,
   status = 200, key?: string,
@@ -94,6 +94,15 @@ async function reads(name: PersonaName) {
   expect(setupFailure, setupFailure ?? '').toBeNull();
   const person = closed[name];
   const failures: string[] = [];
+  const observe = async (_person: PersonaSession, path: string): Promise<Answer> => {
+    const query = new URL(path, 'https://recorded.invalid').searchParams;
+    const target = path.startsWith(root(closed)) ? 'closed' : path.startsWith(root(live)) ? 'live' : 'absent';
+    const kind = path.includes('/roles?') ? 'roles' : path.includes('/members?')
+      ? `management-${query.has('after') ? 'retained' : query.has('limit') ? 'first' : query.has('search') ? 'search' : query.has('role') ? 'role' : 'all'}`
+      : query.has('after') ? 'retained' : query.has('limit') ? 'first' : query.has('featured') ? 'featured' : 'roster';
+    const response = await recording.session(name, person)(`${target}-${kind}`, 'GET', path);
+    return { status: response.status, body: await response.text() };
+  };
   for (const query of ['', '?featured=true', '?limit=1', `?limit=1&after=${encodeURIComponent(retainedCursor)}`]) {
     const path = `${root(closed)}/roster${query}`;
     // Absent currently returns 403. This qualifies equivalence without selecting
@@ -147,14 +156,16 @@ async function productionVisit(name: PersonaName) {
   // Public frame reads have no bearer, including for a signed-in visitor.
   const publicRequest = recording.session(name, closed.visitor);
   const personalRequest = recording.session(name, person);
+  const recorded = new Map<string, Promise<Response>>();
   const fetcher = (async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
-    if (url.origin !== origin) return originalFetch(input, init);
+    if (url.origin !== origin && url.origin !== 'https://recorded.invalid') return originalFetch(input, init);
     const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
     const label = requestLabels.getStore()?.(path);
     if (!label) throw new Error(`Production request has no label: ${path}`);
-    const personal = new Headers(init?.headers).has('authorization');
-    return (personal ? personalRequest : publicRequest)(label, init?.method ?? 'GET', path);
+    const personal = new Headers(init?.headers).has('authorization') || init?.credentials === 'same-origin';
+    if (!recorded.has(label)) recorded.set(label, (personal ? personalRequest : publicRequest)(label, init?.method ?? 'GET', path));
+    return (await recorded.get(label)!).clone();
   }) as typeof fetch;
   const main = browserMainApi(origin, { anonymous: true, fetcher });
   if (name === 'owner') {
@@ -180,6 +191,19 @@ async function productionVisit(name: PersonaName) {
     } });
     const resolution = await frame.resolveRealm(short(closed.realm), 'en');
     if (resolution.kind === 'realm') throw new Error('Closed Realm unexpectedly opened the production members page');
+    const client = closureRosterClient(fetcher, person.actingSubject ?? undefined);
+    const labels = (prefix: string) => (path: string) => `${prefix}-${path.includes('/addresses/') ? 'address'
+      : path.includes('/join-page') ? 'join-page' : path.includes('/session-agent') ? 'session-agent'
+      : path.includes('/person-preferences') ? 'preferences' : path.includes('/platform-access') ? 'access'
+      : path.includes('/joining') ? 'joining' : path.includes('/follow-state') ? 'follow-state' : path.includes('/follows/') ? 'follow'
+      : path.includes('/zone') ? 'zone' : path.includes('/roster') ? 'roster'
+      : path.includes('/ban') ? 'ban' : prefix === 'members' || path.includes('actingSubject=') ? 'private-header' : 'header'}`;
+    await requestLabels.run(labels('members'), () => closureRosterRoute(client, short(closed.realm)));
+    await requestLabels.run(labels('members'), () => closureRosterRoute(client, short(closed.realm), retainedCursor));
+    await requestLabels.run(labels('live-page'), () => closureRosterRoute(client, short(live.realm)));
+    // The rendered membership control refreshes its incomplete follow level after hydration.
+    if (person.actingSubject) await requestLabels.run(labels('live-page'), () =>
+      mainRelationships(person.actingSubject!, { origin: `${origin}/api/main`, fetch: fetcher }).state(live.realm));
   } finally { globalThis.fetch = originalFetch; }
 }
 

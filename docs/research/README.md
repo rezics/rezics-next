@@ -2,7 +2,7 @@
 
 Research pages keep the evidence behind selected choices and the questions that
 still affect implementation. The [storage architecture evaluation](storage-architecture.md)
-records why PostgreSQL + Jena/TDB2/jena-text/Lucene was selected on 2026-09-24;
+records why PostgreSQL + Jena/TDB2/jena-text/Lucene was selected;
 the [architecture owner](../architecture/overview.md) states the result.
 Proprietary MarkLogic/GraphDB/Siren systems were architecture references only:
 required deployment components must be self-hosted open-source or suitable
@@ -15,7 +15,7 @@ about Jena. The [social-reading](reference-social-reading.md) and
 | --- | --- | --- |
 | Application stack and framework tradeoffs | [Stack review](application-stack.md): selected Elysia 2/Bun, Yarn workspaces and vinext/Vite on Workers; Hono/Next alternatives, version evidence and bounded verification limits. | [Main application](../../services/main/src/app.ts), [workspace layout](../development/repository-structure.md), [frontend](../plan/frontend.md). |
 | Mature toolchain selection | [Toolchain survey](toolchain-survey.md): Jena modules, model/mapping tools, language libraries, domain standards and operations candidates. Executed graph evidence remains in the [CJK probe](../../scripts/research/jena_text_cjk/README.md); framework evidence has its separate scope in the stack review. | Each linked owner; [search](../contracts/search.md) for analyzer and query construction. |
-| Agent-efficiency tooling | [Re-evaluation](agent-efficiency-tooling.md): which development tools shorten Goal batches now, with the adopted changes, rejected candidates such as go-task and their revisit triggers. | [Toolchain lock](../development/toolchain.md), [test harness](../testing/test-harness.md). |
+| Agent-efficiency tooling | [Re-evaluation](agent-efficiency-tooling.md): which development tools shorten Goal batches now, with the adopted changes, candidate evaluations and their revisit triggers; Task is now the root command facade. | [Toolchain lock](../development/toolchain.md), [test harness](../testing/test-harness.md). |
 | Source data rights and acquisition terms | [U.S. reuse review](source-data-rights.md): facts versus expression, use-specific NC/fair use, ShareAlike and provider terms; individual uses and VNDB license details retain explicit evidence limits. | [Source lifecycle](../contracts/source-lifecycle.md), [rights](../contracts/license-grants.md). |
 | Semantic Web coverage and application-specific meaning | [Model coverage audit](semantic-web-model-coverage.md): reconcile all previously inventoried model families with standards, community vocabularies and research precedents; qualify exact mappings before adding dependencies or replacing native terms. | [Standards](../contracts/standards.md), [semantic model](../contracts/semantic-model.md), [spatial annotations](../contracts/spatial-annotations.md). |
 | Access storage, object authority and ordered rules | [Comparative review](access-storage-and-policy.md): why PostgreSQL was selected, historical four-backend measurements and decision-snapshot counterexamples. Full performance and scale verification remain later work. | [Identity/access](../contracts/identity-and-access.md), [Access owner](../../services/main/src/modules/access/policy-evaluator.ts). |

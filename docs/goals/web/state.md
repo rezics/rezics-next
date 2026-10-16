@@ -1,5 +1,41 @@
 # State
 
+Checkpoint 9e951fef-ca56-4d4f-9f74-2e6300861e88 consolidates handled events
+task:G-2234:12 and mail:be40da81-bd21-49e3-b30d-3742f48afff1.
+Program's later ruling supersedes G-2234's shared-path and external-record
+holds below; other tasks and later result events retain their own authority.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2234 | Task:G-2234:12 reviewed `86b747940a` and `366f863342` as a bounded implementation step. Canonical `run-rP4qYs` passed all seven phases; seven excused tests reproduced on main `cdaa20bfee`. Retain the 39 named units, 26 stories and 26 phone/desktop PNG inspections as bounded evidence, without promoting complete page proof. A concurrent landing lock appeared while the deciding turn prepared its brief decision; it restored its edit exactly, left no brief commit or duplicate landing, and referred the record gaps and branch/main claim reconciliation to Program in mail:c3a941a5. Mail:be40da81 and committed brief decision `6683758cd6` report the implementation landed as a step and assign the three missing private-page answers to this worker: owner `GET /v1/me/follow-state`, plus stranger and operator `GET /v1/realms/<id>/join-requests/mine`, with the handoff's exact queries. Capture them through the persona recording tool on current main's QA stack and normal row-record path; finish six-persona production page/command proof, phone/desktop inspection and the complete affected surface gate. The mail turn found that continuation active and started no duplicate resume. Keep the task and row open for that remainder; no fabricated answers, frontend workaround, weakened assertion or whole-row acceptance. |
+
+Scope remains 67/68 API rows proved and 402 proved/6 pending persona cells;
+these events promote no row or persona cell. Other retained decisions remain
+historical where their own later events supersede them.
+
+The method's measures, current status and latest efficiency report were read.
+Web's first-attempt share is 23% overall and 0% today (0 of 14); attempts per
+landed task have median 3 and maximum 25 (G-2237). Recorded tokens are
+2063.5M input/13.1M output, with two sessions unavailable and tokens per proved
+row unavailable. Attempts count 71 first, 51 step, 235 fix and 3 capacity;
+11 fixes are inferred. Retained refusals count 0 outcome, 12 gate,
+0 failing-test findings and 18 other. These are aggregate readings, not costs
+attributed to these events. The concurrent ledger now shows G-2234 attempt 18
+exited; its handoff belongs to its own event and is not decided here.
+The latest efficiency report remains dated 2026-10-13 21:49 UTC and supplies
+no comparable measurement of this continuation. Missing private-page recordings
+were the remaining proof gap; Program's ruling lets the surface capture its
+own reached requests while retaining applicable implementation and inspection
+evidence. No efficiency gain or complete page proof is inferred. Earlier
+attempt/token/refusal readings below retain their checkpoint attribution.
+
+Mail:be40da81 was acknowledged by its deciding turn at
+2026-10-16 01:18:52 UTC; its durable acknowledgement was confirmed here.
+The task event supplied no mail. This checkpoint changes only this file and
+starts no worker, landing, closure, watcher or wait.
+
+## Retained checkpoint 242c3f69
+
 Checkpoint 242c3f69-d01c-4978-9592-de02381bf472 consolidates handled events
 task:G-2462:22 and mail:c25572a9-1a6c-46f3-a83d-782c23f05262. Program's
 classification and landing disposition supersede G-2462's earlier hold;
@@ -324,7 +360,7 @@ cross-Goal claim hold, G-2325/G-2235's Program-owned Vite recovery,
 G-2229's membership-transport loan remain as previously decided. G-2333's
 later Cargo-stop disposition supersedes its earlier missing-UTC no-start
 reading for the reported verification job. Program's
-[content-adoption decision](../../architecture/content-adoption.md#decision-supermanager-2026-10-14)
+[content-adoption decision](../../architecture/content-adoption.md#field-meaning-and-admitted-forms)
 at `ab29e5c26` separates a field's semantic role from its value's form;
 content form, derivation and in-content references are separate dimensions.
 Recipe is the first case. Recipes remain in the first public scope and open

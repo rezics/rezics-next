@@ -4,8 +4,7 @@ Content language is independent of interface locale, localized metadata and
 semantic [Context](context.md). A translated display title does not translate a
 book's body. An independently published translation is a realization of the same
 Work with its own custody and a link to its exact source
-([Work levels](work-and-release.md#work-levels-realizations-and-versions),
-2026-09-30); a native multilingual Main Version can also hold several language
+([Work levels](work-and-release.md#work-levels-realizations-and-versions)); a native multilingual Main Version can also hold several language
 contributions, including same-language alternatives. Publication provenance and
 authorization apply to a specific version, never automatically to its successor.
 
@@ -97,7 +96,6 @@ predicate identity and authored meaning.
 
 ## One native-language contract
 
-Decision 7, product manager under maintainer delegation, 2026-09-29.
 Use one BCP 47 parser and localized-value, selection and retrieval contract
 everywhere. Unknown language is preserved, never replaced by English; UI locale
 cannot become authored content language. Account owns interface locale and Main
@@ -114,7 +112,7 @@ different fallback decision and losing meaning on export or re-edit.
 
 ## Vocabulary labels are graph content
 
-Maintainer and product manager, 2026-09-30. Labels of definitions and relations
+Labels of definitions and relations
 (types, properties, roles, Concepts and Facets, with the forms the
 [relation lexicon](semantic-model.md#relation-lexicon) defines) are graph
 content, edited through Main in any BCP 47 language, like names. UI message

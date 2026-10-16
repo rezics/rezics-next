@@ -2,6 +2,7 @@ import type { ResolvedAddress } from './client.ts';
 import { parseAddressSegment } from './path.ts';
 import type { Discovery, JoinPage } from '../manage/settings-api.ts';
 import type { RealmHeader } from '../realm/types.ts';
+import { problemOf, type ServiceProblem } from '../manage/types.ts';
 
 /** Private pages also suppress referrers when Main's older policy omits it. */
 export function privateDiscovery(discovery?: Discovery): Discovery {
@@ -11,7 +12,7 @@ export function privateDiscovery(discovery?: Discovery): Discovery {
 /** What a Realm address read resolves to: the Realm, its request landing, or neither. */
 export type ClassifiedSpacePage =
   | { kind: 'realm'; header: RealmHeader }
-  | { kind: 'join'; page: JoinPage }
+  | { kind: 'join'; page: JoinPage; problem?: ServiceProblem }
   | { kind: 'missing' | 'unavailable' };
 
 /**
@@ -31,8 +32,9 @@ export function classifyRealmSpacePage(realm: string, header: { ok: boolean; sta
   if ([401, 403, 404].includes(landing.status)) return { kind: 'missing' };
   if (!landing.ok) return { kind: 'unavailable' };
   const page = landing.body as JoinPage | null;
+  const problem = problemOf(header.status, header.body);
   return page?.profile === 'realm-join-page-v1' && page.id === `https://rezics.com/id/${realm}` && page.action?.kind === 'request'
-    ? { kind: 'join', page }
+    ? { kind: 'join', page, ...problem ? { problem } : {} }
     : { kind: 'unavailable' };
 }
 
@@ -55,7 +57,7 @@ export async function readRealmSpacePage(key: string, options: {
         ? `?${new URLSearchParams({ actingSubject: options.actingSubject })}`
         : '';
     const header = await read(`/v1/realms/${realm}${query}`, Boolean(query));
-    const headerBody = header.ok ? await header.json() : null;
+    const headerBody: unknown = await header.json().catch(() => null);
     const denied = !header.ok && [401, 403, 404].includes(header.status);
     const landing = denied ? await read(`/v1/realms/${realm}/join-page`) : null;
     const landingBody = landing?.ok ? await landing.json() : null;

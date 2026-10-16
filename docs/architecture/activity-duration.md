@@ -1,12 +1,9 @@
 # Activity duration and estimates
 
-Decided by program on 2026-10-15, with the estimator amendment under "Program review" below. B03 is deliberately pending;
-this change supplies contracts and counterexamples, without handlers, storage,
-admission profiles or a GUI. The staged competitor report's B03 and closing
-decision identify the job: choose an activity that fits the time available.
-Percentage, chapters and completion alone cannot answer it. HowLongToBeat's
-current detailed behavior remains provisional in that report; it is motivation,
-not evidence that this design works.
+Activity duration estimates are deferred beyond the first launch. Contracts
+and counterexamples do not supply handlers, storage, admission profiles or a GUI.
+The intended job is to choose an activity that fits the available time;
+percentage, chapters and completion alone cannot answer it.
 
 ## Existing owners and the decision
 
@@ -92,6 +89,13 @@ runs exist. One sample may yield an estimate with count one. This descriptive
 mean is not a promised completion time, a median, a confidence interval or a
 remaining-time prediction. There is no prior borrowed from other cohorts.
 
+Each cohort component also keeps an additive fixed log-scale histogram of
+finished known durations. Corrections and withdrawals subtract exactly, and
+reads remain one component row per cohort. Return the median bucket interval
+next to the exact mean and counts, naming the bucket scheme and resolution;
+adjacent bounds have a ratio no greater than 1.25. Prove a cohort where one
+outlier moves the mean but not the median interval.
+
 Source-reported aggregates stay in Source custody with source revision,
 retrieval date, reported procedure, unit and sample count. The query selects
 retained source aggregate IRIs explicitly and returns each alongside native
@@ -175,7 +179,8 @@ foreign private reads/writes/exports. Current Main has neither duration capture
 nor duration query routes; each persona must reach an HTTP failure for that
 missing capability, not fail during unrelated fixture preparation.
 
-Program reviews this note and the owning contracts before implementation.
+The owning contracts must include both the mean and median-interval requirements
+before implementation.
 Implementation must make these tests pass without changing them, and add owner
 proof for migration, seal recovery, state/privacy reclassification, source/native
 separation and bounded large-population reads. No visual surface is changed or
@@ -183,33 +188,8 @@ qualified in this step. The later surface must explain sample count, unknowns,
 procedure and the limits of a fit estimate; API success alone proves no human
 usability result.
 
-Qualification on 2026-10-15: QA run `20261015t133833-87dca9` completed fixture
-preparation and executed all six pending persona tests. Every persona reached
-`POST /v1/activity-duration-estimates` and received 404 `not_found`, "No such
-operation", where the outcome requires 200. The runner reports six expected
-failures as passing `test.failing` cases; none of the six cells is proved.
-Production routes were unchanged, so this is the unsupported Main behavior,
-not an implementation of duration. `task goal -- check` passed types, API
-inference, lint, AST checks and guards; `task docs:check` passed. The remaining
-assertions intentionally await implementation and do not yet prove corrections,
-export or disclosure behavior.
-
-## Program review
-
-Accepted on 2026-10-15 with one amendment. A mean alone is not a fit estimate:
-one run left idle for days moves it arbitrarily far, and small cohorts have no
-protection against that. Each cohort component therefore also keeps an additive
-fixed log-scale histogram of known finished durations, the same pattern as the
-rating histograms, so corrections and withdrawals subtract exactly and reads
-stay one component row per cohort. The estimate discloses the median as the
-bucket interval that contains it, with the bucket scheme and its resolution
-named in the response (adjacent bucket bounds within a ratio of 1.25), next to
-the exact mean and the counts. The histogram is part of the first
-implementation, and the outcome test asserts a cohort where one outlier moves
-the mean but not the median interval.
-
-Deferred past the first launch on 2026-10-16: the launch scope is the rows the
-first public release needs, and B03 is a new capability. The pending
-`games/play-duration-estimates` row and its outcome test were removed from the
-launch registry; they remain in commit `9764891737` and return with the
-implementation brief.
+The launch registry has no duration-estimate row. Restore the deferred
+`games/play-duration-estimates` outcome specification from commit `9764891737`
+with the implementation brief, incorporating the median requirement before
+proving its persona outcomes. The earlier unsupported-route probe established
+no correction, export or disclosure behavior.

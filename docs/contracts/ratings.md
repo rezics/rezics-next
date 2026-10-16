@@ -7,7 +7,7 @@ its model profiles and owner tests. RATE01–09 scenarios remain in the
 
 ## Scoped targets and roll-ups
 
-Decision 53, maintainer and product manager, 2026-10-04. An observation targets
+An observation targets
 exactly one Resource; "X in F" is a [projection](semantic-model.md#identities-variants-and-projections),
 so the rating `projection` grain covers "Character in an episode", "Person in a
 match or map" and "unit in a game version" without a second target. The question

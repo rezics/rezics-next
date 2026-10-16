@@ -7419,6 +7419,23 @@
           "cache-control": "no-store",
           "content-type": "application/problem+json"
         }
+      },
+      {
+        "label": "private-page-own-join-requests",
+        "operationId": "getV1RealmsByRealmJoin-requestsMine",
+        "method": "GET",
+        "path": "/v1/realms/01a13e7c-f0f3-71cb-a38c-d7d83d308322/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F342c141c-093b-4534-b2c6-a783089c6483&limit=50",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "content-type": "application/problem+json",
+          "cache-control": "no-store"
+        }
       }
     ],
     "member": [
@@ -19504,6 +19521,23 @@
           "cache-control": "no-store",
           "content-type": "application/problem+json"
         }
+      },
+      {
+        "label": "private-page-follow-detail",
+        "operationId": "getV1MeFollow-state",
+        "method": "GET",
+        "path": "/v1/me/follow-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F92eaa5d9-d281-4521-8492-bb156945735a&target=https%3A%2F%2Frezics.com%2Fid%2F01a13e7c-f0f3-71cb-a38c-d7d83d308322",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "content-type": "application/problem+json",
+          "cache-control": "private, no-store"
+        }
       }
     ],
     "moderator": [
@@ -28274,6 +28308,23 @@
         "headers": {
           "cache-control": "no-store",
           "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "private-page-own-join-requests",
+        "operationId": "getV1RealmsByRealmJoin-requestsMine",
+        "method": "GET",
+        "path": "/v1/realms/01a13e7c-f0f3-71cb-a38c-d7d83d308322/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F393d7f61-1c1e-44b6-ad4a-31cfa5194aba&limit=50",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "content-type": "application/problem+json",
+          "cache-control": "no-store"
         }
       }
     ]

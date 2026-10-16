@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { dirname, join } from 'node:path';
 import { BRIEF_KINDS, type Ledger, type Task } from './types.ts';
 import { mechanismSectionErrors, parseBrief, parseFrontmatter, validateBrief } from './briefs.ts';
+import { dispatchMethodErrors } from './tasks.ts';
 import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
 
 const spawnSync = fixtureSpawns(60_000);
@@ -40,7 +41,7 @@ function repository() {
 }
 
 describe('brief skeleton', () => {
-  for (const kind of BRIEF_KINDS) test(`new writes a complete valid ${kind} skeleton`, () => {
+  for (const kind of BRIEF_KINDS) test(`new writes a complete valid ${kind} skeleton`, async () => {
     const repo = repository();
     try {
       const created = repo.run(['new', '--kind', kind, '--goal', 'alpha', 'Example brief'], { GOAL_ENGINE: 'claude' });
@@ -51,6 +52,12 @@ describe('brief skeleton', () => {
       const completed = skeleton.replace('## Outcome\n', '## Outcome\n\nThe worker delivers the stated outcome.\n')
         .replace('## Checks\n', '## Checks\n\nRun the declared proofs.\n');
       const brief = parseBrief(completed);
+      if (kind === 'mechanism') {
+        expect(await dispatchMethodErrors(brief, completed)).not.toEqual([]);
+        const reviewed = completed.replace('## Design note\n', '## Design note\n\nBound each reader and writer through its owner.\n')
+          .replace('Reviewed: YYYY-MM-DD', 'Reviewed: 2026-10-13');
+        expect(await dispatchMethodErrors(brief, reviewed)).toEqual([]);
+      }
       expect(brief.kind).toBe(kind);
       expect(brief.title).toBe('Example brief');
       expect(brief.engine).toBe('sol');

@@ -52,13 +52,11 @@ music grains do not correspond exactly to REZICS identities.
 
 ## Explicit identities, targets and units
 
-Decision 6, product manager under maintainer delegation, 2026-09-29.
 Versioned profiles must distinguish series and independently identified volumes,
 editions/releases and coverage (omnibus, partial, region, platform), anime
 series/seasons/episodes, characters and contextual credits, and reading sessions.
 Copies and loans keep distinct identity as private records in the library
-owner's PostgreSQL, beside reading status, rather than versioned model profiles
-(Kernel and launch, 2026-10-07). A copy names an exact release; a loan names that
+owner's PostgreSQL, beside reading status, rather than versioned model profiles. A copy names an exact release; a loan names that
 copy, its direction, a Person reference or free-text counterparty, start, due and
 return instants. A free-text name never resolves to a Person. Ownership does not
 imply reading completion or a public graph fact. Reviews identify story,
@@ -82,8 +80,7 @@ profiles above carry their field-level contracts; unknown correspondence stays u
 
 ## Work levels, realizations and versions
 
-Maintainer and product manager, 2026-09-30, adopting R56; the rule for rewrites
-is the maintainer's. **A unit is its own Work when evidence identifies a
+**A unit is its own Work when evidence identifies a
 persistent creative or editorial scope that people need to identify
 independently** across occurrences or publications: creator or publisher
 designation, stable boundaries, independent attribution, established
@@ -179,7 +176,7 @@ works whose web and published versions diverge are the acceptance fixtures.
 
 ## Posts, texts and Works
 
-Maintainer and manager, 2026-10-05. **A Post is a publication, not a Work.**
+**A Post is a publication, not a Work.**
 Publishing a chapter creates a Post and places it in its Book's Structure; it
 never mints a Work. Four layers stay separate:
 
@@ -220,7 +217,7 @@ and gave a thousand-chapter novel a thousand Works.
 
 ## Catalogue acceptance fixtures
 
-Research R55, 2026-09-30. The default boundary between one Work and two is
+The default boundary between one Work and two is
 **narrative incompatibility or a deliberate independent retelling**, never word
 count, language, ISBN or marketing:
 
@@ -261,8 +258,8 @@ Two Works are warranted where authors state the published story diverged:
 [Herbivorous Dragon](https://ncode.syosetu.com/n9375ea/48/) and
 [Cheated Magic Swordsman](https://ncode.syosetu.com/n0447ca/). Ascendance of a
 Bookworm, Mushoku Tensei, Log Horizon, Arifureta and KonoSuba are one-Work
-controls; Re:Zero and Tanya stay undecided until their texts are compared. That
-the SAO web and bunko versions are two Works is the maintainer's decision; the
+controls; Re:Zero and Tanya stay undecided until their texts are compared. The
+SAO web and bunko versions are two Works; the
 exact extent of the rewrite remains unverified.
 
 Acceptance queries, each through the API and the UI:

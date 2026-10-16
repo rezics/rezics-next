@@ -1,9 +1,9 @@
 # Private anchored journals and return state
 
-Status: decided by program on 2026-10-16 (see Program review). This note proposes ownership
-and semantics for competitor-coverage finding B06. It adds no contracts, scope
-rows, operations, schemas or implementation. Program reviews the proposal before
-the contract step.
+This design defines ownership and semantics for private journals. Contracts,
+operations, schemas, persona proofs and implementation follow after the wave
+that changes Content ownership. The first cut has no sharing; anchors change
+only through explicit reanchoring.
 
 The missing job is to leave private context at a particular place and recover
 it on return: a reader's edition passage, a player's attempt, or a member's
@@ -242,11 +242,3 @@ The later UI must make privacy, exact/unresolved targets, conflicts and leaving
 understandable while preserving richer saved state. This static review and
 documentation check establish neither API behavior, human usability nor
 competitor replacement parity.
-
-## Program review
-
-Accepted on 2026-10-16 as proposed: private custody in Content, no sharing in
-the first cut, exact anchors with explicit reanchoring only, the ordered-marker
-meaning and the admission budgets. The contract and pending-row step follows on
-the same pattern as the other decided capabilities, after the wave merges that
-change Content's owners.

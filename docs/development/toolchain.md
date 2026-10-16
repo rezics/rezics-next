@@ -1,6 +1,6 @@
 # Toolchain and root commands
 
-This is the maintainer entry point for tools used by this checkout. The tables
+This is the entry point for tools used by this checkout. The tables
 below come from the root and workspace manifests, release/runtime pins, Aspire
 config, Compose, the Fuseki Dockerfile and `Taskfile.yml`. The
 [toolchain survey](../research/toolchain-survey.md) records alternatives and
@@ -25,7 +25,7 @@ changed collation versions, and records repairs on the disposable copy. See
 and [collation version repair](https://www.postgresql.org/docs/18/sql-altercollation.html).
 
 The development host uses native Docker Engine 29.9 (`docker-ce`), context
-`default`, through `/var/run/docker.sock` as of 2026-10-14. It replaced Docker
+`default`, through `/var/run/docker.sock` and replaces Docker
 Desktop because the QEMU VM pinned up to 18 GiB of host RAM as shared memory
 and imposed a 24 GiB container ceiling. Start the native engine with
 `sudo systemctl start docker`. QA admission uses host MemAvailable and one
@@ -71,13 +71,6 @@ skips the test stage when building the runtime image. Jena downloads try
 This split removes the 16–40 minute native suite and slow archive download from
 ordinary image preparation without weakening the gate; simultaneous image
 builds previously repeated the suite while waiting on its fixture cache lock.
-On 2026-10-14, native Docker built the missing final tag in 33.6 seconds with
-Maven dependencies cached; a concurrent second caller waited 33.2 seconds and
-started no build, and an existing-tag call took 140 ms. A completely cold Maven
-dependency layer took 249 seconds in an earlier 277-second image build. The
-intentional Java failure probe rejected the gate's native-proof runner and
-retained the Maven failure output.
-
 Type checks run `bun check`, Bun's built-in checker (the same errors as `tsc` from
 TypeScript 7, in seconds instead of minutes), so the host needs Bun 1.4.3 or newer and
 `task <workspace>:typecheck` refuses an older one. `tsc` stays installed for the Eden gate
@@ -362,9 +355,11 @@ notices the parent pid is gone. `task jena:check` takes no dataset or path
 argument. If the Compose image is not local it stops and names that tag; it
 does not select an older image. Generated shapes must already exist
 (`task gen`). Wiring this command into root check or CI belongs to the program
-gate, not this task.
+gate, a separately scoped tooling change.
 
-## Architecture evaluation exception (2026-09-24)
+<a id="architecture-evaluation-exception-2026-09-24"></a>
+
+## Disposable architecture evaluation
 
 The [storage research runner](../../scripts/research/storage_architecture/README.md)
 admits native PostgreSQL, Java, Rust, Podman and candidate engines only for
@@ -379,7 +374,7 @@ the runner reports its absence rather than treating that comparison as a pass.
 
 ## Agent terminal workspaces
 
-termspaces 0.2.0 (the maintainer's CLI, installed on the host with `yarn global`,
+termspaces 0.2.0 (installed on the host with `yarn global`,
 not a repository dependency) declares tmux workspaces in
 `~/.config/termspaces/workspaces/` and runs them on its own tmux server under
 systemd. Goal managers and workers are meant to run in its windows, registered
@@ -817,9 +812,7 @@ enable lingering or choose a system service. The unit preserves
 
 Agents drive a real browser through [BrowserOS](https://github.com/browseros-ai/BrowserOS),
 a Chromium fork with a built-in MCP server; it replaced the Claude in Chrome
-extension on 2026-09-28 (maintainer). The extension was hard to drive and
-refuses some public reference sites, and headless Playwright trips those sites'
-bot checks. Playwright stays for scripted tests, stories and repeatable
+extension for interactive browsing. Playwright stays for scripted tests, stories and repeatable
 measurements.
 
 - Host installation: v0.50.5 AppImage at `~/.local/opt/browseros/` (checksum

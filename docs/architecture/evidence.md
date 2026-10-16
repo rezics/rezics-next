@@ -1,6 +1,6 @@
 # Design evidence and qualification boundaries
 
-The PostgreSQL + Jena/TDB2/jena-text selection was confirmed 2026-09-24 after
+The PostgreSQL + Jena/TDB2/jena-text selection follows
 reviewing official sources on 2026-09-23–24. These sources explain mechanisms;
 they do not prove REZICS's combined protocol or production capacity.
 

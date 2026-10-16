@@ -55,6 +55,7 @@ export interface RealmReadClient {
   signedIn: boolean;
   /** Replaying fetch for a story. Production omits it and the header uses the browser session. */
   fetch?: typeof fetch;
+  resolution?: Parameters<typeof realmFrameReads>[0]['resolution'];
 }
 
 // Published modules use the public viewer. Member-readable Realm and Zone
@@ -269,10 +270,10 @@ export const readRealmDirectory = cache(
 
 /** The members who chose to be listed (G-314's public roster), featured first by the moderators' choice. */
 export const readRoster = cache(
-  async (realm: string, cursor?: string): Promise<Loaded<RealmRoster>> =>
+  async (realm: string, cursor?: string, client?: MainClient): Promise<Loaded<RealmRoster>> =>
     settle(
       () =>
-        main()
+        (client ?? main())
           .v1.realms({ realm })
           .roster.get({ query: { limit: 24, after: cursor } }),
       cursor,

@@ -29,7 +29,6 @@ is a publication artifact awaiting factual and legal review.
 
 ## AI disclosure and consent
 
-Decision 3, product manager under maintainer delegation, 2026-09-29.
 Prose, artwork and translations carry revision-aware AI-use declarations
 (none, assisted, generated) and human-review status that readers can filter.
 Declarations remain separate from rights: identifying a method cannot grant

@@ -1,53 +1,9 @@
 # How work is defined, proved and landed
 
-Status: designed on 2026-10-12 at the maintainer's request, from that day's
-measurements. Since 2026-10-13 `goalctl` enforces the brief kinds, the landing
-rules and the attempt cap; the [program](program/GOAL.md#next-tasks) builds the
-rest. Until a check exists in code, managers apply it by hand and say so in the
-brief.
-
-## Why
-
-On 2026-10-12 three Goals ran about 25 workers for ten hours. 77 tasks closed and
-the scope registry did not move for the last three hours. Measured from the run
-logs of that day:
-
-| Measure | Value |
-| --- | --- |
-| Worker attempts | 502: 101 first attempts, 377 resumes after a review, a gate or a rebase, 24 capacity retries |
-| Worker output from first attempts | 7% (59% came from a task's fifth or later attempt) |
-| Landing reviews | 245, of which 171 returned blocking findings; 505 reviewer passes |
-| Findings | 813: 644 P2; 296 anchored in tests, fixtures or scripts; 149 in the web; 245 need a specific interleaving |
-| Worker output by Goal | Launch (web and launch-facing API) 53%, Kernel 31%, Trust-ops 14% |
-
-What the figures showed:
-
-- **Done was defined after the fact and without a limit.** A task was done when
-  an adversarial reviewer found nothing in its diff. One pass finds a small part
-  of what the next pass would find, so every round returned something, mostly
-  about tests and hypothetical interleavings, and every finding cost a resume.
-- **Plain outcomes were never asked.** The Gutenberg recipes were "proved" by the
-  importing author's own view; no test asked what another reader sees or under
-  which rights basis the text was published. A private Realm's member could not
-  read its decisions for the same reason: the proof had one persona.
-- **The web was verified like the kernel**, with the same review and a browser
-  proof for each row, although it only consumes the API.
-- **Shared mechanisms were designed inside tasks.** A contract landed with test
-  doubles as its only implementations and made public reads unavailable for two
-  and a half hours; a fence that replayed whole reads multiplied one reader's
-  queries by five and no test noticed. About a dozen tasks existed only to undo
-  or patch another landing.
-- **Rules in documents did not hold.** "Stop after three attempts" was written
-  on 2026-10-11; tasks took 9, 12 and 31 attempts the next day, each exception
-  granted in a mail.
-
-Published evidence agrees where it exists: a finding should block only when it
-names a violated acceptance criterion or comes with a reproducible failure;
-acceptance checks stated before the work lower its cost; agents over-mock their
-own tests, and almost half of their merged fixes change behaviour on inputs
-their tests never reach; adding coordinating agents does not raise success, and
-failures sit on the seams between owners. The sources are in the report this page
-was written from, archived with the 2026-10-12 Goals.
+The [brief validator](../../scripts/goal/briefs.ts),
+[task lifecycle](../../scripts/goal/tasks.ts) and [merge gate](../../scripts/goal/merge.ts)
+carry the executable rules. Managers apply a required check manually until the
+tool implements it, and name that check in the brief.
 
 ## The unit of work is an outcome row
 
@@ -76,16 +32,16 @@ says" is.
 
 ## API first: three tasks for a row
 
-1. **Outcome.** The API operations and one outcome test for each persona, run
+1. Outcome. The API operations and one outcome test for each persona, run
    through the public API of a real stack, with none of our own modules mocked.
    Written before the implementation by a worker that will not write the
    implementation, and shown to fail on `main` for the stated reason. The
    manager reads the matrix as a product owner: is this what each person should
    get? A wrong answer here costs a paragraph.
-2. **Implementation.** Makes those tests pass. It does not edit them; a needed
+2. Implementation. Makes those tests pass. It does not edit them; a needed
    change goes back to the manager and into the brief first. Done means the
    row's outcome tests, the unit gate and the repository guards pass.
-3. **Surface.** The web consumes the operation through the typed client and
+3. Surface. The web consumes the operation through the typed client and
    shows each state the operation's contract can answer as a story fed by
    answers recorded from the row's outcome tests: loading and populated always;
    empty, error and pending where the contract admits them (pending is a `202`
@@ -98,24 +54,19 @@ says" is.
    surface task itself. The surface task claims the row's outcome test and
    record, imports the production client, changes no assertion and no cell,
    and runs the answer-records guard. A separate record task is briefed only
-   for a row that no surface task holds. (2026-10-14: passing each gap
-   through program to a record task and back took a third of all attempts,
-   and each hop waited for a manager turn.)
+   for a row that no surface task holds.
 
 A row is proved when its outcome tests pass on the shared stack. The surface
 follows a proved row and never leads it.
 
-From 2026-10-14 06:05 UTC, open work runs in [waves](wave.md). A build phase
+Open work runs in [waves](wave.md). A build phase
 implements on one shared branch and starts no stack. A prove phase runs the
 whole suite and fixes what fails. The order above still holds inside a wave:
-each row's outcome test is the specification. What changes is that the tests
-run once per wave, not once per task. Measured since launch: 43% of worker
-input was spent waiting, against 10% editing, and record tasks took a third of
-all attempts.
+each row's outcome test is the specification. Tests run once per wave rather than once per task.
 
 ## What blocks a landing
 
-The tool decides, not the reviewer and not a mail:
+The landing gate blocks on:
 
 - an outcome test that fails, is skipped, weakened or edited by the
   implementation task;
@@ -140,12 +91,10 @@ or write a design note. `goalctl` refuses a further resume without that entry.
 A change to a mechanism other rows build on (`scripts/static/mechanisms.ts`):
 
 - starts from a one-page design note in the brief, read by its Goal's manager
-  before any code (the tool still asks for the line `Read by program:`): which readers and writers it touches, and how each still
-  passes;
+  before code: which readers and writers it touches and how each still passes.
+  The [brief validator](../../scripts/goal/tasks.ts) defines the review marker;
 - states the observable outcome ("reads per request do not depend on the number
-  of matches"), never the mechanism to build. On 2026-10-12 "nothing replays
-  the whole read" produced hand-written fences with three holes; "a bounded
-  number of reads" was met by moving one loop;
+  of matches"), rather than prescribing a second mechanism;
 - lands with a test on the real composition (`composeMain`), not on a double;
 - has one open task at a time for each mechanism.
 
@@ -167,10 +116,3 @@ in the same files goes to one worker as an ordered list, not to several.
 | Attempts for each landed task | Median two or fewer; three is the cap |
 | Tokens for each proved row | Compared between Goals and weeks |
 | Findings that blocked, by kind | Anything but the three kinds above is a tool defect |
-
-## What this replaces
-
-Reviews that run until nothing is found; three parallel review passes; a browser
-proof for every row; classing a finding as must-do because it is a defect;
-a manager's mail deciding each third review; briefs that name a mechanism to
-build.

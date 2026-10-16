@@ -1,6 +1,6 @@
 # Recipe profile and adoption
 
-The [content-adoption decision](../architecture/content-adoption.md#decision-supermanager-2026-10-14)
+The [content-adoption decision](../architecture/content-adoption.md#field-meaning-and-admitted-forms)
 is implemented by the [Recipe facts profile](../../model/definitions/recipe-facts-v1.ts)
 and exact Structure selections. Recipes open publicly only after
 [`recipes/instructions-in-any-form`](../../scripts/qa/cases/outcomes/recipes/instructions-in-any-form.ts)

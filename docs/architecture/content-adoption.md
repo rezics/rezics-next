@@ -1,13 +1,13 @@
 # Field meaning, content forms and adoption
 
-Design proposal for the supermanager, 2026-10-14. Repository basis:
-`1d7d0ccda47a03663b68d71152dca99ad38bfa8f`. This note recommends a boundary;
-it does not activate profiles, change public scope, or claim a migration has
-passed. Recipe is the inspected implementation. Book publication, Work metadata,
-Zone presentation and character wiki below are bounded samples, not completed
-audits of those domains.
+This design defines field meaning, admitted content forms, derivation and
+references. Recipes remain in the first public scope and open after the vertical
+slice's API outcomes pass. The inspected implementation basis is
+`1d7d0ccda47a03663b68d71152dca99ad38bfa8f`; the inventory describes that baseline,
+not current rollout status. Book publication, Work metadata, Zone presentation
+and character wiki are bounded samples, not completed audits.
 
-## Decision proposed
+## Field meaning and admitted forms
 
 Decide a field's **semantic role** before deciding the **forms** its values may
 take. An instruction, description, preparation note, quantity, source citation
@@ -30,10 +30,9 @@ meaning, standard vocabulary, bounded operations and pre-public convergence in
 
 Change this boundary **before Recipes open publicly**, while retaining the
 current useful behaviour and task APIs where they still earn their existence.
-The implementation should be commissioned as bounded owner changes after this
-review. Opening should depend on replacement API proofs, not merely a new shape
+The implementation should be commissioned as bounded owner changes after its contracts are specified. Opening should depend on replacement API proofs, not merely a new shape
 or successful data conversion. Recipes are first-public-scope work under
-[the API Goal](../goals/api/GOAL.md) and [target architecture §13](target-architecture.md#13-決定記錄與剩餘事項).
+[the API Goal](../goals/api/GOAL.md) and [target architecture §13](target-architecture.md#release-choices-and-unresolved-qualification).
 
 ## What exists, and what is missing
 
@@ -80,7 +79,7 @@ selection. The precise choice of Content extension payload versus referenced
 HowToStep resources needs a fixture proving reuse, exact revision selection,
 export and bounded reading before activation. Do not create both as competing
 authoritative representations. [Current registration](../../services/main/src/modules/recipe/structure-profile.ts),
-[target placement](target-architecture.md#2-數據放置與表示).
+[target placement](target-architecture.md#data-placement-and-representation).
 
 Record derivation using PROV-O's Entity/Activity/Agent and qualified derivation
 terms, with existing revision-qualified fragments as inputs. It should express
@@ -267,11 +266,11 @@ Inventory source: [scaled result and nutrition](../../services/main/src/modules/
 
 | Site and current coupling | Replacement within existing owners |
 | --- | --- |
-| [Structure format](../../services/main/src/modules/structure/format.ts): Recipe profile/roles, IngredientLine/RecipeStep union, text spans, RecipeMeasure and manifest measures; qualifier reference validation | Recipe facts in standard graph profiles; expressive/extracted text in Content/Source; Structure owns placement/order/pins. Remove Recipe arithmetic and extraction vocabulary from the shared format. Keep existing finite profile admission, not a new universal payload runtime. |
+| [Structure format](../../services/main/src/modules/structure/format.ts): Recipe profile/roles, IngredientLine/RecipeStep union, text spans, RecipeMeasure and manifest measures; qualifier reference validation | Recipe procedure facts in the single Content block; standard RDF is a derived projection. Expressive/extracted text stays in Content/Source; Structure owns placement/order/pins. Remove Recipe arithmetic and extraction vocabulary from the shared format. Keep existing finite profile admission, not a new universal payload runtime. |
 | [Structure change](../../services/main/src/modules/structure/change.ts): `recipeRemoval` permits update+remove batches; `usesIngredient`/`substituteFor` membership and deletion checks; qualifier comparison sorts those arrays and media | Existing owner transition must atomically detach/retire referenced uses, or refuse. Use qualified relation/Content reference integrity in its owning operation; shared Structure command checks structural invariants only. Local, bounded post-state shapes can check membership; do not replace a transactional reverse-reference check with eventual cleanup. |
 | [Change/admission](../../services/main/src/modules/structure/change-admitted.ts), [read](../../services/main/src/modules/structure/read.ts), [profiles](../../services/main/src/modules/structure/profiles.ts): Recipe-only measure writes and RecipeMeasure reads | Measurement/Semantic owner writes exact facts at a pinned revision; Structure revision binds dependency. Reuse Access, CAS and receipts; thin task wrapper may coordinate a recoverable owner workflow. |
 | [Composition routes](../../services/main/src/routes/compositions.ts) and [Recipe routes](../../services/main/src/routes/recipes.ts), [qualifier schema](../../services/main/src/routes/recipe-qualifiers.ts): custom public payload/operation contracts | Profile-bound general edits/reads for ordinary facts; keep named scaling, nutrition and bounded exchange/read operations where they perform real work. Generate schemas from the owning contracts; do not make every field a new endpoint. |
-| [Recipe projection](../../services/main/src/modules/recipe/structure-profile.ts), [custom shapes](../../model/definitions/recipe-structure-v1.ttl): ordinary facts copied between qualifier JSON and `rv:*` predicates | Standard predicates as authoritative current semantics; exact immutable history remains owner payload bytes, as target architecture requires. Delete custom project/hydrate fact mirroring, not revision custody. |
+| [Recipe projection](../../services/main/src/modules/recipe/structure-profile.ts), [custom shapes](../../model/definitions/recipe-structure-v1.ttl): ordinary facts copied between qualifier JSON and `rv:*` predicates | Standard terms describe the authoritative Content procedure; graph projection is derived, and exact history remains owner payload bytes. Delete custom project/hydrate fact mirroring, not revision custody. |
 | [Source slot mapping](../../services/main/src/modules/recipe/source-conversion.ts): support tied to `qualifier.originalText.value` / `instructionText.value` | Bind support to the destination Content/Semantic field and exact revision. Keep Source mapping/exact evidence checks and independent withdrawal. |
 | [Editor model/ingredient adapter](../../apps/web/features/recipe-editor/model.ts), [ingredient lines](../../apps/web/features/recipe-editor/ingredient-line.ts), [reading](../../apps/web/features/recipe-editor/reading.ts): mixed qualifier drives editing/display | Task UI consumes owner contracts, can retain Recipe vocabulary, and preserves unedited richer forms. No client-side adoption/provenance store or quantity reparse. |
 
@@ -342,101 +341,29 @@ tests alongside the existing owner/outcome tests; none was run for this note.
 | Bounded Work page, revision and disclosure. [Reader](../../services/main/src/modules/recipe/work-page.ts), [cost contract](../../services/main/src/modules/recipe/cost-contract.md), [page tests](../../services/main/tests/recipe-work-page.test.ts). | A 1,001-occurrence hierarchy traverses every occurrence once in depth-first order across sections, at ≤100 per response, ≤1 MiB, ≤34 composition/measure reads at depth 16, with measures read once each page. A cursor pins revision and servings factor, resumes mid-section, refuses tampering and reports stale on changed revision. Hydration/revocation cannot leak private instructions or substitute another revision. Referenced sub-recipes cannot cause unbounded expansion. |
 | Authority/retry/publication and bounded editing. [Recipe cost contract](../../services/main/src/modules/recipe/cost-contract.md), [author outcome](../../tests/qa/integration/outcomes/recipes/author-a-recipe.test.ts), [read outcome](../../tests/qa/integration/outcomes/recipes/read-a-recipe.test.ts). | Replay uses the same receipt without duplicate occurrences; stale expected heads conflict. Public publication remains pinned while later drafts stay private. Moving content owners cannot turn a multi-batch partial import into a reported atomic success. Omitted audio/advanced references on an ordinary edit remain preserved. |
 
-## Migration, cost and the open wave
+## Migration and qualification
 
-### Evidence and estimate
-
-Static inventory at the repository basis counted 10 backend Recipe `.ts` files /
-1,709 lines; two Recipe route files / 810; 37 editor `.ts`/`.tsx` files / 4,217
-(includes locale/fixture modules, excludes files named `.test.`/`.stories.`);
-two Recipe profile sources / 105. That is **51 files / 6,841 lines**, excluding
-shared Structure code, separate reading components, generated files and other
-exchange pages. A path-based `recipe` + `.test.ts` inventory excluding
-`projection` found 59 files / 9,470 lines; it excludes `.test.tsx` and is not a
-complete regression plan. Paths: [backend](../../services/main/src/modules/recipe/),
-[routes](../../services/main/src/routes/recipes.ts),
-[qualifier route](../../services/main/src/routes/recipe-qualifiers.ts),
-[editor](../../apps/web/features/recipe-editor/),
-[profile](../../model/definitions/recipe-structure-v1.ts),
-[shape](../../model/definitions/recipe-structure-v1.ttl).
-The inventory/script and inspected external snapshots are temporary evidence
-under `.temp/content-adoption-evidence*`, not new product tools. Counts measure
-surface area, not removable code or elapsed implementation time.
-
-Planning estimate, **not measured**: remove 700–1,400 production lines of mixed
-qualifier schemas, custom RDF project/hydrate and Recipe-specific shared-layer
-branches; add 1,200–2,400 lines across constrained standard profiles, content
-adoption/reference/derivation binding and destination-owner adapters; revise
-1,500–3,000 existing lines in exchange, page reading and editor consumers.
-Retain most quantity/display/import validation and pagination code. Allow
-another 1,500–3,000 test/fixture lines changed or added. Net production code may
-initially grow: source attribution, richer forms and loss-aware exchange are real
-capabilities, not free consequences of vocabulary reuse. Estimates are inferred
-from the cited file inventory and the owner gaps above; a one-recipe vertical
-slice should revise them before a schedule is promised.
-
-Indicative effort is 12–22 engineer-days: 2–3 for profile/owner contract and
-counterexample fixtures; 4–7 for adoption, exact references and derivation seams;
-3–5 for adapters/read/editor changes; 3–7 for corpus rebuild, outcome records
-and owner/recovery checks. These are work estimates, not a calendar prediction
-on the shared QA host. A scoped first slice can omit unrelated synopsis,
-repair/lab execution and media-production features. It must still represent an
-admitted recording/Post without misidentifying it as a RecipeStep or Work.
+The scope includes Recipe owners/routes/profiles, shared Structure consumers,
+editor and reading surfaces, exchange, source mappings and recorded outcomes.
+Keep quantity, display, import validation and pagination behavior where it still
+serves the owner contract. Use the first vertical slice to measure implementation
+cost before promising a schedule; vocabulary reuse alone does not supply richer
+content forms, provenance or loss-aware exchange.
 
 ### Existing data and retained history
 
-#### Existing data inventory (2026-10-14)
+The shared dev inventory measured on 2026-10-14 contained 34 Recipe Works by
+two seeded Agents, including 30 retained Gutenberg extracts, no field supports,
+and no pins beyond the Works' own publications. These are seed/import fixtures,
+so rebuild them from retained sources and seeds through revised mappings and
+normal Main commands after the vertical slice. Re-record all six Recipe answer
+records. Build no conversion code or compatibility reader for that population.
+The source observations' unknown rights basis remains unknown; rebuilding cannot
+supply rights clearance or human confirmation.
 
-Read-only inspection of the shared local dev backend, authorized by the program
-manager, resolved the initial public-read gaps. Main is at
-`http://localhost:3001` (`task urls`), Fuseki SELECT at
-`http://127.0.0.1:3030/rezics/query`, data epoch
-`8c483e38-59e7-4d95-b27b-de9cd6742a3e`. PostgreSQL reads ran in
-`BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; …; ROLLBACK`
-through `docker exec rezics-dev-postgres-1 psql -U postgres -d content`.
-Repeated graph reads returned the same Work, draft, publication and Structure
-revision counts. These are live dev observations, not an atomic cross-owner
-recovery cut; no owner writes, migrations, backup or restore were performed.
-Counts overlap and must not be added.
-
-| Item and count | Read producing the count | Classification and reason |
-| --- | --- | --- |
-| **34 Recipe Works; 34 owned TextContributions, 34 draft revisions, 34 public publication decisions, 2 author Agents; 0 unpublished text heads** | Fuseki current graph: `?work a schema:Recipe`, `?text a rv:TextContribution; rv:work ?work; rv:draftHead ?head`; revisions graph: `rv:RevisionAnchor/rv:component` (excluding publication decisions) and `rv:PublicationDecision/rv:work/rv:selectedDraft/rv:disclosure`. All draft heads equal their published selected draft. SQL `content.variant.resource_id` matched to these Work/text IDs returns **0**: these are legacy graph TextContributions, not Content variants. | **Needs conversion/preservation** of identities, authored text manifests, authorship and publication decisions. Retained imports can recreate words, not the owned history or selections. |
-| **31 unpublished Recipe Structures, 71 revisions; 434 active occurrences (180 ingredients, 254 steps); 0 structured publication decisions** | Fuseki current `rv:structureProfile rv:RecipeComposition`, `rv:structureHead`, selected generation placements with `rv:occurrenceRole`; revisions `rv:StructureRevision/rv:component` and Recipe Work `rv:WorkStructurePublicationDecision`. The Structures belong to the 30 Gutenberg Works and seeded pancakes. | **Needs conversion** of retained revisions, ordered occurrences, quantities, measures and instruction payloads. Reimport is suitable for disposable replacements, but does not recreate these identities/history. The earlier **34** `GET /v1/recipes/works/{id}` reads returning 200/null reflect missing structured publications, not absent drafts. |
-| **0 field supports, native-child supports, native Work bindings, title applications/attachments or author-credit supports; 0 associated withdrawals** | SQL against `source.field_support` with `field_support_withdrawal`, `native_child_intent` with `native_child_withdrawal`, `native_work_binding`, `native_work_title_application`, `native_work_support_attachment` and `author_credit_intent`, restricted to the enumerated Recipe Work/Structure/text IDs. | No support rows need conversion at this cut. This does not establish source clearance: the **30** Recipe-file observations have rights basis **unknown**, not public-domain. Preserve that distinction when rebuilding support. |
-| **34 publication decisions and 68 publication selections pin 34 exact text revisions; 30 Source observations pin import basis revisions. 0 Recipe pins in Structure seals, fixed releases, fixed placements, exports, progress or verification dependencies** | Fuseki reverse SELECT of every triple referencing the **71** Structure and **34** text revisions, grouped by predicate/type: `rv:selectedDraft` identifies decisions/selections; no seal/release/`rv:pinnedRevision` hits. SQL `source.observation.source_revision` joined through `source.record.external_id`; `export.member`, `structure.progress/progress_scope`, `reader.library_copy.release`, `verification.derivation_input/active_dependency` matched to Recipe IDs/revisions all return 0. | **Needs conversion/preservation** of exact selected text and source-basis references. Retain old-to-new correspondence and receipt custody; never substitute a new head. Search and occurrence-index revision references are **rebuildable projections**, not authored pins. |
-| **30 retained Recipe-file records/observations; 30 byte payloads; 0 erased observations** | SQL `source.record` (`provider=rezics, namespace=recipe-file`) joined to `source.observation`, counting retained bytes and erasure markers; all 30 external IDs match the enumerated Recipe Works. | File payloads are **rebuildable by reimport**; observation identity, recorded rights, exact source basis and replay/erasure custody **need conversion/preservation** if retaining the existing resources. |
-| **30 Gutenberg extracts from 2 editions: 20 English / 10 Italian, 173 ingredient lines (111 / 62)** | Read [extract pins](../../tests/fixtures/gutenberg/recipe-extract-pins.json) and [fixture lock](../../tests/fixtures/fixtures.lock.json); `launchRecipeSources()` in [the corpus builder](../../scripts/load/launch-corpus.ts) verified retained byte sizes/digests, source digests and extract counts. | **Rebuildable by reimport** of retained full text and exact line pins under the revised mapping; keep credit, language and unparsed wording. This classifies inputs, not all live descendants. |
-| **6 Recipe answer records, 1,156 samples; 116 samples embedding Recipe payloads** | Read all `tests/qa/fixtures/outcomes/**/*.json`: recursively detect `@type:Recipe`, `recipe-work-page-v1`, `recipe-composition`, `ingredient-line` or `recipe-step` in request bodies/answers. Payload counts: [author](../../tests/qa/fixtures/outcomes/recipes/author-a-recipe.json) 41, [exchange](../../tests/qa/fixtures/outcomes/recipes/exchange-recipes.json) 44, [reading](../../tests/qa/fixtures/outcomes/recipes/read-a-recipe.json) 31; the other three Recipe records contain none of these payloads. | **Needs conversion and re-recording** through replacement API proofs. Keep existing evidence until equivalent outcomes are proved; recorded answers are not source imports. |
-| **4 demo Recipe definitions; 1 editor fixture with 6 nodes/3 measures; 1 JSON import fixture** | Read [demo plan](../../scripts/dev/seed/plan.ts), [pancake seed](../../scripts/dev/seed/recipes-step.ts), [editor fixture](../../apps/web/features/recipe-editor/fixtures.ts), [import file](../../tests/qa/integration/recipe-file-import.fixture.json). | Demo/import inputs are **rebuildable** by seed/reimport. The editor fixture **needs conversion** to preserve authored occurrence/reference and measurement cases; runtime test builders need revised fixtures and proofs. |
-
-Decision 4 now has an inventory for the shared dev population. Choose reimport
-for retained inputs and explicitly disposable fixtures; preserve/convert the
-owned resource history and exact references above when keeping those resources.
-This inspection neither converts data nor proves recovery or replacement APIs.
-
-[Recipe exchange practice](../contracts/recipe-exchange.md) says there is no
-production Recipe data requiring a compatibility reader/migration and that
-retained corpora, including thirty Gutenberg recipes, are reimported. This note
-did not inspect live storage or prove that every local user edit is disposable.
-Before choosing reset, the manager should inventory owned drafts, publications,
-supports and exact revision pins through their owners; use a consistent backup
-and isolated restore. The pre-public policy is convergence of the current
-definition and rebuilt seeds/fixtures, not a permanent dual reader.
-[Target architecture §4](target-architecture.md#4-版本與演進),
-[preparation budget](../storage/workload-budgets.md#data-preparation-and-import).
-
-For disposable imported fixtures, replay retained Source observations through
-the revised mapping and normal Main commands. For any non-disposable authored
-content, convert a bounded snapshot into new owner revisions, preserving stable
-resource/occurrence IDs where the meaning is unchanged; keep a correspondence
-for source keys, revision-qualified references and support slots. Do not mutate
-old exact payload bytes, silently retarget pins, or label reimport as human
-confirmation. If existing signed/public pins must survive, retain their original
-owner resolution and explicitly qualify the local historical adapter needed;
-this changes the cost estimate and must be decided from the inventory.
-[Immutable profiles](../contracts/model-profiles.md),
-[Source adoption/control](../contracts/source-lifecycle.md).
+Exact retained bytes and independently authored value remain owner obligations.
+An inventory of different, non-disposable data would require a new decision;
+the fixture finding does not authorize rewriting exact pins elsewhere.
 
 Migration needs these explicit decisions and checks:
 
@@ -494,7 +421,7 @@ real client/history obligations. The current architecture explicitly allows
 pre-public convergence, and the current exchange contract reports no production
 compatibility requirement. Those are the reasons for the timing recommendation,
 not an assumption that standard vocabulary removes engineering work.
-[Evolution policy](target-architecture.md#4-版本與演進),
+[Evolution policy](target-architecture.md#versioning-and-evolution),
 [exchange practice](../contracts/recipe-exchange.md).
 
 The supermanager should settle (1) the field-specific adopted forms and one
@@ -511,19 +438,16 @@ design; do not grow a universal mechanism to conceal the failure.
 Validation performed for this design is static repository inspection, primary
 source/schema/serializer inspection, a temporary line inventory and the actual
 public iFixit JSON shape. Remaining validation is implementation API behaviour,
-loss-aware exchange round trips (especially Paprika and Allrecipes), owned-data
-inventory, cross-owner recovery and human surface tasks. Documentation checks
+loss-aware exchange round trips (especially Paprika and Allrecipes), cross-owner recovery and human surface tasks. Documentation checks
 validate links/navigation only; they cannot qualify the replacement.
 
-## Decision (supermanager, 2026-10-14)
+## Instruction representation and slice
 
-Accepted, as a pre-public change. Recipes stay in the first public scope and open only after the vertical slice's API outcomes pass.
+Use one authoritative structured procedure block in Content, with Structure
+selecting and ordering its uses. Projection and exchange are derived forms.
 
 1. **Instruction forms and one structured representation.** A Recipe's instructions admit an authored Post (Content), a retained media recording (an exact Media representation), a structured procedure, or an ordered combination of these through Structure's existing ordered selection. The single authoritative structured form is a bounded procedure block in the Content document, validated as an extension payload. `HowToSection`/`HowToStep` are the vocabulary for projection and exchange, not a second stored representation. If the slice's fixture cannot prove reuse, exact revision selection, export and bounded reading with this choice, revisit it before anything else is built on it.
 2. **Local terms.** Keep local terms only for occurrence substitution, scaling policy and measurement basis/coverage. Every other Recipe fact uses its standard term, constrained by SHACL in the Recipe profile.
 3. **Derivation and references.** Content owns a derivation record (PROV-O qualified derivation: exact input revisions or fragments, output revision, activity kind, responsible public Agent) and a general Resource reference (inline and block) with grain-qualified selectors. The Work-only reference block keeps its meaning.
-4. **Data first.** Inventory owned Recipe drafts, publications, supports and revision pins before choosing between conversion and reimport.
 
-Sequence: the inventory starts now. The vertical slice (an exact quantity with a note; Post, recording and procedure instructions; a tomato occurrence mention; a referenced intermediate recipe) starts once wave/1 has merged into main, and it is the acceptance gate. Its outcomes revise the estimate, then the fixtures, consumers and affected rows migrate and are reproved. The behaviours listed under "Behaviours a replacement must preserve" are the slice's falsifiers.
-
-**Decision 4 settled (supermanager, 2026-10-14, from the inventory above).** Every Recipe in the shared dev population comes from seeds or retained imports: 34 Works by 2 seeded author Agents, 30 Gutenberg extracts, no field supports, and no pins beyond each Work's own publications. Reimport: after the slice, rebuild the Recipe population from the retained sources and seeds through the revised mapping and normal Main commands, and re-record the six Recipe answer records. No conversion code and no compatibility reader.
+The vertical slice (an exact quantity with a note; Post, recording and procedure instructions; a tomato occurrence mention; a referenced intermediate recipe) starts once wave/1 has merged into main, and it is the acceptance gate. Its outcomes revise the estimate, then the fixtures, consumers and affected rows migrate and are reproved. The behaviours listed under "Behaviours a replacement must preserve" are the slice's falsifiers.

@@ -53,8 +53,7 @@ eligible original Use without losing its release origin or source-primary status
 
 ## Creator distribution
 
-Decision 30, maintainer (books, games and Stripe), with product-manager rollout
-judgment, 2026-09-29. Begin as distributor for contracted creators: rights-cleared,
+Begin as distributor for contracted creators: rights-cleared,
 DRM-free EPUB/PDF books and small games/VNs, samples, one-time purchases, updates,
 receipts, refunds and re-downloads from private R2. No launcher, DRM, open seller
 registration or sale of `r18`/`r18g` Works at first.

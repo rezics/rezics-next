@@ -2,7 +2,7 @@
 
 ## Recipients and levels
 
-Maintainer, 2026-10-02. A recipient comes from three sources, in this order:
+A recipient comes from three sources, in this order:
 
 1. **Direct involvement**: replies and mentions, the person's own submissions
    and proposals, role and membership changes, invitations and moderation they

@@ -1,36 +1,31 @@
 # AI agent instructions
 
-Put task-created temporary files in `.temp/`.
+When instructions conflict, the maintainer's current instruction wins, then the
+task brief and its decisions, this file, the protocol documents, then skills and
+other documents.
 
-Run commands through Task (`task --list`; arguments after `--`); Yarn only
-installs dependencies. Tools and versions are recorded in
-`docs/development/toolchain.md`; update it in the same change that adds or
-replaces one. The main checkout's `task dev` serves the shared local backend
-under Aspire on fixed ports; in a worktree `task dev` runs only web and Storybook
-on random ports against it (`-- --backend` for an isolated backend). Find
-addresses with `task urls` or Aspire's MCP server, and configuration with
-`task env` and each workspace's `.env.example`.
+Use [docs/README.md](docs/README.md) to load only the documents the task needs.
+[GOAL.md](GOAL.md) lists active Goals. Managers follow their
+[charter](docs/goals/manager.md); workers follow their [protocol](docs/goals/worker.md).
+The [method](docs/goals/method.md) defines API outcomes before implementation
+and surfaces.
 
-API operations define backend behavior; UI consumes the APIs.
+Put task-created temporary files in `.temp/`. Run project commands through Task
+(`task --list`; arguments after `--`); Yarn installs dependencies. Update the
+[toolchain](docs/development/toolchain.md) when adding or replacing a tool.
+Use `task urls` for addresses, `task env` for masked configuration and each
+workspace's `.env.example` for variables.
 
-Express in code whatever code can express: types, schemas, tests, lint rules,
-stories and comments. Write documents only for what code cannot carry, such as
-intent, decisions with their reasons and operating procedures. Documents record
-practice to consult, not rules; when one no longer fits, change it and explain why.
+API operations define backend behavior; the UI consumes them. Express enforceable
+behavior in types, schemas, tests, lint rules, stories and comments. Documents
+hold intent, decisions with reasons and operating procedures; update a practice
+that no longer fits and explain why.
 
-Write tests with the implementation and run the checks the change affects:
-`task test -- --affected [<base>]` (`--list` previews the plan), explicit
-`task test` paths, and `task docs:check` for documentation changes. Build test
-data once, keep a consistent backup and restore isolated copies; routine
-preparation, including restore, startup and readiness, stays under 10 minutes
-(`docs/storage/workload-budgets.md#data-preparation-and-import`).
+Write tests with behavior changes and run affected checks. Do not add a test
+that only mirrors a small reversible edit. Run `task docs:check` for documentation
+changes. Build test data once, keep a consistent backup and restore isolated
+copies within the [preparation budget](docs/storage/workload-budgets.md#data-preparation-and-import).
 
-The maintainer may update any documentation at any time with any tool. Treat
-those updates as authoritative: detect them, adapt, never revert them silently;
-refine them only in a separate, explained commit.
-
-`GOAL.md` lists the Goals; each runs from its own directory under
-`docs/goals/` with one manager. `docs/goals/method.md` says how work is defined,
-proved and landed: a row of the scope is proved by what each kind of person gets
-from the API, before its implementation and before its surface. Managers follow
-`docs/goals/manager.md`, and their worker processes follow `docs/goals/worker.md`.
+Detect documentation edits during work and treat them as authoritative. Never
+silently revert one; refine it only in a separate commit explaining the change.
+Finish reversible, authorized work before asking for a decision.

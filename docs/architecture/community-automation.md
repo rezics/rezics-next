@@ -1,9 +1,9 @@
 # Bounded community automation
 
-Status: decided by program on 2026-10-16 and deferred past the first launch (see Program review). This note proposes ownership
-and semantics for competitor-coverage finding B07. It adds no contracts, scope
-rows, operations, migrations or implementation. Program reviews the proposal
-before any contract step; it does not change the first-public-scope cut.
+This design is deferred past the first public launch. Brief its contract step
+when operator load on launched Realms demonstrates repeated work it can remove.
+Reuse the durable-job machinery in [Scheduled](scheduled-plans.md). Contracts,
+operations, migrations and implementation are not supplied by this note.
 
 The missing job is to route a flagged post to the right human without repeating
 the same moderator command, and to lift one explicitly defined newcomer limit
@@ -29,9 +29,9 @@ automate a small authorized command, keeping its reason and independent rights.
 | --- | --- | --- |
 | Governance [rule revisions](../../services/main/src/modules/governance/rules.ts), [rule lifecycle limits](../contracts/governance-rules.md) and [case/decision store](../../services/main/src/modules/governance/README.md) | Scoped immutable rule documents, expected heads, receipts, exact evidence, case generations, attributable decisions and reversal chains. | An admitted executable interpretation and separately authorized activation of a reviewed rule revision. Generic JSON publication currently establishes neither activation nor execution authority. Keep that meaning in Governance. |
 | Realm [management commands](../../services/main/src/modules/access/realm-management.ts) and [bounded command definitions](../../services/main/src/modules/realm-admin/contract.ts) | Existing report/submission escalation to Realm owners, current jurisdiction, target generations and command receipts. | A restricted automation binding to those commands. Escalation currently appends an immutable record and has no withdrawal command; reversible effective routing needs an owner extension before this action can be admitted. Do not delete its audit record or build an automation-only queue. |
-| Access [authority and lineage](../contracts/identity-and-access.md), [Realm participation gates](../../services/main/src/modules/access/realm-management-settings.ts) and [grant owner](../../services/main/src/modules/access/grants.ts) | Representation, exact scope, assignment ceilings, grant episodes, expiry, revocation and recovery fences. | A narrowly admitted progression grant profile and its assignment/revocation authority, if program accepts the configuration below. The installed Agent grant profile is not a general-purpose permission issuer. Automation never becomes a second trust or authority owner. |
+| Access [authority and lineage](../contracts/identity-and-access.md), [Realm participation gates](../../services/main/src/modules/access/realm-management-settings.ts) and [grant owner](../../services/main/src/modules/access/grants.ts) | Representation, exact scope, assignment ceilings, grant episodes, expiry, revocation and recovery fences. | A narrowly admitted progression grant profile and its assignment/revocation authority, for an admitted configuration. The installed Agent grant profile is not a general-purpose permission issuer. Automation never becomes a second trust or authority owner. |
 | [Submission owner](../../services/main/src/modules/realm-submission/store.ts), [Realm permit](../../services/main/src/modules/access/realm-management-policy.ts) and [baseline admission](../../services/main/src/modules/access/baseline.ts) | Existing submission commands, mandatory review, bans, membership and current policy checks. | A named newcomer restriction and grant-bound exception need owner qualification. Today `trusted-members` uses membership, not an earned permission; ordinary baseline submission admission is not proof of a separate progression gate. Do not award membership or moderation roles to approximate it. |
-| [Committed events/jobs](../contracts/events-and-jobs.md), [Main relay](../../services/main/src/modules/outbox/relay.ts) and [Scheduled decision](scheduled-plans.md#program-review) | Committed owner facts, stable event identities, owner receipts, bounded continuations, leases, recovery generations and current authority checks. | One shared durable-work mechanism for Scheduled due actions and event-triggered actions: admission, claim, fence, retry, cancellation and receipt reconciliation. The job protocol still has qualification work; Scheduled's decision is not evidence that a general runner is installed. |
+| [Committed events/jobs](../contracts/events-and-jobs.md), [Main relay](../../services/main/src/modules/outbox/relay.ts) and [Scheduled decision](scheduled-plans.md#bounded-reads-and-durable-work) | Committed owner facts, stable event identities, owner receipts, bounded continuations, leases, recovery generations and current authority checks. | One shared durable-work mechanism for Scheduled due actions and event-triggered actions: admission, claim, fence, retry, cancellation and receipt reconciliation. The job protocol still has qualification work; Scheduled's decision is not evidence that a general runner is installed. |
 | [Notification owner](../../services/main/src/modules/notification/README.md) | Recipient eligibility, preferences, durable intake dedupe, disclosure, provider idempotency and uncertain-send lookup. | An admitted automation subject reader/producer only when a configuration needs notice. No custom mailer, second inbox or membership-wide synchronous fan-out. |
 | [Semantic model](../contracts/semantic-model.md#definition-responsibilities), [Context](../contracts/context.md) and [finite rule profile](../../model/definitions/semantic-rule-v1.ttl) | Existing resource/revision and inference vocabulary where its meaning fits. | Context inference describes derived meaning, not permission to perform commands. Keep authorization and operational activation out of RDF classification and descriptive rule inference. |
 
@@ -220,12 +220,3 @@ physical plans/counters. A later surface must expose scope, reason, dry-run,
 activation/expiry, held work and guarded recovery through those same APIs.
 This note establishes a reviewable design, not implemented automation,
 operator-retention improvement or competitor replacement parity.
-
-## Program review
-
-Accepted on 2026-10-16 as the design for B07, and deferred: it is not part of
-the first public launch. The competitor report rates it an operator-retention
-gap, not a switching blocker, and backend complexity is the cost to avoid while
-B03, B04, B05 and B06 are built. Its contract step is briefed when operator load
-on launched Realms gives evidence of the repeated work it removes; it reuses the
-durable-job machinery decided in scheduled-plans.md.

@@ -31,8 +31,7 @@ the background in an agent session; stop it with `astro dev stop` in `apps/about
   placeholders and empty text. The eight locales duplicate `apps/web/i18n/define.ts`, as the
   Accounts app does, and a test keeps them equal. While copy is written in English ahead of
   its translation, its catalog uses `defineEnglishCopy`: every locale renders the English text
-  inside `<main lang="en">`, and the catalog test names each such catalog. The site is not
-  deployed while that list is not empty (G-482 translates the copy G-481 wrote).
+  inside `<main lang="en">`, and the catalog test names each such catalog. The site is not deployed while that list is nonempty.
 - **Only post-launch capabilities get a label.** `src/features.ts` describes the product
   at launch, after the current Goal's M4–M8. Those capabilities carry no label; principles
   and policies such as open source, no advertising trackers and no training on private
@@ -41,12 +40,12 @@ the background in an agent session; stop it with `astro dev stop` in `apps/about
   only for the roadmap's stages and launch inventory; post-launch capabilities have their
   own section when any are advertised. The registry currently has no post-launch claims;
   a test-only fixture covers the Later badge without inventing a product promise. Private
-  World maps, relationships and fictional chronologies ship at M7 (decision 28); the public
-  wiki expansions deferred in decision 29 are a separate scope. The maintainer chose this
-  because the site is published at launch: marking every capability with today's development status adds noise, and calling a principle
-  “available” misrepresents what it is. Progress belongs on the roadmap.
+  world maps, relationships and fictional chronologies belong to M7; public
+  wiki expansions have separate scope. The site describes launch behavior:
+  development progress belongs on the roadmap. Labeling every capability with
+  its current development status adds noise.
 - **Copy status is marked.** `src/copy-status.ts` says whether a page's copy is final; it shows
-  as `data-copy` on `<main>`. G-481 made every page's English copy final.
+  as `data-copy` on `<main>`. Use that registry for current status.
 - **JavaScript.** Pages ship a 0.5 kB boot script (saved theme before paint, remembers a
   chosen language), the theme button's module and React islands: the notify form on every
   page, which loads when it scrolls into view, and on the home page three Motion islands,
