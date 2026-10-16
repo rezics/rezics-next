@@ -13,8 +13,9 @@ const host = (available: number) => ({ vmTotal: 0, vmUsed: 0, hostAvailable: ava
 
 test('host admission arguments require a positive gibibyte need and a command', () => {
   expect(parseHostAdmissionArgs(['--gib', '4', '--', 'tsc', '--noEmit'])).toEqual({
-    gib: 4, command: ['tsc', '--noEmit'],
+    gib: 4, cpu: false, command: ['tsc', '--noEmit'],
   });
+  expect(parseHostAdmissionArgs(['--cpu', '--gib', '4', '--', 'tsc'])).toEqual({ gib: 4, cpu: true, command: ['tsc'] });
   expect(parseHostAdmissionArgs(['--gib', '3.5', '--', 'tsc']).gib).toBe(3.5);
   for (const args of [
     [],
