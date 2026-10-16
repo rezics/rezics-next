@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import type { Pool } from 'pg';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
-import { AccessAdmissionRegistry, type VerifiedPrincipal } from '../src/modules/access/admission.ts';
+import { AccessAdmissionRegistry, AdmissionDenied, type VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { orderTree, recordTree } from '../src/modules/structure/change.ts';
 import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, STRUCTURE_PROFILE,
   type OccurrenceRecord, type OrderEntry, type StructureManifest } from '../src/modules/structure/format.ts';
@@ -24,8 +24,9 @@ const rows = (values: Record<string, string>[]): SparqlResult => ({ results: { b
 const resourcesIn = (query: string) => [...query.matchAll(/VALUES \?resource \{([^}]+)\}/g)].flatMap(match =>
   [...match[1]!.matchAll(/<([^>]+)>/g)].map(value => value[1]!));
 
-/** The route, immutable trees and Access batch evaluator are real. Only storage
- * responses are simulated; the counters count every issued SQL/Fuseki request. */
+/** The route, immutable trees and target Access evaluator are real. Target
+ * storage responses and the separate Zone editor mandate are supplied here;
+ * the counters count every issued SQL/Fuseki request for target admission. */
 async function fixture(count: number, options: { distinct?: boolean; hidden?: (index: number) => boolean;
   work?: (index: number) => boolean; workScope?: boolean; semanticGrantsOnly?: boolean;
   workGrantsOnly?: boolean; scalar?: boolean; policy?: 'allow' | 'deny' | 'unavailable';
@@ -69,9 +70,16 @@ async function fixture(count: number, options: { distinct?: boolean; hidden?: (i
   const grantAllowed = (scope: string, action: string) => readable.has(scope.slice(scope.indexOf('https:')))
     && !proofOnly && (action === 'work.read' ? !options.semanticGrantsOnly : !options.workGrantsOnly);
   let recoveryOpen = true, failureBatch = 0, semanticBatches = 0, ambiguous = false;
+  let editorOpen = true, editorProbes = 0, revokeEditorAfterTargets = false;
   const client = { release() {}, query: async (statement: string, parameters: unknown[] = []) => {
     sql.push(statement);
     const result = (values: object[]) => ({ rows: values, rowCount: values.length });
+    if (statement.includes('AS source_table')) {
+      return result([...statement.matchAll(/SELECT '([^']+)' AS source_table/g)].flatMap((match, index) =>
+        (parameters[index] as string[]).map(sourceId => ({
+          source_table: match[1], source_row: { id: sourceId, generation: '1' },
+        }))));
+    }
     if (statement.includes('access.recovery_fence')) return result([{ open: recoveryOpen, generation: '0' }]);
     if (statement.includes('SELECT id FROM access.principal')) return result([{ id: id('reader').slice(-36) }]);
     if (statement.includes('WHERE NOT EXISTS (SELECT 1 FROM access.scope_gate')) {
@@ -168,9 +176,16 @@ async function fixture(count: number, options: { distinct?: boolean; hidden?: (i
   access.configureBaseline(graph);
   const originalBatch = access.canReadZoneNavigationTargets.bind(access);
   const accessForRoute = Object.create(access) as MainWorkDependencies['access'];
-  accessForRoute.canReadZoneNavigationTargets = (current, workViewer, subject, resources) => {
+  accessForRoute.assertAuthority = async request => {
+    editorProbes++;
+    expect(request).toEqual({ principal: viewer, actingSubject: actor, scope: `zone:edit:${zone}`, action: 'zone.edit' });
+    if (!editorOpen) throw new AdmissionDenied('Zone editor mandate is unavailable');
+  };
+  accessForRoute.canReadZoneNavigationTargets = async (current, workViewer, subject, resources) => {
     batches.push([...resources]);
-    return originalBatch(current, workViewer, subject, resources);
+    const allowed = await originalBatch(current, workViewer, subject, resources);
+    if (revokeEditorAfterTargets) editorOpen = false;
+    return allowed;
   };
   if (options.scalar) accessForRoute.canReadZoneNavigationTargets = undefined;
   const work = { environment: { fuseki: graph, structureObjects: objects, objectDirectory: directory,
@@ -182,12 +197,12 @@ async function fixture(count: number, options: { distinct?: boolean; hidden?: (i
   } as unknown as MainWorkDependencies;
   const app = zoneRoutes(graph, work);
   const read = async (limit = 100, after?: string, historical = false) => {
-    sql.length = queries.length = batches.length = semanticBatches = 0;
+    sql.length = queries.length = batches.length = semanticBatches = editorProbes = 0;
     const query = new URLSearchParams({ actingSubject: actor, limit: String(limit), ...(after ? { after } : {}) });
     const response = await app.handle(new Request(`http://main.test/v1/zones/${zone.slice(-36)}${historical
       ? `/revisions/${revision.slice(-36)}` : ''}?${query}`));
     const body = await response.json() as { mounts?: OccurrenceRecord[]; next?: string | null };
-    return { status: response.status, body, sql: sql.length, fuseki: queries.length, batches: [...batches] };
+    return { status: response.status, body, sql: sql.length, fuseki: queries.length, batches: [...batches], editorProbes };
   };
   const scalar = async () => {
     const allowed = new Set<string>();
@@ -200,8 +215,24 @@ async function fixture(count: number, options: { distinct?: boolean; hidden?: (i
   return { read, records, targets, sql, queries, scalar, batch: () => originalBatch(viewer,
     options.workScope === false ? null : viewer, actor, targets), close: () => rmSync(directory, { recursive: true, force: true }),
     holdRecovery: () => { recoveryOpen = false; }, failGraph: () => { failureBatch = 2; },
-    corruptTypes: () => { ambiguous = true; }, revoke: () => { readable.clear(); } };
+    corruptTypes: () => { ambiguous = true; }, revoke: () => { readable.clear(); },
+    denyEditor: () => { editorOpen = false; },
+    revokeEditorDuringAdmission: () => { revokeEditorAfterTargets = true; } };
 }
+
+test('saved navigation requires a Zone editor mandate before and after target admission', async () => {
+  for (const deny of ['denyEditor', 'revokeEditorDuringAdmission'] as const) {
+    const f = await fixture(4);
+    try {
+      f[deny]();
+      const result = await f.read();
+      expect(result.status).toBe(404);
+      expect(result.body.mounts).toBeUndefined();
+      expect(result.editorProbes).toBe(deny === 'denyEditor' ? 1 : 2);
+      expect(result.batches).toHaveLength(deny === 'denyEditor' ? 0 : 1);
+    } finally { f.close(); }
+  }
+});
 
 test('Zone page admission has constant SQL and Fuseki requests for 4/16/64 mounts over one Collection', async () => {
   const costs: Array<{ sql: number; fuseki: number }> = [];
@@ -211,6 +242,7 @@ test('Zone page admission has constant SQL and Fuseki requests for 4/16/64 mount
       const result = await f.read();
       expect(result.status, JSON.stringify(result.body)).toBe(200);
       expect(result.body.mounts).toEqual(f.records);
+      expect(result.editorProbes).toBe(2);
       expect(result.body.next).toBeNull();
       expect(result.batches).toEqual([f.targets]);
       costs.push({ sql: result.sql, fuseki: result.fuseki });
@@ -268,10 +300,10 @@ test('a full 100-mount page admits 101 candidates in one transaction with bounde
       .map(query => resourcesIn(query).length))
       .toEqual([101]);
     expect(f.queries.filter(query => query.includes('rv:RevisionAnchor')).map(query => resourcesIn(query).length))
-      .toEqual([1, 65, 36]);
-    // The Zone admission has its own transaction; all mounted targets share one.
-    expect(f.sql.filter(statement => statement.startsWith('BEGIN'))).toHaveLength(2);
-    expect(f.sql.filter(statement => statement === 'COMMIT')).toHaveLength(2);
+      .toEqual([65, 36]);
+    // The separate editor mandate is supplied above; all mounted targets share one transaction.
+    expect(f.sql.filter(statement => statement.startsWith('BEGIN'))).toHaveLength(1);
+    expect(f.sql.filter(statement => statement === 'COMMIT')).toHaveLength(1);
   } finally { f.close(); }
 });
 
