@@ -53,7 +53,7 @@ test('an Anime section list finds each searchable Content placement through comp
       profile: 'content-publication-v1', preparationId: `placement-${randomUUID()}`, revisionId: draft.revisionId,
       expectedDigest: draft.byteDigest, expectedContentEpoch: draft.sourcePosition.dataEpoch,
       resourceId: source.work, variantId, expectedPublicationHead: null, actingSubject: actor.actor }), 201);
-    const eligible = await json<{ decision: string }>(await actor.send('POST', '/v1/content-search-eligibility', {
+    await json<{ decision: string }>(await actor.send('POST', '/v1/content-search-eligibility', {
       profile: 'content-search-eligibility-v1', resourceId: source.work, variantId,
       publicationDecision: published.decision, expectedEligibilityHead: null,
       actingSubject: actor.actor, rightsBasis: 'original-contribution', disclosure: 'public' }), 201);
@@ -78,11 +78,31 @@ test('an Anime section list finds each searchable Content placement through comp
     for (const hit of page.results) expect(hit).toMatchObject({ revision: `urn:rezics:content:revision:${draft.revisionId}`,
       matchedPlacements: expect.arrayContaining([{ resource: source.work, work: owner.work, profile: 'section-list-v1', occurrence: changed.occurrences[0], title: 'Production notes' }]) });
     expect(stack.fuseki.queries - before).toBeLessThanOrEqual(40);
+    // Public Content eligibility does not publish its source Work into the
+    // Main Work phrase-search relation.
+    const privateSource = await stack.privateWork(actor.actor, 'Private production notes');
+    for (const action of ['edit', 'read']) await actor.grant(`work:${action}:${privateSource.work}`, `work.${action}`);
+    for (const action of ['draft', 'publish', 'search-eligibility']) {
+      await actor.grant(`content:${action}:${privateSource.work}`, `content.${action}`);
+    }
+    const privatePhrase = `unreleased railway ${randomUUID().slice(0, 8)}`;
+    const privateVariant = `urn:rezics:variant:${randomUUID()}`;
+    const privateDraft = await json<typeof draft>(await actor.send('POST', '/v1/content-drafts', {
+      profile: 'content-text-v1', resourceId: privateSource.work, variantId: privateVariant,
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
+      expectedHead: null, body: privatePhrase, actingSubject: actor.actor }), 201);
+    const privatePublication = await json<typeof published>(await actor.send('POST', '/v1/content-publications', {
+      profile: 'content-publication-v1', preparationId: `placement-${randomUUID()}`, revisionId: privateDraft.revisionId,
+      expectedDigest: privateDraft.byteDigest, expectedContentEpoch: privateDraft.sourcePosition.dataEpoch,
+      resourceId: privateSource.work, variantId: privateVariant, expectedPublicationHead: null,
+      actingSubject: actor.actor }), 201);
     await json(await actor.send('POST', '/v1/content-search-eligibility', {
-      profile: 'content-search-eligibility-v1', resourceId: source.work, variantId,
-      publicationDecision: published.decision, expectedEligibilityHead: eligible.decision,
-      actingSubject: actor.actor, rightsBasis: 'original-contribution', disclosure: 'private' }), 201);
+      profile: 'content-search-eligibility-v1', resourceId: privateSource.work, variantId: privateVariant,
+      publicationDecision: privatePublication.decision, expectedEligibilityHead: null,
+      actingSubject: actor.actor, rightsBasis: 'original-contribution', disclosure: 'public' }), 201);
     await relay();
-    expect(await json(await query())).toMatchObject({ total: 0, results: [] });
+    expect(await json(await stack.call('POST', '/v1/queries/page', { body: {
+      profile: 'public-main-phrase-page-v1', phrase: privatePhrase, language: null, pageSize: 10,
+    } }))).toMatchObject({ total: 0, results: [] });
   } finally { await stack.stop(); }
 }, 240_000);
