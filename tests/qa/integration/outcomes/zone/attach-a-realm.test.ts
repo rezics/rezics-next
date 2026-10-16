@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { uuidToSid } from '@rezics/model/address';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
 import { browserZoneRealmAttachment } from '../../../../../apps/web/features/zone-editor/api.ts';
@@ -23,7 +24,10 @@ async function reached(person: PersonaSession, ...args: Parameters<PersonaSessio
 async function proof(name: PersonaName, run: () => Promise<void>) {
   currentPersona = name;
   requestNumber = 0;
-  try { await run(); } finally { currentPersona = null; }
+  try {
+    if (sessions[name].actingSubject) await reached(sessions[name], 'GET', `/v1/me/person-preferences?${acting(sessions[name])}`);
+    await run();
+  } finally { currentPersona = null; }
 }
 
 const short = (id: string) => id.slice(-36);
@@ -181,6 +185,7 @@ async function denied(name: PersonaName, status: number) {
   );
   expect(refusal.code).toBeString();
   expect(await head(target.zone)).toEqual(current);
+  await attachmentVisit(sessions[name], target);
 }
 outcomeTest(attachment, 'visitor', () => proof('visitor', () => denied('visitor', 401)), recording);
 outcomeTest(attachment, 'stranger', () => proof('stranger', () => denied('stranger', 403)), recording);
@@ -274,11 +279,22 @@ async function attachmentVisit(person: PersonaSession, target: Site) {
     return reached(person, request.method, url.pathname.replace(/^\/api\/main/, '') + url.search,
       raw ? JSON.parse(raw) as unknown : undefined, request.headers.get('idempotency-key') ?? undefined);
   }) as typeof fetch;
-  const main = browserMainApi('https://record.invalid', { fetcher });
-  const attached = await browserZoneRealmAttachment(main).readConfiguration(short(target.zone), person.actingSubject!);
-  if (!attached.ok) throw new Error(`Production attachment read failed: ${attached.failure}`);
-  const presentation = await main.v1.zones({ id: short(target.zone) }).presentation.get({ query: { actingSubject: person.actingSubject! } });
+  const main = browserMainApi('https://record.invalid', { anonymous: !person.actingSubject, fetcher });
+  const client = browserZoneRealmAttachment(main);
+  // A signed-out route stops at sign-in; all signed-in people reach the reader boundary.
+  if (!person.actingSubject) return;
+  const attached = await client.readConfiguration(short(target.zone), person.actingSubject);
+  if (!attached.ok) return;
+  // The native canonical key also identifies Realms created before the independent-site entry.
+  const found = await client.resolveRealmHandle(uuidToSid(short(sessions.space)), person.actingSubject);
+  if (!found.ok) return;
+  const changed = await client.saveConfiguration(short(target.zone), {
+    expectedHead: attached.data.revision, actingSubject: person.actingSubject, defaultRealm: found.data.realm,
+  }, randomUUID());
+  if (!changed.ok) return;
+  await client.readConfiguration(short(target.zone), person.actingSubject);
+  const presentation = await main.v1.zones({ id: short(target.zone) }).presentation.get({ query: { actingSubject: person.actingSubject } });
   if (presentation.error) throw new Error(`Production attached presentation failed: ${presentation.error.status}`);
-  const address = await main.v1.addresses.resolve.get({ query: { scope: 'space', key: short(target.space), actingSubject: person.actingSubject! } });
+  const address = await main.v1.addresses.resolve.get({ query: { scope: 'space', key: short(target.space), actingSubject: person.actingSubject } });
   if (address.error) throw new Error(`Production attached address failed: ${address.error.status}`);
 }

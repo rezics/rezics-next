@@ -4,9 +4,10 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { AnswerRecordValidator, answerPersonas, answerRecord, type AnswerContract, type AnswerRecord } from '../../../../../scripts/api/answer-record.ts';
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { uuidToSid } from '@rezics/model/address';
 import { realmSiteCreationClient } from '../../../../../apps/web/features/communities/realm-site-creation-api.ts';
 import { realmFrameReads, zonePresentationReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
-import { browserZoneAuthoring, loadCompleteZoneNavigation } from '../../../../../apps/web/features/zone-editor/api.ts';
+import { browserZoneAuthoring, browserZoneRealmAttachment, loadCompleteZoneNavigation } from '../../../../../apps/web/features/zone-editor/api.ts';
 import { readZoneManagementFrame } from '../../../../../apps/web/features/zone-editor/authoring-reads.ts';
 import { draftChoice, draftWire, publicationChoice } from '../../../../../apps/web/features/zone-editor/model.ts';
 import { loadSavedPreviewFrame } from '../../../../../apps/web/features/zone-editor/saved-preview-frame.ts';
@@ -261,20 +262,38 @@ async function ownerProof() {
 /** The creation action uses the same typed commands as the web, then opens its existing management reader. */
 async function creationVisit(person: PersonaSession) {
   let label = 'creation-space';
+  let loseResponse = false;
   const fetcher = (async (input, init) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
     const raw = await request.text();
-    return capture('owner', person, label, request.method, url.pathname.replace(/^\/api\/main/, '') + url.search,
+    const response = await capture('owner', person, `${label}${url.pathname.includes('/v1/realms/') ? '-realm' : ''}`, request.method, url.pathname.replace(/^\/api\/main/, '') + url.search,
       raw ? JSON.parse(raw) as unknown : undefined, request.headers.get('idempotency-key') ?? undefined);
+    if (loseResponse) { loseResponse = false; throw new TypeError('Response lost after the command reached Main'); }
+    return response;
   }) as typeof fetch;
   const main = browserMainApi('https://record.invalid', { fetcher });
+  label = 'creation-preferences';
+  await main.v1.me['person-preferences'].get({ query: { actingSubject: person.actingSubject! } });
   const creator = realmSiteCreationClient(main);
-  const created = await creator.create({ profile: 'space-zone-v1', name: 'Independent original site', language: 'en',
-    capabilities: ['zone'], actingSubject: person.actingSubject! }, randomUUID());
+  const intent = { profile: 'space-zone-v1' as const, name: 'Independent original site', language: 'en',
+    capabilities: ['zone'] as ['zone'], actingSubject: person.actingSubject! };
+  const createKey = randomUUID();
+  label = 'creation-space'; loseResponse = true;
+  expect(await creator.create(intent, createKey)).toEqual({ ok: false, failure: 'unavailable' });
+  label = 'creation-space-replay';
+  const created = await creator.create(intent, createKey);
   if (!created.ok) throw new Error(`Production creation failed: ${JSON.stringify(created)}`);
+  expect(created.data.replayed).toBe(true);
+  const original = captured.owner.find(sample => sample.label === 'creation-space')!.answer as typeof created.data;
+  expect(created.data.space).toBe(original.space);
+  expect(created.data.zone).toBe(original.zone);
+  expect(created.data.navigation).toBe(original.navigation);
   label = 'creation-home';
-  const prepared = await creator.prepare(created.data, person.actingSubject!, randomUUID());
+  const prepareKey = randomUUID(); loseResponse = true;
+  expect(await creator.prepare(created.data, person.actingSubject!, prepareKey)).toEqual({ ok: false, failure: 'unavailable' });
+  label = 'creation-home-replay';
+  const prepared = await creator.prepare(created.data, person.actingSubject!, prepareKey);
   if (!prepared.ok) throw new Error(`Production home preparation failed: ${prepared.failure}`);
   label = 'creation-address';
   const destination = await creator.destination(created.data, person.actingSubject!, 'en');
@@ -292,6 +311,34 @@ async function creationVisit(person: PersonaSession) {
     return readZoneManagementFrame(management, ref, 'en', person.actingSubject!);
   });
   if (frame.authoring.kind !== 'ready') throw new Error(`Created Zone cannot open attachment management: ${frame.authoring.kind}`);
+  const attachment = browserZoneRealmAttachment(main);
+  label = 'creation-attachment-configuration';
+  const basis = await attachment.readConfiguration(short(created.data.zone), person.actingSubject!);
+  if (!basis.ok) throw new Error(`Production attachment configuration failed: ${basis.failure}`);
+  label = 'creation-attachment-resolve';
+  const existing = await attachment.resolveRealmHandle(uuidToSid(short(sessions.space)), person.actingSubject!);
+  if (!existing.ok) throw new Error(`Existing Realm could not be selected: ${existing.failure}`);
+  label = 'creation-attachment-save';
+  const attached = await attachment.saveConfiguration(short(created.data.zone), {
+    expectedHead: basis.data.revision, actingSubject: person.actingSubject!, defaultRealm: existing.data.realm,
+  }, randomUUID());
+  if (!attached.ok) throw new Error(`Production attachment failed: ${attached.failure}`);
+  label = 'creation-attached-configuration';
+  const reopened = await attachment.readConfiguration(short(created.data.zone), person.actingSubject!);
+  if (!reopened.ok) throw new Error(`Production attached configuration failed: ${reopened.failure}`);
+  expect(reopened.data.realm).toBe(sessions.realm);
+  label = 'creation-attached-presentation';
+  const presentation = await zonePresentationReads(main, person.actingSubject!).readPresentation(short(created.data.zone));
+  if (!presentation.ok) throw new Error(`Production attached presentation failed: ${presentation.failure}`);
+  label = 'creation-attached-address';
+  const address = await creator.destination(created.data, person.actingSubject!, 'en');
+  expect(address).toEqual(destination);
+  // Restore the row's Realm-less state before its original independent-Zone assertions.
+  label = 'creation-attachment-remove';
+  const removed = await attachment.saveConfiguration(short(created.data.zone), {
+    expectedHead: reopened.data.revision, actingSubject: person.actingSubject!, defaultRealm: null,
+  }, randomUUID());
+  if (!removed.ok) throw new Error(`Restoring the independent Zone failed: ${removed.failure}`);
   return created.data;
 }
 outcomeTest(independent, 'owner', () => qualify('owner', ownerProof), recording);

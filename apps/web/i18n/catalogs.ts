@@ -19,6 +19,7 @@ function splitCatalog<T extends object>(english: () => Promise<T>, translations:
 // this file with the union driver (see .gitattributes), so parallel feature
 // branches add their lines without conflicts; keep one entry per line.
 export const catalogs = {
+  realmSiteCreation: inlineCatalog(() => import('../features/communities/realm-site-creation-messages.ts').then(module => module.realmSiteCreationMessages)),
   realmAppealReview: inlineCatalog(() => import('../features/realm-appeal/review-messages.ts').then(module => module.reviewText)),
   postWork: inlineCatalog(() => import('../features/work-page/post-work-messages.ts').then(module => module.messages)),
   notifications: inlineCatalog(() => import('../features/shell/notifications/messages.ts').then(module => module.messages)),
