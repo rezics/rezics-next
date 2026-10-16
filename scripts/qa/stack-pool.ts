@@ -295,9 +295,16 @@ function ownedEntry(state: string, entry: QaStackPoolEntry): QaStackPoolEntry | 
   return saved.token === entry.token && saved.holder?.pid === entry.holder?.pid ? saved : undefined;
 }
 
+function containerRemovalSettling(args: string[], errors: string): boolean {
+  if (args[0] !== 'rm') return false;
+  const lines = errors.trim().split('\n').map(line => line.trim()).filter(Boolean);
+  return lines.length > 0 && lines.every(line =>
+    /^Error response from daemon: (?:removal of container [a-z0-9]+ is already in progress|No such container: [A-Za-z0-9_.-]+)$/.test(line));
+}
+
 function dockerSync(env: NodeJS.ProcessEnv, args: string[]): string {
   const result = spawnSync('docker', args, { env: preserveReapEnvironment(env), encoding: 'utf8', timeout: 120_000 });
-  if (result.error || result.status !== 0)
+  if (result.error || (result.status !== 0 && !(result.status !== null && containerRemovalSettling(args, result.stderr))))
     throw new Error(`docker ${args.join(' ')} failed: ${(result.stderr || result.error?.message || '').trim()}`);
   return result.stdout.trim();
 }
@@ -313,7 +320,7 @@ async function dockerAsync(env: NodeJS.ProcessEnv, args: string[]): Promise<stri
     child.once('error', error => { clearTimeout(timer); reject(error); });
     child.once('close', code => {
       clearTimeout(timer);
-      if (code === 0) accept(output.trim());
+      if (code === 0 || (code !== null && containerRemovalSettling(args, errors))) accept(output.trim());
       else reject(new Error(`docker ${args.join(' ')} failed: ${errors.trim()}`));
     });
   });
@@ -339,7 +346,12 @@ async function destroyStack(options: QaStackPoolOptions, entry: QaStackPoolEntry
     for (const command of cleanupCommands(`rezics-qa-${entry.projectRunId}`)) {
       const ids = (await dockerAsync(env, command.list)).split(/\s+/).filter(Boolean);
       if (ids.length) await dockerAsync(env, [...command.remove, ...ids]);
-      if (await dockerAsync(env, command.list)) throw new Error('QA pool project cleanup left resources behind');
+      const deadline = Date.now() + 120_000;
+      while (await dockerAsync(env, command.list)) {
+        if (command.remove[0] !== 'rm' || Date.now() >= deadline)
+          throw new Error('QA pool project cleanup left resources behind');
+        await new Promise(accept => setTimeout(accept, 100));
+      }
     }
   }
 }
@@ -352,7 +364,12 @@ function destroyStackSync(options: QaStackPoolOptions, entry: QaStackPoolEntry):
     for (const command of cleanupCommands(`rezics-qa-${entry.projectRunId}`)) {
       const ids = dockerSync(env, command.list).split(/\s+/).filter(Boolean);
       if (ids.length) dockerSync(env, [...command.remove, ...ids]);
-      if (dockerSync(env, command.list)) throw new Error('QA pool project cleanup left resources behind');
+      const deadline = Date.now() + 120_000;
+      while (dockerSync(env, command.list)) {
+        if (command.remove[0] !== 'rm' || Date.now() >= deadline)
+          throw new Error('QA pool project cleanup left resources behind');
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+      }
     }
   }
 }
@@ -428,11 +445,17 @@ export function createQaStackPool(options: QaStackPoolOptions): QaStackPool {
   function leaseFor(entry: QaStackPoolEntry, parkedMs: number): QaStackPoolLease {
     const key = entryPath(paths.state, entry.projectRunId);
     heldStacks.set(key, { entry, state: paths.state, cleanup: () => {
-      const saved = ownedEntry(paths.state, entry);
-      if (!saved) { forgetHeld(key, entry.token); return; }
-      destroySync(saved);
-      rmSync(key, { force: true });
-      forgetHeld(key, entry.token);
+      // An async teardown may still be running when exit cleanup fires. Do not
+      // race it; the janitor reclaims this holder after exit if work is unfinished.
+      const lock = tryAcquireDirectoryLease(join(paths.state, 'lock'));
+      if (lock === 'held') return;
+      try {
+        const saved = ownedEntry(paths.state, entry);
+        if (!saved) { forgetHeld(key, entry.token); return; }
+        destroySync(saved);
+        rmSync(key, { force: true });
+        forgetHeld(key, entry.token);
+      } finally { lock.release(); }
     } });
     return {
       entry, parkedMs,

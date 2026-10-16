@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -539,7 +539,7 @@ test('a holder releases excess capacity when the slot count falls during its run
   expect(f.destroyed).toEqual(['first']);
 });
 
-function fakeDocker(root: string): NodeJS.ProcessEnv {
+function fakeDocker(root: string, removal?: { error: string; remainingLists: number }): NodeJS.ProcessEnv {
   const bin = join(root, 'bin');
   mkdirSync(bin);
   writeFileSync(join(bin, 'docker'), `#!/bin/sh
@@ -555,17 +555,103 @@ case "$1:$2" in
   volume:ls) kind=volumes ;;
   network:ls) kind=networks ;;
   inspect:*) /bin/cat "$FAKE_DOCKER_STATE/owner"; exit 0 ;;
-  rm:*) /bin/rm -f "$FAKE_DOCKER_STATE/containers"; exit 0 ;;
+  rm:*)
+    if [ -f "$FAKE_DOCKER_STATE/removal-error" ]; then
+      touch "$FAKE_DOCKER_STATE/removing"
+      /bin/cat "$FAKE_DOCKER_STATE/removal-error" >&2
+      exit 1
+    fi
+    /bin/rm -f "$FAKE_DOCKER_STATE/containers"; exit 0 ;;
   volume:rm) /bin/rm -f "$FAKE_DOCKER_STATE/volumes"; exit 0 ;;
   network:rm) /bin/rm -f "$FAKE_DOCKER_STATE/networks"; exit 0 ;;
   *) exit 1 ;;
 esac
 case "$*" in *label=rezics.reap-owner*) [ -f "$FAKE_DOCKER_STATE/owner" ] || exit 0 ;; esac
+if [ "$kind" = containers ] && [ -f "$FAKE_DOCKER_STATE/removing" ]; then
+  remaining=$(/bin/cat "$FAKE_DOCKER_STATE/remaining-lists")
+  if [ "$remaining" -eq 0 ]; then /bin/rm -f "$FAKE_DOCKER_STATE/containers"
+  else printf '%s' "$((remaining - 1))" > "$FAKE_DOCKER_STATE/remaining-lists"; fi
+fi
 if [ -f "$FAKE_DOCKER_STATE/$kind" ]; then /bin/cat "$FAKE_DOCKER_STATE/$kind"; fi
 `, { mode: 0o700 });
   for (const kind of ['containers', 'volumes', 'networks']) writeFileSync(join(root, kind), `${kind}-id\n`);
+  if (removal) {
+    writeFileSync(join(root, 'removal-error'), removal.error);
+    writeFileSync(join(root, 'remaining-lists'), String(removal.remainingLists));
+  }
   return { ...process.env, PATH: `${bin}:${process.env.PATH}`, FAKE_DOCKER_STATE: root };
 }
+
+for (const mode of ['async', 'sync'] as const) {
+  for (const answer of ['already removing', 'already gone', 'mixed benign answers'] as const) {
+    test(`${mode} teardown accepts containers ${answer} and verifies disappearance before deleting volumes`, async () => {
+      const f = fixture();
+      f.on();
+      const progress = 'Error response from daemon: removal of container abc123 is already in progress';
+      const gone = 'Error response from daemon: No such container: gone-container';
+      const remainingLists = answer === 'already gone' ? 0 : 2;
+      const env = fakeDocker(f.root, { error: answer === 'already gone' ? gone
+        : answer === 'already removing' ? progress : `${progress}\n${gone}`, remainingLists });
+      const lease = await f.pool({ destroy: undefined, destroySync: undefined, env }).register('settling', 'ordinary');
+      const errors = spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        if (mode === 'async') await lease!.destroy();
+        else destroyHeldQaStacks();
+        expect(errors).not.toHaveBeenCalled();
+        expect(existsSync(join(f.state, 'settling.json'))).toBe(false);
+        for (const kind of ['containers', 'volumes', 'networks']) expect(existsSync(join(f.root, kind))).toBe(false);
+        const commands = readFileSync(join(f.root, 'commands'), 'utf8').trim().split('\n');
+        expect(commands.filter(line => line.startsWith('ps '))).toHaveLength(remainingLists + 2);
+        expect(commands.findIndex(line => line.startsWith('volume ls'))).toBe(remainingLists + 3);
+      } finally { errors.mockRestore(); }
+    });
+  }
+
+  for (const error of ['Error response from daemon: permission denied',
+    'Error response from daemon: removal of container abc123 is already in progress\nError response from daemon: permission denied',
+    '']) {
+    test(`${mode} teardown preserves real removal failures (${error || 'empty stderr'}) even if the container disappears`, async () => {
+      const f = fixture();
+      f.on();
+      const env = fakeDocker(f.root, { error, remainingLists: 0 });
+      const lease = await f.pool({ destroy: undefined, destroySync: undefined, env }).register('failed-removal', 'ordinary');
+      const errors = spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        if (mode === 'async') await expect(lease!.destroy()).rejects.toThrow('docker rm -f containers-id failed:');
+        else {
+          destroyHeldQaStacks();
+          expect(errors).toHaveBeenCalledWith(expect.stringContaining('docker rm -f containers-id failed:'));
+        }
+        expect(existsSync(join(f.state, 'failed-removal.json'))).toBe(true);
+        expect(readFileSync(join(f.root, 'commands'), 'utf8')).not.toContain('volume rm');
+      } finally {
+        rmSync(join(f.root, 'removal-error'));
+        errors.mockRestore();
+      }
+    });
+  }
+}
+
+test('exit cleanup does not duplicate an asynchronous teardown holding the pool lock', async () => {
+  const f = fixture();
+  f.on();
+  const entered = Promise.withResolvers<void>();
+  const finish = Promise.withResolvers<void>();
+  let removals = 0;
+  const lease = await f.pool({ destroy: async () => { removals++; entered.resolve(); await finish.promise; } })
+    .register('teardown', 'ordinary');
+  const teardown = lease!.destroy();
+  try {
+    await entered.promise;
+    destroyHeldQaStacks();
+    expect(f.destroyed).toEqual([]);
+    expect(removals).toBe(1);
+    expect(existsSync(join(f.state, 'teardown.json'))).toBe(true);
+  } finally { finish.resolve(); await teardown; }
+  destroyHeldQaStacks();
+  expect(f.destroyed).toEqual([]);
+  expect(existsSync(join(f.state, 'teardown.json'))).toBe(false);
+});
 
 test('a parked stack survives its creator exit and orphan sweep until its pool record expires', async () => {
   const f = fixture();
