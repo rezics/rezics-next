@@ -1,11 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
+import { basename, dirname, resolve } from 'node:path';
 import { DOMParser, type Element } from '@xmldom/xmldom';
 import { AwsClient } from 'aws4fetch';
 import { Client } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph } from '../../services/main/src/modules/work/activate.ts';
 import { readEnv, replacePrivate } from '../dev/config.ts';
+import { preserveReapEnvironment } from './container-reaper.ts';
+import { commandAsync } from './core.ts';
+import { pollUntilDeadline } from './readiness.ts';
 
 export const integrationOwnerResetStatements = ['account', 'access', 'content', 'relay'].flatMap(
   (owner) => [
@@ -184,10 +188,34 @@ export async function resetIntegrationState(
   };
 }
 
+/** Only after the test command exits: deleting quads leaves TDB2 pages on
+ * tmpfs, charged to Fuseki's memory limit across leases. Restarting this one
+ * disposable service remounts its tmpfs before the fresh graph is bootstrapped.
+ * Persistent stacks retain their physical data and use the logical reset. */
+async function reclaimIntegrationGraphStorage(
+  apps: Record<string, string>, compose: Record<string, string>, composePath: string,
+): Promise<void> {
+  if (compose.REZICS_STACK_PROFILE !== 'qa' || compose.REZICS_STACK_STORAGE !== 'tmpfs') return;
+  const project = basename(dirname(resolve(composePath)));
+  if (!/^rezics-qa-[a-z0-9-]+$/.test(project)) throw new Error('Invalid disposable QA stack directory');
+  const restarted = await commandAsync(resolve(import.meta.dir, '../..'), 'docker',
+    ['restart', '--time', '30', `${project}-fuseki-1`], 45_000, preserveReapEnvironment(process.env));
+  if (!restarted.ok) throw new Error(`Fuseki storage reset failed: ${restarted.output}`);
+  const ping = new URL('/$/ping', apps.FUSEKI_URL!).href;
+  const ready = await pollUntilDeadline(async remainingMs => {
+    try { return await fetch(ping, { signal: AbortSignal.timeout(Math.min(2_000, remainingMs)) }); }
+    catch { return false; }
+  }, Date.now() + 60_000);
+  if (!ready) throw new Error('Fuseki did not become ready after its storage reset');
+}
+
 if (import.meta.main) {
   const appsPath = process.argv[2]!;
   const composePath = process.argv[3]!;
-  const next = await resetIntegrationState(readEnv(appsPath), readEnv(composePath));
+  const apps = readEnv(appsPath);
+  const compose = readEnv(composePath);
+  await reclaimIntegrationGraphStorage(apps, compose, composePath);
+  const next = await resetIntegrationState(apps, compose);
   replacePrivate(appsPath, next);
   replacePrivate(composePath, {
     ...readEnv(composePath),
