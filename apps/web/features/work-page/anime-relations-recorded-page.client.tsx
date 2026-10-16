@@ -54,6 +54,8 @@ export function AnimeRelationsRecordedPage({ main, fetcher, actingSubject, id, v
         setContent(page.header.failure === 'missing' ? <WorkNotFound messages={t} /> : <WorkUnavailable messages={t} />);
         return;
       }
+      if (!page.projection || !page.agentCredits || !page.credits || !page.releases)
+        throw new Error('Successful hub read lacks its production regions');
       const work = page.header.data;
       const host = { main, actingSubject };
       const reads = animeRelationsReads(host);
@@ -75,7 +77,7 @@ export function AnimeRelationsRecordedPage({ main, fetcher, actingSubject, id, v
       if (!mounted) return;
       const words = materializeData(t, { locale });
       const authors = coverAuthors(page.agentCredits, page.credits, key => words.openLibraryAuthor({ key }));
-      const action = nextAction({ start, preference: identity.preference, progress: identity.progress,
+      const action = nextAction({ start, preference: identity.preference, progress: identity.progress.ok ? identity.progress : null,
         releases: page.releases.ok ? page.releases.data.items.length : 0 });
       const actions = actingSubject ? createReaderStore({ actingSubject, seed: page.seed ?? {}, main: () => main }) : undefined;
       setContent(<WorkFrame workRef={id} work={work} experience={experience} locale={locale} messages={t}

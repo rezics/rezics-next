@@ -35,12 +35,12 @@ for (const persona of personas) {
       const source = visit(persona, index + 1);
       expect(Boolean(source.actingSubject)).toBe(persona !== 'visitor');
       const page = await readDatedAnimeHub(source.main, source.actingSubject, source.id);
-      expect(page.header).toEqual({ ok: true, data: source.header.answer });
+      expect<unknown>(page.header).toEqual({ ok: true, data: source.header.answer });
       if (!page.header.ok) throw new Error('Recorded public Work must load');
       expect(page.header.data.title.value).toStartWith(title);
       expect(page.header.data.types).toContain(type);
-      expect(page.projection.ok && page.projection.data.registry.type).toBe(type);
-      expect(page.agentCredits.ok && page.agentCredits.data.items).toContainEqual(expect.objectContaining({
+      expect(page.projection?.ok && page.projection.data.registry.type).toBe(type);
+      expect(page.agentCredits?.ok && page.agentCredits.data.items).toContainEqual(expect.objectContaining({
         role: 'author', displayName: 'Outcome owner', identityStatus: 'active',
       }));
       expect(source.faults).toEqual([]);
