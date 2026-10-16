@@ -3435,10 +3435,10 @@
         },
         "status": 403,
         "answer": {
-          "type": "https://rezics.com/problems/authority_denied",
-          "title": "Authority is not admitted",
+          "type": "https://rezics.com/problems/rights_denied",
+          "title": "Work publication rights are not established",
           "status": 403,
-          "code": "authority_denied"
+          "code": "rights_denied"
         },
         "headers": {
           "cache-control": "no-store",
@@ -8798,10 +8798,10 @@
         },
         "status": 403,
         "answer": {
-          "type": "https://rezics.com/problems/authority_denied",
-          "title": "Authority is not admitted",
+          "type": "https://rezics.com/problems/rights_denied",
+          "title": "Work publication rights are not established",
           "status": 403,
-          "code": "authority_denied"
+          "code": "rights_denied"
         },
         "headers": {
           "cache-control": "no-store",
@@ -14132,10 +14132,10 @@
         },
         "status": 403,
         "answer": {
-          "type": "https://rezics.com/problems/authority_denied",
-          "title": "Authority is not admitted",
+          "type": "https://rezics.com/problems/rights_denied",
+          "title": "Work publication rights are not established",
           "status": 403,
-          "code": "authority_denied"
+          "code": "rights_denied"
         },
         "headers": {
           "cache-control": "no-store",
