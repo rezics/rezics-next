@@ -26,7 +26,8 @@ test('restore keeps excluded backup state and resets only named owner-rebuild st
   } } as unknown as PoolClient;
   await resetAccessRecoveryState(client);
   expect(queries.map(sql => /(?:UPDATE|DELETE FROM) access\.(\w+)/.exec(sql)?.[1]).sort())
-    .toEqual(['derived_generation', 'discovery_refresh', 'rate_limit_v1', 'realm_directory', 'realm_directory_position']);
+    .toEqual(['derived_generation', 'discovery_refresh', 'rate_limit_v1', 'realm_directory',
+      'realm_directory_growth', 'realm_directory_position']);
 });
 
 test('durable temporal publication intents remain authority', async () => {
