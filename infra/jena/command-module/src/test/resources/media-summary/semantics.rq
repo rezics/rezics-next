@@ -144,7 +144,11 @@ PREFIX rv: <https://rezics.com/vocab/> PREFIX schema: <https://schema.org/>
   GRAPH <urn:rezics:graph:revisions> {
     ?structuredDecision a rv:WorkStructurePublicationDecision ; rv:component ?work ;
       rv:publicationOutcome rv:Published ; rv:publicSource ?structuredSource ;
-      rv:disclosure rv:Public ; rv:rightsBasis rv:OriginalContribution .
+      rv:disclosure rv:Public ; rv:rightsBasis ?structuredBasis .
+    FILTER(?structuredBasis = rv:OriginalContribution || ?structuredBasis = rv:PublicDomain)
+    FILTER(?structuredBasis != rv:PublicDomain || EXISTS {
+      ?structuredDecision rv:sourceObservation ?structuredObservation .
+      ?structuredSource rv:sourceObservation ?structuredObservation . })
     ?structuredSource a rv:WorkStructurePublicSource ; rv:work ?work ; rv:component ?pm ;
       rv:structureProfile ?structuredProfile ; rv:structure ?structuredStructure ; rv:structureRevision ?structuredRevision ;
       rv:selectedGeneration ?structuredGeneration ; rv:sourceRoot ?structuredRoot .
