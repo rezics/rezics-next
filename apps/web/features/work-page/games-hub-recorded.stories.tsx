@@ -82,6 +82,8 @@ async function expectChooser(canvasElement: HTMLElement, args: { persona: Answer
   const tracking = trackingCopy(args.locale);
   const name = releaseChoiceName(release, args.locale, tracking);
   const edition = await canvas.findByRole('combobox', { name: tracking.edition });
+  // The asynchronously mounted Select stays disabled until its hydration effect has run.
+  await waitFor(() => expect(edition).toBeEnabled());
   if (saved) await expect(edition).toHaveTextContent(release.title.value);
   else await expect(edition).toHaveTextContent(tracking.anyEdition);
   await userEvent.click(edition);
