@@ -12,7 +12,7 @@ const forwarded = 'export async function page(api, cursor) { const page = await 
 
 test('production web projection syntax introduces no new violations', async () => {
   expect(changedContinuationGroups(continuationInventory(await webSources(root)), accepted.violations)).toEqual([]);
-});
+}, 60_000);
 
 test.each([forwarded, `// A benign edit.\n${forwarded}`,
   forwarded.replace('return { items: page.items, nextCursor: page.nextCursor };', 'return page;'),

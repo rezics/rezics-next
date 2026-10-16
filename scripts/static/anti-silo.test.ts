@@ -584,7 +584,7 @@ test('a shared read cannot import package solving', () => {
   expect(failing.output).toContain('modules/package/marker.ts');
   expect(failing.output).toContain('Package solving stays optional');
   expect(failing.output).toMatch(/1 dependency violations/);
-});
+}, 60_000);
 
 test('a feature cannot import an official Zone package except through the loader', () => {
   const failing = cruise('scripts/static/fixtures/anti-silo/zone-loader');

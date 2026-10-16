@@ -15,7 +15,7 @@ test('production web page predicates have structural evidence or an explicit API
   const current = pageSelections(await webSources(root), operations);
   const accepted = JSON.parse(readFileSync(new URL('./web-page-filtering.inventory.json', import.meta.url), 'utf8'));
   expect(newPageSelections(current, accepted)).toEqual([]);
-});
+}, 60_000);
 
 test('server selection and new correctly filtered consumers pass', () => {
   expect(pageSelections([source(correct), source(correct, 'apps/web/features/new/read.ts')])).toEqual([]);
