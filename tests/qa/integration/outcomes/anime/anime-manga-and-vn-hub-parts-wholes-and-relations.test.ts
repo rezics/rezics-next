@@ -315,7 +315,7 @@ async function read(name: PersonaName) {
 async function visit(name: PersonaName) {
   const person = sessions[name];
   const sample = recording.session(name, person);
-  for (const [index, work] of [...roots, parts[0]!, privateWhole].entries()) {
+  await Promise.all([...roots, parts[0]!, privateWhole].map(async (work, index) => {
     let request = 0;
     const faults: unknown[] = [];
     const fetcher: typeof fetch = async (input, init) => {
@@ -332,7 +332,7 @@ async function visit(name: PersonaName) {
     if (registry.data) seedTypes(registry.data);
     const page = await readDatedAnimeHub(main, host.actingSubject, id);
     if (faults.length) throw faults[0];
-    if (!page.header.ok) continue;
+    if (!page.header.ok) return;
     await Promise.all([
       readAnimeRelationsConnections(animeRelationsReads(host), id, { grain: 'series' }),
       readWorkParts(main, host.actingSubject, id, { limit: 7 }),
@@ -360,12 +360,15 @@ async function visit(name: PersonaName) {
             const standing = await tracking.media.standing(work.work);
             if (standing.ok && !standing.data.opened) await tracking.media.positions(work.work);
           } else if (choice.kind === 'work') await tracking.media.workStanding(work.work);
-          else if (choice.kind === 'game') throw new Error(`Unrecorded route-based game control for ${work.work}`);
+          else if (choice.kind === 'game') {
+            const routes = await tracking.media.routes(work.work);
+            if (routes.ok) await Promise.all(routes.data.items.map(route => tracking.media!.progress(route)));
+          }
         }
       }
     }
     if (faults.length) throw faults[0];
-  }
+  }));
 }
 
 async function proveAndVisit(name: PersonaName) {
