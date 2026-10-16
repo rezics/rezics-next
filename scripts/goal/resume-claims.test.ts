@@ -124,11 +124,11 @@ describe('resume registers brief claims', () => {
     } finally { repo.dispose(); }
   });
 
-  test('a conflict refuses with reclaim diagnostics, preserves the ledger and starts no launcher', () => {
+  test.each(['starting', 'running'] as const)('a %s claim conflict refuses with reclaim diagnostics, preserves the ledger and starts no launcher', state => {
     const repo = repository();
     try {
       const ledger = repo.ledger();
-      ledger.tasks['G-002'] = { ...repo.task, id: 'G-002', paths: ['added.ts'] };
+      ledger.tasks['G-002'] = { ...repo.task, id: 'G-002', paths: ['added.ts'], state };
       repo.save(ledger);
       repo.brief({ paths: '[kept.ts, added.ts]' });
       const before = readFileSync(repo.ledgerPath, 'utf8');
