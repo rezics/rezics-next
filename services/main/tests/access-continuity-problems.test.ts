@@ -49,6 +49,10 @@ function maintainerPool(options: { clash?: boolean }) {
     if (sql.startsWith('INSERT INTO access.scope_gate')) return rows([]);
     if (sql.includes('FROM access.scope_gate')) return rows([{}]);
     if (sql.includes('FROM access.principal')) return rows([{ id: principalId }]);
+    if (sql.includes('FROM access.authority_subject s')) return rows([{
+      policy_generation: '1', provision_id: 'provision', representation_id: 'controller',
+      representation_generation: '1', subject_generation: '1', principal_epoch: '0',
+    }]);
     if (sql.includes('access.work_maintainer_receipt')) {
       return options.clash ? rows([{ id: 'prior', request_digest: 'other', generation: '0', maintainers: [] }]) : rows([]);
     }
