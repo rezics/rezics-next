@@ -17,6 +17,7 @@ const Link = ((props: ZoneLinkProps) => createElement('a', props)) as ComponentT
 const draw = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
 
 test.each(['anime', 'manga'] as const)('%s attribution links remain distinguishable without colour', ref => {
+  installHostZoneAddresses();
   const footer = ref === 'anime' ? AnimeFooter : MangaFooter;
   const html = draw(createElement(footer, { zone: catalogueZone(ref, 'en'), Link, fallback: null,
     credit: { sourceHref: 'https://bgm.tv', licenceHref: 'https://creativecommons.org/licenses/by-sa/3.0/' } }));
