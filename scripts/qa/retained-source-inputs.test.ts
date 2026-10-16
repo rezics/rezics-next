@@ -11,8 +11,9 @@ import { isRetainedSourceInput, RETAINED_SOURCE_EXCLUDED_ROOTS, sourceFileDigest
 import { fixtureCorpus } from '../fixture/corpus.ts';
 import { manifestCore, manifestIdentity } from '../fixture/manifest.ts';
 import { fixtureOwners } from '../fixture/owners/index.ts';
-import { WORK_PROFILE_SCALES, workProfileCorpusId } from '../load/work-profile-corpus.ts';
+import { workProfileCorpusId } from '../load/work-profile-corpus.ts';
 import { seedSpecification } from '../../tests/qa/support/seed-specification.ts';
+import { seedCheckpointPlan } from '../../tests/qa/support/seed-checkpoint-plan.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const compatibility = { native: 'fixed-for-source-byte-check' };
@@ -114,7 +115,8 @@ test('small fixture and every seed cut keep their keys across tooling-only chang
   const original = manifestCore(root, corpus, fixtureOwners, engines);
   const keys = (directory: string) => ({
     fixtureSmall: manifestIdentity(manifestCore(directory, corpus, fixtureOwners, engines)).id,
-    seed: WORK_PROFILE_SCALES.map(scale => workProfileCorpusId(seedSpecification, 'unrelatedWorks', scale, loadCompatibility(directory))),
+    seed: seedCheckpointPlan().map(stage => workProfileCorpusId(
+      { ...seedSpecification, fixed: stage.fixed }, stage.axis, stage.scale, loadCompatibility(directory))),
   });
   const copy = mkdtempSync(join(root, '.temp/retained-storage-inputs-'));
   try {
