@@ -102,6 +102,7 @@ test('file and reviewed batches share one checkout across owner reads and per-ro
     if (++checkouts !== 1) throw new Error('nested pool checkout');
     return { query: async (sql: string) => {
       queries.push(sql);
+      if (sql.includes('current_setting')) return { rows: [{ sequential: 'on', bitmap: 'on' }] };
       if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] };
       if (sql.includes('SELECT request_digest, row_count')) return { rows: [{ request_digest: digest, row_count: 1 }] };
       if (sql.includes('SELECT plan, completed')) return { rows: [{ plan: {}, completed: false }] };

@@ -106,9 +106,9 @@ function audienceScene(kind = 'moderation_outcome') {
             }
             return { rows: [] };
           }
-          if (sql.startsWith('SET LOCAL') || sql.includes('set_config')) return { rows: [] };
           if (sql.includes('current_setting'))
             return { rows: [{ sequential: 'on', bitmap: 'on' }] };
+          if (sql.startsWith('SET LOCAL') || sql.includes('set_config')) return { rows: [] };
           if (sql.includes('SELECT open')) return { rows: [{ open }] };
           if (sql.includes('FROM access.notification_producer_cursor')) {
             if (sql.includes('position::text'))
