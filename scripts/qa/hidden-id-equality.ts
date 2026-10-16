@@ -39,6 +39,9 @@ export const registeredHiddenIdReads = [
 /** Writes have their own outcome proofs; they do not run in the read-only equality fixture.
  * About-posts covers hidden/absent targets (404) and hidden/absent openers (ordinary posting). */
 export const registeredHiddenIdWrites = [
+  // Retained collection resume compares another Person's file with an absent
+  // file in native-exchange-disclosure.test.ts, without dispatching any row.
+  'POST /v1/recipes/file-imports',
   'POST /v1/realms/{realm}/about-posts',
 ] as const;
 /** Parent-output equality, proved at the owner tier in realm-reply-threads,
@@ -60,6 +63,12 @@ export const registeredHiddenContentRevisionReads = [
  * draft/missing revisions, including anonymous refusal. It claims response
  * equality, not equal graph/SQL read counts (recipe-export-disclosure.test.ts). */
 export const registeredHiddenRecipeExportReads = ['GET /v1/recipes/{id}/export'] as const;
+/** Native exchange compares hidden and absent compositions/uploads through
+ * composeMain in native-exchange-disclosure.test.ts; response equality only. */
+export const registeredHiddenExchangeReads = [
+  'GET /v1/compositions/{id}/export',
+  'GET /v1/recipes/file-imports/{id}',
+] as const;
 /** Work contribution/submission pages compare stranger responses for hidden and
  * absent Work/Realm inputs in work-contribution-pages.test.ts. This is response
  * equality coverage, without a claim of equal owner query counts. */
@@ -71,6 +80,7 @@ export const registeredHiddenWorkContributionReads = [
 export const registeredHiddenIdOperations = [...registeredHiddenIdReads, ...registeredHiddenParentOutputReads,
   ...registeredHiddenContentRevisionReads,
   ...registeredHiddenRecipeExportReads,
+  ...registeredHiddenExchangeReads,
   ...registeredHiddenWorkContributionReads,
   ...registeredHiddenIdWrites].sort();
 

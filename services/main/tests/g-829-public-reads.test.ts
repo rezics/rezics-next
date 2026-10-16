@@ -155,6 +155,9 @@ test('G-829 class guard: every resource/composition/Collection GET has an explic
   const gets = app.routes.filter(route => route.method === 'GET'
     && /^\/v1\/(resources\/:resource\/|compositions\/|collections\/)/.test(route.path)).map(route => route.path);
   expect(gets.sort()).toEqual([...publicGetRoutes,
+    // Signed-in native export retains the selected revision's audience;
+    // native-exchange-disclosure compares hidden and absent compositions.
+    '/v1/compositions/:id/export',
     '/v1/resources/:resource/continuities',
     '/v1/compositions/:id/stages/:stage',
     '/v1/compositions/:id/occurrences/:occurrence/progress',

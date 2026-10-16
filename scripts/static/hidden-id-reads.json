@@ -442,6 +442,16 @@
     "status": "unregistered"
   },
   {
+    "operation": "GET /v1/compositions/{id}/export",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:parent",
+      "query:revision"
+    ],
+    "status": "registered"
+  },
+  {
     "operation": "GET /v1/compositions/{id}/occurrences/{occurrence}",
     "ids": [
       "path:id",
@@ -1991,6 +2001,14 @@
     "status": "unregistered"
   },
   {
+    "operation": "GET /v1/recipes/file-imports/{id}",
+    "ids": [
+      "path:id",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
     "operation": "GET /v1/recipes/works/{id}",
     "ids": [
       "path:id",
@@ -3510,10 +3528,10 @@
   {
     "operation": "POST /v1/recipes/file-imports",
     "ids": [
-      "query:actingSubject"
+      "query:actingSubject",
+      "query:fileId"
     ],
-    "status": "exempt",
-    "reason": "The only id is the caller's own acting subject."
+    "status": "registered"
   },
   {
     "operation": "POST /v1/resources/{resource}/derivations",
