@@ -165,7 +165,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
         // cannot establish the historical receipt's original body evidence.
         var rows = data.find(PUBLIC_GRAPH, Node.ANY, org.apache.jena.vocabulary.RDF.type.asNode(), uri(RV + "MatchUnit"));
         try { while (rows.hasNext()) {
-            if (System.nanoTime() >= deadline) throw new TextIndexException("rank metadata migration exceeded its maintenance budget");
+            if (System.nanoTime() >= deadline) throw new IllegalStateException("text rebuild exceeded its maintenance budget");
             Node owner = rows.next().getSubject();
             if (owner.isURI()) SearchDeltaJournal.migrateLegacyContentReceipt(data, lucene, owner.getURI());
         } } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
