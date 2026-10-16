@@ -68,7 +68,9 @@ public class SearchDeltaJournalStartupTest {
         final TextIndexLucene index;
         final DatasetGraphText data;
         Fixture() { this(new ByteBuffersDirectory()); }
-        Fixture(Directory directory) {
+        Fixture(Directory directory) { this(directory, false); }
+        Fixture(boolean ranked) { this(new ByteBuffersDirectory(), ranked); }
+        Fixture(Directory directory, boolean ranked) {
             EntityDefinition definition = new EntityDefinition("uri", "label", "graph");
             definition.set("body", BODY);
             definition.setLangField("lang");
@@ -76,8 +78,9 @@ public class SearchDeltaJournalStartupTest {
             TextIndexConfig config = new TextIndexConfig(definition);
             config.setValueStored(true);
             index = new TextIndexLucene(directory, config);
-            data = new DatasetGraphText(org.apache.jena.sparql.core.DatasetGraphFactory.createTxnMem(), index,
-                new TextDocProducerTriples(index));
+            org.apache.jena.query.text.TextIndex text = ranked ? new FilteredGraphTextIndex(index) : index;
+            data = new DatasetGraphText(org.apache.jena.sparql.core.DatasetGraphFactory.createTxnMem(), text,
+                new TextDocProducerTriples(text));
             data.begin(ReadWrite.WRITE);
             try {
                 data.add(CONTROL, PRODUCT, property("dataEpoch"), NodeFactory.createLiteralString("epoch"));
@@ -312,6 +315,72 @@ public class SearchDeltaJournalStartupTest {
                 assertTrue(lines.contains("startup-audit failed: original Content receipt source differs from current authority ["
                     + CONTENT + "]"));
             } finally { release(fixture.data); }
+        }
+    }
+
+    private static void seedMigrationContent(Fixture fixture, String storedBody, boolean modern) {
+        fixture.anchor();
+        seedLegacyContent(fixture.data.getWrapped(), CONTENT_BODY, null, true);
+        Entity stored = new Entity(CONTENT, CommandPolicy.PUBLIC_SEARCH, "en", null);
+        stored.put("body", storedBody);
+        if (modern) {
+            var filtered = (FilteredGraphTextIndex) fixture.data.getTextIndex();
+            filtered.bindRankData(fixture.data);
+            // Rank context marks a modern document even without an external key.
+            fixture.data.begin(ReadWrite.WRITE);
+            try {
+                fixture.data.add(PUBLIC, uri(CONTENT), property("context"), uri("urn:test:realm"));
+                fixture.data.add(PUBLIC, uri(CONTENT), property("mainVersion"), uri("urn:test:main"));
+                fixture.data.commit();
+            } finally { fixture.data.end(); }
+            filtered.addEntity(stored);
+        } else fixture.index.addEntity(stored);
+        fixture.index.commit();
+    }
+
+    @Test public void rankSchemaMigrationPinsOnlyAVerifiedHistoricalBodyBeforeReplacingIt() {
+        try (Fixture fixture = new Fixture(true)) {
+            seedMigrationContent(fixture, CONTENT_BODY, false);
+            assertTrue(OccurrenceTextSchema.rebuildIfIncompatible(fixture.data));
+            assertFalse(OccurrenceTextSchema.incompatible((FilteredGraphTextIndex) fixture.data.getTextIndex()));
+            fixture.data.begin(ReadWrite.READ);
+            try {
+                assertTrue(fixture.data.contains(uri(CommandPolicy.RECEIPTS), uri(RECEIPT),
+                    property("searchDeltaContentSource"), Node.ANY));
+                assertTrue(fixture.data.contains(uri(CommandPolicy.RECEIPTS), uri(RECEIPT),
+                    property("searchDeltaContentBodyDigest"), Node.ANY));
+            } finally { fixture.data.end(); }
+            try { assertTrue(SearchDeltaJournal.qualifyAtStartup(fixture.data)); }
+            finally { release(fixture.data); }
+        }
+    }
+
+    @Test public void rankSchemaMigrationRefusesACorruptHistoricalBodyWithoutPinningIt() {
+        try (Fixture fixture = new Fixture(true)) {
+            seedMigrationContent(fixture, CONTENT_INDEX_BODY, false);
+            assertThrows(IllegalStateException.class, () -> OccurrenceTextSchema.rebuildIfIncompatible(fixture.data));
+            fixture.data.begin(ReadWrite.READ);
+            try {
+                assertFalse(fixture.data.contains(uri(CommandPolicy.RECEIPTS), uri(RECEIPT),
+                    property("searchDeltaContentSource"), Node.ANY));
+            } finally { fixture.data.end(); }
+            try { assertFalse(SearchDeltaJournal.qualifyAtStartup(fixture.data)); }
+            finally { release(fixture.data); }
+        }
+    }
+
+    @Test public void rankSchemaRebuildCannotInventPinsForAnUnpinnedModernBody() {
+        try (Fixture fixture = new Fixture(true)) {
+            seedMigrationContent(fixture, CONTENT_BODY, true);
+            OccurrenceTextSchema.rebuild(fixture.data,
+                System.nanoTime() + TimeUnit.SECONDS.toNanos(10));
+            fixture.data.begin(ReadWrite.READ);
+            try {
+                assertFalse(fixture.data.contains(uri(CommandPolicy.RECEIPTS), uri(RECEIPT),
+                    property("searchDeltaContentSource"), Node.ANY));
+            } finally { fixture.data.end(); }
+            try { assertFalse(SearchDeltaJournal.qualifyAtStartup(fixture.data)); }
+            finally { release(fixture.data); }
         }
     }
 

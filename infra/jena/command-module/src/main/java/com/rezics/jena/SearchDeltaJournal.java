@@ -654,8 +654,9 @@ final class SearchDeltaJournal {
         return unit.startsWith("urn:rezics:content:match-unit:");
     }
 
-    /** Bind only a newly admitted delivery. An old receipt's missing pins
-     * cannot be reconstructed from a later relay or the current document. */
+    /** Bind a newly admitted delivery, or a historical delivery whose plain
+     * stored document was verified by the schema migration before replacement.
+     * A later relay or an unverified current document cannot supply old pins. */
     static void retainContentReceiptSource(DatasetGraph data, String receipt) {
         Node receipts = uri(CommandPolicy.RECEIPTS), own = uri(receipt);
         Node unit = one(data, receipts, own, uri(RV + "matchUnit"));
@@ -668,6 +669,20 @@ final class SearchDeltaJournal {
             throw new IllegalStateException("Content receipt source is reserved native metadata");
         data.add(receipts, own, CONTENT_SOURCE, literal(source.encoded()));
         data.add(receipts, own, CONTENT_BODY_DIGEST, literal(identity));
+    }
+
+    /** Preserve verified historical evidence before a rank rebuild destroys
+     * the plain stored body. Modern unpinned documents never enter this path. */
+    static void migrateLegacyContentReceipt(DatasetGraph data, TextIndexLucene lucene, String unit) {
+        if (!contentUnit(unit) || !plainStoredContentDocument(lucene, unit)
+            || !legacyUnpinnedContentReceipt(data, unit)) return;
+        verifyContentSubject(data, lucene, unit);
+        Node projection = one(data, PUBLIC, uri(unit), uri(RV + "projection"));
+        var receipts = data.find(uri(CommandPolicy.RECEIPTS), Node.ANY, uri(RV + "projection"), projection);
+        Node receipt;
+        try { receipt = receipts.next().getSubject(); }
+        finally { org.apache.jena.atlas.iterator.Iter.close(receipts); }
+        retainContentReceiptSource(data, receipt.getURI());
     }
 
     /** Resolve the current freshly admitted receipt by its exact projection point. */

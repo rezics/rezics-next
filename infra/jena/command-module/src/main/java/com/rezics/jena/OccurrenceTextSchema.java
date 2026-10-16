@@ -60,6 +60,7 @@ final class OccurrenceTextSchema {
         producer.start();
         long quads = 0;
         try {
+            index.migrateLegacyContentReceipts(data, deadline);
             index.lucene().getIndexWriter().deleteAll();
             for (String field : java.util.Set.copyOf(index.getDocDef().fields())) for (var predicate : index.getDocDef().getPredicates(field)) {
                 var rows = data.find(org.apache.jena.graph.Node.ANY, org.apache.jena.graph.Node.ANY,

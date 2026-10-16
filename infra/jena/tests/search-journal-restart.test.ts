@@ -13,8 +13,8 @@ import { buildPinnedContentPublicationUpdate, contentPublicationDecisionIri,
 import type { PublicationPreparation } from '../../../services/content/src/core.ts';
 
 // A killed Fuseki process loses its in-memory search-journal baseline. The next
-// process has to qualify the same volume, including a Content receipt that was
-// admitted before the native source pin existed.
+// process has to qualify the same volume, including a plain historical Jena
+// body document or a newly admitted Content receipt with native source pins.
 
 const root = resolve(import.meta.dir, '../../..');
 const dockerfile = readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8');
@@ -31,12 +31,14 @@ package com.rezics.jena;
 import org.apache.jena.datatypes.xsd.XSDDatatype;
 import org.apache.jena.graph.*;
 import org.apache.jena.query.*;
+import org.apache.jena.query.text.Entity;
 import org.apache.jena.rdf.model.*;
 import org.apache.jena.riot.RDFDataMgr;
 import org.apache.jena.system.Txn;
 import org.apache.jena.vocabulary.RDF;
 import org.apache.lucene.document.*;
 import org.apache.lucene.index.IndexOptions;
+import org.apache.lucene.index.Term;
 
 public class SearchJournalSeed {
   static final String RV = "https://rezics.com/vocab/";
@@ -65,8 +67,15 @@ public class SearchJournalSeed {
     Resource root = config.listSubjectsWithProperty(RDF.type, kind).next();
     Dataset dataset = DatasetFactory.assemble(root);
     try {
-      Txn.executeWrite(dataset, () -> write(dataset.asDatasetGraph(), args[0]));
-      if (args[0].equals("legacy")) markRankSchema(dataset.asDatasetGraph());
+      Txn.executeWrite(dataset, () -> {
+        write(dataset.asDatasetGraph(), args[0]);
+        if (args[0].equals("publication-delete"))
+          SearchDeltaJournal.retainContentReceiptSource(dataset.asDatasetGraph(), RECEIPT);
+      });
+      if (args[0].equals("legacy")) {
+        installLegacyBody(dataset.asDatasetGraph());
+        markRankSchema(dataset.asDatasetGraph());
+      }
     } finally { dataset.close(); }
   }
 
@@ -176,6 +185,18 @@ public class SearchJournalSeed {
     iri(data, RECEIPTS, RECEIPT, RV + "projection", PROJECTION);
     iri(data, RECEIPTS, RECEIPT, RV + "matchUnit", CONTENT);
     iri(data, RECEIPTS, RECEIPT, RV + "contentRevision", REVISION);
+  }
+
+  static void installLegacyBody(org.apache.jena.sparql.core.DatasetGraph data) throws Exception {
+    var text = (org.apache.jena.query.text.DatasetGraphText) data;
+    var lucene = ((FilteredGraphTextIndex) text.getTextIndex()).lucene();
+    // Today's assembler decorates new documents with rank/source fields. The
+    // historical compatibility case must actually contain the old plain row.
+    lucene.getIndexWriter().deleteDocuments(new Term("uri", CONTENT));
+    var body = new Entity(CONTENT, PUBLIC, "en", null);
+    body.put("body", "legacytoken selected body");
+    lucene.addEntity(body);
+    lucene.commit();
   }
 
   static void markRankSchema(org.apache.jena.sparql.core.DatasetGraph data) throws Exception {
