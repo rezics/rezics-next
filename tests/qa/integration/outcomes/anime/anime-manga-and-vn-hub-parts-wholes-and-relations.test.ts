@@ -8,7 +8,7 @@ import { readSuppliedContents } from '../../../../../apps/web/features/work-page
 import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
 import { animeRelationsReads, readAnimeRelationsConnections } from '../../../../../apps/web/features/work-page/anime-relations-recorded-page.ts';
 import { booksEditionReads, readBooksEditionStatus } from '../../../../../apps/web/features/work-page/books-edition-page.read.ts';
-import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
+import { mainRelationships, RelationshipError } from '../../../../../apps/web/features/relationships/api.ts';
 import { seedTypes, typeEntry } from '../../../../../apps/web/features/catalogue/types.ts';
 import { progressControl } from '../../../../../apps/web/features/tracking/medium-progress.tsx';
 import { standingOf } from '../../../../../apps/web/features/tracking/episodes.ts';
@@ -341,7 +341,9 @@ async function visit(name: PersonaName) {
       readBooksEditionStatus(booksEditionReads(host), id, 'en'),
       host.actingSubject ? mainRelationships(host.actingSubject, {
         origin: `http://record.invalid${BFF_PREFIX}`, fetch: fetcher,
-      }).state(work.work, 'work') : null,
+      }).state(work.work, 'work').catch(error => {
+        if (!(error instanceof RelationshipError)) throw error;
+      }) : null,
     ]);
     if (host.actingSubject) {
       const tracking = mainTrackingApi(host.actingSubject, () => main);
