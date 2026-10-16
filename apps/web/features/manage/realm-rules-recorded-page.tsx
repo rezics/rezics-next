@@ -1,66 +1,30 @@
-'use client';
-
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
+import { realmManagementFrame } from '../../app/[locale]/manage/r/[realm]/layout.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
-import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
-import type { AgentOption } from '../auth/acting-identity.ts';
-import type { MainClient } from '../discover/types.ts';
+import { getMessages } from '../../i18n/server.ts';
+import { BFF_PREFIX } from '../api/browser.ts';
+import { signInPath } from '../auth/paths.ts';
+import { RealmRulesRoute } from '../realm/routes.tsx';
 import { messages as shellMessages } from '../shell/messages.ts';
 import shellJa from '../shell/messages/ja.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
-import { bffAdminApi, type AdminApi } from './admin-api.ts';
-import { saveSettings } from './commands.ts';
-import { messages as manageMessages, type ManageMessages } from './messages.ts';
-import manageDe from './messages/de.ts';
-import manageEs from './messages/es.ts';
-import manageFr from './messages/fr.ts';
-import manageJa from './messages/ja.ts';
-import manageKo from './messages/ko.ts';
-import manageZhHans from './messages/zh-Hans.ts';
-import manageZhHant from './messages/zh-Hant.ts';
-import { RealmFrame } from './realm-frame.tsx';
-import { readAgents, readRealmHeader, readSettings } from './read.ts';
+import { bffAdminApi } from './admin-api.ts';
+import { readAgents } from './read.ts';
+import { rulesPageClient } from './realm-rules-recorded-page-client.ts';
+import { readRealmRulesSettings } from './realm-rules-recorded-page.ts';
+import { RealmRulesSettings } from './realm-rules-recorded-page-settings.tsx';
 import { recoveryIndexKey } from './safety-pending.ts';
-import { SettingsView } from './settings-view.tsx';
-import type { RealmHeader, SettingsView as Settings } from './types.ts';
+import { spaceAccessApi } from './settings-api.ts';
 
-const manageOverlays = new Map<UiLocale, Partial<ManageMessages>>([
-  ['zh-Hant', manageZhHant], ['zh-Hans', manageZhHans], ['ja', manageJa], ['ko', manageKo],
-  ['de', manageDe], ['fr', manageFr], ['es', manageEs],
-]);
-
-/**
- * The settings factory builds its own host client. This binds the same settings
- * read and command to the client the page was given, and leaves every other
- * management call on the host factory.
- */
-function settingsApi(client: MainClient, realm: string, actingSubject: string): AdminApi {
-  const host = bffAdminApi(realm, actingSubject);
-  return {
-    ...host,
-    settings: () => readSettings(client, realm, actingSubject),
-    saveSettings: (command, key) => saveSettings(client, realm, command, key),
-  };
-}
-
-interface LoadedSettings {
-  header: RealmHeader | null;
-  settings: Settings;
-  agent: AgentOption;
-  api: AdminApi;
-}
-
-/**
- * The manage settings route's rules reader and command. The realm and acting
- * person are the route parameters. Selections only choose recorded answers for
- * the requests those production functions make.
- */
-export function RealmRulesRecordedPage({ record, persona, selections, locale, realm, actingSubject, principal }: {
+/** Only transport and host request inputs differ from the production routes. */
+export function RealmRulesRecordedPage({ record, persona, selections, locale, realm, actingSubject, principal,
+  page = 'settings' }: {
   record: AnswerRecord; persona: AnswerPersona; selections: readonly RecordedSelection[]; locale: UiLocale;
-  realm: string; actingSubject: string; principal: string;
+  realm: string; actingSubject: string; principal: string; page?: 'settings' | 'rules';
 }) {
-  const [load, setLoad] = useState<LoadedSettings | { error: string } | null>(null);
+  const [view, setView] = useState<ReactNode>(null);
+  const [error, setError] = useState<Error | null>(null);
   const prepared = useRef(false);
   if (!prepared.current) {
     prepared.current = true;
@@ -68,42 +32,42 @@ export function RealmRulesRecordedPage({ record, persona, selections, locale, re
   }
   useEffect(() => {
     let mounted = true;
+    setView(null); setError(null);
     const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX, locale });
-    const client = browserMainApi(window.location.origin, { anonymous: false, fetcher: replay.fetcher });
-    void Promise.all([
-      readRealmHeader(client, realm, locale, actingSubject),
-      readSettings(client, realm, actingSubject),
-      readAgents(client, [actingSubject], actingSubject),
-    ]).then(([header, settings, names]) => {
-      if (!mounted) return;
-      if (!settings.ok) {
-        setLoad({ error: settings.problem?.title ?? settings.failure });
-        return;
+    const fetcher = (async (input, init) => {
+      try { return await replay.fetcher(input, init); }
+      catch (failure) {
+        if (mounted && !(failure instanceof DOMException && failure.name === 'AbortError')) {
+          setError(failure instanceof Error ? failure : new Error(String(failure)));
+        }
+        throw failure;
       }
+    }) as typeof fetch;
+    const clients = rulesPageClient(fetcher, actingSubject || undefined);
+    const main = clients.personal ?? clients.main;
+    async function render() {
+      if (page === 'rules') return RealmRulesRoute({ params: Promise.resolve({ locale, realm }),
+        searchParams: Promise.resolve({}) }, clients);
+      const [loaded, messages, names] = await Promise.all([
+        readRealmRulesSettings(main, realm, actingSubject), getMessages('manage', locale),
+        readAgents(main, [actingSubject], actingSubject),
+      ]);
       const named = names[actingSubject];
-      setLoad({
-        header: header.ok ? header.data : null,
-        settings: settings.data,
-        agent: {
-          iri: actingSubject,
-          label: named?.label ?? null,
-          handle: named?.handle ?? null,
-          kind: null,
-          path: null,
-        },
-        api: settingsApi(client, realm, actingSubject),
+      return realmManagementFrame({ main, realm, address: realm, actingSubject,
+        agent: { iri: actingSubject, label: named?.label ?? null, handle: named?.handle ?? null, kind: null, path: null },
+        locale, accessClient: main,
+        children: <RealmRulesSettings loaded={loaded} principal={principal} actingSubject={actingSubject} address={realm}
+          locale={locale} messages={messages} signInHref={signInPath(`/${locale}/manage/r/${realm}/settings`)}
+          api={bffAdminApi(realm, actingSubject, () => main)}
+          accessApi={loaded.kind === 'settings' ? spaceAccessApi(() => main, loaded.access.space, loaded.access.realm, actingSubject) : undefined} />,
       });
-    }).catch((error: unknown) => {
-      if (!mounted || (error instanceof DOMException && error.name === 'AbortError')) return;
-      setLoad({ error: error instanceof Error ? error.message : String(error) });
+    }
+    void render().then(result => { if (mounted) setView(result); }).catch((failure: unknown) => {
+      if (!mounted || (failure instanceof DOMException && failure.name === 'AbortError')) return;
+      setError(failure instanceof Error ? failure : new Error(String(failure)));
     });
     return () => { mounted = false; replay.dispose(); };
-  }, [record, persona, selections, locale, realm, actingSubject]);
-  if (!load) return <p role="status" aria-busy="true">{locale === 'ja' ? shellJa.loading : shellMessages.loading}</p>;
-  if ('error' in load) return <p role="alert">{load.error}</p>;
-  const messages = { ...manageMessages, ...manageOverlays.get(locale) };
-  return <RealmFrame realm={realm} header={load.header} agent={load.agent} locale={locale} messages={messages} settingsAllowed>
-    <SettingsView principal={principal} realm={realm} actingSubject={actingSubject} initial={load.settings}
-      locale={locale} messages={messages} api={load.api} />
-  </RealmFrame>;
+  }, [record, persona, selections, locale, realm, actingSubject, principal, page]);
+  if (error) throw error;
+  return view ?? <p role="status" aria-busy="true">{locale === 'ja' ? shellJa.loading : shellMessages.loading}</p>;
 }
