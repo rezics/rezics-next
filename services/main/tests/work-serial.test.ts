@@ -34,6 +34,7 @@ test('serial list hydration stays within one page and represents unavailable cou
   const session = { query, deps: {}, position: { dataEpoch: 'epoch', sequence: '1' }, options: { language: 'en' } } as unknown as WorkReadSession;
   expect(await readSerialSummaries(session, [work])).toEqual(new Map([[work, {
     tagline: null, completionStatus: null, chapterCount: null, wordCount: null, lastUpdatedAt: null,
+    factObligations: { status: 'unassessed' },
   }]]));
   await expect(readSerialSummaries(session, Array(21).fill(work))).rejects.toThrow('out of bounds');
 });

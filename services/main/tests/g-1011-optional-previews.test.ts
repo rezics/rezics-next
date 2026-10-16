@@ -73,7 +73,8 @@ test('G1011: invalid or missing item credits preserve its rating and the healthy
   for (const fault of ['credits', 'missing'] as const) {
     const f = fixture(fault);
     const cards = await resourceWorkCards(f.session, [id(9), id(10)]);
-    expect(cards.get(id(9))).toEqual({ primaryCredits: [], creditCount: { value: 0, kind: 'at-least' }, rating });
+    expect(cards.get(id(9))).toEqual({ primaryCredits: [], creditCount: { value: 0, kind: 'at-least' }, rating,
+      factObligations: { status: 'unassessed' } });
     expect(cards.get(id(10))!.primaryCredits[0]!.displayName).toBe('Author 2');
     expect(cards.get(id(10))!.rating).toEqual(rating);
     expect(f.batches).toEqual([[id(9), id(10)]]);
@@ -94,6 +95,7 @@ test('G1011: unavailable rating and projection owners do not reject card preview
   const ownerFailure = await resourceWorkCards(fixture('projection-owner').session, [id(9), id(10)]);
   for (const card of ownerFailure.values()) expect(card).toEqual({
     primaryCredits: [], creditCount: { value: 0, kind: 'at-least' }, rating: null,
+    factObligations: { status: 'unassessed' },
   });
 });
 test('G1011: invalid or concurrently changed author profiles omit only that author', async () => {
