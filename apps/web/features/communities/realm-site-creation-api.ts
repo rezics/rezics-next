@@ -35,8 +35,9 @@ export function realmSiteCreationClient(main: Main = browserMainApi()) {
       } }), { keepProblem: true });
       if (!answer.ok) return answer;
       const address = answer.data;
+      if (address.status !== 'resolved') return { ok: false, failure: 'unavailable' };
       const canonical = { ...address.canonical, prefix: '/z/' as const };
-      if (address.status !== 'resolved' || address.holder !== receipt.space
+      if (address.holder !== receipt.space
         || address.capabilities?.zone !== receipt.zone || address.canonical.prefix !== canonical.prefix) {
         return { ok: false, failure: 'unavailable' };
       }
