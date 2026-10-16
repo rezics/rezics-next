@@ -1,5 +1,38 @@
 # State
 
+Checkpoint 2571dd24-8f45-4a92-8b6f-3e3069dbd01f consolidates handled events
+task:G-2330:23, mail:cfb60583-c818-4056-b51c-ef96484f898e and task:G-2330:26.
+These decisions supersede affected dispositions below; later worker and
+landing results retain their own events.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2330 | Event 23 was blocked, with no acceptance or landing: complete gate `run-HvwcD7` failed anonymous-client analysis and 21 continuation findings despite the retained recording, 88 units, 50 stories, zero-miss replay and inspected phone/desktop captures. Web referred the guard and inventory dependencies to Program in mail:e7d2af8f, retaining every outcome and complete-gate requirement. Mail:cfb60583 confirms Program's committed 17:40 UTC design ruling and rebase/resume: explicit branded anonymous parameters may pass the acting-identity guard, with tests that plain and persona clients still fail and no endpoint suppression. Only contexts of otherwise byte-identical inventory entries may refresh; Program lends the inventory, and the later landing reconciles G-2704's overlap on current main. Event 26 retained commits `3b163b770c` and `694eebe66b`, 19 refreshed contexts and all 735 entries. Acting-identity/types/lint passed, but complete gate `run-N6KvMi` still failed the two `AboutFacts`/`DiscussionHub` cursor findings. No existing entries existed to relocate, so web referred the contradictory no-addition instruction to Program and accepted no handoff. The subsequent committed 18:03 UTC correction `6fbab7db4d` supersedes only that relocation instruction: first-page requests omit the cursor property instead of passing `cursor: undefined`; no entry is added or moved. Everything else in the 17:40 ruling stands. Program owns continuation; finish the complete surface gate and all existing proof, then hand off. No duplicate web resume, partial acceptance or waived check. |
+| G-2226, G-2330, G-2331, G-2461 | Program retains further resume ownership from mail:0c8cfaa4. Send further web rulings to Program. This checkpoint starts no continuation or landing and infers no later task outcome. |
+
+Mail:cfb60583 was acknowledged by its deciding turn at
+2026-10-16 17:43:18 UTC; this checkpoint confirms its acknowledgement.
+The two task events supplied no incoming mail.
+
+The method's measures and current status were read. Scope remains 68/68 API
+rows proved, with 408 proved and zero pending, not-applicable or missing
+persona cells; these events add no API proof or accepted surface row.
+Program-wide first-attempt share is 67% (478/717), today 75% (42/56);
+attempts per landed task have median 2 and maximum 63 (G-2582).
+Status reports 0 outcome, 15 gate, 0 failing-test-finding and 32 other
+refusals, with 1,679 unclassified attempt/job causes. Tokens per proved row
+are unavailable; aggregate tokens are not attributed to this Goal's rows.
+The latest efficiency report remains 2026-10-13 21:49 UTC and supplies no
+current paired 12-hour comparison or demonstrated efficiency improvement.
+These events identify repeated guard-recognition and inventory-instruction
+blockers; Program's branded-client and cursor-omission rulings address their
+causes without lowering the gate. A later passing result remains required.
+
+Only this file changes. This checkpoint starts no brief, worker, landing,
+closure, watcher or wait; later deliveries remain for their own event turns.
+
+## Retained checkpoint 0f97f084
+
 Checkpoint 0f97f084-1e22-49c4-b68e-d5069b9a3686 consolidates handled events
 task:G-2467:6, mail:000b9edb-0674-4f15-8490-c367ab04a85a,
 mail:8266b119-c733-447a-9d23-bb6807eed4b0 and
