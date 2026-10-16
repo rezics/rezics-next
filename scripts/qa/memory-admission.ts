@@ -256,7 +256,7 @@ async function startupConcurrency(options: StartupMemoryOptions): Promise<number
   } catch { return 1; }
 }
 
-async function loadLimit(options: StartupMemoryOptions, pressure: boolean): Promise<number> {
+export async function admissionCpuLimit(options: StartupMemoryOptions, pressure: boolean): Promise<number> {
   const fallback = pressure ? 12 : 1;
   const directory = await startupDirectory(options);
   if (!directory) return fallback;
@@ -289,7 +289,7 @@ export function admissionCpuPressure(options: Pick<MemoryWaitOptions, 'read' | '
   return options.read !== undefined && env.REZICS_QA_CPU_PRESSURE_FILE === undefined ? undefined : hostCpuPressure(env);
 }
 
-function hostLoad(env: NodeJS.ProcessEnv): number {
+export function admissionHostLoad(env: NodeJS.ProcessEnv): number {
   const value = Number(readFileSync(env.REZICS_QA_LOADAVG_FILE ?? '/proc/loadavg', 'utf8').trim().split(/\s+/)[0]);
   if (!Number.isFinite(value) || value < 0) throw new Error('Cannot read host one-minute load');
   return value;
@@ -451,7 +451,7 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
   if (!Number.isSafeInteger(processors) || processors < 1) { release(); throw new Error('Invalid QA processor count'); }
   // The same rule as for pressure: a simulated host has the load its caller injects or names in a file, never this machine's.
   const simulatedLoad = options.read !== undefined && (options.env ?? process.env).REZICS_QA_LOADAVG_FILE === undefined;
-  const readLoad = options.readLoad ?? (simulatedLoad ? () => 0 : () => hostLoad(options.env ?? process.env));
+  const readLoad = options.readLoad ?? (simulatedLoad ? () => 0 : () => admissionHostLoad(options.env ?? process.env));
   const slotReady = waitForStartupSlot(options);
   const read = options.read ?? (need.vm + need.vmReserve > 0
     ? remaining => readMemory(remaining, options.env ?? process.env) : async () => readHostMemory());
@@ -540,7 +540,7 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
         // their processor cost has not yet appeared in the signal. This prevents a
         // low reading from admitting a burst through the existing arrival queue.
         const pressure = loadEnabled ? admissionCpuPressure(options) : undefined;
-        const limit = loadEnabled ? await loadLimit(options, pressure !== undefined) : 1;
+        const limit = loadEnabled ? await admissionCpuLimit(options, pressure !== undefined) : 1;
         mutex.exec('BEGIN IMMEDIATE');
         held = true;
         const live: StartupPromise[] = [];

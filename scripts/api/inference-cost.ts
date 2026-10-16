@@ -25,7 +25,7 @@ const baselinePath = 'scripts/api/inference-cost-baseline.json';
 export const inferenceCompilerFlags = ['--extendedDiagnostics', '--pretty', 'false', '--incremental', 'false', '--noEmit'];
 // The native web compiler peaked near 8 GiB in the audit. Serialize large host
 // admissions and leave room for its process overhead; this is the gate's owner.
-export const inferenceGateCommand = ['bun', 'scripts/qa/host-admission.ts', '--gib', '9.5', '--', 'bun', 'scripts/api/inference-cost.ts'];
+export const inferenceGateCommand = ['bun', 'scripts/qa/host-admission.ts', '--cpu', '--gib', '9.5', '--', 'bun', 'scripts/api/inference-cost.ts'];
 
 /** Include shared contract/schema inputs and dependency/config changes, including
  * deletions. A web consumer can inflate its graph without changing MainApp. */
@@ -109,7 +109,7 @@ async function main(args: string[]) {
     return;
   }
   if (args.length > 1 || (args.length === 1 && args[0] !== '--record'))
-    throw new Error('Usage: task goal -- job -- bun scripts/qa/host-admission.ts --gib 9.5 -- bun scripts/api/inference-cost.ts [--record]');
+    throw new Error('Usage: task goal -- job -- bun scripts/qa/host-admission.ts --cpu --gib 9.5 -- bun scripts/api/inference-cost.ts [--record]');
   const record = args[0] === '--record';
   const currentVersions = versions(root);
   const baseline = record ? undefined : parseInferenceBaseline(JSON.parse(readFileSync(join(root, baselinePath), 'utf8')));

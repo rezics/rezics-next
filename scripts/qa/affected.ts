@@ -653,7 +653,7 @@ export function backendGraph(root: string, includeFrontend = false): GraphModule
       ...(includeFrontend ? ['apps/web', 'apps/accounts', 'packages/ui'] : []),
     ],
   );
-  if (result.status !== 0) throw new Error(`dependency-cruiser failed: ${result.stderr.trim()}`);
+  if (result.status !== 0) throw new Error(result.stderr.trim());
   const modules = (JSON.parse(result.stdout) as { modules: GraphModule[] }).modules;
   if (!modules.some((module) => module.source.startsWith('services/main/src/'))) {
     throw new Error('dependency-cruiser returned no backend modules');

@@ -106,13 +106,13 @@ tasks:
     deps: [toolchain:bun-check]
     desc: Type-check every script except the dataset tools.
     cmds:
-      - bun scripts/qa/host-admission.ts --gib 1.5 -- bun check -p scripts/tsconfig.json --no-pretty --threads 8
+      - bun scripts/qa/host-admission.ts --cpu --gib 1.5 -- bun check -p scripts/tsconfig.json --no-pretty --threads 8
 
   apphost:typecheck:
     deps: [toolchain:bun-check, aspire:restore]
     desc: Type-check the AppHost and its configuration imports with Node types.
     cmds:
-      - bun scripts/qa/host-admission.ts --gib 0.5 -- bun check -p apphost/tsconfig.apphost.json --no-pretty --threads 8
+      - bun scripts/qa/host-admission.ts --cpu --gib 0.5 -- bun check -p apphost/tsconfig.apphost.json --no-pretty --threads 8
 
   aspire:
     desc: Run the pinned Aspire CLI against the dev AppHost (describe, logs, wait, agent mcp, ...).
@@ -186,17 +186,17 @@ tasks:
       - bun scripts/goal/admission.ts -- node_modules/.bin/playwright test --config apps/web/playwright.config.ts {{.CLI_ARGS}}
 
   goal:type-files:
-    desc: Type-check selected files and their imports without whole-workspace memory admission.
+    desc: Type-check selected files and their imports with host admission.
     deps: [toolchain:bun-check]
     cmds:
-      - bun check --no-pretty --threads 8 {{.CLI_ARGS}}
+      - bun scripts/qa/host-admission.ts --cpu --gib 1.5 -- bun check --no-pretty --threads 8 {{.CLI_ARGS}}
 
   web:typecheck:
     deps: [toolchain:bun-check]
     desc: Type-check the web workspace.
     dir: apps/web
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 5.5 -- bun check -p tsconfig.json --no-pretty --threads 8
+      - bun ../../scripts/qa/host-admission.ts --cpu --gib 5.5 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   storybook:
     desc: Run Storybook on port 6006 with its MCP endpoint at /mcp.
@@ -235,7 +235,7 @@ tasks:
     desc: Type-check the Accounts workspace.
     dir: apps/accounts
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 1 -- bun check -p tsconfig.json --no-pretty --threads 8
+      - bun ../../scripts/qa/host-admission.ts --cpu --gib 1 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   accounts:storybook:
     desc: Run the Accounts Storybook on port 6007.
@@ -274,7 +274,7 @@ tasks:
     desc: Generate Astro content types and check the about site's Astro and TypeScript sources.
     dir: apps/about
     cmds:
-      - node astro-check.cjs
+      - bun ../../scripts/qa/host-admission.ts --cpu --gib 1.5 -- node astro-check.cjs
 
   about:check:
     desc: Check the about site's types (Astro, TypeScript), lint, format and unit tests.
@@ -296,14 +296,14 @@ tasks:
     desc: Type-check Rezics UI.
     dir: packages/ui
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 1 -- bun check -p tsconfig.json --no-pretty --threads 8
+      - bun ../../scripts/qa/host-admission.ts --cpu --gib 1 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   document:typecheck:
     deps: [toolchain:bun-check]
     desc: Type-check the independent document protocol.
     dir: packages/document
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 0.5 -- bun check -p tsconfig.json --no-pretty --threads 8
+      - bun ../../scripts/qa/host-admission.ts --cpu --gib 0.5 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   document:gen:
     desc: Generate the standalone Document Core, Text and Blocks JSON Schemas.
@@ -340,7 +340,7 @@ tasks:
     deps: [toolchain:bun-check]
     desc: Type-check the shared telemetry runtime.
     cmds:
-      - bun scripts/qa/host-admission.ts --gib 0.5 -- bun check -p packages/observability/tsconfig.json --no-pretty --threads 8
+      - bun scripts/qa/host-admission.ts --cpu --gib 0.5 -- bun check -p packages/observability/tsconfig.json --no-pretty --threads 8
 
   observability:aspire-smoke:
     desc: Verify real server spans, structured logs and OTLP authentication against the running backend AppHost.
@@ -503,7 +503,7 @@ tasks:
     deps: [toolchain:bun-check]
     desc: Type-check the independent local dataset tools.
     cmds:
-      - bun scripts/qa/host-admission.ts --gib 1 -- bun check -p scripts/datasets/tsconfig.json --no-pretty --threads 8
+      - bun scripts/qa/host-admission.ts --cpu --gib 1 -- bun check -p scripts/datasets/tsconfig.json --no-pretty --threads 8
 
   dataset:check:
     desc: Check the dataset tools types, lint and formatting without capturing or importing data.
@@ -676,7 +676,7 @@ tasks:
     desc: Type-check Account.
     dir: services/account
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 1 -- bun check -p tsconfig.json --no-pretty --threads 8
+      - bun ../../scripts/qa/host-admission.ts --cpu --gib 1 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   account:mail-report:
     desc: Report uncertain Account mail and optional-mail suppression counts; never resend.
@@ -688,7 +688,7 @@ tasks:
     desc: Type-check Content.
     dir: services/content
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 1 -- bun check -p tsconfig.json --no-pretty --threads 8
+      - bun ../../scripts/qa/host-admission.ts --cpu --gib 1 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   content:test:
     desc: Run Content unit tests.
@@ -716,7 +716,7 @@ tasks:
     desc: Type-check Main.
     dir: services/main
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 2 -- bun check -p tsconfig.json --no-pretty --threads 8
+      - bun ../../scripts/qa/host-admission.ts --cpu --gib 2 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   source:names:publish:
     desc: Publish one bounded page of retained source-author names to native search; continue with --after from the result.
@@ -733,7 +733,7 @@ tasks:
     desc: Type-check the model package.
     dir: packages/model
     cmds:
-      - bun ../../scripts/qa/host-admission.ts --gib 0.5 -- bun check -p tsconfig.json --no-pretty --threads 8
+      - bun ../../scripts/qa/host-admission.ts --cpu --gib 0.5 -- bun check -p tsconfig.json --no-pretty --threads 8
 
   model:test:
     desc: Run model package tests.
