@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { browserZoneRealmAttachment } from '../../../../../apps/web/features/zone-editor/api.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -10,6 +12,20 @@ import {
 
 setDefaultTimeout(90_000);
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(attachment);
+let currentPersona: PersonaName | null = null;
+let requestNumber = 0;
+async function reached(person: PersonaSession, ...args: Parameters<PersonaSession['main']>) {
+  if (!currentPersona) return person.main(...args);
+  const [method, path] = args;
+  return recording.session(currentPersona, person)(`${method.toLowerCase()}-${path.split('?')[0]!.split('/').at(-1)}-${++requestNumber}`, ...args);
+}
+async function proof(name: PersonaName, run: () => Promise<void>) {
+  currentPersona = name;
+  requestNumber = 0;
+  try { await run(); } finally { currentPersona = null; }
+}
+
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) =>
   new URLSearchParams({ actingSubject: person.actingSubject! });
@@ -22,7 +38,7 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 type Site = { zone: string; space: string; zoneRevision: string; navigationRevision: string };
 async function site(person: PersonaSession): Promise<Site> {
   return answer(
-    person.main('POST', '/v1/spaces', {
+    reached(person, 'POST', '/v1/spaces', {
       profile: 'space-zone-v1',
       name: 'Attachment authority fixture',
       language: 'en',
@@ -36,7 +52,7 @@ async function site(person: PersonaSession): Promise<Site> {
 }
 async function head(zone: string, editor = sessions.owner) {
   return await answer<{ zone: string; revision: string; configuration: { defaultRealm?: string } }>(
-    editor.main('GET', `/v1/zones/${short(zone)}/configuration?${acting(editor)}`),
+    reached(editor, 'GET', `/v1/zones/${short(zone)}/configuration?${acting(editor)}`),
   );
 }
 function configure(
@@ -45,7 +61,7 @@ function configure(
   expectedHead: string,
   defaultRealm: string | null,
 ) {
-  return person.main('PUT', `/v1/zones/${short(zone)}/configuration`, {
+  return reached(person, 'PUT', `/v1/zones/${short(zone)}/configuration`, {
     actingSubject: person.actingSubject ?? sessions.owner.actingSubject,
     expectedHead,
     defaultRealm,
@@ -151,6 +167,7 @@ afterAll(async () => {
 import attachment from '../../../../../scripts/qa/cases/outcomes/zone/attach-a-realm.ts';
 let target: Site;
 beforeAll(async () => {
+  await recording.prepare();
   sessions = await personaSessions('public');
   target = await site(sessions.owner);
 }, 180_000);
@@ -164,10 +181,10 @@ async function denied(name: PersonaName, status: number) {
   expect(refusal.code).toBeString();
   expect(await head(target.zone)).toEqual(current);
 }
-outcomeTest(attachment, 'visitor', () => denied('visitor', 401));
-outcomeTest(attachment, 'stranger', () => denied('stranger', 403));
-outcomeTest(attachment, 'member', () => denied('member', 403));
-outcomeTest(attachment, 'owner', async () => {
+outcomeTest(attachment, 'visitor', () => proof('visitor', () => denied('visitor', 401)), recording);
+outcomeTest(attachment, 'stranger', () => proof('stranger', () => denied('stranger', 403)), recording);
+outcomeTest(attachment, 'member', () => proof('member', () => denied('member', 403)), recording);
+outcomeTest(attachment, 'owner', () => proof('owner', async () => {
   // This member owns a different Space's Zone, but holds no Realm stewardship.
   const zoneOnly = await site(sessions.member);
   const missing = `https://rezics.com/id/${randomUUID()}`;
@@ -188,10 +205,11 @@ outcomeTest(attachment, 'owner', async () => {
   const current = await head(target.zone);
   await answer(configure(sessions.owner, target.zone, current.revision, sessions.realm));
   expect((await head(target.zone)).configuration.defaultRealm).toBe(sessions.realm);
+  await attachmentVisit(sessions.owner, target);
   // The operator variant must request a new attachment, rather than retain this owner's link.
   await answer(configure(sessions.owner, target.zone, (await head(target.zone)).revision, null));
-});
-outcomeTest(attachment, 'moderator', async () => {
+}), recording);
+outcomeTest(attachment, 'moderator', () => proof('moderator', async () => {
   await denied('moderator', 403);
   const ownZone = await site(sessions.moderator);
   await answer(
@@ -204,11 +222,12 @@ outcomeTest(attachment, 'moderator', async () => {
     expect((await head(ownZone.zone, sessions.moderator)).configuration.defaultRealm).toBe(
       sessions.realm,
     );
+    await attachmentVisit(sessions.moderator, ownZone);
   } finally {
     await role(sessions.moderator, false, roleId);
   }
-});
-outcomeTest(attachment, 'operator', async () => {
+}), recording);
+outcomeTest(attachment, 'operator', () => proof('operator', async () => {
   await denied('operator', 403);
   await resourceMandate('zone.edit', `zone:edit:${target.zone}`);
   const zoneOnly = await head(target.zone);
@@ -242,4 +261,23 @@ outcomeTest(attachment, 'operator', async () => {
   await resourceMandate('realm.attach', `realm:attach:${sessions.realm}`);
   const current = await head(target.zone);
   await answer(configure(sessions.operator, target.zone, current.revision, sessions.realm));
-});
+  await attachmentVisit(sessions.operator, target);
+}), recording);
+
+/** The existing attachment adapter and canonical presentation/address reads retain their production identity. */
+async function attachmentVisit(person: PersonaSession, target: Site) {
+  const fetcher = (async (input, init) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    const raw = await request.text();
+    return reached(person, request.method, url.pathname.replace(/^\/api\/main/, '') + url.search,
+      raw ? JSON.parse(raw) as unknown : undefined, request.headers.get('idempotency-key') ?? undefined);
+  }) as typeof fetch;
+  const main = browserMainApi('https://record.invalid', { fetcher });
+  const attached = await browserZoneRealmAttachment(main).readConfiguration(short(target.zone), person.actingSubject!);
+  if (!attached.ok) throw new Error(`Production attachment read failed: ${attached.failure}`);
+  const presentation = await main.v1.zones({ id: short(target.zone) }).presentation.get({ query: { actingSubject: person.actingSubject! } });
+  if (presentation.error) throw new Error(`Production attached presentation failed: ${presentation.error.status}`);
+  const address = await main.v1.addresses.resolve.get({ query: { scope: 'space', key: short(target.space), actingSubject: person.actingSubject! } });
+  if (address.error) throw new Error(`Production attached address failed: ${address.error.status}`);
+}

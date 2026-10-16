@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { AnswerRecordValidator, answerPersonas, answerRecord, type AnswerContract, type AnswerRecord } from '../../../../../scripts/api/answer-record.ts';
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { realmSiteCreationClient } from '../../../../../apps/web/features/communities/realm-site-creation-api.ts';
 import { realmFrameReads, zonePresentationReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
 import { browserZoneAuthoring, loadCompleteZoneNavigation } from '../../../../../apps/web/features/zone-editor/api.ts';
 import { readZoneManagementFrame } from '../../../../../apps/web/features/zone-editor/authoring-reads.ts';
@@ -227,6 +228,7 @@ outcomeTest(independent, 'stranger', () => qualify('stranger', () => reader('str
 outcomeTest(independent, 'member', () => qualify('member', () => reader('member')), recording);
 async function ownerProof() {
   const site = fixture('owner'), owner = sessions.owner;
+  await creationVisit(owner);
   expect((await configuration(site, owner, 'standalone-configuration')).configuration.defaultRealm ?? null).toBeNull();
   expect(await answer(sample(owner, 'unpublished-home', 'GET', `${path(site)}/routes?path=%2F`))).not.toHaveProperty('page');
   await answer(sample(sessions.visitor, 'unpublished-content-hidden', 'GET', exactPath(site.saved)), 404);
@@ -250,6 +252,42 @@ async function ownerProof() {
     sample(owner, 'saved-editor', 'GET', `${path(site)}/showcase-editor?${acting(owner)}`));
   expect(editor.draft).toMatchObject({ revisionId: later.revisionId, document });
   await pageReads(site, owner);
+}
+
+/** The creation action uses the same typed commands as the web, then opens its existing management reader. */
+async function creationVisit(person: PersonaSession) {
+  let label = 'creation-space';
+  const fetcher = (async (input, init) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    const raw = await request.text();
+    return capture('owner', person, label, request.method, url.pathname.replace(/^\/api\/main/, '') + url.search,
+      raw ? JSON.parse(raw) as unknown : undefined, request.headers.get('idempotency-key') ?? undefined);
+  }) as typeof fetch;
+  const main = browserMainApi('https://record.invalid', { fetcher });
+  const creator = realmSiteCreationClient(main);
+  const created = await creator.create({ profile: 'space-zone-v1', name: 'Independent original site', language: 'en',
+    capabilities: ['zone'], actingSubject: person.actingSubject! }, randomUUID());
+  if (!created.ok) throw new Error(`Production creation failed: ${created.failure}`);
+  label = 'creation-home';
+  const prepared = await creator.prepare(created.data, person.actingSubject!, randomUUID());
+  if (!prepared.ok) throw new Error(`Production home preparation failed: ${prepared.failure}`);
+  label = 'creation-address';
+  const destination = await creator.destination(created.data, person.actingSubject!, 'en');
+  if (!destination.ok) throw new Error(`Production creation address failed: ${destination.failure}`);
+  const ref = decodeURIComponent(destination.data.attachmentPath.split('/')[3]!);
+  const frame = await requestLabels.run(managementLabel('management'), async () => {
+    // Give each reached management request its own recording label, just as the existing production visit does.
+    const management = browserMainApi('https://record.invalid', { fetcher: (async (input, init) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
+      return capture('owner', person, `creation-${requestLabels.getStore()!(request.method, path)}`,
+        request.method, path);
+    }) as typeof fetch });
+    return readZoneManagementFrame(management, ref, 'en', person.actingSubject!);
+  });
+  if (frame.authoring.kind !== 'ready') throw new Error(`Created Zone cannot open attachment management: ${frame.authoring.kind}`);
 }
 outcomeTest(independent, 'owner', () => qualify('owner', ownerProof), recording);
 outcomeTest(independent, 'moderator', () => qualify('moderator', () => reader('moderator')), recording);
