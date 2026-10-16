@@ -22,7 +22,7 @@ import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaMode
 
 const unitFile = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
 const storyFile = /\.stories\.tsx$/;
-export interface SurfaceSelection { main: string; rows: string[]; units: string[]; outcomes?: string[]; stories: string[]; guards: string[]; changed: string[]; proofs: string[] }
+export interface SurfaceSelection { main: string; rows: string[]; units: string[]; stories: string[]; guards: string[]; changed: string[]; proofs: string[] }
 export interface SurfaceSelectionResult { selection?: SurfaceSelection; refusals: string[] }
 
 /** Read the outcome owner's declarations and registration checks from the exact main commit,
@@ -105,7 +105,6 @@ export async function selectSurface(cwd: string, brief: Brief, changed: readonly
   }
   const tests = [...new Set(brief.tests ?? [])];
   const units: string[] = [];
-  const outcomes: string[] = [];
   const stories: string[] = [];
   for (const file of tests) {
     const local = relative(cwd, resolve(cwd, file));
@@ -113,11 +112,10 @@ export async function selectSurface(cwd: string, brief: Brief, changed: readonly
       refusals.push(`test file outside worktree or not canonical: ${file}`);
     } else if (!existsSync(join(cwd, file)) || !statSync(join(cwd, file)).isFile()) {
       refusals.push(`missing named test file: ${file}`);
-    } else if (validRows.some(row => file === `tests/qa/integration/outcomes/${row}.test.ts`)) outcomes.push(file);
-    else if (storyFile.test(file) && (file.startsWith('apps/web/') || file.startsWith('packages/ui/'))) stories.push(file);
+    } else if (storyFile.test(file) && (file.startsWith('apps/web/') || file.startsWith('packages/ui/'))) stories.push(file);
     else if (unitFile.test(file) && !(file.startsWith('tests/qa/') && !file.startsWith('tests/qa/unit/'))
       && ![isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath].some(classify => classify(file))) units.push(file);
-    else refusals.push(`surface test must be a unit test, web *.stories.tsx or its named row outcome test: ${file}`);
+    else refusals.push(`surface test must be a unit test or web *.stories.tsx: ${file}`);
   }
   if (!stories.length) refusals.push('surface requires tests: naming at least one web *.stories.tsx');
   const guards = mergeUnitFiles(cwd, 'Affected since surface gate\n', changed);
@@ -131,8 +129,7 @@ export async function selectSurface(cwd: string, brief: Brief, changed: readonly
       if (unitFile.test(file) && !guards.includes(file) && !units.includes(file)) units.push(file);
     }
   } catch (error) { refusals.push(`surface unit selection failed: ${String(error)}`); }
-  return { refusals, ...(!refusals.length ? { selection: { main: mainCommit, rows, units,
-    ...(outcomes.length ? { outcomes } : {}), stories, guards, changed: [...changed], proofs: [...new Set(proofs)] } } : {}) };
+  return { refusals, ...(!refusals.length ? { selection: { main: mainCommit, rows, units, stories, guards, changed: [...changed], proofs: [...new Set(proofs)] } } : {}) };
 }
 
 export type SurfacePart = 'contract' | 'types' | 'lint' | 'ast' | 'tests' | 'guards' | 'stories';
@@ -291,18 +288,9 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
         output = await options.generate() ?? '';
         code = output ? 1 : 0;
       } else if ((name === 'tests' || name === 'guards') && commands.length) {
-        const files = name === 'tests' ? selection.units : selection.guards;
-        const result = files.length ? await unitPart(name, files) : { code: 0, output: '' };
+        const result = await unitPart(name, name === 'tests' ? selection.units : selection.guards);
         code = result.code;
         output = result.output;
-        // A Method Surface may capture its own row. Its named outcome proof runs
-        // through the stack harness, never through the unit shard or baseline excuses.
-        if (!code && name === 'tests' && selection.outcomes?.length) {
-          const outcome = await run(['bun', 'scripts/qa/test.ts', ...selection.outcomes], cwd,
-            join(directory, 'outcomes.log'), env);
-          code = outcome.code;
-          output += `\n${outcome.output}`;
-        }
       } else for (const command of commands) {
         const commandLog = join(directory, `${name}-${commands.indexOf(command)}.log`);
         const result = options.workerStatic && !options.absoluteInference && command === inferenceGateCommand
@@ -349,14 +337,14 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
     if (!ok) return finish();
   }
   const waiting = now();
-  await withSlot(['surface-gate', ...selection.units, ...(selection.outcomes ?? []), ...selection.guards, ...selection.stories], false, undefined, {
+  await withSlot(['surface-gate', ...selection.units, ...selection.guards, ...selection.stories], false, undefined, {
     ...options.slotOptions,
     runCommand: async (_command, slotEnv, onStart) => {
       env = { ...slotEnv, REZICS_QA_ARTIFACT_ROOT: join(directory, 'qa-artifacts') };
       onStart();
       let wait = (now() - waiting) / 1000;
       const parts: [SurfacePart, string[]][] = [
-        ...(only.includes('tests') ? [['tests', [...selection.units, ...(selection.outcomes ?? [])]] as [SurfacePart, string[]]] : []),
+        ...(only.includes('tests') ? [['tests', selection.units] as [SurfacePart, string[]]] : []),
         ...(only.includes('guards') ? [['guards', selection.guards] as [SurfacePart, string[]]] : []),
         ...(only.includes('tests') ? [['stories', selection.stories] as [SurfacePart, string[]]] : []),
       ];
