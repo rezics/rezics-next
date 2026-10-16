@@ -459,7 +459,12 @@ async function productionVisit(name: PersonaName) {
       }),
       named(`${prefix}-attachments`, () => readZoneAttachments(main, realm, actor)),
     ]);
-    await named(`${prefix}-access`, () => readManagementAccess(main, realm, actor));
+    await named(path => {
+      const pathname = new URL(path, 'https://recorded.invalid').pathname;
+      if (pathname === `/v1/realms/${realm}`) return `${prefix}-access-realm`;
+      return pathname === `/v1/spaces/${realm}/settings`
+        ? `${prefix}-access-direct-settings` : `${prefix}-access-space-settings`;
+    }, () => readManagementAccess(main, realm, actor));
     if (!inventory.ok || !inventory.data.items.some(item => item.zone === target.zone)) return;
     const input = { zone: target.zone, realm: sessions.realm, actingSubject: actor, key: randomUUID() };
     let result = await named(`${prefix}-withdraw`, () => withdrawRealmAttachment(main, input));
