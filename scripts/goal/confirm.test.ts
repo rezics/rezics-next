@@ -306,6 +306,7 @@ for (const at of [undefined, 'main']) test(`a request ${at ? 'with --at' : 'with
 test('a scheduled run cannot reserve the gap before a queued request acquires the lease; dead tickets do not block it', async () => {
   const f = fixture();
   const controller = new AbortController();
+  mkdirSync(f.stateDir, { recursive: true });
   const lease = tryAcquireDirectoryLease(join(f.stateDir, 'confirm.lock'));
   if (lease === 'held') throw new Error('Fixture lease held');
   const requested = runConfirmation({ ...f.options, signal: controller.signal, runner: fakeOutcomeRunner() });

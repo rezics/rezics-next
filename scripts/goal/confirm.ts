@@ -9,7 +9,7 @@ import { newRunId } from '../qa/core.ts';
 import { preflightRetainedSources, retainedPreflightSummary, type RetainedPreflight } from '../qa/retained-preflight.ts';
 import { directoryLeaseHeld, readDirectoryLease, releaseDirectoryLease, transferDirectoryLease, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import type { RowOutcomes } from '../qa/cases/outcome-cells.ts';
-import { batchTestResults, cellReadings, confirmationCounts, confirmationRecord, confirmationSummary, latestConfirmation, recordConfirmation } from './confirmed.ts';
+import { batchTestResults, cellReadings, confirmationCounts, confirmationRecord, confirmationSummary, latestConfirmation, recordConfirmation, type ConfirmationStop } from './confirmed.ts';
 import { createPinnedCheckout, prepareCheckout, regressionBatchQaDirectory, regressionCheckoutRoot, runBatch,
   type Batch, type Execution, type Manifest, type RegressionOptions, type RegressionTier } from './regress.ts';
 
@@ -67,7 +67,6 @@ export interface ConfirmationManifest extends Manifest {
   stopped?: ConfirmationStop;
 }
 
-type ConfirmationStop = 'preempted' | 'SIGTERM' | 'SIGINT' | 'aborted';
 
 /** Both lexical traversal and existing symlink ancestors must stay inside this checkout's scratch space. */
 function recordDirectory(repo: string, directory: string): string {
@@ -174,6 +173,7 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Con
       const owner = readDirectoryLease(lock);
       if (owner?.pid !== process.pid || owner.token !== token) throw new Error('Confirmation reservation is not owned by this process');
     } else {
+      mkdirSync(join(stateDir, 'confirm-requests'), { recursive: true });
       const acquired = tryAcquireDirectoryLease(join(stateDir, 'confirm-requests', randomUUID()), { note: { runId } });
       if (acquired === 'held') throw new Error('Could not register confirmation request');
       request = acquired;
