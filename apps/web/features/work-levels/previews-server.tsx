@@ -1,4 +1,5 @@
 import { readAnimeRelationsPreview } from '../work-page/anime-relations-recorded-page.ts';
+import type { SuppliedClient } from '../work-page/read.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import { copyOf } from './messages.ts';
@@ -23,14 +24,19 @@ import {
 
 interface Embedded {
   id: string;
+  client?: SuppliedClient;
   workRef: string;
   locale: UiLocale;
   pageMessages: WorkPageMessages;
 }
 
-export async function PartsPreview({ id, workRef, locale, pageMessages }: Embedded) {
+export async function PartsPreview({ id, workRef, locale, pageMessages, client }: Embedded) {
   const t = copyOf(locale);
-  const { parts, wholes, names } = await readAnimeRelationsPreview({ readParts, readWholes, namesOf }, id);
+  const { parts, wholes, names } = await readAnimeRelationsPreview({
+    readParts: (key, query) => readParts(key, query, client),
+    readWholes: (key, query) => readWholes(key, query, client),
+    namesOf: (resources, position) => namesOf(resources, position, client),
+  }, id);
   return (
     <PartsPreviewView
       parts={parts}
@@ -43,10 +49,10 @@ export async function PartsPreview({ id, workRef, locale, pageMessages }: Embedd
   );
 }
 
-export async function ConnectionsPreview({ id, workRef, locale, pageMessages }: Embedded) {
+export async function ConnectionsPreview({ id, workRef, locale, pageMessages, client }: Embedded) {
   const t = copyOf(locale);
-  const relations = await readRelations(id, { limit: 20 });
-  const people = relations.ok ? await readPeople(relations.data.items) : undefined;
+  const relations = await readRelations(id, { limit: 20 }, client);
+  const people = relations.ok ? await readPeople(relations.data.items, client) : undefined;
   return (
     <ConnectionsPreviewView
       relations={relations}

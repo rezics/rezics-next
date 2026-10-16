@@ -51,8 +51,8 @@ export const reader = cache(async () => {
 });
 
 /** Main ranks rating populations by current votes and supplies the reader-community flag. */
-export const readRatingPopulations = cache(async (target: string, locale: UiLocale): Promise<Loaded<ListPage<RatingPopulation>>> => {
-  const { main, actingSubject } = await reader();
+export const readRatingPopulations = cache(async (target: string, locale: UiLocale, client?: SuppliedClient): Promise<Loaded<ListPage<RatingPopulation>>> => {
+  const { main, actingSubject } = client ?? await reader();
   try { return { ok: true, data: await discoveryApi(main, locale, actingSubject)
     .populations(idOf(target) ? target : iriOf(target), { limit: 20 }) }; }
   catch (error) { return error instanceof BrowseReadError
@@ -60,9 +60,9 @@ export const readRatingPopulations = cache(async (target: string, locale: UiLoca
 });
 
 /** The session Agent the page reads as, for client components that write as it (reading progress). */
-export async function readingAgent(): Promise<{ signedIn: boolean; actingSubject: string | null }> {
-  const { signedIn, actingSubject } = await reader();
-  return { signedIn, actingSubject: actingSubject ?? null };
+export async function readingAgent(client?: SuppliedClient): Promise<{ signedIn: boolean; actingSubject: string | null }> {
+  const { signedIn, actingSubject } = client ?? await reader();
+  return { signedIn: Boolean(signedIn), actingSubject: actingSubject ?? null };
 }
 
 export { failureOf };
@@ -103,8 +103,8 @@ export const resolveWorkRef = cache(async (ref: WorkRef): Promise<ResolvedRef> =
   return workRefFromAddress(resolved.data);
 });
 
-export const readWorkHeader = cache(async (id: string, _locale: UiLocale): Promise<Loaded<WorkHeader>> => {
-  return booksEditionReads(await reader()).readWorkHeader(id);
+export const readWorkHeader = cache(async (id: string, _locale: UiLocale, client?: SuppliedClient): Promise<Loaded<WorkHeader>> => {
+  return booksEditionReads(client ?? await reader()).readWorkHeader(id);
 });
 
 /**
@@ -194,43 +194,43 @@ export async function loadWork(ref: string, locale: UiLocale):
   return work.kind === 'work' ? { ok: true, id: work.id, header: work.header } : { ok: false };
 }
 
-export const readReleases = cache(async (id: string) => {
-  return booksEditionReads(await reader()).readReleases(id);
+export const readReleases = cache(async (id: string, client?: SuppliedClient) => {
+  return booksEditionReads(client ?? await reader()).readReleases(id);
 });
 
 /** The saved release has an exact address independent of the inventory's current page. */
-export const readEditionRelease = cache(async (id: string, release: string) =>
-  booksEditionReads(await reader()).readEditionRelease(id, release));
+export const readEditionRelease = cache(async (id: string, release: string, client?: SuppliedClient) =>
+  booksEditionReads(client ?? await reader()).readEditionRelease(id, release));
 
 /** A saved realization is resolved at its exact retained revision. */
-export const readEditionRealization = cache(async (id: string, realization: string, revision: string) =>
-  booksEditionReads(await reader()).readEditionRealization(id, realization, revision));
+export const readEditionRealization = cache(async (id: string, realization: string, revision: string, client?: SuppliedClient) =>
+  booksEditionReads(client ?? await reader()).readEditionRealization(id, realization, revision));
 
-export const readCredits = cache(async (id: string): Promise<Loaded<CreditPage>> => {
-  const { main, actingSubject } = await reader();
+export const readCredits = cache(async (id: string, client?: SuppliedClient): Promise<Loaded<CreditPage>> => {
+  const { main, actingSubject } = client ?? await reader();
   return booksEditionReads({ main, actingSubject }).readCredits(id);
 });
 
-export const readAdoptions = cache(async (id: string, _locale: UiLocale): Promise<Loaded<AdoptionPage>> => {
-  const { main, actingSubject } = await reader();
+export const readAdoptions = cache(async (id: string, _locale: UiLocale, client?: SuppliedClient): Promise<Loaded<AdoptionPage>> => {
+  const { main, actingSubject } = client ?? await reader();
   return booksEditionReads({ main, actingSubject }).readAdoptions(id);
 });
 
-export const readRealm = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<RealmHeader>> => {
-  const { main, actingSubject } = await reader();
+export const readRealm = cache(async (realm: string, _locale: UiLocale, client?: SuppliedClient): Promise<Loaded<RealmHeader>> => {
+  const { main, actingSubject } = client ?? await reader();
   return settle(() => main.v1.realms({ realm }).get({ query: { actingSubject } }));
 });
 
 /** Mine needs a signed-in person acting as an Agent; say which step is missing before asking Main. */
-async function scopeReader(scope: WorkScope) {
-  const current = await reader();
+async function scopeReader(scope: WorkScope, client?: SuppliedClient) {
+  const current = client ?? await reader();
   if (scope.kind !== 'mine' || current.actingSubject) return { ...current, failure: null };
   return { ...current, failure: (current.signedIn ? 'identity' : 'sign-in') as ReadFailure };
 }
 
-export const readClassifications = cache(async (id: string, _locale: UiLocale, scope: WorkScope):
+export const readClassifications = cache(async (id: string, _locale: UiLocale, scope: WorkScope, client?: SuppliedClient):
   Promise<Loaded<ClassificationPage>> => {
-  const { main, actingSubject } = await reader();
+  const { main, actingSubject } = client ?? await reader();
   return booksEditionReads({ main, actingSubject }).readClassifications(id, scope);
 });
 
@@ -239,15 +239,15 @@ export const readClassifications = cache(async (id: string, _locale: UiLocale, s
  * Contexts exist, so the page does, visibly: the one in the URL, else the
  * first Main lists, and it names the Context it shows.
  */
-export const readRatings = cache(async (id: string, scope: WorkScope, contextId: string | undefined):
+export const readRatings = cache(async (id: string, scope: WorkScope, contextId: string | undefined, client?: SuppliedClient):
   Promise<Loaded<RatingRead>> => {
-  const { main, actingSubject, failure } = await scopeReader(scope);
+  const { main, actingSubject, failure } = await scopeReader(scope, client);
   if (failure) return { ok: false, failure };
   return readAnimeRelationsRatings({ main, actingSubject }, id, scope, contextId);
 });
 
-export async function readVersions(id: string, _locale: UiLocale, filter: VersionQuery): Promise<Loaded<VersionPage>> {
-  const { main, actingSubject } = await reader();
+export async function readVersions(id: string, _locale: UiLocale, filter: VersionQuery, client?: SuppliedClient): Promise<Loaded<VersionPage>> {
+  const { main, actingSubject } = client ?? await reader();
   return settle(async () => {
     const result=await main.v1.query.post({profile:'template-query-v1',query:'https://rezics.com/query/work-versions',revision:1,
       parameters:{roots:[iriOf(id)],kind:filter.kind,contentLanguage:filter.language},presentation:{actingSubject},cursor:filter.cursor});
@@ -271,8 +271,8 @@ export async function readDiscussion(id: string, realm: string | undefined, curs
 }
 
 /** Works an Agent is credited on, newest first, for "More by" on a Work page. */
-export const readAgentWorks = cache(async (agent: string, _locale: UiLocale): Promise<Loaded<AgentWorksPage>> => {
-  const { main, actingSubject } = await reader();
+export const readAgentWorks = cache(async (agent: string, _locale: UiLocale, client?: SuppliedClient): Promise<Loaded<AgentWorksPage>> => {
+  const { main, actingSubject } = client ?? await reader();
   return settle(() => main.v1.agents({ id: agent.slice(-36) }).works.get({ query: { actingSubject,
     limit: 12 } }));
 });
@@ -282,8 +282,8 @@ export const readAgentWorks = cache(async (agent: string, _locale: UiLocale): Pr
  * Work on Currently reading, and the reviews answering `context`, everyone's
  * rating question the header shows.
  */
-export const readWorkStats = cache(async (id: string, context: string | undefined): Promise<Loaded<WorkStats>> => {
-  return readAnimeRelationsStats(await reader(), id, context);
+export const readWorkStats = cache(async (id: string, context: string | undefined, client?: SuppliedClient): Promise<Loaded<WorkStats>> => {
+  return readAnimeRelationsStats(client ?? await reader(), id, context);
 });
 
 /**
@@ -291,20 +291,20 @@ export const readWorkStats = cache(async (id: string, context: string | undefine
  * read it, each card saying which (`basis`). One page of twelve: three pages
  * of the row on a wide screen.
  */
-export const readAlsoEnjoyed = cache(async (id: string, _locale: UiLocale): Promise<Loaded<AlsoEnjoyedPage>> => {
-  const { main, actingSubject } = await reader();
+export const readAlsoEnjoyed = cache(async (id: string, _locale: UiLocale, client?: SuppliedClient): Promise<Loaded<AlsoEnjoyedPage>> => {
+  const { main, actingSubject } = client ?? await reader();
   return booksEditionReads({ main, actingSubject }).readAlsoEnjoyed(id);
 });
 
 /** A page of this Work's reviews for one rating Context; the reader's own comes first on page one. */
-export async function readReviews(id: string, query: Omit<ReviewQuery, 'actingSubject'>): Promise<Loaded<ReviewPage>> {
-  const { main, actingSubject } = await reader();
+export async function readReviews(id: string, query: Omit<ReviewQuery, 'actingSubject'>, client?: SuppliedClient): Promise<Loaded<ReviewPage>> {
+  const { main, actingSubject } = client ?? await reader();
   return settle(() => main.v1.resources({ resource: id }).reviews.get({ query: { ...query, actingSubject } }), query.cursor);
 }
 
 /** An Agent's public name and handle, once per request, for reviews and credits Main names by IRI. */
-export const readReviewer = cache(async (agent: string): Promise<Reviewer | null> => {
-  const { main, actingSubject } = await reader();
+export const readReviewer = cache(async (agent: string, client?: SuppliedClient): Promise<Reviewer | null> => {
+  const { main, actingSubject } = client ?? await reader();
   const profile = await settle(() => main.v1.agents({ id: agent.slice(-36) }).get({ query: { actingSubject } }));
   return profile.ok ? { name: profile.data.displayName, handle: profile.data.handle } : null;
 });
@@ -314,21 +314,21 @@ export const readReviewer = cache(async (agent: string): Promise<Reviewer | null
  * as no Agent or Main denies that Agent a reader library; empty when Main could
  * not answer, so the controls read it again in the browser.
  */
-export const readReaderState = cache(async (id: string): Promise<ReaderSeed | null> => {
-  const { main, actingSubject } = await reader();
+export const readReaderState = cache(async (id: string, client?: SuppliedClient): Promise<ReaderSeed | null> => {
+  const { main, actingSubject } = client ?? await reader();
   if (!actingSubject) return null;
   const state = await settle(() => main.v1.works({ id })['reader-state'].get({ query: { actingSubject } }));
   if (state.ok) return { [state.data.work]: readerEntry(state.data) };
   return state.failure === 'sign-in' ? null : {};
 });
 
-export const readAgentCredits = cache(async (id: string): Promise<Loaded<AgentCreditPage>> => {
-  const { main, actingSubject } = await reader();
+export const readAgentCredits = cache(async (id: string, client?: SuppliedClient): Promise<Loaded<AgentCreditPage>> => {
+  const { main, actingSubject } = client ?? await reader();
   return booksEditionReads({ main, actingSubject }).readAgentCredits(id);
 });
 
 /** A caller-supplied Main client. Omitted, reads use the request-cached host client. */
-type SuppliedClient = { main: MainClient; actingSubject?: string };
+export type SuppliedClient = { main: MainClient; actingSubject?: string; signedIn?: boolean };
 
 /** One level of the Main Version's table of contents: a group's children, or the top level. */
 export async function readContents(id: string, query: ContentsQuery, client?: SuppliedClient): Promise<Loaded<ContentsPage>> {
@@ -341,10 +341,10 @@ export async function readContents(id: string, query: ContentsQuery, client?: Su
  * Version's selected text in any language, as Main's Versions read marks it
  * (English first, as Main picks). Null when the Work has no selected text.
  */
-export const oneTextLanguage = cache(async (id: string, locale: UiLocale, selected: string | null):
+export const oneTextLanguage = cache(async (id: string, locale: UiLocale, selected: string | null, client?: SuppliedClient):
   Promise<string | null> => {
   if (selected) return selected;
-  const versions = await readVersions(id, locale, { kind: 'text-variant' });
+  const versions = await readVersions(id, locale, { kind: 'text-variant' }, client);
   const languages = versions.ok ? versions.data.items.filter(item => item.selected).map(item => item.language) : [];
   return languages.find(language => language === 'en') ?? languages.sort()[0] ?? null;
 });
@@ -359,20 +359,20 @@ export const oneTextLanguage = cache(async (id: string, locale: UiLocale, select
  */
 export const readStart = cache(async (id: string, work: string, locale: UiLocale, selected: string | null,
   client?: SuppliedClient): Promise<ReadStart> => {
-  return readSuppliedStart(client ?? await reader(), id, work, () => oneTextLanguage(id, locale, selected));
+  return readSuppliedStart(client ?? await reader(), id, work, () => oneTextLanguage(id, locale, selected, client));
 });
 
 /**
  * Where Main says the reader stands in a Work: its composition's next part, or a standalone Work's own status
  * (G-835). Nothing is derived here. Signed out, or without an acting Agent, there is nothing to read.
  */
-export const readProgressSummary = cache(async (id: string, language?: string): Promise<Loaded<ProgressSummary>> => {
-  return booksEditionReads(await reader()).readProgressSummary(id, language);
+export const readProgressSummary = cache(async (id: string, language?: string, client?: SuppliedClient): Promise<Loaded<ProgressSummary>> => {
+  return booksEditionReads(client ?? await reader()).readProgressSummary(id, language);
 });
 
 /** The reader's private edition choice for a Work: a language and optionally one realization or release. */
-export const readEditionPreference = cache(async (id: string): Promise<Loaded<EditionPreference | null>> => {
-  return booksEditionReads(await reader()).readEditionPreference(id);
+export const readEditionPreference = cache(async (id: string, client?: SuppliedClient): Promise<Loaded<EditionPreference | null>> => {
+  return booksEditionReads(client ?? await reader()).readEditionPreference(id);
 });
 
 export type ReadStart =

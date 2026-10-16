@@ -1,7 +1,7 @@
 import { cache } from 'react';
 import type { DiscussionPage, Loaded, RatingContextPage, RatingRead, RatingSummary, ReviewPage } from '../work-page/types.ts';
 import { readLinkedStatements, readResourcePage } from '../work-page/anime-hub-recorded-page.ts';
-import { reader, settle } from '../work-page/read.ts';
+import { reader, settle, type SuppliedClient } from '../work-page/read.ts';
 import { followHref } from './href.ts';
 import type { EntityProjection, EntitySection, RelationsPage, StatementPage } from './types.ts';
 
@@ -13,8 +13,8 @@ import type { EntityProjection, EntitySection, RelationsPage, StatementPage } fr
  * `entity-page-v1` for a resource, once per request; a hidden and a missing resource answer alike (`missing`).
  * `position` is the reading position Main withholds later records for (G-847); omitted, Main chooses for the reader.
  */
-export const readEntityProjection = cache(async (id: string, position?: string): Promise<Loaded<EntityProjection>> => {
-  const { main, actingSubject } = await reader();
+export const readEntityProjection = cache(async (id: string, position?: string, client?: SuppliedClient): Promise<Loaded<EntityProjection>> => {
+  const { main, actingSubject } = client ?? await reader();
   return readResourcePage(main, actingSubject, id, position);
 });
 
@@ -27,8 +27,8 @@ export function sectionOf(page: EntityProjection, id: EntitySection['id']): Enti
  * coordinates (a continuity the reader chose): Main decides what is covered, the browser never filters.
  */
 export async function readStatements(section: EntitySection, cursor: string | undefined, position?: string,
-  frame?: readonly string[]): Promise<Loaded<StatementPage>> {
-  const { main, actingSubject } = await reader();
+  frame?: readonly string[], client?: SuppliedClient): Promise<Loaded<StatementPage>> {
+  const { main, actingSubject } = client ?? await reader();
   return readLinkedStatements(main, actingSubject, section.href, { cursor, position, frame });
 }
 
@@ -37,15 +37,15 @@ export async function readStatements(section: EntitySection, cursor: string | un
  * reader, or one signed in without an acting Agent, reads them as anyone does.
  */
 export async function readRelations(section: EntitySection, cursor: string | undefined, position?: string,
-  frame?: readonly string[]): Promise<Loaded<RelationsPage>> {
-  const { main, actingSubject } = await reader();
+  frame?: readonly string[], client?: SuppliedClient): Promise<Loaded<RelationsPage>> {
+  const { main, actingSubject } = client ?? await reader();
   return settle(followHref<RelationsPage>(main, section.href,
     { actingSubject, after: cursor, limit: 20, position, ...frame?.length ? { frame: [...frame] } : {} }), cursor);
 }
 
 /** Reviewed replies placed in public Realms about the resource, newest first. */
-export async function readDiscussion(section: EntitySection, cursor: string | undefined): Promise<Loaded<DiscussionPage>> {
-  const { main, actingSubject } = await reader();
+export async function readDiscussion(section: EntitySection, cursor: string | undefined, client?: SuppliedClient): Promise<Loaded<DiscussionPage>> {
+  const { main, actingSubject } = client ?? await reader();
   return settle(followHref<DiscussionPage>(main, section.href, { actingSubject, cursor }), cursor);
 }
 

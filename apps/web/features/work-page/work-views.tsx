@@ -12,6 +12,9 @@ import { lifespan } from '../author/facts.ts';
 import { messages as authorMessages } from '../author/messages.ts';
 import authorZhHans from '../author/messages/zh-Hans.ts';
 import { readOpenLibraryAuthor, readOpenLibraryAuthorWorks } from '../author/read.ts';
+import type { ReaderActions } from '../catalogue/reader-actions.tsx';
+import type { RelationshipsApi } from '../relationships/types.ts';
+import type { MainClient } from '../discover/types.ts';
 import { authorSeparator, coverKindOf } from '../catalogue/work.ts';
 import { AdoptionRegion } from './adoption.tsx';
 import { AlsoEnjoyedSection } from './also-enjoyed.tsx';
@@ -27,12 +30,13 @@ import { readContentsGroup } from './contents-actions.ts';
 import { ProvisionalNotice } from '../catalogue-intake/provisional-notice.tsx';
 import { ContentsRegion } from './contents.tsx';
 import { DiscussionRegion } from './discussion.tsx';
+import { booksEditionReads } from './books-edition-page.read.ts';
 import { publicationSource } from './publication-source.tsx';
 import { readAnimeAgentCredits, readAnimeReaderState, readAnimeWorkCredits, readSelectedWorkCredits } from './anime-hub-recorded-page.ts';
 import { oneTextLanguage, readAdoptions, readAgentWorks, readAlsoEnjoyed, readClassifications,
   readContents, readDiscussion, readHistory, readingAgent, readRatings, readRealm,
   readReviewer, readReviews, readVersions, readWorkStats,
-  readHubWorkPage, readText, readRatingPopulations, reader } from './read.ts';
+  readHubWorkPage, readText, readRatingPopulations, reader, type SuppliedClient } from './read.ts';
 import { Region, RegionFailure, RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
 import { type ContentsQuery, EVERYONE, mainScope, type HistoryFilter, idOf, type VersionQuery, type WorkAt, type WorkScope,
@@ -97,12 +101,27 @@ async function recipePageHost(): Promise<RecipeWorkHost> {
   };
 }
 
-interface Common { locale: UiLocale; messages: WorkPageMessages }
+/** The request's clients and presentation inputs, also supplied unchanged by recorded surfaces. */
+export interface WorkPageClient extends SuppliedClient {
+  anonymous: MainClient;
+  signedIn: boolean;
+  avatarQuery?: string;
+  publicFetch?: typeof fetch;
+  pageUrl?: string | null;
+}
+
+const workPageClient = cache(async (): Promise<WorkPageClient> => {
+  const [host, browse, page] = await Promise.all([reader(), browseReader(), headers()]);
+  return { ...host, anonymous: browse.anonymous, avatarQuery: browse.avatarQuery,
+    pageUrl: page.get('x-rezics-page-url') };
+});
+
+interface Common { locale: UiLocale; messages: WorkPageMessages; client?: WorkPageClient }
 
 /** Realms the scope bar and empty states can offer: those that adopted the Work, plus the one in the URL. */
-async function scopeRealms(id: string, scope: WorkScope | null, locale: UiLocale): Promise<ScopeRealm[]> {
-  const [adoptions, current] = await Promise.all([readAdoptions(id, locale),
-    scope?.kind === 'realm' ? readRealm(scope.realm, locale) : null]);
+async function scopeRealms(id: string, scope: WorkScope | null, locale: UiLocale, client?: WorkPageClient): Promise<ScopeRealm[]> {
+  const [adoptions, current] = await Promise.all([readAdoptions(id, locale, client),
+    scope?.kind === 'realm' ? readRealm(scope.realm, locale, client) : null]);
   const realms: ScopeRealm[] = adoptions.ok ? adoptions.data.items.flatMap(item => {
     const realm = idOf(item.realm);
     return realm ? [{ id: realm, name: item.name }] : [];
@@ -113,9 +132,9 @@ async function scopeRealms(id: string, scope: WorkScope | null, locale: UiLocale
   return realms;
 }
 
-async function ratingRealms(id: string, scope: WorkScope | null, locale: UiLocale): Promise<ScopeRealm[]> {
-  const [populations, current] = await Promise.all([readRatingPopulations(id, locale),
-    scope?.kind === 'realm' ? readRealm(scope.realm, locale) : null]);
+async function ratingRealms(id: string, scope: WorkScope | null, locale: UiLocale, client?: WorkPageClient): Promise<ScopeRealm[]> {
+  const [populations, current] = await Promise.all([readRatingPopulations(id, locale, client),
+    scope?.kind === 'realm' ? readRealm(scope.realm, locale, client) : null]);
   const realms: ScopeRealm[] = populations.ok ? populations.data.items.filter(item => !item.global)
     .map(item => ({ id: item.id.slice(-36), name: item.name, ratingCount: item.ratingCount, readerCommunity: item.readerCommunity })) : [];
   if (scope?.kind === 'realm' && !realms.some(realm => realm.id === scope.realm)) {
@@ -125,32 +144,32 @@ async function ratingRealms(id: string, scope: WorkScope | null, locale: UiLocal
 }
 
 // Author reads the first credit page. These names are that continuation record.
-const readAgentCredits = cache(async (id: string) => {
-  const { main, actingSubject } = await reader();
+const readAgentCredits = cache(async (id: string, client?: WorkPageClient) => {
+  const { main, actingSubject } = client ?? await reader();
   return readAnimeAgentCredits(main, actingSubject, id);
 });
-const readCredits = cache(async (id: string) => {
-  const { main, actingSubject } = await reader();
+const readCredits = cache(async (id: string, client?: WorkPageClient) => {
+  const { main, actingSubject } = client ?? await reader();
   return readAnimeWorkCredits(main, actingSubject, id);
 });
-const animeReaderState = cache(async (id: string) => {
-  const { main, actingSubject } = await reader();
+const animeReaderState = cache(async (id: string, client?: WorkPageClient) => {
+  const { main, actingSubject } = client ?? await reader();
   return readAnimeReaderState(main, actingSubject, id);
 });
 
-async function Credits({ id, work, locale, messages }: Common & { id: string; work: Header }) {
+async function Credits({ id, work, locale, messages, client }: Common & { id: string; work: Header }) {
   const source = publicationSource(work);
-  const host = await reader();
-  const [agentCredits, credits] = await Promise.all([readAgentCredits(id),
+  const host = client ?? await reader();
+  const [agentCredits, credits] = await Promise.all([readAgentCredits(id, client),
     readSelectedWorkCredits(host.main, host.actingSubject, id, Boolean(source))]);
   return <WorkCredits agentCredits={agentCredits} credits={credits} source={source} locale={locale} messages={messages} />;
 }
 
 /** The cover uses the same credited names as the header, without delaying the rest of the Work page. */
-async function Cover({ id, work, avatarQuery, locale, messages }: Common & {
+async function Cover({ id, work, avatarQuery, locale, messages, client }: Common & {
   id: string; work: Header; avatarQuery?: string;
 }) {
-  const [agentCredits, externalCredits] = await Promise.all([readAgentCredits(id), readCredits(id)]);
+  const [agentCredits, externalCredits] = await Promise.all([readAgentCredits(id, client), readCredits(id, client)]);
   const t = materializeData(messages, { locale });
   const authors = coverAuthors(agentCredits, externalCredits, key => t.openLibraryAuthor({ key }));
   return <WorkPageCover work={work} authors={authors} avatarQuery={avatarQuery} />;
@@ -160,9 +179,9 @@ async function Cover({ id, work, avatarQuery, locale, messages }: Common & {
  * Everyone's rating summary for the header, on the Work's first rating
  * question, with its reviews and the people reading the Work now.
  */
-async function RatingLineSlot({ id, experience, locale, messages }: Common & { id: string; experience: WorkExperience }) {
-  const ratings = await readRatings(id, EVERYONE, undefined);
-  const stats = await readWorkStats(id, ratings.ok ? ratings.data.context?.context : undefined);
+async function RatingLineSlot({ id, experience, locale, messages, client }: Common & { id: string; experience: WorkExperience }) {
+  const ratings = await readRatings(id, EVERYONE, undefined, client);
+  const stats = await readWorkStats(id, ratings.ok ? ratings.data.context?.context : undefined, client);
   return <RatingLine ratings={ratings} stats={stats} experience={experience} locale={locale} messages={messages} />;
 }
 
@@ -172,16 +191,16 @@ async function RatingLineSlot({ id, experience, locale, messages }: Common & { i
  * the projection the registry's entry for the Work's types stands in and the
  * type section is left out.
  */
-export const readExperience = async (id: string, types: readonly string[]): Promise<WorkExperience> => {
-  const page = await readEntityProjection(id);
+export const readExperience = async (id: string, types: readonly string[], client?: WorkPageClient): Promise<WorkExperience> => {
+  const page = await readEntityProjection(id, undefined, client);
   return workExperience(page.ok ? page.data : null, types);
 };
 
 /** A type's own action (cook, copy, install), or for cover-led Works the one primary action the hub leads with. */
-async function ReadSlot({ workRef, id, work, experience, locale, messages }: Common & { workRef: WorkAt; id: string;
+async function ReadSlot({ workRef, id, work, experience, locale, messages, client }: Common & { workRef: WorkAt; id: string;
   work: Header; experience: WorkExperience }) {
   if (experience.kind === 'book') {
-    return <PrimaryAction workRef={workRef} id={id} work={work} locale={locale} messages={messages} />;
+    return PrimaryAction({ workRef, id, work, locale, messages, client });
   }
   const hub = experience.typeSection && experience.kind !== 'recipe' ? await readHubWorkPage(experience.typeSection.href)
     : null;
@@ -191,27 +210,29 @@ async function ReadSlot({ workRef, id, work, experience, locale, messages }: Com
 }
 
 /** The hub sections the Work's projection binds, in the documented order. */
-export const readHubPlan = async (id: string): Promise<readonly HubSection[]> => {
-  const page = await readEntityProjection(id);
+export const readHubPlan = async (id: string, client?: WorkPageClient): Promise<readonly HubSection[]> => {
+  const page = await readEntityProjection(id, undefined, client);
   return hubPlan(page.ok ? page.data : null);
 };
 
 /** Header and tabs around every Work view; credits and the rating summary stream in on their own. */
-export async function WorkFrameView({ workRef, id, work, locale, messages, lead, children }: Common & {
+export async function WorkFrameView({ workRef, id, work, locale, messages, lead, children, client, readerActions, relationships }: Common & {
   workRef: WorkAt; id: string; work: Header; children: ReactNode;
+  readerActions?: ReaderActions; relationships?: RelationshipsApi;
   /** The sections a Zone's page leads with (`ZonePackage.hubOrder`). */
   lead?: readonly HubSection[];
 }) {
-  const experience = await readExperience(id, work.types);
+  client ??= await workPageClient();
+  const experience = await readExperience(id, work.types, client);
   if (experience.kind === 'recipe') {
     return recipeWorkFrame({ host: await recipePageHost(), workRef, id, work, locale, messages, children });
   }
   const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, plan, art, showcaseMessages] = await Promise.all([
-    readingAgent(), browseReader(), animeReaderState(id), readRatings(id, EVERYONE, undefined),
-    readHubPlan(id),
+    readingAgent(client), (client ?? browseReader()), animeReaderState(id, client), readRatings(id, EVERYONE, undefined, client),
+    readHubPlan(id, client),
     // One batch for the page, so the art costs one round trip however many layers it has, and one for
     // the header's images, so they are drawn (or masked) in the server's HTML.
-    readOwnWorkShowcase(work.id).then(async (art) => {
+    readOwnWorkShowcase(work.id, client?.publicFetch).then(async (art) => {
       const item = art.get(work.id);
       return { item, images: item ? await readShowcaseImages(item.images.flatMap(image =>
         image.role === 'cutout' ? [] : [image.url])) : {} };
@@ -222,31 +243,31 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
     max: context.scale.max } : null;
   return <WorkFrame workRef={workRef} work={work} experience={experience} locale={locale} messages={messages} signedIn={signedIn}
     showcase={workShowcaseHeader(art.item, showcaseMessages, art.images)}
-    actingSubject={seed ? actingSubject : null} readerSeed={seed ?? undefined} ratingTarget={ratingTarget}
+    actingSubject={seed ? actingSubject : null} readerSeed={seed ?? undefined} ratingTarget={ratingTarget} readerActions={readerActions} relationships={relationships}
     signInHref={signInPath(localizedPath(workHref(workRef), locale))} avatarQuery={avatarQuery}
     cover={<Suspense fallback={<WorkPageCover work={work} avatarQuery={avatarQuery} />}>
-      <Cover id={id} work={work} avatarQuery={avatarQuery} locale={locale} messages={messages} /></Suspense>}
+      {Cover({ id, work, avatarQuery, locale, messages, client })}</Suspense>}
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
-      <Credits id={id} work={work} locale={locale} messages={messages} /></Suspense>}
-    ratingLine={<Suspense fallback={null}><RatingLineSlot id={id} experience={experience} locale={locale} messages={messages} /></Suspense>}
+      {Credits({ id, work, locale, messages, client })}</Suspense>}
+    ratingLine={<Suspense fallback={null}>{RatingLineSlot({ id, experience, locale, messages, client })}</Suspense>}
     sections={hubLabels(messages, plan, lead)}
     readAction={<Suspense fallback={experience.kind === 'book'
       ? <ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} /> : null}>
-      <ReadSlot workRef={workRef} id={id} work={work} experience={experience} locale={locale} messages={messages} />
+      {ReadSlot({ workRef, id, work, experience, locale, messages, client })}
     </Suspense>}
     status={showsEditionStatus(experience) ? <Suspense fallback={null}>
-      <Status id={id} locale={locale} messages={messages} /></Suspense> : undefined}
+      {Status({ id, locale, messages, client })}</Suspense> : undefined}
     shortcuts={<>
       <ProvisionalNotice verification={work.verification} provenance={work.fieldProvenance} locale={locale} />
       {plan.includes('wiki') ? <Suspense fallback={null}>
-        <WikiShortcut id={id} locale={locale} messages={messages} /></Suspense> : null}</>}>
+        {WikiShortcut({ id, locale, messages, client })}</Suspense> : null}</>}>
     {children}</WorkFrame>;
 }
 
-async function ScopeBarSlot({ workRef, id, scope, tab = 'overview', locale, messages }: Common & {
+async function ScopeBarSlot({ workRef, id, scope, tab = 'overview', locale, messages, client }: Common & {
   workRef: WorkAt; id: string; scope: WorkScope | null; tab?: 'overview' | 'discussion';
 }) {
-  const [realms, agent] = await Promise.all([tab === 'overview' ? ratingRealms(id, scope, locale) : scopeRealms(id, scope, locale), readingAgent()]);
+  const [realms, agent] = await Promise.all([tab === 'overview' ? ratingRealms(id, scope, locale, client) : scopeRealms(id, scope, locale, client), readingAgent(client)]);
   return <ScopeBar workRef={workRef} scope={scope} realms={realms} tab={tab}
     target={tab === 'overview' ? `https://rezics.com/id/${id}` : undefined} actingSubject={agent.actingSubject ?? undefined}
     locale={locale} messages={messages} />;
@@ -254,13 +275,13 @@ async function ScopeBarSlot({ workRef, id, scope, tab = 'overview', locale, mess
 
 type ScopedProps = Common & { workRef: WorkAt; id: string; scope: WorkScope };
 
-async function view({ workRef, id, scope, locale }: ScopedProps): Promise<ScopeView> {
-  return { workRef, scope, realms: await scopeRealms(id, scope, locale) };
+async function view({ workRef, id, scope, locale, client }: ScopedProps): Promise<ScopeView> {
+  return { workRef, scope, realms: await scopeRealms(id, scope, locale, client) };
 }
 
 async function Ratings(props: ScopedProps & { context: string | undefined }) {
-  const [realms, ratings, agent] = await Promise.all([ratingRealms(props.id, props.scope, props.locale),
-    readRatings(props.id, props.scope, props.context), readingAgent()]);
+  const [realms, ratings, agent] = await Promise.all([ratingRealms(props.id, props.scope, props.locale, props.client),
+    readRatings(props.id, props.scope, props.context, props.client), readingAgent(props.client)]);
   const scopeView: ScopeView = { workRef: props.workRef, scope: props.scope, realms };
   return <RatingSummaryRegion ratings={ratings} view={scopeView} locale={props.locale} messages={props.messages}
     scopeBar={<ScopeBar workRef={props.workRef} scope={props.scope} realms={scopeView.realms} locale={props.locale}
@@ -272,8 +293,8 @@ async function Ratings(props: ScopedProps & { context: string | undefined }) {
  * Details with a citation: the title, native authors, REZICS and the page's
  * address in this interface language, from the proxy's record of the request.
  */
-async function Record({ id, workRef, work, locale, messages }: Common & { id: string; workRef: WorkAt; work: Header }) {
-  const [credits, page] = await Promise.all([readAgentCredits(id), headers().then(list => list.get('x-rezics-page-url'))]);
+async function Record({ id, workRef, work, locale, messages, client }: Common & { id: string; workRef: WorkAt; work: Header }) {
+  const [credits, page] = await Promise.all([readAgentCredits(id, client), client ? client.pageUrl : headers().then(list => list.get('x-rezics-page-url'))]);
   const authors = citationAuthors(credits);
   // A citation names the Work's own address, never a Zone's frame around it.
   const url = page ? new URL(localizedPath(workHref(workRefOf(workRef)), locale), page).toString() : null;
@@ -282,11 +303,11 @@ async function Record({ id, workRef, work, locale, messages }: Common & { id: st
   return <WorkRecord work={work} citation={citation} locale={locale} messages={messages} />;
 }
 
-async function Author({ id, locale, messages }: Common & { id: string }) {
-  const [agents, external] = await Promise.all([readAgentCredits(id), readCredits(id)]);
+async function Author({ id, locale, messages, client }: Common & { id: string }) {
+  const [agents, external] = await Promise.all([readAgentCredits(id, client), readCredits(id, client)]);
   const native = agents.ok ? agents.data.items.find(credit => credit.role === 'author') : undefined;
   if (native) {
-    const [works, { avatarQuery }] = await Promise.all([readAgentWorks(native.agent, locale), browseReader()]);
+    const [works, { avatarQuery }] = await Promise.all([readAgentWorks(native.agent, locale, client), (client ?? browseReader())]);
     return <AuthorSection author={{ kind: 'agent', name: native.displayName, handle: native.handle, agent: native.agent, works }}
       work={id} avatarQuery={avatarQuery} locale={locale} messages={messages} />;
   }
@@ -295,7 +316,7 @@ async function Author({ id, locale, messages }: Common & { id: string }) {
     .sort((a, b) => a.ordinal - b.ordinal)[0] : undefined;
   if (!credit || credit.provider !== 'open-library' || !credit.key) return null;
   const [details, works, { avatarQuery }] = await Promise.all([
-    readOpenLibraryAuthor(credit.key, locale, 1), readOpenLibraryAuthorWorks(credit.key, locale, 12), browseReader(),
+    readOpenLibraryAuthor(credit.key, locale, 1), readOpenLibraryAuthorWorks(credit.key, locale, 12), (client ?? browseReader()),
   ]);
   const name = details.ok ? details.data.name?.displayName ?? credit.displayName : credit.displayName;
   const t = materializeData(messages, { locale });
@@ -311,19 +332,19 @@ async function Author({ id, locale, messages }: Common & { id: string }) {
  * Mine), so a review's stars mean the same as the summary's. The reader can
  * write where the page's own stars rate: everyone's question.
  */
-async function Reviews({ workRef, id, work, scope, context: chosen, locale, messages }: ScopedProps & {
+async function Reviews({ workRef, id, work, scope, context: chosen, locale, messages, client }: ScopedProps & {
   work: Header; context: string | undefined }) {
   const [ratings, everyone, { signedIn, actingSubject }] = await Promise.all([
-    readRatings(id, scope.kind === 'mine' ? EVERYONE : scope, chosen),
-    readRatings(id, EVERYONE, undefined), readingAgent()]);
+    readRatings(id, scope.kind === 'mine' ? EVERYONE : scope, chosen, client),
+    readRatings(id, EVERYONE, undefined, client), readingAgent(client)]);
   const question = ratings.ok ? ratings.data.context : null;
   if (!question) return null;
-  const initial = await readReviews(id, { context: question.context, sort: 'helpful', limit: 10 });
+  const initial = await readReviews(id, { context: question.context, sort: 'helpful', limit: 10 }, client);
   const authors = initial.ok ? [...new Set(initial.data.items.map(review => review.author))] : [];
-  const named = await Promise.all(authors.map(async author => [author, await readReviewer(author)] as const));
+  const named = await Promise.all(authors.map(async author => [author, await readReviewer(author, client)] as const));
   const writable = everyone.ok && everyone.data.context?.context === question.context;
   // Editions, translations and related Works have their own rating questions, read in the scope the reviews are in.
-  const targets = await reviewTargets(id, work, locale);
+  const targets = await reviewTargets(id, work, locale, client);
   return <ReviewsSection target={work.id} context={question.context} scale={question.scale.max} initial={initial}
     targets={targets} scopeQuery={mainScope(scope.kind === 'mine' ? EVERYONE : scope)}
     aggregate={ratings.ok ? aggregateOf(ratings.data.summary) : null}
@@ -337,12 +358,13 @@ async function Reviews({ workRef, id, work, scope, context: chosen, locale, mess
 
 async function Classification(props: ScopedProps) {
   const [scopeView, classifications, facets] = await Promise.all([view(props), props.scope.kind === 'mine' ? null
-    : readClassifications(props.id, props.locale, props.scope), readFacets()]);
+    : readClassifications(props.id, props.locale, props.scope, props.client),
+    props.client ? booksEditionReads({ main: props.client.anonymous }).readFacets() : readFacets()]);
   const facet = classificationFacet(facets.ok ? facets.data : null);
   // Nobody tagged it for everyone: show what the first two communities featuring it chose, named as theirs.
   const untagged = props.scope.kind === 'global' && classifications?.ok && !classifications.data.items.length;
   const communities: CommunityGenres[] = untagged ? await Promise.all(scopeView.realms.slice(0, 2).map(async realm => {
-    const chosen = await readClassifications(props.id, props.locale, { kind: 'realm', realm: realm.id });
+    const chosen = await readClassifications(props.id, props.locale, { kind: 'realm', realm: realm.id }, props.client);
     return { realm, items: chosen.ok ? chosen.data.items.filter(item => item.source === 'local') : [] };
   })) : [];
   return <ClassificationRegion classifications={classifications} view={scopeView} communities={communities}
@@ -351,15 +373,15 @@ async function Classification(props: ScopedProps) {
 }
 
 /** Works to read next, beside the ones this Work's readers also enjoyed. */
-async function AlsoEnjoyed({ id, work, locale, messages }: Common & { id: string; work: Header }) {
-  const [alsoEnjoyed, realms, { avatarQuery }] = await Promise.all([readAlsoEnjoyed(id, locale),
-    scopeRealms(id, null, locale), browseReader()]);
+async function AlsoEnjoyed({ id, work, locale, messages, client }: Common & { id: string; work: Header }) {
+  const [alsoEnjoyed, realms, { avatarQuery }] = await Promise.all([readAlsoEnjoyed(id, locale, client),
+    scopeRealms(id, null, locale, client), (client ?? browseReader())]);
   return <AlsoEnjoyedSection alsoEnjoyed={alsoEnjoyed} book={coverKindOf(work.types) === 'book'} realms={realms}
     avatarQuery={avatarQuery} locale={locale} messages={messages} />;
 }
 
 async function Adoption(props: ScopedProps) {
-  const [scopeView, adoptions] = await Promise.all([view(props), readAdoptions(props.id, props.locale)]);
+  const [scopeView, adoptions] = await Promise.all([view(props), readAdoptions(props.id, props.locale, props.client)]);
   return <AdoptionRegion adoptions={adoptions} view={scopeView} locale={props.locale} messages={props.messages} />;
 }
 
@@ -388,19 +410,21 @@ export async function TypeExperience({ id, work, experience, locale, messages }:
  * Overview: the hub's sections below the identity, in the documented order. Each region reads in parallel under
  * its own Suspense boundary; `OverviewLayout` draws only the sections the Work's projection binds.
  */
-export async function WorkOverview({ workRef, id, work, scope, context, locale, messages, lead }: Common & {
+export async function WorkOverview({ workRef, id, work, scope, context, locale, messages, lead, client }: Common & {
   workRef: WorkAt; id: string; work: Header; scope: WorkScope | null; context: string | undefined;
   /** The sections a Zone's page leads with (`ZonePackage.hubOrder`). */
   lead?: readonly HubSection[];
 }) {
-  const [experience, plan] = await Promise.all([readExperience(id, work.types), readHubPlan(id)]);
+  const suppliedClient = client;
+  client ??= await workPageClient();
+  const [experience, plan] = await Promise.all([readExperience(id, work.types, client), readHubPlan(id, client)]);
   if (experience.kind === 'recipe') {
     return recipeWorkOverview({ host: await recipePageHost(), workRef, id, work, scope, locale, messages, lead });
   }
-  const access = await readPlatformAccess();
+  const access = await readPlatformAccess(suppliedClient);
   const t = messages;
   const loading = t.loadingRegion;
-  const common = { id, locale, messages };
+  const common = { id, locale, messages, client };
   const specialist = <Suspense fallback={<RegionSkeleton
     id="work-type-loading" title={work.title.value} label={loading} lines={5} />}>
     <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} /></Suspense>;
@@ -413,45 +437,44 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
         <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} /></Suspense> : null
       : experience.kind === 'book' || experience.kind === 'plain' ? null : specialist}
     about={<WorkAbout work={work} locale={locale} messages={messages} />}
-    facts={<Suspense fallback={null}><AboutFacts {...common} /></Suspense>}
+    facts={<Suspense fallback={null}>{plan.includes('about') ? AboutFacts(common) : null}</Suspense>}
     availability={<>
       <Suspense fallback={<RegionSkeleton id="work-availability-loading" title={t.sectionAvailability} label={loading}
         lines={4} />}>
-        <Availability workRef={workRef} {...common} /></Suspense>
-      <Suspense fallback={null}><WorkTypeSections work={id} types={work.types} locale={locale} /></Suspense>
+        {plan.includes('availability') ? Availability({ workRef, ...common }) : null}</Suspense>
+      <Suspense fallback={null}>{plan.includes('availability') ? WorkTypeSections({ work: id, types: work.types, locale }) : null}</Suspense>
     </>}
     parts={<Suspense fallback={<RegionSkeleton id="work-parts-loading" title={t.sectionParts} label={loading} lines={3} />}>
-      <Parts workRef={workRef} {...common} /></Suspense>}
+      {plan.includes('parts') ? Parts({ workRef, ...common }) : null}</Suspense>}
     wiki={<Suspense fallback={<RegionSkeleton id="work-wiki-loading" title={t.sectionWiki} label={loading} lines={2} />}>
-      <WikiSection {...common} /></Suspense>}
+      {plan.includes('wiki') ? WikiSection(common) : null}</Suspense>}
     scopeBar={<Suspense fallback={<ScopeBarSkeleton label={loading} />}>
-      <ScopeBarSlot workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />
+      {!scope && plan.includes('ratings') ? ScopeBarSlot({ workRef, id, scope, locale, messages, client }) : null}
     </Suspense>}
     ratings={scope ? <Suspense fallback={<RegionSkeleton id="work-ratings-loading" title={t.ratings} label={loading}
       lines={5} />}>
-      <Ratings workRef={workRef} id={id} scope={scope} context={context} locale={locale} messages={messages} />
+      {plan.includes('ratings') ? Ratings({ workRef, id, scope, context, locale, messages, client }) : null}
     </Suspense> : null}
     classification={scope ? <Suspense fallback={<RegionSkeleton id="work-classification-loading"
       title={t.classification} label={loading} />}>
-      <Classification workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />
+      {plan.includes('about') ? Classification({ workRef, id, scope, locale, messages, client }) : null}
     </Suspense> : null}
     reviews={scope ? <Suspense fallback={<RegionSkeleton id="work-reviews-loading" title={t.reviews} label={loading}
       lines={6} />}>
-      <Reviews workRef={workRef} id={id} work={work} scope={scope} context={context} locale={locale}
-        messages={messages} />
+      {plan.includes('ratings') ? Reviews({ workRef, id, work, scope, context, locale, messages, client }) : null}
     </Suspense> : null}
     discussion={<Suspense fallback={<RegionSkeleton id="work-discussion-loading" title={t.sectionDiscussion}
       label={loading} lines={3} />}>
-      <DiscussionHub workRef={workRef} {...common} /></Suspense>}
+      {plan.includes('discussion') ? DiscussionHub({ workRef, ...common }) : null}</Suspense>}
     adoption={scope ? <Suspense fallback={<RegionSkeleton id="work-adoption-loading" title={t.adoption}
       label={loading} lines={2} />}>
-      <Adoption workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />
+      {plan.includes('discussion') ? Adoption({ workRef, id, scope, locale, messages, client }) : null}
     </Suspense> : null}
     record={<Suspense fallback={<WorkRecord work={work} locale={locale} messages={messages} />}>
-      <Record id={id} workRef={workRef} work={work} locale={locale} messages={messages} /></Suspense>}
+      {Record({ id, workRef, work, locale, messages, client })}</Suspense>}
     alsoEnjoyed={<Suspense fallback={null}>
-      <AlsoEnjoyed id={id} work={work} locale={locale} messages={messages} /></Suspense>}
-    author={<Suspense fallback={null}><Author id={id} locale={locale} messages={messages} /></Suspense>} />;
+      {plan.includes('lists') ? AlsoEnjoyed({ id, work, locale, messages, client }) : null}</Suspense>}
+    author={<Suspense fallback={null}>{plan.includes('lists') ? Author({ id, locale, messages, client }) : null}</Suspense>} />;
 }
 
 export async function WorkVersions({ workRef, id, query, locale, messages }: Common & {
@@ -501,13 +524,13 @@ export function WorkDiscussion({ workRef, id, scope, cursor, locale, messages }:
   </>;
 }
 
-export async function WorkContents({ workRef, id, work, query, locale, messages }: Common & {
+export async function WorkContents({ workRef, id, work, query, locale, messages, client }: Common & {
   workRef: WorkAt; id: string; work: Header; query: ContentsQuery | null;
 }) {
-  const contents = query ? await readContents(id, query) : { ok: false as const, failure: 'invalid' as const };
+  const contents = query ? await readContents(id, query, client) : { ok: false as const, failure: 'invalid' as const };
   const none = contents.ok ? !contents.data.items.length && !query?.parent && !query?.cursor
     : contents.failure === 'missing';
-  const language = none ? await oneTextLanguage(id, locale, work.selectedLanguage) : null;
+  const language = none ? await oneTextLanguage(id, locale, work.selectedLanguage, client) : null;
   // Called a book as its cover draws it: a Work with no type, such as an imported classic, is shown as one.
   const oneText = language ? { title: work.title, language, book: coverKindOf(work.types) === 'book' } : null;
   // The top level opens one volume with its chapters: the one asked for (the reader's), else the first story volume.
@@ -515,7 +538,7 @@ export async function WorkContents({ workRef, id, work, query, locale, messages 
   const open = groups.find(item => idOf(item.occurrence) === query?.open)
     ?? groups.find(item => item.division !== 'extras' && item.childCount) ?? groups[0];
   const openPage = open && query ? await readContents(id, { parent: idOf(open.occurrence) ?? undefined,
-    language: query.language }) : null;
+    language: query.language }, client) : null;
   return <ContentsRegion contents={contents} workRef={workRef} id={id} query={query ?? {}} oneText={oneText}
     opened={open && openPage?.ok ? { occurrence: open.occurrence, page: openPage.data } : null}
     groupAction={readContentsGroup} locale={locale} messages={messages} />;

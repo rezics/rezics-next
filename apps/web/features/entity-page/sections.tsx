@@ -1,6 +1,6 @@
 import { entryLabel } from '../catalogue/types.ts';
 import { namesOf } from '../work-levels/read.ts';
-import { readRealm, readReviewer } from '../work-page/read.ts';
+import { readRealm, readReviewer, type SuppliedClient } from '../work-page/read.ts';
 import { TargetRatingsRegion } from '../work-page/ratings.tsx';
 import { ReviewsSection } from '../work-page/reviews.tsx';
 import { idOf } from '../work-page/route.ts';
@@ -17,18 +17,18 @@ import { getMessages } from '../../i18n/server.ts';
 // The sections' server halves: each reads from the link the projection gave it, names what it lists, and hands
 // the answer to the view of the same name (views.tsx), which stories and tests draw without Main.
 
-export async function StatementsSection({ section, cursor, position, frame, projection = false, ownName, ...rest }: SectionProps
-  & { cursor: string | undefined; ownName?: string; position?: string; frame?: readonly string[];
+export async function StatementsSection({ section, cursor, position, frame, projection = false, ownName, client, ...rest }: SectionProps
+  & { cursor: string | undefined; client?: SuppliedClient; ownName?: string; position?: string; frame?: readonly string[];
     /** A place's facts: those covered by its coordinates, most specific first, each saying how far it reaches. */
     projection?: boolean }) {
-  const page = await readStatements(section, cursor, position, frame);
-  const labels = page.ok ? await readPredicateLabels(page.data, rest.locale) : new Map();
+  const page = await readStatements(section, cursor, position, frame, client);
+  const labels = page.ok ? await readPredicateLabels(page.data, rest.locale, client) : new Map();
   // Values and the continuities a statement holds in are named together, so one read names both.
   const names = page.ok ? await namesOf(page.data.groups.flatMap(group => group.items.flatMap(item => [
     ...item.kind === 'statement' && item.value.kind === 'resource' ? [item.value.iri] : [],
     // An owner's own property can name a resource too (the Work a character belongs to).
     ...item.kind === 'component-property' && item.value.kind === 'resource' && typeof item.value.ref === 'string' ? [item.value.ref] : [],
-    ...item.qualifiers.applicability])), position) : new Map();
+    ...item.qualifiers.applicability])), position, client) : new Map();
   return projection
     ? <ProjectionFactsView page={page} labels={labels} names={names} ownName={ownName} cursor={cursor} hrefFor={rest.hrefFor}
       locale={rest.locale} t={rest.t} messages={rest.messages} />
@@ -53,20 +53,21 @@ export async function RelationsSection({ section, cursor, position, frame, hideI
 }
 
 
-export async function DiscussionSection({ section, cursor, resource, registry, signedIn, preview, anchor, noun, ...rest }: SectionProps & {
+export async function DiscussionSection({ section, cursor, resource, registry, signedIn, preview, anchor, noun, client, ...rest }: SectionProps & {
   anchor?: string;
+  client?: SuppliedClient;
   /** What the resource is called in a sentence, where the type registry's word is not one a reader knows (a place). */
   noun?: string;
   cursor: string | undefined; resource: string; registry: EntityProjection['registry']; signedIn: boolean;
   /** Show only the first few replies and no paging, for a host that links to the full list (the Work hub). */
   preview?: number;
 }) {
-  const [read, feedMessages] = await Promise.all([readDiscussion(section, cursor), getMessages('feed', rest.locale)]);
+  const [read, feedMessages] = await Promise.all([readDiscussion(section, cursor, client), getMessages('feed', rest.locale)]);
   const page = preview !== undefined && read.ok
     ? { ok: true as const, data: { ...read.data, items: read.data.items.slice(0, preview), nextCursor: null } } : read;
   const ids = page.ok ? [...new Set(page.data.items.flatMap(item => idOf(item.realm) ?? []))] : [];
   const realms = new Map(await Promise.all(ids.map(async realm => {
-    const header = await readRealm(realm, rest.locale);
+    const header = await readRealm(realm, rest.locale, client);
     return [realm, header.ok ? header.data.name : null] as const;
   })));
   return <DiscussionView page={page} realms={realms} cursor={cursor} resource={resource} anchor={anchor}

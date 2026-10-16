@@ -1,3 +1,4 @@
+import type { MainClient } from '../discover/types.ts';
 import { treaty } from '@elysia/eden';
 import type { MainApp } from '@rezics/main/app';
 import { cookies, headers } from 'next/headers';
@@ -112,7 +113,13 @@ export async function mainApi(options: { fetcher?: typeof fetch } = {}) {
  * across requests or viewers. A refusal or an unreachable Main reads as no access, so closed surfaces
  * stay hidden rather than appear and fail.
  */
-export const readPlatformAccess = cache(async (): Promise<PlatformAccess> => {
+export const readPlatformAccess = cache(async (client?: { main: MainClient }): Promise<PlatformAccess> => {
+  if (client) {
+    try {
+      const answer = await client.main.v1.me['platform-access'].get();
+      return (!answer.error ? parsePlatformAccess(answer.data) : null) ?? NO_PLATFORM_ACCESS;
+    } catch { return NO_PLATFORM_ACCESS; }
+  }
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
   try {
     const response = await serverRead(

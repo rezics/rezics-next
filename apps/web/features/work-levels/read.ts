@@ -1,7 +1,7 @@
 import { cache } from 'react';
 import { readWorkParts, readWorkRealizations, readWorkRelations, readWorkWholes } from '../work-page/anime-hub-recorded-page.ts';
 import { settle } from '../work-page/books-edition-page.read.ts';
-import { reader } from '../work-page/read.ts';
+import { reader, type SuppliedClient } from '../work-page/read.ts';
 import { animeRelationsReads } from '../work-page/anime-relations-recorded-page.ts';
 import type { CollectionMembers, Loaded, Names, PartsPage, RealizationPage, Realization,
   People, RelationEntry, RelationsPage, Release, ReleasePage, WholesPage } from './types.ts';
@@ -11,20 +11,20 @@ import type { CollectionMembers, Loaded, Names, PartsPage, RealizationPage, Real
 // disclosure for public parts, wholes and relations reads. Collection reads
 // still require an acting Agent.
 
-export async function readParts(id: string, query: { parent?: string; after?: string; limit?: number }):
+export async function readParts(id: string, query: { parent?: string; after?: string; limit?: number }, client?: SuppliedClient):
   Promise<Loaded<PartsPage>> {
-  const current = await reader();
+  const current = client ?? await reader();
   return readWorkParts(current.main, current.actingSubject, id, query);
 }
 
-export async function readWholes(id: string, query: { after?: string; limit?: number } = {}): Promise<Loaded<WholesPage>> {
-  const current = await reader();
+export async function readWholes(id: string, query: { after?: string; limit?: number } = {}, client?: SuppliedClient): Promise<Loaded<WholesPage>> {
+  const current = client ?? await reader();
   return readWorkWholes(current.main, current.actingSubject, id, query);
 }
 
-export async function readRelations(id: string, query: { after?: string; limit?: number }):
+export async function readRelations(id: string, query: { after?: string; limit?: number }, client?: SuppliedClient):
   Promise<Loaded<RelationsPage>> {
-  const current = await reader();
+  const current = client ?? await reader();
   return readWorkRelations(current.main, current.actingSubject, id, query);
 }
 
@@ -38,21 +38,21 @@ export async function readCollectionMembers(collection: string, query: { after?:
  * Names and availability for up to 64 resources per Main call; a failed batch leaves its resources unnamed. `position` is
  * the reading position (`all` or an occurrence IRI) Main withholds later names for; omitted, Main chooses.
  */
-export const readNames = cache(async (resources: string, position?: string): Promise<Names> => {
-  return animeRelationsReads(await reader()).readNames(resources, position);
+export const readNames = cache(async (resources: string, position?: string, client?: SuppliedClient): Promise<Names> => {
+  return animeRelationsReads(client ?? await reader()).readNames(resources, position);
 });
 
 /** `readNames` over a list; the cache key is the sorted, joined list and the position, so one request shares one call per position. */
-export const namesOf = (resources: readonly string[], position?: string) =>
-  readNames([...new Set(resources)].sort().join(' '), position);
+export const namesOf = (resources: readonly string[], position?: string, client?: SuppliedClient) =>
+  readNames([...new Set(resources)].sort().join(' '), position, client);
 
-export async function readReleases(id: string, after?: string): Promise<Loaded<ReleasePage>> {
-  const { main, actingSubject } = await reader();
+export async function readReleases(id: string, after?: string, client?: SuppliedClient): Promise<Loaded<ReleasePage>> {
+  const { main, actingSubject } = client ?? await reader();
   return settle(() => main.v1.works({ id }).releases.get({ query: { actingSubject, limit: 20, cursor: after } }), after);
 }
 
-export async function readRealizations(id: string, after?: string): Promise<Loaded<RealizationPage>> {
-  const { main, actingSubject } = await reader();
+export async function readRealizations(id: string, after?: string, client?: SuppliedClient): Promise<Loaded<RealizationPage>> {
+  const { main, actingSubject } = client ?? await reader();
   return readWorkRealizations(main, actingSubject, id, after);
 }
 
@@ -84,6 +84,6 @@ export async function readReleaseWork(release: string): Promise<Loaded<{ work: s
 }
 
 /** The contributors a relation page names as REZICS Agents, with the name and handle their profile link needs; one Agent Main will not name stays a bare key. */
-export async function readPeople(entries: readonly RelationEntry[]): Promise<People> {
-  return animeRelationsReads(await reader()).readPeople(entries);
+export async function readPeople(entries: readonly RelationEntry[], client?: SuppliedClient): Promise<People> {
+  return animeRelationsReads(client ?? await reader()).readPeople(entries);
 }
