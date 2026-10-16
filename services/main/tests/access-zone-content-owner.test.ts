@@ -202,14 +202,15 @@ test('administrator replay and the immutable proof refuse a changed or omitted r
     person = await authorize(zone),
     input = request(person, zone);
   const registered = await access.register(input);
-  await expect(access.register({ ...input, resolvedZonePage: resource() })).rejects.toBeInstanceOf(
-    AdmissionConflict,
+  const changedZone = resource();
+  await expect(access.register({ ...input, resolvedZonePage: changedZone })).rejects.toBeInstanceOf(
+    AdmissionDenied,
   );
   const { resolvedZonePage: _zone, ...omitted } = input;
-  await expect(access.register(omitted)).rejects.toBeInstanceOf(AdmissionConflict);
+  await expect(access.register(omitted)).rejects.toBeInstanceOf(AdmissionDenied);
   await expect(
     access.register({ ...input, baselineContribution: resource() }),
-  ).rejects.toBeInstanceOf(AdmissionConflict);
+  ).rejects.toBeInstanceOf(AdmissionDenied);
   // Partial reply-root metadata is malformed before replay lookup, even for a Zone page.
   await expect(access.register({ ...input, baselineRelatedWork: resource() }))
     .rejects.toBeInstanceOf(AdmissionDenied);
@@ -222,6 +223,13 @@ test('administrator replay and the immutable proof refuse a changed or omitted r
   expect(await access.claim(registered.id, input.requestDigest, person.principal)).toMatchObject({
     state: 'claimed',
   });
+  // Change the permission basis only after proving the original can claim.
+  // Current authority for the other Zone permits disclosure of the conflict.
+  await grants.platform.create(await context(), randomUUID(), 'platform:resource:zone.edit',
+    { principalId: person.id }, null, receipt(), zoneEditScope(changedZone));
+  await expect(access.register({ ...input, resolvedZonePage: changedZone })).rejects.toBeInstanceOf(
+    AdmissionConflict,
+  );
 });
 
 test('revoked or replacement zone.edit grants cannot dispatch the saved administrator admission', async () => {
@@ -235,11 +243,7 @@ test('revoked or replacement zone.edit grants cannot dispatch the saved administ
     person.permission.grant.generation,
     receipt(),
   );
-  expect(await access.register(input)).toMatchObject({
-    id: registered.id,
-    replayed: true,
-    dispatchEligible: false,
-  });
+  await expect(access.register(input)).rejects.toBeInstanceOf(AdmissionDenied);
   await expect(
     access.claim(registered.id, input.requestDigest, person.principal),
   ).rejects.toBeInstanceOf(AdmissionDenied);
@@ -263,7 +267,7 @@ test('revoked or replacement zone.edit grants cannot dispatch the saved administ
   expect(await access.register(request(person, zone))).toMatchObject({ dispatchEligible: true });
 });
 
-test('zone.edit expiry makes replay ineligible and refuses claim while the admission lease remains live', async () => {
+test('zone.edit expiry refuses replay disclosure and claim while the admission lease remains live', async () => {
   const zone = resource(),
     expiry = new Date(Date.now() + 2000),
     person = await authorize(zone, expiry);
@@ -284,10 +288,7 @@ test('zone.edit expiry makes replay ineligible and refuses claim while the admis
       )
     ).rows[0].live,
   ).toBe(true);
-  expect(await access.register(input)).toMatchObject({
-    id: registered.id,
-    dispatchEligible: false,
-  });
+  await expect(access.register(input)).rejects.toBeInstanceOf(AdmissionDenied);
   await expect(
     access.claim(registered.id, input.requestDigest, person.principal),
   ).rejects.toBeInstanceOf(AdmissionDenied);

@@ -137,6 +137,7 @@ test('Bun teardown reports held persona requests after assertion failure and the
   try {
     const source = `
       import { test } from 'bun:test';
+      import ${JSON.stringify(resolve('tests/qa/support/outcome-test.ts'))};
       import { personaSession } from ${JSON.stringify(resolve('tests/qa/support/personas.ts'))};
       globalThis.fetch = () => new Promise(() => {});
       const person = name => personaSession('http://main.test', 'http://account.test', null,
@@ -157,6 +158,8 @@ test('Bun teardown reports held persona requests after assertion failure and the
       child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
     ]);
     expect(code).toBe(1);
+    expect(stderr).toContain('deliberate assertion failure');
+    expect(stderr).toContain('timed out');
     const lines = (stdout + stderr).split('\n').filter(line => line.startsWith(requestWatchPrefix));
     const ended = records(lines).filter(line => line.event === 'test-end');
     expect(ended).toContainEqual(expect.objectContaining({ persona: 'timed-out', service: 'Main',

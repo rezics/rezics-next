@@ -42,6 +42,11 @@ export function worktreeBase(cwd: string): string {
   return (newest ?? carrying[0])?.wave ?? 'main';
 }
 
+/** Pin the same source revision for changed-file selection and inherited check failures. */
+export function checkBaseRevision(cwd: string): string {
+  return git(cwd, ['merge-base', 'HEAD', worktreeBase(cwd)]);
+}
+
 /** Ancestry, rather than a patch comparison, detects whether this tree has its base's last harness fix. */
 export function warnHarnessCurrency(cwd: string, print: (line: string) => void = console.log): number {
   if (!workerBranch(cwd)) return 0;

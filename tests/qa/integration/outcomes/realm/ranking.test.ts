@@ -7,11 +7,18 @@ import { seedRealmRanking as seed } from '../../../support/realm-ranking-fixture
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import type { PersonaName, PersonaSession, PersonaSessions } from '../../../support/personas.ts';
 import { realmDiscussionSource } from '../../../support/realm-discussion-source.ts';
+import '../../../../../apps/web/tests/support/official-package-fixture.ts';
+import { BFF_PREFIX } from '../../../../../apps/web/features/api/browser.ts';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
+import { rankingVisit, rankingVisitHost, rankingChart } from '../../../../../apps/web/features/realm/ranking-visit.tsx';
+import type { DiscussionQuery } from '../../../../../apps/web/features/realm/discussion-read.ts';
+import { uiLocales, type UiLocale } from '../../../../../apps/web/i18n/define.ts';
 
 type Page = {
   items: { reply: string; author: { id: string } | null; work: { id: string }; vote: { score: number } }[];
   nextCursor: string | null; count: { value: number; kind: string; total: null };
 };
+type Header = Record<string, unknown> & { sourcePosition: { dataEpoch: string; sequence: string } };
 setDefaultTimeout(120_000);
 let publicRealm: PersonaSessions, privateRealm: PersonaSessions;
 const publicThreads: string[] = [], oldThreads: string[] = [], currentThreads: string[] = [];
@@ -50,6 +57,35 @@ afterAll(async () => {
   finally { await restored?.dispose(); }
 });
 
+/** Capture the whole production visit, preserving the anonymous/personal split. */
+async function captureVisit(sessions: PersonaSessions, name: PersonaName, label: string,
+  query: DiscussionQuery, chart = false, locale: UiLocale = 'en') {
+  let ordinal = 0;
+  let refreshFollow = false;
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (!url.pathname.startsWith(`${BFF_PREFIX}/`)) throw new Error(`Unexpected visit request: ${url.pathname}`);
+    // Bun's Request currently reports include even when constructed with omit.
+    const person = (init?.credentials ?? request.credentials) === 'omit' ? sessions.visitor : sessions[name];
+    const response = await recording.session(name, person)(`${label}-${++ordinal}`, request.method,
+      url.pathname.slice(BFF_PREFIX.length) + url.search, undefined, undefined,
+      { headers: Object.fromEntries(request.headers.entries()), settle: false });
+    if (url.pathname.startsWith(`${BFF_PREFIX}/v1/follows/`)) {
+      const follow = response.ok ? await response.clone().json() as { following: boolean | null; level: string | null } : null;
+      refreshFollow = !follow || follow.following === null || follow.level === null;
+    }
+    return response;
+  }) as typeof fetch;
+  const page = await rankingVisit({ replay: rankingVisitHost(fetcher, name !== 'visitor'),
+    ref: short(sessions.realm), locale, query, ...(chart ? { module: rankingChart } : {}) });
+  expect(page).not.toBeNull();
+  expect(ordinal, `${name}/${label} must reach the production transport`).toBeGreaterThan(0);
+  // The shared relationship control refreshes unknown follow levels on mount.
+  if (refreshFollow && sessions[name].actingSubject) await mainRelationships(sessions[name].actingSubject!, {
+    origin: `https://recorded.invalid${BFF_PREFIX}`, fetch: fetcher,
+  }).state(sessions.realm, 'realm');
+}
+
 async function storyRanking(sessions: PersonaSessions, name: PersonaName,
   sort: 'best' | 'top', window: 'week' | 'month' | 'all', label: string, cursor?: string,
   expectedStatus = 200) {
@@ -65,6 +101,7 @@ async function storyRanking(sessions: PersonaSessions, name: PersonaName,
 }
 
 async function storyStates(name: PersonaName) {
+  const visits: (() => Promise<void>)[] = [];
   const person = publicRealm[name];
   const stateRealm = { ...publicRealm, realm: emptyRealm };
   const absentRealm = { ...publicRealm, realm: `https://rezics.com/id/${randomUUID()}` };
@@ -79,6 +116,20 @@ async function storyStates(name: PersonaName) {
     const invalid = await storyRanking(publicRealm, name, sort, window,
       `${sort}-${window}-invalid-cursor`, 'contract:another-viewer:page-2', 400);
     expect(invalid).toMatchObject({ ok: false, failure: 'invalid' });
+    // Capture each reached page state once; the coordinate-specific reader assertions above stay complete.
+    if (sort === 'best') visits.push(() => captureVisit(absentRealm, name, 'visit-best-all-missing', { sort, window }));
+    if (window === 'month') visits.push(
+      () => captureVisit(stateRealm, name, `visit-${sort}-${window}-empty`, { sort, window }),
+      () => captureVisit(publicRealm, name, `visit-${sort}-${window}-invalid-cursor`, {
+        sort, window, cursor: 'contract:another-viewer:page-2',
+      }),
+    );
+  }
+  visits.push(() => captureVisit(publicRealm, name, 'visit-ranking-module', { sort: 'best', window: 'all' }, true),
+    () => captureVisit(stateRealm, name, 'visit-ranking-module-empty', { sort: 'best', window: 'all' }, true));
+  if (name === 'visitor') for (const locale of uiLocales) {
+    if (locale === 'en') continue;
+    visits.push(() => captureVisit(publicRealm, name, `visit-best-all@${locale}`, { sort: 'best', window: 'all' }, false, locale));
   }
   for (const interval of ['day', 'week', 'month'] as const) {
     const main = recordedMainClient(recording, name, person, `ranking-module-${interval}`);
@@ -104,6 +155,7 @@ async function storyStates(name: PersonaName) {
     expect(await readRankingModuleAnswer(recordedMainClient(recording, name, person,
       `ranking-module-${interval}-missing`), absentRealm.realm, interval, 'reads')).toMatchObject({ ok: false, failure: 'missing' });
   }
+  for (let start = 0; start < visits.length; start += 3) await Promise.all(visits.slice(start, start + 3).map(visit => visit()));
   const moving = { ...publicRealm, realm: movedRealm };
   const first = await storyRanking(moving, name, 'best', 'all', 'moved-basis');
   expect(first.ok).toBe(true);
@@ -119,12 +171,14 @@ async function storyStates(name: PersonaName) {
   await seed({ ...moving, owner: publicRealm.stranger }, 1, 'next-ranked-cut');
   expect(await storyRanking(moving, name, 'best', 'all', 'moved', first.data.nextCursor!, 409))
     .toMatchObject({ ok: false, failure: 'moved' });
+  await captureVisit(moving, name, 'visit-moved', { sort: 'best', window: 'all', cursor: first.data.nextCursor! });
 }
 
 async function traverse(sessions: PersonaSessions, name: PersonaName, expected: string[]) {
   const person = sessions[name], root = `/v1/realms/${short(sessions.realm)}`;
-  const header = await answer<Record<string, unknown>>(person.main('GET', `${root}?${acting(person)}`));
+  const header = await answer<Header>(person.main('GET', `${root}?${acting(person)}`));
   for (const [sort, window] of [['best', 'all'], ['top', 'week'], ['top', 'month'], ['top', 'all']]) {
+    const visits: Promise<{ error?: unknown }>[] = [];
     const params = acting(person); params.set('sort', sort!); params.set('window', window!); params.set('limit', '20');
     const seen: string[] = [], scores: number[] = [], cursors = new Set<string>();
     let page: Page;
@@ -137,6 +191,14 @@ async function traverse(sessions: PersonaSessions, name: PersonaName, expected: 
         const recorded = await storyRanking(sessions, name, sort as 'best' | 'top',
           window as 'week' | 'month' | 'all', `${prefix}${sort}-${window}${suffix}`, params.get('cursor') ?? undefined);
         expect(recorded.ok).toBe(true);
+        // Every ordering uses the same frame. Capture each public ordering, one terminal
+        // continuation and the private admission boundary without repeating that frame.
+        const frameVisit = sessions === publicRealm
+          ? pageNumber === 0 || finalPage && sort === 'top' && window === 'month'
+          : sort === 'best' && (pageNumber === 0 || finalPage);
+        if (frameVisit) visits.push(captureVisit(sessions, name, `visit-${prefix}${sort}-${window}${suffix}`, {
+          sort: sort as 'best' | 'top', window: window as 'week' | 'month' | 'all', cursor: params.get('cursor') ?? undefined,
+        }).then(() => ({}), error => ({ error })));
         if (!recorded.ok) throw new Error('Ranked traversal read failed');
         page = recorded.data;
       } else page = await answer<Page>(person.main('GET', `${root}/threads?${params}`));
@@ -153,12 +215,18 @@ async function traverse(sessions: PersonaSessions, name: PersonaName, expected: 
       }
       expect(cursors.size).toBeLessThan(30);
     } while (page.nextCursor);
+    // Independent frame visits overlap the unchanged complete API traversal.
+    for (const result of await Promise.all(visits)) if ('error' in result) throw result.error;
     expect(new Set(seen).size).toBe(seen.length);
     expect(seen.sort()).toEqual([...expected].sort());
     if (sort === 'top') expect(scores).toEqual([...scores].sort((left, right) => right - left));
   }
-  const after = await answer<Record<string, unknown>>(person.main('GET', `${root}?${acting(person)}`));
-  expect(after).toEqual(header);
+  const after = await answer<Header>(person.main('GET', `${root}?${acting(person)}`));
+  const { sequence: beforeSequence, ...beforePosition } = header.sourcePosition;
+  const { sequence: afterSequence, ...afterPosition } = after.sourcePosition;
+  // Projection progress can advance during a read-only visit; the represented state cannot change.
+  expect({ ...after, sourcePosition: afterPosition }).toEqual({ ...header, sourcePosition: beforePosition });
+  expect(BigInt(afterSequence)).toBeGreaterThanOrEqual(BigInt(beforeSequence));
 }
 async function prove(name: PersonaName) {
   const person = publicRealm[name];
@@ -177,6 +245,9 @@ async function prove(name: PersonaName) {
       await answer(person.main('GET', `/v1/realms/${short(privateRealm.realm)}/threads?${params}`), 404);
       expect(await storyRanking(privateRealm, name, sort as 'best' | 'top', window as 'week' | 'month' | 'all',
         `private-${sort}-${window}`, undefined, 404)).toMatchObject({ ok: false, failure: 'missing' });
+      if (sort === 'best') await captureVisit(privateRealm, name, `visit-private-${sort}-${window}`, {
+        sort: sort as 'best' | 'top', window: window as 'week' | 'month' | 'all',
+      });
     }
   }
   await storyStates(name);

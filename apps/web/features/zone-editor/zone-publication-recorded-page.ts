@@ -112,7 +112,7 @@ export async function readZonePublicationFrame(
   if (resolved.kind === 'realm' && resolved.zone) {
     if (actingSubject) {
       await readMembership(personal, resolved.header.id, actingSubject);
-      const access = await personal.v1.me['platform-access'].get();
+      const access = await browserMainApi(recordedOrigin, { fetcher }).v1.me['platform-access'].get();
       await readMemberBan(personal, resolved.header.id, actingSubject, gateFor(parsePlatformAccess(access.data)));
     }
     const publication = await frames.readCompletePresentation(resolved.zone.id);

@@ -171,9 +171,15 @@ test('reply root registration, replay, claim and fence use exact saved root, Per
     });
     expect(await author.access.register(input)).toMatchObject({ id: registered.id,
       dispatchEligible: true, replayed: true });
-    await expect(author.access.register({ ...input, baselineRelatedWork: nativeId() }))
+    // Replay checks current authority and the saved root separately. A changed
+    // intent also checks current authority before disclosing the conflict.
+    expect(calls).toHaveLength(3);
+    const changedRoot = nativeId();
+    await expect(author.access.register({ ...input, baselineRelatedWork: changedRoot }))
       .rejects.toBeInstanceOf(AdmissionConflict);
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(4);
+    expect(calls.at(-1)).toEqual({ resource: changedRoot, revision: rootRevision,
+      actor: author.actingSubject, principal: supplied });
     expect(await author.access.claim(registered.id, input.requestDigest, supplied)).toMatchObject({
       id: registered.id, state: 'claimed',
     });
@@ -188,10 +194,11 @@ test('reply root registration, replay, claim and fence use exact saved root, Per
       await fence.query('ROLLBACK').catch(() => {});
       throw error;
     } finally { fence.release(); }
-    expect(calls).toHaveLength(4);
+    expect(calls).toHaveLength(6);
     for (const [index, call] of calls.entries()) {
-      expect(call).toMatchObject({ resource: rootTarget, revision: rootRevision, actor: author.actingSubject });
-      expect(call.principal).toBe(index < 2 ? supplied : current);
+      expect(call).toMatchObject({ resource: index === 3 ? changedRoot : rootTarget,
+        revision: rootRevision, actor: author.actingSubject });
+      expect(call.principal).toBe(index < 4 ? supplied : current);
     }
 
     const replyRoot = nativeId();

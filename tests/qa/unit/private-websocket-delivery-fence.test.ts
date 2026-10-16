@@ -96,7 +96,7 @@ async function rawClient(port: number) {
   };
 }
 
-function probeServer() {
+async function probeServer() {
   const opened = deferred<{ send(data: string): number; ping(data: string): number }>();
   const pongs: string[] = [];
   const pongWaiters: Array<(value: string) => void> = [];
@@ -112,7 +112,10 @@ function probeServer() {
     },
     close() { closed.resolve(); },
   });
-  app.listen({ hostname: '127.0.0.1', port: 0 });
+  // The listen callback runs after Elysia publishes WebSocket capability.
+  await within(new Promise<void>(resolve => {
+    app.listen({ hostname: '127.0.0.1', port: 0 }, () => resolve());
+  }));
   return { app, opened: opened.promise,
     nextPong: () => within(pongs.length ? Promise.resolve(pongs.shift()!)
       : new Promise<string>(resolve => pongWaiters.push(resolve))),
@@ -120,7 +123,7 @@ function probeServer() {
 }
 
 test('SEARCH12: matching pong follows result bytes, while send statuses precede observed pong', async () => {
-  const server = probeServer();
+  const server = await probeServer();
   let client: Awaited<ReturnType<typeof rawClient>> | undefined;
   try {
     client = await rawClient(server.app.server!.port!);
@@ -178,7 +181,10 @@ test('SEARCH12: a full peer receipt is the only post-send terminal transition', 
     },
     close() { void receipt.disconnect(); },
   });
-  app.listen({ hostname: '127.0.0.1', port: 0 });
+  // The listen callback runs after Elysia publishes WebSocket capability.
+  await within(new Promise<void>(resolve => {
+    app.listen({ hostname: '127.0.0.1', port: 0 }, () => resolve());
+  }));
   let client: Awaited<ReturnType<typeof rawClient>> | undefined;
   try {
     client = await rawClient(app.server!.port!);
@@ -227,7 +233,10 @@ test('SEARCH12: half-close after an armed send remains visible and unresolved', 
       closed.resolve();
     },
   });
-  app.listen({ hostname: '127.0.0.1', port: 0 });
+  // The listen callback runs after Elysia publishes WebSocket capability.
+  await within(new Promise<void>(resolve => {
+    app.listen({ hostname: '127.0.0.1', port: 0 }, () => resolve());
+  }));
   let client: Awaited<ReturnType<typeof rawClient>> | undefined;
   try {
     client = await rawClient(app.server!.port!);
@@ -311,7 +320,7 @@ test('SEARCH12: a definitive arm denial aborts; an uncertain owner response rema
 });
 
 test('SEARCH12: a disconnected client yields close without a matching pong', async () => {
-  const server = probeServer();
+  const server = await probeServer();
   let client: Awaited<ReturnType<typeof rawClient>> | undefined;
   try {
     client = await rawClient(server.app.server!.port!);
@@ -330,7 +339,7 @@ test('SEARCH12: a disconnected client yields close without a matching pong', asy
 });
 
 test('SEARCH12: TCP half-close can report server close before buffered result is read', async () => {
-  const server = probeServer();
+  const server = await probeServer();
   let client: Awaited<ReturnType<typeof rawClient>> | undefined;
   try {
     client = await rawClient(server.app.server!.port!);
@@ -350,7 +359,7 @@ test('SEARCH12: TCP half-close can report server close before buffered result is
 });
 
 test('SEARCH12: a paused peer receives the entire 1 MiB result before the receipt ping', async () => {
-  const server = probeServer();
+  const server = await probeServer();
   let client: Awaited<ReturnType<typeof rawClient>> | undefined;
   try {
     client = await rawClient(server.app.server!.port!);
@@ -397,7 +406,7 @@ test('SEARCH12: a paused peer receives the entire 1 MiB result before the receip
 });
 
 test('SEARCH12: Elysia reports unsolicited and early pongs before any result frame', async () => {
-  const server = probeServer();
+  const server = await probeServer();
   let client: Awaited<ReturnType<typeof rawClient>> | undefined;
   try {
     client = await rawClient(server.app.server!.port!);
@@ -414,7 +423,7 @@ test('SEARCH12: Elysia reports unsolicited and early pongs before any result fra
 });
 
 test('SEARCH12: close does not revoke a paused peer’s buffered 1 MiB result', async () => {
-  const server = probeServer();
+  const server = await probeServer();
   let client: Awaited<ReturnType<typeof rawClient>> | undefined;
   try {
     client = await rawClient(server.app.server!.port!);

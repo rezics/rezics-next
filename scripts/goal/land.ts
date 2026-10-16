@@ -184,7 +184,8 @@ function classifyScope(scope: LandScope): { permitted: string[]; claimed: string
 /** A missing or contradictory result never authorizes a merge. Cursor and Grok join message segments with no
  * separator, so the handoff can start right after a sentence ("...in place.RESULT: done"). */
 export function handoffResult(text: string, step = false): string | undefined {
-  const results = [...text.matchAll(/(?:^|(?<=[.!?)\]`'"’”]))RESULT:[^\r\n]*/gm)];
+  // A closing quote can end a glued segment; an opening quote after a space only mentions a result.
+  const results = [...text.matchAll(/(?:^|(?<=[.!?)\]])|(?<=\S[`'"’”]))RESULT:[^\r\n]*/gm)];
   if (results.length !== 1) return undefined;
   const line = results[0]![0];
   // A qualified `done` is not done. A result that claims less may say why on its own line.

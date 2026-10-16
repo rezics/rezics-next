@@ -15,6 +15,7 @@ const domainPhrases = [
   'Content moderation',
   'Content languages',
   'Content preferences',
+  'Content variant',
   'Access given',
   'Access removed',
   'Access and discovery',
@@ -63,6 +64,8 @@ describe('G-900 catalogs do not name an internal service', () => {
     expect(serviceNames('Content languages')).toEqual([]);
     expect(serviceNames('Content moderation')).toEqual([]);
     expect(serviceNames('Content preferences')).toEqual([]);
+    expect(serviceNames('Content variant')).toEqual([]);
+    expect(serviceNames('Content variant: Content didn’t answer')).toEqual(['Content']);
     expect(serviceNames('The Content service didn’t answer')).toEqual(['Content']);
     expect(serviceNames('Access given {{date}}')).toEqual([]);
     expect(serviceNames('Access removed')).toEqual([]);

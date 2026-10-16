@@ -15,8 +15,8 @@ const projects = Object.keys(inferenceProjects) as InferenceProject[];
 // the existing Eden process still has its independent 30-second wall deadline.
 export const inferenceMargins = { instantiations: 0.05, checkSeconds: 2, appBytes: 0.05, routesBytes: 0.05 } as const;
 export type InferenceMetrics = Record<keyof typeof inferenceMargins, number>;
-type Measurements = Record<InferenceProject, InferenceMetrics>;
-interface Baseline {
+export type Measurements = Record<InferenceProject, InferenceMetrics>;
+export interface Baseline {
   format: 1;
   versions: Record<string, string>;
   measurements: Measurements;

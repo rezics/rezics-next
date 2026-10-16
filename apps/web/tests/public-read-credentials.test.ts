@@ -174,6 +174,14 @@ interface ReadRule {
 
 /** Route evidence for every Main read a browser call can reach. An id missing here fails the scan. */
 const readClasses: Readonly<Record<string, ReadRule & { evidence: string }>> = {
+  getV1Types: {
+    kind: 'anonymous',
+    evidence: 'services/main/src/routes/types.ts:42 returns the public registry snapshot without reading the bearer',
+  },
+  'getV1MePlatform-access': {
+    kind: 'credential',
+    evidence: 'services/main/src/routes/platform-access.ts:27 verifies the bearer for its access summary and takes no subject',
+  },
   getV1Zones: {
     kind: 'anonymous',
     evidence: 'services/main/src/routes/zones.ts:334 lists official Zones without reading the request or bearer',
@@ -552,6 +560,20 @@ test('an unlisted Main read fails', () => {
       {},
     ),
   ).toEqual(['features/new.tsx: .v1.works.get( reaches getV1Works, which has no read class']);
+});
+
+test('the type registry is anonymous and platform access keeps the session credentials', () => {
+  expect(violations({ fixture: `
+    void browserMainApi(undefined, { anonymous: true }).v1.types.get();
+    void browserMainApi().v1.me['platform-access'].get();
+  ` })).toEqual([]);
+  expect(violations({ fixture: `
+    void browserMainApi().v1.types.get();
+    void browserMainApi(undefined, { anonymous: true }).v1.me['platform-access'].get();
+  ` })).toEqual([
+    'fixture: .v1.types.get( reaches getV1Types with the session cookie; the route ignores the bearer',
+    "fixture: .v1.me['platform-access'].get( reaches getV1MePlatform-access anonymously; the route reads the bearer",
+  ]);
 });
 
 test('optional public branches accept anonymous reads only without an acting subject', () => {

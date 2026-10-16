@@ -7,7 +7,7 @@ import { migrationInventory, type RetainedOwnerState } from '../../../scripts/fi
 import { dockerEnvironment, postgresImage, projectRunning, removeStoppedContainers, removeVolumes,
   root, run, stream, VOLUME_KINDS } from '../../../scripts/fixture/stack.ts';
 import { loadCompatibility } from '../../../scripts/load/compatibility.ts';
-import { Pool } from 'pg';
+import { boundedPool } from '../../../services/main/src/infrastructure/pg-pool.ts';
 import { recordRetainedPostgresCollations } from '../../../scripts/fixture/runtime-facts.ts';
 import { retainStoppedOwnerBackup, restoreCatalogueBackup } from '../../../scripts/load/catalogue-backup.ts';
 import { stopCorpusSourcePostgres } from '../../../scripts/load/corpus-backup-driver.ts';
@@ -65,7 +65,7 @@ export function realmSourceRuntime(sourceRunId = Bun.env.REZICS_QA_RUN_ID): Real
     },
     retain: retainPersonaRealm,
     async cut(context, metadata) {
-      const pool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL, connectionTimeoutMillis: 2_000 });
+      const pool = boundedPool({ connectionString: Bun.env.ACCESS_DATABASE_URL, connectionTimeoutMillis: 2_000 });
       try { await recordRetainedPostgresCollations(context.backup, sql => pool.query(sql)); }
       finally { await pool.end(); }
       const signal = AbortSignal.timeout(context.budget.remaining());

@@ -142,9 +142,10 @@ export const readZoneRoute = cache(
 );
 
 export const readRealmWorks = cache(
-  async (realm: string, _locale: UiLocale, cursor?: string): Promise<Loaded<RealmWorksPage>> =>
+  async (realm: string, _locale: UiLocale, cursor?: string, client?: RealmReadClient): Promise<Loaded<RealmWorksPage>> =>
     settle(async () => {
-      const { main, actingSubject } = await readerMain();
+      const { main, actingSubject } = client
+        ? { main: client.personal ?? client.main, actingSubject: client.actingSubject } : await readerMain();
       return main.v1.realms({ realm }).works.get({ query: { actingSubject, cursor } });
     }, cursor),
 );
@@ -166,9 +167,14 @@ export const readRealmDecision = cache(
 );
 
 export const readNewAdoptions = cache(
-  async (realm: string, _locale: UiLocale): Promise<Loaded<ZoneWorkPage>> =>
-    settle(() => main().v1.realms({ realm }).modules['new-adoptions'].get({ query: {} })),
+  async (realm: string, _locale: UiLocale, client?: RealmReadClient): Promise<Loaded<ZoneWorkPage>> =>
+    readNewAdoptionsAnswer(client?.main ?? main(), realm),
 );
+
+/** Public callers omit the Person; an authenticated supplied reader must carry its Person. */
+export function readNewAdoptionsAnswer(client: MainClient, realm: string, actingSubject?: string): Promise<Loaded<ZoneWorkPage>> {
+  return settle(() => client.v1.realms({ realm }).modules['new-adoptions'].get({ query: { actingSubject } }));
+}
 
 export const readRecentlyCompleted = cache(
   async (realm: string, _locale: UiLocale): Promise<Loaded<ZoneWorkPage>> =>

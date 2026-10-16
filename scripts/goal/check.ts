@@ -13,8 +13,9 @@ import { parseJUnit, isQaOwnerPath, isQaIntegrationPath, isQaFaultPath, isQaMode
 import { tierBunTestArgs, type TierTestTimeout } from '../qa/core.ts';
 import { withSlot, type SlotRunOptions, type GateLaneOptions } from './qa-slots.ts';
 import { selectSurface, runSurfaceGate } from './surface-gate.ts';
-import { prepareCheckTree, worktreeBase } from './tree-currency.ts';
+import { prepareCheckTree, checkBaseRevision } from './tree-currency.ts';
 import { inferenceGateCommand, needsInferenceGate } from '../api/inference-cost.ts';
+import { workerInferenceCheck } from './inference-check.ts';
 import { trainEvent, type TrainEvent } from './merge-train.ts';
 
 export type CheckGroup = 'types' | 'lint' | 'tests' | 'guards';
@@ -36,8 +37,7 @@ function gitOutput(cwd: string, args: string[]): string {
 }
 
 /** Diffing the base directly includes staged and unstaged edits; untracked source files are not in that diff. */
-export function checkChangedFiles(cwd: string): string[] {
-  const base = gitOutput(cwd, ['merge-base', 'HEAD', worktreeBase(cwd)]).trim();
+export function checkChangedFiles(cwd: string, base = checkBaseRevision(cwd)): string[] {
   return [...new Set([
     ...gitOutput(cwd, ['diff', '--no-renames', '--name-only', '-z', base, '--']).split('\0'),
     ...gitOutput(cwd, ['ls-files', '--others', '--exclude-standard', '-z']).split('\0'),
@@ -89,6 +89,8 @@ export interface CheckOptions {
   cwd?: string;
   /** The CLI prepares and restarts before loading the updated harness. */
   treePrepared?: boolean;
+  /** Merge always enforces the recorded numeric baseline, even if the worker base already fails. */
+  absoluteInference?: boolean;
   only?: readonly CheckGroup[];
   changed?: readonly string[];
   tests?: readonly string[];
@@ -154,7 +156,8 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
     return { code: 1, log, checks: [{ name: 'currency', code: 1, seconds: 0 }] };
   }
   ensureDependencies(cwd);
-  const changed = options.changed ?? checkChangedFiles(cwd);
+  const base = options.changed ? undefined : checkBaseRevision(cwd);
+  const changed = options.changed ?? checkChangedFiles(cwd, base);
   const briefPath = join(cwd, '.temp/goal/brief.md');
   const briefText = existsSync(briefPath) ? readFileSync(briefPath, 'utf8') : undefined;
   const brief = briefText === undefined ? undefined : parseBrief(briefText);
@@ -171,7 +174,7 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
       for (const line of refusal.split('\n')) (options.print ?? console.log)(line);
       return { code: 1, log, checks: [{ name: 'selection', code: 1, seconds: 0 }] };
     }
-    return runSurfaceGate(cwd, selected.selection, { ...options, workerStatic: true });
+    return runSurfaceGate(cwd, selected.selection, { ...options, workerStatic: true, inferenceBase: base });
   }
   for (const file of tests) {
     const path = relative(cwd, resolve(cwd, file));
@@ -192,6 +195,7 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
   const now = options.now ?? Date.now;
   const checks: CheckResult[] = [];
   const tree = (options.cache ?? !options.runner) ? cleanCheckTree(cwd) : undefined;
+  const inferenceBase = base ?? (tree && !options.absoluteInference ? checkBaseRevision(cwd) : undefined);
   const completedFiles = new Set(options.completed?.testFiles ?? []);
   let qaEnv = process.env;
 
@@ -200,7 +204,8 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
     const outputs: string[] = [];
     let code = 0;
     const cache = tree && commands.length ? join(root, 'cache', createHash('sha256')
-      .update(JSON.stringify({ tree, name, commands, testFiles })).digest('hex') + '.json') : undefined;
+      .update(JSON.stringify({ tree, name, commands, testFiles,
+        ...(name === 'inference' ? { absoluteInference: !!options.absoluteInference, inferenceBase } : {}) })).digest('hex') + '.json') : undefined;
     let reused: string | undefined;
     if (cache && existsSync(cache) && cleanCheckTree(cwd) === tree) {
       try {
@@ -217,7 +222,9 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
       const direct = name === 'guards' || (name === 'tests' && selected.every(file => checkTestTier(file) === 'unit'));
       const invocation = direct ? [...command, '--reporter=junit', `--reporter-outfile=${join(artifactsDirectory, 'unit.xml')}`] : command;
       let result: CheckCommandResult;
-      try { result = await run(invocation, cwd, join(directory, `${label}.log`), env); }
+      try { result = name === 'inference' && !options.absoluteInference
+        ? await workerInferenceCheck(cwd, join(directory, `${label}.log`), env, run, print, inferenceBase)
+        : await run(invocation, cwd, join(directory, `${label}.log`), env); }
       catch (error) { result = { code: 1, output: `error: ${error instanceof Error ? error.message : String(error)}` }; }
       let failureOutput = result.output;
       if (name === 'tests' || name === 'guards') {

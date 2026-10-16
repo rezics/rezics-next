@@ -63,4 +63,6 @@ when the build tasks have handed off. Each failure
 becomes a fix task on the same branch. Its brief carries the failing test and
 its output, and a fixer may run that one test on a stack. When the suite is
 green, records are captured in one run, and `wave/<n>` merges into `main`
-through the gate.
+through the gate. A merge candidate verifies at one main revision and hands off that head;
+it does not merge main again for later commits, because `task goal -- merge`
+merges current main itself and gates the result.

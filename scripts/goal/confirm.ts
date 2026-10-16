@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { loadSettings } from './config.ts';
@@ -8,7 +9,7 @@ import { newRunId } from '../qa/core.ts';
 import { preflightRetainedSources, retainedPreflightSummary, type RetainedPreflight } from '../qa/retained-preflight.ts';
 import { directoryLeaseHeld, readDirectoryLease, releaseDirectoryLease, transferDirectoryLease, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import type { RowOutcomes } from '../qa/cases/outcome-cells.ts';
-import { batchTestResults, cellReadings, confirmationCounts, confirmationRecord, confirmationSummary, latestConfirmation, recordConfirmation } from './confirmed.ts';
+import { batchTestResults, cellReadings, confirmationCounts, confirmationRecord, confirmationSummary, latestConfirmation, recordConfirmation, type ConfirmationStop } from './confirmed.ts';
 import { createPinnedCheckout, prepareCheckout, regressionBatchQaDirectory, regressionCheckoutRoot, runBatch,
   type Batch, type Execution, type Manifest, type RegressionOptions, type RegressionTier } from './regress.ts';
 
@@ -27,6 +28,7 @@ export interface ConfirmationOptions {
   retainedPreflight?: typeof preflightRetainedSources;
   /** The pump transfers its reservation to the detached child before the child starts. */
   leaseToken?: string;
+  signal?: AbortSignal;
 }
 
 export const confirmationUsage = 'Usage: goalctl confirm [--at <rev>] [--lanes <n>] [--record <directory under .temp/>] | confirm --status [--run <id>]';
@@ -59,7 +61,12 @@ interface RecordedAnswer {
   attempt: string;
 }
 
-export interface ConfirmationManifest extends Manifest { records?: RecordedAnswer[]; retainedSources?: RetainedPreflight }
+export interface ConfirmationManifest extends Manifest {
+  records?: RecordedAnswer[];
+  retainedSources?: RetainedPreflight;
+  stopped?: ConfirmationStop;
+}
+
 
 /** Both lexical traversal and existing symlink ancestors must stay inside this checkout's scratch space. */
 function recordDirectory(repo: string, directory: string): string {
@@ -131,25 +138,74 @@ export function confirmationTimeoutOnly(manifest: Manifest, batch: Batch, result
   return failed.some(test => test.timeout) || result.classification === 'deadline';
 }
 
+/** Tickets use process identities, so a dead requester cannot suppress scheduled work. */
+function confirmationRequested(stateDir: string): boolean {
+  const directory = join(stateDir, 'confirm-requests');
+  return existsSync(directory) && readdirSync(directory).some(name => directoryLeaseHeld(join(directory, name)));
+}
+
 export async function runConfirmation(options: ConfirmationOptions): Promise<ConfirmationManifest> {
-  const { repo, stateDir } = options;
-  const recordTarget = options.record === undefined ? undefined : recordDirectory(repo, options.record);
-  mkdirSync(stateDir, { recursive: true });
-  const lock = join(stateDir, 'confirm.lock');
+  const { stateDir } = options;
+  // Validate before publishing a request or taking the shared lease.
+  if (options.record !== undefined) recordDirectory(options.repo, options.record);
   const runId = options.runId ?? `confirm-${newRunId()}`;
   validateRunId(runId);
-  const startedAt = new Date().toISOString();
+  mkdirSync(stateDir, { recursive: true });
+  const lock = join(stateDir, 'confirm.lock');
+  const scheduled = options.leaseToken !== undefined;
+  let stopped: ConfirmationStop | undefined;
+  const stop = (reason: ConfirmationStop) => {
+    if (stopped) return;
+    stopped = reason;
+    console.error(`Confirmation ${runId} stopping after active outcome batches clean up: ${reason}`);
+  };
+  const term = () => stop('SIGTERM');
+  const interrupt = () => stop('SIGINT');
+  const abort = () => stop('aborted');
+  process.on('SIGTERM', term);
+  process.on('SIGINT', interrupt);
+  options.signal?.addEventListener('abort', abort);
+  if (options.signal?.aborted) abort();
+  let request: Exclude<ReturnType<typeof tryAcquireDirectoryLease>, 'held'> | undefined;
   let token = options.leaseToken;
-  if (token) {
-    const owner = readDirectoryLease(lock);
-    if (owner?.pid !== process.pid || owner.token !== token) throw new Error('Confirmation reservation is not owned by this process');
-  } else {
-    const acquired = tryAcquireDirectoryLease(lock, { note: { runId, startedAt } });
-    if (acquired === 'held') throw new Error('An outcome confirmation is already running');
-    token = acquired.token;
+  try {
+    if (scheduled) {
+      const owner = readDirectoryLease(lock);
+      if (owner?.pid !== process.pid || owner.token !== token) throw new Error('Confirmation reservation is not owned by this process');
+    } else {
+      mkdirSync(join(stateDir, 'confirm-requests'), { recursive: true });
+      const acquired = tryAcquireDirectoryLease(join(stateDir, 'confirm-requests', randomUUID()), { note: { runId } });
+      if (acquired === 'held') throw new Error('Could not register confirmation request');
+      request = acquired;
+      for (;;) {
+        if (stopped) throw new Error(`Confirmation stopped while queued: ${stopped}`);
+        const acquired = tryAcquireDirectoryLease(lock, { note: { runId, command: 'confirm:requested' } });
+        if (acquired !== 'held') { token = acquired.token; break; }
+        await Bun.sleep(25);
+      }
+    }
+    return await executeConfirmation({ ...options, runId }, () => {
+      if (!stopped && scheduled && confirmationRequested(stateDir)) stop('preempted');
+      return stopped;
+    });
+  } finally {
+    // Retain both the reservation and the request through every lane's cleanup.
+    if (token) releaseDirectoryLease(lock, token, process.pid);
+    request?.release();
+    process.off('SIGTERM', term);
+    process.off('SIGINT', interrupt);
+    options.signal?.removeEventListener('abort', abort);
   }
+}
+
+async function executeConfirmation(options: ConfirmationOptions & { runId: string },
+  stopReason: () => ConfirmationStop | undefined): Promise<ConfirmationManifest> {
+  const { repo, stateDir, runId } = options;
+  const recordTarget = options.record === undefined ? undefined : recordDirectory(repo, options.record);
+  const startedAt = new Date().toISOString();
   let checkout: string | undefined;
   let manifest: ConfirmationManifest | undefined;
+  let declarations: readonly RowOutcomes[] = [];
   let runLease: Exclude<ReturnType<typeof tryAcquireDirectoryLease>, 'held'> | undefined;
   // The format is shared, but a bounded run must not become a whole-regression baseline.
   const directory = join(stateDir, 'confirm', runId);
@@ -176,10 +232,10 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Con
       status: 'running', files: [], batches: [], preflight: { commit: pinned, ok: false, artifactPaths: [] }, diagnoses: [],
       laneCount: lanes, ...(recordTarget ? { records: [] } : {}) };
     save();
-    manifest.preflight = { commit: pinned, ...await (options.prepare ?? (tree =>
+    if (!stopReason()) manifest.preflight = { commit: pinned, ...await (options.prepare ?? (tree =>
       prepareCheckout(tree, join(directory, 'preflight'))))(checkout) };
     save();
-    const declarations: readonly RowOutcomes[] = options.outcomeRegistry ? await options.outcomeRegistry(checkout)
+    declarations = options.outcomeRegistry ? await options.outcomeRegistry(checkout)
       : [...(await (await import(pathToFileURL(join(checkout, 'scripts/qa/cases/outcomes.ts')).href) as
         typeof import('../qa/cases/outcomes.ts')).loadOutcomes({ root: checkout })).values()];
     // Keep the pinned declarations for status after the disposable checkout is removed.
@@ -189,8 +245,8 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Con
     manifest.files = files.map(file => ({ file, tier: outcomeTier(file), outcome: 'pending' }));
     manifest.batches = manifest.files.map((file, index) => ({ id: `outcome-${index + 1}`, tier: file.tier as RegressionTier,
       files: [file.file], state: 'pending', attempts: [] }));
-    manifest.retainedSources = await (options.retainedPreflight ?? preflightRetainedSources)(checkout, files, undefined, repo);
-    if (!manifest.retainedSources.ok) {
+    if (!stopReason()) manifest.retainedSources = await (options.retainedPreflight ?? preflightRetainedSources)(checkout, files, undefined, repo);
+    if (manifest.retainedSources && !manifest.retainedSources.ok) {
       manifest.preflight.ok = false;
       manifest.preflight.reason = retainedPreflightSummary(manifest.retainedSources);
     }
@@ -202,7 +258,7 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Con
       const recordSource = recordTarget ? join('.temp', 'confirmation-records', runId, label) : undefined;
       try {
         batch.attempts.push(await runner(checkout!, batch, join(directory, label), 1, slots,
-          regressionBatchQaDirectory(directory, label), { env: { ...process.env, REZICS_QA_RETAINED_ROOT: repo,
+          regressionBatchQaDirectory(directory, label), { drainOnSignal: true, env: { ...process.env, REZICS_QA_RETAINED_ROOT: repo,
             ...(recordSource ? { OUTCOME_RECORD_DIR: recordSource } : {}) } }));
       } catch (error) {
         batch.attempts.push({ code: 1, outcomes: {}, artifactPaths: [], queueMs: 0, testMs: 0, totalMs: 0,
@@ -221,23 +277,34 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Con
       }
       save();
     };
-    if (manifest.preflight.ok) {
+    if (manifest.preflight.ok && !stopReason()) {
       let next = 0;
-      await Promise.all(Array.from({ length: manifest.laneCount! }, async () => {
-        while (next < manifest!.batches.length) await execute(manifest!.batches[next++]!);
+      const lanes = await Promise.allSettled(Array.from({ length: manifest.laneCount! }, async () => {
+        while (next < manifest!.batches.length && !stopReason()) await execute(manifest!.batches[next++]!);
       }));
+      const failure = lanes.find(result => result.status === 'rejected');
+      if (failure?.status === 'rejected') throw failure.reason;
       // Drain all lanes before retrying a timeout, so its second attempt runs alone.
       for (const batch of manifest.batches)
-        if (confirmationTimeoutOnly(manifest, batch, batch.attempts.at(-1)!)) await execute(batch);
+        if (!stopReason() && confirmationTimeoutOnly(manifest, batch, batch.attempts.at(-1)!)) await execute(batch);
     }
     manifest.finishedAt = new Date().toISOString();
-    manifest.status = !manifest.preflight.ok || manifest.batches.some(batch => batch.attempts.at(-1)?.code)
+    manifest.stopped = stopReason();
+    manifest.partial = manifest.stopped !== undefined;
+    manifest.status = manifest.stopped ? 'incomplete' : !manifest.preflight.ok || manifest.batches.some(batch => batch.attempts.at(-1)?.code)
       ? 'failed' : manifest.files.every(file => file.outcome === 'passed') ? 'passed' : 'incomplete';
     save();
-    recordConfirmation(stateDir, directory, manifest, declarations, manifest.finishedAt, pinned === main);
+    recordConfirmation(stateDir, directory, manifest, declarations, manifest.finishedAt, pinned === main && !manifest.stopped);
     return manifest;
   } catch (error) {
-    if (manifest) { manifest.status = 'incomplete'; manifest.finishedAt = new Date().toISOString(); save(); }
+    if (manifest) {
+      manifest.status = 'incomplete';
+      manifest.partial = true;
+      manifest.stopped = stopReason();
+      manifest.finishedAt = new Date().toISOString();
+      save();
+      recordConfirmation(stateDir, directory, manifest, declarations, manifest.finishedAt, false);
+    }
     throw error;
   } finally {
     if (checkout) {
@@ -245,7 +312,6 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Con
       if (removed.status !== 0) console.error(`Pinned checkout cleanup failed: ${removed.stderr}`);
     }
     runLease?.release();
-    releaseDirectoryLease(lock, token, process.pid);
   }
 }
 
@@ -261,6 +327,7 @@ export function confirmationStatus(stateDir: string, now = Date.now(), runId?: s
       : latestConfirmation(directory);
     return [`Confirmation ${runId}: ${manifest.atCommit}; ${manifest.status}; started ${manifest.startedAt}`,
       `Running: ${manifest.status === 'running' ? 'yes' : 'no'}`,
+      ...(manifest.stopped ? [`Stopped: ${manifest.stopped}`] : []),
       ...(manifest.retainedSources ? [retainedPreflightSummary(manifest.retainedSources)] : []), ...confirmationSummary(record)].join('\n');
   }
   const record = latestConfirmation(stateDir);
@@ -297,7 +364,7 @@ export function scheduleConfirmation(options: ScheduleConfirmationOptions): bool
   const now = options.now ?? Date.now();
   mkdirSync(stateDir, { recursive: true });
   const minutes = loadSettings({ stateDirectory: stateDir, cwd: repo }).settings.confirmIntervalMinutes;
-  if (!Number.isFinite(minutes) || minutes < 0 || minutes === 0 || confirmationRunning(stateDir)) return false;
+  if (!Number.isFinite(minutes) || minutes < 0 || minutes === 0 || confirmationRunning(stateDir) || confirmationRequested(stateDir)) return false;
   const record = latestConfirmation(stateDir);
   const startPath = join(stateDir, 'confirm-last-start');
   const lastStart = existsSync(startPath) ? Date.parse(readFileSync(startPath, 'utf8').trim())
@@ -312,9 +379,10 @@ export function scheduleConfirmation(options: ScheduleConfirmationOptions): bool
     '--', '.', ':(exclude)docs/**']);
   if (!changes) return false;
   const lock = join(stateDir, 'confirm.lock');
-  const acquired = tryAcquireDirectoryLease(lock, { note: { startedAt: new Date(now).toISOString(), command: 'confirm' } });
+  const acquired = tryAcquireDirectoryLease(lock, { note: { startedAt: new Date(now).toISOString(), command: 'confirm:scheduled' } });
   if (acquired === 'held') return false;
   try {
+    if (confirmationRequested(stateDir)) { acquired.release(); return false; }
     const pid = options.spawn ? options.spawn(acquired.token) : spawnConfirmation(repo, stateDir, acquired.token);
     transferDirectoryLease(lock, acquired.token, pid, process.pid);
     writeFileSync(startPath, `${new Date(now).toISOString()}\n`);

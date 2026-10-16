@@ -40,6 +40,8 @@ export function batchTestResults(manifest: Manifest, batch: Manifest['batches'][
   return results;
 }
 
+export type ConfirmationStop = 'preempted' | 'SIGTERM' | 'SIGINT' | 'aborted';
+
 export interface ConfirmationRecord {
   version: 1;
   runId: string;
@@ -47,6 +49,7 @@ export interface ConfirmationRecord {
   startedAt: string;
   recordedAt: string;
   outcomes: ConfirmedOutcome[];
+  stopped?: ConfirmationStop;
 }
 
 function writeRecord(path: string, record: ConfirmationRecord): void {
@@ -62,7 +65,7 @@ export function latestConfirmation(stateDir: string): ConfirmationRecord | undef
 }
 
 /** Initial batch evidence judges the pinned scope; diagnosis probes cannot turn it green. */
-export function confirmationRecord(manifest: Manifest,
+export function confirmationRecord(manifest: Manifest & { stopped?: ConfirmationStop },
   declarations: readonly RowOutcomes[], recordedAt = new Date().toISOString()): ConfirmationRecord {
   const outcomes: ConfirmedOutcome[] = [];
   for (const declaration of declarations) for (const persona of personas) {
@@ -88,7 +91,8 @@ export function confirmationRecord(manifest: Manifest,
     outcomes.push({ rowId: declaration.rowId, persona, file, test: title, status, expectedFailure, reading });
   }
   const record: ConfirmationRecord = { version: 1, runId: manifest.runId, atCommit: manifest.atCommit,
-    startedAt: manifest.startedAt, recordedAt, outcomes };
+    startedAt: manifest.startedAt, recordedAt, outcomes,
+    ...(manifest.stopped ? { stopped: manifest.stopped } : {}) };
   return record;
 }
 
@@ -102,7 +106,7 @@ export function confirmationSummary(record?: ConfirmationRecord): string[] {
     })];
 }
 
-export function recordConfirmation(stateDir: string, directory: string, manifest: Manifest,
+export function recordConfirmation(stateDir: string, directory: string, manifest: Manifest & { stopped?: ConfirmationStop },
   declarations: readonly RowOutcomes[], recordedAt = new Date().toISOString(), publish = true): ConfirmationRecord {
   const record = confirmationRecord(manifest, declarations, recordedAt);
   writeRecord(join(directory, 'confirmed.json'), record);

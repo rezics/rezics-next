@@ -139,7 +139,7 @@ for (const who of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'opera
       record = homes as AnswerRecord;
       const prefix = `frame-${branch}`;
       const labels = record.personas[who].filter(sample => sample.label.startsWith(`${prefix}-`)
-        && !sample.label.startsWith(`${prefix}-index-`)).map(sample => sample.label);
+        && !sample.label.startsWith(`${prefix}-index-`) && !sample.label.includes('@')).map(sample => sample.label);
       if (branch !== 'empty') labels.push('published-home-route');
       const { requests, gaps } = replay(labels);
       const presentation = sample(`${prefix}-presentation`).answer as ZonePresentationRead;
