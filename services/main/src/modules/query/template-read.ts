@@ -12,6 +12,7 @@ import { sourcedPublicationCreditReferences } from '../work/sourced-publication-
 import { readAuthorNames, sourceCreditReferences } from '../source/author-name-read.ts';
 import { resolveConcepts } from '../concept-page/read.ts';
 import { discoveryStorage } from '../discovery/store.ts';
+import { readCreditAttributionCards } from '../profiles/attribution.ts';
 import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
 import { closedStringEnum, TEMPLATE_COST, type ReviewedTemplate, type TemplateInput } from './template-schema.ts';
 import { creditSeekKey, type SeekCandidate } from './seek-index.ts';
@@ -265,6 +266,17 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       cursor?.expiresAt ?? Date.now()+READ_BASIS_RETENTION_MS):null;
     if(!yearPage) await admit(session,template.root,roots);
     if(readDependencyToken(await extraBasis())!==readDependencyToken(membership)) throw new WorkReadMoved('Template membership moved');
+    // Credit references disclose identities too. Admit every native role through
+    // the same attribution owner as /agent-credits, including retained deletion
+    // proofs. The page is bounded before this batch; external keys stay opaque.
+    if(template.sourceCredits) {
+      const agents=items.flatMap(item=>typeof item.agent==='string'?[item.agent]:[]);
+      const attributions=await readCreditAttributionCards(session,agents);
+      for(let index=items.length-1;index>=0;index--) {
+        const agent=items[index]!.agent;
+        if(typeof agent==='string' && !attributions.has(agent)) items.splice(index,1);
+      }
+    }
     const payload={profile:'template-result-v1',query:template.query,revision:template.revision,items,
       complete:!nextCursor,nextCursor,sourcePosition:position,count:{value:items.length,kind:'exact-page',total:null}};
     if(!Value.Check(template.response,payload)) throw new WorkReadUnavailable('Template response differs from its schema');

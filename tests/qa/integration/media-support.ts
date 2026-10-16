@@ -208,7 +208,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
       } catch (error) { await client.query('ROLLBACK'); throw error; }
       finally { client.release(); }
     };
-    const send = (method: string, path: string, body?: unknown, key = `${name}-${randomUUID()}`) =>
+    const send = (method: string, path: string, body?: unknown, key: string = randomUUID()) =>
       call(method, path, { token, body, key });
     const read = (path: string) => {
       const url = new URL(`http://main.local${path}`);

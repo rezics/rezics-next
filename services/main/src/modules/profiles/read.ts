@@ -16,6 +16,7 @@ import {
 } from '../work/read-session.ts';
 import type { shelfWork } from './read-contract.ts';
 import { isNativeCreditRole, type NativeCreditRole } from '../work/read-contract.ts';
+import { NATIVE_CREDIT_ROLES } from '../work/credit-roles.ts';
 import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
 import { readFactObligations } from '../rights/read-imported.ts';
@@ -399,6 +400,7 @@ export async function readAgentWorks(session: WorkReadSession, agent: string, co
       rv:work ?id ; rv:creditRevision ?creditHead . }
     GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:NativeAgentCreditRevision ; rv:component ?credit ;
       rv:agent ${iri(agent)} ; rv:work ?id . FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?credit rv:retiredBy ?retirement } }
     ${publicWork('?id', '?main')}
 
 
@@ -435,8 +437,9 @@ export async function readAgentWorks(session: WorkReadSession, agent: string, co
     GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:NativeAgentCreditRevision ; rv:component ?credit ;
       rv:work ?work ; rv:agent ${iri(agent)} ; schema:roleName ?role .
       FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
-  } LIMIT ${page.length * 3 + 1}`,
-        page.length * 3,
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?credit rv:retiredBy ?retirement } }
+  } LIMIT ${page.length * NATIVE_CREDIT_ROLES.length + 1}`,
+        page.length * NATIVE_CREDIT_ROLES.length,
       )
     : [];
   const items = page.flatMap((id) => {

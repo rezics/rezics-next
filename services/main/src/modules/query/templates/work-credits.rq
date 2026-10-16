@@ -19,6 +19,8 @@ SELECT ?id ?key ?ordinal ?confirmation ?role ?participantKind ?provider ?namespa
     BIND("external-reference" AS ?participantKind)
     FILTER(!BOUND(?_role) || ?_role = ?role)
   } UNION {
+    # Every native role shares the attribution owner's post-hydration admission;
+    # a bound Agent reference alone is not permission to disclose its identity.
     GRAPH <urn:rezics:graph:current> {
       ?id a rv:NativeAgentCredit ; rv:work ?_work_iri ; rv:creditRevision ?revision ;
         rv:agent ?agent ; schema:roleName ?role .
