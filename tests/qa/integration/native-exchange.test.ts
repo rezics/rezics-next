@@ -22,19 +22,23 @@ test('a Book composition exports all 260 exact pins in bounded resumable manifes
     profile: 'metadata-only-v1', authoring: 'own-work', title, language: 'en',
     semanticTypes: ['https://schema.org/Book'], actingSubject,
   }), 201);
-  const work = await create('Native exchange inventory'), target = await create('An exact reusable part');
+  const work = await create('Native exchange inventory');
   const composition = await json<{ structure: string; revision: string }>(owner.main('POST', '/v1/compositions', {
-    profile: 'work-composition', work: work.work, mainVersion: work.mainVersion, actingSubject,
+    profile: 'book-composition', work: work.work, mainVersion: work.mainVersion, actingSubject,
   }), 201);
   const path = `/v1/compositions/${short(composition.structure)}`;
-  let revision = composition.revision;
-  const occurrences: string[] = [];
+  const chapter = await json<{ post: string; occurrence: string; compositionRevision: string }>(owner.main('POST',
+    `/v1/works/${short(work.work)}/chapters`, { profile: 'book-chapter-create-v1', title: 'An exact reusable chapter',
+      language: 'en', direction: 'ltr', parent: composition.structure, position: 'last',
+      expectedCompositionHead: composition.revision, actingSubject }));
+  let revision = chapter.compositionRevision;
+  const occurrences: string[] = [chapter.occurrence];
   while (occurrences.length < 260) {
     const changed = await json<{ revision: string; occurrences: string[] }>(owner.main('POST', `${path}/changes`, {
-      profile: 'work-composition', expectedHead: revision, actingSubject,
+      profile: 'book-composition', expectedHead: revision, actingSubject,
       operations: Array.from({ length: Math.min(16, 260 - occurrences.length) }, (_, index) => ({
-        op: 'insert', parent: composition.structure, position: 'last', role: 'part', target: target.work,
-        displayLabel: `Part ${occurrences.length + index}`, inclusion: 'required',
+        op: 'insert', parent: composition.structure, position: 'last', role: 'chapter', target: chapter.post,
+        label: { value: `Chapter ${occurrences.length + index}`, language: 'en' },
       })),
     }));
     revision = changed.revision; occurrences.push(...changed.occurrences);
