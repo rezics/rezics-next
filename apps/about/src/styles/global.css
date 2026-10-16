@@ -13,8 +13,11 @@
 @source "../../../../packages/ui/src/utils.ts";
 @source "../../../../packages/ui/src/components/badge.tsx";
 @source "../../../../packages/ui/src/components/button.tsx";
+@source "../../../../packages/ui/src/components/document-url.tsx";
 @source "../../../../packages/ui/src/components/field.tsx";
 @source "../../../../packages/ui/src/components/input.tsx";
+@source "../../../../packages/ui/src/components/media-image-key.tsx";
+@source "../../../../packages/ui/src/components/media-image.tsx";
 @source "../../../../packages/ui/src/components/separator.tsx";
 @source "../../../../packages/ui/src/components/skip-nav.tsx";
 @source "../../../../packages/ui/src/components/spinner.tsx";
