@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { seedServedTypes } from '../catalogue/type-fixtures.ts';
 import type { SearchParams } from '../discover/scope.ts';
+import { zoneContentText } from '../language/untagged.ts';
 import { browseHref, chosenCount, cleared, mainBrowseQuery, parseBrowseState } from './browse-state.ts';
 import { browseModel, type FacetCounts } from './browse-view.ts';
 import { messages } from './messages.ts';
@@ -27,8 +28,8 @@ const selected = (year: string) => parseBrowseState({ year, q: 'Lantern title',
 
 const facets: FacetCounts = {
   concept: [
-    { value: iri(concept), count: 2, name: { value: 'Adventure', lang: 'en', dir: 'ltr' } },
-    { value: iri(excluded), count: 1, name: { value: 'Mystery', lang: 'en', dir: 'ltr' } },
+    { value: iri(concept), count: 2, name: zoneContentText('Adventure', 'en') },
+    { value: iri(excluded), count: 1, name: zoneContentText('Mystery', 'en') },
   ],
   status: [{ value: 'completed', count: 2 }, { value: 'ongoing', count: 1 }],
   length: [{ value: '0-99999', count: 2 }, { value: '100000-299999', count: 1 }],
