@@ -9,7 +9,6 @@ import { EVERYONE } from '../work-page/route.ts';
 import { mainRelationships } from '../relationships/api.ts';
 import { RecipeContent } from '../work-page/types/recipe.tsx';
 import { loadRecipeAuthoring } from './authoring-page.ts';
-import { mainRecipeExportApi, RecipeExportError } from './export-api.ts';
 import { instructionVisitTransport } from './instruction-recorded-fixture.ts';
 import { readRecipeVisitFrame } from './recipe-authoring-recorded-page.ts';
 
@@ -27,7 +26,7 @@ test('a server Recipe region leaves continuation functions inside the client bou
 });
 
 test.each(['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const)(
-  '%s replays unchanged instruction captures through production page, editor and exchange with zero misses', async persona => {
+  '%s replays unchanged instruction captures through production page, editor and compact exports with zero misses', async persona => {
     const misses: unknown[] = [];
     const visit = instructionVisitTransport(persona, 'https://recorded.invalid', source =>
       readFile(new URL(`../../../../${source}`, import.meta.url)).then(bytes => new Uint8Array(bytes)), error => misses.push(error));
@@ -71,14 +70,23 @@ test.each(['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as
         expect(bytes.status).toBe(200);
         expect(new Uint8Array(await bytes.arrayBuffer())).toEqual(new Uint8Array(await readFile(new URL('../../../../tests/fixtures/recipes/original-tomato-method.wav', import.meta.url))));
       }
-      const exported = mainRecipeExportApi(() => visit.main);
-      const selection = { structure: visit.page.structure, revision: visit.page.revision, actingSubject: visit.actingSubject ?? '' };
-      if (persona === 'visitor') {
-        await expect(exported.exportRevision(selection)).rejects.toBeInstanceOf(RecipeExportError);
-        await expect(exported.exportNativeRevision!(selection)).rejects.toBeInstanceOf(RecipeExportError);
-      } else {
-        expect((await exported.exportRevision(selection)).losses?.length).toBeGreaterThan(0);
-        expect((await exported.exportNativeRevision!(selection)).losses).toEqual([]);
+      // These captures prove compact exports. The paged download client is
+      // covered by export-api.test.ts, including resume and authority rechecks.
+      for (const format of ['schema-org', 'native'] as const) {
+        const exported = await visit.main.v1.recipes({ id: visit.page.structure.slice(-36) }).export.get({
+          query: { ...(visit.actingSubject ? { actingSubject: visit.actingSubject } : {}),
+            revision: visit.page.revision, format },
+        });
+        if (persona === 'visitor') {
+          expect(exported.error?.status).toBe(401);
+          expect(exported.data).toBeNull();
+        } else {
+          expect(exported.error).toBeNull();
+          expect(exported.data).toMatchObject({ structure: visit.page.structure, revision: visit.page.revision });
+          if (!exported.data || !('losses' in exported.data) || !exported.data.losses) throw new Error('Missing compact export losses');
+          if (format === 'schema-org') expect(exported.data.losses.length).toBeGreaterThan(0);
+          else expect(exported.data.losses).toEqual([]);
+        }
       }
       expect(misses).toEqual([]);
     } finally { visit.dispose(); }

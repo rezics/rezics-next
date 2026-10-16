@@ -11,7 +11,6 @@ import { clearTypes } from '../catalogue/types.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { readRecipe, readRecipeDraft, writePlan } from './api.ts';
 import type { Operation } from './intents.ts';
-import { mainRecipeExportApi } from './export-api.ts';
 import { readingLine } from './ingredient-line.ts';
 import { mainRecipeImportApi } from './import-api.ts';
 import { ingredients, steps } from './model.ts';
@@ -324,7 +323,7 @@ test('the recorded draft and the empty imported composition are read as themselv
   expect(emptyAnswer.occurrences).toEqual([]);
 });
 
-test('the owner exports the recorded revision and the work keeps its author credit', async () => {
+test('the owner reads the recorded compact export and the work keeps its author credit', async () => {
   const exported = sample(exchange, 'owner', 'selected-schema-org-export');
   const credits = sample(exchange, 'owner', 'public-credits');
   const { main } = replay(exchange, 'owner', [
@@ -335,11 +334,14 @@ test('the owner exports the recorded revision and the work keeps its author cred
   const structure = `https://rezics.com/id/${url.pathname.split('/')[3]}`;
   const revision = url.searchParams.get('revision')!;
   const actor = url.searchParams.get('actingSubject')!;
-  const file = await mainRecipeExportApi(() => main).exportRevision({
-    structure,
-    revision,
-    actingSubject: actor,
+  // This capture uses the compact endpoint; paginated downloads have their own
+  // client tests rather than invented continuation answers in this recording.
+  const result = await main.v1.recipes({ id: structure.slice(-36) }).export.get({
+    query: { revision, actingSubject: actor, format: 'schema-org' },
   });
+  expect(result.error).toBeNull();
+  if (!result.data || !('recipe' in result.data)) throw new Error('Missing compact Schema.org export');
+  const file = result.data;
   const answer = exported.answer as {
     revision: string;
     structure: string;
@@ -347,7 +349,8 @@ test('the owner exports the recorded revision and the work keeps its author cred
   };
   expect(file.revision).toBe(answer.revision);
   expect(file.structure).toBe(answer.structure);
-  expect(file.recipe).toEqual(answer.recipe);
+  const recipe: Record<string, unknown> = file.recipe;
+  expect(recipe).toEqual(answer.recipe);
 
   const creditUrl = new URL(credits.path, origin);
   const read = await main.v1
