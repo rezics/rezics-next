@@ -13,7 +13,7 @@ async function json<T>(response: Response, status = 200): Promise<T> {
   return JSON.parse(body) as T;
 }
 
-test('an Anime section list finds each searchable Content placement through composed Main', async () => {
+test('Anime composition parts are searchable while section-list targets follow reader admission', async () => {
   const stack = await startMediaStack('search-profile-placements', { contentProjection: true });
   try {
     await stack.contentCursor.initialize(stack.contentConsumer);
@@ -92,17 +92,11 @@ test('an Anime section list finds each searchable Content placement through comp
     const visitorPage = await json<{ results: Array<{ matchedPlacements?: unknown[] }> }>(
       await stack.call('POST', '/v1/queries/page', { body: input }));
     expect(visitorPage.results.flatMap(hit => hit.matchedPlacements ?? [])).toEqual([]);
-    const query = () => actor.send('POST', '/v1/queries/page', input);
-    const before = stack.fuseki.queries;
-    const page = await json<{ total: number; results: Array<{ work: string; revision: string;
-      matchedPlacements?: Array<{ resource: string; work: string; occurrence: string; profile: string }> }> }>(await query());
-    expect(page.results.map(hit => hit.work)).toEqual([owner.work]);
-    expect(new Set(page.results.flatMap(hit => hit.matchedPlacements?.map(place => place.occurrence) ?? []))).toEqual(new Set(changed.occurrences));
-    for (const hit of page.results) expect(hit).toMatchObject({ revision: `urn:rezics:content:revision:${draft.revisionId}`,
-      matchedPlacements: expect.arrayContaining([{ resource: source.work, work: owner.work, profile: 'section-list-v1', occurrence: changed.occurrences[0], title: 'Production notes' }]) });
-    expect(stack.fuseki.queries - before).toBeLessThanOrEqual(40);
-    // A later draft removes an admitted use and introduces an unadmitted use.
-    // Search must retain the old exact occurrences and their original order.
+    // Signing in supplies preferences, not Structure acting authority.
+    expect(await json(await actor.send('POST', '/v1/queries/page', input)))
+      .toMatchObject({ total: 0, results: [] });
+    const query = () => stack.call('POST', '/v1/queries/page', { body: input });
+    // A later section-list draft does not change visitor target admission.
     const removed = await json<{ revision: string }>(await actor.send('POST', `/v1/compositions/${short(structure.structure)}/changes`, {
       profile: 'section-list-v1', expectedHead: changed.revision, actingSubject: actor.actor,
       operations: [{ op: 'remove', occurrence: changed.occurrences[0] }],
@@ -112,10 +106,40 @@ test('an Anime section list finds each searchable Content placement through comp
       operations: [{ op: 'insert', role: 'entry', parent: structure.structure, position: 'last',
           target: source.work, qualifier: { note: 'Unpublished replacement' } }],
     }));
-    const retained = await json<typeof page>(await query());
-    expect(retained.results).toEqual(page.results);
-    expect(retained.results.flatMap(hit => hit.matchedPlacements?.map(place => place.occurrence) ?? []))
-      .toEqual(changed.occurrences);
+    expect(await json(await query())).toMatchObject({ total: 0, results: [] });
+
+    // The generic composition profile admits public Work parts for every owner
+    // type. Its declared searchable role gives this Anime a public phrase path.
+    const anime = await stack.catalogueWork(actor.actor, 'Anime collection', ['https://schema.org/TVSeries']);
+    const introduction = await stack.contribution(anime.work, actor.actor, 'en', 'Collection introduction');
+    const selected = { context: { kind: 'main-version-default' as const, id: anime.mainVersion },
+      work: anime.work, contribution: introduction.contribution, publicationDecision: introduction.decision,
+      expectedSelectionHead: null, selectionBasis: 'main-maintainer' as const, actingSubject: actor.actor };
+    await selectMainDefault(stack.env, stack.admission(actor.actor,
+      `publication:select:${anime.mainVersion}`, 'publication.select', mainSelectionDigest(selected)), selected);
+    for (const action of ['edit', 'read']) await actor.grant(`work:${action}:${anime.work}`, `work.${action}`);
+    const composition = await json<{ structure: string; revision: string }>(await actor.send('POST',
+      '/v1/compositions', { profile: 'work-composition', work: anime.work,
+        mainVersion: anime.mainVersion, actingSubject: actor.actor }), 201);
+    const parts = await json<{ revision: string; occurrences: string[] }>(await actor.send('POST',
+      `/v1/compositions/${short(composition.structure)}/changes`, {
+        profile: 'work-composition', actingSubject: actor.actor, expectedHead: composition.revision,
+        operations: [0, 1].map(index => ({ op: 'insert', role: 'part', parent: composition.structure,
+          position: 'last', target: source.work, displayLabel: `Part ${index + 1}`, inclusion: 'required' })),
+      }));
+    const publicParts = await json<{ occurrences: Array<{ occurrence: string }> }>(
+      await stack.call('GET', `/v1/compositions/${short(composition.structure)}`));
+    expect(publicParts.occurrences.map(item => item.occurrence)).toEqual(parts.occurrences);
+    const before = stack.fuseki.queries;
+    const page = await json<{ total: number; results: Array<{ work: string; revision: string;
+      matchedPlacements?: Array<{ resource: string; work: string; occurrence: string; profile: string }> }> }>(await query());
+    expect(page.results.map(hit => hit.work)).toEqual([anime.work]);
+    expect(page.results.flatMap(hit => hit.matchedPlacements?.map(place => place.occurrence) ?? []))
+      .toEqual(parts.occurrences);
+    for (const hit of page.results) expect(hit).toMatchObject({ revision: `urn:rezics:content:revision:${draft.revisionId}`,
+      matchedPlacements: expect.arrayContaining([{ resource: source.work, work: anime.work, profile: 'work-composition',
+        occurrence: parts.occurrences[0], title: 'Production notes' }]) });
+    expect(stack.fuseki.queries - before).toBeLessThanOrEqual(40);
     // Public Content eligibility does not publish its source Work into the
     // Main Work phrase-search relation.
     const privateSource = await stack.privateWork(actor.actor, 'Private production notes');
