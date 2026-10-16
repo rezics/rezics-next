@@ -254,23 +254,24 @@ export async function classificationCostProfile() {
     );
     expect(batch.get(target.work)?.after).toBeString();
     expect(batch.get(works[1]!.work)?.after).toBeNull();
-    // Movement between candidate and decision exchanges never mixes positions.
+    // A global graph clock may move while this Work's admitted facts stay fixed.
     const native = stack.fuseki.query.bind(stack.fuseki);
+    let moved = false;
     stack.fuseki.query = async (...args) => {
       const result = await native(...args);
-      // Background probes share this client. A moved sequence is the foreground
-      // read's fault, so a scheduler query must keep the sequence it observed.
+      // Background probes share this client; keep their observed positions.
       if (foregroundCounted() && args[0].includes('SELECT ?index ?epoch ?sequence')) {
+        moved = true;
         for (const row of result.results?.bindings ?? []) row.sequence!.value = '999999999';
       }
       return result;
     };
     try {
-      await expect(
-        workRead(home.deps, new Request('http://main.internal/g1041-movement'), {}, (session) =>
+      const page = await workRead(home.deps, new Request('http://main.internal/g1041-movement'), {}, (session) =>
           current.readWorkClassifications(session, target.work, [definitions[0]!.sense]),
-        ),
-      ).rejects.toThrow('incomplete');
+        );
+      expect(moved).toBe(true);
+      expect(page.items.map(item => item.sense)).toEqual([definitions[0]!.sense]);
     } finally {
       stack.fuseki.query = native;
     }

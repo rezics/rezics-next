@@ -66,6 +66,12 @@ test('G833: SAO translations share Works, exact releases cover several volumes a
     expect(new Set(texts.items.map(item => item.work))).toEqual(new Set([work.work]));
     expect(new Set(texts.items.map(item => item.language))).toEqual(new Set(['en', 'zh-Hans', 'zh-Hant']));
     expect(new Set(texts.items.map(item => item.id)).size).toBe(3);
+    const textPage = await json<{ nextCursor: string }>(await stack.call('GET', `${root(work.work)}/realizations?limit=1`));
+    const hiddenWork = await stack.privateWork(editor.actor, 'An unrelated private draft');
+    expect((await stack.call('GET', `${root(work.work)}/realizations?limit=1&cursor=${encodeURIComponent(textPage.nextCursor)}`)).status).toBe(200);
+    const added = text(editor, work.work, 'fr');
+    await json(await saveText(editor, work.work, added));
+    expect((await stack.call('GET', `${root(work.work)}/realizations?limit=1&cursor=${encodeURIComponent(textPage.nextCursor)}`)).status).toBe(409);
     expect(await json(await stack.call('GET', `${root(work.work)}/realizations/${hant.id.slice(-36)}`)))
       .toMatchObject({ language: 'zh-Hant', publishers: [publishers.taiwanKadokawa] });
     expect(await json(await stack.call('GET', `${root(work.work)}/realizations/${hans.id.slice(-36)}`)))
@@ -82,11 +88,27 @@ test('G833: SAO translations share Works, exact releases cover several volumes a
     const omnibus = release(editor, english.map(entry => covered(entry.body, entry.result)),
       { title: { value: 'Volumes 1–3 omnibus', language: 'en' } });
     const omnibusSaved = await json<WriteResult>(await saveRelease(editor, work.work, omnibus));
+    await editor.grant(`work:edit:${hiddenWork.work}`, 'work.edit');
+    const hiddenText = text(editor, hiddenWork.work, 'en');
+    const hiddenTextSaved = await json<WriteResult>(await saveText(editor, hiddenWork.work, hiddenText));
+    const hiddenRelease = release(editor, [covered(en.body, en.result), covered(hiddenText, hiddenTextSaved)],
+      { identifiers: digital.identifiers });
+    const hiddenSaved = await json<WriteResult>(await saveRelease(editor, work.work, hiddenRelease));
+    const releasePage = await json<{ nextCursor: string }>(await stack.call('GET', `${root(work.work)}/releases?limit=1`));
+    expect(releasePage.nextCursor).toBeString();
+    await stack.privateWork(editor.actor, 'Another unrelated private draft');
+    const hiddenCorrected = await json<WriteResult>(await saveRelease(editor, work.work,
+      { ...hiddenRelease, expectedHead: hiddenSaved.revision, title: { value: 'Private omnibus correction', language: 'en' }, evidence: id() }));
+    expect((await stack.call('GET', `${root(work.work)}/releases?limit=1&cursor=${encodeURIComponent(releasePage.nextCursor)}`)).status).toBe(200);
+    await json(await saveRelease(editor, work.work, { ...digital, expectedHead: (await json<{ revision: string }>(
+      await stack.call('GET', `${root(work.work)}/releases/${digital.id.slice(-36)}`))).revision,
+      title: { value: 'Corrected digital title', language: 'en' }, evidence: id() }));
+    expect((await stack.call('GET', `${root(work.work)}/releases?limit=1&cursor=${encodeURIComponent(releasePage.nextCursor)}`)).status).toBe(409);
     const admission = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?admission WHERE {
       GRAPH ${iri(GRAPHS.receipts)} { <${omnibusSaved.receipt}> rv:admissionId ?admission } } LIMIT 2`))
       .results!.bindings[0]!.admission!.value;
     const terminal = (await readReleaseReceipt(stack.env, admission))!;
-    const handler = ownerOutboxEventHandler(`${RV}ReleaseChangedEvent`)!;
+    const handler = (await ownerOutboxEventHandler(`${RV}ReleaseChangedEvent`))!;
     const eventValues = { admissionId: admission, receipt: terminal.receipt, digest: terminal.requestDigest,
       scope: terminal.scope, authorityEpoch: terminal.authorityEpoch };
     const cloud = await handler.read({ fuseki: stack.fuseki, eventId: `urn:event:${randomUUID()}`, ordinal: 0,
@@ -114,6 +136,17 @@ test('G833: SAO translations share Works, exact releases cover several volumes a
     expect(store.items.map(item => item.id)).toEqual([digital.id]);
     expect((await json<{ items: unknown[] }>(await stack.call('GET',
       '/v1/releases?provider=https%3A%2F%2Fanother.example&identifier=sao-volume-1'))).items).toEqual([]);
+    const twin = release(editor, [covered(en.body, en.result)], { identifiers: digital.identifiers });
+    const twinSaved = await json<WriteResult>(await saveRelease(editor, work.work, twin));
+    const identifierPath = '/v1/releases?provider=https%3A%2F%2Fstore.example&identifier=sao-volume-1&limit=1';
+    const identifierPage = await json<{ nextCursor: string }>(await stack.call('GET', identifierPath));
+    expect(identifierPage.nextCursor).toBeString();
+    await json(await saveRelease(editor, work.work, { ...hiddenRelease, expectedHead: hiddenCorrected.revision,
+      title: { value: 'Another private omnibus correction', language: 'en' }, evidence: id() }));
+    expect((await stack.call('GET', `${identifierPath}&cursor=${encodeURIComponent(identifierPage.nextCursor)}`)).status).toBe(200);
+    await json(await saveRelease(editor, work.work, { ...twin, expectedHead: twinSaved.revision,
+      title: { value: 'Visible identifier match correction', language: 'en' }, evidence: id() }));
+    expect((await stack.call('GET', `${identifierPath}&cursor=${encodeURIComponent(identifierPage.nextCursor)}`)).status).toBe(409);
     for (const query of ['', '?isbn13=9780316371248', '?provider=https%3A%2F%2Fstore.example',
       '?isbn13=9780316371247&provider=https%3A%2F%2Fstore.example&identifier=sao-volume-1']) {
       expect((await stack.call('GET', `/v1/releases${query}`)).status).toBe(400);
@@ -241,7 +274,7 @@ test('G833: CAS, denied writes, concurrent corrections, exact sources and lost-r
     expect(await json(await saveRelease(editor, work.work, correctedPub, pubKey)))
       .toMatchObject({ revision: pubCorrected.revision, receipt: pubCorrected.receipt, replayed: true });
 
-    const event = ownerOutboxEventHandler(`${RV}RealizationChangedEvent`)!;
+    const event = (await ownerOutboxEventHandler(`${RV}RealizationChangedEvent`))!;
     const receiptRows = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?admission WHERE {
       GRAPH ${iri(GRAPHS.receipts)} { <${corrected.receipt}> rv:admissionId ?admission } } LIMIT 2`)).results!.bindings;
     const admissionId = receiptRows[0]!.admission!.value;

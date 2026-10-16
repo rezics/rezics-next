@@ -9,6 +9,9 @@ import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, STRUCTURE_PROFILE,
 import { derivedId, orderTreeKey, type CompositionHeader } from '../src/modules/structure/graph.ts';
 import { newCost } from '../src/modules/structure/tree.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { ReadingBoundary } from '../src/modules/reading-position/boundary.ts';
+import { WorkReadSession, WorkReadExpired } from '../src/modules/work/read-session.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 /** Real immutable B+trees; only the graph's exact revision anchor is simulated. */
 async function fixture(count: number, disclosed: (index: number) => boolean, onTarget?: () => void) {
@@ -38,15 +41,16 @@ async function fixture(count: number, disclosed: (index: number) => boolean, onT
   const digest = await objects.put(new TextEncoder().encode(JSON.stringify(manifest)));
   const header: CompositionHeader = { structure, head: revision, generation, manifest: `urn:rezics:sha256:${digest}`,
     placementCount: count, profile: 'collection-membership', owner, component: owner, work: owner, mainVersion: owner };
-  let graphCalls = 0, targetChecks = 0;
+  let graphCalls = 0, targetChecks = 0, sequence = 1;
   const env = { structureObjects: objects, fuseki: { query: async () => {
     graphCalls++;
     const term = (value: string) => ({ type: 'literal', value });
     return { results: { bindings: [{ manifest: term(header.manifest), count: term(String(count)),
-      epoch: term('g-552-epoch'), sequence: term('1') }] } };
+      epoch: term('g-552-epoch'), sequence: term(String(sequence)) }] } };
   } } } as unknown as WorkActivationEnvironment;
-  const read = (limit: number, after?: string, occurrence?: string) => readVisibleCompositionPage(env, { structure, header,
+  const read = (limit: number, after?: string, occurrence?: string, readingBoundary?: ReadingBoundary) => readVisibleCompositionPage(env, { structure, header,
     limit, after, occurrence, visible: row => row.role !== 'member' || !!row.target,
+    readingBoundary,
     canReadTargets: async targets => {
       const admitted = new Set<string>();
       for (const target of targets) {
@@ -56,8 +60,32 @@ async function fixture(count: number, disclosed: (index: number) => boolean, onT
       }
       return admitted;
     } });
-  return { records, read, graphCalls: () => graphCalls, targetChecks: () => targetChecks };
+  return { records, read, env, readable, advance: () => ++sequence, sequence: () => String(sequence),
+    graphCalls: () => graphCalls, targetChecks: () => targetChecks };
 }
+
+test('Reading-position collection continuation ignores a private edit and restarts for changed visible membership', async () => {
+  const f = await fixture(3, () => true);
+  let readingGeneration = 1;
+  const deps = { environment: f.env, access: { assertRecoveryOpen: async () => undefined },
+    readingPositions: { generation: async () => String(readingGeneration),
+    lookup: async () => new Map(), required: async () => new Set() } } as unknown as MainWorkDependencies;
+  const read = async (after?: string) => {
+    const session = new WorkReadSession(deps, new Request('http://main.test/collection?position=all'), {},
+      { dataEpoch: 'g-552-epoch', sequence: f.sequence() });
+    const page = await f.read(1, after, undefined, new ReadingBoundary(session));
+    await session.fenceDependencies();
+    return page;
+  };
+  const first = await read();
+  expect(first.next).toBeString();
+  f.advance();
+  readingGeneration++;
+  expect((await read(first.next!)).occurrences[0]!.target).toBe(f.records[1]!.target);
+  f.readable.delete(f.records[2]!.target!);
+  f.advance();
+  await expect(read(first.next!)).rejects.toBeInstanceOf(WorkReadExpired);
+});
 
 test('G-552: Collection continuation traverses 1,000 members in bounded pages without gaps or duplicates', async () => {
   const f = await fixture(1_000, () => true);

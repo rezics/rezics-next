@@ -10,6 +10,7 @@ import {
   type WorkReadSession,
 } from '../work/read-session.ts';
 import { admittedPage } from '../disclosure/admitted-page.ts';
+import { admittedReadPosition } from '../read-basis/admitted-position.ts';
 import { fenceWorkBasis, readWorkBasis } from '../work/read-header.ts';
 import { recordedLanguageTag, InvalidContentLanguages } from './languages.ts';
 import {
@@ -290,11 +291,10 @@ export async function readWorkReleases(
     }
   }
   const binding = ['releases', work, listed];
-  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  const selected = await releasePage(session, {
+  const input: Parameters<typeof releasePage>[1] = {
     binding,
     limit,
-    after: cursor?.after,
+    after: undefined,
     work,
     parse: (raw, release) => parseRecord(raw, work, release),
     fetch: (probe, after, size) =>
@@ -316,9 +316,37 @@ export async function readWorkReleases(
   } ORDER BY STR(?release) LIMIT ${size}`,
         size,
       ),
-  });
+  };
+  const position = await releasePosition(session, input, basis.dependencyToken);
+  const cursor = decodeReadCursor(session.options.cursor, binding, position);
+  const selected = await releasePage(session, { ...input, after: cursor?.after });
   const page = selected.page;
   const records = page.map((row) => selected.records.get(row.release!.value)!);
+  const snapshots = await releaseSnapshots(session, work, records);
+  await fenceWorkBasis(session, basis);
+  const views = records.map((record) => ({
+    ...selected.views.get(record.id)!,
+    snapshots: snapshots.get(record.id) ?? [],
+  }));
+  return { ...pageResult(session, views, selected.lookahead
+    ? encodeReadCursor(binding, position, page.at(-1)!.release!.value) : null), sourcePosition: position };
+}
+
+async function releasePosition(session: WorkReadSession, input: Parameters<typeof releasePage>[1], workBasis?: string) {
+  return admittedReadPosition(session, JSON.stringify(input.binding), async function* (probe) {
+    if (workBasis) yield [workBasis];
+    let after: string | undefined;
+    do {
+      const selected = await releasePage(probe, { ...input, after, limit: RELEASE_COST.page });
+      const records = selected.page.map(row => selected.records.get(row.release!.value)!);
+      const snapshots = input.work ? await releaseSnapshots(probe, input.work, records) : new Map<string, SnapshotView[]>();
+      yield records.map(record => ({ ...selected.views.get(record.id)!, snapshots: snapshots.get(record.id) ?? [] }));
+      after = selected.lookahead ? selected.last!.release!.value : undefined;
+    } while (after);
+  });
+}
+
+async function releaseSnapshots(session: WorkReadSession, work: string, records: AnyReleaseRecord[]) {
   const web = records.filter((record) => record.kind === 'web').map((record) => iri(record.id));
   const snapshotRows = web.length
     ? await session.query(
@@ -358,18 +386,7 @@ export async function readWorkReleases(
       });
     snapshots.set(publication, list);
   }
-  await fenceWorkBasis(session, basis);
-  const views = records.map((record) => ({
-    ...selected.views.get(record.id)!,
-    snapshots: snapshots.get(record.id) ?? [],
-  }));
-  return pageResult(
-    session,
-    views,
-    selected.lookahead
-      ? encodeReadCursor(binding, session.position, page.at(-1)!.release!.value)
-      : null,
-  );
+  return snapshots;
 }
 
 export async function readWorkRelease(session: WorkReadSession, work: string, release: string) {
@@ -460,12 +477,11 @@ export async function readReleasesByIdentifier(session: WorkReadSession, lookup:
   const value =
     lookup.isbn13 ?? identifierLiteral({ provider: lookup.provider!, value: lookup.identifier! });
   const binding = ['release-identifier', predicate, value];
-  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const limit = session.options.limit ?? RELEASE_V2_COST.page;
-  const selected = await releasePage(session, {
+  const input: Parameters<typeof releasePage>[1] = {
     binding,
     limit,
-    after: cursor?.after,
+    after: undefined,
     fetch: (probe, after, size) =>
       probe.query(
         `SELECT ?release ?revision WHERE {
@@ -487,13 +503,16 @@ export async function readReleasesByIdentifier(session: WorkReadSession, lookup:
       }
       return record;
     },
-  });
+  };
+  const position = await releasePosition(session, input);
+  const cursor = decodeReadCursor(session.options.cursor, binding, position);
+  const selected = await releasePage(session, { ...input, after: cursor?.after });
   const views = selected.page.map((row) => selected.views.get(row.release!.value)!);
-  return pageResult(
+  return { ...pageResult(
     session,
     views,
     selected.lookahead
-      ? encodeReadCursor(binding, session.position, selected.last!.release!.value)
+      ? encodeReadCursor(binding, position, selected.last!.release!.value)
       : null,
-  );
+  ), sourcePosition: position };
 }

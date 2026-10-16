@@ -368,7 +368,7 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
       expect((await store.lookup([early.component])).get(early.component)?.find(row => row.continuityWork === volume2.work)?.receipt).toBe('alternate-continuity');
       await client.query('BEGIN'); await store.write(client, correction, 'reviewed-publication'); await client.query('COMMIT');
       expect((await read(entityPath(early.component))).status).toBe(404);
-      expect((await read(`${memberPath}?after=${encodeURIComponent(narrowed.next!)}`)).status).toBe(400);
+      expect((await read(`${memberPath}?after=${encodeURIComponent(narrowed.next!)}`)).status).toBe(409);
       await client.query('BEGIN'); await store.write(client, { ...correction, occurrence: earlyPosition, receipt: 'restored-correction' }, correction.receipt);
       await client.query('COMMIT');
     } finally { client.release(); }
@@ -384,7 +384,9 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     // The finished Session's Library-read projection already completed this chapter, so the reader writes at version 3.
     await json(await progress(true, 3));
     expect((await read(entityPath(early.component))).status).toBe(200);
-    expect((await read(`${memberPath}?after=${encodeURIComponent(narrowed.next!)}`)).status).toBe(400);
+    // The private progress clock changed, but this collection admits the same
+    // members as before the correction and progress writes.
+    expect((await read(`${memberPath}?after=${encodeURIComponent(narrowed.next!)}`)).status).toBe(200);
     const otherReader = await json<{ items: { id: string }[] }>(await call('GET', `${zonePath}&actingSubject=${encodeURIComponent(person)}`, undefined, outsider.token));
     expect(otherReader.items.map(item => item.id)).toEqual([unchanged.component]);
     const privateSnapshot = store.privateSnapshot.bind(store);

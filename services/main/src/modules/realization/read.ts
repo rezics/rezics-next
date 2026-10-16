@@ -5,6 +5,7 @@ import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadMissing, WorkRe
 import { parseStoredRealization, REALIZATION_COST, REALIZATION_PROFILE, type RealizationRecord } from './schema.ts';
 import { readLegacyRealization, translationRealization } from './legacy.ts';
 import { readTranslationLinks } from '../work/translation-links.ts';
+import { admittedReadPosition } from '../read-basis/admitted-position.ts';
 
 export function realizationView(record: RealizationRecord, revision: string) {
   const { expectedHead: ignoredHead, actingSubject: ignoredActor, ...facts } = record;
@@ -48,14 +49,31 @@ export async function readWorkRealizations(session: WorkReadSession, work: strin
   const basis = await readWorkBasis(session, work);
   const limit = session.options.limit ?? REALIZATION_COST.page;
   const binding = ['realizations', work];
-  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
+  const position = await admittedReadPosition(session, JSON.stringify(binding), async function* (probe) {
+    yield [basis.dependencyToken];
+    let after: string | undefined;
+    do {
+      const selected = await realizationPage(probe, work, REALIZATION_COST.page, after);
+      yield selected.items;
+      after = selected.after ?? undefined;
+    } while (after);
+  });
+  const cursor = decodeReadCursor(session.options.cursor, binding, position);
+  const selected = await session.selection(`realizations:${work}:${cursor?.after ?? ''}:${limit}`,
+    probe => realizationPage(probe, work, limit, cursor?.after));
+  await fenceWorkBasis(session, basis);
+  return { ...pageResult(session, selected.items, selected.after
+    ? encodeReadCursor(binding, position, selected.after) : null), sourcePosition: position };
+}
+
+async function realizationPage(session: WorkReadSession, work: string, limit: number, after?: string) {
   const rows = await session.query(`SELECT ?realization ?revision ?state ?main ?legacyRevision ?targetWork WHERE {
     { GRAPH ${iri(GRAPHS.current)} { ?realization a rv:Realization ; rv:work ${iri(work)} ; rv:head ?revision }
       OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:RealizationRevision ; rv:component ?realization ;
         rv:modelRevision ${iri(REALIZATION_PROFILE)} ; rv:realizationState ?state } } }
     UNION { GRAPH ${iri(GRAPHS.revisions)} { ?realization a rv:TranslationLink ; rv:sourceWork ${iri(work)} ;
       rv:targetMainVersion ?main ; rv:targetMainRevision ?legacyRevision ; rv:targetWork ?targetWork } }
-    ${cursor ? `FILTER(STR(?realization) > ${lit(cursor.after)})` : ''}
+    ${after ? `FILTER(STR(?realization) > ${lit(after)})` : ''}
   } ORDER BY STR(?realization) LIMIT ${limit + 1}`, limit + 1);
   if (rows.some(row => !row.realization) || new Set(rows.map(row => row.realization!.value)).size !== rows.length) {
     throw new WorkReadUnavailable('Realization identities are ambiguous');
@@ -84,7 +102,5 @@ export async function readWorkRealizations(session: WorkReadSession, work: strin
     if (summary.status !== 'available') readable.delete(summary.reference);
   }
   const visible = items.filter(item => !item.legacy || readable.has(item.legacy.targetWork));
-  await fenceWorkBasis(session, basis);
-  return pageResult(session, visible, rows.length > limit
-    ? encodeReadCursor(binding, session.position, rows[limit - 1]!.realization!.value) : null);
+  return { items: visible, after: rows.length > limit ? rows[limit - 1]!.realization!.value : null };
 }

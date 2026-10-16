@@ -100,7 +100,7 @@ test('G-829: wholes scan beyond a hidden batch and never expose trailing private
   };
   const deps = { environment: { fuseki: graph, objectDirectory: '.temp/public-reads',
     lineage: { dataEpoch: 'one', routingEpoch: 'one' } },
-    access: { canReadWork: async () => {
+    access: { assertRecoveryOpen: async () => undefined, canReadWork: async () => {
       privateGrantProbes++;
       throw new Error('Anonymous candidates cannot obtain a private grant');
     } }, media: { store: { avatarRows: async (resources: readonly string[]) => {

@@ -122,7 +122,9 @@ function fixture(input: Target[], signedIn = false) {
     const target = indexed.get(resource);
     return !!target && (!target.private || !!principal && !!target.granted);
   };
-  const deps = { environment, access: { canReadWork: async (_principal: unknown, _actor: string, work: string) => {
+  const deps = { environment, access: { assertRecoveryOpen: async () => undefined,
+    activePrincipalId: async () => 'reader',
+    canReadWork: async (_principal: unknown, _actor: string, work: string) => {
     grants.push(work); return indexed.get(work)?.granted ?? false;
   }, canReadSemanticResource: async (principal: unknown, _actor: string | null, resource: string) =>
     canReadSemantic(principal, resource) }, mediaAccess: {

@@ -4,6 +4,7 @@ import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMissing, W
 import { readCompositionPage } from '../structure/read.ts';
 import { canReadCompositionWork } from './disclosure-read.ts';
 import { compositionWorkBatchReader } from './visible-targets.ts';
+import { admittedReadPosition } from '../read-basis/admitted-position.ts';
 
 /** Responses contain at most 100 disclosed uses and one disclosed lookahead.
  * Each scan batch is bounded to 101 candidates; hidden batches are skipped under
@@ -65,7 +66,31 @@ export async function readWorkWholes(session: WorkReadSession, resource: string,
   if (!await canReadCompositionWork(session, resource)) throw new WorkReadMissing('Work is unavailable');
   const binding = { resource, kind: 'work-wholes', actor: session.options.actingSubject,
     subject: session.principal?.subject };
-  let after = decodeReadCursor(input.after, binding, session.position)?.after;
+  let firstPage: Awaited<ReturnType<typeof workWholesPage>>;
+  const position = await admittedReadPosition(session, JSON.stringify(binding), async function* (probe) {
+    let after: string | undefined;
+    do {
+      const page = await workWholesPage(probe, resource, WORK_COMPOSITION_READ_COST.page, after);
+      if (!after) firstPage = page;
+      yield page.wholes;
+      after = page.after;
+    } while (after);
+  });
+  const cursor = decodeReadCursor(input.after, binding, position);
+  // Retain only the first bounded owner page while hashing the relation. Its
+  // selected-result fence already closes a first response's rows and lookahead.
+  const wholes = !cursor ? firstPage!.wholes.slice(0, input.limit) : undefined;
+  const last = wholes?.at(-1);
+  const page = wholes ? { wholes, after: last && (firstPage!.wholes.length > input.limit || firstPage!.after)
+    ? `${last.work}|${last.occurrence}` : undefined }
+    : await session.selection(`work-wholes:${JSON.stringify([resource, cursor?.after, input.limit])}`,
+      probe => workWholesPage(probe, resource, input.limit, cursor?.after));
+  return { resource, wholes: page.wholes, next: page.after
+    ? encodeReadCursor(binding, position, page.after) : null,
+    sourcePosition: { datasetId: 'product' as const, ...position } };
+}
+
+async function workWholesPage(session: WorkReadSession, resource: string, limit: number, after?: string) {
   const wholes: Array<{ work: string; mainVersion: string; structure: string; occurrence: string;
     segmentKey: string; orderKey: string }> = [];
   const access = new Map<string, boolean>();
@@ -99,16 +124,14 @@ export async function readWorkWholes(session: WorkReadSession, resource: string,
       if (access.get(whole)) wholes.push({ work: whole, mainVersion: row.main!.value,
         structure: row.structure!.value, occurrence: row.occurrence!.value,
         segmentKey: row.segment!.value, orderKey: row.order!.value });
-      if (wholes.length > input.limit) break;
+      if (wholes.length > limit) break;
     }
-    if (wholes.length > input.limit || rows.length < WORK_COMPOSITION_READ_COST.candidateProbe) break;
+    if (wholes.length > limit || rows.length < WORK_COMPOSITION_READ_COST.candidateProbe) break;
     const last = rows.at(-1)!;
     after = `${last.whole!.value}|${last.occurrence!.value}`;
   }
-  const hasNext = wholes.length > input.limit;
-  wholes.splice(input.limit);
+  const hasNext = wholes.length > limit;
+  wholes.splice(limit);
   const last = wholes.at(-1);
-  return { resource, wholes, next: hasNext && last
-    ? encodeReadCursor(binding, session.position, `${last.work}|${last.occurrence}`) : null,
-    sourcePosition: { datasetId: 'product' as const, ...session.position } };
+  return { wholes, after: hasNext && last ? `${last.work}|${last.occurrence}` : undefined };
 }

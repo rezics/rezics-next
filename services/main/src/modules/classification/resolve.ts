@@ -81,13 +81,26 @@ export async function resolveClassifications(
   const realm = input.context.kind === 'realm-classification' ? input.context.id : undefined;
   // Literal keys must be inside GRAPH joins: an outer VALUES table can
   // otherwise join only after ARQ has enumerated the whole relation.
-  const baseTargets = inputs
-    .map(
-      (row) => `{ BIND(${iri(row.work)} AS ?work)
-    BIND(${iri(row.mainVersion)} AS ?main) BIND(${iri(row.sense)} AS ?sense)
+  const byWork = new Map<string, ClassificationResolutionInput[]>();
+  for (const row of inputs) {
+    const key = `${row.work}\0${row.mainVersion}`;
+    const group = byWork.get(key) ?? [];
+    group.push(row);
+    byWork.set(key, group);
+  }
+  // A continuation can consume more than one public page. Share each Work's
+  // literal anchor across its senses so its proof is not sent once per sense.
+  const baseTargets = [...byWork.values()]
+    .map((rows) => {
+      const target = rows[0]!;
+      return `{ BIND(${iri(target.work)} AS ?work)
+    BIND(${iri(target.mainVersion)} AS ?main)
     GRAPH ${iri(GRAPHS.current)} {
-      ${iri(row.work)} a schema:CreativeWork ; rv:mainVersion ${iri(row.mainVersion)} .
-      ${iri(row.mainVersion)} a rv:MainVersion ; rv:work ${iri(row.work)} .
+      ${iri(target.work)} a schema:CreativeWork ; rv:mainVersion ${iri(target.mainVersion)} .
+      ${iri(target.mainVersion)} a rv:MainVersion ; rv:work ${iri(target.work)} .
+    }
+    { ${rows.map(row => `{ BIND(${iri(row.sense)} AS ?sense)
+    GRAPH ${iri(GRAPHS.current)} {
       ${iri(row.sense)} a rv:ClassificationSense ; rv:senseState rv:Active ;
         rv:interpretationScope ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
         rv:head ?senseRevision ; rv:expression ?expression .
@@ -95,8 +108,9 @@ export async function resolveClassifications(
     }
     GRAPH ${iri(GRAPHS.revisions)} { ?senseRevision a rv:RevisionAnchor ;
       rv:component ${iri(row.sense)} ; rv:modelRevision ?senseModel . ${classificationModelRevisions('?senseModel')} }
-  }`,
-    )
+  }`).join(' UNION ')} }
+  }`;
+    })
     .join(' UNION ');
   const base = await query(
     `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>

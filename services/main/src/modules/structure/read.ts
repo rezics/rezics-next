@@ -9,7 +9,7 @@ import { StructureObjectCorrupt, StructureObjectUnavailable, newCost, type TreeC
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { resolvePreparedGroups } from './group-root.ts';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
-import { encodeReadCursor, decodeReadCursor, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { encodeReadCursor, decodeReadCursor, readDependencyToken, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { readPublishedStructuredWorkSource, type PublishedStructuredWorkSource } from '../work/public-patterns.ts';
 import { qualifierKeyTree, qualifierKeyPrefix, qualifierKeyOf, requireQualifierKeyIndex, resolvePreparedQualifierKeys,
   QUALIFIER_KEY_COST, type QualifierKey } from './qualifier-index.ts';
@@ -426,7 +426,10 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     }
   }
   const prefix = `${parent}\u0001`;
-  const cursorPosition = sourcePosition;
+  // The immutable revision owns sibling order; unrelated graph commits cannot
+  // move it. Target admission is checked again inside every range scan.
+  const cursorPosition = { ...sourcePosition,
+    dependencyToken: readDependencyToken([input.structure, revision, parent]) };
   const cursorBinding = { structure: input.structure, revision, parent,
     ...(input.reverse ? { reverse: true } : {}) };
   if (input.afterKey && !input.snapshot) throw new CompositionUnavailable('immutable sibling anchor needs a snapshot');

@@ -160,6 +160,7 @@ async function page(fuseki: FusekiClient, work: MainWorkDependencies, request: R
       ...(input.parent ? { parent: input.parent } : {}), ...(input.after ? { after: input.after } : {}),
       limit: input.limit ?? 50, visible: item => item.role !== 'member' || !!item.target,
       readingBoundary: boundary,
+      canReadTargetsForSession: probe => compositionTargetBatchReader(probe, structureProfileFor(header.profile)),
       canReadTargets });
     // The shared page retains hidden uses for exact owner history. This projection
     // returns only disclosed members and has no hidden count or timing counters.

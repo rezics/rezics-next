@@ -9,6 +9,7 @@ import { MAX_SUMMARY_BATCH } from '../media/summary.ts';
 import { readSearchDecisionSupports } from './search-supports.ts';
 import { readWorkBasis, fenceWorkBasis } from './read-header.ts';
 import { readMetadataRelevance } from './metadata-read.ts';
+import { admittedReadPosition } from '../read-basis/admitted-position.ts';
 import {
   decodeReadCursor,
   encodeReadCursor,
@@ -34,6 +35,11 @@ interface ClassificationTarget {
   mainVersion: string;
 }
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+interface SelectedClassifications {
+  items: Static<typeof classificationItem>[];
+  after: string | null;
+  candidates: string[];
+}
 function checkSelection(selectedSenses?: readonly string[]) {
   if (
     selectedSenses &&
@@ -56,7 +62,8 @@ export async function readWorkClassificationBatch(
   // Resolution and Judgment protection may inspect hidden and lookahead rows.
   // Their selected result owns the fence, including its scan continuation.
   return session.selection(`work-classifications:${JSON.stringify([targets, selectedSenses, after])}`,
-    probe => readSelectedWorkClassificationBatch(probe, targets, selectedSenses, after));
+    async probe => new Map([...(await readSelectedWorkClassificationBatch(probe, targets, selectedSenses, after))]
+      .map(([work, { items, after }]) => [work, { items, after }] as const)));
 }
 
 async function readSelectedWorkClassificationBatch(
@@ -64,13 +71,17 @@ async function readSelectedWorkClassificationBatch(
   targets: readonly ClassificationTarget[],
   selectedSenses?: readonly string[],
   after?: string,
+  basisScan = false,
 ) {
   checkSelection(selectedSenses);
-  const limit = session.options.limit ?? 20;
+  // A single Work's continuation scan shares resolution and hydration across a
+  // bounded owner batch. Public pages keep their existing twenty-sense bound.
+  const limit = basisScan ? MAX_SUMMARY_BATCH : session.options.limit ?? 20;
   if (
     targets.length > WORK_CLASSIFICATION_BATCH_COST.works ||
     limit < 1 ||
-    limit > WORK_CLASSIFICATION_BATCH_COST.senses ||
+    limit > (basisScan ? MAX_SUMMARY_BATCH : WORK_CLASSIFICATION_BATCH_COST.senses) ||
+    targets.length * (limit + 1) > WORK_CLASSIFICATION_BATCH_COST.candidates ||
     new Set(targets.map((row) => row.work)).size !== targets.length ||
     targets.some((row) => !nativeId.test(row.work) || !nativeId.test(row.mainVersion))
   ) {
@@ -80,7 +91,7 @@ async function readSelectedWorkClassificationBatch(
   if (scope.kind === 'mine')
     throw new WorkReadInvalid('Personal classification decisions are not defined');
   if (!targets.length)
-    return new Map<string, { items: Static<typeof classificationItem>[]; after: string | null }>();
+    return new Map<string, SelectedClassifications>();
   const rows = await session.query(
     `SELECT ?work ?sense ?revision ?concept ?realmContext WHERE {
     ${targets
@@ -201,6 +212,7 @@ async function readSelectedWorkClassificationBatch(
         {
           items: [] as Static<typeof classificationItem>[],
           after: own.length > limit ? own[limit - 1]!.sense!.value : null,
+          candidates: own.slice(0, limit).map(row => row.sense!.value),
         },
       ] as const;
     }),
@@ -287,6 +299,9 @@ export async function readWorkClassifications(
   selectedSenses?: readonly string[],
 ) {
   checkSelection(selectedSenses);
+  const limit = session.options.limit ?? 20;
+  if (limit < 1 || limit > WORK_CLASSIFICATION_BATCH_COST.senses)
+    throw new WorkReadLimit('Classification batch exceeds its bounded relation');
   const basis = await readWorkBasis(session, work),
     scope = await session.scope();
   const binding = [
@@ -296,15 +311,34 @@ export async function readWorkClassifications(
     session.options.language ?? null,
     ...(selectedSenses ? [selectedSenses] : []),
   ];
-  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  const batch = await readWorkClassificationBatch(
-    session,
-    [{ work, mainVersion: basis.card.mainVersion }],
-    selectedSenses,
-    cursor?.after,
-  );
-  const { items, after } = batch.get(work)!;
-  const relevance = await readMetadataRelevance(session, work, scope, items);
+  let first: { selected: SelectedClassifications;
+    relevance: Awaited<ReturnType<typeof readMetadataRelevance>> } | undefined;
+  const position = await admittedReadPosition(session, JSON.stringify(binding), async function* (probe) {
+    yield [basis.dependencyToken];
+    let after: string | undefined;
+    do {
+      const selected = (await readSelectedWorkClassificationBatch(probe,
+        [{ work, mainVersion: basis.card.mainVersion }], selectedSenses, after,
+        true)).get(work)!;
+      const relevance = await readMetadataRelevance(probe, work, scope, selected.items);
+      if (!after) first = { selected, relevance };
+      yield selected.items.map(item => [item, relevance.get(item.sense) ?? null]);
+      after = selected.after ?? undefined;
+    } while (after);
+  });
+  const cursor = decodeReadCursor(session.options.cursor, binding, position);
+  // Retain at most one owner batch, never the inventory. Its admitted digest
+  // already owns the final fence, so the initial page needs no duplicate scan.
+  const initial = first!;
+  const firstCandidates = initial.selected.candidates.slice(0, limit);
+  const candidateSet = new Set(firstCandidates);
+  const { items, after } = cursor ? (await readWorkClassificationBatch(session,
+    [{ work, mainVersion: basis.card.mainVersion }], selectedSenses, cursor.after)).get(work)! : {
+      items: initial.selected.items.filter(item => candidateSet.has(item.sense)),
+      after: initial.selected.candidates.length > limit || initial.selected.after
+        ? firstCandidates.at(-1) ?? null : null,
+    };
+  const relevance = cursor ? await readMetadataRelevance(session, work, scope, items) : initial.relevance;
   for (const item of items) {
     const assessment = relevance.get(item.sense);
     item.relevance = assessment?.value ?? null;
@@ -316,8 +350,9 @@ export async function readWorkClassifications(
     ...pageResult(
       session,
       items,
-      after ? encodeReadCursor(binding, session.position, after) : null,
+      after ? encodeReadCursor(binding, position, after) : null,
     ),
+    sourcePosition: position,
     scope,
   };
 }
