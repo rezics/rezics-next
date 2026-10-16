@@ -2,7 +2,7 @@ import { primaryDiscoveryCreditBatch } from '../discovery/credits.ts';
 import { observeSearchPhase } from './operation-evidence.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { namedDiscoveryCredits } from '../discovery/credits.ts';
-import { DISCOVERY_COST, namedAuthorCredit, type DiscoveryCredit, type ProjectedCredit } from '../discovery/contract.ts';
+import { namedAuthorCredit, type DiscoveryCredit, type ProjectedCredit } from '../discovery/contract.ts';
 import { MAX_SUMMARY_BATCH, type ResourceSummary } from '../media/summary.ts';
 import { WorkReadUnavailable, workRead, type WorkReadSession } from '../work/read-session.ts';
 import { currentDisclosureViewer } from '../disclosure/viewer.ts';
