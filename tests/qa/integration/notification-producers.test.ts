@@ -257,11 +257,16 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
         root: { value: root },
                 rootRevision: { value: rootRevision }, author: { value: actor }, preparation: { value: preparationId } }] } };
     } } as unknown as FusekiClient;
-    const readerContent = { query: async (sql: string) => ({ rowCount: sql.includes('SELECT 1 FROM content.reply p')
-      ? Number(reviewApproved) : 1, rows: sql.includes('SELECT origin_realm')
-      ? [{ origin_realm: null }] : sql.includes('SELECT 1 FROM content.reply p') ? [{}]
-        : [{ reply, author: actor, rootTarget: root, rootRevision,
-          revisionId: replyRevision, body: 'A visible reply' }] }) } as unknown as Pool;
+    const readerContent = { query: async (sql: string) => {
+      // Approval belongs to Content's discovery function, including withdrawal.
+      if (sql.includes('content.discovery_current_reviews')) {
+        const rows = reviewApproved ? [{ ordinal: 0 }] : [];
+        return { rowCount: rows.length, rows };
+      }
+      return { rowCount: 1, rows: sql.includes('SELECT origin_realm')
+        ? [{ origin_realm: null }] : [{ reply, author: actor, rootTarget: root, rootRevision,
+          revisionId: replyRevision, body: 'A visible reply' }] };
+    } } as unknown as Pool;
     const replyReader = notificationProducerSubjectReader(access, readerContent,
       { fuseki: readerGraph, lineage: { dataEpoch: 'test', routingEpoch: 'test' } } as WorkActivationEnvironment);
     const replyInput = { principalId: recipientId, owner: 'graph', ref: reply,

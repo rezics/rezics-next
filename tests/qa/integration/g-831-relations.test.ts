@@ -34,7 +34,7 @@ type Page = { items: RelationPageEntry[]; next: string | null };
 test('G-831: catalogue relations, open derivation kinds, both directions, privacy, replay and stale authority', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>, resolve('.temp', 'relation-lexicon-qa', Bun.env.REZICS_QA_RUN_ID),
-    'openid agent:create work:create work:edit work:read collection:edit semantic:read source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read');
+    'openid agent:create work:create work:edit work:read library:write collection:edit semantic:read source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read');
   try {
     // Work intake is catalogue import. Seeding a definition presentation is
     // platform administration; the shared registry is empty in an isolated shard.
