@@ -245,14 +245,14 @@ for (const signed of [false, true]) {
     expect(page.count.value).toBe(2);
     expect(page.nextCursor).toBeNull();
     expect(f.batches.map(batch => batch.map(target => target.resource)))
-      .toEqual([[realm], [id(11), id(12), id(13)], [realm]]);
+      .toEqual([[realm], [id(11), id(12), id(13)]]);
+    await f.session.fenceDependencies();
+    expect(f.batches.filter(batch => batch.some(target => target.resource === realm))).toHaveLength(2);
     await expect(readRealmDecision(f.session, realm, id(11))).rejects.toThrow(
       'Decision is unavailable',
     );
     f.fail();
-    await expect(readRealmDecisions(f.session, realm)).rejects.toThrow(
-      'Disclosure owner is unavailable',
-    );
+    await expect(f.session.fenceDependencies()).rejects.toThrow('Disclosure owner is unavailable');
   });
 
   test(`G-904: Realm Work pages select admitted identities before hydration (${signed ? 'signed' : 'anonymous'})`, async () => {
@@ -286,7 +286,9 @@ for (const signed of [false, true]) {
       [id(2), id(3)],
     ]);
     expect(f.batches.map(batch => batch.map(target => target.resource)))
-      .toEqual([[id(99)], [id(1), id(2), id(3)], [id(99)]]);
+      .toEqual([[id(99)], [id(1), id(2), id(3)]]);
+    await f.session.fenceDependencies();
+    expect(f.batches.filter(batch => batch.some(target => target.resource === id(99)))).toHaveLength(2);
   });
 
   test(`G-904: rankings fill admitted scores and use only admitted lookahead (${signed ? 'signed' : 'anonymous'})`, async () => {

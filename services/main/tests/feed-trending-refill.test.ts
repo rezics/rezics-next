@@ -182,11 +182,14 @@ for (const rejection of ['hide', 'absent', 'denied'] as const) {
 
 test('G1034: Ranking raw continuation counts rejected rows and never hydrates its lookahead', async () => {
   const f = fixture(8, 2, 'denied');
-  const first = await readRankings(f.session({ limit: 3 }), f.projection,
+  const session = f.session({ limit: 3 });
+  const first = await readRankings(session, f.projection,
     { realm: null, metric: 'reads', interval: 'week', order: 'growth' });
   expect(first.items.map(item => item.id)).toEqual([f.candidates[2]!.work]);
   expect(first.nextCursor).toEqual(expect.any(String));
   expect(f.admissions.flat()).toEqual(f.candidates.slice(0, 3).map(row => row.work));
+  expect(f.hydration.flat()).toEqual([f.candidates[2]!.work]);
+  await session.fenceDependencies();
   expect(f.hydration.flat()).toEqual([f.candidates[2]!.work, f.candidates[2]!.work]);
   const second = await readRankings(f.session({ limit: 3, cursor: first.nextCursor! }), f.projection,
     { realm: null, metric: 'reads', interval: 'week', order: 'growth' });

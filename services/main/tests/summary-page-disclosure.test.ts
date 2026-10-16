@@ -185,7 +185,11 @@ test('ranking withholds a cover the viewer may not see', async () => {
   expect(ranking.items[0]!.cover.kind).toBe('fallback');
   const passes = f.evaluated.filter(call => call.paired && call.targets.some(target => target.component === 'name')
     && call.targets.some(target => target.owner === 'media' && target.component === 'cover'));
-  expect(passes).toHaveLength(2);
+  expect(passes).toHaveLength(1);
+  await f.session.fenceDependencies();
+  const closedPasses = f.evaluated.filter(call => call.paired && call.targets.some(target => target.component === 'name'));
+  expect(closedPasses).toHaveLength(2);
+  expect(closedPasses.every(call => call.targets.some(target => target.owner === 'media' && target.component === 'cover'))).toBe(true);
 });
 
 test('ranking does not label a signed-in-only name public', async () => {
@@ -205,6 +209,10 @@ test('ranking does not label a signed-in-only name public', async () => {
   expect(summaries.some(summary => summary.disclosure === 'restricted' && summary.name.value === title)).toBe(true);
   expect(summaries.every(summary => summary.disclosure !== 'public')).toBe(true);
   const passes = f.evaluated.filter(call => call.paired && call.targets.some(target => target.component === 'name'));
-  expect(passes).toHaveLength(2);
+  expect(passes).toHaveLength(1);
+  await f.session.fenceDependencies();
+  const closedPasses = f.evaluated.filter(call => call.paired && call.targets.some(target => target.component === 'name'));
+  expect(closedPasses).toHaveLength(2);
+  expect(closedPasses.every(call => call.targets.some(target => target.owner === 'media' && target.component === 'cover'))).toBe(true);
   expect(passes.every(call => call.targets.some(target => target.owner === 'media' && target.component === 'cover'))).toBe(true);
 });
