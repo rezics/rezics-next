@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
+import { Pool } from 'pg';
 import { ZONE_PRESETS } from '../../../services/main/src/modules/zone/presentation-format.ts';
-import { type SeedApi } from './api.ts';
+import { SeedApiError, type SeedApi } from './api.ts';
 import { officialTheme } from './official-plan.ts';
 import { seedOfficialThemes } from './official-theme-step.ts';
 import {
@@ -9,6 +10,8 @@ import {
   grantOfficialZoneSeed,
 } from './operator.ts';
 import { seedKey } from './plan.ts';
+import { adoptZoneSpace } from './realms-step.ts';
+import { grantVnSeedAuthority } from './vn-catalogue-step.ts';
 import { readOrCreateOfficialZone, updateOfficialZonePresentation } from './zones.ts';
 import {
   afterCatchUp,
@@ -50,6 +53,8 @@ interface WikiPort {
   official: Pick<SeedApi, 'get' | 'put'>;
   actor: string;
   token: string;
+  spaceToken?: string;
+  space?: SpaceReceipt;
   officialToken: string;
   prepareWork(work: WorkReceipt): Promise<void>;
 }
@@ -150,7 +155,7 @@ async function publish(port: WikiPort, key: string, title: string, body: string)
  * Chapter writes are batches of at most 16. */
 export async function applyOfficialWiki(port: WikiPort) {
   const { api, actor, token } = port;
-  const space = await api.post<SpaceReceipt>(
+  const space = port.space ?? await api.post<SpaceReceipt>(
     '/v1/spaces',
     {
       profile: 'space-realm-v2',
@@ -160,7 +165,7 @@ export async function applyOfficialWiki(port: WikiPort) {
       capabilities: ['realm'],
       actingSubject: actor,
     },
-    token,
+    port.spaceToken ?? token,
     seedKey('wiki-space', slug),
   );
   await readOrCreateOfficialZone(api, {
@@ -367,11 +372,24 @@ export async function seedOfficialWiki(state: SeedState): Promise<void> {
   await grantOfficialZoneSeed(input, wikiZone);
   for (const collection of Object.values(collections))
     await grantCuratedCollectionSeed(input, collection);
+  const retained = await adoptZoneSpace(path => state.api.get<Record<string, unknown>>(path, owner.token)
+    .catch((error: unknown) => {
+      if (error instanceof SeedApiError && error.status === 404) return null;
+      throw error;
+    }), wikiZone, owner.actingSubject);
+  const pool = new Pool({ connectionString: input.accessDatabaseUrl });
+  try {
+    await grantVnSeedAuthority(pool, { ...input, ownerAccountSubject: input.accountSubject },
+      'space:create:root', 'space.create');
+  } finally { await pool.end(); }
+  const spaceToken = await state.api.token(state.operatorSession.cookie);
   const result = await applyOfficialWiki({
     api: state.api,
     official: state.operatorSession.api,
     actor: owner.actingSubject,
     token: owner.token,
+    spaceToken,
+    ...(retained ? { space: retained } : {}),
     officialToken: state.operatorSession.token,
     prepareWork: (work) =>
       grantHomeSeedAuthority(input, [
