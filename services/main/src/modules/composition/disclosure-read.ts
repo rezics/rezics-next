@@ -88,7 +88,7 @@ export function compositionTargetBatchReader(session: WorkReadSession, profile: 
     else {
       // Every reader gets the target owners' baseline. Profile authority can
       // additionally admit restricted targets for a principal acting as a subject.
-      const baseline = await read(native);
+      const baseline = await canReadCompositionResources(session, native);
       if (!session.principal || !session.options.actingSubject) readable = baseline;
       else {
         const granted = await canReadStructureTargets(profile, { environment: session.deps.environment,

@@ -40,11 +40,20 @@ async function change(created: Changed, operations: object[]) {
 test('a section-list reader navigates nested declared containers and lists readable entries', async () => {
   const owner = await work('Section list navigation');
   const target = await work('Entry target');
+  await editor.grant(`content:draft:${target.work}`, 'content.draft');
+  const variantId = `urn:rezics:variant:${crypto.randomUUID()}`;
+  const content = await json<{ revisionId: string }>(await editor.send('POST', '/v1/content-drafts', {
+    profile: 'content-text-v1', resourceId: target.work, variantId,
+    language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
+    expectedHead: null, body: 'Entry Content', actingSubject: editor.actor,
+  }), 201);
   const created = await composition(owner);
   const outer = await change(created, [{ op: 'insert', role: 'section', parent: created.structure, position: 'last' }]);
   const inner = await change({ ...created, ...outer }, [{ op: 'insert', role: 'section', parent: outer.occurrences[0], position: 'last' }]);
   const inserted = await change({ ...created, ...inner }, [{ op: 'insert', role: 'entry', parent: inner.occurrences[0],
-    position: 'last', target: target.work, qualifier: { note: 'Read this entry' } }]);
+    position: 'last', target: target.work, qualifier: { note: 'Read this entry' },
+    selection: { mode: 'fixed-revision', revision: content.revisionId,
+      selector: { grain: 'content', variantId, revision: content.revisionId } } }]);
   const found = await seekChapter(stack.env, { structure: created.structure, canReadTarget: async () => true });
   expect(found?.record).toMatchObject({ occurrence: inserted.occurrences[0], role: 'entry', target: target.work });
   const contents = await json<{ items: Array<{ role: string; target: string; availability: string }> }>(await editor.read(
