@@ -31,7 +31,10 @@ regression. Ranking acceptance now shares one QA bucket clock across source and 
 and such a failure is now attributed to a branch only when it repeats there.
 Main and Accounts no longer reset a slow request's socket: request deadlines
 answer with HTTP errors. Main's confirmation at `b3fe1c57d9` on 2026-10-17
-passed all 408 cells with none failed or unrun.
+passed all 408 cells with none failed or unrun. The 12-hour reading at 04:26
+was 7.47 M per landing, and 4.14 M for the repairs after 01:15. Its largest
+avoidable cost was goalctl's dispatch tests starting real model sessions
+through the machine's account settings; tests are being isolated from them.
 
 Shared capabilities are implemented once ([platform thesis](../../product/platform-thesis.md)).
 The program inventories, across every in-scope vertical and source, the shared
