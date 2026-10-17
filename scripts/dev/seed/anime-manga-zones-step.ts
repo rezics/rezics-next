@@ -7,6 +7,7 @@ import type { SerialStatus } from '../../../services/main/src/modules/work/metad
 import { statementDecisionBody, classifiedStatementBody, discloseClassificationConcept,
   shareClassificationContext } from './classified-statement.ts';
 import { collectionPage, createSpace } from './ln-vn-zones-step.ts';
+import { adoptZoneSpace } from './realms-step.ts';
 import { officialTheme } from './official-plan.ts';
 import { grantOfficialZoneSeed, type LocalOperatorInput } from './operator.ts';
 import { seedKey } from './plan.ts';
@@ -285,12 +286,12 @@ export async function applyAnimeMangaZones(port: SeedPort, samples = animeMangaS
     { id: 'manga' as const, name: 'Manga' },
   ]) {
     const zone = zoneIri(spec.id);
-    const space = await createSpace(port, { id: spec.id, name: spec.name, language: 'en', routeSegment: spec.id,
+    await port.grant(`zone:edit:${zone}`, 'zone.edit');
+    await port.grant(`semantic:read:${zone}`, 'semantic.read');
+    const space = await createCatalogueSpace(port, { id: spec.id, name: spec.name, language: 'en', routeSegment: spec.id,
       preset: 'editorial', mountSegment: 'catalogue', navigation: [{ label: 'Browse', href: '/browse' }],
       browse: [], announcement: `${spec.name} in the catalogue`, sharedMember: '' }, zone);
     const collection = `https://rezics.com/id/${stableId(`catalogue-collection:${spec.id}`)}`;
-    await port.grant(`zone:edit:${zone}`, 'zone.edit');
-    await port.grant(`semantic:read:${zone}`, 'semantic.read');
     await call(port, 'POST', '/v1/zones', { zone, space: space.space, disclosure: 'public', name: spec.name,
       language: 'en', actingSubject: actor }, seedKey('catalogue-zone', spec.id));
     await port.grant(`collection:edit:${collection}`, 'collection.edit');
@@ -315,6 +316,20 @@ export async function applyAnimeMangaZones(port: SeedPort, samples = animeMangaS
   return { works, zones };
 }
 
+/** Official catalogue setup exceeds one member's monthly Space allowance.
+ * Keep ordinary member quota intact and use explicit operator delegation.
+ * Adopt earlier member-created Zones before changing the issuing principal. */
+export async function createCatalogueSpace(port: SeedPort, spec: Parameters<typeof createSpace>[1], zone: string) {
+  if (!port.spaceRequest) return createSpace(port, spec, zone);
+  const retained = await adoptZoneSpace(async path => {
+    const result = await port.request('GET', path);
+    if (result.status === 404) return null;
+    if (result.status !== 200) throw new Error(`Catalogue Space read HTTP ${result.status}`);
+    return result.body as Record<string, unknown>;
+  }, zone, port.actingSubject);
+  return retained ?? createSpace({ ...port, request: port.spaceRequest }, spec, zone);
+}
+
 export async function seedAnimeMangaZones(state: SeedState): Promise<void> {
   const session = state.sessions[0];
   if (!session || !state.operatorInput || !state.operatorSession) {
@@ -328,7 +343,13 @@ export async function seedAnimeMangaZones(state: SeedState): Promise<void> {
       actingSubject: session.actingSubject,
       request: (method, path, body, key) => seedHttp(state, () => session.token, method, path, body, key),
       officialRequest: (method, path, body, key) => seedHttp(state, () => state.operatorSession!.token, method, path, body, key),
+      spaceRequest: async (method, path, body, key) => {
+        const token = await state.api.token(state.operatorSession!.cookie);
+        return seedHttp(state, () => token, method, path, body, key);
+      },
       grant: async (scope, action) => {
+        if (action === 'space.create') await grantVnSeedAuthority(pool,
+          { ...input, ownerAccountSubject: input.accountSubject }, scope, action);
         if (action === 'zone.official') {
           await grantOfficialZoneSeed(input, scope.slice('zone:official:'.length));
           return;

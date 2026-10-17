@@ -19,6 +19,8 @@ export interface SeedPort {
   request(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, key?: string): Promise<HttpResult>;
   grant(scope: string, action: string): Promise<void>;
   officialRequest?: SeedPort['request'];
+  /** The authorized local operator creates official catalogue Spaces through its site client. */
+  spaceRequest?: SeedPort['request'];
   refresh?: () => Promise<void>;
 }
 export interface VnWorkRecord { vndb: string; iri: string; mainVersion: string;

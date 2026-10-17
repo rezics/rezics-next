@@ -5,13 +5,33 @@ import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { catalogueIntakePath } from '../../../tests/fixtures/catalogue/intake.ts';
 import { checkFirstPartyBundle } from '../../../services/main/src/modules/theme/first-party-bundle.ts';
-import { animeMangaSamplePlan, applyAnimeMangaZones, type CatalogueSample } from './anime-manga-zones-step.ts';
+import { animeMangaSamplePlan, applyAnimeMangaZones, createCatalogueSpace, type CatalogueSample } from './anime-manga-zones-step.ts';
 import { officialTheme } from './official-plan.ts';
 import { approveOfficialPackage } from './official-theme-step.ts';
 import { seedKey } from './plan.ts';
 import type { HttpResult, SeedPort } from './vn-catalogue-step.ts';
 
 const native = (suffix: string) => `https://rezics.com/id/00000000-0000-4000-a000-${suffix.padStart(12, '0')}`;
+
+test('official catalogue Spaces use delegated operator creation and preserve earlier member-created Spaces', async () => {
+  const spec = { id:'anime',name:'Anime',language:'en',routeSegment:'anime',preset:'editorial' as const,
+    mountSegment:'catalogue',navigation:[],browse:[],announcement:'',sharedMember:'' };
+  for (const retained of [true,false]) {
+    let memberWrites=0, operatorWrites=0;
+    const receipt = { space:native('2'),realm:native('3') };
+    const port:SeedPort = { actingSubject:native('1'),grant:async()=>{},
+      request:async(method,path)=> {
+        if(method!=='GET') { memberWrites++; throw new Error('Member creation quota must not be spent'); }
+        if(!retained) return {status:404,body:{}};
+        return {status:200,body:path.includes('/zones/') ? {configuration:{...receipt,defaultRealm:receipt.realm}} : {id:receipt.realm,space:receipt.space}};
+      },
+      spaceRequest:async()=>{operatorWrites++;return {status:201,body:receipt};},
+    };
+    expect(await createCatalogueSpace(port,spec,native('4'))).toMatchObject(receipt);
+    expect(memberWrites).toBe(0);
+    expect(operatorWrites).toBe(retained?0:1);
+  }
+});
 
 test('the sample has a page of each format filter, mixed languages, a long series and the absent cases', () => {
   const plan = animeMangaSamplePlan();
