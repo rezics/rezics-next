@@ -188,10 +188,10 @@ export async function resetIntegrationState(
   };
 }
 
-/** Only after the test command exits: deleting quads leaves TDB2 pages on
- * tmpfs, charged to Fuseki's memory limit across leases. Restarting this one
- * disposable service remounts its tmpfs before the fresh graph is bootstrapped.
- * Persistent stacks retain their physical data and use the logical reset. */
+/** Only when releasing a finished run's lease: deleting quads leaves TDB2
+ * pages on tmpfs, charged to Fuseki's memory limit across leases. Restarting
+ * this disposable service remounts its tmpfs before the fresh graph is built.
+ * Batch resets keep native startup state; persistent stacks keep their data. */
 async function reclaimIntegrationGraphStorage(
   apps: Record<string, string>, compose: Record<string, string>, composePath: string,
 ): Promise<void> {
@@ -214,7 +214,8 @@ if (import.meta.main) {
   const composePath = process.argv[3]!;
   const apps = readEnv(appsPath);
   const compose = readEnv(composePath);
-  await reclaimIntegrationGraphStorage(apps, compose, composePath);
+  if (process.argv[4] === '--release')
+    await reclaimIntegrationGraphStorage(apps, compose, composePath);
   const next = await resetIntegrationState(apps, compose);
   replacePrivate(appsPath, next);
   replacePrivate(composePath, {

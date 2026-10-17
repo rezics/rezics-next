@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
+import { commandAsync } from '../../../scripts/qa/core.ts';
 import { createQaStackPool, type QaStackPoolEntry } from '../../../scripts/qa/stack-pool.ts';
 import { qaMemoryDeadline } from '../../../scripts/qa/memory-admission.ts';
 import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
@@ -111,6 +112,18 @@ async function runPoolProbe(): Promise<void> {
       clean: { rows, objectAbsent: true, messages: inbox.total, fusekiRetainedBytes } };
     writeFileSync(join(directory, `${probe}.json`), JSON.stringify(evidence), { mode: 0o600 });
   } finally { await pool.end(); }
+  if (probe === 'first') {
+    // A batch reset must not discard service state while its run still owns
+    // the stack. Physical reclaim belongs to release, before the next lease.
+    const startedAt = docker('inspect', '--format', '{{.State.StartedAt}}', container);
+    const reset = await commandAsync(root, 'bun', ['scripts/qa/integration-reset.ts',
+      join(stackDirectory, 'apps.env'), join(stackDirectory, 'compose.env')], 60_000,
+      preserveReapEnvironment(process.env));
+    expect(reset.ok, reset.output).toBe(true);
+    expect(docker('inspect', '--format', '{{.State.StartedAt}}', container)).toBe(startedAt);
+    expect(Number(docker('exec', container, 'stat', '-c', '%s', '/fuseki/databases/pool-reset-probe')))
+      .toBe(16 * 1024 * 1024);
+  }
   if (probe === 'crash') while (true) await Bun.sleep(1000);
 }
 

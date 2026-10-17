@@ -635,7 +635,7 @@ async function runShardWork(
       if (lease && run.ok && record.stage === 'test') {
         const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
         const reset = await commandAsync(root, 'bun', ['scripts/qa/integration-reset.ts',
-          join(stackDir, 'apps.env'), join(stackDir, 'compose.env')], 180_000, environment, noteMemory, { runDeadline });
+          join(stackDir, 'apps.env'), join(stackDir, 'compose.env'), '--release'], 180_000, environment, noteMemory, { runDeadline });
         if (reset.ok) {
           parked = await lease.park(readEnv(join(stackDir, 'apps.env')), readEnv(join(stackDir, 'compose.env')));
           destroyedReason = !qaStackPoolEnabled(qaSlotDirectory) ? 'switch off'

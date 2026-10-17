@@ -278,6 +278,7 @@ function coldPoolHarness(directory: string, inspectionError: string,
       if (command === 'docker' && args[0] === 'inspect') return result(true, '{}');
       if (args[0] === 'scripts/qa/bootstrap.ts') { events.push('bootstrap'); return result(); }
       if (args[0] === 'scripts/qa/integration-reset.ts') {
+        expect(args[3]).toBe('--release');
         events.push('reset');
         if (mode.switchOffAfterReset) enabled = false;
         return result(!mode.resetFailed);
