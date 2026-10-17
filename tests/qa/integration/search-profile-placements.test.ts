@@ -77,8 +77,16 @@ test('Anime composition parts are searchable while section-list targets follow r
     const relay = async () => {
       await deliverFixtureContentEligibility(relayEnv, stack.content);
       const cut = await stack.content.ownerPosition();
-      for (let i = 0; i < 12 && (await stack.contentCursor.read(stack.contentConsumer)).sequence !== cut.sequence; i++) {
-        await relayContentProjectionOnce(relayEnv, stack.content, stack.contentCursor, stack.contentConsumer);
+      // A new consumer also replays earlier files' events in the shared shard.
+      for (;;) {
+        const checkpoint = await stack.contentCursor.read(stack.contentConsumer);
+        if (checkpoint.dataEpoch !== cut.dataEpoch || BigInt(checkpoint.sequence) > BigInt(cut.sequence)) {
+          throw new Error('Content projection differs from the selected source cut');
+        }
+        if (checkpoint.sequence === cut.sequence) break;
+        if (!await relayContentProjectionOnce(relayEnv, stack.content, stack.contentCursor, stack.contentConsumer)) {
+          throw new Error('Content projection stopped before the selected source cut');
+        }
       }
     };
     await relay();
