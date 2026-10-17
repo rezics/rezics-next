@@ -27,7 +27,7 @@ passed 408 cells with none failed or unrun. The 12-hour reading
 at 01:15 on 2026-10-17 was 5.76 M per landing. Its largest avoidable cost was a
 returned round on that repair: a ranking run that crossed midnight UTC read an
 empty current-day bucket, and the failure was taken for the storage change's
-regression. Ranking acceptance is being made independent of bucket boundaries,
+regression. Ranking acceptance now shares one QA bucket clock across source and reads,
 and such a failure is now attributed to a branch only when it repeats there.
 
 Shared capabilities are implemented once ([platform thesis](../../product/platform-thesis.md)).
