@@ -70,6 +70,11 @@ build is running. See the [flock manual](https://man7.org/linux/man-pages/man1/f
 Windows uses a named kernel mutex around the same input checks, memory admission
 and bounded image build. The builder owns the mutex until its command exits.
 
+Frontend Task commands invoke the installed Node CLI entry points directly so
+Windows does not interpret POSIX `.bin` shims as commands. Vinext forwards
+`--host` to Vite; its retired `--hostname` option aborts startup. Storybook uses
+`--ci` to suppress prompts and browser opening; version 11 removed `--no-open`.
+
 The module packages with `-DskipTests`; `task jena:test` builds the separate
 `module-test` target with the original Maven options and locked fixture cache.
 The affected merge gate selects this native proof for every `infra/jena/**`

@@ -215,7 +215,7 @@ test('G-542: real governance restrict/restore and r18 policy matrix, public API 
         await portReservation.stop(true);
         const log = openSync(resolve(directory, 'web.log'), 'w', 0o600);
         try {
-          web = spawn('task', ['web:dev', '--', '--hostname', '127.0.0.1', '--port', String(webPort)], { cwd: resolve('.'), detached: true,
+          web = spawn('task', ['web:dev', '--', '--host', '127.0.0.1', '--port', String(webPort)], { cwd: resolve('.'), detached: true,
             env: { ...Bun.env, VINEXT_NO_DEV_LOCK: '1', MAIN_ORIGIN: `http://127.0.0.1:${server.port}`,
               ACCOUNT_ORIGIN: f.account.issuer.replace(/\/api\/auth$/, ''), NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' },
             stdio: ['ignore', log, log] });

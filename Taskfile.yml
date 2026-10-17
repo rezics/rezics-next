@@ -168,13 +168,13 @@ tasks:
     desc: Run vinext alone, without Aspire, against the shared backend (defaults in apps/web/.env.example; pass -- --port <n>).
     dir: apps/web
     cmds:
-      - ../../node_modules/.bin/vinext dev --host 127.0.0.1 {{.CLI_ARGS}}
+      - node ../../node_modules/vinext/dist/cli.js dev --host 127.0.0.1 {{.CLI_ARGS}}
 
   web:build:
     desc: Build the vinext Workers application.
     dir: apps/web
     cmds:
-      - ../../node_modules/.bin/vinext build {{.CLI_ARGS}}
+      - node ../../node_modules/vinext/dist/cli.js build {{.CLI_ARGS}}
 
   web:preview:
     desc: Build the web Worker for a running QA stack and serve it with wrangler on port 3003.
@@ -203,13 +203,13 @@ tasks:
     desc: Run Storybook on port 6006 with its MCP endpoint at /mcp.
     dir: apps/web
     cmds:
-      - ../../node_modules/.bin/storybook dev -p 6006 --host 127.0.0.1 --no-open {{.CLI_ARGS}}
+      - node ../../node_modules/storybook/dist/bin/dispatcher.js dev -p 6006 --host 127.0.0.1 --ci {{.CLI_ARGS}}
 
   storybook:build:
     desc: Build static Storybook into .temp/storybook/static.
     dir: apps/web
     cmds:
-      - ../../node_modules/.bin/storybook build --output-dir ../../.temp/storybook/static
+      - node ../../node_modules/storybook/dist/bin/dispatcher.js build --output-dir ../../.temp/storybook/static
 
   storybook:test:
     desc: Run Storybook stories as Vitest browser tests with accessibility checks.
@@ -223,13 +223,13 @@ tasks:
     desc: Run the Accounts app alone with vinext, without Aspire, against the shared Account service (defaults in apps/accounts/.env.example; pass -- --port <n>).
     dir: apps/accounts
     cmds:
-      - ../../node_modules/.bin/vinext dev --host 127.0.0.1 {{.CLI_ARGS}}
+      - node ../../node_modules/vinext/dist/cli.js dev --host 127.0.0.1 {{.CLI_ARGS}}
 
   accounts:build:
     desc: Build the Accounts vinext Workers application.
     dir: apps/accounts
     cmds:
-      - ../../node_modules/.bin/vinext build {{.CLI_ARGS}}
+      - node ../../node_modules/vinext/dist/cli.js build {{.CLI_ARGS}}
 
   accounts:typecheck:
     deps: [toolchain:bun-check]
@@ -242,7 +242,7 @@ tasks:
     desc: Run the Accounts Storybook on port 6007.
     dir: apps/accounts
     cmds:
-      - ../../node_modules/.bin/storybook dev -p 6007 --host 127.0.0.1 --no-open {{.CLI_ARGS}}
+      - node ../../node_modules/storybook/dist/bin/dispatcher.js dev -p 6007 --host 127.0.0.1 --ci {{.CLI_ARGS}}
 
   accounts:storybook:test:
     desc: Run the Accounts stories as Vitest browser tests with accessibility checks.

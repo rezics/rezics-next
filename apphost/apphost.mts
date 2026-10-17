@@ -166,7 +166,7 @@ const wranglerRegistry = join(root, '.temp', 'wrangler-registry');
 const accountsEndpoint = mode === 'backend' && env.ACCOUNTS_PORT
   ? { port: Number(env.ACCOUNTS_PORT), isProxied: false, env: 'PORT' } : frontendEndpoint(3004);
 const accounts = configure(builder.addExecutable('accounts', 'sh', accountsApp,
-  ['-c', 'exec ../../node_modules/.bin/vinext dev --hostname 127.0.0.1 --port "$PORT"']),
+  ['-c', 'exec ../../node_modules/.bin/vinext dev --host 127.0.0.1 --port "$PORT"']),
 accountsSpec, ['ACCOUNT_SERVICE_ORIGIN', 'WEB_ORIGIN'])
   .withEnvironment('ACCOUNT_SERVICE_ORIGIN', accountUrl)
   .withEnvironment('WRANGLER_REGISTRY_PATH', wranglerRegistry)
@@ -176,7 +176,7 @@ const accountsUrl = accounts.getEndpoint('http');
 
 const webAuthPublicPath = join(resolve(envFile, '..'), 'web-auth', 'public.json');
 const webApp = configure(builder.addExecutable('web', 'sh', web,
-  ['-c', 'set -e; WEB_OAUTH_CLIENT_ID="$(node -e \'const id = JSON.parse(require("node:fs").readFileSync(process.env.REZICS_WEB_AUTH_PUBLIC_PATH, "utf8")).clientId; if (!id) process.exit(1); process.stdout.write(id)\')"; export WEB_OAUTH_CLIENT_ID; exec ../../node_modules/.bin/vinext dev --hostname 127.0.0.1 --port "$PORT"']),
+  ['-c', 'set -e; WEB_OAUTH_CLIENT_ID="$(node -e \'const id = JSON.parse(require("node:fs").readFileSync(process.env.REZICS_WEB_AUTH_PUBLIC_PATH, "utf8")).clientId; if (!id) process.exit(1); process.stdout.write(id)\')"; export WEB_OAUTH_CLIENT_ID; exec ../../node_modules/.bin/vinext dev --host 127.0.0.1 --port "$PORT"']),
 webSpec, ['MAIN_ORIGIN', 'ACCOUNT_ORIGIN', 'WEB_OAUTH_CLIENT_ID'])
   .withEnvironment('REZICS_WEB_AUTH_PUBLIC_PATH', webAuthPublicPath)
   .withEnvironment('WRANGLER_REGISTRY_PATH', wranglerRegistry)
@@ -192,7 +192,7 @@ await accounts.withEnvironment('WEB_ORIGIN', webApp.getEndpoint('http'));
 await accounts.waitFor(webApp);
 
 await builder.addExecutable('storybook', 'sh', web,
-  ['-c', 'exec ../../node_modules/.bin/storybook dev --host 127.0.0.1 --no-open -p "$PORT"'])
+  ['-c', 'exec ../../node_modules/.bin/storybook dev --host 127.0.0.1 --ci -p "$PORT"'])
   .withHttpEndpoint(frontendEndpoint(6006));
 
 await builder.build().run();
