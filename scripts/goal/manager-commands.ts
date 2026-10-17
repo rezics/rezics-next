@@ -141,7 +141,7 @@ export function coordinatorStartDescriptor(options: ReturnType<typeof coordinato
   };
   const [program,args] = command(true);
   return {goal,generation:randomUUID(),session,engine,effort,cwd,home,
-    program:Bun.which(program) ?? program,args,startArgs:command(false)[1],socket,server:tmuxServer(socket),
+    program:Bun.which(program, { PATH: process.env.PATH }) ?? program,args,startArgs:command(false)[1],socket,server:tmuxServer(socket),
     env:{PATH:process.env.PATH ?? '',HOME:homedir(),GOAL_ID:goal,GOAL_MANAGER:`goal-${goal}`,GOAL_SETTINGS_DIRECTORY:settingsDirectory(),
       ...(engine === 'claude' ? (process.env.CLAUDE_CONFIG_DIR ? {CLAUDE_CONFIG_DIR:home} : {}) : engineEnv(engine)),
       ...Object.fromEntries(['GOAL_MAX_WORKERS','GOAL_MEMORY_FLOOR_GIB','STORYBOOK_MAX_WORKERS','GOAL_CODEX_HOME',
@@ -159,7 +159,7 @@ function eventCoordinator(directory: string): GoalCoordinator {
       if (!activeGoals(eventLedger(directory)).includes(descriptor.goal)) throw new Error('Enrolled Goal is no longer active');
       const home = descriptor.engine === 'claude' ? realpathSync(claudeConfigHome()) : engineEnv(descriptor.engine).CODEX_HOME;
       const program = launcherOf(descriptor.engine);
-      if ((home ? realpathSync(home) : '') !== descriptor.home || (Bun.which(program) ?? program) !== descriptor.program)
+      if ((home ? realpathSync(home) : '') !== descriptor.home || (Bun.which(program, { PATH: process.env.PATH }) ?? program) !== descriptor.program)
         throw new Error('Selected engine account home or launcher changed; handover required');
       managerWakeGates(descriptor.engine);
     }});
@@ -223,7 +223,7 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
         ensureTermspacesSession();
         const socket = termspacesTarget().socket;
         const descriptor: LaunchDescriptor = {goal,generation:randomUUID(),session,engine,effort,cwd,home,previousOwner,
-          program:Bun.which('claude') ?? 'claude',args:claudeWakeArgs(session,model!,effort),socket,server:tmuxServer(socket),
+          program:Bun.which('claude', { PATH: process.env.PATH }) ?? 'claude',args:claudeWakeArgs(session,model!,effort),socket,server:tmuxServer(socket),
           env:{PATH:process.env.PATH ?? '',HOME:homedir(),GOAL_ID:goal,GOAL_SETTINGS_DIRECTORY:settingsDirectory(),
             GOAL_MANAGER:managerOf(eventLedger(directory),goal),
             ...(process.env.CLAUDE_CONFIG_DIR ? {CLAUDE_CONFIG_DIR:process.env.CLAUDE_CONFIG_DIR} : {}),
@@ -242,7 +242,7 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
       const [program, launchArgs] = launchCommand({id:goal,engine,effort,session,worktree:cwd,resume:true,
         prompt:WAKE_PROMPT,lastMessage:WAKE_LAST_MESSAGE});
       const descriptor: LaunchDescriptor = {goal,generation:randomUUID(),session,engine,effort,cwd,home,previousOwner,
-        program:Bun.which(program) ?? program,args:launchArgs,socket,server:tmuxServer(socket),
+        program:Bun.which(program, { PATH: process.env.PATH }) ?? program,args:launchArgs,socket,server:tmuxServer(socket),
         env:{PATH:process.env.PATH ?? '',HOME:homedir(),...engineEnv(engine),CODEX_HOME:home,GOAL_ID:goal,GOAL_SETTINGS_DIRECTORY:settingsDirectory(),
           GOAL_MANAGER:managerOf(eventLedger(directory),goal),
           ...(process.env.GOAL_MAIL_STATE_DIR ? {GOAL_MAIL_STATE_DIR:directory} : {}),
