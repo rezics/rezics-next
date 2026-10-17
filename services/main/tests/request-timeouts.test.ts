@@ -5,6 +5,7 @@ import { Pool } from 'pg';
 import { createMainApp } from '../src/app.ts';
 import { FusekiClient, fusekiReadBudget } from '../src/infrastructure/fuseki.ts';
 import { AccountAssertionVerifier } from '../src/modules/account/verify-assertion.ts';
+import { GO_PROXY_LIVE_RUN_TIMEOUT_MS } from '../src/modules/package/go-refresh.ts';
 import { createAccountApp } from '../../account/src/app.ts';
 import type { createAccountAuth } from '../../account/src/auth.ts';
 
@@ -22,6 +23,19 @@ function accountApp(pool: Pool) {
     secret: 'request-timeout-test-secret-at-least-32-characters' } } as ReturnType<typeof createAccountAuth>;
   return createAccountApp(auth, pool);
 }
+
+test.each(['Main', 'Accounts'] as const)('%s bounds idle connections above the longest request deadline', async service => {
+  const pool = new Pool();
+  try {
+    // Main's live Go capture has a two-minute deadline; Accounts' dependency
+    // budgets are shorter. Both listeners must leave room for an HTTP result.
+    const app = service === 'Main' ? mainApp() : accountApp(pool);
+    const seconds = app['~config']?.serve?.idleTimeout;
+    expect(Number.isSafeInteger(seconds)).toBe(true);
+    expect(seconds).toBeGreaterThan(GO_PROXY_LIVE_RUN_TIMEOUT_MS / 1000);
+    expect(seconds).toBeLessThanOrEqual(255);
+  } finally { await pool.end(); }
+});
 
 test('Main and Accounts answer handlers that outlast Bun\'s default socket idle timeout', async () => {
   // Both real composition roots listen with their production server options.

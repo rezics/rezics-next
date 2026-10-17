@@ -338,10 +338,10 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
   work?.realmAdmin?.configureFollowGraph?.(fuseki);
   if (work) composeDisclosure(work);
   // Registered first so it also handles every plugin route mounted below.
-  // Bun's idle timer also cuts off handlers awaiting a dependency. Let the
-  // operation/client deadlines return their HTTP errors instead of a reset.
+  // The longest online budget is the two-minute Go capture. Leave headroom for
+  // operation/client deadlines to return HTTP errors while closing idle clients.
   // https://bun.sh/docs/runtime/http/server#idletimeout
-  const app = new Elysia({ serve: { idleTimeout: 0 } })
+  const app = new Elysia({ serve: { idleTimeout: 180 } })
     .use(httpTelemetry())
     .onRequest(({ request }) => {
       if (new URL(request.url).pathname.startsWith('/health/')) return;
