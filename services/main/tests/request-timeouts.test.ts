@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import type { Elysia } from 'elysia';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
 import { createMainApp } from '../src/app.ts';
@@ -8,6 +9,11 @@ import { createAccountApp } from '../../account/src/app.ts';
 import type { createAccountAuth } from '../../account/src/auth.ts';
 
 const listen = { hostname: '127.0.0.1', port: 0 };
+
+function mainApp(fuseki = new FusekiClient('http://127.0.0.1:1/rezics/', '')) {
+  // Test-only routes do not consume the union of Main's mounted API types.
+  return createMainApp(fuseki) as Elysia;
+}
 
 function accountApp(pool: Pool) {
   // These transport routes never authenticate. Leave provider/database startup
@@ -22,8 +28,7 @@ test('Main and Accounts answer handlers that outlast Bun\'s default socket idle 
   // Fifteen seconds crosses the default even with Bun's coarse socket timer.
   const slow = async () => { await Bun.sleep(15_000); return { status: 'complete' }; };
   const pool = new Pool();
-  const main = createMainApp(new FusekiClient('http://127.0.0.1:1/rezics/', ''))
-    .post('/timeout-test/slow', slow).listen(listen);
+  const main = mainApp().post('/timeout-test/slow', slow).listen(listen);
   const account = accountApp(pool).post('/timeout-test/slow', slow).listen(listen);
   try {
     // Settle both requests so one reset cannot hide the other service's result.
@@ -64,7 +69,7 @@ for (const phase of ['headers', 'body'] as const) {
       fetch: () => delayedJson(phase, { boolean: true }) });
     const pool = new Pool();
     const fuseki = new FusekiClient(dependency.url.toString(), '');
-    const main = createMainApp(fuseki).get('/timeout-test/deadline', () => fusekiReadBudget.run({
+    const main = mainApp(fuseki).get('/timeout-test/deadline', () => fusekiReadBudget.run({
       signal: AbortSignal.timeout(50), callsLeft: 1, bytesLeft: 1024,
     }, () => fuseki.query('ASK {}'))).listen(listen);
     const account = accountApp(pool).get('/timeout-test/deadline', async () => {
@@ -110,7 +115,7 @@ for (const phase of ['headers', 'body'] as const) {
         jwksUrl: new URL('/timeout-test/jwks', account.server!.url).toString(),
         introspectUrl: new URL('/timeout-test/introspect', account.server!.url).toString(),
         clientId: 'main', clientSecret: 'test-secret', timeoutMs: 50 });
-      const main = createMainApp(new FusekiClient('http://127.0.0.1:1/rezics/', ''))
+      const main = mainApp()
         .get('/timeout-test/protected', ({ request }) => verifier.verify(request, ['work:read'])).listen(listen);
       try {
         const started = performance.now();
