@@ -91,7 +91,7 @@ their termspaces windows through goalctl; only the supermanager is started by
 hand. Reports inform decisions but do not replace judgment or measured results.
 Use models for decisions and programs for mechanical waiting, checks and landing.
 
-Follow [Asking the maintainer](#asking-the-maintainer) for decisions reserved to him.
+Follow [Asking the maintainer](#asking-the-maintainer) for decisions reserved to the maintainer.
 
 Landing gates run the tests the change affects plus those its brief names;
 main's scheduled confirmation catches what that selection misses, and its
