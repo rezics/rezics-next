@@ -20,11 +20,13 @@ Efficiency readings on 2026-10-16: 13.16 M worker input per main landing for
 (15:45–19:00), and 3.57 M while closing (19:00–22:00). Failed landing surface
 gates fell from six to none. The largest remaining cost was discovering stale
 test premises one run at a time, so workers now fix independent failures from
-one run together. Confirmation stacks that lose a dependency service mid-run
-left six catalogue cells unrun twice; that repair is open. The 12-hour reading
+one run together. Six catalogue cells went unrun twice because Fuseki was
+OOM-killed: pooled stacks kept its tmpfs storage across leases. Storage is now
+reclaimed when a run releases its stack, and a full confirmation of that change
+passed 408 cells with none failed or unrun. The 12-hour reading
 at 01:15 on 2026-10-17 was 5.76 M per landing. Its largest avoidable cost was a
 returned round on that repair: a ranking run that crossed midnight UTC read an
-empty current-day bucket, and the failure was taken for the branch's
+empty current-day bucket, and the failure was taken for the storage change's
 regression. Ranking acceptance is being made independent of bucket boundaries,
 and such a failure is now attributed to a branch only when it repeats there.
 
