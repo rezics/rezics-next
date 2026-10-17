@@ -12,7 +12,7 @@ const listen = { hostname: '127.0.0.1', port: 0 };
 
 function mainApp(fuseki = new FusekiClient('http://127.0.0.1:1/rezics/', '')) {
   // Test-only routes do not consume the union of Main's mounted API types.
-  return createMainApp(fuseki) as Elysia;
+  return createMainApp(fuseki) as unknown as Elysia;
 }
 
 function accountApp(pool: Pool) {
