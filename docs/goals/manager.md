@@ -97,7 +97,10 @@ Landing gates run the tests the change affects plus those its brief names;
 main's scheduled confirmation catches what that selection misses, and its
 failures are fixed on main. A second landing review with findings comes to the
 program. Findings that disclose data or bypass authority are fixed before the
-merge; the rest merge with the change and join the next batch. Small follow-ups
+merge; the rest merge with the change and join the next batch. A branch's
+confirmation failure in a test that passed on main is the branch's regression
+only when a rerun of that file on the branch head fails again; a failure that
+does not repeat is repaired on main. Small follow-ups
 in the same tooling or owners go to one batch task rather than separate briefs,
 so they cannot conflict with each other.
 

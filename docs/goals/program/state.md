@@ -21,7 +21,12 @@ Efficiency readings on 2026-10-16: 13.16 M worker input per main landing for
 gates fell from six to none. The largest remaining cost was discovering stale
 test premises one run at a time, so workers now fix independent failures from
 one run together. Confirmation stacks that lose a dependency service mid-run
-left six catalogue cells unrun twice; that repair is open.
+left six catalogue cells unrun twice; that repair is open. The 12-hour reading
+at 01:15 on 2026-10-17 was 5.76 M per landing. Its largest avoidable cost was a
+returned round on that repair: a ranking run that crossed midnight UTC read an
+empty current-day bucket, and the failure was taken for the branch's
+regression. Ranking acceptance is being made independent of bucket boundaries,
+and such a failure is now attributed to a branch only when it repeats there.
 
 Shared capabilities are implemented once ([platform thesis](../../product/platform-thesis.md)).
 The program inventories, across every in-scope vertical and source, the shared
