@@ -239,7 +239,10 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       return accountFailure(error);
     } finally { if (!held) client.release(); }
   };
-  const app = new Elysia()
+  // Bun's idle timer also cuts off handlers awaiting a dependency. Let the
+  // operation/client deadlines return their HTTP errors instead of a reset.
+  // https://bun.sh/docs/runtime/http/server#idletimeout
+  const app = new Elysia({ serve: { idleTimeout: 0 } })
     .use(httpTelemetry())
     .onRequest(({ request, server }) => {
       const peer = server?.requestIP(request)?.address;

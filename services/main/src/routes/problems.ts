@@ -210,6 +210,11 @@ export function typedRefusal(error: unknown, fault: unknown = error): Response |
 }
 
 function mapTypedRefusal(error: unknown): Response | undefined {
+  // fetch can exhaust its deadline before headers or while reading the body.
+  // Both leave the dependency unavailable, rather than an internal failure.
+  if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+    return problem(503, 'dependency_unavailable', 'Work operation could not be completed', { 'retry-after': '1' });
+  }
   const set: ProblemSet = { headers: {} };
   const owned = accountFailure(error, set) ?? admissionFailure(error, set)
     ?? actingContextFailure(error) ?? scalarFailure(error, set);
