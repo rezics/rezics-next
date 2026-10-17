@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 import { dryRunLines, parseOptions, steps } from '../../../scripts/dev/seed/cli.ts';
 import { bookConcepts, freeConcepts, genreConcepts, seededBookIds }
   from '../../../scripts/dev/seed/genres-plan.ts';
@@ -247,7 +247,7 @@ describe('dev seed plan', () => {
     const plan = devResetPlan(root, devResetTarget(root, true));
     expect(plan.volumes).toEqual(['rezics-qa-wt-g-341_postgres_data',
       'rezics-qa-wt-g-341_fuseki_data', 'rezics-qa-wt-g-341_rustfs_data']);
-    expect(plan.files.every(file => file.startsWith(`${plan.dir}/`))).toBe(true);
+    expect(plan.files.every(file => file.startsWith(`${plan.dir}${sep}`))).toBe(true);
     expect(() => devResetPlan(root, { profile: 'qa', runId: 'other' })).toThrow('fixed dev project');
     expect(() => devResetPlan(root, devResetTarget(root, true), {
       MAIN_OBJECT_DIRECTORY: '/checkout/.temp/stack/rezics-dev/objects',

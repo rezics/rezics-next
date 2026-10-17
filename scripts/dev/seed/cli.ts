@@ -16,7 +16,7 @@ import { seedContributions } from './contributions-step.ts';
 import { seedHomeFeed } from './feed-step.ts';
 import { seedFranchises } from './franchises-step.ts';
 import { seedScopedSubjects } from './scoped-subjects-step.ts';
-import { seedAnimeMangaZones } from './anime-manga-zones-step.ts';
+import { seedAnimeMangaZones } from './anime-manga-setup-step.ts';
 import { seedLnVnZones } from './ln-vn-zones-step.ts';
 import { seedBookConcepts } from './genres-step.ts';
 import { seedLibrary } from './library-step.ts';
