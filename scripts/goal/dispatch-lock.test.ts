@@ -71,6 +71,46 @@ function ok(result: ReturnType<ReturnType<typeof repository>['run']>): string {
   return result.stdout;
 }
 
+test.each([[], ['--dry-run'], ['--engine', 'sol', '--dry-run']])(
+  'dispatch without a brief or ID reports usage (%j)', (...args) => {
+    const f = repository();
+    const result = f.run('dispatch', ...args);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Usage: goalctl dispatch <G-id|brief.md>');
+    expect(result.stderr).not.toMatch(/EISDIR|ENOENT/);
+    expect(f.ledger().tasks).toEqual({});
+  },
+);
+
+test.each([['G-002', '--dry-run'], ['--engine', 'sol', 'G-002', '--dry-run']])(
+  'dispatch resolves an ID in the calling Goal (%j)', (...args) => {
+    const f = repository();
+    f.brief();
+    // Another active Goal must not make the caller's task ID ambiguous.
+    f.brief('G-002', ['kind: invalid'], 'api');
+    expect(ok(f.run('dispatch', ...args))).toContain('G-002: claims ok');
+    expect(f.ledger().tasks).toEqual({});
+  },
+);
+
+test('dispatch resolves an ID when only one Goal is active', () => {
+  const f = repository();
+  f.brief();
+  Reflect.deleteProperty(f.env, 'GOAL_ID');
+  f.save({ tasks: {}, goals: { program: f.ledger().goals!.program! } });
+  expect(ok(f.run('dispatch', 'G-002', '--dry-run'))).toContain('G-002: claims ok');
+});
+
+test('dispatch refuses an ID without a caller when several Goals are active', () => {
+  const f = repository();
+  f.brief();
+  Reflect.deleteProperty(f.env, 'GOAL_ID');
+  const result = f.run('dispatch', 'G-002', '--dry-run');
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('Several Goals are active');
+  expect(f.ledger().tasks).toEqual({});
+});
+
 async function preparing(f: ReturnType<typeof repository>, fail = false) {
   const marker = join(f.local, 'install-started');
   const release = join(f.local, 'install-release');

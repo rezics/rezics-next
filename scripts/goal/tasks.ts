@@ -77,7 +77,13 @@ export function neededFileWaits(brief: Brief): string[] {
 }
 
 export async function dispatch(briefPath: string, flags: Set<string>, overrideEngine?: string): Promise<void> {
-  const absolute = resolve(briefPath);
+  if (!briefPath) throw new Error('Usage: goalctl dispatch <G-id|brief.md> [--engine <engine>] [--dry-run]');
+  let absolute = resolve(briefPath);
+  if (/^G-\d{3,}$/.test(briefPath)) {
+    const goal = briefGoal(readLedger(), absolute);
+    if (!goal) throw new Error(`dispatch ${briefPath} needs an active Goal; set GOAL_ID or pass a brief path`);
+    absolute = join(root, goalBriefFile(goal, briefPath));
+  }
   const text = readFileSync(absolute, 'utf8');
   const brief = parseBrief(text);
   if (overrideEngine !== undefined) brief.engine = overrideEngine;

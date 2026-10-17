@@ -2648,7 +2648,7 @@ describe('goalctl reclaim', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('reclaim <id> <brief> [--allow-area]');
-    expect(result.stderr).toContain('dispatch <brief.md> [--engine <engine>] [--dry-run] [--force-usage] [--allow-area]');
+    expect(result.stderr).toContain('dispatch <G-id|brief.md> [--engine <engine>] [--dry-run] [--force-usage] [--allow-area]');
     expect(result.stderr).toContain('gate <id> [--skip-unit-gate] [--skip-type-gate]');
   });
 });

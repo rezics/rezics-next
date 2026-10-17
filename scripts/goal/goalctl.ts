@@ -87,7 +87,8 @@ async function main(argv: string[]): Promise<number> {
     case 'dispatch': {
       const index = rest.indexOf('--engine');
       if (index >= 0 && (!rest[index + 1] || rest[index + 1]!.startsWith('--'))) throw new Error('--engine needs an account or model engine');
-      await dispatch(positional[0] ?? '', flags, index >= 0 ? rest[index + 1] : undefined);
+      const source = rest.find((arg, at) => !arg.startsWith('--') && (index < 0 || at !== index + 1));
+      await dispatch(source ?? '', flags, index >= 0 ? rest[index + 1] : undefined);
       return 0;
     }
     case 'wait': await waitFor(positional[0] ?? ''); return 0;
@@ -240,7 +241,7 @@ async function main(argv: string[]): Promise<number> {
         return commandModule.default(rest);
       }
       console.error('Usage: goalctl goal start <slug> --manager <session> [--adopt] [--allow-area] | goal close <slug> [--dry-run]'
-        + ' | new [--goal <slug>] <title> | dispatch <brief.md> [--engine <engine>] [--dry-run] [--force-usage] [--allow-area]'
+        + ' | new [--goal <slug>] <title> | dispatch <G-id|brief.md> [--engine <engine>] [--dry-run] [--force-usage] [--allow-area]'
         + ' | wait <id> | owner <path> | reclaim <id> <brief> [--allow-area] | resume <id> (-m <text> | --file <path>) [--effort e] [--class baselineRed|environment|fixRound]'
         + ` [--engine ${engineNames().join('|')}] [--fresh] [--force-usage]`
         + ' | stop <id> | scope <id> | land <id> | merge <id> [--allow-scope] [--allow-ids] [--landed] [--skip-unit-gate] [--skip-type-gate]'
