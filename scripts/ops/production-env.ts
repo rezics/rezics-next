@@ -138,6 +138,8 @@ export function checkProductionEnv(
   env: Record<string, string | undefined>,
   roles: ProductionRole[] = ['main', 'account', 'relay', 'relay-init', 'migrate'],
 ) {
+  if (Object.hasOwn(env, 'REZICS_QA_RANKING_AT'))
+    throw new Error('Production forbids REZICS_QA_RANKING_AT');
   // The QA stack opens platform groups with this variable. A request cannot set
   // it, and a production process must not start with it present.
   if (Object.hasOwn(env, 'REZICS_PLATFORM_OPEN_GROUPS'))

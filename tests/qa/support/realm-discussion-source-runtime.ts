@@ -15,7 +15,8 @@ import { RetainedSources, sourceFileDigests } from '../../../scripts/qa/retained
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { producerModules, retainedVolumeInventory } from '../fault-recovery/owner-restore-erasure-fixture.ts';
 import { personaSessions, retainPersonaRealm, restorePersonaRealms } from './personas.ts';
-import { realmDiscussionSourceAdapter, realmDiscussionSourceSpecification, realmSourceAuthorityLifetimeMs, type RealmSourceRuntime, type RealmSourceSessions } from './realm-discussion-source.ts';
+import { realmDiscussionSourceAdapter, realmDiscussionSourceSpecification, realmSourceAuthorityLifetimeMs,
+  realmSourceRankingAt, type RealmSourceRuntime, type RealmSourceSessions } from './realm-discussion-source.ts';
 
 // Confirmations may read retained inputs from another checkout, but this
 // producer's physical backup publication belongs to the running checkout.
@@ -58,6 +59,7 @@ export function realmSourceRuntime(sourceRunId = Bun.env.REZICS_QA_RUN_ID): Real
           answer: service === 'Main' ? JSON.parse(event.response.body) : null });
       };
       const options = { observeMain: observer('Main'), observeAccount: observer('Account'),
+        rankingAt: realmSourceRankingAt,
         moderatorLifetimeMs: realmSourceAuthorityLifetimeMs };
       const rankingPublic = await personaSessions('public', options);
       try {
@@ -116,7 +118,7 @@ export function realmSourceRuntime(sourceRunId = Bun.env.REZICS_QA_RUN_ID): Real
           `.temp/stack/rezics-qa-${runId}/apps.env`], docker, undefined, context.budget.remaining(), signal);
         const realms = await withEnvironment({ ...copy.apps, REZICS_QA_RUN_ID: runId, REZICS_QA_STACK_TIER: 'integration' },
           () => restorePersonaRealms([metadata.realms.rankingPublic, metadata.realms.rankingPrivate,
-            metadata.realms.discussionPublic, metadata.realms.discussionPrivate]));
+            metadata.realms.discussionPublic, metadata.realms.discussionPrivate], { rankingAt: metadata.rankingAt }));
         sessions = { rankingPublic: realms[0]!, rankingPrivate: realms[1]!, discussionPublic: realms[2]!, discussionPrivate: realms[3]! };
         const totalMs = Date.now() - started;
         const live = sessions;

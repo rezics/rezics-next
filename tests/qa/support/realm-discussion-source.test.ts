@@ -7,7 +7,7 @@ import { sha256, stable } from '../../../scripts/fixture/corpus.ts';
 import { RetainedSources, sourceKey } from '../../../scripts/qa/retained-source.ts';
 import type { PersonaSession, RetainedPersonaRealm } from './personas.ts';
 import { buildRealmDiscussionCorpus, realmDiscussionSourceAdapter, realmDiscussionSourceSpecification,
-  realmSourceBuildDeadlineMs, realmSourceMeasurements, realmSourcePopulation, realmSourceRoles, validateRealmSourceMetadata, verifyRealmDiscussionCorpus,
+  realmSourceBuildDeadlineMs, realmSourceMeasurements, realmSourcePopulation, realmSourceRankingAt, realmSourceRoles, validateRealmSourceMetadata, verifyRealmDiscussionCorpus,
   type RealmSourceReply, type RealmSourceRequest, type RealmSourceRuntime, type RealmSourceSessions } from './realm-discussion-source.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
@@ -251,6 +251,9 @@ test('complete builder uses 552 public draft/identity/placement commands with ex
   try {
     const result = await buildRealmDiscussionCorpus(f.runtime, { key: 'unit', directory, backup: join(directory, 'backup'), budget: new FixtureWorkBudget(1_800_000) });
     validateRealmSourceMetadata(result.metadata);
+    expect(result.metadata.rankingAt).toBe(realmSourceRankingAt);
+    const wrongBucketTime = structuredClone(result.metadata); wrongBucketTime.rankingAt = '2024-04-01T00:00:00.000Z';
+    expect(() => validateRealmSourceMetadata(wrongBucketTime)).toThrow('ranking bucket time differs');
     expect(maximumGraphPublications).toBe(2);
     expect(exactReads).toBeGreaterThanOrEqual(552 * 3);
     expect(maximumExactReads).toBeLessThanOrEqual(6);

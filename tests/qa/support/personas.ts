@@ -224,6 +224,8 @@ let firstOperator:
   | { runId: string; email: string; password: string; actingSubject: string }
   | undefined;
 interface PersonaOptions {
+  /** Retained ranking sources keep bucket time across build and restore. */
+  rankingAt?: string;
   /** Retained sources need authority to outlive build, admission and restores. */
   moderatorLifetimeMs?: number;
   /** Observe actual public Main setup attempts, including fixed-key provisioning.
@@ -278,6 +280,8 @@ async function applications(options: PersonaOptions) {
   const resource = Bun.env.ACCOUNT_MAIN_RESOURCE;
   const compose = readEnv(resolve('.temp/stack', `rezics-qa-${runId}`, 'compose.env'));
   const config = mainConfig({ ...process.env, ...runtime, PLATFORM_FIRST_ADMIN_ACCOUNT: undefined,
+    REZICS_STACK_PROFILE: compose.REZICS_STACK_PROFILE,
+    ...(options.rankingAt === undefined ? {} : { REZICS_QA_RANKING_AT: options.rankingAt }),
     ...(options.notificationProvider ? {
       MAIN_NOTIFICATION_PROVIDER_URL: options.notificationProvider.url,
       MAIN_NOTIFICATION_PROVIDER_TOKEN: options.notificationProvider.token,
@@ -518,14 +522,16 @@ export function retainPersonaRealm(sessions: PersonaSessions): RetainedPersonaRe
 
 /** Starts an independent application lifetime against the caller's isolated restored
  * environment. No Realm, membership, role or author is created during restoration. */
-export async function restorePersonaRealms(records: readonly RetainedPersonaRealm[]): Promise<PersonaSessions[]> {
+export async function restorePersonaRealms(records: readonly RetainedPersonaRealm[],
+  options: Pick<PersonaOptions, 'rankingAt'> = {}): Promise<PersonaSessions[]> {
   if (!records.length) throw new Error('Restored persona Realms are missing');
   const operator = records[0]!.identities.operator;
   if (records.some(record => record.identities.operator.accountId !== operator.accountId))
     throw new Error('Restored Realms must share their retained platform identity');
   if (records.some(record => JSON.stringify(record.auth) !== JSON.stringify(records[0]!.auth)))
     throw new Error('Restored Realms must share their retained Account issuer and OAuth clients');
-  const started = performance.now(), stack = await applications({ retainedOperator: operator, retainedAuth: records[0]!.auth });
+  const started = performance.now(), stack = await applications({ ...options,
+    retainedOperator: operator, retainedAuth: records[0]!.auth });
   try {
     const sessions: PersonaSessions[] = [];
     for (const record of records) {

@@ -30,7 +30,7 @@ export async function readRankingPage(
   },
 ) {
   if (options.realm) await readRealmBasis(session, options.realm);
-  const bucket = rankingBuckets(new Date(), options.interval).current;
+  const bucket = rankingBuckets(projection.clock.at(), options.interval).current;
   const limit = session.options.limit ?? RANKING_COST.pageSize;
   let capture = await projection.capture(options.metric, options.interval, bucket,
     options.order, null, limit + 1, options.realm);
@@ -189,7 +189,7 @@ export async function readRankingPage(
   if (options.realm) await readRealmBasis(session, options.realm);
   if (
     !await projection.fence(capture) ||
-    rankingBuckets(new Date(), options.interval).current !== bucket
+    rankingBuckets(projection.clock.at(), options.interval).current !== bucket
   ) {
     throw new WorkReadMoved('Ranking changed; restart from the first page');
   }

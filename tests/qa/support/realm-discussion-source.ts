@@ -7,7 +7,9 @@ import { RetainedSources, type RetainedSourceAdapter, type SourceContext, type S
 import type { PersonaName, PersonaSession, PersonaSessions, RetainedPersonaRealm } from './personas.ts';
 import { prepareRealmRankingStates } from './realm-ranking-fixture.ts';
 import { realmSourceBuildDeadlineMs } from './realm-discussion-budget.ts';
+import { realmSourceRankingAt } from './realm-ranking-clock.ts';
 export { realmSourceBuildDeadlineMs } from './realm-discussion-budget.ts';
+export { realmSourceRankingAt } from './realm-ranking-clock.ts';
 
 export const realmSourcePopulation = Object.freeze({ publicRanking: 261, retainedPrivate: 21,
   currentPrivate: 21, roots: 21, siblings: 193, nested: 34, privateRoots: 1 });
@@ -99,6 +101,7 @@ export function realmSourceMeasurements(requests: readonly RealmSourceRequest[],
 
 export type RealmSourceMetadata = {
   contract: 'realm-discussion-source-v1'; population: typeof realmSourcePopulation;
+  rankingAt: string;
   realms: Record<keyof RealmSourceSessions, RetainedPersonaRealm>;
   authoritySnapshots: Record<keyof RealmSourceSessions, { members: RetainedOwnerState; roles: RetainedOwnerState; settings: RetainedOwnerState }>;
   /** Restores preserve the producer's moderation deadline; expired sources refuse. */
@@ -133,6 +136,7 @@ export function realmDiscussionSourceSpecification(files: Record<string, string>
     inputs: { population: realmSourcePopulation, roles: [...realmSourceRoles], language: 'en', direction: 'ltr',
       authoring: 'own-work', batch: 8, identityPublication: 'serial-no-overlapping-writes',
       authorityLifetimeMs: realmSourceAuthorityLifetimeMs,
+      rankingAt: realmSourceRankingAt,
       producerDeadlineMs: realmSourceBuildDeadlineMs, producerDeadlineEvidence: realmSourceBuildEvidence } };
 }
 
@@ -153,6 +157,7 @@ async function together<T>(pending: Promise<T>[]): Promise<T[]> {
 
 export function validateRealmSourceMetadata(metadata: RealmSourceMetadata, now = Date.now()): void {
   requireFact(metadata.contract === 'realm-discussion-source-v1', 'contract differs');
+  requireFact(metadata.rankingAt === realmSourceRankingAt, 'ranking bucket time differs');
   requireFact(stable(metadata.population) === stable(realmSourcePopulation), 'populations differ');
   requireFact(metadata.startingStatesValidUntil > now, 'original moderation starting states have expired');
   const { ranking, discussion } = metadata;
@@ -392,6 +397,7 @@ export async function buildRealmDiscussionCorpus(runtime: RealmSourceRuntime, co
         privateAccountId: priv[role].accountId, privateActingSubject: priv[role].actingSubject }]))];
     })) as RealmSourceMetadata['sequenceStarts'];
     const metadata: RealmSourceMetadata = { contract: 'realm-discussion-source-v1', population: realmSourcePopulation,
+      rankingAt: realmSourceRankingAt,
       realms, authoritySnapshots, startingStatesValidUntil: startedAt + realmSourceAuthorityLifetimeMs, sequenceStarts,
       ranking: { publicWork, retainedWork, currentWork, public: pub, retained, current, admission, states: rankingStates },
       discussion: { publicWork: discussionWork, privateWork, roots, siblings, nested, privateOpener },

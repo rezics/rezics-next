@@ -257,7 +257,7 @@ export async function composeMain(input: ComposeMainInput) {
   const readRankings = new ReadRankingProjection(pool, content, contentPool, {
     fuseki, lineage: { dataEpoch: config.MAIN_DATA_EPOCH, routingEpoch: config.MAIN_ROUTING_EPOCH },
     objectDirectory: config.MAIN_OBJECT_DIRECTORY,
-  });
+  }, config.rankingClock);
   const sourceIntake = new SourceIntakeStore(contentPool);
   const rightsStore = new RightsStore(contentPool, pool);
   sourceIntake.setRawRetentionGate((provider, namespace) => rightsStore.rawRetentionPermitted(provider, namespace));

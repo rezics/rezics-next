@@ -4,6 +4,7 @@
 import { cleanEnv, num, port, str, url } from 'envalid';
 import { telemetrySpec } from '@rezics/observability/config';
 import { requiredMatcherMode } from './modules/media-screen/required-matcher.ts';
+import { rankingClock } from './modules/rankings/clock.ts';
 
 const postgres = (desc: string) => url({ desc, example: 'postgres://role:password@127.0.0.1:5432/role' });
 const optionalPostgres = (desc: string) => url({ desc, default: undefined,
@@ -76,6 +77,8 @@ export const mainSpec = {
   OWNER_RELOCATION_TARGET_URL: optionalPostgres('Target URL for an owner relocation.'),
   OWNER_RELOCATION_TARGET_OBJECT_DIRECTORY: str({ default: undefined, desc: 'Target object directory for an owner relocation.' }),
   REZICS_LOAD_RUN_ID: str({ default: undefined, desc: 'Load run ID tagged onto search metrics during `task load`.' }),
+  REZICS_QA_RANKING_AT: str({ default: undefined,
+    desc: 'Admitted QA stacks only: canonical UTC bucket time shared by ranking source construction and reads.' }),
 };
 
 /** The Main relay process (`services/main/src/relay.ts`). */
@@ -104,12 +107,13 @@ export const relayInitSpec = {
 };
 
 export function mainConfig(env: Record<string, string | undefined> = process.env) {
+  const clock = rankingClock(env);
   const config = cleanEnv(env, mainSpec);
   requiredMatcherMode(config.MAIN_REQUIRED_MEDIA_MATCHER, env.NODE_ENV === 'production');
   if (Boolean(config.MAIN_RELAY_DATABASE_URL) !== Boolean(config.MAIN_RELAY_CONSUMER)) {
     throw new Error('MAIN_RELAY_DATABASE_URL and MAIN_RELAY_CONSUMER are configured together');
   }
-  return config;
+  return { ...config, rankingClock: clock };
 }
 
 export type MainConfig = ReturnType<typeof mainConfig>;

@@ -7,6 +7,7 @@ import type { ContentCore, ContentOutboxEvent } from '../../../../content/src/co
 import { readProgressSignal, type ProgressSignal } from '../structure/progress-outbox.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { refreshReadRankingAdmissions } from '../feed/ranking-admission.ts';
+import { wallRankingClock, type RankingClock } from './clock.ts';
 import { captureRankingPopulation, fenceRankingPopulation,
   type RankingCaptureRow, type RankingPopulation, type RankingPopulationCapture } from './store.ts';
 
@@ -74,7 +75,8 @@ export class ReadRankingProjection {
   private timer: ReturnType<typeof setInterval> | undefined;
   private running: Promise<unknown> | undefined;
   constructor(private readonly access: Pool, private readonly content: ContentCore,
-    private readonly contentPool: Pool, private readonly env: WorkActivationEnvironment) {}
+    private readonly contentPool: Pool, private readonly env: WorkActivationEnvironment,
+    readonly clock: RankingClock = wallRankingClock) {}
 
   start(): void {
     if (this.timer) return;
@@ -140,7 +142,7 @@ export class ReadRankingProjection {
   private async changeReview(client: PoolClient, generation: string, work: string,
     interval: RankingInterval, at: Date, delta: number): Promise<void> {
     const { current, previous } = rankingBuckets(at, interval);
-    const cutoff = new Date();
+    const cutoff = this.clock.at();
     cutoff.setUTCDate(1);
     cutoff.setUTCMonth(cutoff.getUTCMonth() - 3);
     if (current < cutoff.toISOString().slice(0, 10)) return;
@@ -327,13 +329,13 @@ export class ReadRankingProjection {
           if (!work) throw new RankingProjectionUnavailable('Progress Structure has no current Work');
           await refreshReadRankingAdmissions(this.env, this.access, [work], client);
           if (value) {
-            const at = new Date(value.occurredAt);
+            const at = this.clock.at(new Date(value.occurredAt));
             for (const metric of progressRankingMetrics(value)) {
               for (const interval of intervals) await this.increment(client, generation, work, metric, interval, at);
             }
           } else {
             for (const interval of intervals) await this.changeReview(client, generation, work, interval,
-              new Date(review.occurred_at), review.delta);
+              this.clock.at(new Date(review.occurred_at)), review.delta);
             if (review.delta < 0) await client.query(`DELETE FROM access.read_ranking_removal
               WHERE event_id=(SELECT id FROM access.reader_review_rank_change WHERE position=$1)`, [position]);
           }
@@ -381,14 +383,15 @@ export class ReadRankingProjection {
       [String(sequence), String(reviewPosition), generation, pending.length > 0]);
       await client.query(`DELETE FROM access.read_ranking_pending WHERE ctid IN (
         SELECT ctid FROM access.read_ranking_pending WHERE generation <> $1 LIMIT $2)`, [generation, RANKING_COST.cleanupRows]);
+      const cleanupAt = this.clock.at().toISOString();
       await client.query(`DELETE FROM access.read_ranking_score WHERE ctid IN (
         SELECT ctid FROM access.read_ranking_score
-        WHERE generation <> $1 OR bucket < (date_trunc('month', now() AT TIME ZONE 'UTC')
-          - interval '3 months')::date LIMIT $2)`, [generation, RANKING_COST.cleanupRows]);
+        WHERE generation <> $1 OR bucket < (date_trunc('month', $3::timestamptz AT TIME ZONE 'UTC')
+          - interval '3 months')::date LIMIT $2)`, [generation, RANKING_COST.cleanupRows, cleanupAt]);
       await client.query(`DELETE FROM access.read_ranking_publication WHERE ctid IN (
         SELECT ctid FROM access.read_ranking_publication
-        WHERE generation <> $1 OR bucket < (date_trunc('month', now() AT TIME ZONE 'UTC')
-          - interval '3 months')::date LIMIT $2)`, [generation, RANKING_COST.cleanupRows]);
+        WHERE generation <> $1 OR bucket < (date_trunc('month', $3::timestamptz AT TIME ZONE 'UTC')
+          - interval '3 months')::date LIMIT $2)`, [generation, RANKING_COST.cleanupRows, cleanupAt]);
       await client.query('COMMIT');
       return events.length + reviewEvents.length + pending.length;
     } catch (error) {
