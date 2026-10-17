@@ -40,6 +40,7 @@ async function change(created: Changed, operations: object[]) {
 test('a section-list reader navigates nested declared containers and lists readable entries', async () => {
   const owner = await work('Section list navigation');
   const target = await stack.publicWork(editor.actor, ['en'], 'Entry target');
+  await editor.grant(`work:read:${target.work}`, 'work.read');
   await editor.grant(`content:draft:${target.work}`, 'content.draft');
   const variantId = `urn:rezics:variant:${crypto.randomUUID()}`;
   const content = await json<{ revisionId: string }>(await editor.send('POST', '/v1/content-drafts', {
