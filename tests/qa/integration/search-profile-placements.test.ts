@@ -86,15 +86,17 @@ test('Anime composition parts are searchable while section-list targets follow r
     const outline = await json<{ occurrences: Array<{ occurrence: string }> }>(
       await actor.read(`/v1/compositions/${short(structure.structure)}`));
     expect(outline.occurrences.map(item => item.occurrence)).toEqual(changed.occurrences);
-    const visitorOutline = await json<{ occurrences: unknown[] }>(
+    const visitorOutline = await json<{ occurrences: Array<{ occurrence: string }> }>(
       await stack.call('GET', `/v1/compositions/${short(structure.structure)}`));
-    expect(visitorOutline.occurrences).toEqual([]);
-    const visitorPage = await json<{ results: Array<{ matchedPlacements?: unknown[] }> }>(
+    expect(visitorOutline.occurrences.map(item => item.occurrence)).toEqual(changed.occurrences);
+    const visitorPage = await json<{ results: Array<{ matchedPlacements?: Array<{ occurrence: string }> }> }>(
       await stack.call('POST', '/v1/queries/page', { body: input }));
-    expect(visitorPage.results.flatMap(hit => hit.matchedPlacements ?? [])).toEqual([]);
-    // Signing in supplies preferences, not Structure acting authority.
-    expect(await json(await actor.send('POST', '/v1/queries/page', input)))
-      .toMatchObject({ total: 0, results: [] });
+    expect(visitorPage.results.flatMap(hit => hit.matchedPlacements?.map(place => place.occurrence) ?? []))
+      .toEqual(changed.occurrences);
+    // Signing in preserves the same public baseline without acting authority.
+    const signedInPage = await json<typeof visitorPage>(await actor.send('POST', '/v1/queries/page', input));
+    expect(signedInPage.results.flatMap(hit => hit.matchedPlacements?.map(place => place.occurrence) ?? []))
+      .toEqual(changed.occurrences);
     const query = () => stack.call('POST', '/v1/queries/page', { body: input });
     // A later section-list draft does not change visitor target admission.
     const removed = await json<{ revision: string }>(await actor.send('POST', `/v1/compositions/${short(structure.structure)}/changes`, {
@@ -106,7 +108,9 @@ test('Anime composition parts are searchable while section-list targets follow r
       operations: [{ op: 'insert', role: 'entry', parent: structure.structure, position: 'last',
           target: source.work, qualifier: { note: 'Unpublished replacement' } }],
     }));
-    expect(await json(await query())).toMatchObject({ total: 0, results: [] });
+    const afterDraft = await json<typeof visitorPage>(await query());
+    expect(afterDraft.results.flatMap(hit => hit.matchedPlacements?.map(place => place.occurrence) ?? []))
+      .toEqual(changed.occurrences);
 
     // The generic composition profile admits public Work parts for every owner
     // type. Its declared searchable role gives this Anime a public phrase path.
@@ -133,12 +137,19 @@ test('Anime composition parts are searchable while section-list targets follow r
     const before = stack.fuseki.queries;
     const page = await json<{ total: number; results: Array<{ work: string; revision: string;
       matchedPlacements?: Array<{ resource: string; work: string; occurrence: string; profile: string }> }> }>(await query());
-    expect(page.results.map(hit => hit.work)).toEqual([anime.work]);
-    expect(page.results.flatMap(hit => hit.matchedPlacements?.map(place => place.occurrence) ?? []))
+    expect(page.results.map(hit => hit.work).sort()).toEqual([owner.work, anime.work].sort());
+    const placements = page.results.flatMap(hit => hit.matchedPlacements ?? []);
+    expect(placements.filter(place => place.work === owner.work).map(place => place.occurrence))
+      .toEqual(changed.occurrences);
+    expect(placements.filter(place => place.work === anime.work).map(place => place.occurrence))
       .toEqual(parts.occurrences);
-    for (const hit of page.results) expect(hit).toMatchObject({ revision: `urn:rezics:content:revision:${draft.revisionId}`,
-      matchedPlacements: expect.arrayContaining([{ resource: source.work, work: anime.work, profile: 'work-composition',
-        occurrence: parts.occurrences[0], title: 'Production notes' }]) });
+    for (const hit of page.results) expect(hit).toMatchObject({ revision: `urn:rezics:content:revision:${draft.revisionId}` });
+    expect(placements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ resource: source.work, work: anime.work, profile: 'work-composition',
+        occurrence: parts.occurrences[0], title: 'Production notes' }),
+      expect.objectContaining({ resource: source.work, work: owner.work, profile: 'section-list-v1',
+        occurrence: changed.occurrences[0], title: 'Production notes' }),
+    ]));
     expect(stack.fuseki.queries - before).toBeLessThanOrEqual(40);
     // Public Content eligibility does not publish its source Work into the
     // Main Work phrase-search relation.

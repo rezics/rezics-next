@@ -85,10 +85,19 @@ export function compositionTargetBatchReader(session: WorkReadSession, profile: 
     let readable: ReadonlySet<string>;
     if (disclosure === 'work') readable = await read(native);
     else if (disclosure === 'resource') readable = await canReadCompositionResources(session, native);
-    else if (!session.principal || !session.options.actingSubject) readable = new Set();
-    else readable = await canReadStructureTargets(profile, { environment: session.deps.environment,
-      access: session.deps.access, principal: session.principal,
-      actingSubject: session.options.actingSubject, targetReader: operation => operation(session) }, native);
+    else {
+      // Every reader gets the target owners' baseline. Profile authority can
+      // additionally admit restricted targets for a principal acting as a subject.
+      const baseline = await read(native);
+      if (!session.principal || !session.options.actingSubject) readable = baseline;
+      else {
+        const granted = await canReadStructureTargets(profile, { environment: session.deps.environment,
+          access: session.deps.access, principal: session.principal,
+          actingSubject: session.options.actingSubject, targetReader: operation => operation(session) },
+        native.filter(target => !baseline.has(target)));
+        readable = new Set([...baseline, ...granted]);
+      }
+    }
     return new Set([...catalog, ...readable]);
   };
 }

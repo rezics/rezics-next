@@ -11,7 +11,7 @@ async function answer<T>(pending: Promise<Response>, status = 200): Promise<T> {
   return JSON.parse(text) as T;
 }
 
-test('search withholds occurrences refused by the same visitor composition reader', async () => {
+test('search discloses public entries admitted by the same visitor composition reader', async () => {
   const sessions = await personaSessions('public');
   try {
     const { owner, visitor } = sessions;
@@ -99,10 +99,12 @@ test('search withholds occurrences refused by the same visitor composition reade
     }), 201);
 
     await answer(visitor.main('GET', `/v1/works/${short(source.work)}`));
-    const outline = await answer<{ occurrences: unknown[] }>(visitor.main(
+    const outline = await answer<{ occurrences: Array<{ occurrence: string }> }>(visitor.main(
       'GET', `/v1/compositions/${short(structure.structure)}`));
-    expect(outline.occurrences).toEqual([]);
-    expect((await visitor.main('GET', `/v1/compositions/${short(structure.structure)}/occurrences/${short(changed.occurrences[0]!)}`)).status).toBe(404);
+    expect(outline.occurrences.map(item => item.occurrence)).toEqual(changed.occurrences);
+    const occurrence = await answer<{ occurrences: Array<{ occurrence: string }> }>(visitor.main('GET',
+      `/v1/compositions/${short(structure.structure)}/occurrences/${short(changed.occurrences[0]!)}`));
+    expect(occurrence.occurrences.map(item => item.occurrence)).toEqual(changed.occurrences);
     const query = () => visitor.main('POST', '/v1/queries/page', {
       profile: 'public-main-phrase-page-v1', phrase, language: null, pageSize: 10,
     });
@@ -116,8 +118,8 @@ test('search withholds occurrences refused by the same visitor composition reade
     const page = await answer<{ results: Array<{ matchedPlacements?: Array<{ occurrence: string }> }> }>(
       Promise.resolve(response));
     expect(page.results.flatMap(hit => hit.matchedPlacements?.map(place => place.occurrence) ?? []),
-      'Search disclosed an occurrence that the same visitor cannot read through Structure')
-      .not.toContain(changed.occurrences[0]!);
+      'Search includes the public entry the same visitor reads through Structure')
+      .toContain(changed.occurrences[0]!);
   } finally {
     await sessions.close();
   }

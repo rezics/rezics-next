@@ -50,6 +50,26 @@ test('a section-list reader navigates nested declared containers and lists reada
   const contents = await json<{ items: Array<{ role: string; target: string; availability: string }> }>(await editor.read(
     `/v1/works/${short(owner.work)}/contents?parent=${encodeURIComponent(inner.occurrences[0]!)}`));
   expect(contents.items).toMatchObject([{ role: 'entry', target: target.work, availability: 'available' }]);
+  await editor.grant(`work:publish:${owner.work}`, 'work.publish');
+  const current = await json<{ revision: string }>(await editor.read(`/v1/works/${short(owner.work)}`));
+  await json(await editor.send('POST', '/v1/work-publications', {
+    profile: 'work-structure-publication-v1', operation: 'publish', work: owner.work,
+    expectedWorkHead: current.revision, expectedMainVersion: owner.mainVersion,
+    structure: created.structure, expectedStructureHead: inserted.revision, expectedPublicationHead: null,
+    rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: editor.actor,
+  }), 201);
+  const stranger = await stack.member('profile-stranger');
+  for (const read of [
+    (path: string) => stack.call('GET', path),
+    (path: string) => stranger.read(path),
+  ]) {
+    const publicContents = await json<typeof contents>(await read(
+      `/v1/works/${short(owner.work)}/contents?parent=${encodeURIComponent(inner.occurrences[0]!)}`));
+    expect(publicContents.items).toMatchObject([{ role: 'entry', target: target.work, availability: 'available' }]);
+    const page = await json<{ occurrences: Array<{ occurrence: string; target: string }> }>(await read(
+      `/v1/compositions/${short(created.structure)}?parent=${encodeURIComponent(inner.occurrences[0]!)}`));
+    expect(page.occurrences).toMatchObject([{ occurrence: inserted.occurrences[0], target: target.work }]);
+  }
 }, 120_000);
 
 test('a section-list editor refreshes nested entries with exact source correspondence and retry recovery', async () => {
