@@ -6,6 +6,7 @@ import { loadVndbSlice, metadataTag, recordedTag, seededReleasePlan, ODBL, DBCL,
 import { catalogueWorkBody } from '../../../tests/fixtures/catalogue/intake.ts';
 import { importedRightsAssessments } from '../../../services/main/src/modules/rights/import-policy.ts';
 import { SeedApiError } from './api.ts';
+import { catalogueAgentToken } from './catalogue-agent-owners.ts';
 import { acceptClassifiedStatement, discloseClassificationConcept, expectedScopeDecisionHead, shareClassificationContext,
   type ClassificationResolution, type SharedClassificationContext } from './classified-statement.ts';
 import { grantImportedContributionSeedAuthority, type LocalOperatorInput } from './operator.ts';
@@ -91,7 +92,11 @@ export async function seedVnCatalogue(state: SeedState): Promise<void> {
   try {
     const manifest = await applyVnCatalogue({
       actingSubject: session.actingSubject,
-      request: (method, path, body, key) => seedHttp(state, () => session.token, method, path, body, key),
+      request: async (method, path, body, key) => {
+        const token = method === 'POST' && path === '/v1/agents' && key
+          ? await catalogueAgentToken(state, pool, session, key) : session.token;
+        return seedHttp(state, () => token, method, path, body, key);
+      },
       grant: (scope, action) => grantVnSeedAuthority(pool, input, scope, action),
       refresh: () => refreshSeedTokens(state),
     });

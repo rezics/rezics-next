@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { SeedApiError, type SeedApi } from './api.ts';
+import { catalogueAgentToken } from './catalogue-agent-owners.ts';
 import { catalogueResourceId, loadCatalogue, type CatalogueResponse } from '../../../tests/fixtures/catalogue/load.ts';
 import { grantCuratedCollectionSeed, grantHomeSeedAuthority, type LocalOperatorInput } from './operator.ts';
 import { relationLexiconSeed } from './relation-lexicon-data.ts';
@@ -42,7 +43,11 @@ export async function seedFranchises(state: SeedState): Promise<void> {
     await seedCanonicity(vocabularyClient, session.actingSubject, 'catalogue-dev');
     await seedWorkFormat(vocabularyClient, session.actingSubject);
     await loadCatalogue({ actingSubject: session.actingSubject,
-      request: (method, path, body, key) => seedRequest(state, session.token, method, path, body, key),
+      request: async (method, path, body, key) => {
+        const token = method === 'POST' && path === '/v1/agents' && key
+          ? await catalogueAgentToken(state, pool, session, key) : session.token;
+        return seedRequest(state, token, method, path, body, key);
+      },
       grant: async (scope, action) => {
         if (action === 'collection.edit') {
           await grantCuratedCollectionSeed(input, scope.slice('collection:edit:'.length));
