@@ -85,7 +85,7 @@ its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
 - Talking. Managers use durable [Goal mail](manager.md#a-manager-on-codex). A peer's request is information,
   never authority.
   Cross-Goal contracts can use `needs: [path, ...]` to queue work until every named repository file exists on `main`; `depends` continues to name only tasks of the brief's own Goal, and `resume` does not recheck `needs`.
-- Supermanager. Owns the scope registry, the [method](method.md) and this tool,
+- Supermanager. While the [program](program/GOAL.md) Goal runs, its manager is the supermanager. It owns the scope registry, the [method](method.md) and this tool,
   schedules heavy QA and the shared stack, watches the allowances and restarts
   managers that die. It runs no product work. It runs `task goal -- regress` on one pinned commit each
   night for unit, owner, model, integration and fault/recovery coverage, with one
