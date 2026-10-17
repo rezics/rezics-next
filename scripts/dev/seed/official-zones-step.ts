@@ -237,7 +237,8 @@ async function chapters(o: Official, key: string, target: WorkReceipt, author: s
     profile: 'book-composition', work: target.work, mainVersion: target.mainVersion, actingSubject: author },
   as.token, seedKey('official-composition', key));
   // An empty composition has no public contents yet; its first chapter starts from the creation head.
-  const contents = async () => (await o.read<Contents>(`/v1/works/${workId}/contents?limit=20`))
+  const contents = async () => (await o.read<Contents>(
+    `/v1/works/${workId}/contents?limit=20&actingSubject=${encodeURIComponent(author)}`, as.token))
     ?? { composition: composition.structure, compositionRevision: composition.revision, items: [] };
   let current = await contents();
   for (const [index, chapter] of planned.entries()) {
@@ -248,11 +249,11 @@ async function chapters(o: Official, key: string, target: WorkReceipt, author: s
     const existing = current.items.find(item => item.role === 'chapter' && item.target === chapterWork);
     if (!existing) {
       if (current.items.some(item => item.label?.value === chapter.title)) continue; // Made another way; leave it.
-      const made = await o.api.post<{ compositionRevision: string; work: string }>(`/v1/works/${workId}/chapters`, {
+      const made = await o.api.post<{ compositionRevision: string; post: string }>(`/v1/works/${workId}/chapters`, {
         profile: 'book-chapter-create-v1', title: chapter.title, language, direction: 'ltr',
         parent: composition.structure, position: 'last', expectedCompositionHead: current.compositionRevision,
         actingSubject: author }, as.token, chapterKey);
-      if (made.work !== chapterWork) throw new Error(`Chapter ${key}:${index} has another identity`);
+      if (made.post !== chapterWork) throw new Error(`Chapter ${key}:${index} has another identity`);
       current = { ...current, compositionRevision: made.compositionRevision,
         items: [...current.items, { occurrence: '', role: 'chapter', label: { value: chapter.title },
           target: chapterWork, selectedRevision: null }] };
