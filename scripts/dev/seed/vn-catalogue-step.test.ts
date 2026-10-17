@@ -4,9 +4,30 @@ import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { catalogueIntakePath } from '../../../tests/fixtures/catalogue/intake.ts';
 import { loadVndbSlice } from '../../../tests/fixtures/vndb/load.ts';
 import { seedKey } from './plan.ts';
-import { applyVnCatalogue, call, type HttpResult, type SeedPort } from './vn-catalogue-step.ts';
+import { applyVnCatalogue, call, publishCatalogueText, type HttpResult, type SeedPort } from './vn-catalogue-step.ts';
 
 afterEach(() => mock.restore());
+
+test('a historical cancelled selection reconciles only when the public draft proves the same content is selected', async () => {
+  const work = { work: native(), mainVersion: native() };
+  const contribution = native(), draftRevision = native(), publicationDecision = native();
+  for (const matches of [true, false]) {
+    const selectionKeys: (string | undefined)[] = [];
+    const fake: SeedPort = { actingSubject: native(), grant: async () => {},
+      request: async (method, path, _body, key) => {
+        if (path === '/v1/contributions') return { status: 200, body: { contribution, draftRevision } };
+        if (path === '/v1/contribution-publications') return { status: 200, body: { publicationDecision } };
+        if (method === 'GET') return { status: 200, body: { ...work, contribution,
+          selectedDraft: matches ? draftRevision : native(), language: 'ja' } };
+        selectionKeys.push(key);
+        return { status: 404, body: { code: 'selection_unavailable' } };
+      } };
+    const result = publishCatalogueText(fake, work, 'cancelled-example', 'ja', 'A sample');
+    if (matches) expect(await result).toEqual({ contribution, decision: publicationDecision });
+    else await expect(result).rejects.toThrow('selection_unavailable');
+    expect(selectionKeys).toEqual([seedKey('vndb-selection', 'cancelled-example')]);
+  }
+});
 
 test('catalogue Work commands wait for broker admission with the same body and key', async () => {
   const sleep = spyOn(Bun, 'sleep').mockResolvedValue(undefined);

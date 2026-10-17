@@ -509,7 +509,20 @@ export async function publishCatalogueText(port: SeedPort, work: { work: string;
     expectedDraftHead: contribution.draftRevision, expectedPublicationHead: null,
     rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: actor,
   }, seedKey('vndb-publication', key));
-  await call(port, 'POST', '/v1/publication-selections', {
+  const selectionPort: SeedPort = { ...port, request: async (method, path, body, requestKey) => {
+    const result = await port.request(method, path, body, requestKey);
+    if (result.status !== 404 || (result.body as { code?: string } | null)?.code !== 'selection_unavailable') return result;
+    // A cancelled historical key stays cancelled. A later, independently
+    // completed selection can nevertheless satisfy this seed's exact content
+    // intent. Reconcile only from the public selected draft, without a new key.
+    const current = await port.request('GET', `/v1/main-versions/${short(work.mainVersion)}/selection?language=${encodeURIComponent(language)}`);
+    const selected = current.body as { work?: string; mainVersion?: string; contribution?: string;
+      selectedDraft?: string; language?: string };
+    return current.status === 200 && selected.work === work.work && selected.mainVersion === work.mainVersion
+      && selected.contribution === contribution.contribution && selected.selectedDraft === contribution.draftRevision
+      && selected.language === language ? current : result;
+  } };
+  await call(selectionPort, 'POST', '/v1/publication-selections', {
     profile: 'main-default-selection-v1', context: { kind: 'main-version-default', id: work.mainVersion },
     work: work.work, contribution: contribution.contribution, publicationDecision: published.publicationDecision,
     expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: actor,
