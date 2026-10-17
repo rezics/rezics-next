@@ -71,8 +71,8 @@ function ok(result: ReturnType<ReturnType<typeof repository>['run']>): string {
   return result.stdout;
 }
 
-test.each([[], ['--dry-run'], ['--engine', 'sol', '--dry-run']])(
-  'dispatch without a brief or ID reports usage (%j)', (...args) => {
+test.each([{ args: [] }, { args: ['--dry-run'] }, { args: ['--engine', 'sol', '--dry-run'] }])(
+  'dispatch without a brief or ID reports usage (%j)', ({ args }) => {
     const f = repository();
     const result = f.run('dispatch', ...args);
     expect(result.status).toBe(1);
@@ -82,8 +82,8 @@ test.each([[], ['--dry-run'], ['--engine', 'sol', '--dry-run']])(
   },
 );
 
-test.each([['G-002', '--dry-run'], ['--engine', 'sol', 'G-002', '--dry-run']])(
-  'dispatch resolves an ID in the calling Goal (%j)', (...args) => {
+test.each([{ args: ['G-002', '--dry-run'] }, { args: ['--engine', 'sol', 'G-002', '--dry-run'] }])(
+  'dispatch resolves an ID in the calling Goal (%j)', ({ args }) => {
     const f = repository();
     f.brief();
     // Another active Goal must not make the caller's task ID ambiguous.
