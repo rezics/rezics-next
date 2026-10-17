@@ -17,13 +17,23 @@ capacity defaults, read [settings](references/settings.md).
    `git log` and `git status` for maintainer edits. Read
    the Goal's `GOAL.md` and `state.md`, the [method](../../../docs/goals/method.md), this charter
    and the [program](../../../docs/goals/README.md). Load other documents only as a task needs them.
-2. Take rows, not tasks. Work is a row of the scope registry. For each row:
+2. Take rows, not tasks. Use `task goal -- planning` and the ledger to choose
+   ready work. Work is a row of the scope registry. For each row:
    an outcome task, then an implementation task, then (in the web Goal) a
    surface task. Read the outcome matrix yourself before any implementation is
    dispatched.
 3. Brief the outcome. A brief names the row, its tests, the files likely to
    change and what not to build. It never names a mechanism to build; a shared
-   mechanism starts from a design note the supermanager has read.
+   mechanism starts from a design note the owning manager and supermanager have
+   read before implementation. Use the operation index (`task operation -- <query>`)
+   and `task goal -- persona` for API questions; inspect source when those
+   observations leave a decision unresolved.
+
+   Record settled answers in the brief. After many decisions, restate the whole
+   current instruction in the next decision and supersede the rest. Never edit
+   a brief while its landing lock exists. Before resuming a worker, commit the
+   brief decision, rebase its branch onto main and reinstall dependencies if the
+   lockfile changed; workers do not rebase.
 4. Let the tool decide landings. A task lands on its gates, and on one
    review pass where the method asks for one. At the attempt cap the task stops
    and you choose, in the brief: cut the row's scope, split, or write a design
@@ -31,7 +41,8 @@ capacity defaults, read [settings](references/settings.md).
    (docs/goals/wave.md) is never landed on its own: accept its `RESULT: done`
    once its commits are on `wave/<n>`, and it reaches `main` with the wave.
    Leave it exited: program closes the wave's tasks as verified after the wave
-   merges.
+   merges. Verify a landing-tool repair with an actual landing, not ledger state
+   alone.
 5. Keep a later list. A finding no row's persona meets goes to `later.md`
    in the Goal's directory, in one line. Promotion into scope is the
    supermanager's.
@@ -57,6 +68,24 @@ capacity defaults, read [settings](references/settings.md).
    owners, remove its row from the root `GOAL.md` and run `goal close <goal>`
    ([convergence](../../../docs/goals/README.md#convergence)).
 
+## Event turns
+
+The [coordinator](../../../scripts/goal/coordinator.ts) owns events, concurrency,
+deadlines and wakes. Decide the event, carry out its dispatch, queue, resume or
+landing, then end the turn. Edit `state.md` only on checkpoint turns.
+An exited task with ready work behind it gets an executable disposition within
+five minutes.
+
+## Efficiency audit
+
+Follow the charter's [monitoring schedule](../../../docs/goals/manager.md#standing-directions).
+Use explicit window bounds with `task goal -- efficiency --since … --until … --record`.
+Give a read-only Sol researcher the figures, prior audit and three most expensive
+task logs. It returns causes, evidence, proposed changes and a measure that would
+falsify each improvement. Compare tokens per landed task of the same kind before
+and after a change; caps bound bad scope but do not establish savings. Include
+each turn's trigger, context and actions, even wakes that accomplish no work.
+
 ## Starting a manager
 
 A Goal gets a manager once its directory exists, with `GOAL.md` and
@@ -73,7 +102,23 @@ checks, sends the [start message](../../../scripts/goal/coordinator.ts), and enr
 the new native session without an interactive owner. Repeating it refuses an
 existing session or an unresolved turn; when the native session is gone, it
 starts a replacement. `enroll` below remains the handover command. Program runs
-in the maintainer's own terminal.
+in the maintainer's own terminal, using [supermanager startup](#starting-the-supermanager).
+
+### Starting the supermanager
+
+The maintainer starts the supermanager in termspaces, window `super-manager`
+of session `rezics-agents` (`termspaces attach rezics-agents`). Choose an active
+Goal with `GOAL.md` and `state.md`; a closed Goal needs a new slug.
+
+```sh
+GOAL_ID=<goal> claude --model <model> --effort xhigh --autocompact 300000 --dangerously-skip-permissions
+```
+
+Send: `You are the REZICS supermanager. Read docs/goals/manager.md,
+docs/goals/README.md, docs/goals/method.md and
+.agents/skills/goal-management/SKILL.md, then the active Goal's GOAL.md and
+state.md. Register with task goal -- goal start <goal> --manager supermanager,
+and run the Goal from its next ready work.`
 
 ### A manager on Codex
 

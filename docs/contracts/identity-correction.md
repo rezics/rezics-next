@@ -106,3 +106,5 @@ Split beyond compensating unmerge, the workbench UI, batch queues, graph
 predicate scanning, incoming-reference fencing and identity reservations are
 deferred. General Resource and Account-controlled Agent corrections need their
 own grain and recovery authority; the Work adapter does not admit them.
+
+Open question: should title control prevent a Work merge?

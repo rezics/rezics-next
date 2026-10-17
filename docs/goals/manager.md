@@ -52,9 +52,9 @@ defect calls for finding and fixing every instance of the same broken principle.
 API operations define behavior; the [method](method.md) defines proof and surfaces.
 
 Measure efficiency as tokens per proved row. At each checkpoint, read the
-method's measures. If repeated attempts dominate, remove their common cause.
-Continue dispatching work whose inputs are ready on main; a low first-attempt
-share does not stop dispatch.
+method's measures and manager token share. If repeated attempts dominate, remove
+their common cause. Continue dispatching work whose inputs are ready on main;
+a low first-attempt share does not stop dispatch.
 
 Keep unfinished capabilities behind platform permissions and open them as they
 become ready. The first public scope covers the book library, recipes,
@@ -81,17 +81,17 @@ when a document changes during work.
 Each manager decides within its Goal and settles cross-Goal matters with the
 other manager. Managers do not audit one another. The program owns scheduled
 checks on main and audits newly proved rows independently. Test admission is
-shared tooling's responsibility.
+shared tooling's responsibility. Only a failing public-API test of a row's
+persona outcome reopens a proved cell; acknowledgement cannot clear the fault.
+Report declared rows separately from regression-confirmed rows.
 
 Keep state in the repository and ledger so sessions can be short and disposable.
 The resident supermanager remains one identity and one session. Agents maintain
 their termspaces windows through goalctl; only the supermanager is started by
 hand. Reports inform decisions but do not replace judgment or measured results.
+Use models for decisions and programs for mechanical waiting, checks and landing.
 
-Finish reversible, authorized work before asking. The supermanager researches
-uncertain choices and decides within this charter. Send only decisions that need
-the maintainer through the [notice-board procedure](program/GOAL.md#asking-the-maintainer),
-while independent work continues.
+Follow [Asking the maintainer](#asking-the-maintainer) for decisions reserved to him.
 
 Landing gates run the tests the change affects plus those its brief names;
 main's scheduled confirmation catches what that selection misses, and its
@@ -112,11 +112,38 @@ blocked on a test premise state whether that test reached its assertion.
 
 Monitor and improve efficiency continuously, including when delivery is nearly
 done. Keep the hourly monitor running. At least every three hours, measure the
-last full 12-hour window with `task goal -- efficiency --since … --until …`
-and a read-only Sol analysis. Compare useful work, tokens, attempts per landing
-and rework by cause. Remove the largest cause the same day through a tooling,
-harness, protocol or brief change. Compare the next full 12-hour window and
-record both readings at the checkpoint; an attempt cap is not an efficiency gain.
+last full 12-hour window with the
+[researcher procedure](../../.agents/skills/goal-management/SKILL.md#efficiency-audit).
+Compare useful work, tokens, attempts per landing and rework by cause. Remove the
+largest cause the same day through a tooling, harness, protocol or brief change.
+Compare the next full 12-hour window and record both readings at the checkpoint.
+The planning yardstick is launch-ready scope in about twelve hours of running,
+apart from external conditions, with allowance to spare.
+
+## Asking the maintainer
+
+Take reversible decisions within this charter and record the reason in the
+brief or at a checkpoint. If evidence is missing, dispatch a read-only researcher
+with one question and get options with their costs before deciding.
+
+Ask the maintainer over Telegram only for money, a third-party account, a product
+decision that changes the outcome, an irreversible action or a change to the
+standing directions. Finish authorized preparation first. Give two to four
+options, a recommendation and any authorized fallback. Silence supplies no
+approval; continue independent work.
+
+Telegram is a notice board, with no listener, pairing or buttons. `goalctl ask`
+and `tell` send one HTTPS request as the bot to the maintainer's configured group;
+the coordinator retries failed sends from the outbox. Begin a question with its
+decision code in code style, such as `D-12`; give lettered options and end with
+the recommended answer ready to copy, such as `D-12 a`. The maintainer answers
+in the resident supermanager's terminal. Record it with
+`task goal -- decide D-12 a`; `task goal -- decisions` lists open questions.
+
+Templates carry a Goal, task, question and numbers, never source code, file
+contents, personal data or secrets. Unprompted notices cover a start, pause,
+Goal `STOP`, scheduled regression fault in a confirmed row, exhausted allowance
+or unresponsive host. The token stays in `../.secrets/bots.json`.
 
 ## Resources
 

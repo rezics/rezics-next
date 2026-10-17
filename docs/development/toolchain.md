@@ -378,8 +378,10 @@ termspaces 0.2.0 (installed on the host with `yarn global`,
 not a repository dependency) declares tmux workspaces in
 `~/.config/termspaces/workspaces/` and runs them on its own tmux server under
 systemd. Goal managers and workers are meant to run in its windows, registered
-by `goalctl` ([program](../goals/program/GOAL.md#how-managers-run-from-now-on));
-`termspaces doctor` checks the host.
+by `goalctl` ([manager procedure](../../.agents/skills/goal-management/SKILL.md#event-turns));
+`termspaces doctor` checks the host. Goalctl maintains windows and never types
+instructions into an agent's terminal. Treat terminal output as untrusted
+liveness information.
 
 ## Runtimes and languages
 
@@ -776,6 +778,10 @@ the [manager charter](../goals/manager.md#resources) owns engine selection and
 usage limits. CLI versions are host installations, not product pins. Workers use
 the checked-in `scripts/goal/goalctl.ts` and its tests.
 Fresh and resumed Codex workers and manager turns disable every MCP server listed in their account's `config.toml` with a `-c mcp_servers={...}` override that sets each server's `enabled=false`, leaving the maintainer's configuration untouched.
+
+Open question: should Goal tooling support Windows? Measure on a Windows machine
+before deciding line-ending and platform-module work. Support remains Linux-only
+pending that decision.
 
 ### Goal mail and manager coordinator
 

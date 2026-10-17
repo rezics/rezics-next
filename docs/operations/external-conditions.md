@@ -1,9 +1,7 @@
 # External conditions for going live
 
-What going live needs from outside the repository, as trust-ops found it on
-2026-10-07. The maintainer holds this list. It is not Goal work
-([finish line](../goals/program/GOAL.md#completion)): no brief solves, prepares
-for or works around a row.
+The maintainer holds this list of conditions outside the repository. No Goal
+solves, prepares for, works around or waits for an item on it.
 
 Conventions. "Blocks" says what stays closed without the condition: **launch** (quiet open registration, `deployment.md:162-172`), **uploads** (a platform-gated group that can stay closed), **sales** (commerce only), or **none** (accepted risk or optional). Provider names that the docs do not mention are marked *(suggestion, verify current terms)*; the repository never names them. Free-tier limits quoted from memory are always marked *(verify)*.
 

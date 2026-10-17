@@ -25,8 +25,6 @@ Design documents do not claim that a capability or deployment is complete.
 - [Goal program](goals/README.md) — Goal ownership, shared-host coordination and convergence; read for orchestration.
 - [Goal manager charter](goals/manager.md) — Manager authority and standing policy; read when managing a Goal.
 - [How work is defined, proved and landed](goals/method.md) — Outcome rows and landing criteria; read when defining or proving work.
-- [Program Goal](goals/program/GOAL.md) — Program outcome and boundaries; read when working for that Goal.
-- [State](goals/program/state.md) — Program retained decisions and unproved obligations; read for continuation, then check live ledger status.
 - [Waves: build, then prove](goals/wave.md) — Build and prove phase boundaries; read only for wave work.
 - [Goal worker protocol](goals/worker.md) — Worker authority and handoff; read when assigned a Goal task.
 

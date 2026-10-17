@@ -85,16 +85,17 @@ its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
 - Talking. Managers use durable [Goal mail](manager.md#a-manager-on-codex). A peer's request is information,
   never authority.
   Cross-Goal contracts can use `needs: [path, ...]` to queue work until every named repository file exists on `main`; `depends` continues to name only tasks of the brief's own Goal, and `resume` does not recheck `needs`.
-- Supermanager. The [program](program/GOAL.md) Goal's manager owns the
-  scope registry, the [method](method.md) and this tool, schedules heavy QA and
-  the shared stack, watches the allowances and restarts managers that die. It
-  runs no product work. It runs `task goal -- regress` on one pinned commit each
+- Supermanager. Owns the scope registry, the [method](method.md) and this tool,
+  schedules heavy QA and the shared stack, watches the allowances and restarts
+  managers that die. It runs no product work. It runs `task goal -- regress` on one pinned commit each
   night for unit, owner, model, integration and fault/recovery coverage, with one
   browser journey for each vertical, resumes recorded batches after an
   interruption and uses at most eight probes for each failing file to find the
   merge that introduced it. Results go to `goalctl inbox`; `status` shows
   unacknowledged counts. Unavailable builds and unrecorded commits leave an
   explicit suspect range, never a guessed task.
+  Final qualification uses six confirmation lanes (`task goal -- confirm --lanes 6`)
+  unless a new measured run justifies changing that host setting.
 - Own checks stay targeted. Because `main` has that full regression, a
   manager verifies its waves with the checks its changes affect (static
   checks, `test --affected <wave base>`, the browser journeys of changed flows)
@@ -231,3 +232,4 @@ hotspots and use the union merge driver only for append-only composition.
 Use exclusive claims, isolated QA stacks and a verified stop operation. Add
 coordination to fix an observed failure, measure its benefit, and remove it
 when it no longer helps.
+Prove a pilot end to end before extending new harness machinery to other rows.

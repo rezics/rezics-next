@@ -64,3 +64,8 @@ loopback and set `ACCOUNTS_COUNTRY_FROM_HEADER`, so the Accounts app passes the
 header a browser tool sends (the local worker's own edge always reports one
 fixed country); production reads only Cloudflare's country and refuses that
 setting. With no country the strictest minimum age applies.
+
+## Open question
+
+Tailnet sign-in still needs compatible origins and a full stack restart. Which
+origins should it use? A loopback-bound origin does not authorize the change.

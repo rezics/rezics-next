@@ -387,15 +387,6 @@ Migration needs these explicit decisions and checks:
 
 ### Effect on wave/1 Recipe rows
 
-The checked-in [program state](../goals/program/state.md) records wave/1 and
-Recipes hub/reading as pending. At this basis,
-[the hub declaration](../../scripts/qa/cases/outcomes/recipes/work-hub-and-reading.ts)
-has six pending persona cells; its prerequisite descriptions are proposals,
-not a current implementation inventory. Other Recipe declarations below say
-proved. This note does not inspect the live wave branch, demote cells, or certify
-current prove-run status. The manager must reconcile against the wave's latest
-records; nearby pool/deadlock fixes are independent of this semantic decision.
-
 | Existing row | Effect of commissioned replacement |
 | --- | --- |
 | [work-hub-and-reading](../../scripts/qa/cases/outcomes/recipes/work-hub-and-reading.ts) | Directly affected: preserve public-domain source credit, author/transcriber distinction, nested instructions, exact adopted revision and private boundaries. Prove all six personas after owner changes. Do not postpone source attribution until after a model change. |

@@ -49,6 +49,14 @@ Model, command, read, client. Check pagination, idempotency, authority,
 preservation of fields the client did not send, and whether a request bound has
 quietly become a product limit.
 
+For shared capabilities, inventory generic owners that recognise a vertical or
+provider across in-scope verticals and sources. Group findings by cause, decide
+in a design note, then generalise the owner and migrate its callers together;
+moving or renaming special cases does not qualify. Proof needs a non-Recipe
+consumer and a second source where that is the boundary. Report product-row
+coverage separately from shared-capability acceptance; the unified-engine
+outcome remains open while a known exception remains.
+
 ## 6. Cluster by broken invariant, then prioritise
 
 Group findings under the principle they break. Recurring classes in REZICS:
