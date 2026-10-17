@@ -92,7 +92,7 @@ def check(root: Path, files: list[Path], *, navigation: bool = True) -> list[str
     errors = []
     cache = {}
     for source, body in texts.items():
-        label = source.relative_to(root)
+        label = source.relative_to(root).as_posix()
         for line, url in destinations(body):
             parts = urlsplit(url)
             if parts.scheme or parts.netloc:
@@ -131,7 +131,7 @@ def check(root: Path, files: list[Path], *, navigation: bool = True) -> list[str
             for source in sorted(texts):
                 if (source.is_relative_to(root / "docs") and not brief(source)
                         and source not in visited):
-                    errors.append(f"{source.relative_to(root)}: unreachable from docs/README.md")
+                    errors.append(f"{source.relative_to(root).as_posix()}: unreachable from docs/README.md")
     return errors
 
 

@@ -1,18 +1,20 @@
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   cpSync,
   existsSync,
   mkdirSync,
+  lstatSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   readdirSync,
   renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { redactCommandOutput } from '../fixture/command-output.ts';
 import { BUILD_ADMISSION_GIB } from '../qa/host-admission.ts';
 
@@ -35,9 +37,41 @@ export function activeBackend(stack: string): string | undefined {
 
 export function activateBackend(stack: string, checkout: string, name = 'backend'): void {
   const pointer = join(stack, name);
+  if (existsSync(pointer) && realpathSync(pointer) === realpathSync(checkout)) return;
   rmSync(`${pointer}.tmp`, { force: true });
   symlinkSync(checkout, `${pointer}.tmp`, 'dir');
-  renameSync(`${pointer}.tmp`, pointer);
+  try { renameSync(`${pointer}.tmp`, pointer); }
+  catch (error) {
+    if (process.platform !== 'win32' || !existsSync(pointer) || !lstatSync(pointer).isSymbolicLink()) throw error;
+    // Windows cannot replace a directory link. Writers are stopped when a
+    // refresh changes revisions; retain its old link until installation succeeds.
+    const previous = `${pointer}.previous-${randomUUID()}`;
+    renameSync(pointer, previous);
+    try { renameSync(`${pointer}.tmp`, pointer); }
+    catch (replacementError) { renameSync(previous, pointer); throw replacementError; }
+    rmSync(previous, { force: true });
+  }
+}
+
+/** A Windows copy may retain junctions to the mutable source checkout or copy
+ * their targets as directories. Every workspace import must use the frozen copy. */
+export function rebaseBackendDependencyLinks(source: string, checkout: string,
+  moduleRoots: readonly string[], packageFiles: readonly string[]): void {
+  for (const moduleRoot of moduleRoots) for (const packageFile of packageFiles) {
+    const workspace = dirname(packageFile);
+    const name = (JSON.parse(readFileSync(join(source, packageFile), 'utf8')) as { name?: string }).name;
+    if (!name) continue;
+    const original = join(source, moduleRoot, name);
+    if (!existsSync(original) || realpathSync(original) !== realpathSync(join(source, workspace))) continue;
+    const target = resolve(checkout, moduleRoot, name);
+    if (!target.startsWith(resolve(checkout) + sep)) throw new Error('Dependency link leaves the frozen checkout');
+    try {
+      const stat = lstatSync(target);
+      rmSync(target, { recursive: !stat.isSymbolicLink(), force: true });
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    mkdirSync(dirname(target), { recursive: true });
+    symlinkSync(join(checkout, workspace), target, 'junction');
+  }
 }
 
 /** Storage is reconciled less often than code. Its original Compose bind paths
@@ -123,7 +157,8 @@ export const backendCommand: BackendCommand = (root, executable, args) => {
     maxBuffer: 8 * 1024 * 1024,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  if (result.error || result.status !== 0)
+  const copied = executable === 'robocopy' && result.status !== null && result.status >= 0 && result.status < 8;
+  if (result.error || (result.status !== 0 && !copied))
     throw new Error(refreshCommandFailure({
       step: 'Backend',
       command: [executable, ...args],
@@ -199,16 +234,21 @@ export function stageBackend(
         readFileSync(join(source, path)).equals(readFileSync(join(checkout, path))),
     );
   if (reusable) {
-    for (const path of [
+    const moduleRoots = [
       'node_modules',
       ...dependencyInputs
         .filter((path) => path.endsWith('/package.json'))
         .map((path) => join(dirname(path), 'node_modules')),
-    ]) {
+    ];
+    for (const path of moduleRoots) {
       if (!existsSync(join(source, path))) continue;
       mkdirSync(dirname(join(checkout, path)), { recursive: true });
-      command(root, 'cp', ['-a', '--reflink=auto', join(source, path), join(checkout, path)]);
+      if (process.platform === 'win32') command(root, 'robocopy', [join(source, path), join(checkout, path),
+        '/E', '/COPY:DAT', '/DCOPY:DAT', '/SL', '/SJ', '/MT:16', '/R:1', '/W:1', '/NFL', '/NDL', '/NP', '/NJH', '/NJS']);
+      else command(root, 'cp', ['-a', '--reflink=auto', join(source, path), join(checkout, path)]);
     }
+    if (process.platform === 'win32') rebaseBackendDependencyLinks(source, checkout, moduleRoots,
+      dependencyInputs.filter(path => path.endsWith('/package.json')));
   } else command(checkout, 'task', ['install']);
   command(checkout, 'task', ['gen']);
   mkdirSync(join(checkout, '.temp/stack'), { recursive: true });

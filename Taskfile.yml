@@ -7,6 +7,7 @@ set: [pipefail]
 
 env:
   ASPIRE_CLI_TELEMETRY_OPTOUT: '1'
+  PYTHONUTF8: '1'
 
 vars:
   ASPIRE: node {{.ROOT_DIR}}/node_modules/@microsoft/aspire-cli/bin/aspire.js

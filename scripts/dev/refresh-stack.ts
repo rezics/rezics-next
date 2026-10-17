@@ -494,7 +494,7 @@ export function printRefreshPlan(snapshot: Awaited<ReturnType<typeof inspectRefr
  * Compose output stays hidden: `command` never records it. */
 export function refreshBuildStepLog(candidate: string, args: string[], output: string, now = new Date()): string {
   const directory = resolve(candidate, '..', '..');
-  const name = `refresh-build-${args.slice(0, 1).join('').replace(/[^A-Za-z0-9:_-]/g, '_')}-${
+  const name = `refresh-build-${args.slice(0, 1).join('').replace(/[^A-Za-z0-9_-]/g, '_')}-${
     now.toISOString().replace(/[^0-9TZ]/g, '')}.log`;
   const path = join(directory, name);
   const fd = openSync(path, 'w', 0o600);

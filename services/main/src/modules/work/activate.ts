@@ -230,7 +230,8 @@ function prepareImmutable(directory: string, bytes: Uint8Array): string {
   }
   renameSync(temp, target);
   if (hash(readFileSync(target)) !== digest) throw new Error('staged immutable object verification failed');
-  const dirFd = openSync(directory, 'r');
+  // Windows FlushFileBuffers requires write access, including for directories.
+  const dirFd = openSync(directory, process.platform === 'win32' ? 'r+' : 'r');
   try { fsyncSync(dirFd); } finally { closeSync(dirFd); }
   return digest;
 }

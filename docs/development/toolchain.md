@@ -52,6 +52,13 @@ to the user layer with a diagnostic; runtime state stays in `.temp/`.
 The locally built Fuseki image has a content-addressed tag derived by
 `scripts/dev/fuseki-image.ts` and checked by `task gen:check`.
 
+Windows backend preparation uses the operating system's `robocopy` with bounded
+retries and sixteen copy threads. It accepts successful exit codes 0–7 and
+rewrites workspace junctions into the frozen checkout, so later source edits
+cannot alter the serving revision. This avoids GNU `cp` traversing Windows
+junctions and copying dependencies beyond the preparation budget. Task enables
+Python UTF-8 mode on every platform so generated documentation has one encoding.
+
 `task jena:image` stamps and obtains that tag: an existing image returns immediately;
 otherwise callers share a host-wide lock keyed by tag and inspect again before
 building. Generation, stack startup, toolchain installation and dev refresh use
@@ -59,6 +66,9 @@ the same implementation. Linux `flock` (util-linux 2.41.5 on the development hos
 holds the lock across its builder process and releases it when the descriptors
 close; lock files under `/tmp/rezics-fuseki-images` must not be deleted while a
 build is running. See the [flock manual](https://man7.org/linux/man-pages/man1/flock.1.html).
+
+Windows uses a named kernel mutex around the same input checks, memory admission
+and bounded image build. The builder owns the mutex until its command exits.
 
 The module packages with `-DskipTests`; `task jena:test` builds the separate
 `module-test` target with the original Maven options and locked fixture cache.

@@ -28,7 +28,7 @@ def direct_packages(root: Path) -> list[tuple[str, str, str]]:
             for name, version in data.get(field, {}).items():
                 if name in packages and packages[name][0] != version:
                     raise ValueError(f"Conflicting direct pins for {name}: {packages[name][0]} and {version}")
-                packages.setdefault(name, (version, []))[1].append(str(path.parent))
+                packages.setdefault(name, (version, []))[1].append(path.parent.as_posix())
     return [(name, version, ", ".join(sorted(set(owners))))
             for name, (version, owners) in sorted(packages.items())]
 

@@ -10,6 +10,30 @@ const draft = { profile: 'member-reply-draft-v1', reply: native,
   variantId: `urn:rezics:variant:${uuid}`, rootTarget: native, rootRevision: native,
   language: 'en', direction: 'ltr', expectedHead: null, body: 'A reply', actingSubject: native };
 
+test('a seed sign-in retains session and second-factor cookies without response attributes', async () => {
+  const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch(request) {
+    if (new URL(request.url).pathname === '/api/auth/sign-in/email') {
+      const headers = new Headers();
+      headers.append('set-cookie', 'session=authenticated; Path=/; HttpOnly');
+      headers.append('set-cookie', 'session_data=cached; Expires=Wed, 21 Oct 2026 07:28:00 GMT; Path=/');
+      headers.append('set-cookie', 'two_factor=challenge; Path=/; HttpOnly');
+      return Response.json({ user: { id: uuid } }, { headers });
+    }
+    const cookies = new Map((request.headers.get('cookie') ?? '').split(';').map(value => {
+      const [name, ...parts] = value.trim().split('=');
+      return [name, parts.join('=')] as const;
+    }));
+    return new Response(null, { status: cookies.get('session') === 'authenticated'
+      && cookies.get('two_factor') === 'challenge' && !cookies.has('Path') ? 200 : 401 });
+  } });
+  try {
+    const api = new SeedApi({ account: server.url.origin } as SeedEndpoints);
+    const signed = await api.signInOrUp({ email: 'reader@example.test', password: 'local-test-password' });
+    expect((await fetch(new URL('/api/auth/two-factor/verify-totp', server.url),
+      { headers: { cookie: signed.cookie } })).status).toBe(200);
+  } finally { await server.stop(true); }
+});
+
 async function fixture(codes: string[], operation: (api: SeedApi, calls: { key: string; body: unknown }[]) => Promise<void>) {
   const calls: { key: string; body: unknown }[] = [];
   const server = Bun.serve({ port: 0, hostname: '127.0.0.1', async fetch(request) {

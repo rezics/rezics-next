@@ -173,7 +173,7 @@ export class SeedApi {
       response = await signIn();
     }
     const data = await payload<{ user?: { id?: string } }>(response, `Account sign-in ${user.email}`);
-    const cookie = response.headers.get('set-cookie');
+    const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
     if (!cookie || !data.user?.id) throw new Error(`Account sign-in ${user.email}: missing session`);
     return { cookie, id: data.user.id };
   }

@@ -29,7 +29,7 @@ function storeDirectoryBytes(directory: string, bytes: Uint8Array): string {
   finally { closeSync(fd); }
   renameSync(temp, target);
   if (hash(readFileSync(target)) !== digest) throw new Error('snapshot object read-back differs');
-  const dirFd = openSync(directory, 'r');
+  const dirFd = openSync(directory, process.platform === 'win32' ? 'r+' : 'r');
   try { fsyncSync(dirFd); } finally { closeSync(dirFd); }
   return digest;
 }

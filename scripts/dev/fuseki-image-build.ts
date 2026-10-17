@@ -26,6 +26,10 @@ export function fusekiImageLock(image: string, directory = '/tmp/rezics-fuseki-i
 /** The second inspection runs under the kernel lock. Its fd is inherited by the
  * builder, so a dead caller cannot free the lock while its build is still alive. */
 export function fusekiImageBuildCommand(root: string, image: string, options: FusekiImageOptions = {}): string[] {
+  if (process.platform === 'win32') return ['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', join(import.meta.dir, 'fuseki-image-build-windows.ps1'),
+    '-Root', root, '-Image', image, '-Docker', options.docker ?? 'docker', '-Bun', process.execPath,
+    '-TagModule', join(import.meta.dir, 'fuseki-image.ts'), '-Admission', join(import.meta.dir, '../qa/host-admission.ts')];
   const script = `check_inputs() { "$3" -e 'const { fusekiImageTag } = await import(process.argv[1]); if (fusekiImageTag(process.argv[2]) !== process.argv[3]) throw new Error("Fuseki inputs changed during image preparation");' "$7" "$6" "$2"; }\n`
     + 'check_inputs "$@" || exit $?\n'
     + 'if "$1" image inspect "$2" >/dev/null 2>&1; then '

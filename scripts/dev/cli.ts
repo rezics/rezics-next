@@ -14,6 +14,7 @@ import { compatibleLoadStorage, loadCompatibility,
   type LoadCompatibility } from '../load/compatibility.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { ensureFusekiImage } from './fuseki-image-build.ts';
+import { releaseManifest } from './release-manifest.ts';
 import { devResetPlan, devResetTarget } from './reset.ts';
 import { ensureBackend, activeBackend, storageBackend, readPendingRefresh } from './refresh.ts';
 import { expectedRefreshEnvironment, prepareRefreshStorage, refreshSharedStack } from './refresh-stack.ts';
@@ -345,7 +346,7 @@ async function stackUp(options: StackOptions): Promise<{ apps: Record<string, st
 }
 
 async function install(): Promise<void> {
-  if (process.versions.bun !== '1.4.2') throw new Error('Bun 1.4.2 is required');
+  if (process.versions.bun !== releaseManifest.runtimes.bun) throw new Error(`Bun ${releaseManifest.runtimes.bun} is required`);
   if (run('node', ['--version']) !== 'v26.8.2') throw new Error('Node 26.8.2 is required');
   if (run('corepack', ['yarn', '--version']) !== '4.18.0') throw new Error('Yarn 4.18.0 is required');
   if (run('task', ['--version']) !== '3.53.1') throw new Error('Task 3.53.1 is required; see the toolchain lock');

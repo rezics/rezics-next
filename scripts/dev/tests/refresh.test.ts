@@ -1575,8 +1575,9 @@ describe('refresh build step output', () => {
       const path = refreshBuildStepLog(candidate, ['dev:seed', '--', '--themes-only'],
         'seed failed: Main HTTP 503\n', new Date('2026-10-08T13:00:00.000Z'));
       expect(dirname(path)).toBe(stack);
-      expect(path).toContain('refresh-build-dev:seed-20261008T130000000Z.log');
-      expect(statSync(path).mode & 0o777).toBe(0o600);
+      expect(path).toContain('refresh-build-dev_seed-20261008T130000000Z.log');
+      // Windows privacy comes from NTFS ACLs rather than POSIX permission bits.
+      if (process.platform !== 'win32') expect(statSync(path).mode & 0o777).toBe(0o600);
       expect(readFileSync(path, 'utf8')).toBe('seed failed: Main HTTP 503\n');
     } finally { rmSync(stack, { recursive: true, force: true }); }
   });

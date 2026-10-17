@@ -79,7 +79,7 @@ class DirectoryModelObjects implements ImmutableObjects {
       try { linkSync(staging, join(this.directory, digest)); }
       catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
     } finally { unlinkSync(staging); }
-    const directoryFd = openSync(this.directory, 'r');
+    const directoryFd = openSync(this.directory, process.platform === 'win32' ? 'r+' : 'r');
     try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }
     await this.get(digest);
     return digest;

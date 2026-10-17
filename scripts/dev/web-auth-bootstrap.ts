@@ -109,7 +109,7 @@ async function signUp(app: ReturnType<typeof createAccountApp>, base: string,
     method: 'POST', headers: { 'content-type': 'application/json', origin: base },
     body: JSON.stringify({ ...signupPolicyFixture, name: `Local ${role}`, email, password }),
   }));
-  const cookie = response.headers.get('set-cookie');
+  const cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
   const body = await response.json() as { user?: { id?: string } };
   if (response.status !== 200 || !body.user?.id || !cookie) {
     throw new Error(`Local ${role} signup failed with HTTP ${response.status}`);
@@ -146,7 +146,7 @@ async function signInOperator(app: ReturnType<typeof createAccountApp>, base: st
     method: 'POST', headers: { 'content-type': 'application/json', origin: base },
     body: JSON.stringify({ email: operator.email, password: operator.password }),
   }));
-  let cookie = response.headers.get('set-cookie');
+  let cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
   await response.body?.cancel();
   if (response.status !== 200 || !cookie) return undefined;
   cookie = await proveFixtureOperator({ pool, secret, origin: base, handle: request => app.handle(request) }, { ...operator, cookie });
