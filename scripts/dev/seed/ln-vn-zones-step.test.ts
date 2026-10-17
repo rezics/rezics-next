@@ -89,6 +89,12 @@ test('seeded light-novel shelf samples carry no author credit for the acting acc
         if (collection) collections.add(collection);
         return ok({ structure: id(), revision: id() });
       }
+      if (method === 'POST' && /^\/v1\/collections\/[^/]+\/changes$/.test(pathname)) {
+        const { operations } = body as { operations: { target?: string }[] };
+        if (operations.some(operation => operation.target && !grants.includes(`work.read work:read:${operation.target}`)))
+          return { status: 404, body: { code: 'collection_unavailable' } };
+        return ok({ revision: id() });
+      }
       if (method === 'GET' && pathname.endsWith('/configuration')) {
         return ok({ revision: id(), name: '', language: '', configuration: {
           defaultRealm: null, official: null, presentation: null } });
@@ -106,9 +112,10 @@ test('seeded light-novel shelf samples carry no author credit for the acting acc
     },
   };
   const showcase = id();
+  const privateBook = id();
   try {
     await applyLnVnZones({
-      port: fake, vnWorks: [{ vndb: SHOWCASE.vn, iri: showcase }], showcaseIri: showcase, extraBooks: [],
+      port: fake, vnWorks: [{ vndb: SHOWCASE.vn, iri: showcase }], showcaseIri: showcase, extraBooks: [privateBook],
     });
     const created = writes.filter(item => item.method === 'POST' && item.path === '/v1/works');
     const samples = created.filter(item => SHELF.includes((item.body as { title?: string }).title ?? ''));
@@ -122,6 +129,8 @@ test('seeded light-novel shelf samples carry no author credit for the acting acc
     const credits = writes.filter(item => item.method === 'POST' && item.path.endsWith('/agent-credits'));
     expect(credits).toEqual([]);
     expect(grants).toContain('catalogue.verify catalogue:verify:root');
+    expect(grants).toContain(`work.read work:read:${privateBook}`);
+    expect(grants).toContain(`work.read work:read:${showcase}`);
   } finally {
     for (const sample of ['completed', 'ongoing', 'hiatus']) {
       rmSync(catalogueIntakePath(epoch, actor, seedKey('vndb-sample', sample)), { force: true });

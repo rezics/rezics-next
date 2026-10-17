@@ -261,6 +261,10 @@ async function configureZone(port: SeedPort, spec: ZoneSpec, zone: string, realm
 }
 
 async function insertMembers(port: SeedPort, zoneId: string, collection: string, wanted: string[]) {
+  // The shelf includes the plan's pen-name Works before their public selection.
+  // Its curator needs its own read authority, even when the Account also controls
+  // the author Agent. Establish it before reading retained membership as well.
+  for (const target of wanted) await port.grant(`work:read:${target}`, 'work.read');
   let page = await collectionPage(port, collection);
   let head = page.revision;
   const missing = wanted.filter(target => !page.targets.has(target));
