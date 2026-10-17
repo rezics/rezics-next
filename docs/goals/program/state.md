@@ -11,8 +11,12 @@ procedure, are archived on `archive/goals` with their Goals. That rebuild is
 still blocked before a fresh checkpoint; it gates growth checks only, not any
 row. Every program task has landed, and main's final confirmation at `eedd958e26`
 passed all 408 launch cells on 2026-10-16 with none failed or not run. The
-completion criteria are met. The program stays open for the maintainer's
-acceptance findings rather than closing at once.
+completion criteria are met. On 2026-10-17 the maintainer decided that a
+published section list's public entries are visible and searchable for
+anonymous visitors, each filtered by its own visibility, and that external
+conditions do not hold the close. With that change on main, the final
+confirmation at `72efe4353b` passed all 408 cells with none failed or unrun,
+and the program closed.
 
 Efficiency readings on 2026-10-16: 13.16 M worker input per main landing for
 03:00–15:00, 7.65 M after the gate, harness and watcher repairs landed
