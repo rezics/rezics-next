@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { OAuthClientError, signIn } from '../../lib/oauth-client.ts';
 import { assertSeedRequest } from './request-schema.ts';
 import { recoverSeedPut, seedPutConflict } from './put-recovery.ts';
-import { nameClosedRefusal, openSeedPlatformGroup, seedCallExposure, type SeedPlatformGrant } from './platform-use.ts';
+import { nameClosedRefusal, openSeedPlatformGroup, seedCallExposures, type SeedPlatformGrant } from './platform-use.ts';
 
 
 /** POST operations that read or compute and never record anything. */
@@ -200,15 +200,16 @@ export class SeedApi {
 
   /** Open platform:use for this bearer before a closed Main call. A seed with no
    * local administrator still makes the call; a platform_closed answer then names the group. */
-  async prepareClosed(method: string, path: string, token?: string): Promise<void> {
-    const exposure = seedCallExposure(method, path);
-    if (!exposure?.startsWith('platform:')) return;
-    const group = exposure.slice('platform:'.length);
+  async prepareClosed(method: string, path: string, token?: string, body?: unknown): Promise<void> {
     if (!this.endpoints.platformGrant) return;
-    if (!token) {
-      throw new Error(`Seed ${method} ${path} needs platform:use:${group} for ${exposure} and has no caller token`);
+    for (const exposure of seedCallExposures(method, path, body)) {
+      if (!exposure.startsWith('platform:')) continue;
+      const group = exposure.slice('platform:'.length);
+      if (!token) {
+        throw new Error(`Seed ${method} ${path} needs platform:use:${group} for ${exposure} and has no caller token`);
+      }
+      await openSeedPlatformGroup(this.endpoints, token, group);
     }
-    await openSeedPlatformGroup(this.endpoints, token, group);
   }
 
   closedDetail(method: string, path: string, status: number, detail: string): string {
@@ -253,7 +254,7 @@ export class SeedApi {
   private async write<T>(method: 'PUT' | 'POST', path: string, body: unknown,
     token: string, key: string): Promise<T> {
     assertSeedRequest(method, path, body);
-    await this.prepareClosed(method, path, token);
+    await this.prepareClosed(method, path, token, body);
     let attemptKey = key;
     for (let attempt = 0; attempt < 8; attempt++) {
       const response = await this.mainResponse(path, { method,

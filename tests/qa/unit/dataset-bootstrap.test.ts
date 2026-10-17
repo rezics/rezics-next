@@ -8,6 +8,7 @@ import {
   loadDatasetAdminCredentials,
   datasetStackMarker,
   completeDatasetAdminAudit,
+  designateDatasetFirstPartyClient,
 } from '../../../scripts/datasets/bootstrap.ts';
 import { FixtureAuthorityDenied } from '../../../services/main/src/modules/access/fixture-authority.ts';
 
@@ -57,6 +58,45 @@ const representationInsert =
 const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000123';
 
 describe('dedicated local dataset administrator bootstrap', () => {
+  test('designates only its active operator-owned importer client and records one atomic audit', async () => {
+    const calls: string[] = [];
+    let firstParty = false;
+    const client = { async query(sql: string, values: unknown[] = []) {
+      calls.push(sql);
+      if (sql.includes('FROM rezics_account_operator o')) return { rows: [{ role: 'admin' }], rowCount: 1 };
+      if (sql.includes('FROM "oauthClient"')) {
+        expect(values).toEqual(['local-importer', 'dataset-account']);
+        expect(sql).toContain("name='Local real datasets'");
+        expect(sql).toContain('disabled IS NOT TRUE');
+        return { rows: [{}], rowCount: 1 };
+      }
+      if (sql.includes('INSERT INTO rezics_oauth_first_party_client')) {
+        const rowCount = firstParty ? 0 : 1;
+        firstParty = true;
+        return { rows: [], rowCount };
+      }
+      return { rows: [], rowCount: 0 };
+    } } as unknown as PoolClient;
+    await designateDatasetFirstPartyClient(client, 'dataset-account', 'local-importer');
+    await designateDatasetFirstPartyClient(client, 'dataset-account', 'local-importer');
+    expect(calls.filter(sql => sql.includes('INSERT INTO rezics_account_operator_audit'))).toHaveLength(1);
+    expect(calls.at(-1)).toBe('COMMIT');
+  });
+
+  test('client designation rolls back for inactive operators or an unrelated client', async () => {
+    for (const role of [null, 'admin']) {
+      const calls: string[] = [];
+      const client = { async query(sql: string) {
+        calls.push(sql);
+        return { rows: sql.includes('FROM rezics_account_operator o') && role ? [{ role }] : [], rowCount: 0 };
+      } } as unknown as PoolClient;
+      await expect(designateDatasetFirstPartyClient(client, 'dataset-account', 'unrelated'))
+        .rejects.toThrow(role ? 'unrelated OAuth client' : 'active local operator');
+      expect(calls.at(-1)).toBe('ROLLBACK');
+      expect(calls.some(sql => sql.includes('INSERT INTO rezics_oauth_first_party_client'))).toBe(false);
+    }
+  });
+
   test('persists independently generated private credentials before setup and reuses them with mode0600', () => {
     const account = `http://127.0.0.1:${Math.floor(Math.random() * 10_000) + 30_000}`;
     const first = loadDatasetAdminCredentials(account);
@@ -65,7 +105,7 @@ describe('dedicated local dataset administrator bootstrap', () => {
     expect(first.credentials.email.endsWith('@example.test')).toBe(true);
     expect(first.credentials.password.length).toBeGreaterThanOrEqual(40);
     expect(first.credentials).toEqual(repeated.credentials);
-    expect(statSync(first.credentialsPath).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') expect(statSync(first.credentialsPath).mode & 0o777).toBe(0o600);
     expect(JSON.parse(readFileSync(first.credentialsPath, 'utf8')).name).toBe(
       'Local dataset administrator',
     );
@@ -81,7 +121,7 @@ describe('dedicated local dataset administrator bootstrap', () => {
     expect(first.credentialsPath).not.toBe(next.credentialsPath);
     expect(first.credentials.email).not.toBe(next.credentials.email);
     expect(loadDatasetAdminCredentials(account, old).credentials).toEqual(first.credentials);
-    expect(statSync(first.credentialsPath).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') expect(statSync(first.credentialsPath).mode & 0o777).toBe(0o600);
     expect(() => datasetStackMarker(undefined, 'operator')).toThrow('reset marker');
   });
 

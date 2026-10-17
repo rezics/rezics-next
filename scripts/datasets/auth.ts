@@ -6,6 +6,8 @@ import { SeedApi, type SeedEndpoints } from '../dev/seed/api.ts';
 import { people } from '../dev/seed/plan.ts';
 import {
   ensureDatasetAdminAccount,
+  localDatasetOperatorSession,
+  ensureDatasetFirstPartyClient,
   ensureDatasetAdminAccess,
   datasetStackMarker,
   inspectDatasetBulkOwnerStatus,
@@ -100,6 +102,7 @@ export async function localDatasetSession(
   };
   const privateConfig = JSON.parse(readFileSync(join(stack, 'web-auth/private.json'), 'utf8')) as {
     operator?: { id: string; email: string; password: string };
+    member?: { email: string; password: string };
     actingSubject?: string;
   };
   if (!privateConfig.operator)
@@ -123,10 +126,18 @@ export async function localDatasetSession(
     resource: publicConfig.resource,
     scope,
     enrollmentToken: env.ACCOUNT_ENROLLMENT_TOKEN,
+    ...(privateConfig.member && privateConfig.actingSubject && env.ACCESS_DATABASE_URL ? {
+      platformGrant: { ...privateConfig.member, actingSubject: privateConfig.actingSubject,
+        clientId: publicConfig.clientId, redirectUri, resource: publicConfig.resource,
+        accessDatabaseUrl: env.ACCESS_DATABASE_URL },
+    } : {}),
   };
   const dedicated = identity === 'admin' ? await ensureDatasetAdminAccount(stack, endpoints) : null;
   const credentials = dedicated?.credentials ?? privateConfig.operator;
-  const signed = await new SeedApi(endpoints).signInOrUp(credentials);
+  if (!credentials.id) throw new Error('Dataset operator has no retained Account identity');
+  const signed = identity === 'admin'
+    ? dedicated?.session ?? await localDatasetOperatorSession(stack, endpoints, { ...credentials, id: credentials.id })
+    : await new SeedApi(endpoints).signInOrUp(credentials);
   if (signed.id !== credentials.id) throw new Error('Dataset operator identity changed');
   const clientPath = join(
     repository,
@@ -170,6 +181,7 @@ export async function localDatasetSession(
     if (!clientId) throw new Error('Dataset OAuth registration returned no client');
     atomicJson(clientPath, { clientId, stackMarker: resetMarker });
   }
+  if (identity === 'admin') await ensureDatasetFirstPartyClient(stack, signed.id, clientId);
   const installation = await fetch(
     `${accountService}/api/account/installations/${encodeURIComponent(clientId)}`,
     {
@@ -217,6 +229,7 @@ export async function localDatasetSession(
           password: fixture.password,
         });
   let token = await datasetToken(tokenEndpoints, authenticated.cookie);
+  const platformApi = new SeedApi(endpoints);
   const api: DatasetApi = {
     ...(identity === 'admin'
       ? {
@@ -225,6 +238,7 @@ export async function localDatasetSession(
         }
       : {}),
     async request(method, path, body, key) {
+      await platformApi.prepareClosed(method, path, token, body);
       const send = () =>
         fetch(`${main}${path}`, {
           method,

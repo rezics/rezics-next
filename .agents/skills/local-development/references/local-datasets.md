@@ -79,10 +79,18 @@ The default importer creates/reuses a dedicated local dataset administrator.
 Its random credentials are stored with mode 0600 under `.temp/datasets/`; the
 bootstrap command reports only the credential file path. Existing local Account
 ownership assigns its Account role through the public operator API. The explicitly
-authorized Access owner bootstrap establishes the local administrator and four
+authorized Access owner bootstrap establishes the local administrator and six
 scoped fixture grants, preserving existing administrators, data, policies and
 recovery fences. Only this setup accesses owner stores; all dataset records and
 native resources are written through existing public HTTP operations.
+
+The local operator proves its enrolled second factor and recent authentication
+through Account HTTP. Setup designates only the dedicated, operator-owned
+`Local real datasets` client as first-party and records an Account audit; this
+lets consent offer the import scopes that third-party applications cannot take.
+Each imported call opens its required platform group for that caller through
+the existing administrator API, including capabilities selected by semantic
+resource types. The importer does not change the web client's scopes or gates.
 
 An existing dev stack can still name an earlier model generation after the
 checked-in model changes. `task dataset:bootstrap-model` is the explicitly

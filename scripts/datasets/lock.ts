@@ -3,6 +3,13 @@ import { join } from 'node:path';
 import { directoryLeaseState, readDirectoryLease, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { repository } from './store.ts';
 
+// Windows has no procfs identity. A reused PID may conservatively retain a
+// stale lease until it exits, but a live writer must never be reclaimed.
+const leaseOptions = process.platform === 'win32' ? { alive: (pid: number) => {
+  try { process.kill(pid, 0); return true; }
+  catch (error) { return (error as NodeJS.ErrnoException).code !== 'ESRCH'; }
+} } : {};
+
 export function datasetImportLockPath(context: string): string {
   if (!/^[a-f0-9]{64}$/.test(context)) throw new Error('Invalid dataset import lock context');
   return join(repository, '.temp/datasets/import-locks', context);
@@ -24,16 +31,16 @@ export function acquireDatasetImportLock(context: string): () => void {
     if (!released && (!Number.isSafeInteger(owner?.pid) || (owner!.pid as number) <= 0))
       throw new Error('Dataset import lock owner is invalid');
   }
-  const state = directoryLeaseState(directory);
+  const state = directoryLeaseState(directory, leaseOptions);
   if (state === 'initializing')
     throw new Error('Dataset import context is locked; its owner is still initializing');
   if (state === 'held') {
     const owner = readDirectoryLease(directory);
     throw new Error(`Dataset import context already has an active writer (PID ${owner?.pid})`);
   }
-  const lease = tryAcquireDirectoryLease(directory);
+  const lease = tryAcquireDirectoryLease(directory, leaseOptions);
   if (lease === 'held') {
-    const again = directoryLeaseState(directory);
+    const again = directoryLeaseState(directory, leaseOptions);
     const owner = readDirectoryLease(directory);
     if (again === 'initializing')
       throw new Error('Dataset import context is locked; its owner is still initializing');

@@ -8,6 +8,7 @@ import {
   type PlatformOperationId,
 } from '../../../generated/openapi/main/exposure.ts';
 import type { Credentials, SeedEndpoints } from './api.ts';
+import { semanticTypeCapabilities } from '../../../services/main/src/modules/semantic/selected-capability.ts';
 
 /** The dev stack's first platform administrator, the only principal that may
  * open a group. The web client is kept apart from a step's narrower seed client. */
@@ -57,6 +58,27 @@ export function seedCallExposure(method: string, path: string): string | undefin
     route.pattern.test(pathname) && route.methods[method.toLowerCase()])?.methods[method.toLowerCase()];
   if (!operationId || !(operationId in operationExposures)) return undefined;
   return operationExposures[operationId as PlatformOperationId];
+}
+
+/** Public semantic commands can select closed capabilities from their proposed
+ * resource types. Open those for the fixture caller before dispatch as well. */
+export function seedCallExposures(method: string, path: string, body?: unknown): string[] {
+  const exposures = new Set<string>();
+  const route = seedCallExposure(method, path);
+  if (route) exposures.add(route);
+  if (method === 'POST' && /^\/v1\/semantic\/changes(?:\/bulk)?$/.test(path.split('?')[0] ?? '')
+    && body && typeof body === 'object') {
+    const input = body as { state?: unknown; items?: unknown[] };
+    const states = path.split('?')[0]?.endsWith('/bulk') && Array.isArray(input.items) ? input.items : [input.state];
+    const types = states.flatMap(state => {
+      if (!state || typeof state !== 'object') return [];
+      const resource = state as { component?: string; types?: unknown[] };
+      return resource.component === 'resource' && Array.isArray(resource.types)
+        ? resource.types.filter((type): type is string => typeof type === 'string') : [];
+    });
+    for (const exposure of semanticTypeCapabilities(types)) exposures.add(exposure);
+  }
+  return [...exposures];
 }
 
 /** Put the closed group on a platform_closed problem so a seed failure names

@@ -1,7 +1,20 @@
 import { expect, test } from 'bun:test';
-import { livePlatformUses, nameClosedRefusal, seedCallExposure } from './platform-use.ts';
+import { livePlatformUses, nameClosedRefusal, seedCallExposure, seedCallExposures } from './platform-use.ts';
 
 const id = '00000000-0000-4000-a000-000000000001';
+
+test('public semantic seed commands open only capabilities selected by their resource types', () => {
+  const event = { component: 'resource', types: ['https://schema.org/Event'] };
+  const offer = { component: 'resource', types: ['https://schema.org/Offer'] };
+  expect(seedCallExposures('POST', '/v1/semantic/changes', { state: event }))
+    .toEqual(['public', 'platform:events']);
+  expect(seedCallExposures('POST', '/v1/semantic/changes/bulk', { items: [event, offer] }))
+    .toEqual(['public', 'platform:events', 'platform:commerce']);
+  expect(seedCallExposures('POST', '/v1/semantic/changes', { state: { component: 'resource', types: ['https://schema.org/Person'] } }))
+    .toEqual(['public']);
+  expect(seedCallExposures('POST', '/v1/works', { state: event })).toEqual(['public']);
+  expect(seedCallExposures('GET', '/v1/semantic/changes', { state: event })).toEqual([]);
+});
 
 test('seed calls resolve the longest route that has the method', () => {
   expect(seedCallExposure('GET', `/v1/themes/${id}/first-party`)).toBe('platform:executable-themes');

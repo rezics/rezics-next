@@ -2,11 +2,12 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
-import { writeAudit } from '../../services/account/src/operators.ts';
+import { operatorRole, rolePermits, writeAudit } from '../../services/account/src/operators.ts';
 import { grantFixtureAuthority } from '../../services/main/src/modules/access/fixture-authority.ts';
 import { AccessPlatformAdministrators } from '../../services/main/src/modules/access/platform-administrator.ts';
 import { readEnv } from '../dev/config.ts';
 import { SeedApi, type SeedEndpoints } from '../dev/seed/api.ts';
+import { proveFixtureOperator } from '../dev/fixture-operator.ts';
 import { atomicJson, repository, sha256 } from './store.ts';
 
 const REASON =
@@ -21,6 +22,7 @@ export interface DatasetAdminCredentials {
 export interface DatasetAdminSetup {
   credentials: DatasetAdminCredentials;
   credentialsPath: string;
+  session?: { id: string; cookie: string };
 }
 export const DATASET_ADMIN_GRANTS = [
   { action: 'work.create', scope: 'work:create:root' },
@@ -90,6 +92,62 @@ export function loadDatasetAdminCredentials(account: string, marker?: string): D
   return { credentials, credentialsPath };
 }
 
+/** Dedicated importer operators satisfy the same enrolled-factor and recent
+ * reauthentication policy as the existing local owner. Only loopback fixtures
+ * may read their own authenticator secret. All proofs go through Account HTTP. */
+export async function localDatasetOperatorSession(stack: string, endpoints: SeedEndpoints,
+  operator: { id: string; email: string; password: string }): Promise<{ id: string; cookie: string }> {
+  for (const origin of [endpoints.account, endpoints.accountService ?? endpoints.account]) {
+    if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(origin).hostname))
+      throw new Error('Dataset operator proof is local-only');
+  }
+  const env = readEnv(join(stack, 'dev.env'));
+  if (!env.ACCOUNT_SECRET) throw new Error('Local dataset operator proof needs its Account secret');
+  const pool = new Pool({ connectionString: checkedLocalDatabase(env.ACCOUNT_DATABASE_URL!) });
+  try {
+    const cookie = await proveFixtureOperator({ pool, secret: env.ACCOUNT_SECRET, origin: endpoints.account,
+      handle: request => {
+        const url = new URL(request.url);
+        const service = new URL(endpoints.accountService ?? endpoints.account);
+        url.protocol = service.protocol;
+        url.host = service.host;
+        return fetch(new Request(url, request));
+      } }, operator);
+    return { id: operator.id, cookie };
+  } finally { await pool.end(); }
+}
+
+/** This dedicated local tool requires scopes intentionally hidden from third
+ * parties. Designate only its operator-owned client, retaining an Account audit.
+ * Registration, installation, consent and token issuance still use HTTP. */
+export async function ensureDatasetFirstPartyClient(stack: string, accountSubject: string, clientId: string): Promise<void> {
+  const env = readEnv(join(stack, 'dev.env'));
+  const pool = new Pool({ connectionString: checkedLocalDatabase(env.ACCOUNT_DATABASE_URL!) });
+  const client = await pool.connect();
+  try { await designateDatasetFirstPartyClient(client, accountSubject, clientId); }
+  finally { client.release(); await pool.end(); }
+}
+
+export async function designateDatasetFirstPartyClient(client: PoolClient, accountSubject: string, clientId: string): Promise<void> {
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout = '2s'");
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    const role = await operatorRole(client, accountSubject);
+    if (!role || !rolePermits(role, 'clients:manage')) throw new Error('Dataset client designation needs an active local operator');
+    const registered = await client.query(`SELECT 1 FROM "oauthClient" WHERE "clientId"=$1 AND "userId"=$2
+      AND name='Local real datasets' AND disabled IS NOT TRUE AND "grantTypes"='["authorization_code"]'::jsonb FOR SHARE`,
+    [clientId, accountSubject]);
+    if (!registered.rowCount) throw new Error('Dataset client designation refused an unrelated OAuth client');
+    const inserted = await client.query(`INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1)
+      ON CONFLICT DO NOTHING RETURNING client_id`, [clientId]);
+    if (inserted.rowCount) await writeAudit(client, { actorId: accountSubject,
+      action: 'local_dataset_client_designated', targetId: clientId, reason: REASON,
+      before: { firstParty: false }, after: { firstParty: true }, requestId: randomUUID() });
+    await client.query('COMMIT');
+  } catch (error) { await client.query('ROLLBACK'); throw error; }
+}
+
 /** Account creation/verification and role assignment use existing public APIs. */
 export async function ensureDatasetAdminAccount(
   stack: string,
@@ -136,13 +194,17 @@ export async function ensureDatasetAdminAccount(
     }
   }
   const setup = loadDatasetAdminCredentials(endpoints.account, marker);
-  const signed = await api.signInOrUp(setup.credentials);
+  const retainedIdentity = setup.credentials.id;
+  const signed = retainedIdentity
+    ? await localDatasetOperatorSession(stack, endpoints, { ...setup.credentials, id: retainedIdentity })
+    : await api.signInOrUp(setup.credentials);
   if (setup.credentials.id && setup.credentials.id !== signed.id) {
     throw new Error(
       'Dedicated dataset administrator Account identity changed; inspect the local stack before continuing',
     );
   }
   setup.credentials.id = signed.id;
+  if (retainedIdentity) setup.session = signed;
   atomicJson(setup.credentialsPath, setup.credentials);
   const service = endpoints.accountService ?? endpoints.account;
   const status = await fetch(`${service}/api/account/admin/me`, {
@@ -151,8 +213,7 @@ export async function ensureDatasetAdminAccount(
   if (!status.ok) throw new Error(`Dataset administrator role read: HTTP ${status.status}`);
   const current = (await status.json()) as { role: string | null };
   if (current.role === 'admin' || current.role === 'owner') return setup;
-  const signedOwner = await api.signInOrUp({ email: owner.email, password: owner.password });
-  if (signedOwner.id !== owner.id) throw new Error('Local Account owner identity changed');
+  const signedOwner = await localDatasetOperatorSession(stack, endpoints, owner);
   const assigned = await fetch(
     `${service}/api/account/admin/operators/${encodeURIComponent(signed.id)}`,
     {
