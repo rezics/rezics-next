@@ -170,6 +170,32 @@ export interface PublicTextPosition {
   population: number;
   serverInstanceId: string;
   publicSearchWriteEpoch: string;
+  /** Issued only by the generation owner's background Content completeness audit. */
+  contentQualification?: ContentSearchQualification;
+}
+
+export interface ContentSearchQualification {
+  population: number;
+  ownerDataEpoch?: string;
+  ownerSequence: string;
+  publicDomain: boolean;
+}
+
+function contentQualification(proof: SearchDeltaProof): ContentSearchQualification | undefined {
+  const raw = (proof as SearchDeltaProof & { contentQualification?: unknown }).contentQualification;
+  if (!raw || typeof raw !== 'object') return undefined;
+  const witness = raw as Record<string, unknown>;
+  if (typeof witness.population !== 'string' || !decimal.test(witness.population)
+    || !Number.isSafeInteger(Number(witness.population))
+    || typeof witness.ownerSequence !== 'string' || !decimal.test(witness.ownerSequence)
+    || typeof witness.publicDomain !== 'boolean'
+    || (witness.ownerDataEpoch !== undefined
+      && (typeof witness.ownerDataEpoch !== 'string' || !witness.ownerDataEpoch))
+    || (witness.ownerDataEpoch === undefined
+      && (witness.population !== '0' || witness.ownerSequence !== '0'))) return undefined;
+  return { population: Number(witness.population), ownerSequence: witness.ownerSequence,
+    publicDomain: witness.publicDomain,
+    ...(typeof witness.ownerDataEpoch === 'string' ? { ownerDataEpoch: witness.ownerDataEpoch } : {}) };
 }
 
 const generationIri = /^urn:rezics:text-index-generation:[0-9a-f-]{36}$/;
@@ -341,6 +367,7 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
   }
   position.publicSearchWriteEpoch = proof.writeEpoch!;
   position.population = count(proof.qualifiedPopulation);
+  position.contentQualification = contentQualification(proof);
   await observeSearchPhase('readiness-completion-health', () => assertSameTextInstance(fuseki, position, graphBasis));
   return position;
 }
