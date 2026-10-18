@@ -1,4 +1,9 @@
-import { readCompositionHeader, readPlacements } from '../structure/graph.ts';
+import { CompositionCorrupt, CompositionUnavailable, compositionForMainVersion,
+  readCompositionHeader, readPlacements } from '../structure/graph.ts';
+import { readCompositionPage, readCompositionSnapshot } from '../structure/read.ts';
+import { StructureObjectCorrupt, StructureObjectUnavailable } from '../structure/tree.ts';
+import { ObjectNotFound, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
+import { isOwnerTransientFailure } from '../../infrastructure/owner-failure.ts';
 import { countSerialWords } from '../work/serial-projection.ts';
 import { readContents } from '../work-contents/read.ts';
 import { structureProfileFor } from '../structure/profiles.ts';
@@ -12,6 +17,84 @@ import { WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
  * and fixed graph enrichment batches. */
 export const STUDIO_CHAPTER_COST = { pageSize: 20, contentCalls: 40, graphBatches: 4,
   accessCalls: 44, graphStatements: 64, bodyBatch: 4, bodyBatches: 5 } as const;
+
+/** Counts share a request budget and read immutable placement pages, never chapter bodies. */
+export const STUDIO_CHAPTER_COUNT_COST = { pageSize: 20, pagesPerBook: 20, pagesPerInventory: 40 } as const;
+export interface StudioChapterCount { value: number; complete: boolean }
+interface CountPage { revision: string; next: string | null;
+  occurrences: readonly { occurrence: string; role: string; state: string }[] }
+
+/** Follow every group's siblings and each continuation. Placement identity, not target identity, is counted. */
+export async function countStudioChapterOccurrences(
+  load: (parent?: string, after?: string) => Promise<CountPage>,
+  budget: { remaining: number } = { remaining: STUDIO_CHAPTER_COUNT_COST.pagesPerBook },
+): Promise<StudioChapterCount> {
+  let value = 0, revision: string | undefined;
+  const pending: Array<{ parent?: string; after?: string }> = [{}];
+  const addresses = new Set<string>(), occurrences = new Set<string>();
+  for (let pages = 0; pending.length; pages++) {
+    if (pages >= STUDIO_CHAPTER_COUNT_COST.pagesPerBook || budget.remaining-- <= 0) return { value, complete: false };
+    const { parent, after } = pending.shift()!;
+    const address = JSON.stringify([parent ?? null, after ?? null]);
+    if (addresses.has(address)) return { value, complete: false };
+    addresses.add(address);
+    let page: CountPage;
+    try { page = await load(parent, after); }
+    catch (error) {
+      if (error instanceof WorkReadMoved) throw error;
+      if (error instanceof WorkReadUnavailable || error instanceof WorkReadMissing || error instanceof WorkReadLimit
+        || error instanceof CompositionUnavailable || error instanceof CompositionCorrupt
+        || error instanceof StructureObjectUnavailable || error instanceof StructureObjectCorrupt
+        || error instanceof ObjectNotFound || error instanceof ObjectUnavailable
+        || isOwnerTransientFailure(error)) return { value, complete: false };
+      throw error;
+    }
+    revision ??= page.revision;
+    if (page.revision !== revision || page.occurrences.some(item => occurrences.has(item.occurrence))
+      || new Set(page.occurrences.map(item => item.occurrence)).size !== page.occurrences.length) return { value, complete: false };
+    for (const item of page.occurrences) {
+      occurrences.add(item.occurrence);
+      if (item.state !== 'active') continue;
+      if (item.role === 'chapter') value++;
+      else if (item.role === 'group') pending.push({ parent: item.occurrence });
+    }
+    if (page.next) pending.push({ parent, after: page.next });
+  }
+  return { value, complete: true };
+}
+
+/** The caller's list/exact Work admission fences authority around this private aggregate. */
+export async function readStudioChapterCount(session: WorkReadSession, book: string, mainVersion: string,
+  budget: { remaining: number } = { remaining: STUDIO_CHAPTER_COUNT_COST.pagesPerBook }): Promise<StudioChapterCount> {
+  const env = session.deps.environment;
+  try {
+    const mapping = () => compositionForMainVersion(env, mainVersion);
+    const structure = await mapping();
+    session.observeDependency(`studio-count-mapping:${mainVersion}`, structure, mapping);
+    // Successful absence is an empty Book; a failed owner read is unknown.
+    if (!structure) return { value: 0, complete: true };
+    const readHeader = () => readCompositionHeader(env, structure);
+    const header = await readHeader();
+    if (!header || header.work !== book || header.component !== mainVersion || header.profile !== 'book-composition') {
+      return { value: 0, complete: false };
+    }
+    session.observeDependency(`studio-count-header:${structure}`, header, readHeader);
+    const snapshot = await readCompositionSnapshot(env, { structure, header });
+    return await countStudioChapterOccurrences((parent, after) => readCompositionPage(env, {
+      structure, header, snapshot, parent, after, limit: STUDIO_CHAPTER_COUNT_COST.pageSize,
+      // Count the controlled Book's placements; this never discloses a target or its text.
+      canReadTarget: async () => true,
+    }), budget);
+  } catch (error) {
+    if (error instanceof CompositionUnavailable || error instanceof CompositionCorrupt
+      || error instanceof StructureObjectUnavailable || error instanceof StructureObjectCorrupt
+      || error instanceof ObjectNotFound || error instanceof ObjectUnavailable || error instanceof WorkReadUnavailable
+      || isOwnerTransientFailure(error)) {
+      return { value: 0, complete: false };
+    }
+    throw error;
+  }
+}
 
 // Scripts written without spaces between words: their writers measure a manuscript in
 // characters (中文“字数”, 日本語「文字数」); elsewhere writers count words.
