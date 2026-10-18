@@ -17,7 +17,9 @@ export function testDatasetImportCoverage(snapshot: DatasetSnapshot, report: Dat
   require(report.snapshot === snapshot.id && report.digest === snapshot.digest,
     'coverage belongs to another immutable snapshot');
   const keys = new Set(snapshot.sources.flatMap(source => source.records).map(record => record.key));
-  const inventory = datasetCoverage(snapshot, keys);
+  require(new Set(report.selectedRecords).size === report.selectedRecords.length
+    && report.selectedRecords.every(key => keys.has(key)), 'coverage has invalid selected source identities');
+  const inventory = datasetCoverage(snapshot, new Set(report.selectedRecords));
   const observed = new Set<string>();
   for (const entry of report.entries) {
     const id = datasetCoverageId(entry), expected = inventory.entries.get(id);
@@ -26,6 +28,7 @@ export function testDatasetImportCoverage(snapshot: DatasetSnapshot, report: Dat
     require(expected && entry.recordDigest === expected.recordDigest
       && entry.valueDigest === expected.valueDigest && entry.observation === expected.observation,
     'coverage changed or invented source evidence');
+    require(entry.acquisition === expected.acquisition, 'coverage changed source acquisition evidence');
     inventory.retain(entry.record);
     for (const mapping of entry.mappings ?? [])
       inventory.disposition(entry, { status: 'mapped', reason: entry.disposition.reason, mapping });

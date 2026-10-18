@@ -11,14 +11,20 @@ import { atomicJson, canonical, sha256, verifiedBlob } from './store.ts';
 import { checkedComponentState } from '../../services/main/src/modules/semantic/change.ts';
 import { importedRightsAssessments } from '../../services/main/src/modules/rights/import-policy.ts';
 import { acquireDatasetImportLock } from './lock.ts';
-import { verifyCoverSourceCapture } from './snapshot.ts';
+import { normalizedCaptureRole, verifyCoverSourceCapture } from './snapshot.ts';
+import { selectDatasetRoots, type DatasetSelectionManifest, type DatasetSelectionOptions } from './selection.ts';
 import type {
-  DatasetEdge, DatasetIntakeReference, DatasetMappingContext, DatasetMapperId, DatasetNativeMapper,
-  DatasetNativeRecord, DatasetRecord, DatasetSnapshot,
+  DatasetCoverageKey, DatasetEdge, DatasetIntakeReference, DatasetMappingContext, DatasetMapperId, DatasetNativeMapper,
+  DatasetNativeRecord, DatasetRecord, DatasetSnapshot, StoredImage,
 } from './types.ts';
 import { BANGUMI_USER_POST_FIELDS } from './bangumi.ts';
 import { datasetRecordDigest, datasetSourceIdentity, datasetSourceReference } from './native/context.ts';
 import { DATASET_NATIVE_MAPPERS, datasetCoverage, datasetCoverageId, type DatasetCoverageReport } from './native/coverage.ts';
+import { projectDatasetFields, type DatasetFieldPlan } from './native/fields.ts';
+import { datasetMediaMapper, datasetWorkCoverImages, electedDatasetCovers } from './native/media.ts';
+import { datasetRelationMapper } from './native/relations.ts';
+import { datasetCreditMapper } from './native/credits.ts';
+import { datasetReleaseMapper } from './native/releases.ts';
 
 const SCHEMA = 'https://schema.org/';
 const RV = 'https://rezics.com/vocab/';
@@ -162,6 +168,8 @@ interface JournalEntry {
   result?: Record<string, unknown>;
   /** Last Main response for a resumable media step, including refusals. */
   responseStatus?: number;
+  /** Exact historical replies survive later replay refusals or editor changes. */
+  responses?: { status?: number; body: Record<string, unknown> }[];
   phase?: 'cover-evidence' | 'cover-reserve' | 'cover-transfer' | 'cover-selection' | 'cover-read';
   /** Ordered source/child receipt keys bound to an atomic native batch. */
   itemKeys?: string[];
@@ -195,6 +203,7 @@ interface Journal {
   native: Record<string, NativeRecord>;
   limitations: string[];
   completed: boolean;
+  selection?: DatasetSelectionManifest;
 }
 type NativeRecord = DatasetNativeRecord;
 export interface DatasetImportOptions extends Partial<DatasetSession> {
@@ -202,7 +211,9 @@ export interface DatasetImportOptions extends Partial<DatasetSession> {
   nativeBatchItems?: number;
   locale?: string;
   progress?: (message: string) => void;
+  /** Legacy prefix limit. An accepted root selection always processes its full view. */
   maxRecords?: number;
+  selection?: DatasetSelectionOptions;
   /** Project elected Work-to-Work graph evidence; every relationship is retained separately. */
   relationships?: boolean;
   /** Complete native phases, using the existing journal and public owner operations. */
@@ -223,6 +234,35 @@ export interface DatasetImportResult {
   coverResults: DatasetCoverImportResult[];
   coverageFile: string;
   coverage: Omit<DatasetCoverageReport, 'entries'>;
+  selectionFile?: string;
+  selection?: DatasetSelectionManifest;
+  fieldPlansFile: string;
+}
+
+export class DatasetSelectionRefusedError extends Error {
+  constructor(readonly manifest: DatasetSelectionManifest, readonly selectionFile: string) {
+    super('Dataset root selection refused before public API commands');
+    this.name = 'DatasetSelectionRefusedError';
+  }
+}
+
+/** Repair changes evidence/captureRole, never the frozen image occurrence. Match
+ * cloned, filtered helpers by their unchanged descriptor, preserving duplicates. */
+function frozenCoverOccurrences(snapshot: DatasetSnapshot, images: readonly StoredImage[]) {
+  const key = (image: StoredImage) => canonical({ record: image.record, role: image.role,
+    url: image.url, capture: image.capture, missing: image.missing, unavailable: image.unavailable });
+  const originals = new Map<string, number[]>();
+  snapshot.images.forEach((image, index) => {
+    const id = key(image);
+    originals.set(id, [...(originals.get(id) ?? []), index]);
+  });
+  return images.map(image => {
+    const indices = originals.get(key(image));
+    const offset = indices?.findIndex(index => !snapshot.images[index]!.sourceEvidence
+      || canonical(snapshot.images[index]!.sourceEvidence) === canonical(image.sourceEvidence)) ?? -1;
+    if (!indices || offset < 0) throw new Error('Repaired cover has no exact frozen occurrence');
+    return { index: indices.splice(offset, 1)[0]!, image };
+  });
 }
 
 export type DatasetCoverImportStep =
@@ -237,6 +277,7 @@ export type DatasetCoverImportStep =
 export type DatasetCoverImportReasonCode =
   | 'work-receipt-unavailable'
   | 'source-evidence-unavailable'
+  | 'source-evidence-contract-unavailable'
   | 'capture-unavailable'
   | 'cover-descriptor-invalid'
   | 'source-capture-invalid'
@@ -654,23 +695,34 @@ export async function importDataset(
   snapshot: DatasetSnapshot,
   options: DatasetImportOptions = {},
 ): Promise<DatasetImportResult> {
+  const parentRecords = snapshot.sources.flatMap(source => source.records);
+  assertNoImportedUserPosts(parentRecords);
+  // Selection is an offline view. Refusal precedes session lookup and every
+  // public command, including the catalogue read used to discover the epoch.
+  const selectionResult = options.selection ? selectDatasetRoots(snapshot, options.selection) : undefined;
+  const selection = selectionResult?.manifest;
+  const selectionFile = selection
+    ? join(root, 'imports', 'selections', `${sha256(canonical(selection))}.json`) : undefined;
+  if (selectionFile) atomicJson(selectionFile, selection);
+  if (selectionResult?.status === 'refused') throw new DatasetSelectionRefusedError(selectionResult.manifest, selectionFile!);
+  const view = selectionResult?.selection;
+  const sources = view?.sources ?? snapshot.sources;
+  const records = sources.flatMap(source => source.records);
   const session =
     options.api && options.mainOrigin && options.webOrigin && options.actingSubject
       ? (options as DatasetSession)
       : await localDatasetSession();
   const { api, mainOrigin, actingSubject } = session;
   const locale = options.locale ?? 'zh-Hant';
-  const records = snapshot.sources.flatMap((source) => source.records);
-  assertNoImportedUserPosts(records);
   if (options.maxRecords !== undefined && (!Number.isSafeInteger(options.maxRecords) || options.maxRecords < 0))
     throw new Error('Dataset record limit must be a nonnegative integer');
   if (options.nativeBatchItems !== undefined) nativeBatchSize(String(options.nativeBatchItems));
-  const allEdges = snapshot.sources.flatMap((source) => source.edges);
-  const byKey = new Map(records.map((record) => [record.key, record]));
-  const selected = options.maxRecords === undefined ? records : records.slice(0, options.maxRecords);
+  const allEdges = sources.flatMap((source) => source.edges);
+  const byKey = new Map(parentRecords.map((record) => [record.key, record]));
+  const selected = selection || options.maxRecords === undefined ? records : records.slice(0, options.maxRecords);
   const selectedKeys = new Set(selected.map(record => record.key));
-  if (byKey.size !== records.length
-    || new Set(records.map(datasetSourceIdentity)).size !== records.length)
+  if (byKey.size !== parentRecords.length
+    || new Set(parentRecords.map(datasetSourceIdentity)).size !== parentRecords.length)
     throw new Error('Dataset has duplicate source identities; native grain must be unambiguous');
   const mapperIds = new Set<string>();
   for (const mapper of options.nativeMappers ?? []) {
@@ -679,9 +731,25 @@ export async function importDataset(
       throw new Error('Dataset mapper identities and revisions must be unique and stable');
     mapperIds.add(mapper.id);
   }
+  const nativeMappers = [...(options.nativeMappers ?? []),
+    ...[datasetRelationMapper(), datasetCreditMapper(), datasetReleaseMapper(), datasetMediaMapper(root)]
+      .filter(mapper => !mapperIds.has(mapper.id))];
   const coverage = datasetCoverage(snapshot, selectedKeys);
+  const selectedOccurrences = new Set<string>();
+  if (selection) {
+    for (const source of selection.sources) {
+      for (const index of source.edges) selectedOccurrences.add(`/sources/${source.source}/edges/${index}`);
+      for (const index of source.images) selectedOccurrences.add(`/sources/${source.source}/images/${index}`);
+    }
+    for (const index of selection.storedImages) selectedOccurrences.add(`/images/${index}`);
+  }
+  const inView = (key: DatasetCoverageKey) => selectedKeys.has(key.record)
+    && (!selection || key.kind === 'field' || selectedOccurrences.has(key.path));
+  for (const entry of coverage.entries.values())
+    if (selectedKeys.has(entry.record) && !inView(entry) && entry.disposition.status === 'unmapped')
+      entry.disposition.reason = 'outside-selected-view';
   const imagesByRecord = new Map<string, DatasetSnapshot['images']>();
-  for (const image of snapshot.images) {
+  for (const image of view?.images ?? snapshot.images) {
     const listed = imagesByRecord.get(image.record) ?? [];
     listed.push(image);
     imagesByRecord.set(image.record, listed);
@@ -709,7 +777,8 @@ export async function importDataset(
   const epoch = (basis.sourcePosition as { dataEpoch?: unknown } | undefined)?.dataEpoch;
   if (typeof epoch !== 'string') throw new Error('Public catalogue returned no product epoch');
   const context = sha256(
-    canonical([mainOrigin, actingSubject, epoch, snapshot.id, snapshot.digest]),
+    canonical([mainOrigin, actingSubject, epoch, snapshot.id, snapshot.digest,
+      ...(selection ? [sha256(canonical(selection))] : [])]),
   );
   // Different snapshots share native source identities in one product/Account.
   // Keep the legacy exact-context lease as well for an older client's retry.
@@ -732,12 +801,14 @@ export async function importDataset(
           native: {},
           limitations: [],
           completed: false,
+          ...(selection ? { selection } : {}),
         };
     if (
       journal.snapshot !== snapshot.id || journal.digest !== snapshot.digest ||
       journal.dataEpoch !== epoch ||
       journal.mainOrigin !== mainOrigin ||
-      journal.actingSubject !== actingSubject
+      journal.actingSubject !== actingSubject ||
+      canonical(journal.selection ?? null) !== canonical(selection ?? null)
     ) {
       throw new Error('Dataset import checkpoint belongs to another snapshot or API instance');
     }
@@ -796,6 +867,20 @@ export async function importDataset(
       entry => request(api, entry.method, entry.path, entry.body ?? undefined,
         entry.method === 'GET' ? undefined : key));
     };
+    const coverResponse = (entry: JournalEntry, response: ApiResponse) => {
+      const history = [...(entry.responses ?? []),
+        ...(entry.result ? [{ status: entry.responseStatus, body: entry.result }] : []),
+        { status: response.status, body: response.body }];
+      const seen = new Set<string>();
+      entry.responses = history.filter(reply => {
+        const id = canonical(reply);
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      }).map(reply => structuredClone(reply));
+      entry.responseStatus = response.status;
+      entry.result = structuredClone(response.body);
+    };
     /** Cover writes use the same immutable request journal, but are always replayed
      * against current owner fences before their prior receipt is accepted. */
     const coverCall = async (label: string, phase: JournalEntry['phase'],
@@ -816,8 +901,7 @@ export async function importDataset(
       const key = method === 'GET' ? undefined : `dataset:${sha256(`${context}:${label}`)}`;
       const response = await responseWithRetry(api, method, path,
         () => api.request(method, path, body, key));
-      entry.responseStatus = response.status;
-      entry.result = response.body;
+      coverResponse(entry, response);
       saveEntry(label, entry);
       save(true);
       return response;
@@ -843,14 +927,19 @@ export async function importDataset(
       if (bytes.byteLength !== byteLength || sha256(bytes) !== digest)
         throw new Error(`Frozen cover bytes changed: ${digest}`);
       const response = await transferWithRetry(api, path, bytes);
-      entry.responseStatus = response.status;
-      entry.result = response.body;
+      coverResponse(entry, response);
       saveEntry(label, entry);
       save(true);
       return response;
     };
     const retainedLabels = new Set<string>();
     const sourceObservations = new Map<string, DatasetIntakeReference[]>();
+    const sourceReference = (key: string) => {
+      const record = byKey.get(key);
+      if (!record) throw new Error(`No frozen source record: ${key}`);
+      const intakes = sourceObservations.get(key) ?? [];
+      return datasetSourceReference(snapshot, record, intakes.map(intake => intake.observation), intakes);
+    };
     const retained = async (label: string, record: DatasetRecord, value: unknown) => {
       const parts = intakeChunks(value),
         ids: string[] = [];
@@ -1051,6 +1140,7 @@ export async function importDataset(
     const urlsFile = join(root, 'urls.md');
     const coverResults = new Map<string, DatasetCoverImportResult>();
     const coverageFile = join(root, `coverage-${context}.json`);
+    const fieldPlansFile = join(root, `field-plans-${context}.json`);
     const completedMappers = new Set<DatasetMapperId>();
     let coverageReport = coverage.report(false, completedMappers);
     try {
@@ -1080,7 +1170,7 @@ export async function importDataset(
           save(true);
         }
       }
-      for (const source of snapshot.sources) {
+      for (const source of sources) {
         const record = source.records[0];
         if (record)
           await retained(
@@ -1097,6 +1187,16 @@ export async function importDataset(
               totalRecords: source.records.length,
             },
           );
+        if (record && source.images.length) await retained(
+          `images:${source.provider}:snapshot-image-candidates-v1`,
+          { ...record, kind: 'dataset-image-candidates', externalId: snapshot.id },
+          { format: 'rezics-dataset-image-candidates-v1', snapshot: snapshot.id, digest: snapshot.digest,
+            ...(selection ? { selection } : {}), provider: source.provider,
+            images: snapshot.sources.flatMap((parent, sourceIndex) => parent.provider === source.provider
+              ? parent.images.flatMap((image, index) => inView({ record: image.record, kind: 'source-image',
+                path: `/sources/${sourceIndex}/images/${index}` })
+                ? [{ path: `/sources/${sourceIndex}/images/${index}`, image }] : []) : []) },
+        );
       }
       if (options.native !== false) {
         options.progress?.(
@@ -1402,11 +1502,33 @@ export async function importDataset(
           'Elected Work-to-Work relationships are labelled evidence resources, preserving direction, source identity and qualifiers. Accepted classifications, cross-provider merges, native episode compositions and exact realizations require their existing review/owner flows. Every remaining relationship is retained as complete source evidence; it is not expanded into artificial native graph records.',
         );
       }
-      for (const [imageIndex, image] of snapshot.images.entries()) {
+      const hasMedia = snapshot.images.length > 0 || snapshot.sources.some(source => source.images.length > 0);
+      let mediaViewValid = true;
+      let coverOccurrences: { index: number; image: StoredImage }[] = [];
+      if (options.native !== false && hasMedia) {
+        try {
+          coverOccurrences = frozenCoverOccurrences(snapshot, datasetWorkCoverImages(root, snapshot));
+        } catch {
+          // A failed repair cannot fall back to admitting raw source evidence.
+          // Raw descriptors are used only to report the elected pending cover.
+          mediaViewValid = false;
+          const elected = electedDatasetCovers(snapshot.sources.flatMap(source => source.images));
+          coverOccurrences = snapshot.images.flatMap((image, index) => elected.some(cover =>
+            cover.record === image.record && cover.role === image.role && cover.url === image.url)
+            && byKey.get(image.record)?.native === 'work' ? [{ index, image }] : []);
+          note('Frozen media consumption view could not be validated; no cover admission or selection was attempted.');
+        }
+      }
+      const electedIndices = new Set(coverOccurrences.map(({ index }) => index));
+      if (options.native !== false) for (const [index, image] of snapshot.images.entries()) {
+        const key: DatasetCoverageKey = { record: image.record, kind: 'image', path: `/images/${index}` };
+        if (inView(key) && normalizedCaptureRole(image) === 'cover' && !electedIndices.has(index))
+          coverage.disposition(key, { status: 'source-only', reason: 'unelected-cover-candidate' });
+      }
+      for (const { index: imageIndex, image } of coverOccurrences) {
         if (options.native === false) continue;
-        if (image.captureRole !== 'cover') continue;
         const record = byKey.get(image.record);
-        if (!record || !selectedKeys.has(image.record)) continue;
+        if (!record || !inView({ record: image.record, kind: 'image', path: `/images/${imageIndex}` })) continue;
         const recordDigest = sha256(record.key);
         const pending = (reason: string, step: DatasetCoverImportStep,
           reasonCode: DatasetCoverImportReasonCode, response?: ApiResponse) => {
@@ -1420,6 +1542,10 @@ export async function importDataset(
           (options.progress ?? console.info)(log);
           note(`cover pending ${recordDigest.slice(0, 16)} (${reason})`);
         };
+        if (!mediaViewValid) {
+          pending('repaired source evidence is invalid', 'evidence-capture', 'source-capture-invalid');
+          continue;
+        }
         const mapped = journal.native[image.record];
         if (mapped?.kind !== 'work' || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(mapped.id)) {
           pending('native Work receipt unavailable', 'target-work', 'work-receipt-unavailable');
@@ -1458,6 +1584,11 @@ export async function importDataset(
           verifyCoverSourceCapture(root, snapshot.captures, image);
         } catch {
           pending('source record capture is unavailable or corrupt', 'evidence-capture', 'source-capture-invalid');
+          continue;
+        }
+        if (source.derivation) {
+          pending('Source/Media source-cover-evidence-v1 and media-imported-cover-v1 cannot retain the VNDB archive/table/row/field witness',
+            'source-evidence', 'source-evidence-contract-unavailable');
           continue;
         }
         let frozenBytes: Buffer;
@@ -1675,6 +1806,9 @@ export async function importDataset(
           pending('cover API unavailable', activeStep, 'cover-api-unavailable');
         }
       }
+      const fieldPlans: DatasetFieldPlan[] = selected.map(record => projectDatasetFields(record, sourceReference(record.key)));
+      atomicJson(fieldPlansFile, { profile: 'dataset-field-plans-v1',
+        parent: { id: snapshot.id, digest: snapshot.digest }, ...(selection ? { selection } : {}), plans: fieldPlans });
       if (options.native !== false) {
         for (const record of selected) {
           const mapped = journal.native[record.key];
@@ -1695,18 +1829,50 @@ export async function importDataset(
             });
           }
         }
+        // A plan describes candidates. It cannot turn an envelope or one part of
+        // multipart raw input into a convertible observation or an adoption.
+        for (const plan of fieldPlans) for (const field of plan.fields) for (const evidence of field.evidence) {
+          const key: DatasetCoverageKey = { record: plan.source.key, kind: 'field', path: evidence.path };
+          const entry = coverage.entries.get(datasetCoverageId(key));
+          if (!entry || entry.observation === 'empty' || entry.disposition.status === 'mapped') continue;
+          coverage.disposition(key, {
+            status: field.disposition === 'source-only' ? 'source-only' : 'unmapped',
+            reason: field.disposition === 'candidate'
+              ? `field-candidate-without-adoption: ${field.reason}; POST /v1/sources/observations/:observation/conversions requires an admitted exact retained input; dataset envelopes and multipart parts are not convertible`
+              : field.reason,
+          });
+        }
+        if (fieldPlans.some(plan => plan.fields.some(field => field.disposition === 'candidate')))
+          note('Field plans remain candidates until admitted exact source conversion and adoption/support receipts bind the existing native target; retained dataset envelopes and multipart parts are not substituted for provider observations.');
+        for (const entry of coverage.entries.values()) {
+          if (entry.kind !== 'source-image' || !inView(entry)) continue;
+          coverage.disposition(entry, {
+            status: entry.acquisition === 'captured' && mediaViewValid ? 'source-only' : 'unmapped',
+            reason: entry.acquisition === 'not-acquired' ? 'source-image-not-acquired'
+              : entry.acquisition !== 'captured' ? 'acquisition-failed'
+              : !mediaViewValid ? 'source-capture-invalid' : 'retained-source-image-candidate; native receipts belong to frozen image occurrences',
+          });
+        }
         const mappingContext: Omit<DatasetMappingContext, 'command'> = {
           snapshot, actingSubject, selected: selectedKeys, records: byKey,
+          ...(selection ? { selection } : {}),
           native: new Map(Object.entries(journal.native)),
-          source(key) {
-            const record = byKey.get(key);
-            if (!record) throw new Error(`No frozen source record: ${key}`);
-            const intakes = sourceObservations.get(key) ?? [];
-            return datasetSourceReference(snapshot, record, intakes.map(intake => intake.observation), intakes);
+          source: sourceReference,
+          read: path => request(api, 'GET', path),
+          disposition(key, value) {
+            if (!inView(key)) return;
+            const prior = coverage.entries.get(datasetCoverageId(key));
+            // A subordinate adapter's pending plan cannot erase another owner's
+            // acknowledged fact. Additional mapped supports still append normally.
+            if (prior?.disposition.status === 'mapped' && value.status !== 'mapped') return;
+            coverage.disposition(key, value);
           },
-          read: path => request(api, 'GET', path), disposition: coverage.disposition,
         };
-        for (const mapper of options.nativeMappers ?? []) {
+        for (const mapper of nativeMappers) {
+          if (mapper.id === 'media' && !mapperIds.has('media')) {
+            if (!mediaViewValid) continue;
+            if (!hasMedia) { completedMappers.add('media'); continue; }
+          }
           await mapper.map({ ...mappingContext, command: (label, method, path, body) =>
             command(`mapping:${mapper.id}:${mapper.revision}:${label}`, method, path, body) });
           completedMappers.add(mapper.id);
@@ -1716,14 +1882,15 @@ export async function importDataset(
       save(true);
     } finally {
       for (const entry of coverage.entries.values()) {
-        if (!selectedKeys.has(entry.record) || entry.disposition.status !== 'unmapped') continue;
+        if (!inView(entry) || entry.disposition.status !== 'unmapped') continue;
         if (!retainedLabels.has(`record:${entry.record}`)) entry.disposition.reason = 'source-intake-incomplete';
         else if (options.native === false) entry.disposition.reason = 'native-mapping-disabled';
       }
       coverageReport = coverage.report(selected.length === records.length
         && selected.every(record => retainedLabels.has(`record:${record.key}`))
-        && snapshot.sources.every(source => !source.records.length
-          || retainedLabels.has(`scope:${source.provider}:snapshot-manifest-v1`)), completedMappers);
+        && sources.every(source => !source.records.length
+          || (retainedLabels.has(`scope:${source.provider}:snapshot-manifest-v1`)
+            && (!source.images.length || retainedLabels.has(`images:${source.provider}:snapshot-image-candidates-v1`)))), completedMappers);
       atomicJson(coverageFile, coverageReport);
       save(true);
       writeUrlIndex(root, snapshot, selected, journal, session, locale, context);
@@ -1745,6 +1912,8 @@ export async function importDataset(
       coverResults: [...coverResults.values()],
       coverageFile,
       coverage: (({ entries: _entries, ...summary }) => summary)(coverageReport),
+      ...(selectionFile ? { selectionFile, selection } : {}),
+      fieldPlansFile,
     };
     atomicJson(join(root, 'import-latest.json'), result);
     return result;

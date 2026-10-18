@@ -87,6 +87,33 @@ describe('observed dataset adoption coverage', () => {
     testDatasetImportCoverage(snapshot, report);
   });
 
+  test('never-acquired candidates retain source pointers and prevent completeness even when retained source-only', () => {
+    const available = structuredClone(snapshot);
+    available.images = [];
+    available.sources[0]!.images = [{ record: record.key, role: 'portrait', url: 'https://example.org/not-captured.jpg' }];
+    const inventory = datasetCoverage(available, selected);
+    inventory.retain(record.key);
+    const candidate: DatasetCoverageKey = { record: record.key, kind: 'source-image', path: '/sources/0/images/0' };
+    expect(() => inventory.disposition(candidate, { status: 'mapped', reason: 'guessed-media', mapping: mapping() }))
+      .toThrow('Unavailable source evidence');
+    for (const entry of inventory.entries.values()) if (entry.observation === 'present')
+      inventory.disposition(entry, { status: 'source-only', reason: 'retained-evidence' });
+    inventory.disposition(key('/title'), { status: 'mapped', reason: 'native-user-fact', mapping: mapping() });
+    const report = inventory.report(true, new Set(DATASET_NATIVE_MAPPERS));
+    expect(report.counts.unmapped).toBe(0);
+    expect(report.rootsWithoutNativeFacts).toEqual([]);
+    expect(report.pendingAcquisitions).toEqual([candidate]);
+    expect(report.catalogueReady).toBe(false);
+    expect(report.entries.filter(entry => entry.kind === 'image')).toEqual([]);
+    expect(report.entries.find(entry => entry.kind === 'source-image')).toMatchObject({
+      observation: 'present', acquisition: 'not-acquired', valueDigest: expect.any(String),
+    });
+    testDatasetImportCoverage(available, report);
+    const changed = structuredClone(report);
+    changed.entries.find(entry => entry.kind === 'source-image')!.acquisition = 'captured';
+    expect(() => testDatasetImportCoverage(available, changed)).toThrow('acquisition evidence');
+  });
+
   test('all source-only dispositions and completed transport never substitute for a native user fact', () => {
     const available = structuredClone(snapshot);
     available.images = [];

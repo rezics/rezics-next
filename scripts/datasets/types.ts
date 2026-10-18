@@ -1,4 +1,5 @@
 import type { Capture } from './network.ts';
+import type { DatasetSelectionManifest } from './selection.ts';
 
 export type Provider = 'vndb' | 'bangumi' | 'musicbrainz';
 export interface DatasetRecord {
@@ -133,8 +134,9 @@ export interface DatasetMappingReceipt {
 
 export interface DatasetCoverageKey {
   record: string;
-  kind: 'field' | 'edge' | 'image';
-  /** RFC 6901 pointer in record, or the snapshot for edge/image occurrences. */
+  /** source-image is a provider candidate, not an acquired /images occurrence. */
+  kind: 'field' | 'edge' | 'image' | 'source-image';
+  /** RFC 6901 pointer in record, or the immutable parent snapshot for occurrences. */
   path: string;
 }
 
@@ -146,7 +148,10 @@ export type DatasetMappingDisposition =
  * Mappers consume public source conversion/adoption/support APIs through command.
  * A new revision uses a new label; it never rewrites a previous request or support. */
 export interface DatasetMappingContext {
+  /** Always the immutable parent, including when an offline selection is active. */
   snapshot: DatasetSnapshot;
+  /** Original parent indices; excluded occurrences cannot acquire dispositions. */
+  selection?: DatasetSelectionManifest;
   actingSubject: string;
   selected: ReadonlySet<string>;
   records: ReadonlyMap<string, DatasetRecord>;

@@ -9,9 +9,11 @@ import {
   projectionLanguage,
   nativeBatchSize,
   assertNoImportedUserPosts,
+  DatasetSelectionRefusedError,
 } from '../../../scripts/datasets/import.ts';
 import { localDatasetSession, type DatasetApi } from '../../../scripts/datasets/auth.ts';
-import { putBlob, repository, sha256 } from '../../../scripts/datasets/store.ts';
+import { canonical, putBlob, repository, sha256 } from '../../../scripts/datasets/store.ts';
+import type { DatasetSelectionBudget } from '../../../scripts/datasets/selection.ts';
 import { datasetStackMarker } from '../../../scripts/datasets/bootstrap.ts';
 import { acquireDatasetImportLock, datasetImportLockPath } from '../../../scripts/datasets/lock.ts';
 import type { DatasetCoverEvidence, DatasetRecord, DatasetSnapshot, StoredImage } from '../../../scripts/datasets/types.ts';
@@ -234,29 +236,47 @@ function apiFixture(options: { loseCoverReplies?: ('reserve' | 'transfer' | 'sel
   };
 }
 
+// Fixture serialization follows the frozen format. These transport assertions do
+// not establish provider archive custody, adoption, rights or public byte delivery.
+function sealSnapshot(value: DatasetSnapshot): DatasetSnapshot {
+  const capture = ({ url, digest, bytes, mediaType }: NonNullable<StoredImage['capture']>) =>
+    ({ url, digest, bytes, mediaType });
+  value.digest = sha256(canonical({ format: value.format, sources: value.sources,
+    captures: value.captures.map(capture), images: value.images.map(image => ({ ...image,
+      capture: image.capture ? capture(image.capture) : null })) }));
+  return value;
+}
+
 function coverSnapshot(directory: string, sourceRecord: DatasetRecord, source?: Partial<DatasetCoverEvidence>) {
-  const bytes = Buffer.from('pinned dataset cover bytes\u0000with exact digest');
+  const bytes = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    Buffer.from('pinned dataset cover bytes\u0000with exact digest')]);
   const imageUrl = 'https://images.example.test/covers/pinned.png';
   const sourceProvider = source?.provider ?? sourceRecord.provider;
-  const sourceNamespace = source?.namespace ?? 'subject';
-  const sourceExternalId = source?.externalId ?? `canonical-${sourceRecord.externalId}`;
+  const sourceNamespace = source?.namespace ?? sourceRecord.kind;
+  const sourceExternalId = source?.externalId ?? sourceRecord.externalId;
   const sourceCaptureUrl = source?.captureUrl
-    ?? `https://records.example.test/${sourceProvider}/${sourceNamespace}/${encodeURIComponent(sourceExternalId)}`;
-  const recordBytes = Buffer.from(JSON.stringify({ id: sourceExternalId, images: { common: imageUrl } }));
+    ?? (sourceProvider === 'bangumi' ? `https://api.bgm.tv/v0/subjects/${sourceExternalId}`
+      : `https://records.example.test/${sourceProvider}/${sourceNamespace}/${encodeURIComponent(sourceExternalId)}`);
+  const recordBytes = Buffer.from(JSON.stringify({ id: sourceProvider === 'bangumi' ? Number(sourceExternalId) : sourceExternalId,
+    images: { large: imageUrl } }));
   const recordDigest = putBlob(directory, recordBytes);
   const evidence: DatasetCoverEvidence = {
-    provider: sourceRecord.provider,
-    namespace: 'subject',
-    externalId: `canonical-${sourceRecord.externalId}`,
+    provider: sourceProvider,
+    namespace: sourceNamespace,
+    externalId: sourceExternalId,
     revision: null,
     captureUrl: sourceCaptureUrl,
     recordDigest,
-    field: '/images/common',
+    field: '/images/large',
     sourceName: 'Reviewed source',
-    sourceUrl: `https://catalogue.example.test/record/${sourceRecord.externalId}`,
+    sourceUrl: sourceRecord.sourceUrl,
     holder: null,
     ...source,
   };
+  sourceRecord.provider = sourceProvider as DatasetRecord['provider'];
+  sourceRecord.kind = sourceNamespace;
+  sourceRecord.externalId = sourceExternalId;
+  sourceRecord.sourceUrl = evidence.sourceUrl;
   const image: StoredImage = {
     record: sourceRecord.key,
     role: 'cover',
@@ -268,12 +288,13 @@ function coverSnapshot(directory: string, sourceRecord: DatasetRecord, source?: 
     missing: false,
   };
   const value = snapshot([sourceRecord]);
+  value.sources[0]!.provider = sourceRecord.provider;
   value.captures = [{ url: evidence.captureUrl, digest: evidence.recordDigest,
     bytes: recordBytes.length, mediaType: 'application/json', fetchedAt: '2026-10-02T00:00:00Z',
     etag: null, lastModified: null }];
   value.images = [image];
-  value.sources[0]!.images = [image];
-  return { snapshot: value, bytes, image, evidence };
+  value.sources[0]!.images = [{ record: image.record, role: image.role, url: image.url, sourceEvidence: evidence }];
+  return { snapshot: sealSnapshot(value), bytes, image, evidence };
 }
 
 const options = (api: DatasetApi) => ({
@@ -281,6 +302,169 @@ const options = (api: DatasetApi) => ({
   actingSubject: iri(9000),
   mainOrigin: 'http://127.0.0.1:3001',
   webOrigin: 'http://127.0.0.1:3000',
+});
+
+const selectionBudget: DatasetSelectionBudget = {
+  maxInputItems: 10_000, maxRecords: 100, maxEdges: 1000, maxImages: 1000,
+  maxJsonBytes: 4 * 1024 * 1024, maxMediaBytes: 4 * 1024 * 1024,
+};
+
+describe('offline selection and published producer helpers', () => {
+  test('refuses an over-budget closure before any public request and retains its refusal manifest', async () => {
+    const fixture = apiFixture(), directory = root();
+    const source = snapshot([record('root-work', 'work'), record('character', 'character')]);
+    const before = canonical(source);
+    const error = await importDataset(directory, source, { ...options(fixture.api),
+      selection: { roots: ['root-work'], budget: { ...selectionBudget, maxRecords: 1 } },
+    }).catch(error => error);
+    expect(error).toBeInstanceOf(DatasetSelectionRefusedError);
+    if (!(error instanceof DatasetSelectionRefusedError)) throw error;
+    expect(error.manifest.limitations.some(limit => limit.code === 'budget-exceeded')).toBe(true);
+    expect(JSON.parse(readFileSync(error.selectionFile, 'utf8'))).toEqual(error.manifest);
+    expect(fixture.requests).toHaveLength(0);
+    expect(fixture.nativeWorks).toHaveLength(0);
+    expect(canonical(source)).toBe(before);
+  });
+
+  test('imports the whole accepted closure without a second record cap and preserves earlier bindings and parent bytes', async () => {
+    const fixture = apiFixture(), directory = root();
+    const other = record('unrelated', 'work'), character = record('character', 'character'), work = record('root-work', 'work');
+    const source = snapshot([other, character, work]);
+    source.sources[0]!.roots = [other.key, work.key];
+    source.sources[0]!.edges = [{ from: work.key, to: character.key, kind: 'character', data: { order: 0 } }];
+    const before = canonical(source);
+    const prior = await importDataset(directory, source, options(fixture.api));
+    const priorBytes = readFileSync(prior.receiptFile, 'utf8'), priorNative = JSON.parse(priorBytes).native;
+    const requests = fixture.requests.length;
+    const result = await importDataset(directory, source, { ...options(fixture.api), maxRecords: 0,
+      selection: { roots: [work.key], budget: selectionBudget, relatedWorkDepth: 0 },
+    });
+    expect(result.records).toBe(2);
+    expect(result.completed).toBe(true);
+    expect(result.selection!.parent).toEqual({ id: source.id, digest: source.digest });
+    expect(result.selection!.sources[0]!.records).toEqual([1, 2]);
+    expect(JSON.parse(readFileSync(result.selectionFile!, 'utf8'))).toEqual(result.selection);
+    const native = JSON.parse(readFileSync(result.receiptFile, 'utf8')).native;
+    expect(native[work.key].id).toBe(priorNative[work.key].id);
+    expect(native[character.key].id).toBe(priorNative[character.key].id);
+    expect(readFileSync(prior.receiptFile, 'utf8')).toBe(priorBytes);
+    expect(canonical(source)).toBe(before);
+    expect(fixture.requests.slice(requests).some(call => call.path === '/v1/work-imports/bulk'
+      || call.path === '/v1/semantic/changes/bulk')).toBe(false);
+  });
+
+  test('retains field candidates and never-acquired source images without inventing adoption or image occurrences', async () => {
+    const fixture = apiFixture(), directory = root(), work = record('field-plan', 'work');
+    work.data = { alias: 'First alias\nSecond alias', rating: 0, unknown: false };
+    const source = snapshot([work]);
+    source.sources[0]!.images = [{ record: work.key, role: 'cover', url: 'https://images.example.test/never-acquired.png' }];
+    sealSnapshot(source);
+    const before = canonical(source);
+    const result = await importDataset(directory, source, options(fixture.api));
+    const plans = JSON.parse(readFileSync(result.fieldPlansFile, 'utf8'));
+    expect(plans.parent).toEqual({ id: source.id, digest: source.digest });
+    expect(plans.plans[0].fields.some((field: { role: string; disposition: string }) =>
+      field.role === 'aliases' && field.disposition === 'candidate')).toBe(true);
+    const report = JSON.parse(readFileSync(result.coverageFile, 'utf8'));
+    expect(report.entries.find((entry: { path: string }) => entry.path === '/data/alias').disposition)
+      .toMatchObject({ status: 'unmapped', reason: expect.stringContaining('without-adoption') });
+    expect(report.entries.find((entry: { path: string }) => entry.path === '/data/rating').disposition.status).toBe('source-only');
+    expect(report.entries.find((entry: { path: string }) => entry.path === '/data/unknown').observation).toBe('present');
+    expect(report.entries.find((entry: { path: string }) => entry.path === '/title').disposition.status).toBe('mapped');
+    expect(report.entries.find((entry: { kind: string }) => entry.kind === 'source-image')).toMatchObject({
+      path: '/sources/0/images/0', observation: 'present', acquisition: 'not-acquired',
+      disposition: { status: 'unmapped', reason: 'source-image-not-acquired' },
+    });
+    expect(report.entries.some((entry: { kind: string }) => entry.kind === 'image')).toBe(false);
+    expect(result.coverage.pendingAcquisitions).toEqual([{ record: work.key, kind: 'source-image', path: '/sources/0/images/0' }]);
+    expect(result.coverage.catalogueReady).toBe(false);
+    expect(result.coverage.pendingMappers).toEqual(['fields']);
+    expect(fixture.requests.some(call => call.path === '/v1/media/uploads' || call.path.endsWith('/avatar')
+      || call.path.endsWith('/conversions') || call.path.endsWith('/proposals'))).toBe(false);
+    expect(canonical(source)).toBe(before);
+    testDatasetImportCoverage(source, report);
+  });
+
+  test('admits only the elected repaired cover and keeps frozen indices through a filtered selection and replay', async () => {
+    const fixture = apiFixture(), directory = root(), work = record('elected-work', 'work'), other = record('other-work', 'work');
+    const original = coverSnapshot(directory, work), outside = coverSnapshot(directory, other);
+    const urls = { cover: 'https://images.example.test/cv1.png', selected: 'https://images.example.test/cv2.png',
+      vote: 'https://images.example.test/cv4.png', missing: 'https://images.example.test/screenshot.png' };
+    const raw = Buffer.from(JSON.stringify({ id: work.externalId, images: urls }));
+    const sourceDigest = putBlob(directory, raw);
+    const image = (role: string, field: keyof typeof urls): StoredImage => ({ ...original.image, role, url: urls[field],
+      sourceEvidence: { ...original.evidence, recordDigest: sourceDigest, field: `/images/${field}` },
+      capture: { ...original.image.capture!, url: urls[field] } });
+    const vote = image('candidate-cover', 'vote'), ordinary = image('cover', 'cover'), selected = image('selected-cover', 'selected');
+    const parent = original.snapshot;
+    parent.sources[0]!.records = [other, work];
+    parent.sources[0]!.roots = [other.key, work.key];
+    parent.sources[0]!.images = [outside.snapshot.sources[0]!.images[0]!, ...[vote, ordinary, selected].map(value => ({
+      record: value.record, role: value.role, url: value.url, sourceEvidence: value.sourceEvidence,
+    })), { record: work.key, role: 'screenshot', url: urls.missing }];
+    parent.captures = [...outside.snapshot.captures, { ...parent.captures[0]!, digest: sourceDigest, bytes: raw.length }];
+    // Legacy capture facts stay frozen. Consumption recovers the evidence and role.
+    const legacySelected = { ...selected, sourceEvidence: undefined, captureRole: 'other' as const };
+    parent.images = [outside.image, vote, ordinary, legacySelected];
+    sealSnapshot(parent);
+    const before = canonical(parent);
+    const input = { ...options(fixture.api), maxRecords: 0,
+      selection: { roots: [work.key], budget: selectionBudget } };
+    const first = await importDataset(directory, parent, input);
+    const native = JSON.parse(readFileSync(first.receiptFile, 'utf8')).native[work.key].id;
+    const selectedReceipt = fixture.currentSelections.get(native);
+    const second = await importDataset(directory, parent, input);
+    const reservations = fixture.requests.filter(call => call.path === '/v1/media/uploads');
+    expect(reservations.length).toBeGreaterThan(0);
+    expect(reservations.every(call => (call.body as { importedCover: { image: { captureUrl: string } } })
+      .importedCover.image.captureUrl === urls.selected)).toBe(true);
+    expect(new Set(reservations.map(call => call.key)).size).toBe(1);
+    expect(fixture.currentSelections.get(native)).toBe(selectedReceipt);
+    expect(fixture.nativeWorks).toHaveLength(1);
+    expect(first.records).toBe(1);
+    expect(first.selection!.storedImages).toEqual([1, 2, 3]);
+    expect(second.coverResults).toEqual([{ record: sha256(work.key), status: 'imported' }]);
+    const report = JSON.parse(readFileSync(second.coverageFile, 'utf8'));
+    const at = (path: string) => report.entries.find((entry: { path: string }) => entry.path === path);
+    expect(at('/images/3').disposition.status).toBe('mapped');
+    expect(at('/images/3').disposition.mapping.receipt.selection).toBe(selectedReceipt);
+    expect(at('/images/1').disposition).toEqual({ status: 'source-only', reason: 'unelected-cover-candidate' });
+    expect(at('/images/2').disposition.status).toBe('source-only');
+    expect(at('/images/0').disposition.status).toBe('unmapped');
+    expect(at('/sources/0/images/4')).toMatchObject({ kind: 'source-image', acquisition: 'not-acquired',
+      disposition: { status: 'unmapped', reason: 'source-image-not-acquired' } });
+    expect(at('/images/4')).toBeUndefined();
+    expect(second.coverage.catalogueReady).toBe(false);
+    expect(canonical(parent)).toBe(before);
+    expect(parent.images[3]!.sourceEvidence).toBeUndefined();
+    expect(parent.images[3]!.captureRole).toBe('other');
+    testDatasetImportCoverage(parent, report);
+  });
+
+  test('keeps acknowledged cover replies when a later owner fence refuses replay and preserves an editor selection', async () => {
+    const fixture = apiFixture(), directory = root(), work = record('receipt-history', 'work');
+    const source = coverSnapshot(directory, work).snapshot;
+    const first = await importDataset(directory, source, options(fixture.api));
+    const native = fixture.nativeWorks[0]!, originalSelection = fixture.currentSelections.get(native);
+    fixture.currentSelections.set(native, uuid(7999));
+    const api: DatasetApi = { ...fixture.api, async request(method, path, body, key) {
+      if (method === 'PUT' && path.endsWith('/avatar')) return { status: 409, body: { code: 'stale_head' } };
+      return fixture.api.request(method, path, body, key);
+    } };
+    const replay = await importDataset(directory, source, options(api));
+    expect(replay.coverResults).toEqual([{ record: sha256(work.key), status: 'pending', step: 'selection',
+      reasonCode: 'fence-refused', httpStatus: 409 }]);
+    expect(fixture.currentSelections.get(native)).toBe(uuid(7999));
+    const requestDirectory = join(directory, 'imports', basename(first.receiptFile, '.json'), 'requests');
+    const selection = readdirSync(requestDirectory).filter(name => name.endsWith('.json'))
+      .map(name => JSON.parse(readFileSync(join(requestDirectory, name), 'utf8')))
+      .find(saved => saved.entry.phase === 'cover-selection').entry;
+    expect(selection.body.expectedSelection).toBeNull();
+    expect(selection.result).toEqual({ code: 'stale_head' });
+    expect(selection.responses).toContainEqual({ status: 201, body: expect.objectContaining({ selection: originalSelection }) });
+    expect(selection.responses).toContainEqual({ status: 409, body: { code: 'stale_head' } });
+    expect(JSON.parse(readFileSync(first.receiptFile, 'utf8')).native[work.key].id).toBe(native);
+  });
 });
 
 describe('independent public-API dataset import', () => {
@@ -328,7 +512,7 @@ describe('independent public-API dataset import', () => {
     expect(result.completed).toBe(true);
     expect(result.coverage.transportCompleted).toBe(true);
     expect(result.coverage.catalogueReady).toBe(false);
-    expect(result.coverage.pendingMappers).toEqual(['fields', 'relations', 'credits', 'releases', 'media']);
+    expect(result.coverage.pendingMappers).toEqual(['fields']);
     const coverage = JSON.parse(readFileSync(result.coverageFile, 'utf8'));
     expect(coverage.entries.find((entry: { path: string }) => entry.path === '/title').disposition.status).toBe('mapped');
     expect(coverage.entries.find((entry: { path: string }) => entry.path === '/data/flags/0').disposition.status).toBe('unmapped');
@@ -453,7 +637,7 @@ describe('independent public-API dataset import', () => {
     expect(supports).toHaveLength(2);
     expect(supports.find(saved => saved.label.includes('map-v1')).entry.body).toEqual(supportRequests[0]!.body);
     expect(JSON.parse(firstJournal).native).toEqual(JSON.parse(readFileSync(second.receiptFile, 'utf8')).native);
-    expect(second.coverage.pendingMappers).toEqual(['relations', 'credits', 'releases', 'media']);
+    expect(second.coverage.pendingMappers).toEqual([]);
     expect(second.coverage.catalogueReady).toBe(false);
   });
 
@@ -463,7 +647,7 @@ describe('independent public-API dataset import', () => {
     await importDataset(directory, source, options(fixture.api));
     const target = fixture.nativeWorks[0]!;
     fixture.currentSelections.set(target, uuid(7998));
-    source.id = 'new-cover-snapshot'; source.digest = 'e'.repeat(64);
+    source.id = 'new-cover-snapshot'; source.sources[0]!.scope.revision = 'newer'; sealSnapshot(source);
     const selections = fixture.requests.filter(call => call.path.endsWith('/avatar')).length;
     const result = await importDataset(directory, source, options(fixture.api));
     expect(fixture.nativeWorks).toHaveLength(1);
