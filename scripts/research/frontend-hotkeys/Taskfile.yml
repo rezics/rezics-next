@@ -18,7 +18,7 @@ tasks:
     desc: Build private Web and Accounts copies sequentially with host admission.
     dir: '{{.USER_WORKING_DIR}}'
     cmds:
-      - node scripts/research/frontend-hotkeys/routes.mjs
+      - node scripts/research/frontend-hotkeys/routes.mjs {{.CLI_ARGS}}
   route:preview:
     dir: '{{env "KEYBOARD_PREVIEW_CWD"}}'
     cmds:
