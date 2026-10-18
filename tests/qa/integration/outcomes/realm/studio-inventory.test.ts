@@ -1,7 +1,7 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import declaration from '../../../../../scripts/qa/cases/outcomes/realm/studio-inventory.ts';
 import { outcomeTest } from '../../../support/outcome-test.ts';
-import { personaNames, type PersonaName } from '../../../support/personas.ts';
+import { type PersonaName } from '../../../support/personas.ts';
 import { authorManagementManifest, bookType, buildAuthorManagementCorpus,
   restoreAuthorManagementCorpus, short } from '../../../support/author-management-fixture.ts';
 
@@ -17,8 +17,9 @@ let fixture: Awaited<ReturnType<typeof restoreAuthorManagementCorpus>>;
 setDefaultTimeout(120_000);
 const preparing = Bun.env.AUTHOR_MANAGEMENT_PREPARE === '1';
 if (preparing) {
-  test('AMGT00 retains one command-created author-management corpus', buildAuthorManagementCorpus, 600_000);
-} else {
+  test('AMGT00: retains one command-created author-management corpus', buildAuthorManagementCorpus, 600_000);
+}
+describe('AMGT01:', () => {
   beforeAll(async () => { fixture = await restoreAuthorManagementCorpus(); }, 600_000);
   afterAll(async () => { await fixture?.close(); });
   const path = (agent: string) => `/v1/me/agents/${short(agent)}/works`;
@@ -55,7 +56,7 @@ if (preparing) {
     return { items, pages, failures };
   }
 
-  for (const name of personaNames) outcomeTest(declaration, name, async () => {
+  async function inventoryPersona(name: PersonaName) {
     const { sessions, metadata } = fixture, person = sessions[name], owner = sessions.owner;
     if (name === 'visitor') {
       const response = await person.main('GET', path(owner.actingSubject!));
@@ -113,7 +114,13 @@ if (preparing) {
     } else {
       expect(page.items.map(item => item.id)).toEqual(name === 'member' ? [metadata.inventory.foreign.work] : []);
     }
-  });
+  }
+  outcomeTest(declaration, 'visitor', () => inventoryPersona('visitor'));
+  outcomeTest(declaration, 'stranger', () => inventoryPersona('stranger'));
+  outcomeTest(declaration, 'member', () => inventoryPersona('member'));
+  outcomeTest(declaration, 'owner', () => inventoryPersona('owner'));
+  outcomeTest(declaration, 'moderator', () => inventoryPersona('moderator'));
+  outcomeTest(declaration, 'operator', () => inventoryPersona('operator'));
 
   test.failing('AMGT01 Studio recent created and title sorts are stable across every page', async () => {
     const sorted = new Map<string, Item[]>();
@@ -204,4 +211,4 @@ if (preparing) {
     expect((await recipeDetail.json() as { item: Item }).item.chapterCount).toBeNull();
     console.info('Author-management count corpus', authorManagementManifest);
   });
-}
+});

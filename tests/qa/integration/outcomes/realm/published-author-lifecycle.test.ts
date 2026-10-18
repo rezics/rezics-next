@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import declaration from '../../../../../scripts/qa/cases/outcomes/realm/published-author-lifecycle.ts';
 import { outcomeTest } from '../../../support/outcome-test.ts';
-import { personaNames, type PersonaSession } from '../../../support/personas.ts';
+import { type PersonaName, type PersonaSession } from '../../../support/personas.ts';
 import { actorQuery, restoreAuthorManagementCorpus, short, type Content } from '../../../support/author-management-fixture.ts';
 
 type Draft = Pick<Content, 'resourceId' | 'variantId' | 'revisionId' | 'byteDigest' | 'sourcePosition'>
@@ -16,6 +16,7 @@ type EligibilityWithdrawal = { profile: 'content-search-eligibility-withdrawal-v
   decision: string; receipt: string; graphDataEpoch: string; graphSequence: string; replayed: boolean };
 type PlacementWithdrawal = { profile: 'realm-reply-placement-withdrawal-v1'; realm: string; reply: string;
   revisionId: string; withdrawnPlacement: string; withdrawal: string; replayed: boolean };
+describe('AMGT01:', () => {
 let fixture: Awaited<ReturnType<typeof restoreAuthorManagementCorpus>>;
 setDefaultTimeout(120_000);
 // Every body gets a writable copy of the one retained cut; a red predecessor cannot alter its premise.
@@ -48,7 +49,7 @@ const placedPath = (realm: string, reply: string, person: PersonaSession) =>
   `/v1/realms/${short(realm)}/replies/${short(reply)}?${actorQuery(person)}`;
 
 // Run denials before owner mutations, so every persona sees the same qualified baseline.
-for (const name of personaNames.filter(name => name !== 'owner')) outcomeTest(declaration, name, async () => {
+async function readAndDeny(name: Exclude<PersonaName, 'owner'>) {
   const { sessions, metadata } = fixture, person = sessions[name];
   for (const content of [metadata.chapter, metadata.post]) {
     const read = await answer<Exact>(person.main('GET', exactPath(content.revisionId)));
@@ -86,7 +87,12 @@ for (const name of personaNames.filter(name => name !== 'owner')) outcomeTest(de
   }, person.actingSubject ?? sessions.owner.actingSubject!));
   expect(withdrawal.status, await withdrawal.text()).toBe(name === 'visitor' ? 401 : 403);
   expect(await answer(person.main('GET', `/v1/member-replies/${short(reply.reply)}`))).toEqual(initial);
-});
+}
+outcomeTest(declaration, 'visitor', () => readAndDeny('visitor'));
+outcomeTest(declaration, 'stranger', () => readAndDeny('stranger'));
+outcomeTest(declaration, 'member', () => readAndDeny('member'));
+outcomeTest(declaration, 'moderator', () => readAndDeny('moderator'));
+outcomeTest(declaration, 'operator', () => readAndDeny('operator'));
 
 outcomeTest(declaration, 'owner', async () => {
   const { sessions, metadata } = fixture, owner = sessions.owner;
@@ -297,4 +303,5 @@ test.failing('AMGT01 owner placement withdrawal preserves another publisher plac
   expect(history.reference).toMatchObject({ resourceId: reply.reply, variantId: reply.variantId,
     revisionId: reply.revisionId, provenance: { author: reply.author } });
   expect(history.serializedJson).toContain(reply.body);
+});
 });

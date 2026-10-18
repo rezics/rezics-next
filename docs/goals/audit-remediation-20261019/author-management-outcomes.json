@@ -156,9 +156,9 @@
     }
   ],
   "execution": {
-    "namedSelection": "AMGT01 over exactly the two row prove files",
+    "namedSelection": "AMGT01 over exactly the two row prove files; AMGT01: describe prefixes include all six persona titles in the runner's acceptance-ID filter",
     "producerSelection": "AMGT00 over only studio-inventory.test.ts with AUTHOR_MANAGEMENT_PREPARE=1, AUTHOR_MANAGEMENT_BASELINE=79be80d4d0e1cad1639b6a65e8f0795d6a95929a and REZICS_QA_STACK_MODE=scale",
-    "qaCommand": "bun scripts/goal/goalctl.ts test tests/qa/integration/outcomes/realm/studio-inventory.test.ts tests/qa/integration/outcomes/realm/published-author-lifecycle.test.ts -t AMGT01",
+    "qaCommand": "REZICS_QA_STACK_MODE=scale bun scripts/goal/goalctl.ts test tests/qa/integration/outcomes/realm/studio-inventory.test.ts tests/qa/integration/outcomes/realm/published-author-lifecycle.test.ts -t AMGT01",
     "jobOwner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command> from the worker worktree",
     "wrapperSemantics": "Every declaration and additional body uses pending/test.failing. A reached assertion failure is expected red product evidence, not proof; an unexpectedly passing pending body is reported honestly. Setup, readiness, corpus, admission, missing registry or storage failures never count as product assertion failures. No answer captures are generated.",
     "baseline": {
