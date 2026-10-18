@@ -1,5 +1,6 @@
 import { GRAPHS, iri, lit } from '../work/activate.ts';
-import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import type { WorkReadSession } from '../work/read-session.ts';
+import { invalidWorkReadSource } from '../work/read-source-fault.ts';
 
 /** Restore resets sequence to zero while retaining revision anchors in prior epochs.
  * Rank the retained lineage explicitly so restored Works remain browsable.
@@ -16,7 +17,7 @@ async function restorePriors(session: WorkReadSession): Promise<ReadonlyMap<stri
   const prior = new Map<string, string>();
   for (const row of rows) {
     if (!row.epoch || !row.prior || (prior.has(row.epoch.value) && prior.get(row.epoch.value) !== row.prior.value)) {
-      throw new WorkReadUnavailable('Restore lineage is ambiguous');
+      throw invalidWorkReadSource('Restore lineage is ambiguous');
     }
     prior.set(row.epoch.value, row.prior.value);
   }
@@ -27,7 +28,7 @@ function epochOrder(session: WorkReadSession, prior: ReadonlyMap<string, string>
   const epochs: string[] = [];
   let next: string | undefined = session.position.dataEpoch;
   while (next) {
-    if (epochs.includes(next)) throw new WorkReadUnavailable('Restore lineage contains a cycle');
+    if (epochs.includes(next)) throw invalidWorkReadSource('Restore lineage contains a cycle');
     epochs.push(next);
     next = prior.get(next);
   }
