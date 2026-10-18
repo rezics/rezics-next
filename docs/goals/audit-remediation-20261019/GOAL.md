@@ -8,6 +8,8 @@ union has 61 finding classes (2 P0, 27 P1, 32 P2); aliases and overlapping
 observations do not add classes. Every class requires a recorded disposition,
 implementation where needed, regression coverage and actual product proof.
 
+See the [current state](state.md) for progress and next actions.
+
 The retained local evidence is in `.temp/site-audit-2026-10-18/` (especially
 `round-3/REPORT.md`, `all-findings.json` and `VALIDATION.md`) and
 `.temp/catalogue-audit-20261018/` (the capability matrix and 31 acceptance
