@@ -27,8 +27,8 @@ bounded inverse reads before this page can be retired.
 The following interface and matrices are **pending manager approval and proof**.
 They specify the audit scenarios C03–C05, C07–C09, C15, C19 and C25. They do not
 claim that a query, persona cell, source mapping or corpus has passed. The
-[audit decisions](../goals/audit-remediation-20261019/decisions.md) approve the
-outcomes; the interface choices below still need disposition before a separate
+manager-supplied audit decisions (staged as `.temp/ref/decisions.md` for this
+worker) approve the outcomes; the interface choices below still need disposition before a separate
 implementation author starts. Source-update/adoption proof remains with source
 coverage; these rows test the resulting read and its exact independent supports.
 
