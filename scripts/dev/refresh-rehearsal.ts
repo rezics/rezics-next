@@ -38,15 +38,30 @@ export async function snapshotRefreshDatabase(container: string, sourceUrl: stri
     throw new Error('Rehearsal requires an owner database URL');
   const scratch = `rezics_rehearsal_${randomBytes(12).toString('hex')}`;
   const drop = () => postgresCommand(container, 'cleanup', ['dropdb', '--host=/var/run/postgresql',
-    '--username=postgres', '--if-exists', scratch]);
+    '--username=postgres', '--force', '--if-exists', scratch]);
+  const removeHooks = () => {
+    process.removeListener('exit', onExit);
+    process.removeListener('SIGINT', onSignal);
+    process.removeListener('SIGTERM', onSignal);
+  };
   const onExit = () => {
     try { drop(); }
     catch { console.error(`Rehearsal cleanup failed for disposable database ${scratch}`); }
+    finally { removeHooks(); }
+  };
+  const onSignal = (signal: NodeJS.Signals) => {
+    // Default signal termination bypasses exit hooks. Force closes connections
+    // only inside this exact random copy, including its pending migration.
+    // Cleanup keeps the five-second container budget and nine-second host wall.
+    onExit();
+    process.exit(signal === 'SIGINT' ? 130 : 143);
   };
   process.once('exit', onExit);
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
   const dispose = async () => {
     drop();
-    process.removeListener('exit', onExit);
+    removeHooks();
   };
   try {
     postgresCommand(container, 'create', ['createdb', '--host=/var/run/postgresql',
