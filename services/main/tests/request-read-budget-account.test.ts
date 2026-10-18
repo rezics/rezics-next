@@ -1,12 +1,16 @@
 import { expect, test } from 'bun:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { Elysia } from 'elysia';
 import { FusekiClient, fusekiReadBudget, FusekiReadDeadlineExceeded, withFusekiReadRequest }
   from '../src/infrastructure/fuseki.ts';
 import { AccountAssertionDenied, AccountAssertionInsufficientScope, AccountAssertionVerifier,
   verifyCommandAccount, verifyRequestAccount, type VerifiedAccountAssertion }
   from '../src/modules/account/verify-assertion.ts';
 import { workRead, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { rateLimitBudgets } from '../src/modules/rate-limit/budgets.ts';
+import { rateLimitHook } from '../src/modules/rate-limit/hook.ts';
+import { PrincipalBudgetCache } from '../src/modules/rate-limit/principal-cache.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const limits = { calls: 160, bytes: 4 * 1024 * 1024, deadlineMs: 2000 };
@@ -102,6 +106,84 @@ test('an expired Main deadline starts no Account admission, introspection or gra
     await expect(f.read(f.request(Date.now() - 1))).rejects.toBeInstanceOf(FusekiReadDeadlineExceeded);
     expect(f.state).toMatchObject({ admissions: 0, keyCalls: 0, introspections: 0, graphCalls: 0 });
   } finally { await f.stop(); }
+});
+
+for (const departingFirst of [false, true]) test.each(['deadline', 'caller'] as const)(
+  `%s releases the ${departingFirst ? 'first' : 'joining'} coalesced rate-limit admission without losing the other reader`,
+  async mode => {
+    const f = await fixture(true);
+    const controller = new AbortController();
+    const reason = new DOMException('Reader left rate-limit admission', 'AbortError');
+    let arrivals = 0, classifications = 0, counters = 0, handlers = 0, completed = false;
+    const joined = gate();
+    const app = new Elysia().onRequest(() => { if (++arrivals === 2) joined.enter(); })
+      .use(rateLimitHook(f.verifier, { budgets: rateLimitBudgets(), options: {
+        secret: 'request-budget-counter-secret-at-least-32-characters',
+        serviceClientIds: new Set(), trustedProxyPeers: new Set(), clientIpHeader: 'x-forwarded-for',
+      }, store: {
+        async classify() { classifications++; return 'member'; },
+        async consume() { counters++; return { allowed: true, retryAfter: 60 }; },
+      } })).get('/v1/discovery/concepts', async ({ request }) => {
+        await verifyRequestAccount(f.verifier, request, ['work:read']);
+        handlers++;
+        await f.graph.query('ASK {}');
+        return 'public page';
+      });
+    const send = (departing = false) => {
+      const input = f.request(departing && mode === 'deadline' ? Date.now() + 150 : undefined,
+        departing ? controller.signal : undefined);
+      const request = new Request(`${audience}/v1/discovery/concepts`, {
+        headers: input.headers, signal: input.signal,
+      });
+      return withFusekiReadRequest(request, limits, () => app.handle(request)).catch(error => error);
+    };
+    try {
+      const first = send(departingFirst);
+      await f.keys.entered;
+      const second = send(!departingFirst);
+      const departed = departingFirst ? first : second;
+      const unaffected = (departingFirst ? second : first).finally(() => { completed = true; });
+      await joined.entered;
+      // Let the second hook join the cold cache lookup before cancelling it or its owner.
+      await delay(0);
+      if (mode === 'caller') controller.abort(reason);
+      const error = await promptly(departed);
+      if (mode === 'deadline') expect(error).toBeInstanceOf(FusekiReadDeadlineExceeded);
+      else expect(error).toBe(reason);
+      expect(error).not.toBeInstanceOf(AccountAssertionDenied);
+      expect(completed).toBe(false);
+      expect([classifications, counters, handlers]).toEqual([0, 0, 0]);
+      expect(f.state).toMatchObject({ keyCalls: 1, keyAborts: 0, introspections: 0, graphCalls: 0 });
+      f.keys.release();
+      expect(await unaffected).toMatchObject({ status: 200 });
+      expect(f.state).toMatchObject({ keyCalls: 1, keyAborts: 0, introspections: 1, graphCalls: 1 });
+      expect([classifications, counters, handlers]).toEqual([1, 1, 1]);
+      expect(await send()).toMatchObject({ status: 200 });
+      expect(f.state).toMatchObject({ keyCalls: 1, introspections: 2, graphCalls: 2 });
+      expect([classifications, counters, handlers]).toEqual([1, 2, 2]);
+    } finally { await f.stop(); }
+  });
+
+test('coalesced admission does not retry a denial or outage when its owner also closes', async () => {
+  for (const failure of [new AccountAssertionDenied(), new Error('Account outage')]) {
+    const cache = new PrincipalBudgetCache();
+    const owner = new AbortController(), waiter = new AbortController(), held = gate();
+    let verifications = 0, classifications = 0;
+    const verify = async (): Promise<VerifiedAccountAssertion> => {
+      verifications++;
+      held.enter(); await held.held;
+      owner.abort(new DOMException('Owner closed', 'AbortError'));
+      throw failure;
+    };
+    const classify = async () => { classifications++; return 'member' as const; };
+    const first = cache.resolve('bearer', verify, classify, owner.signal).catch(error => error);
+    await held.entered;
+    const second = cache.resolve('bearer', verify, classify, waiter.signal).catch(error => error);
+    held.release();
+    expect(await first).toBe(owner.signal.reason);
+    expect(await second).toBe(failure);
+    expect([verifications, classifications]).toEqual([1, 0]);
+  }
 });
 
 test.each(['deadline', 'caller'] as const)(

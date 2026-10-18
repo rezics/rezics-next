@@ -1,6 +1,7 @@
 import { Elysia, ParseError, ValidationError, status, type Context } from 'elysia';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AccountAssertionDenied, verifyRequestAccount } from '../account/verify-assertion.ts';
+import { withFusekiReadWait } from '../../infrastructure/fuseki.ts';
 import {
   rateLimitFamily,
   type Budgets,
@@ -48,11 +49,12 @@ export function rateLimitHook(
       const independent =
         family === 'report' || family === 'correspondence' || family === 'provider';
       if (!anonymous && !independent) {
-        const attribution = await cache.resolve(
+        const attribution = await withFusekiReadWait(request.signal, signal => cache.resolve(
           request.headers.get('authorization')!,
           () => verifyRequestAccount(account, request, []),
           (principal) => limit.store.classify(principal),
-        );
+          signal,
+        ));
         identity = attribution.identity;
         principalClass = attribution.principalClass;
       }
