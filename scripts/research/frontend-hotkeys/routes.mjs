@@ -86,6 +86,19 @@ for(const candidate of ['native','ark','tanstack'])for(const app of ['web','acco
     await page.waitForFunction(()=>window.__fixture&&window.__adapter,undefined,{timeout:45000});
     await page.getByRole('button',{name:'Open trial modal',exact:true}).click();await page.locator('#modal-input').waitFor();
     await page.keyboard.press('Escape');await page.waitForTimeout(300);await Promise.all(bodyJobs);
+    record.latency=[];
+    for(const count of [5,50]){
+      await page.getByLabel('Registration count').selectOption(String(count));await page.waitForTimeout(100);
+      const raw=await page.evaluate(()=>Array.from({length:3},()=>Array.from({length:120},()=>{
+        window.__fixture.clear();const target=document.querySelector('#page-target');target.focus();
+        const start=performance.now();target.dispatchEvent(new KeyboardEvent('keydown',{key:'k',code:'KeyK',ctrlKey:true,bubbles:true,cancelable:true}));
+        target.dispatchEvent(new KeyboardEvent('keyup',{key:'k',code:'KeyK',ctrlKey:true,bubbles:true}));
+        return {ms:window.__fixture.logs.find(row=>row.id==='search')?.at-start,actions:window.__fixture.logs.map(row=>row.id)};
+      })));
+      const values=raw.flat().filter(row=>Number.isFinite(row.ms)).map(row=>row.ms).sort((a,b)=>a-b);
+      record.latency.push({count,registrations:await page.evaluate(()=>window.__adapter.count()),raw,
+        validSamples:values.length,p50:values[Math.floor(values.length*.5)],p95:values[Math.floor(values.length*.95)]});
+    }
     record.chunks=[...loaded.values()].sort((a,b)=>a.path.localeCompare(b.path));
     record.totals=Object.fromEntries(['raw','gzip','brotli'].map(key=>[key,record.chunks.reduce((sum,row)=>sum+row[key],0)]));
     record.status='measured';record.browser=browser.version();
