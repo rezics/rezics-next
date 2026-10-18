@@ -26,13 +26,19 @@ function identityFixture() {
     if (sql.includes('LEFT JOIN gate ON true')) return { rows: [{ recovery_open: state.recovery,
       authority_epoch: '7', open: state.gate, dispatch_open: state.gate }] };
     if (sql.includes('SELECT open FROM access.recovery_fence')) return { rows: [{ open: state.recovery }] };
-    if (sql.includes('SELECT id FROM access.principal')) return { rows: state.active ? [{ id: 'principal' }] : [] };
+    if (sql.includes('SELECT id FROM access.principal')) return { rows: state.active
+      && values[0] === principal.issuer && values[1] === principal.subject ? [{ id: 'principal' }] : [] };
     if (sql.includes('SELECT p.id, preference.acting_subject')) return { rows: state.active
+      && values[0] === principal.issuer && values[1] === principal.subject
       ? [{ id: 'principal', acting_subject: null, revision: null }] : [] };
     if (sql.includes('operational_bounds_activation')) return { rows: [{
       id: 'access-operational-bounds-v1', acting_contexts: 50, group_depth: 32, groups_per_scope: 256,
       memberships_per_scope: 1024, member_groups_per_agent: 16, private_groups_per_principal: 16, roles_per_principal: 16,
+      acting_subject: agent,
     }] };
+    if (sql.includes('SELECT DISTINCT recipient_subject FROM access.permission_grant')) return { rows: [{ recipient_subject: agent }] };
+    if (sql.includes('access.read_platform_permissions') || sql.includes('FROM access.agent_provision WHERE principal_id')
+      || sql.includes('FROM access.principal_agent_attribution')) return { rows: [] };
     if (sql.includes('WITH RECURSIVE path AS')) return { rows: [{
       subject: agent, action: 'agent.control', representation_id: 'mandate', edge_ids: [],
     }] };
@@ -70,6 +76,9 @@ function identityFixture() {
 
 test('eligible identity discovery keeps live labels and remains independent of a closed task gate', async () => {
   const f = identityFixture();
+  expect(await f.contexts.discover(principal)).toMatchObject({ complete: true, contexts: [{
+    actingSubject: agent, handle: 'reader', kind: 'person', displayName: 'Reader',
+  }], directContexts: [] });
   f.state.gate = false;
   expect(await f.contexts.discoverAgents(principal)).toMatchObject({ complete: true, items: [{
     actingSubject: agent, handle: 'reader', kind: 'person', displayName: { value: 'Reader', language: 'en' },
@@ -90,6 +99,9 @@ test('a name-policy outage is unavailable with its cause, never a successful nul
   const error = await f.contexts.discoverAgents(principal).catch((failure: unknown) => failure);
   expect(error).toBeInstanceOf(ActingContextUnavailable);
   expect(error).toMatchObject({ code: 'identity_labels_unavailable', cause: {
+    code: 'identity_names_unavailable', cause,
+  } });
+  await expect(f.contexts.discover(principal)).rejects.toMatchObject({ code: 'identity_labels_unavailable', cause: {
     code: 'identity_names_unavailable', cause,
   } });
   f.state.nameFailure = null;
@@ -131,6 +143,11 @@ test('saved identity reads keep explicit unselection, main suggestion and Accoun
   expect(await f.choices.readMain({ ...principal, issuer: 'https://foreign.invalid' })).toMatchObject({
     mainAgent: { actingSubject: null, revision: null, eligible: false },
   });
+  expect(await f.choices.readSession({ ...principal, subject: 'another-account' }, revision)).toMatchObject({
+    sessionAgent: { actingSubject: null, revision: null, eligible: false },
+    mainAgent: { actingSubject: null, revision: null, eligible: false }, initialActingSubject: null,
+  });
+  expect((await f.contexts.discoverAgents({ ...principal, subject: 'another-account' })).items).toEqual([]);
 });
 
 test('identity dependency failures never clear saved choices and recover on the next read', async () => {
