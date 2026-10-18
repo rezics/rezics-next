@@ -297,6 +297,10 @@ test('a failed gate with only part of the branch landed remains a conflict', asy
 
 for (const first of ['settlement', 'merge']) test(`${first} holds the landing lock before the other starts`, async () => {
   const f = fixture();
+  const ledger = f.ledger(); ledger.tasks[f.task.id]!.land = 'auto'; f.save(ledger);
+  const brief = readFileSync(f.task.brief, 'utf8').replace('kind: tooling\n', 'kind: tooling\nland: auto\n');
+  writeFileSync(f.task.brief, brief);
+  copyFileSync(f.task.brief, join(f.task.worktree, '.temp/goal/brief.md'));
   const settle = () => f.start([`import { settleTask } from ${JSON.stringify(join(import.meta.dir, 'settle.ts'))}; await settleTask('${f.task.id}');`], { FIXTURE_GATE: 'types' }, true);
   const merge = () => f.start(['merge', f.task.id], { FIXTURE_GATE: 'types' });
   const owner = first === 'settlement' ? settle() : merge();
