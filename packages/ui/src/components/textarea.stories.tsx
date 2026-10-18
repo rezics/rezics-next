@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { settled } from '../stories/support.tsx';
 import { expectControlBoundary, expectInvalidFieldKeyboardFocus } from '../test/control-contrast.ts';
@@ -284,4 +285,36 @@ export const AvailabilityPhone: Story = {
 
 export const AvailabilityDarkPhone: Story = {
   ...Availability, globals: { theme: 'dark', viewport: { value: 'phone' } },
+};
+
+export const ErrorRecovery: Story = {
+  render: function ReviewWithValidation() {
+    const [value, setValue] = useState('');
+    return (
+      <Field
+        ids={{ errorText: 'review-validation-error', helperText: 'review-validation-helper' }}
+        invalid={value.trim().length < 50}
+      >
+        <FieldLabel>Your review</FieldLabel>
+        <Textarea onChange={event => setValue(event.currentTarget.value)} value={value} />
+        <FieldHelper>Share what other readers should know about this Work.</FieldHelper>
+        <FieldError>Reviews need at least 50 characters. Add a few more thoughts.</FieldError>
+      </Field>
+    );
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const textarea = canvas.getByRole('textbox', { name: 'Your review' });
+    await expect(textarea).toBeInvalid();
+    await expect(textarea).toHaveAttribute('aria-errormessage', 'review-validation-error');
+    await expect(textarea).toHaveAccessibleErrorMessage(/at least 50 characters/);
+    await userEvent.type(textarea, review);
+    await expect(textarea).toBeValid();
+    await expect(textarea).not.toHaveAttribute('aria-errormessage');
+    await expect(textarea).toHaveAccessibleDescription('Share what other readers should know about this Work.');
+    await expect(canvas.queryByText(/Reviews need at least 50 characters/)).not.toBeInTheDocument();
+    await userEvent.clear(textarea);
+    await expect(textarea).toBeInvalid();
+    await expect(textarea).toHaveAccessibleErrorMessage(/at least 50 characters/);
+  },
 };
