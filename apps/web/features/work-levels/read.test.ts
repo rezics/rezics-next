@@ -24,6 +24,11 @@ let expired = false;
 let actingSubject: string | undefined;
 let answer: (operation: Operation, query: Query) => Answer;
 let collectionCalls = 0;
+let collectionStatus = 200;
+let summaryStatus = 200;
+let collectionGroups = false;
+const collectionQueries: URLSearchParams[] = [];
+const collectionSummary = fixture.summary(fixture.iri('900'), 'Public reading list', 'en', 'collection');
 let pageDeadline: number | undefined;
 let stallParts = false;
 const requests: { path: string; authorization: string | null; status: number }[] = [];
@@ -77,14 +82,23 @@ const restoreOriginalTransport = replaceModule(import.meta.resolve('../api/serve
         if (expired && authorization) return respond({ error: 'expired' }, 401);
         if (url.pathname === '/v1/me/person-preferences') return respond({ contentLanguages: [] });
         if (url.pathname === '/v1/resources/summaries') {
+          if (summaryStatus !== 200) return respond({ code: 'summary_unavailable' }, summaryStatus);
           const body = JSON.parse(String(init?.body)) as { resources: string[] };
           return respond({
-            summaries: body.resources.flatMap((reference) => fixture.names.get(reference) ?? []),
+            summaries: body.resources.flatMap((reference) => reference === fixture.iri('900')
+              ? [collectionSummary] : fixture.names.get(reference) ?? []),
           });
         }
         if (url.pathname.startsWith('/v1/collections/')) {
           collectionCalls += 1;
-          return respond({ collection: fixture.iri('900'), occurrences: [], next: null });
+          collectionQueries.push(url.searchParams);
+          if (collectionStatus !== 200) return respond({ code: 'collection_unavailable' }, collectionStatus);
+          const second = url.searchParams.get('after') === 'members-page-2';
+          return respond({ collection: fixture.iri('900'), occurrences: [{
+            occurrence: fixture.iri(second ? '82' : '81'), role: 'member', parent: fixture.iri('9'),
+            target: fixture.iri(second ? '200' : '100'), orderKey: 'a', labels: [],
+          }, ...(collectionGroups ? [{ occurrence: fixture.iri('83'), role: 'group', parent: fixture.iri('9'),
+            orderKey: 'b', labels: [{ value: 'مكتبة الأدب', language: 'ar' }] }] : [])], next: second ? null : 'members-page-2' });
         }
         const match = url.pathname.match(/^\/v1\/resources\/([^/]+)\/(parts|wholes|relations)$/);
         if (!match) throw new Error(`Unexpected Main request: ${url.pathname}`);
@@ -116,7 +130,9 @@ afterAll(async () => {
   restoreOriginalNavigation();
 });
 
-const { readParts, readWholes, readRelations, readCollectionMembers } = await import('./read.ts');
+const { readParts, readWholes, readRelations, readCollectionMembers, readPublicCollectionPage } = await import('./read.ts');
+const { default: EntityRoute, generateMetadata } = await import('../../app/[locale]/e/[ref]/page.tsx');
+const { PublicCollectionPage, collectionPageHref } = await import('./connections.tsx');
 const { Parts } = await import('../work-page/hub-sections.tsx');
 const { ConnectionsPage } = await import('./pages.tsx');
 const reads: Record<
@@ -147,6 +163,10 @@ function assertPublicTransport(visitor: (typeof visitors)[number]) {
 beforeEach(() => {
   calls.length = 0;
   collectionCalls = 0;
+  collectionQueries.length = 0;
+  collectionStatus = 200;
+  summaryStatus = 200;
+  collectionGroups = false;
   requests.length = 0;
   signedIn = false;
   expired = false;
@@ -462,17 +482,78 @@ test('private and deleted hub targets never render disclosed fixture names', asy
   }
 });
 
-test('collection reads still require an eligible Agent', async () => {
+test('public Collection members reach Main for anonymous, expired and Agent-less readers', async () => {
   for (const visitor of visitors) {
     signedIn = visitor.signedIn;
     expired = visitor.expired;
-    expect(await readCollectionMembers(fixture.iri('900'), {})).toEqual({
-      ok: false,
-      failure: signedIn ? 'identity' : 'sign-in',
-    });
+    const page = await readCollectionMembers(fixture.iri('900'), {});
+    expect(page.ok).toBe(true);
+    if (page.ok) expect(page.data.members[0]?.target).toBe(fixture.iri('100'));
   }
-  expect(collectionCalls).toBe(0);
+  expect(collectionCalls).toBe(visitors.length);
   actingSubject = fixture.iri('agent');
   expect((await readCollectionMembers(fixture.iri('900'), {})).ok).toBe(true);
-  expect(collectionCalls).toBe(1);
+  expect(collectionCalls).toBe(visitors.length + 1);
+  expect(collectionQueries.at(-1)?.get('actingSubject')).toBe(actingSubject!);
+});
+
+test('the Collection entry and metadata use meaningful members and canonical names without an entity page call', async () => {
+  collectionGroups = true;
+  const params = Promise.resolve({ ref: fixture.iri('900').slice(-36) });
+  const query = { language: 'sv', tag: ['a', 'b'] };
+  const metadata = await generateMetadata({ params, searchParams: Promise.resolve(query) });
+  expect(metadata.title).toBe('Public reading list');
+  const first = await markupOf(await EntityRoute({ params, searchParams: Promise.resolve(query) }));
+  expect(first).toContain('Public reading list');
+  expect(first).toContain('A Certain Magical Index: New Testament');
+  expect(first).toContain('مكتبة الأدب');
+  expect(first).toContain(`parent=${encodeURIComponent(fixture.iri('83'))}`);
+  expect(first).not.toContain('Sign in');
+  expect(first).toContain('language=sv&amp;tag=a&amp;tag=b&amp;after=members-page-2');
+  const second = await markupOf(await EntityRoute({ params,
+    searchParams: Promise.resolve({ ...query, after: 'members-page-2' }) }));
+  expect(second).toContain('A Certain Magical Index</bdi>');
+  expect(second).not.toContain('A Certain Magical Index: New Testament');
+  expect(collectionQueries.map(query => query.get('after'))).toEqual([null, 'members-page-2']);
+  expect(requests.some(request => request.path.endsWith('/page'))).toBe(false);
+});
+
+test('temporary resource admission failure never requests an unsupported generic entity capability', async () => {
+  summaryStatus = 503;
+  const props = { params: Promise.resolve({ ref: fixture.iri('900').slice(-36) }), searchParams: Promise.resolve({}) };
+  const metadata = await generateMetadata(props);
+  expect(metadata.robots).toEqual({ index: false });
+  const markup = await markupOf(await EntityRoute(props));
+  expect(markup).toContain('role="alert"');
+  expect(markup).toContain('Retry');
+  expect(requests.every(request => request.path === '/v1/resources/summaries')).toBe(true);
+});
+
+test('Collection continuation preserves all task selections and reports owner failure without a successful member list', async () => {
+  const current = `${resourceHref('/e/', fixture.iri('900'))}?after=old&parent=group&language=sv&tag=a&tag=b`;
+  expect(collectionPageHref(current, { after: 'next+page' })).toBe(
+    `${resourceHref('/e/', fixture.iri('900'))}?after=next%2Bpage&parent=group&language=sv&tag=a&tag=b`);
+  collectionStatus = 503;
+  const page = await readPublicCollectionPage(fixture.iri('900'), { after: 'old', parent: fixture.iri('9') });
+  expect(page).toMatchObject({ ok: false, failure: 'unavailable', status: 503 });
+  const markup = await markupOf(createElement(PublicCollectionPage, {
+    summary: collectionSummary as Extract<typeof collectionSummary, { status: 'available' }>, page,
+    currentUrl: current, locale: 'en', messages: messages.en,
+  }));
+  expect(markup).toContain('role="alert"');
+  expect(markup).toContain('Retry');
+  expect(markup).not.toContain('A Certain Magical Index');
+  collectionStatus = 200;
+  summaryStatus = 503;
+  expect(await readPublicCollectionPage(fixture.iri('900'), {})).toMatchObject({ ok: false, failure: 'unavailable', status: 503 });
+});
+
+test('a denied Collection member read remains missing while an admitted signed-in read keeps its acting Agent', async () => {
+  collectionStatus = 404;
+  expect(await readPublicCollectionPage(fixture.iri('900'), {})).toMatchObject({ ok: false, failure: 'missing', status: 404 });
+  signedIn = true;
+  actingSubject = fixture.iri('999');
+  collectionStatus = 200;
+  expect((await readPublicCollectionPage(fixture.iri('900'), {})).ok).toBe(true);
+  expect(collectionQueries.at(-1)?.get('actingSubject')).toBe(actingSubject!);
 });

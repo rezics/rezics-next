@@ -4,7 +4,7 @@ import { LocalizedText } from '@rezics/ui/localized-text';
 import { cn } from '@rezics/ui/utils';
 import { LinkIcon, NetworkIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { resourceHref } from '../address/path.ts';
+import { resourceHref, type AddressTarget } from '../address/path.ts';
 import { authorHref } from '../author/route.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
@@ -16,8 +16,51 @@ import { namedWorkHref, NameLink, SummaryLink, type SummaryHref, summaryWorkHref
 import { type Appearance, type CreditedName, labelFor, type RelationItem, type RelationRow, relationRows } from './relation-rows.ts';
 import { anchors, connectionsHref, type ConnectionsQuery, type Grain, grains } from './route.ts';
 import type { CollectionMembers, Loaded, Names, PartsPage, People, RelationsPage, Summary } from './types.ts';
+import type { PublicCollectionPage as CollectionRead } from './read.ts';
+import { PageContainer, PageHeader } from '../shell/page.tsx';
+import { browseMessages } from '../discover/browse-messages.ts';
+import { copyOf } from './messages.ts';
 
 const outline = buttonVariants({ variant: 'outline', size: 'sm' });
+
+/** Changing only the membership position keeps every other task parameter. */
+export function collectionPageHref(current: string, change: { after?: string | null; parent?: string | null }): string {
+  const url = new URL(current, 'https://rezics.com');
+  for (const [key, value] of Object.entries(change)) {
+    if (value) url.searchParams.set(key, value);
+    else url.searchParams.delete(key);
+  }
+  return url.pathname + url.search;
+}
+
+/** The standalone Collection destination consumes its public owner, never an entity capability. */
+export function PublicCollectionPage({ summary, page, currentUrl, locale, messages }: {
+  summary: Extract<Summary, { status: 'available' }>; page: Loaded<CollectionRead>;
+  currentUrl: string; locale: UiLocale; messages: WorkPageMessages;
+}) {
+  const t = copyOf(locale), browse = browseMessages[locale];
+  const current = new URL(currentUrl, 'https://rezics.com');
+  const start = collectionPageHref(currentUrl, { after: null, parent: null });
+  return <PageContainer className="grid gap-6">
+    <Link href="/discover?type=lists" className="w-fit text-sm underline underline-offset-4">{browse.lists}</Link>
+    <PageHeader title={<LocalizedText text={summary.name} />} />
+    {!page.ok ? <RegionFailure title={browse.unavailable} failure={page.failure} messages={messages} restartHref={start} />
+      : page.data.occurrences.length ? <ol aria-label={browse.lists} className="grid gap-3">
+        {page.data.occurrences.map(item => <li key={item.occurrence} className="min-w-0 break-words rounded-xl border p-4">
+          {item.target ? <SummaryLink summary={page.data.names.get(item.target)} unavailable={t.unavailable} unnamed={t.unavailable}
+            hrefFor={named => resourceHref('/e/', named.address as AddressTarget)} />
+            : <Link href={collectionPageHref(currentUrl, { after: null, parent: item.occurrence })} className="underline underline-offset-4">
+              {item.labels[0] ? <bdi lang={item.labels[0].language}>{item.labels[0].value}</bdi> : t.openGroup}</Link>}
+        </li>)}
+      </ol> : <p role="status" className="text-muted-foreground">{browse.empty}</p>}
+    <nav aria-label={browse.lists} className="flex flex-wrap gap-3">
+      {current.searchParams.has('after') || current.searchParams.has('parent')
+        ? <Link href={start} className={outline}>{browse.first}</Link> : null}
+      {page.ok && page.data.nextCursor ? <Link href={collectionPageHref(currentUrl, { after: page.data.nextCursor })}
+        className={outline}>{browse.more}</Link> : null}
+    </nav>
+  </PageContainer>;
+}
 
 /** A franchise Collection, its members in Main's order, and at the parts grain each member's parts. */
 export interface Franchise {
