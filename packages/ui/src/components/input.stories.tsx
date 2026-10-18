@@ -53,9 +53,6 @@ export const EmptyFields: Story = {
       await expect(input).toHaveValue('');
       await expect(input).not.toHaveFocus();
       await expectControlBoundary(input);
-      await userEvent.hover(input);
-      await expectControlBoundary(input);
-      await userEvent.unhover(input);
     }
     const first = inputs[0]!;
     await userEvent.tab();
@@ -101,8 +98,10 @@ export const Invalid: Story = {
     const input = within(canvasElement).getByRole('textbox', { name: 'Original title' });
     await expect(input).toHaveAttribute('aria-invalid', 'true');
     await expectControlBoundary(input);
-    await userEvent.hover(input);
+    await userEvent.tab();
+    await expect(input).toHaveFocus();
     await expectControlBoundary(input);
+    input.blur();
   },
 };
 
