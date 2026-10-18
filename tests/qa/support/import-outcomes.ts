@@ -9,6 +9,9 @@ import type { DatasetRecord, DatasetSnapshot } from '../../../scripts/datasets/t
 import { reconstructIntake } from '../../../scripts/datasets/import.ts';
 import type { Persona, RowOutcomes } from '../../../scripts/qa/cases/outcome-cells.ts';
 import type { PersonaSession, PersonaSessions, RetainedPersonaRealm } from './personas.ts';
+import { admissionRefusals, retainedAdmissionCases, type RetainedConversionRequest,
+  type RetainedFieldCoordinate, type RetainedRecordBinding, type RetainedRecordInput, type RetainedSupportAdmission,
+  type RetainedSupportRequest } from '../fixtures/catalogue/import-admission-contract.ts';
 
 export { matrix };
 export const short = (iri: string) => iri.slice(-36);
@@ -20,8 +23,11 @@ export type Disposition = 'adopted' | 'source-only' | 'source-empty' | 'acquisit
   | 'unmapped' | 'pending-adoption' | 'unknown';
 type Position = { datasetId: 'product'; dataEpoch: string; sequence: string };
 export type Target = { resource: string; revision: string; mainVersion?: string; kind: string };
-type Source = { record: string; observation: string; conversion: string; proposal?: string;
-  parts: Array<{ observation: string; rawDigest: string; rawBytesBase64: string }> };
+type Source = { record: string; observation: string; conversion?: string; proposal?: string;
+  parts: Array<{ record?: string; observation: string; rawDigest: string; rawBytesBase64: string }>;
+  /** Prepared request inputs need actual intake receipts, not a successful new
+   * conversion. The proposed result is observed only in an outcome test body. */
+  retainedRequest?: RetainedConversionRequest; retainedBinding?: RetainedRecordBinding };
 type Command = { method: 'POST' | 'PUT'; path: string; body: Record<string, unknown>;
   key: string; status: number; identity: Record<string, string> };
 type Control = { workHead: string; contentHead: string | null; controlHead: string | null;
@@ -48,6 +54,9 @@ export interface ImportCorpus {
   selections: Array<{ name: string; commands: Command[] }>;
   hidden: { resource: string; observation: string; conversion: string; proposal: string; canary: string };
   music: { track?: Target; release?: Target; nameHead: string };
+  /** Actual source-origin synopsis control command's support receipt, if the
+   * product returned one. Missing support is observed in the test body. */
+  synopsisSupport?: { support: string; supportIdentity: string };
   refresh: { sourceKey: string; baseConversion: string; candidateConversion: string;
     command: Command; oldGeneration: string; newGeneration: string };
 }
@@ -201,6 +210,116 @@ export async function answer<T>(request: Promise<Response>, status = 200): Promi
   expect(response.status, `HTTP ${status} required; got ${response.status}: ${body.slice(0, 800)}`).toBe(status);
   return JSON.parse(body) as T;
 }
+
+/** Independent test oracle for the two coordinate spaces. It does not perform
+ * Source's normalization/admission or manufacture any server receipt. */
+export function assertRetainedRecordInput(input: RetainedRecordInput, record: DatasetRecord,
+  pin: { id: string; digest: string; fileSha256: string }, parts: Source['parts']): void {
+  expect(input.identity).toEqual({ key: record.key, provider: record.provider,
+    namespace: record.kind, externalId: record.externalId });
+  expect(input.snapshot).toEqual({ id: pin.id, digest: pin.digest, fileSha256: pin.fileSha256 });
+  expect(input.record, 'all normalized fields, including title/language/native, remain exact').toEqual(record);
+  expect(input.recordDigest).toBe(digest(record));
+  expect(parts.length).toBeGreaterThan(0);
+  const buffers = parts.map(part => Buffer.from(part.rawBytesBase64, 'base64'));
+  // This existing reader checks framing, ordered indexes, decoded byte length
+  // and the assembled byte digest. Parsing does not make a record/data pointer
+  // equivalent to an observation pointer.
+  reconstructIntake(buffers);
+  expect(input.intakes).toEqual(parts.map((part, index) => {
+    if (!part.record) throw new Error('TEST PREMISE: missing actual Source record in an intake receipt');
+    expect(part.record, 'retain the actual Source record in every intake receipt').toMatch(native);
+    expect(bytesDigest(buffers[index]!)).toBe(part.rawDigest);
+    return { index, record: part.record, observation: part.observation, byteDigest: part.rawDigest };
+  }));
+  const first = JSON.parse(buffers[0]!.toString()) as Record<string, unknown>;
+  if (first.format === 'rezics-dataset-chunk-v1') {
+    if (typeof first.digest !== 'string' || typeof first.byteLength !== 'number') {
+      throw new Error('TEST PREMISE: invalid retained chunk digest or byte length');
+    }
+    expect(input.payload).toEqual({ format: 'rezics-dataset-chunk-v1',
+      byteDigest: first.digest, byteLength: first.byteLength });
+  } else {
+    expect(input.payload).toEqual({ format: 'json',
+      byteDigest: bytesDigest(buffers[0]!), byteLength: buffers[0]!.length });
+  }
+}
+
+export function assertRetainedBinding(binding: RetainedRecordBinding, request: RetainedConversionRequest,
+  conversion: string): void {
+  const { record: _record, ...retained } = request.retained;
+  expect(binding).toMatchObject({ ...retained, profile: 'source-retained-record-binding-v1',
+    conversion, mappingRevision: request.mappingRevision });
+  expect(binding.binding).toMatch(native);
+  expect(binding.sourceRecord).toMatch(native);
+  expect(binding.normalizationRevision.length).toBeGreaterThan(0);
+}
+
+/** Missing proposed conversion/admission results are outcome-body observations.
+ * Never require their successful receipts in openImportFixture. */
+export async function assertRetainedRecordAdmissions(fixture: ImportFixture): Promise<void> {
+  const operator = fixture.people.operator;
+  for (const sourceKey of retainedAdmissionCases) {
+    const source = fixture.corpus.sources[sourceKey];
+    expect(source, `TEST PREMISE: retain real intake receipts for ${sourceKey}`).toBeDefined();
+    const request = source!.retainedRequest;
+    expect(request, `TEST PREMISE: supply the proposed request using exact retained inputs for ${sourceKey}`).toBeDefined();
+    const record = fixture.records.get(sourceKey)!;
+    const pin = matrix.sources.find(value => value.provider === record.provider)!;
+    assertRetainedRecordInput(request!.retained, record, pin, source!.parts);
+    const path = `/v1/sources/observations/${short(source!.parts[0]!.observation)}/conversions`;
+    const response = await operator.main('POST', path, request!, `import-retained-${sourceKey}`);
+    expect([200, 201], 'the existing Source route verifies the complete normalized record').toContain(response.status);
+    const result = await response.json() as { conversion: { conversion: string;
+      retainedRecord: RetainedRecordBinding }; replayed: boolean };
+    expect(result.conversion.retainedRecord).toBeDefined();
+    assertRetainedBinding(result.conversion.retainedRecord, request!, result.conversion.conversion);
+    const binding = result.conversion.retainedRecord;
+    // Only an actual command result can introduce the canonical original record.
+    // A multipart intake's part-record identity is never silently that original.
+    if (source!.retainedBinding) expect(binding).toEqual(source!.retainedBinding);
+    source!.retainedBinding = binding;
+    const replay = await answer<typeof result>(operator.main('POST', path, request!, `import-retained-${sourceKey}`));
+    expect(replay).toEqual({ ...result, replayed: true });
+    const other = fixture.records.get(retainedAdmissionCases.find(key => key !== sourceKey)!)!;
+    const wrongRecord = structuredClone(request!);
+    wrongRecord.retained.record = other;
+    wrongRecord.retained.recordDigest = digest(other);
+    const wrongDigest = structuredClone(request!);
+    wrongDigest.retained.recordDigest = differentDigest(request!.retained.recordDigest);
+    const wrongBytes = structuredClone(request!);
+    wrongBytes.retained.intakes[0]!.byteDigest = differentDigest(request!.retained.intakes[0]!.byteDigest);
+    const mutations: Array<[string, RetainedConversionRequest]> = [
+      ['record', wrongRecord], ['record-digest', wrongDigest], ['byte-digest', wrongBytes],
+    ];
+    if (request!.retained.intakes.length > 1) {
+      const wrongOrder = structuredClone(request!);
+      wrongOrder.retained.intakes.reverse();
+      mutations.push(['part-order', wrongOrder]);
+    }
+    for (const [basis, body] of mutations) {
+      await assertAdmissionRefusal(operator.main('POST', path, body,
+        `import-retained-refuse-${sourceKey}-${basis}`), admissionRefusals.conversion, basis);
+      const after = await answer<{ retainedRecord: RetainedRecordBinding }>(operator.main('GET',
+        `/v1/sources/conversions/${short(binding.conversion)}`));
+      expect(after.retainedRecord, 'a refusal cannot replace the admitted record binding').toEqual(binding);
+    }
+    const unsupported = structuredClone(request!);
+    unsupported.mappingRevision = 'unregistered-import-field-map-v1';
+    await assertAdmissionRefusal(operator.main('POST', path, unsupported,
+      `import-retained-refuse-${sourceKey}-unverified`), admissionRefusals.unverified);
+    expect((await answer<{ retainedRecord: RetainedRecordBinding }>(operator.main('GET',
+      `/v1/sources/conversions/${short(binding.conversion)}`))).retainedRecord).toEqual(binding);
+  }
+}
+
+const differentDigest = (value: string) => `${value[0] === '0' ? '1' : '0'}${value.slice(1)}`;
+export async function assertAdmissionRefusal(request: Promise<Response>,
+  contract: { status: number; code: string }, basis?: string): Promise<void> {
+  const response = await request;
+  expect(response.status).toBe(contract.status);
+  expect(await response.json()).toMatchObject({ code: contract.code, ...(basis ? { basis } : {}) });
+}
 export function query(person: PersonaSession, values: Record<string, string> = {}): string {
   return new URLSearchParams({ ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}), ...values }).toString();
 }
@@ -273,6 +392,7 @@ export function publicSafe(value: unknown, fixture: ImportFixture): void {
   const text = JSON.stringify(value);
   for (const secret of Object.values(fixture.corpus.hidden)) expect(text).not.toContain(secret);
   for (const key of ['rawBytesBase64', 'sourcePointer', 'byteDigest', 'captureCount', 'omittedFields',
+    'retainedRecord', 'normalizationRevision', 'recordDigest', 'sourceOccurrence', 'intakes',
     'observation', 'conversion', 'proposal', 'privateCount', 'uid']) expect(text).not.toMatch(new RegExp(`"${key}"\\s*:`));
 }
 
@@ -310,6 +430,7 @@ export async function deniedSourceCommands(persona: Persona, fixture: ImportFixt
   if (persona === 'operator') return;
   const person = fixture.people[persona], selected = fixture.corpus.sources['bangumi:subject:1014'];
   if (!selected?.proposal) throw new Error('TEST PREMISE: missing real Bangumi proposal');
+  if (!selected.conversion) throw new Error('TEST PREMISE: missing the real conversion behind the Bangumi proposal');
   const paths = [
     `/v1/sources/observations/${short(selected.observation)}`,
     `/v1/sources/conversions/${short(selected.conversion)}`,
@@ -598,7 +719,8 @@ export async function assertInventory(fixture: ImportFixture): Promise<void> {
   for (const sourceKey of new Set(matrix.inventory.map(row => row.sourceKey))) {
     const source = fixture.corpus.sources[sourceKey];
     if (!source) throw new Error(`TEST PREMISE: missing retained conversion for ${sourceKey}`);
-    const page = await allPages<Inventory>(person, `/v1/sources/conversions/${short(source.conversion)}/inventory`);
+    expect(source.conversion, `retained ${sourceKey} has a real Source conversion`).toBeDefined();
+    const page = await allPages<Inventory>(person, `/v1/sources/conversions/${short(source.conversion!)}/inventory`);
     expect(page.items.every(item => item.sourceKey === sourceKey)).toBe(true);
     observed.push(...page.items);
     // Exact-byte readback is the existing export of the retained observation. It is
@@ -657,8 +779,9 @@ export async function confirmHumanValue(fixture: ImportFixture): Promise<void> {
   if (before.mode === 'human-controlled' && fixture.staleSourceFieldBody) return;
   expect(before.mode, 'restore starts with an actual source-managed synopsis').toBe('source-managed');
   const source = fixture.corpus.sources['bangumi:subject:1014']!;
+  expect(source.conversion, 'the source-managed synopsis retains its actual conversion').toBeDefined();
   const conversion = await answer<{ mappingRevision: string }>(fixture.people.operator.main('GET',
-    `/v1/sources/conversions/${short(source.conversion)}`));
+    `/v1/sources/conversions/${short(source.conversion!)}`));
   fixture.staleSourceFieldBody = { profile: 'work-editorial-field-control-v1', field: 'synopsis',
     expectedWorkHead: before.workHead, basis: { contentHead: before.contentHead, head: before.controlHead,
       epoch: before.controlEpoch, protection: before.protectionHead }, value: sourceValue, origin: 'source',
@@ -678,9 +801,69 @@ export async function confirmHumanValue(fixture: ImportFixture): Promise<void> {
 }
 
 type Support = { support: string; supportIdentity: string; sourceRecord: string; state: string;
-  nativeRevision: string; withdrawal: { nativeEffect: string } | null };
+  nativeRevision: string; withdrawal: { nativeEffect: string } | null; admission?: RetainedSupportAdmission };
+
+export function assertRetainedSupportAdmission(admission: RetainedSupportAdmission,
+  request: RetainedSupportRequest): void {
+  expect(admission.profile).toBe('source-field-support-admission-v1');
+  expect(admission.sourceRecord).toBe(request.sourceRecord);
+  expect(admission.conversion).toBe(request.conversion);
+  expect(admission.evidence).toEqual(request.evidence);
+  expect(admission.correspondence.normalizationRevision.length).toBeGreaterThan(0);
+  expect(admission.correspondence.rule.length).toBeGreaterThan(0);
+  expect(admission.correspondence.payloadPointers.length).toBeGreaterThan(0);
+  expect(admission.native).toEqual(request.native);
+  expect(['transaction-guarded', 'verified-before-commit']).toContain(admission.headGuarantee);
+  expect(request.native.target).toBe(request.target);
+  expect(request.native.revision).toBe(request.expectedHead);
+}
+
+export function assertRetainedFieldCoordinate(actual: RetainedFieldCoordinate, record: DatasetRecord,
+  expected: { pointer: string; language?: string | null; ordinal?: number }): unknown {
+  expect(actual.pointer).toBe(expected.pointer);
+  for (const optional of ['language', 'ordinal'] as const) {
+    expect(Object.hasOwn(actual, optional), `${optional}: omitted is distinct from null or a supplied value`)
+      .toBe(Object.hasOwn(expected, optional));
+    expect(actual[optional]).toEqual(expected[optional]);
+  }
+  const value = pointerValue(record, expected.pointer);
+  const presence = value === undefined ? 'omitted' : value === null ? 'null' : value === '' ? 'empty-string'
+    : Array.isArray(value) && !value.length ? 'empty-array'
+      : value && typeof value === 'object' && !Object.keys(value).length ? 'empty-object' : 'value';
+  expect(actual.presence).toBe(presence);
+  expect(Object.hasOwn(actual, 'valueDigest')).toBe(presence !== 'omitted');
+  if (presence !== 'omitted') expect(actual.valueDigest).toBe(digest(value));
+  if (expected.ordinal === undefined) return value;
+  expect(typeof value).toBe('string');
+  expect(Number.isSafeInteger(expected.ordinal) && expected.ordinal >= 0).toBe(true);
+  const lines = (value as string).split(/\r?\n/);
+  expect(expected.ordinal).toBeLessThan(lines.length);
+  return lines[expected.ordinal];
+}
+
+export function supportAdmissionMutations(body: RetainedSupportRequest,
+  other: { record: string; conversion: string; target: string; head: string }): Array<[string, RetainedSupportRequest]> {
+  const mutation = (basis: string, change: (copy: RetainedSupportRequest) => void): [string, RetainedSupportRequest] => {
+    const copy = structuredClone(body); change(copy); return [basis, copy];
+  };
+  return [
+    mutation('record', copy => { copy.sourceRecord = other.record; }),
+    mutation('record-digest', copy => { copy.evidence.recordDigest = differentDigest(copy.evidence.recordDigest); }),
+    mutation('conversion', copy => { copy.conversion = other.conversion; }),
+    mutation('value-digest', copy => { copy.evidence.field.valueDigest = differentDigest(copy.evidence.field.valueDigest!); }),
+    mutation('native-target', copy => { copy.native.target = other.target; }),
+    mutation('native-value', copy => {
+      if (copy.native.kind === 'component-property') copy.native.property.value = { kind: 'string', lexical: 'Deliberately wrong native value' };
+      else copy.native.value = { kind: 'literal', lexical: 'Deliberately wrong native value',
+        datatype: 'http://www.w3.org/2001/XMLSchema#string', language: null };
+    }),
+    mutation('native-head', copy => { copy.expectedHead = other.head; copy.native.revision = other.head; }),
+  ];
+}
+
 export async function assertIndependentWithdrawal(fixture: ImportFixture): Promise<void> {
   const operator = fixture.people.operator, contract = matrix.independentSupport;
+  if (!operator.actingSubject) throw new Error('TEST PREMISE: the authorized fixture operator must have an acting subject');
   const resource = target(fixture, contract.targetSourceKey).resource;
   const supports: Support[] = [];
   // Different records whose exact retained references denote the same artist. This
@@ -689,14 +872,30 @@ export async function assertIndependentWithdrawal(fixture: ImportFixture): Promi
     const source = fixture.corpus.sources[evidence.sourceKey];
     if (!source) throw new Error(`TEST PREMISE: missing independent real evidence ${evidence.sourceKey}`);
     expect(pointerValue(fixture.records.get(evidence.sourceKey)!.data, evidence.pointer)).toBe(contract.value);
-    const body = { profile: 'source-field-support-attachment-v1', target: resource, slot: contract.slot,
-      occurrence: null, context: 'global', sourceRecord: source.record, conversion: source.conversion,
-      grain: evidence.grain, sourceField: evidence.field, sourceOccurrence: null, sourcePointer: evidence.pointer,
-      expectedHead: fixture.corpus.music.nameHead, actingSubject: operator.actingSubject };
+    expect(source.retainedBinding, 'Source admitted the exact normalized record, not a guessed observation path').toBeDefined();
+    const binding = source.retainedBinding!;
+    const body: RetainedSupportRequest = { profile: 'source-field-support-attachment-v2', target: resource, slot: contract.slot,
+      occurrence: null, context: 'global', sourceRecord: binding.sourceRecord, conversion: binding.conversion,
+      grain: evidence.grain, sourceField: evidence.field, sourceOccurrence: null,
+      expectedHead: fixture.corpus.music.nameHead, actingSubject: operator.actingSubject,
+      evidence: { binding: binding.binding, recordDigest: binding.recordDigest, mappingRevision: binding.mappingRevision,
+        field: { pointer: `/data${evidence.pointer}`, presence: 'value', valueDigest: digest(contract.value) } },
+      native: { kind: 'component-property', target: resource, revision: fixture.corpus.music.nameHead,
+        property: { predicate: 'https://schema.org/name', value: { kind: 'string', lexical: contract.value } } } };
+    expect(assertRetainedFieldCoordinate(body.evidence.field, fixture.records.get(evidence.sourceKey)!,
+      { pointer: `/data${evidence.pointer}` })).toBe(contract.value);
     const attached = await answer<{ support: Support; replayed: boolean }>(operator.main('POST',
       '/v1/sources/field-supports', body, `import-independent-${index}`), 201);
-    expect(attached.support).toMatchObject({ state: 'recorded', sourceRecord: source.record,
+    expect(attached.support).toMatchObject({ state: 'recorded', sourceRecord: binding.sourceRecord,
       nativeRevision: fixture.corpus.music.nameHead });
+    expect(attached.support.admission).toBeDefined();
+    assertRetainedSupportAdmission(attached.support.admission!, body);
+    const payload = reconstructIntake(source.parts.map(part => Buffer.from(part.rawBytesBase64, 'base64'))) as Record<string, unknown>;
+    const payloadPointer = payload.format === 'rezics-dataset-record-v1'
+      ? `/record/data${evidence.pointer}` : evidence.pointer;
+    expect(pointerValue(payload, payloadPointer), 'actual retained MusicBrainz payload at its own coordinate').toBe(contract.value);
+    expect(attached.support.admission!.correspondence).toMatchObject({ normalizationRevision: binding.normalizationRevision,
+      payloadPointers: [payloadPointer], selectedValueDigest: digest(contract.value) });
     const duplicate = await answer<typeof attached>(operator.main('POST', '/v1/sources/field-supports', body, `import-independent-${index}`));
     expect(duplicate).toEqual({ ...attached, replayed: true });
     // A new request key for the same source record still names one support binding.
@@ -704,6 +903,33 @@ export async function assertIndependentWithdrawal(fixture: ImportFixture): Promi
     expect([200, 201]).toContain(repeated.status);
     const sameRecord = await repeated.json() as typeof attached;
     expect(sameRecord.support.support).toBe(attached.support.support);
+    expect(sameRecord.support.supportIdentity).toBe(attached.support.supportIdentity);
+    const otherEvidence = contract.evidence.find(value => value.sourceKey !== evidence.sourceKey)!;
+    const otherSource = fixture.corpus.sources[otherEvidence.sourceKey]!;
+    const otherTarget = target(fixture, 'bangumi:subject:1014');
+    expect(otherSource.retainedBinding).toBeDefined();
+    for (const [basis, refused] of supportAdmissionMutations(body, { record: otherSource.retainedBinding!.sourceRecord,
+      conversion: otherSource.retainedBinding!.conversion, target: otherTarget.resource, head: otherTarget.revision })) {
+      await assertAdmissionRefusal(operator.main('POST', '/v1/sources/field-supports', refused,
+        `import-independent-refuse-${index}-${basis}`), admissionRefusals.support, basis);
+      expect(await answer<Support>(operator.main('GET', `/v1/sources/field-supports/${short(attached.support.support)}`)))
+        .toEqual(attached.support);
+    }
+    const wrongPointer = structuredClone(body); wrongPointer.evidence.field.pointer += '/0';
+    const wrongOrdinal = structuredClone(body); wrongOrdinal.evidence.field.ordinal = 0;
+    const wrongOccurrence = structuredClone(body); wrongOccurrence.sourceOccurrence = `urn:rezics:source-occurrence:${digest('wrong occurrence basis')}`;
+    const unsupported = structuredClone(body); unsupported.slot = 'semantic-property-v1#https://schema.org/unregisteredImportField';
+    for (const [label, refused, refusal] of [
+      ['pointer', wrongPointer, admissionRefusals.coordinate],
+      ['ordinal', wrongOrdinal, admissionRefusals.coordinate],
+      ['occurrence', wrongOccurrence, admissionRefusals.coordinate],
+      ['unverified', unsupported, admissionRefusals.unverified],
+    ] as const) {
+      await assertAdmissionRefusal(operator.main('POST', '/v1/sources/field-supports', refused,
+        `import-independent-refuse-${index}-${label}`), refusal);
+      expect(await answer<Support>(operator.main('GET', `/v1/sources/field-supports/${short(attached.support.support)}`)))
+        .toEqual(attached.support);
+    }
     supports.push(attached.support);
   }
   expect(supports[0]!.sourceRecord).not.toBe(supports[1]!.sourceRecord);
@@ -720,6 +946,25 @@ export async function assertIndependentWithdrawal(fixture: ImportFixture): Promi
   const page = await answer<{ summary: { name: { value: string } } }>(fixture.people.visitor.main('GET',
     `/v1/resources/${short(resource)}/page`));
   expect(page.summary.name.value).toBe(contract.value);
+}
+
+export async function assertHumanSupportWithdrawal(fixture: ImportFixture): Promise<void> {
+  const support = fixture.corpus.synopsisSupport;
+  expect(support, 'source-origin synopsis retains its real independently withdrawable support').toBeDefined();
+  const work = target(fixture, 'bangumi:subject:1014').resource, owner = fixture.people.owner;
+  const path = `/v1/works/${short(work)}/fields/synopsis/control?${query(owner)}`;
+  const before = await answer<Control>(owner.main('GET', path));
+  expect(before.mode).toBe('human-controlled');
+  expect(before.value).toBe((fixture.records.get('bangumi:subject:1014')!.data.api_subject as { summary: string }).summary);
+  const body = { profile: 'source-support-withdrawal-v1', support: support!.support,
+    expectedSupport: support!.supportIdentity, reason: 'Withdraw source support after same-value human confirmation.' };
+  const withdrawn = await answer<{ support: Support; replayed: boolean }>(fixture.people.operator.main('POST',
+    '/v1/sources/withdrawals', body, 'import-withdraw-human-confirmed-source'), 201);
+  expect(withdrawn.support).toMatchObject({ support: support!.support, state: 'withdrawn', withdrawal: { nativeEffect: 'none' } });
+  expect(await answer(owner.main('GET', path)), 'withdrawing source support does not revoke the human confirmation').toEqual(before);
+  expect(await answer(fixture.people.operator.main('POST', '/v1/sources/withdrawals', body, 'import-withdraw-human-confirmed-source')))
+    .toEqual({ ...withdrawn, replayed: true });
+  await assertNativeFacts(fixture.people.visitor, fixture);
 }
 
 export async function assertAtomicRefresh(fixture: ImportFixture): Promise<void> {

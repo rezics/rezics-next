@@ -145,6 +145,13 @@ use unknown without source/count/retry disclosure.
 
 ## Fixture prerequisite and baseline execution
 
+The subsequent [joint retained-record/native-support proposal](import-admission-contract.md)
+specifies current and proposed request, refusal and receipt shapes. It extends
+the existing Source and native owners, preserves the matrix's `.data` inventory
+coordinates and adds a distinct full-record coordinate. Neither conversion nor
+the Work scalar/type, Structure or proposed name slot admits arbitrary semantic
+fields. Program reading and disposition remain required before implementation.
+
 The tests deliberately have no fallback to the development stack, synthetic
 same-name Works, invented provider responses, direct native SQL/RDF writes or a
 missing-fixture skip. The producer has not been implemented here. A missing

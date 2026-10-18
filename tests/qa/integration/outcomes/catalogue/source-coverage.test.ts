@@ -3,7 +3,8 @@ import declaration from '../../../../../scripts/qa/cases/outcomes/catalogue/sour
 import type { Persona } from '../../../../../scripts/qa/cases/outcome-cells.ts';
 import { outcomeTest } from '../../../support/outcome-test.ts';
 import { assertAtomicRefresh, assertCoverageStates, assertIndependentWithdrawal, assertInventory,
-  assertNativeFacts, confirmHumanValue, coverage, deniedSourceCommands, matrix, openImportFixture,
+  assertHumanSupportWithdrawal, assertNativeFacts, assertRetainedRecordAdmissions, confirmHumanValue,
+  coverage, deniedSourceCommands, matrix, openImportFixture,
   type ImportFixture } from '../../../support/import-outcomes.ts';
 
 setDefaultTimeout(180_000);
@@ -24,9 +25,11 @@ async function sourceCoverage(persona: Persona): Promise<void> {
   await deniedSourceCommands(persona, fixture);
   if (persona === 'owner') await confirmHumanValue(fixture);
   if (persona === 'operator') {
+    await assertRetainedRecordAdmissions(fixture);
     await assertInventory(fixture);
     await confirmHumanValue(fixture);
     await assertIndependentWithdrawal(fixture);
+    await assertHumanSupportWithdrawal(fixture);
     await assertAtomicRefresh(fixture);
   }
 }

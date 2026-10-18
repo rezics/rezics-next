@@ -40,8 +40,9 @@ The staged planning input and historical execution records are retained as-is.
 `sourceRoot` supplies `snapshots/<matrix.sources[].id>/snapshot.json`. The loader
 checks exact file bytes, snapshot identity/digest, selected record digests and
 edge closure. `sources[sourceKey]` records actual `record`, `observation`,
-`conversion`, optional `proposal`, and nonempty `parts` with actual observation
-IDs, SHA-256 `rawDigest` and exact `rawBytesBase64`. `reconstructIntake` checks the
+optional successful `conversion`/`proposal`, and nonempty `parts` with actual
+Source record and observation IDs, SHA-256 `rawDigest` and exact `rawBytesBase64`.
+`reconstructIntake` checks the
 parts against the retained normalized record, Bangumi API subject, or provider
 payload as appropriate. Retain existing chunk framing rather than inventing
 smaller successful provider responses. The retained Bangumi 404 is evidence of
@@ -116,10 +117,14 @@ by a missing interface. `assertOriginals` calls `target` for the VNDB/Bangumi
 originals and MusicBrainz album, recording and composition; later checks need
 the elected relation endpoints, unknown release, failed-lookup identity and Bach
 Agent. Missing those bindings is a named `TEST PREMISE`, not an outcome failure.
-`sources` also needs real conversions for every elected inventory/support record,
-and the native Bach name must exist before its support adapter is exercised.
-Report a failed public preparation command for these prerequisites rather than
-fabricating a complete manifest.
+The native Bach name must exist before its support adapter is exercised.
+Existing inventory/editorial assertions still require real per-record
+conversions at their point of use. A missing successful conversion may now be
+represented by an absent `sources[key].conversion`, rather than a fabricated
+ID; a proposed retained conversion is exercised in the outcome body. Report
+failed current commands and distinguish a missing supported fixture path from
+a reached product assertion. Negative authority cases still need the actual
+Bangumi conversion/proposal they address.
 
 `refresh` currently requires `sourceKey`, distinct real base/candidate conversion
 IDs, a real supported source-title command and actual `oldGeneration` /
@@ -129,6 +134,63 @@ provide the required generations or native bindings, G-2791 must retain its
 executable preparation stages and report the exact missing input to the manager;
 this consumer cannot yet be declared ready. No test/helper changes here resolve
 that prerequisite, and no missing token is represented as a guessed success.
+
+## Joint retained-record and native verification inputs
+
+The [joint admission contract](import-admission-contract.md) and
+[local proposal types](../../../tests/qa/fixtures/catalogue/import-admission-contract.ts)
+extend this handoff without changing the frozen selection digest above. G-2781
+remains the pure adapter, G-2778 the only importer wiring owner and G-2791 the
+only producer. G-2772 keeps independent native facts/attribution assertions and
+joint Semantic/Statement exact target/value/head verification. No producer
+adapter result is adoption, publication, source support or a successful native
+verification receipt.
+
+For the four `retainedAdmissionCases`, supply `sources[key].retainedRequest`
+using the exact selected full `DatasetRecord`, pinned snapshot identity/digests,
+ordered actual part-record/observation/byte receipts and exact assembled payload
+metadata. The request is a proposed conversion input, not a successful result;
+retain it even when no compatible command exists on the product baseline.
+`parts[].record` must come from the real intake response. Normalized fields
+outside `.data` are part of the record digest, not invented fields in provider
+JSON. Do not rewrite bare payloads into envelopes or mark incomplete part
+observations complete to satisfy conversion.
+
+The test bodies call the existing conversion route with the proposed request,
+observe its real result, and require its verified `retainedRecord` binding.
+`retainedBinding` may contain a previously returned real result, but is not
+required as successful setup. Tests keep new results separate from legacy
+`record`/`conversion`/proposal/adoption receipts. Record/digest/byte/part-order
+refusals and replays must leave the original binding unchanged. The native name
+test then sends v2 support requests with exact record coordinates and native
+head/value, checks wrong record/digest/conversion/target/value/head refusals,
+and independently withdraws one real record support. No caller-supplied record
+digest or mapping name is itself evidence admission.
+
+Supply `synopsisSupport: {support, supportIdentity}` only if the actual
+source-origin synopsis control command returned that support and its
+principal-private management read returned the matching identity. After same-value human
+confirmation, its withdrawal must preserve human control and public text. This
+is an outcome-body assertion when the product has not returned that support;
+do not fabricate a successful support receipt just to build a manifest.
+
+Current real-command gaps are explicit: registered VNDB/MusicBrainz full-record
+conversion and multipart/original-record binding, normalized-to-payload field
+correspondence, the name adapter, and generic Semantic/Statement support
+verification. Coverage, private inventory and genuine release parts remain the
+original pending proposals. Unsupported fields, source languages, multiline or
+oversized descriptions and exact numeric/date values retain their original
+bytes and a reasoned unresolved disposition; they cannot be fixed by truncation,
+locale guessing, scalar-slot substitution or fabricated successful receipts.
+Positive Bangumi synopsis/domain fields, native relations and MusicBrainz grain
+assertions remain mandatory.
+
+Genuine fixture prerequisites still include explicit operator exposure/scoped
+authority, truthful rights/publication receipts, actual native read/head inputs,
+exact retained bytes and stopped-owner restore compatibility. Proposed interface
+successes belong in test bodies. If those genuine inputs cannot be obtained
+through current public commands on the original baseline, hand off the exact
+refusal/missing command; no baseline product failure has then been established.
 
 ## Baseline compatibility, backup and later proof
 
