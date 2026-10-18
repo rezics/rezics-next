@@ -2,7 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CheckIcon, CopyIcon, LinkIcon, SearchIcon, SendIcon } from 'lucide-react';
 import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
-import { expectControlBoundary } from '../test/control-contrast.ts';
+import { settled } from '../stories/support.tsx';
+import { expectControlBoundary, expectInvalidFieldKeyboardFocus } from '../test/control-contrast.ts';
 import { Field, FieldError, FieldLabel } from './field.tsx';
 import {
   InputGroup,
@@ -259,6 +260,78 @@ export const Invalid: Story = {
 };
 
 export const InvalidDark: Story = { ...Invalid, globals: { theme: 'dark' } };
+
+export const InvalidFields: Story = {
+  globals: { theme: 'light', viewport: { value: 'desktop1440' } },
+  render: () => (
+    <div className="flex flex-col gap-4">
+      <Field invalid>
+        <FieldLabel>Realm address</FieldLabel>
+        <InputGroup>
+          <InputGroupAddon><InputGroupText>rezics.com/r/</InputGroupText></InputGroupAddon>
+          <InputGroupInput defaultValue="" />
+        </InputGroup>
+        <FieldError>Choose an address for the Realm.</FieldError>
+      </Field>
+      <Field invalid>
+        <FieldLabel>Contact email</FieldLabel>
+        <InputGroup>
+          <InputGroupInput defaultValue="reader@" type="email" />
+          <InputGroupAddon align="inline-end"><InputGroupText>Email</InputGroupText></InputGroupAddon>
+        </InputGroup>
+        <FieldError>Enter a complete email address.</FieldError>
+      </Field>
+      <Field invalid>
+        <FieldLabel>Reply</FieldLabel>
+        <InputGroup>
+          <InputGroupAddon align="block-start"><InputGroupText>Reply to @redcoast</InputGroupText></InputGroupAddon>
+          <InputGroupTextarea defaultValue="" />
+        </InputGroup>
+        <FieldError>Write a reply before sending.</FieldError>
+      </Field>
+      <Field invalid>
+        <FieldLabel>Source description</FieldLabel>
+        <InputGroup>
+          <InputGroupTextarea defaultValue="A reference" />
+          <InputGroupAddon align="block-end">
+            <InputGroupButton>Choose a source</InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+        <FieldError>Include the source title and a link.</FieldError>
+      </Field>
+    </div>
+  ),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const controls = canvas.getAllByRole('textbox');
+    for (const control of controls) {
+      const group = control.closest<HTMLElement>('[data-slot="input-group"]')!;
+      await expectInvalidFieldKeyboardFocus(control, group);
+      await expect(getComputedStyle(control).outlineStyle, 'the group owns the focus outline').toBe('none');
+    }
+    const lastGroup = controls.at(-1)!.closest<HTMLElement>('[data-slot="input-group"]')!;
+    await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: 'Choose a source' })).toHaveFocus();
+    await settled(lastGroup);
+    await expect(getComputedStyle(lastGroup).outlineStyle, 'addon buttons keep their own focus cue').toBe('none');
+    await expectControlBoundary(lastGroup);
+    for (const error of canvasElement.querySelectorAll('[data-slot="field-error"]')) {
+      await expect(error).toBeVisible();
+    }
+  },
+};
+
+export const InvalidFieldsDark: Story = {
+  ...InvalidFields, globals: { theme: 'dark', viewport: { value: 'desktop1440' } },
+};
+
+export const InvalidFieldsPhone: Story = {
+  ...InvalidFields, globals: { theme: 'light', viewport: { value: 'phone' } },
+};
+
+export const InvalidFieldsDarkPhone: Story = {
+  ...InvalidFields, globals: { theme: 'dark', viewport: { value: 'phone' } },
+};
 
 export const Disabled: Story = {
   render: () => (
