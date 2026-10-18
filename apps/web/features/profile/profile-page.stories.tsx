@@ -180,11 +180,30 @@ export const LongBio: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const toggle = await canvas.findByRole('button', { name: 'Show more' });
+    const more = canvas.getByRole('button', { name: 'More actions · Lin Mei 林梅' });
+    await expect(more).toBeVisible();
+    await expect(canvas.getByRole('link', { name: /^Follow/ })).toBeVisible();
+    await expect(more.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     await userEvent.click(toggle);
     await expect(canvas.getByRole('button', { name: 'Show less' })).toHaveAttribute(
       'aria-expanded',
       'true',
     );
+  },
+};
+
+export const SubjectMenuKeyboard: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByRole('link', { name: 'Report this profile' })).toBeNull();
+    const more = canvas.getByRole('button', { name: 'More actions · Lin Mei 林梅' });
+    more.focus();
+    await userEvent.keyboard('{Enter}');
+    const report = await within(document.body).findByRole('menuitem', { name: 'Report this profile' });
+    await expect(new URL(report.getAttribute('href')!, location.origin).searchParams.get('target')).toBe(storyId(1));
+    await userEvent.keyboard('{Escape}');
+    await expect(more).toHaveFocus();
   },
 };
 

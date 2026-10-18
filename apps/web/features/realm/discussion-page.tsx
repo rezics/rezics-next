@@ -122,6 +122,7 @@ export async function DiscussionFrame({
   here,
   children,
   client,
+  thread = false,
 }: {
   view: RealmView;
   locale: UiLocale;
@@ -131,11 +132,12 @@ export async function DiscussionFrame({
   here: string;
   children: ReactNode;
   client?: RealmReadClient;
+  thread?: boolean;
 }) {
   const t = materializeData(feed, { locale });
   const { header } = view.realm;
   const segments = view.realm.zone?.segment ? { [header.id]: view.realm.zone.segment } : {};
-  return RealmFrame({ view, tab: 'discussions', locale, search, client, children: (
+  return RealmFrame({ view, tab: 'discussions', locale, search, client, address: here, compactCommunity: thread, children: (
       <FeedProvider
         locale={locale}
         messages={feed}

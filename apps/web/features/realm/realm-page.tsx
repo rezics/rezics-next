@@ -18,6 +18,7 @@ import { signInPath } from '../auth/paths.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { sessionAgentState, sessionReadSubject, type MainSessionAgentState } from '../auth/session.ts';
 import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
+import { CommunityContext } from './thread-rail.tsx';
 import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
 import { ZONE_NONCE_HEADER } from '../zones/csp.ts';
 import {
@@ -446,6 +447,7 @@ export async function RealmFrame({
   siteNavigation,
   client,
   children,
+  compactCommunity = false,
 }: {
   view: RealmView;
   tab: RealmTab | null;
@@ -464,6 +466,8 @@ export async function RealmFrame({
   siteNavigation?: SitePresentationCut['navigation'];
   /** Set when a story replays the frame. Production omits it and reads the request. */
   client?: RealmReadClient;
+  /** A thread keeps community context compact, leaving its post as the page's subject. */
+  compactCommunity?: boolean;
 }) {
   const [jar, request] = client
     ? [{ get: () => undefined } as Awaited<ReturnType<typeof cookies>>, new Headers()] as const
@@ -538,13 +542,15 @@ export async function RealmFrame({
         zone={frameZone}
         dataZone={zone.slug ?? realm.realm}
         theme={theme}
-        pkg={pkg}
+        pkg={compactCommunity ? null : pkg}
         nonce={request.get(ZONE_NONCE_HEADER) ?? undefined}
         actions={actions}
         members={members}
-        masthead={<ZoneMasthead zone={frameZone} members={members} actions={actions} />}
+        masthead={compactCommunity ? <CommunityContext name={frameZone.name}
+          href={realmHref(locale, realm.ref, 'discussions')} actions={actions} />
+          : <ZoneMasthead zone={frameZone} members={members} actions={actions} />}
         tabs={
-          site ? null : (
+          site || compactCommunity ? null : (
             <RealmTabs
               locale={locale}
               realmRef={realm.ref}

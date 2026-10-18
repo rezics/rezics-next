@@ -28,5 +28,5 @@ export function ConceptFollow({ concept, name, following, revision, followers, s
 }) {
   return <FollowControl target={concept} name={name} following={following} revision={revision} followers={followers}
     kind="concept" signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref} actions={actions} locale={locale}
-    messages={messages} />;
+    messages={messages} reports={[{ target: concept, kind: 'page', realm: null }]} className="justify-end gap-x-2" />;
 }

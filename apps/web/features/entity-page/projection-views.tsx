@@ -9,7 +9,7 @@ import { RightsMark, rightsRuns } from '../rights-mark/rights-mark.tsx';
 import { Pages, Quiet, Value } from './views.tsx';
 import { LocalizedText } from '@rezics/ui/localized-text';
 import type { PredicateLabels } from './predicate-labels.ts';
-import { withoutOwnName } from './statement-groups.ts';
+import { splitStatementSources, withoutOwnName } from './statement-groups.ts';
 
 // A place's facts. Main answers only what holds within the place's coordinates, most specific first, and says how far each
 // claim reaches (`frameMatch`); this page keeps Main's order and groups it by that reach, never by a rule of its own.
@@ -34,6 +34,7 @@ export function ProjectionFactsView({
   locale = 'en',
   t,
   messages,
+  pageEndSources = false,
 }: {
   page: Loaded<StatementPage>;
   labels?: PredicateLabels;
@@ -45,6 +46,7 @@ export function ProjectionFactsView({
   locale?: UiLocale;
   t: Copy;
   messages: WorkPageMessages;
+  pageEndSources?: boolean;
 }) {
   if (!page.ok) {
     return (
@@ -58,7 +60,8 @@ export function ProjectionFactsView({
       </Region>
     );
   }
-  const claims = page.data.groups.flatMap((group) =>
+  const groups = pageEndSources ? splitStatementSources(page.data.groups).facts : page.data.groups;
+  const claims = groups.flatMap((group) =>
     withoutOwnName(group, ownName).map((item) => ({ predicate: group.predicate, item })),
   );
   const titles: Record<Reach, string> = {
@@ -96,12 +99,12 @@ export function ProjectionFactsView({
               </section>
             );
           })}
-          {rightsRuns(claims, () => page.data.factObligations).map((run, index) => (
+          {!pageEndSources ? rightsRuns(claims, () => page.data.factObligations).map((run, index) => (
             <RightsMark key={index} rights={run.rights} locale={locale} />
-          ))}
+          )) : null}
         </div>
       ) : (
-        <Quiet title={t.noStatements} body={t.noStatementsBody} />
+        <Quiet title={pageEndSources ? t.noFurtherDetails : t.noStatements} body={pageEndSources ? undefined : t.noStatementsBody} />
       )}
       <Pages
         cursor={cursor}

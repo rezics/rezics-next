@@ -2,6 +2,16 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  noFurtherDetails: "Weitere Angaben sind nicht aufgeführt.",
+  showMore: "Mehr anzeigen",
+  showLess: "Weniger anzeigen",
+  sources: "Quellen, Lizenzen und Belege",
+  sourceRecord: "Quelldatensatz",
+  sourceIdentity: "Quellenkennung",
+  evidence: "Beleg",
+  recordRevision: "Revision",
+  fieldEvidenceUnavailable: "Für diesen Datensatz liegen keine Quellenangaben zu einzelnen Feldern vor.",
+
   alternateSelf: "Anderes Ich",
   otherWorldCounterpart: "Gegenstück aus einer anderen Welt",
   identityGlobal: "Global",

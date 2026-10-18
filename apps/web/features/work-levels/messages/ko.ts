@@ -50,6 +50,7 @@ export default {
   isbnMatches: '이 ISBN의 릴리스',
   identifiers: '식별자', isbn: 'ISBN', platform: '플랫폼', territory: '지역',
   languages: '언어', originalUrl: '원본 URL',
+  openPublication: '발행 페이지 열기', noCoverage: '이 발행본에 포함된 작품이 아직 등록되지 않았습니다.',
   coverage: '수록', coversHeading: '수록 내용', mainVersion: '메인 버전',
   coversWorks: plural({ one: insert('작품 {{count}}편 수록'), other: insert('작품 {{count}}편 수록') },
     { count: asValue(number()) }),

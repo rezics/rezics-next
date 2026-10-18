@@ -13,16 +13,18 @@ import { ProjectionFactsView } from './projection-views.tsx';
 import { readIdentityDefinitions } from './identity-read.ts';
 import { readPredicateLabels } from './predicate-labels.ts';
 import { getMessages } from '../../i18n/server.ts';
+import { StatementSourcesView } from './sources.tsx';
 
 // The sections' server halves: each reads from the link the projection gave it, names what it lists, and hands
 // the answer to the view of the same name (views.tsx), which stories and tests draw without Main.
 
-export async function StatementsSection({ section, cursor, position, frame, projection = false, ownName, client, ...rest }: SectionProps
+export async function StatementsSection({ section, cursor, position, frame, projection = false, ownName, client, pageEndSources = false, sourcesOnly = false, ...rest }: SectionProps
   & { cursor?: string; client?: SuppliedClient; ownName?: string; position?: string; frame?: readonly string[];
     /** A place's facts: those covered by its coordinates, most specific first, each saying how far it reaches. */
-    projection?: boolean }) {
+    projection?: boolean; pageEndSources?: boolean; sourcesOnly?: boolean }) {
   const page = await readStatements(section, cursor, position, frame, client);
   const labels = page.ok ? await readPredicateLabels(page.data, rest.locale, client) : new Map();
+  if (sourcesOnly) return <StatementSourcesView page={page} labels={labels} locale={rest.locale} t={rest.t} />;
   // Values and the continuities a statement holds in are named together, so one read names both.
   const names = page.ok ? await namesOf(page.data.groups.flatMap(group => group.items.flatMap(item => [
     ...item.kind === 'statement' && item.value.kind === 'resource' ? [item.value.iri] : [],
@@ -31,9 +33,9 @@ export async function StatementsSection({ section, cursor, position, frame, proj
     ...item.qualifiers.applicability])), position, client) : new Map();
   return projection
     ? <ProjectionFactsView page={page} labels={labels} names={names} ownName={ownName} cursor={cursor} hrefFor={rest.hrefFor}
-      locale={rest.locale} t={rest.t} messages={rest.messages} />
+      locale={rest.locale} t={rest.t} messages={rest.messages} pageEndSources={pageEndSources} />
     : <StatementsView page={page} labels={labels} names={names} ownName={ownName} cursor={cursor} hrefFor={rest.hrefFor}
-      locale={rest.locale} t={rest.t} messages={rest.messages} />;
+      locale={rest.locale} t={rest.t} messages={rest.messages} pageEndSources={pageEndSources} />;
 }
 
 

@@ -2,6 +2,16 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  noFurtherDetails: "No se indican más detalles.",
+  showMore: "Mostrar más",
+  showLess: "Mostrar menos",
+  sources: "Fuentes, licencias y pruebas",
+  sourceRecord: "Registro de origen",
+  sourceIdentity: "Identidad de la fuente",
+  evidence: "Prueba",
+  recordRevision: "Revisión",
+  fieldEvidenceUnavailable: "Este registro no dispone de atribución por campo.",
+
   alternateSelf: "Otro yo",
   otherWorldCounterpart: "Contraparte de otro mundo",
   identityGlobal: "Global",

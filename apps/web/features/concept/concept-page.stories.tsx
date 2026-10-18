@@ -67,6 +67,30 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+export const LongDefinitionMenuPhone: Story = {
+  args: { concept: { ...fantasy, description: { ...fantasy.name,
+    value: 'Stories built on the impossible, with invented worlds and the creatures in them. '.repeat(80) } } },
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const more = canvas.getByRole('button', { name: 'More actions · Fantasy' });
+    const expand = await canvas.findByRole('button', { name: 'Show more' });
+    await expect(more.compareDocumentPosition(expand) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(canvas.getByRole('link', { name: /^Works$/ })).toHaveAttribute('href', '#concept-content');
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    more.focus();
+    await userEvent.keyboard('{Enter}');
+    const report = await within(document.body).findByRole('menuitem', { name: 'Report this page' });
+    const query = new URL(report.getAttribute('href')!, location.origin).searchParams;
+    await expect(query.get('target')).toBe(fantasy.id);
+    await expect(query.has('realm')).toBe(false);
+    await userEvent.keyboard('{Escape}');
+    await expect(more).toHaveFocus();
+    await userEvent.click(expand);
+    await expect(canvas.getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true');
+  },
+};
+
 const noOverflow = async () => {
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 };

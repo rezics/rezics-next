@@ -87,6 +87,26 @@ export const componentStatements: StatementPage = { ...statements(), groups: [{ 
     value: { kind: 'language-string', lexical: 'معرض الهولوغرام', language: 'ar', direction: 'rtl' } }] }] };
 export const noStatements: StatementPage = { ...statements(), groups: [], count: { value: 0, kind: 'exact-page', total: null } };
 
+/** Imported source identity stays distinct from domain identifiers and source evidence can name an exact revision. */
+export function importedSourceStatements(): StatementPage {
+  const property = (n: number, predicate: string,
+    value: Extract<StatementItem, { kind: 'component-property' }>['value']): StatementItem => ({
+      kind: 'component-property', revision: revision(n), predicate, qualifiers, sources: [], value,
+    });
+  return { ...statements(), groups: [
+    { predicate: 'https://schema.org/name', items: [property(1, 'https://schema.org/name',
+      { kind: 'language-string', lexical: 'Example Studio', language: 'en', direction: direction('en', 'Example Studio') })] },
+    { predicate: 'https://schema.org/identifier', items: [
+      property(2, 'https://schema.org/identifier', { kind: 'external', provider: 'example', namespace: 'organization', key: 'studio-42' }),
+      property(3, 'https://schema.org/identifier', { kind: 'string', lexical: 'Domain identifier 24' }),
+    ] },
+    { predicate: 'https://schema.org/url', items: [property(4, 'https://schema.org/url',
+      { kind: 'string', lexical: 'https://example.test/organizations/studio-42' })] },
+    { predicate: 'https://schema.org/foundingDate', items: [{ ...property(5, 'https://schema.org/foundingDate',
+      { kind: 'string', lexical: '1997' }), sources: ['https://example.test/organizations/studio-42/revisions/3'] }] },
+  ], count: { value: 5, kind: 'exact-page', total: null } };
+}
+
 /** The labels Main selected for the statements' predicates; `memberOf` has none in the reader's language. */
 export const predicateLabels: PredicateLabels = new Map(Object.entries({ name: 'Name', alternateName: 'Also known as', birthDate: 'Born' })
   .map(([term, value]) => [`https://schema.org/${term}`, { value, language: 'en', direction: direction('en', value) }]));

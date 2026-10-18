@@ -2,6 +2,16 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  noFurtherDetails: "등록된 추가 정보가 없습니다.",
+  showMore: "더 보기",
+  showLess: "접기",
+  sources: "출처, 라이선스 및 근거",
+  sourceRecord: "출처 기록",
+  sourceIdentity: "출처 식별 정보",
+  evidence: "근거",
+  recordRevision: "수정본",
+  fieldEvidenceUnavailable: "이 기록에는 항목별 출처 정보가 없습니다.",
+
   alternateSelf: "또 다른 자신",
   otherWorldCounterpart: "다른 세계의 같은 인물",
   identityGlobal: "전체",

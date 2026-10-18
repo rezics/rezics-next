@@ -50,6 +50,7 @@ export default {
   isbnMatches: '与此 ISBN 对应的发行',
   identifiers: '标识符', isbn: 'ISBN', platform: '平台', territory: '地区',
   languages: '语言', originalUrl: '原始网址',
+  openPublication: '打开出版页面', noCoverage: '尚未记录这个发行涵盖的作品。',
   coverage: '涵盖', coversHeading: '涵盖内容', mainVersion: '主版本',
   coversWorks: plural({ one: insert('涵盖 {{count}} 部作品'), other: insert('涵盖 {{count}} 部作品') },
     { count: asValue(number()) }),

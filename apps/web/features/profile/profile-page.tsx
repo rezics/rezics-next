@@ -16,7 +16,8 @@ import { WorkGrid, WorkShelf } from '../catalogue/work-shelf.tsx';
 import { Notice } from '../discover/notice.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
-import { ReportAction } from '../safety/report-action.tsx';
+import { ReportMenu } from '../safety/report-action.tsx';
+import { SubjectHeader } from '../entity-page/header.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { Expandable } from '../work-page/expandable.tsx';
 import { creditedCard, shelfCard, worksSummary } from './cards.ts';
@@ -90,18 +91,23 @@ function ProfileHeader({ profile, credited, follow, reader, followActions, local
   const t = materializeData(messages, { locale });
   const own = ownProfile(reader, profile);
   const followers = follow.ok ? follow.data.followers : null;
-  return <header className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-5 gap-y-6 sm:items-start
-    sm:gap-x-10">
+  const reports = [{ target: profile.id, kind: 'profile' as const }];
+  return <SubjectHeader identity={<div className="flex min-w-0 items-center gap-3 sm:gap-5">
     <ProfileAvatar name={profile.displayName} kind={profile.kind} avatarUrl={profile.avatarUrl}
-      avatarQuery={reader.avatarQuery} className="sm:row-span-2" />
-    <div className="min-w-0 space-y-1.5 sm:pt-3">
+      avatarQuery={reader.avatarQuery} className="size-10 sm:size-24" />
+    <div className="min-w-0 space-y-1.5">
       <p className="font-medium text-muted-foreground text-sm">{kindLabel(profile, credited, t)}</p>
-      <h1 className="text-balance font-semibold font-work-title text-3xl/tight tracking-tight [overflow-wrap:anywhere]
-        sm:text-5xl/tight">{profile.displayName}</h1>
+      <h1 className="text-balance font-semibold font-work-title text-2xl/tight tracking-tight [overflow-wrap:anywhere]
+        sm:text-3xl/tight">{profile.displayName}</h1>
       {profile.handle ? <p className="text-muted-foreground [overflow-wrap:anywhere]">@{profile.handle}</p> : null}
-    </div>
-    <div className="col-span-2 grid content-start gap-5 sm:col-span-1 sm:col-start-2">
-      {own ? <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    </div></div>}
+    actions={own ? <ReportMenu targets={reports} name={profile.displayName} locale={locale} />
+      : <FollowControl target={profile.id} name={profile.displayName}
+        following={follow.ok ? follow.data.following : null} revision={follow.ok ? follow.data.revision : null}
+        followers={followers} signedIn={reader.signedIn} actingSubject={reader.actingSubject}
+        signInHref={signInPath(localizedPath(profileHref(profile), locale))} actions={followActions}
+        locale={locale} messages={messages} reports={reports} className="justify-end gap-x-2" />}
+    primary={own ? <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Link href={localizedPath('/settings', locale)} className={cn(buttonVariants({ variant: 'outline', pill: true }),
           'min-w-32')}><UserRoundIcon aria-hidden="true" />{t.editProfile}</Link>
         {profile.handle ? null : <Link href={localizedPath('/settings#handle', locale)}
@@ -109,19 +115,12 @@ function ProfileHeader({ profile, credited, follow, reader, followActions, local
           {authMessages[locale].chooseHandle}</Link>}
         {followers ? <span className="text-muted-foreground text-sm tabular-nums">
           {followerLabel(followers, locale, messages)}</span> : null}
-      </div>
-        : <FollowControl target={profile.id} name={profile.displayName}
-          following={follow.ok ? follow.data.following : null} revision={follow.ok ? follow.data.revision : null}
-          followers={followers} signedIn={reader.signedIn} actingSubject={reader.actingSubject}
-          signInHref={signInPath(localizedPath(profileHref(profile), locale))} actions={followActions}
-          locale={locale} messages={messages} />}
+      </div> : undefined}>
       {profile.bio ? <Expandable more={t.showMore} less={t.showLess} className="max-w-prose">
         <p lang={profile.bio.language} className={cn('whitespace-pre-line text-pretty text-[1.0625rem]',
           proseClass(profile.bio.language))}>{profile.bio.text}</p>
       </Expandable> : null}
-      {own ? null : <div><ReportAction target={profile.id} kind="profile" /></div>}
-    </div>
-  </header>;
+  </SubjectHeader>;
 }
 
 const completionText = (completion: AgentWorksPage['items'][number]['completionStatus'], t: Text) =>

@@ -53,6 +53,7 @@ export default {
   isbnMatches: 'Veröffentlichungen mit dieser ISBN',
   identifiers: 'Kennungen', isbn: 'ISBN', platform: 'Plattform', territory: 'Gebiet',
   languages: 'Sprachen', originalUrl: 'Ursprüngliche URL',
+  openPublication: 'Veröffentlichung öffnen', noCoverage: 'Für diese Veröffentlichung sind noch keine Werke verzeichnet.',
   coverage: 'Enthält', coversHeading: 'Was sie enthält', mainVersion: 'Hauptversion',
   coversWorks: plural({ one: insert('Enthält {{count}} Werk'), other: insert('Enthält {{count}} Werke') },
     { count: asValue(number()) }),

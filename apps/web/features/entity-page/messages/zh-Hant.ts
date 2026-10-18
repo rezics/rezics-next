@@ -2,6 +2,16 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  noFurtherDetails: "尚未列出其他詳情。",
+  showMore: "展開",
+  showLess: "收起",
+  sources: "來源、授權與證據",
+  sourceRecord: "來源紀錄",
+  sourceIdentity: "來源身分",
+  evidence: "證據",
+  recordRevision: "修訂",
+  fieldEvidenceUnavailable: "此紀錄暫無逐項資料的來源說明。",
+
   alternateSelf: "另一個自己",
   otherWorldCounterpart: "其他世界的對應角色",
   identityGlobal: "全站",

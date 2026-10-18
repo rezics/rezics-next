@@ -42,7 +42,7 @@ function ThreadPage({ read, mode, signedIn, locale, api = memoryThreads(), sort 
   const memberCount = materializeData(realmMessagesFor(locale), { locale }).members(10);
   const feedMessages = locale === 'zh-Hans' ? { ...messages, ...zhHans }
     : locale === 'ja' ? { ...messages, ...ja } : messages;
-  return <RealmPageStory zone={zone} locale={locale} members={memberCount}>
+  return <RealmPageStory zone={zone} locale={locale} members={memberCount} compactCommunity>
     <FeedProvider locale={locale} messages={feedMessages} now={THREAD_NOW}
       signedIn={signedIn} actingSubject={signedIn ? 'https://rezics.com/id/00000802-bbbb-7a6f-8c2d-3e7b5c1a9f40' : null}
       signInHref={`/auth/start?next=${encodeURIComponent(here)}`} avatarQuery="" tab="all" followedRealms={null}

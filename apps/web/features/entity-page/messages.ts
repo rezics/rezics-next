@@ -12,6 +12,16 @@ import zhHant from './messages/zh-Hant.ts';
 // from the type registry, and relation labels from Main's lexicon; neither is
 // written here.
 const en = {
+  noFurtherDetails: "No further details are listed.",
+  showMore: "Show more",
+  showLess: "Show less",
+  sources: "Sources, licences and evidence",
+  sourceRecord: "Source record",
+  sourceIdentity: "Source identity",
+  evidence: "Evidence",
+  recordRevision: "Revision",
+  fieldEvidenceUnavailable: "Field-by-field attribution is not available for this record.",
+
   alternateSelf: "Alternate self",
   otherWorldCounterpart: "Counterpart from another world",
   identityGlobal: "Global",

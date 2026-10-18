@@ -21,7 +21,7 @@ const tag = 'rounded-sm bg-muted px-1.5 py-0.5 font-mono text-muted-foreground t
 const kindLabel = (kind: Release['kind'], t: Copy) => ({ formal: t.kindFormal, web: t.kindWeb, fixed: t.kindFixed,
   virtual: t.kindVirtual })[kind];
 
-const coverageLabel = (completeness: Release['coverage'][number]['completeness'], t: Copy) => ({
+export const coverageLabel = (completeness: Release['coverage'][number]['completeness'], t: Copy) => ({
   complete: t.coverageComplete, partial: t.coveragePartial, trial: t.coverageTrial, unknown: t.coverageUnknown })[completeness];
 
 /** A language tag named in the interface language, beside the tag itself so zh-Hant and zh-Hans are never confused. */
@@ -61,15 +61,19 @@ function Parties({ label, agents, names, t }: { label: string; agents: readonly 
 }
 
 /** One realization: who made this text and how far it can be trusted. */
-export function RealizationRow({ realization, all, releases, names, locale, t, showLanguage = false }: {
+export function RealizationRow({ realization, all, releases, names, locale, t, showLanguage = false, showEvidence = true, anchor }: {
   realization: Realization; all: readonly Realization[]; releases: readonly Release[]; names: Names; locale: UiLocale; t: Copy;
   /** True where no group heading already names the language (a release's own page). */
   showLanguage?: boolean;
+  /** A detail host can collect evidence once at its page end. */
+  showEvidence?: boolean;
+  /** The same realization can occur under several covered Works on one release. */
+  anchor?: string;
 }) {
   const covering = releases.filter(release => release.coverage.some(entry => entry.realization === realization.id));
   const evidence = realization.evidence?.startsWith('https://') && !realization.evidence.startsWith('https://rezics.com/id/')
     ? realization.evidence : null;
-  return <li id={`realization-${realization.id.slice(-12)}`} className="grid min-w-0 gap-3 border-border/70 border-b pb-4">
+  return <li id={anchor ?? `realization-${realization.id.slice(-12)}`} className="grid min-w-0 gap-3 border-border/70 border-b pb-4">
     <div className="flex flex-wrap items-center gap-2">
       {showLanguage ? <span className="font-medium"><LanguageName tag={realization.language} locale={locale} /></span> : null}
       <Badge variant="secondary">{realization.kind === 'original' ? t.kindOriginal : t.kindTranslation}</Badge>
@@ -85,7 +89,7 @@ export function RealizationRow({ realization, all, releases, names, locale, t, s
       </div>
       <Parties label={t.translators} agents={realization.translators} names={names} t={t} />
       <Parties label={t.publishers} agents={realization.publishers} names={names} t={t} />
-      {evidence ? <div className="grid min-w-0 gap-0.5">
+      {showEvidence && evidence ? <div className="grid min-w-0 gap-0.5">
         <dt className="text-muted-foreground text-xs">{t.evidence}</dt>
         <dd className="min-w-0 text-sm"><a href={evidence} rel="noreferrer"
           className="break-all text-primary underline-offset-4 hover:underline">{evidence}</a></dd>
@@ -132,12 +136,14 @@ function ReleaseHeading({ level, release }: { level: 2 | 3; release: Release }) 
 }
 
 /** A release: its format, identifiers, platform, territory and what it covers; an omnibus lists every volume. */
-export function ReleaseCard({ release, names, locale, t, headingLevel = 3, detailed = false, coverage = true }: {
+export function ReleaseCard({ release, names, locale, t, headingLevel = 3, detailed = false, coverage = true, showOriginalUrl = true }: {
   release: Release; names: Names; locale: UiLocale; t: Copy;
   /** Null when the page names the release itself (its own page). */
   headingLevel?: 2 | 3 | null; detailed?: boolean;
   /** False where the page lists what the release covers itself. */
   coverage?: boolean;
+  /** The release detail header already offers its original publication. */
+  showOriginalUrl?: boolean;
 }) {
   const languages = release.contentLanguages.filter(language => language !== 'zxx');
   const identifiers = [...(release.isbn13 ? [{ provider: 'isbn', value: release.isbn13 }] : []),
@@ -172,7 +178,7 @@ export function ReleaseCard({ release, names, locale, t, headingLevel = 3, detai
         <dt className="text-muted-foreground text-xs">{t.languages}</dt>
         <dd className="flex flex-wrap gap-x-3 text-sm">{languages.map(language => <LanguageName key={language} tag={language}
           locale={locale} />)}</dd></div> : null}
-      {release.originalUrl ? <div className="grid min-w-0 gap-0.5 sm:col-span-2">
+      {showOriginalUrl && release.originalUrl ? <div className="grid min-w-0 gap-0.5 sm:col-span-2">
         <dt className="text-muted-foreground text-xs">{t.originalUrl}</dt>
         <dd className="min-w-0 text-sm"><a href={release.originalUrl} rel="noreferrer"
           className="break-all text-primary underline-offset-4 hover:underline">{release.originalUrl}</a></dd></div> : null}

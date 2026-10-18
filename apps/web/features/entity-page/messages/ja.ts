@@ -2,6 +2,16 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  noFurtherDetails: "ほかの詳細は掲載されていません。",
+  showMore: "もっと見る",
+  showLess: "折りたたむ",
+  sources: "出典・ライセンス・根拠",
+  sourceRecord: "出典の記録",
+  sourceIdentity: "出典の識別情報",
+  evidence: "根拠",
+  recordRevision: "改訂",
+  fieldEvidenceUnavailable: "この記録には項目ごとの出典情報がありません。",
+
   alternateSelf: "もう一つの自分",
   otherWorldCounterpart: "別世界の同一人物",
   identityGlobal: "全体",

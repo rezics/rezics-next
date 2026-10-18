@@ -4,6 +4,27 @@ import type { StatementGroup, StatementItem } from './types.ts';
 // Which statements a list draws and under what heading. Pure, so stories and the views import it without Main's reads.
 
 const NAME_PREDICATE = 'https://schema.org/name';
+const IDENTIFIER_PREDICATE = 'https://schema.org/identifier';
+
+export function externalIdentity(item: StatementItem): { provider: string; namespace: string; key: string } | null {
+  if (item.kind !== 'component-property') return null;
+  const value = item.value as { kind?: unknown; provider?: unknown; namespace?: unknown; key?: unknown };
+  return value.kind === 'external' && typeof value.provider === 'string' && typeof value.namespace === 'string'
+    && typeof value.key === 'string' ? { provider: value.provider, namespace: value.namespace, key: value.key } : null;
+}
+
+/** Only explicit external identities have a source role. A generic URL can also be the subject's homepage. */
+export function splitStatementSources(groups: readonly StatementGroup[]) {
+  const facts: StatementGroup[] = [];
+  const sources: StatementGroup[] = [];
+  for (const group of groups) {
+    const source = group.items.filter(item => group.predicate === IDENTIFIER_PREDICATE && externalIdentity(item) !== null);
+    const remaining = group.items.filter(item => !source.includes(item));
+    if (source.length) sources.push({ ...group, items: source });
+    if (remaining.length) facts.push({ ...group, items: remaining });
+  }
+  return { facts, sources };
+}
 
 /** The text a statement's value carries when it is a string, for comparing with a name. */
 function lexicalOf(item: StatementItem): string | null {

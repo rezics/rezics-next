@@ -89,7 +89,17 @@ export const OpenLibraryAuthor: Story = {
       'href',
       `/auth/start?next=${encodeURIComponent('/en/authors/open-library/OL21594A')}`,
     );
+    const sources = canvas.getByRole('region', { name: 'Sources, licences and evidence' });
+    await expect(sources.compareDocumentPosition(canvas.getByRole('region', { name: 'Works by Jane Austen' })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    await expect(within(sources).getByRole('link', { name: 'Source record' })).toHaveAttribute('href',
+      'https://openlibrary.org/authors/OL21594A.json');
+    await expect(within(sources).getByText(/open-library-revision:77/)).toBeVisible();
   },
+};
+
+export const AuthorDetailPhone: Story = {
+  ...OpenLibraryAuthor,
+  globals: { viewport: { value: 'phone' } },
 };
 
 /** Following shows at once, as on a REZICS author's profile, and the count moves with it. */

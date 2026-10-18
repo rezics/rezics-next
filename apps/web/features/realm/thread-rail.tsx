@@ -4,19 +4,32 @@ import type { ReactNode } from 'react';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 
-/** A discussion page's columns: the posts, and the community rail beside them (below them on phones). */
+/** Community information precedes the posts on phones and sits beside them on desktop. */
 export function DiscussionColumns({ rail, children }: { rail: ReactNode; children: ReactNode }) {
   return <PageContainer className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_18rem] xl:gap-8">
-    <div className="min-w-0">{children}</div>{rail}
+    <div className="min-w-0 lg:col-start-2 lg:row-start-1">{rail}</div>
+    <div className="min-w-0 lg:col-start-1 lg:row-start-1">{children}</div>
   </PageContainer>;
 }
 
 export interface RailRule { id: string; title: string; body: string; lang: string }
 
+/** A thread keeps the community address and membership controls without repeating its landing page. */
+export function CommunityContext({ name, href, actions }: {
+  name: { value: string; lang: string; dir: 'ltr' | 'rtl' }; href: string; actions: ReactNode;
+}) {
+  return <PageContainer className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-3 sm:py-3 lg:py-3">
+    <LocalizedLink href={href} lang={name.lang} dir={name.dir}
+      className="min-w-0 font-semibold text-sm underline-offset-4 [overflow-wrap:anywhere] hover:underline">
+      {name.value}</LocalizedLink>
+    <div className="flex flex-wrap items-center gap-2">{actions}</div>
+  </PageContainer>;
+}
+
 /**
  * A community's side rail beside its discussions, as a subreddit keeps one:
  * what the Realm is for and its rules, each rule opening to its full text.
- * Below the thread on phones, where the rail cannot sit beside it.
+ * On phones, compact links keep the full community information and rules reachable before replying.
  */
 export function ThreadRail({ name, description, members, aboutHref, rules, labels }: {
   name: { value: string; lang: string };
@@ -28,19 +41,24 @@ export function ThreadRail({ name, description, members, aboutHref, rules, label
 }) {
   const card = 'grid gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-(--aura-shadow-card)';
   return <aside aria-label={labels.about} className="grid content-start gap-4 lg:sticky lg:top-20">
-    <section aria-labelledby="rail-about" className={card}>
+    <nav aria-label={labels.about} className="flex flex-wrap gap-x-4 gap-y-1 text-sm lg:hidden">
+      <LocalizedLink href={aboutHref} className="inline-flex min-h-9 items-center rounded-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">{labels.more}</LocalizedLink>
+      {rules.length ? <LocalizedLink href={`${aboutHref}#realm-rules`} className="inline-flex min-h-9 items-center gap-1.5 rounded-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">
+        <ScrollTextIcon aria-hidden="true" className="size-4" />{labels.rules}</LocalizedLink> : null}
+    </nav>
+    <section aria-labelledby="rail-about" className={`${card} hidden lg:grid`}>
       <h2 id="rail-about" className="font-semibold text-muted-foreground text-xs uppercase tracking-wide">
         {labels.about}</h2>
       <p lang={name.lang} dir={direction(name.lang, name.value)} className="font-semibold">{name.value}</p>
       {description ? <p lang={description.lang} dir={direction(description.lang, description.value)}
-        className="text-pretty text-muted-foreground text-sm/relaxed">
+        className="line-clamp-5 text-pretty text-muted-foreground text-sm/relaxed">
         {description.value}</p> : null}
       {members ? <p className="flex items-center gap-1.5 text-sm"><UsersRoundIcon aria-hidden="true"
         className="size-4 text-muted-foreground" />{members}</p> : null}
       <LocalizedLink href={aboutHref} className="inline-flex min-h-8 w-fit items-center font-medium text-primary text-sm
         underline-offset-4 hover:underline">{labels.more}</LocalizedLink>
     </section>
-    {rules.length ? <section aria-labelledby="rail-rules" className={card}>
+    {rules.length ? <section aria-labelledby="rail-rules" className={`${card} hidden lg:grid`}>
       <h2 id="rail-rules" className="flex items-center gap-1.5 font-semibold text-muted-foreground text-xs uppercase
         tracking-wide"><ScrollTextIcon aria-hidden="true" className="size-3.5" />{labels.rules}</h2>
       <ol className="grid divide-y divide-border/60">
