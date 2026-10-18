@@ -7,6 +7,38 @@ import { processIdentity } from '../qa/process/identity.ts';
 
 const reviewCount = (log: string) => readFileSync(log, 'utf8').trim().split('\n').length;
 
+test('an all-scope tooling review keeps its explicit effort when landing resumes', () => {
+  const r = repo();
+  try {
+    const file = join(r.settingsDirectory, 'settings.user.json');
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')),
+      reviewScope: 'all', reviewEngine: 'sample-b', reviewEffort: 'xhigh', reviewFallbackEngines: [] }));
+    writeFileSync(r.task.brief, readFileSync(r.task.brief, 'utf8').replace('kind: implementation', 'kind: tooling'));
+    const stopped = r.run('land', { LANE_TIMEOUT: 'yes' });
+    expect(stopped.status, stopped.stdout + stopped.stderr).toBe(1);
+    expect(reviewCount(r.log)).toBe(1);
+    expect(JSON.parse(readFileSync(r.log, 'utf8').trim())).toContain('model_reasoning_effort=xhigh');
+    const resumed = r.run();
+    expect(resumed.status, resumed.stdout + resumed.stderr).toBe(0);
+    expect(reviewCount(r.log)).toBe(1);
+    expect(r.ledger().tasks[r.task.id]!.state).toBe('verified');
+  } finally { r.cleanup(); }
+});
+
+test('enabling all-scope review reviews a stopped tooling landing that previously skipped review', () => {
+  const r = repo();
+  try {
+    writeFileSync(r.task.brief, readFileSync(r.task.brief, 'utf8').replace('kind: implementation', 'kind: tooling'));
+    expect(r.run('land', { LANE_TIMEOUT: 'yes' }).status).toBe(1);
+    expect(existsSync(r.log)).toBe(false);
+    const file = join(r.settingsDirectory, 'settings.user.json');
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), reviewScope: 'all' }));
+    const resumed = r.run();
+    expect(resumed.status, resumed.stdout + resumed.stderr).toBe(0);
+    expect(reviewCount(r.log)).toBe(1);
+  } finally { r.cleanup(); }
+});
+
 test('a lane wait that ran out is recorded and the same reviewed landing lands again', () => {
   const r = repo();
   try {

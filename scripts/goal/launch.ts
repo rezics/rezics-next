@@ -48,7 +48,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
     '--output-format', 'json', '--', prompt]];
 }
 
-function codexMcpOverrides(engine: Engine): string[] {
+export function codexMcpOverrides(engine: Engine): string[] {
   const home = engineEnv(engine).CODEX_HOME;
   if (!home) return [];
   const config = join(home, 'config.toml');
