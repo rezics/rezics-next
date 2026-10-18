@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
+import { expectControlBoundary } from '../test/control-contrast.ts';
 import { Field, FieldError, FieldLabel } from './field.tsx';
 import { Input } from './input.tsx';
 
@@ -26,6 +27,48 @@ export const Default: Story = {
     </Field>
   ),
 };
+
+export const EmptyFields: Story = {
+  globals: { theme: 'light' },
+  render: () => (
+    <div className="flex flex-col gap-4">
+      {['bg-background', 'bg-card', 'bg-muted'].map(surface => (
+        <div className={`flex flex-col gap-4 rounded-2xl border p-4 ${surface}`} key={surface}>
+          <Field>
+            <FieldLabel>Display name</FieldLabel>
+            <Input autoComplete="off" />
+          </Field>
+          <Field>
+            <FieldLabel>Email</FieldLabel>
+            <Input autoComplete="off" type="email" />
+          </Field>
+        </div>
+      ))}
+    </div>
+  ),
+  async play({ canvasElement }) {
+    const inputs = within(canvasElement).getAllByRole('textbox');
+    for (const input of inputs) {
+      await expect(input).toBeEnabled();
+      await expect(input).toHaveValue('');
+      await expect(input).not.toHaveFocus();
+      await expectControlBoundary(input);
+      await userEvent.hover(input);
+      await expectControlBoundary(input);
+      await userEvent.unhover(input);
+    }
+    const first = inputs[0]!;
+    await userEvent.tab();
+    await expect(first).toHaveFocus();
+    await expectControlBoundary(first);
+    await userEvent.type(first, 'Reader');
+    await expect(first).toHaveValue('Reader');
+    await userEvent.clear(first);
+    first.blur();
+  },
+};
+
+export const EmptyFieldsDark: Story = { ...EmptyFields, globals: { theme: 'dark' } };
 
 export const Sizes: Story = {
   render: () => (
@@ -55,11 +98,15 @@ export const Invalid: Story = {
     </Field>
   ),
   async play({ canvasElement }) {
-    await expect(
-      within(canvasElement).getByRole('textbox', { name: 'Original title' }),
-    ).toHaveAttribute('aria-invalid', 'true');
+    const input = within(canvasElement).getByRole('textbox', { name: 'Original title' });
+    await expect(input).toHaveAttribute('aria-invalid', 'true');
+    await expectControlBoundary(input);
+    await userEvent.hover(input);
+    await expectControlBoundary(input);
   },
 };
+
+export const InvalidDark: Story = { ...Invalid, globals: { theme: 'dark' } };
 
 export const Disabled: Story = {
   render: () => (
@@ -68,4 +115,7 @@ export const Disabled: Story = {
       <Input defaultValue="三体" />
     </Field>
   ),
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('textbox', { name: 'Imported title' })).toBeDisabled();
+  },
 };
