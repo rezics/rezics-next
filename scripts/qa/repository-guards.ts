@@ -72,6 +72,11 @@ const repositoryIndexReads = ['tools/repo-index/**', 'scripts/lib/repo-index*.ts
 /** Inventory guards read beyond their import graph. Gate selection uses these
  * inventories; main-wide runs retain the complete registry. */
 export const repositoryGuards = [
+  {
+    file: 'apps/web/tests/server-client-boundary.test.ts',
+    reads: ['apps/web/{app,features,i18n}/**/*.{ts,tsx}', 'packages/ui/src/**/*.{ts,tsx}'],
+    reason: 'Server routes and their server imports may render client components, but cannot invoke client references as ordinary functions.',
+  },
   ...[
     'scripts/goal/deployment-canaries.test.ts',
     'scripts/goal/dependencies.test.ts',

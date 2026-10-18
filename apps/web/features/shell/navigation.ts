@@ -29,7 +29,7 @@ export interface NavigationItem {
   href: string;
   icon: LucideIcon;
   label: Record<UiLocale, string>;
-  /** A shorter phone-tab caption; the full `label` remains the accessible name. */
+  /** A shorter phone-tab caption, also used in its accessible name. */
   bottomLabel?: Record<UiLocale, string>;
   /** Shown in the phone bottom bar, which holds exactly five items. */
   bottom?: boolean;

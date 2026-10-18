@@ -10,15 +10,9 @@ import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { bffListApi, type ListApi } from './commands.ts';
 import { kindLabel } from './labels.ts';
+import { listHref, listViews, type ListView } from './list-state.ts';
 import type { ProposalMessages } from './messages.ts';
 import type { Loaded, ProposalPage, ProposalSummary, TargetName } from './types.ts';
-
-export type ListView = 'mine' | 'review-requested';
-export const listViews: readonly ListView[] = ['mine', 'review-requested'];
-
-/** `?view=` back to a view; anything else is the viewer's own proposals. */
-export const parseListView = (value: string | undefined): ListView => value === 'review-requested' ? value : 'mine';
-export const listHref = (view: ListView) => view === 'mine' ? '/proposals' : `/proposals?view=${view}`;
 
 /**
  * The viewer's proposals, or those waiting for their review, newest first as

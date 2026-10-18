@@ -360,7 +360,7 @@ export const PhoneCommunities: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const bar = canvas.getByRole('navigation', { name: 'Main navigation' });
-    await expect(within(bar).getByRole('link', { name: 'Notifications · Notifications, 99+ unread' })).toBeVisible();
+    await expect(within(bar).getByRole('link', { name: 'Alerts · 99+ unread' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Open navigation' }));
     const drawer = within(await within(document.body).findByRole('dialog', { name: 'Menu' }, { timeout: 5000 }));
     await waitFor(() => expect(drawer.getByRole('region', { name: 'Communities and sites' })).toBeVisible());
