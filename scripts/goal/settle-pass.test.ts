@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import type { QueueLedger } from './queue.ts';
 import type { Attempt, Task } from './types.ts';
+import type { CapacityTask } from './claude-capacity.ts';
 import { recoverDiedPreparations, settlementOwed } from './settle.ts';
 
 const ended = spawnSync('true').pid!;
@@ -20,6 +21,19 @@ test('a pass takes the ledger lock only for a task whose ended attempt nobody is
   expect(settlementOwed(task({ attempts: [attempt(1), attempt(2)], settlement: settled }))).toBe(true);
   expect(settlementOwed(task({ settlement: { attempt: 1, token: 'a', owner: { pid: process.pid } } }))).toBe(false);
   expect(settlementOwed(task({ settlement: { attempt: 1, token: 'a', owner: { pid: ended } } }))).toBe(true);
+});
+
+test.each(['running', 'stopped', 'exited'] as const)('a quota-paused %s task is not claimed as an ended worker', state => {
+  const current = task({ state, settlement: { attempt: 1, token: 'dead-owner', owner: { pid: ended } } }) as CapacityTask;
+  current.claudeCapacity = { attempt: 1, owner: { pid: ended }, pause: {
+    at: Date.now(), stage: 'interrupt', signalledAt: Date.now(), reason: 'about-reserve',
+  } };
+  expect(settlementOwed(current)).toBe(false);
+  current.claudeCapacity.pause!.stage = 'waiting';
+  expect(settlementOwed(current)).toBe(false);
+  // The durable marker alone does not prevent settlement after a real resume/exit.
+  delete current.claudeCapacity.pause;
+  expect(settlementOwed(current)).toBe(true);
 });
 
 test('a preparation whose process died is removed and its brief queued again; a live one is left alone', () => {

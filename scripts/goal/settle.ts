@@ -59,7 +59,7 @@ async function returnRefusal(task: Task, attempt: number): Promise<string | unde
   const record = readLanding(task.id, attempt);
   if (!record) return;
   const output = landingStop(task.id, record);
-  if (!output || task.land !== 'auto' || isWaveBuild(task)) return;
+  if (!output || (task as CapacityTask).claudeCapacity || task.land !== 'auto' || isWaveBuild(task)) return;
   const refusal = classifyLandingRefusal(output);
   if (refusal.kind === 'manager') return refusal.reason;
   if (task.branch !== record.branch || task.worktree !== record.worktree

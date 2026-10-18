@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Ledger, Task } from './types.ts';
+import type { CapacityTask } from './claude-capacity.ts';
 import { GoalMailStore } from './mail.ts';
 import { GoalCoordinator, type IndependentLauncher, processIdentity, WAKE_PROMPT, WAKE_LAST_MESSAGE } from './coordinator.ts';
 import { managerEvents } from './manager-commands.ts';
@@ -100,7 +101,7 @@ function fixture(result = 'done', kind: Task['kind'] = 'tooling', automatic = tr
   writeFileSync(output, JSON.stringify({ result: `RESULT: ${result}\nNEXT: Inspect the remaining work`, is_error: false }));
   const task: Task = { id: 'G-001', title: 'Deliver a file', kind, land: automatic ? 'auto' : undefined, effort: 'high', cases: [], paths: ['delivered.txt'],
     migrations: [], shared: [], depends: [], brief, worktree, branch: 'goal/fixture', base, state: 'running', goal: 'program',
-    attempts: [{ n: 1, engine: 'claude', effort: 'high', pid: 2147483647, session: 'fixture', output,
+    attempts: [{ n: 1, engine: 'cursor', effort: 'high', pid: 2147483647, session: 'fixture', output,
       startedAt: new Date().toISOString() }] };
   const ledgerPath = join(state, 'ledger.json');
   // Settlement fixtures exercise landing; scheduled confirmation has its own fixture below.
@@ -115,7 +116,8 @@ function fixture(result = 'done', kind: Task['kind'] = 'tooling', automatic = tr
   const gate = join(directory, '.temp/gate');
   const launches = join(directory, '.temp/launches.jsonl');
   const workerRelease = join(directory, '.temp/worker-release');
-  writeFileSync(join(bin, 'claude'), `#!/usr/bin/env bun
+  // Generic settlement/refusal coverage must not depend on Claude's separately tested admission policy.
+  writeFileSync(join(bin, 'cursor-agent'), `#!/usr/bin/env bun
     import { appendFileSync, existsSync, writeFileSync } from 'node:fs';
     const args = process.argv.slice(2);
     appendFileSync(${JSON.stringify(launches)}, JSON.stringify(args) + '\\n');
@@ -125,7 +127,7 @@ function fixture(result = 'done', kind: Task['kind'] = 'tooling', automatic = tr
     if (committed.exitCode !== 0) process.exit(committed.exitCode);
     console.log(JSON.stringify({ result: 'RESULT: done', session_id: 'fixture', is_error: false }));
   `);
-  chmodSync(join(bin, 'claude'), 0o755);
+  chmodSync(join(bin, 'cursor-agent'), 0o755);
   writeFileSync(join(bin, 'task'), `#!/usr/bin/env bun
     import { existsSync, writeFileSync } from 'node:fs';
     const args = process.argv.slice(2);
@@ -216,6 +218,14 @@ function stoppedLanding(f: ReturnType<typeof fixture>, refusal: string, automati
     brief: readFileSync(f.task.brief, 'utf8'), branch: f.task.branch, worktree: f.task.worktree,
     handoff: JSON.parse(readFileSync(f.output, 'utf8')).result }));
   return directory;
+}
+
+function capacityManaged(task: Task): CapacityTask {
+  const managed = task as CapacityTask;
+  const attempt = managed.attempts.at(-1)!;
+  attempt.engine = 'claude';
+  managed.claudeCapacity = { attempt: attempt.n, owner: { pid: attempt.pid } };
+  return managed;
 }
 
 test('a unit-gate refusal resumes its own session with only bounded failure evidence, then lands the fix', async () => {
@@ -421,6 +431,86 @@ test('one pass lands and closes an auto tooling task, without a waiter or an enr
   expect(readFileSync(join(f.directory, 'delivered.txt'), 'utf8')).toBe('Delivered\n');
   expect(existsSync(f.task.worktree)).toBe(false);
 }, 45_000);
+
+for (const automatic of [false, true]) test(`a capacity-managed delivery requires manager landing with auto=${automatic}`, async () => {
+  const f = fixture('done', 'tooling', automatic); f.commit(); writeFileSync(f.release, 'release');
+  const ledger = f.ledger(); capacityManaged(ledger.tasks[f.task.id]!); f.save(ledger);
+  await f.execute(['settle']);
+  await until(() => !!f.ledger().tasks[f.task.id]!.settlement?.settledAt);
+  const task = f.ledger().tasks[f.task.id]!;
+  expect(task.state).toBe('exited');
+  expect(task.settlement?.reason).toBe('Claude capacity tasks need a manager landing decision');
+  expect(task.attempts).toHaveLength(1);
+  expect(task.waitingResume).toBeUndefined();
+  expect(f.git('rev-parse', 'main')).toBe(f.task.base);
+  expect(f.git('rev-list', '--count', 'main..goal/fixture')).toBe('1');
+  expect(existsSync(f.task.worktree)).toBe(true);
+  expect(existsSync(f.gate)).toBe(false);
+  expect(existsSync(f.launches)).toBe(false);
+  await f.execute(['settle']);
+  expect(f.ledger().tasks[f.task.id]!.settlement).toEqual(task.settlement);
+});
+
+test('a capacity-managed delivery does not return a retained automatic landing refusal after restart', async () => {
+  const f = fixture(); f.commit(); writeFileSync(f.release, 'release');
+  stoppedLanding(f, `${f.task.id} introduced unit failures; not merging:\n  value.test.ts\n    (fail) delivery`);
+  const ledger = f.ledger();
+  const managed = capacityManaged(ledger.tasks[f.task.id]!); managed.state = 'exited'; f.save(ledger);
+  await f.execute(['settle']);
+  await until(() => !!f.ledger().tasks[f.task.id]!.settlement?.settledAt || !!f.ledger().tasks[f.task.id]!.waitingResume);
+  const task = f.ledger().tasks[f.task.id]!;
+  expect(task.waitingResume).toBeUndefined();
+  expect(task.attempts).toHaveLength(1);
+  expect(task.state).toBe('exited');
+  expect(task.settlement?.reason).toBe('Claude capacity tasks need a manager landing decision');
+  expect(JSON.parse(readFileSync(join(f.run, 'settle-1.json'), 'utf8')).resumedAttempt).toBeUndefined();
+  expect(f.git('rev-parse', 'main')).toBe(f.task.base);
+  expect(existsSync(f.gate)).toBe(false);
+  expect(existsSync(f.launches)).toBe(false);
+  await f.execute(['settle']);
+  expect(f.ledger().tasks[f.task.id]!.settlement).toEqual(task.settlement);
+});
+
+test('a capacity interruption preserves the worker and its dirty progress across settlement passes', async () => {
+  const f = fixture(); f.commit();
+  const ledger = f.ledger();
+  const task = capacityManaged(ledger.tasks[f.task.id]!); task.state = 'stopped';
+  task.claudeCapacity!.pause = { at: Date.now(), stage: 'waiting', signalledAt: Date.now(), reason: 'about-reserve' };
+  f.save(ledger);
+  writeFileSync(join(f.task.worktree, 'delivered.txt'), 'Retained unfinished progress\n');
+  await f.execute(['settle']); await f.execute(['settle']);
+  expect(f.ledger().tasks[f.task.id]).toEqual(task);
+  expect(readFileSync(join(f.task.worktree, 'delivered.txt'), 'utf8')).toBe('Retained unfinished progress\n');
+  expect(f.git('rev-parse', 'main')).toBe(f.task.base);
+  expect(f.git('rev-list', '--count', 'main..goal/fixture')).toBe('1');
+  expect(existsSync(f.gate)).toBe(false);
+  expect(existsSync(f.launches)).toBe(false);
+});
+
+test.each(['read-only', 'merged', 'merged final step'] as const)('a capacity-managed %s task retains normal verified closure', async closure => {
+  const f = fixture('done', 'tooling', false);
+  const ledger = f.ledger();
+  const task = capacityManaged(ledger.tasks[f.task.id]!);
+  if (closure === 'read-only') task.paths = [];
+  else {
+    f.commit(); f.git('merge', '--ff-only', 'goal/fixture');
+    task.mergedCommit = f.git('rev-parse', 'HEAD');
+    if (closure === 'merged') task.state = 'merged';
+  }
+  f.save(ledger);
+  const head = f.git('rev-parse', 'main');
+  await f.execute(['settle']);
+  await until(() => !!f.ledger().tasks[f.task.id]!.settlement?.settledAt);
+  const closed = f.ledger().tasks[f.task.id]!;
+  expect(closed.state, closed.settlement?.reason).toBe('verified');
+  expect(closed.settlement?.reason).toBe('landed and verified');
+  expect(closed.attempts).toHaveLength(1);
+  expect(f.git('rev-parse', 'main')).toBe(head);
+  expect(existsSync(join(f.state, 'merges.jsonl'))).toBe(false);
+  expect(existsSync(f.task.worktree)).toBe(false);
+  expect(existsSync(f.gate)).toBe(false);
+  expect(existsSync(f.launches)).toBe(false);
+});
 
 test('partial handoff stays open, its result and NEXT become one durable manager event', async () => {
   const f = fixture('partial');
