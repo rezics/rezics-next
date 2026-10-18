@@ -12,6 +12,7 @@ import { migrationDirectories, migrationRecords, type SchemaOwner } from '../ops
 import { sqlMigration } from '../lib/concurrent-index.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { ensureFusekiImage, imageBuildBudgetMs } from './fuseki-image-build.ts';
+import { snapshotRefreshDatabase, type RehearsalDatabase } from './refresh-rehearsal.ts';
 export { imageBuildBudgetMs } from './fuseki-image-build.ts';
 import { BUILD_ADMISSION_GIB } from '../qa/host-admission.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
@@ -212,47 +213,32 @@ interface RehearsalClient {
   end(): Promise<unknown>;
 }
 
-/** RESTART allocates transactional sequence storage. Plain rollback does not
- * undo nextval/setval on existing sequences (including calls from triggers).
- * Preserve their state in the rehearsal storage; rollback restores the original.
- * The transaction deadline bounds how long these locks can delay live writers. */
-const isolateRehearsalSequences = `DO $$
-DECLARE sequence_name text; sequence_value bigint; sequence_called boolean;
-BEGIN
-  FOR sequence_name IN
-    SELECT format('%I.%I', n.nspname, c.relname)
-    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE c.relkind = 'S' AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-    ORDER BY n.nspname, c.relname
-  LOOP
-    EXECUTE format('SELECT last_value, is_called FROM %s', sequence_name)
-      INTO sequence_value, sequence_called;
-    EXECUTE format('ALTER SEQUENCE %s RESTART WITH %s', sequence_name, sequence_value);
-    PERFORM pg_catalog.setval(sequence_name::regclass, sequence_value, sequence_called);
-  END LOOP;
-END $$`;
-
 /** Pending files share their owner's transaction so later files can consume
- * earlier schema and data changes. The transaction deadline bounds the entire
- * owner's rehearsal, including locks held by earlier migrations. */
+ * earlier schema and data changes. All DDL and sequence mutations run against
+ * a disposable full snapshot, avoiding sequence/table lock inversions with live
+ * writers. Rollback alone cannot restore nextval/setval on existing sequences. */
 export async function rehearseRefreshMigrations(root: string, env: Record<string, string>,
   pending: readonly string[], createClient: (url: string) => RehearsalClient = url => new Client({
     connectionString: url, connectionTimeoutMillis: 5_000,
     lock_timeout: 1_000, statement_timeout: 5_000, query_timeout: 6_000,
     options: '-c transaction_timeout=10000 -c idle_in_transaction_session_timeout=5000',
-  })): Promise<void> {
+  }), prepareDatabase: (url: string) => Promise<RehearsalDatabase> = url =>
+    snapshotRefreshDatabase(compose(root, ['ps', '-q', 'postgres']), url)): Promise<void> {
   const databases: Record<SchemaOwner, string> = { access: env.ACCESS_DATABASE_URL!,
     relay: env.MAIN_RELAY_DATABASE_URL!, content: env.CONTENT_DATABASE_URL!, account: env.ACCOUNT_DATABASE_URL! };
   for (const owner of Object.keys(migrationDirectories) as SchemaOwner[]) {
     const files = migrationRecords(root, owner).filter(file => pending.includes(file.name));
     if (!files.length) continue;
-    const client = createClient(databases[owner]);
+    let database: RehearsalDatabase | undefined;
+    let client: RehearsalClient | undefined;
+    const errors: unknown[] = [];
     let migration = files[0]!.name;
     try {
+      database = await prepareDatabase(databases[owner]);
+      client = createClient(database.url);
       await client.connect();
       await client.query('BEGIN');
       try {
-        await client.query(isolateRehearsalSequences);
         for (const file of files) {
           migration = file.name;
           // A rolled-back ordinary build validates the same columns and
@@ -270,10 +256,18 @@ export async function rehearseRefreshMigrations(root: string, env: Record<string
         throw error;
       }
       await client.query('ROLLBACK');
-    } catch (error) {
-      throw new Error(`Migration rehearsal failed: ${migration}: ${error instanceof Error ? error.message : String(error)}. Writers were not stopped`,
-        { cause: error });
-    } finally { await client.end(); }
+    } catch (error) { errors.push(error); }
+    finally {
+      // Always attempt both cleanups and keep the SQL error first if cleanup
+      // also fails. Only this invocation's random scratch database is dropped.
+      try { await client?.end(); } catch (error) { errors.push(error); }
+      try { await database?.dispose(); } catch (error) { errors.push(error); }
+    }
+    if (errors.length) {
+      const diagnostic = errors.map(error => error instanceof Error ? error.message : String(error)).join('; ');
+      throw new Error(`Migration rehearsal failed: ${migration}: ${diagnostic}. Writers were not stopped`,
+        { cause: errors.length === 1 ? errors[0] : new AggregateError(errors) });
+    }
   }
 }
 
@@ -738,6 +732,8 @@ async function maintainStagedStack(root: string, candidate: string, revision: st
           candidate,
           readEnv(join(dir, 'dev.env')),
           snapshot.input.pendingMigrations,
+          undefined,
+          url => snapshotRefreshDatabase(compose(candidate, ['ps', '-q', 'postgres'], 30_000, root), url),
         );
       },
       stopWriters,
