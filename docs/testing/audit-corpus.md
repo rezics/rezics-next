@@ -7,6 +7,11 @@ It uses RetainedSources, the dataset selector/importer, persona fixture APIs and
 the stopped-owner backup owner. It does not acquire sources, refresh shared
 imports, or replace any of the original 113 native Work identities.
 
+The [consumer prerequisite table](audit-corpus-prerequisites.md) records all
+current prove files, named cases, actual parser/readiness contracts, historical
+setup failures and unresolved owner interfaces. It establishes no ready corpus
+or product outcome.
+
 Preparation and product proof are separate phases. A wave build may run only
 the stack-free unit, type, lint and guard checks. The commands below which start
 owners require the manager's explicit preparation/prove phase.
@@ -62,7 +67,7 @@ Projection values may be JSON or strict operators:
 
 `concat` joins string values; `tail` obtains a native IRI's short ID. Available
 bindings are `originals`, `source`, `realms`, `identities` (including `/empty`),
-`controls`, `authority`, `import:<snapshot>`, `command:<id>`, `preparation` and
+`controls`, `authority`, `import:<snapshot>`, `command:<id>`, `receipt:<id>`, `preparation` and
 `restore`, `read:<id>` and `read:<phase>:<id>`. Successful readiness checks bind
 their real response, including observed generation tokens; each restored copy
 replaces the current read binding after checking its identity. The receipt ledger
@@ -71,6 +76,15 @@ Failed/unexecuted commands have no binding. `controls` contains
 fresh unknown IDs, admitted to provenance only after a genuine 404 read.
 Runtime addresses, product revisions, measured timings, backup digest and
 command-ledger custody are producer-owned projection fields.
+
+`receipt:<id>` is the existing search consumer's `{path, sha256}` evidence
+shape: a mode-0600 file containing the same single successful command receipt
+as JSON. For example, a record's `evidence` can reference the whole binding with
+`{"$audit":"ref","from":"receipt:create-book","pointer":""}`. These pins
+join retained-source integrity checks. The multi-command JSONL ledger remains
+the contextual/information receipt ledger; it is not parsed as single JSON.
+The public-domain projection supplies its backup as a checkout-relative `.temp/`
+path, as required by that consumer, retaining the same physical cut.
 
 ```sh
 task goal -- prepare-audit inspect .temp/audit-corpus/recipe.json
@@ -120,6 +134,8 @@ leases under `.temp/audit-corpus/sources/`. Failed-attempt JSONL evidence remain
 in `.temp/audit-corpus/attempts/`, outside disposable pending publication trees.
 HTTP failures retain their real status/body; transport failures have no HTTP
 answer. Neither becomes a product assertion failure or a successful receipt.
+Successful command JSON evidence stays alongside its attempt ledger, outside
+disposable publication trees; it remains checksummed if later stages fail.
 
 ## Independent proof restores
 
@@ -169,6 +185,10 @@ The `auditOwnerPrerequisites` export is the executable handoff:
   releases and media `DatasetNativeMapper` implementations with stable
   `id`/`revision` and actual receipt/coverage/occurrence/source generation data.
   The current producer registers only the existing captured-media mapper.
+  Relations, credits and releases adapters now exist on the wave; field
+  projection is a pure plan. Credit adoption bindings and release source/native
+  correspondences must come from their actual owning receipts before wiring
+  those adapters. Their presence alone does not establish source admission.
 - Source custodians must supply the original 113-binding backup, frozen source
   trees, qualified Book/chapter/Recipe nutrition/substitution quotes and licensed
   cover/portrait evidence. Missing facts remain unknown.
