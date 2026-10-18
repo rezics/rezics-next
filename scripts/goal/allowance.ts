@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -231,8 +231,36 @@ const MAX_RESPONSE_BYTES = 1024 * 1024;
 /** Listing config launches no MCP servers and includes layers outside the account's config.toml. */
 function inheritedMcp(account: CodexAccount, env: NodeJS.ProcessEnv, timeout: number): Promise<string[]> {
   return new Promise((resolveResult, reject) => {
-    execFile(account.launcher ?? 'codex', ['mcp', 'list', '--json'], { env, timeout, maxBuffer: MAX_RESPONSE_BYTES, killSignal: 'SIGKILL' }, (error, stdout) => {
-      if (error) { reject(new AllowanceError('transport')); return; }
+    const child = spawn(account.launcher ?? 'codex', ['mcp', 'list', '--json'],
+      { env, detached: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    let stdout = '', bytes = 0;
+    let failure: AllowanceError | undefined;
+    let escalation: ReturnType<typeof setTimeout> | undefined;
+    const kill = (signal: NodeJS.Signals) => {
+      try { if (child.pid) process.kill(-child.pid, signal); } catch { /* Already exited. */ }
+    };
+    const interrupt = () => {
+      failure ??= new AllowanceError('transport');
+      kill('SIGTERM');
+      escalation ??= setTimeout(() => kill('SIGKILL'), 500);
+    };
+    // Enumeration precedes the app-server transport, so it owns signal cleanup until reaped.
+    process.on('SIGINT', interrupt); process.on('SIGTERM', interrupt);
+    const timer = setTimeout(interrupt, timeout);
+    child.once('error', interrupt);
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      if (failure) return;
+      bytes += Buffer.byteLength(chunk);
+      if (bytes > MAX_RESPONSE_BYTES) { interrupt(); return; }
+      stdout += chunk;
+    });
+    child.once('close', code => {
+      clearTimeout(timer);
+      clearTimeout(escalation);
+      kill('SIGKILL');
+      process.removeListener('SIGINT', interrupt); process.removeListener('SIGTERM', interrupt);
+      if (failure || code !== 0) { reject(failure ?? new AllowanceError('transport')); return; }
       try {
         const servers: unknown = JSON.parse(stdout);
         if (!Array.isArray(servers) || servers.some(server => typeof object(server).name !== 'string')) throw new AllowanceError('protocol');
