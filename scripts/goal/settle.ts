@@ -34,6 +34,10 @@ const runDirectory = (id: string) => join(stateDir, 'runs', id);
 const landingRecord = (id: string, attempt: number) => join(runDirectory(id), `settle-${attempt}.json`);
 const reviewDirectories = (id: string) => readdirSync(runDirectory(id)).filter(name => name.startsWith('review-')).sort();
 
+function isWaveBuild(task: Task): boolean {
+  return /^## Wave[ \t]*$/m.test(readFileSync(briefPathOf(task) ?? '', 'utf8'));
+}
+
 function landingStop(id: string, record: AutomaticLanding): string | undefined {
   return reviewDirectories(id).filter(name => !record.reportsBefore.includes(name))
     .map(name => join(runDirectory(id), name, 'stop.txt')).find(existsSync);
@@ -54,7 +58,7 @@ async function returnRefusal(task: Task, attempt: number): Promise<string | unde
   const record = readLanding(task.id, attempt);
   if (!record) return;
   const output = landingStop(task.id, record);
-  if (!output) return;
+  if (!output || task.land !== 'auto' || isWaveBuild(task)) return;
   const refusal = classifyLandingRefusal(output);
   if (refusal.kind === 'manager') return refusal.reason;
   if (task.branch !== record.branch || task.worktree !== record.worktree
@@ -176,23 +180,24 @@ export async function runSettlement(id: string, attemptNumber: number, token: st
     else if (result.error || handoff !== 'done') reason = `${result.error ? 'worker handoff is missing or reports an error; ' : ''}RESULT: ${handoff ?? 'missing'}${next ? `; NEXT: ${next}` : ''}`;
     else if (task.state === 'conflict') reason = task.refusal ?? 'landing stopped';
     else if (task.state !== 'exited' && task.state !== 'merged') reason = `task is ${task.state}`;
-    else if (task.land !== 'auto' && !['outcome', 'surface', 'tooling'].includes(task.kind ?? '')) {
+    else if (isWaveBuild(task)) reason = 'wave build task needs program disposition; it cannot land individually';
+    else if (task.state === 'merged' || canVerifyReadOnly(task)) {
+      await closeTasks([id], 'verified');
+      reason = 'landed and verified';
+    } else if (task.land !== 'auto') {
       reason = `${task.kind ?? 'implementation'} task needs a manager landing decision (land: auto is absent)`;
     } else {
-      if (task.state === 'merged' || canVerifyReadOnly(task)) await closeTasks([id], 'verified');
-      else {
-        const record = readLanding(id, attemptNumber);
-        if (record && landingStop(id, record)) throw new Error('landing stopped');
-        if (!record) {
-          const managerStop = reviewDirectories(id).map(name => join(runDirectory(id), name, 'stop.txt'))
-            .find(file => existsSync(file) && statSync(file).mtimeMs >= Date.parse(attempt.startedAt));
-          if (managerStop) throw new Error(readFileSync(managerStop, 'utf8'));
-        }
-        if (directoryLeaseHeld(join(runDirectory(id), 'land.lock'))) throw new Error('landing is already being watched by its caller');
-        writeLanding(id, attemptNumber, { reportsBefore: reviewDirectories(id), brief: readFileSync(briefPathOf(task) ?? '', 'utf8'),
-          branch: task.branch, worktree: task.worktree, handoff: result.text });
-        await landTask(id);
+      const record = readLanding(id, attemptNumber);
+      if (record && landingStop(id, record)) throw new Error('landing stopped');
+      if (!record) {
+        const managerStop = reviewDirectories(id).map(name => join(runDirectory(id), name, 'stop.txt'))
+          .find(file => existsSync(file) && statSync(file).mtimeMs >= Date.parse(attempt.startedAt));
+        if (managerStop) throw new Error(readFileSync(managerStop, 'utf8'));
       }
+      if (directoryLeaseHeld(join(runDirectory(id), 'land.lock'))) throw new Error('landing is already being watched by its caller');
+      writeLanding(id, attemptNumber, { reportsBefore: reviewDirectories(id), brief: readFileSync(briefPathOf(task) ?? '', 'utf8'),
+        branch: task.branch, worktree: task.worktree, handoff: result.text });
+      await landTask(id);
       reason = 'landed and verified';
     }
   } catch (error) { reason = firstLine(error); }
