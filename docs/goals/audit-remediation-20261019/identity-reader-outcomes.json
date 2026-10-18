@@ -1,0 +1,215 @@
+{
+  "format": "identity-reader-outcome-contract-v1",
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2775",
+  "status": "pending",
+  "findings": ["D4-007", "D4-008"],
+  "sourceMatrices": ["identity-reader-outcomes-spec.json", "decisions.md"],
+  "sourceMatrixLocation": "Dispatch staged copies under .temp/ref; the manager accepted their source matrices before this specification.",
+  "declaration": "scripts/qa/cases/outcomes/realm/identity-discovery.ts",
+  "registryOwner": "G-2768",
+  "proveFiles": {
+    "identity": "tests/qa/integration/outcomes/realm/identity-discovery.test.ts",
+    "reader": "tests/qa/integration/audit-public-reading.test.ts",
+    "fixture": "tests/qa/support/identity-reader-fixture.ts"
+  },
+  "proofBoundary": "Every declaration remains pending. Compiling assertions, process health, successful setup, and an expected baseline failure prove no persona cell. No UI, focus, browser menu, rendered fallback, or later implementation is qualified here.",
+  "personas": {
+    "visitor": {
+      "identityCase": "realm/identity-discovery / visitor",
+      "readerCases": "D4-008 / visitor: links, search, concealment, recovery",
+      "authority": "No Account bearer. Identity reads require sign-in; public reading is available. An actual sign-in as the separate empty Account preserves the visitor return path without creating an Agent."
+    },
+    "stranger": {
+      "identityCase": "realm/identity-discovery / stranger",
+      "readerCases": "D4-008 / stranger: links, search, concealment, recovery",
+      "authority": "Unrelated verified Account with its represented Person and organization; no Realm membership."
+    },
+    "member": {
+      "identityCase": "realm/identity-discovery / member",
+      "readerCases": "D4-008 / member: links, search, concealment, recovery",
+      "authority": "Real public Realm membership. Membership does not add another Person's Agents or private catalogue data."
+    },
+    "owner": {
+      "identityCase": "realm/identity-discovery / owner",
+      "readerCases": "D4-008 / owner: links, search, concealment, recovery",
+      "authority": "Owning Person created the Realm and Book. Ordinary requests omit actingSubject and retain public disclosure; explicit management reads are separate setup commands."
+    },
+    "moderator": {
+      "identityCase": "realm/identity-discovery / moderator",
+      "readerCases": "D4-008 / moderator: links, search, concealment, recovery",
+      "authority": "Actual Realm moderation role. It does not widen ordinary identity discovery or public reader disclosure."
+    },
+    "operator": {
+      "identityCase": "realm/identity-discovery / operator",
+      "readerCases": "D4-008 / operator: links, search, concealment, recovery",
+      "authority": "Real first-administrator/platform authority. It does not widen ordinary discovery or silently publish data."
+    }
+  },
+  "additionalIdentityCases": [
+    "D4-007 / authenticated empty Account: 200 empty is distinct from sign-out, denial and owner failure",
+    "D4-007 / insufficient scope and invalid bearer: never replace authenticated refusal with anonymous discovery",
+    "D4-008 / authenticated empty Account: public reading requires no anonymous authority change",
+    "D4-008 / invalid bearer: one independent case per header, contents, chapter, exact, default, search and search-page surface"
+  ],
+  "contractDecisions": [
+    {
+      "id": "identity-inventory",
+      "decision": "Use existing /v1/me/agents, /v1/me/session-agent and /v1/me/main-agent-preference. No new identity endpoint or browser storage mechanism is proposed.",
+      "reason": "Account authentication, current Agent representation, session choice and main preference have distinct existing owners."
+    },
+    {
+      "id": "eligibility",
+      "decision": "The five represented Accounts each have their own Person and an organization provisioned by that Account. Discovery contains exactly those two Agents, with the genuine names and kinds. Another Account's Person is ineligible and selecting it returns 403 acting_context_denied, including for moderator and operator.",
+      "reason": "Creation receipts, Realm roles and platform roles cannot substitute for current Agent representation. This specification tests an ineligible candidate; revocation of a previously saved representation is a separate prerequisite, not fabricated here."
+    },
+    {
+      "id": "unselected-and-initial",
+      "decision": "A fresh session with two eligible Agents and no saved choice has null session/main choices and null initialActingSubject. A saved Session Agent and Main Agent preference are independent. Explicitly clearing the session preserves its new revision and does not fall back to Main. On a new OAuth session, an eligible Main Agent is an initial suggestion, never a persisted Session Agent.",
+      "reason": "Null with a saved revision expresses deliberate unselection; it differs from an absent choice."
+    },
+    {
+      "id": "authenticated-empty",
+      "decision": "Create and verify a separate real Account without calling POST /v1/agents. With a genuine bearer, inventory is 200 complete items:[], and choice objects contain actingSubject:null, eligible:false, revision:null. Selecting a foreign Agent is 403. Reading a public chapter remains 200 with that same bearer and Account session.",
+      "reason": "An anonymous request or a test adapter with an empty list would not establish the signed-in empty premise."
+    },
+    {
+      "id": "session-and-next",
+      "decision": "Exercise actual Account sign-in and OAuth PKCE with an opaque state containing the requested next path, including nested percent-encoded query state. Observe the real registered callback and assert identical state and next. Owner failure, denied selection and stale revision preserve the Account and saved choices; recovery is an explicit new request with the same captured bearer.",
+      "reason": "API callback preservation is testable here. The consuming browser's redirect and local drafts remain pending browser proof."
+    },
+    {
+      "id": "optional-authentication",
+      "decision": "For all seven public reader surfaces, a supplied invalid bearer returns 401 account_assertion_denied. Absence of a bearer permits the public baseline; presence of an invalid bearer cannot be discarded for an anonymous retry.",
+      "reason": "This is an explicit cross-surface contract to review before implementation. Existing public handlers that ignore optional authentication may fail it."
+    },
+    {
+      "id": "public-book",
+      "decision": "Use an original Book with a public selected catalogue contribution, a real book-composition, two content-text-v1 chapters, native Content publication and public search eligibility, and a separate explicit work-structure-publication-v1 receipt. The default unparameterized contents request, bounded contents continuation, chapter links, exact revision links, both audited and paged phrase search, and existing main-default text selection must read those published bytes.",
+      "reason": "Process Healthy, a successful create command, a private structure or an unpublished draft cannot establish a public reader premise."
+    },
+    {
+      "id": "default-links",
+      "decision": "The existing consumer starts at GET /v1/works/{uuid}/contents and follows the first available occurrence to GET /v1/chapters/{uuid}; its text fallback uses GET /v1/main-versions/{uuid}/selection. Test the default contents URL and both explicit/default-language selection URLs. Do not add a test-only start/read API or conflate catalogue introductory text with chapter content.",
+      "reason": "D4-008 retains independent content, navigation, reading-position and progress owners."
+    },
+    {
+      "id": "concealment",
+      "decision": "A public empty Book returns 200 contents items:[] and nextCursor:null. A private draft Book, a Book whose bytes have a native publication but no public eligibility/adoption, and an absent Book/occurrence have indistinguishable 404 work_unavailable bodies. Private, unpublished successor, unadopted and absent exact revisions have indistinguishable 404 revision_unavailable bodies, even for a signed-in owner using the ordinary public request.",
+      "reason": "Concealment cannot be an empty success or reveal resource existence, names, paths or revisions through error details."
+    },
+    {
+      "id": "owner-failure",
+      "decision": "A transparent proxy forwards actual Fuseki owner responses and can return only an explicit 503 failure. It never supplies successful source data. Identity reads with represented Agents must report 503 acting_context_unavailable. Known Work, contents and chapter reads must report 503 work_read_unavailable. Clear the fault and make one explicit retry; retain Account identity, exact saved revisions, Work identity/title/types and published chapter selections.",
+      "reason": "An unavailable owner is distinct from complete empty, denied, missing and concealed data. The API proof does not assert that a rendered UI retains its independent sections."
+    }
+  ],
+  "apiMatrix": [
+    {
+      "operation": "GET /v1/me/agents",
+      "request": { "headers": { "Authorization": "Bearer <actual OAuth token>" }, "query": {} },
+      "scope": "agent:create",
+      "success": { "status": 200, "profile": "agent-discovery-v1", "complete": true, "items": "exactly the currently represented Agents; [] for the real verified empty Account" },
+      "failures": { "anonymousOrInvalidBearer": "401 account_assertion_denied", "insufficientScope": "403 insufficient_scope", "ownerUnavailable": "503 acting_context_unavailable" }
+    },
+    {
+      "operation": "GET /v1/me/session-agent",
+      "request": { "headers": { "Authorization": "Bearer <actual OAuth token>", "x-session-key": "<one stable UUID per OAuth session>" }, "query": {} },
+      "success": { "status": 200, "profile": "session-agent-v1", "sessionAgent": { "actingSubject": "IRI|null", "eligible": "boolean", "revision": "UUID|null" }, "mainAgent": "same choice shape", "initialActingSubject": "eligible suggestion IRI|null; null after an explicit session choice or unselection" },
+      "failures": { "anonymousOrInvalidBearer": "401 account_assertion_denied", "insufficientScope": "403 insufficient_scope", "ownerUnavailable": "503 acting_context_unavailable" }
+    },
+    {
+      "operation": "PUT /v1/me/session-agent",
+      "request": { "headers": { "Authorization": "Bearer <actual OAuth token>", "x-session-key": "<same session UUID>", "Idempotency-Key": "<fresh UUID>" }, "body": { "actingSubject": "IRI|null", "expectedRevision": "UUID|null" } },
+      "success": { "status": 200, "profile": "session-agent-v1", "actingSubject": "requested IRI|null", "revision": "new UUID", "replayed": false },
+      "failures": { "ineligibleAgent": "403 acting_context_denied; preserve prior state", "staleRevision": "409 stale_context; preserve prior state" }
+    },
+    {
+      "operation": "GET /v1/me/main-agent-preference",
+      "request": { "headers": { "Authorization": "Bearer <actual OAuth token>" }, "query": {} },
+      "success": { "status": 200, "profile": "main-agent-preference-v1", "mainAgent": { "actingSubject": "IRI|null", "eligible": "boolean", "revision": "UUID|null" } },
+      "failures": { "anonymousOrInvalidBearer": "401 account_assertion_denied", "insufficientScope": "403 insufficient_scope", "ownerUnavailable": "503 acting_context_unavailable" }
+    },
+    {
+      "operation": "PUT /v1/me/main-agent-preference",
+      "request": { "headers": { "Authorization": "Bearer <actual OAuth token>", "Idempotency-Key": "<fresh UUID>" }, "body": { "actingSubject": "own organization IRI", "expectedRevision": null } },
+      "success": { "status": 200, "profile": "main-agent-preference-v1", "actingSubject": "requested IRI", "revision": "new UUID", "replayed": false },
+      "invariant": "Does not overwrite the independently selected Session Agent."
+    },
+    {
+      "operation": "GET /v1/works/{uuid}",
+      "request": { "query": {}, "authentication": "visitor or the persona's unchanged captured bearer; no actingSubject" },
+      "success": { "status": 200, "profile": "work-read-v1", "id": "public Book IRI", "mainVersion": "original mainVersion IRI", "title": "original title", "types": ["https://schema.org/Book"], "disclosure": "public", "publicationState": "published" },
+      "failures": { "privateUnpublishedOrMissing": "404 work_unavailable", "failedOwner": "503 work_read_unavailable", "suppliedInvalidBearer": "401 account_assertion_denied" }
+    },
+    {
+      "operation": "GET /v1/works/{uuid}/contents",
+      "request": { "defaultQuery": {}, "boundedQuery": { "version": "public mainVersion IRI", "language": "en", "limit": 1 }, "continuation": "same bounded query plus cursor returned by first page; no actingSubject" },
+      "success": { "status": 200, "profile": "work-contents-v1", "work": "Book IRI", "version": "mainVersion IRI", "composition": "published structure IRI", "compositionRevision": "published structure revision IRI", "items": "two available chapter occurrence/post/selectedRevision pairs in composition order; bounded pages contain one each", "nextCursor": "opaque string until final page, then null" },
+      "empty": "200 items:[], nextCursor:null for the public empty Book",
+      "failures": { "privateUnpublishedOrMissing": "404 work_unavailable", "failedOwner": "503 work_read_unavailable", "suppliedInvalidBearer": "401 account_assertion_denied" }
+    },
+    {
+      "operation": "GET /v1/chapters/{occurrenceUuid}",
+      "request": { "defaultQuery": {}, "explicitQuery": { "language": "en" }, "authentication": "unchanged; no actingSubject" },
+      "success": { "status": 200, "profile": "work-chapter-v1", "work": "same Book IRI", "version": "same mainVersion IRI", "occurrence": "linked occurrence IRI", "selectedRevision": "urn:rezics:content:revision:<published UUID>", "previousAndNext": "adjacent public occurrence IRIs or null at boundaries", "content": "actual exact Content owner bytes and digest, excluding the unpublished successor" },
+      "failures": { "privateUnpublishedOrMissing": "404 work_unavailable", "failedOwner": "503 work_read_unavailable", "suppliedInvalidBearer": "401 account_assertion_denied" }
+    },
+    {
+      "operation": "GET /v1/content-revisions/{revisionUuid}",
+      "request": { "query": {}, "authentication": "unchanged; no actingSubject" },
+      "success": { "status": 200, "reference": { "owner": "content", "resourceId": "chapter Post IRI", "variantId": "urn:rezics:variant:<UUID>", "revisionId": "published UUID, not its graph IRI", "byteDigest": "digest returned by actual draft command" }, "serializedJson": "actual published original chapter text", "body": "JSON equal to parsed serializedJson" },
+      "failures": { "privateUnpublishedUnadoptedOrMissing": "404 revision_unavailable", "suppliedInvalidBearer": "401 account_assertion_denied" }
+    },
+    {
+      "operation": "GET /v1/main-versions/{mainVersionUuid}/selection",
+      "request": { "defaultQuery": {}, "explicitQuery": { "language": "en" }, "authentication": "visitor or unchanged signed-in bearer" },
+      "success": { "status": 200, "work": "same Book IRI", "mainVersion": "same mainVersion IRI", "contribution": "explicitly selected public contribution", "language": "en", "body": "original catalogue introduction; separate from native chapter bytes" },
+      "failures": { "suppliedInvalidBearer": "401 account_assertion_denied" }
+    },
+    {
+      "operation": "POST /v1/queries",
+      "request": { "body": { "profile": "public-content-phrase-v1", "phrase": "unique original corpus marker", "language": "en" }, "authentication": "visitor or unchanged signed-in bearer" },
+      "success": { "status": 200, "profile": "public-content-phrase-v1", "resultGrain": "content-variant", "complete": true, "total": 2, "results": "exactly two public published revision graph IRIs; each actual matchedPlacement links back to its Book occurrence" },
+      "empty": "200 total:0, results:[] for a marker absent from the corpus",
+      "failures": { "suppliedInvalidBearer": "401 account_assertion_denied" }
+    },
+    {
+      "operation": "POST /v1/queries/page",
+      "request": { "body": { "profile": "public-content-phrase-page-v1", "phrase": "same original marker", "language": "en", "pageSize": 1 }, "continuation": "same body plus continuation set to the entire first response.next object" },
+      "success": { "status": 200, "profile": "public-content-phrase-page-v1", "resultGrain": "content-variant", "relationComplete": true, "total": 2, "results": "one distinct eligible revision per page; union equals the audited /queries response", "next": "opaque object on first page, null on last page" },
+      "empty": "200 total:0, results:[], next:null",
+      "failures": { "suppliedInvalidBearer": "401 account_assertion_denied" }
+    }
+  ],
+  "fixture": {
+    "composition": "Existing personaSessions and restorePersonaRealms run real Account OAuth, Main composition and lifecycle, Access, Content, graph, immutable objects and relay owners. No REZICS module mocks or successful fake source responses.",
+    "authority": "Use the existing persona fixture's supported role/ownership commands and grantFixtureAuthority where required; no direct shared authority or business writes.",
+    "corpus": "One command-created public Book (two chapters), public empty Book, private draft Book, native-published but publicly unadopted Book, unpublished successor to a public revision, five real represented people with their own organizations and one separately verified Account with no Agent.",
+    "rights": { "basis": "original-contribution", "credit": "Synthetic people, names, Book text and organization names authored for this fixture; no external content." },
+    "backup": "Close all fixture writers and relay, stop PostgreSQL cleanly, and retain one consistent stopped copy of all owner volumes with createCorpusBackupDriver. Each prove file restores a separate disposable copy of that same backup; no reconstruction from successful response literals.",
+    "privateManifest": ".temp/identity-reader/corpus.json (0600; retained credentials are never committed or printed)",
+    "preparationEvidence": ".temp/identity-reader/preparation-*.json",
+    "assertionEvidence": ".temp/identity-reader/assertions-<QA run id>.jsonl; append immediately before each reached HTTP/status assertion",
+    "preparationBudgetMs": 600000,
+    "budgetScope": "Source startup, command creation, stopped backup, isolated restore, migrations and application startup count. Host admission wait is excluded by REZICS_QA_PREPARATION_STARTED_AT. A reused cut skips construction but measures its new restore. Preparation failure remains SETUP, never a product assertion failure.",
+    "reuse": "Retain the same backup and recipe/storage compatibility digest. Reject incompatible reuse; preserve the old backup rather than silently rebuild."
+  },
+  "baseline": {
+    "selection": "identity-reader-api-baseline",
+    "status": "not-run",
+    "productRevision": "79be80d4d0e1cad1639b6a65e8f0795d6a95929a",
+    "pinProcedure": "Commit this complete specification; detach this worker worktree at the product revision and overlay only the authored declaration, tests, test fixture and matrix. Verify the product/harness diff before running. Keep main and all other worktrees read-only.",
+    "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test tests/qa/integration/outcomes/realm/identity-discovery.test.ts tests/qa/integration/audit-public-reading.test.ts",
+    "expectedResult": "Ordinary assertions may fail. Report the actual failing test body, reached assertion and actual response; never count setup, transport failure, health or a test.failing wrapper as the requested product failure.",
+    "failingBodies": [],
+    "assertionsReached": null,
+    "preparation": null
+  },
+  "remainingPrerequisites": [
+    "G-2768 enrolls the pending identity row and the exact prove files without editing these declarations/assertions. Corpus-owning tests must receive the runner's appropriate isolation enrollment before wider prove campaigns.",
+    "The baseline must pin pristine product code, successfully construct the supported public publication and empty-Account premises, and finish preparation within 600 seconds before a claimed outcome failure.",
+    "A saved Agent whose representation is later revoked requires a supported independent fixture authority transition; do not manufacture private rows or an eligible:false success response.",
+    "Separate browser author proves rendered login return, menu/focus, and preserved independent sections. This API specification author has no browser execution authority."
+  ]
+}
