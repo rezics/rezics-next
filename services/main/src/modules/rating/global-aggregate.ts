@@ -100,8 +100,8 @@ function standingComponentsSelect(env: WorkActivationEnvironment,
       ${explicit ? `{ VALUES (?observation ?originMain ?originWork) {
         ${heads.map(head => `(${iri(head.observation)} ${iri(head.mainVersion!)} ${iri(head.work)})`).join(' ')} }
         GRAPH ${iri(GRAPHS.current)} { ?observation rv:ratingContext ${iri(context)} ; rv:targetMainVersion ?originMain }
-        ${inventory?.selectedSlot !== undefined || inventory?.selectedHeads ? `FILTER(?originMain = ${iri(target.mainVersion)} || EXISTS {
-          GRAPH ${iri(GRAPHS.current)} { ?originWork rv:mergedInto+ ${iri(target.work)} } })` : ''}
+        FILTER(?originMain = ${iri(target.mainVersion)} || EXISTS {
+          GRAPH ${iri(GRAPHS.current)} { ?originWork rv:mergedInto+ ${iri(target.work)} } })
       }` : `{ SELECT DISTINCT ?observation WHERE {
         { GRAPH ${iri(GRAPHS.current)} { ?observation rv:ratingContext ${iri(context)} ; rv:targetMainVersion ${iri(target.mainVersion)} } }
         ${inherited.length ? `UNION { VALUES (?observation ?origin) { ${inherited.map(head => `(${iri(head.observation)} ${iri(head.originWork!)})`).join(' ')} }
@@ -260,7 +260,8 @@ async function snapshot(env: WorkActivationEnvironment, access: InventoryAccess,
     evidenceHeads(inventory);
     inventories.push(inventory);
   }
-  if (inventories.some(inventory => inventory.recoveryGeneration !== inventories[0]!.recoveryGeneration)) unavailable();
+  if (inventories.some(inventory => inventory.recoveryGeneration !== inventories[0]!.recoveryGeneration
+    || inventory.standingGeneration !== inventories[0]!.standingGeneration)) unavailable();
   signal.throwIfAborted();
   const result = await env.fuseki.query(standingComponentsQuery(env, components, target, inventories),
     GLOBAL_AGGREGATE_BUDGET.graphBytes);
@@ -277,7 +278,7 @@ async function snapshot(env: WorkActivationEnvironment, access: InventoryAccess,
       own.filter(row => row.kind?.value === 'observation'), budget, onlySlot);
   });
   if (rows.some(row => !components.some(({ kind }) => kind === row.component?.value))) unavailable();
-  if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal)) unavailable();
+  if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal, inventories[0]!.standingGeneration)) unavailable();
   signal.throwIfAborted();
   return { components: verified,
     sourcePosition: { datasetId: 'product' as const, dataEpoch: root.epoch.value, sequence: root.sequence!.value } };
@@ -378,7 +379,8 @@ export async function queryWorkStandingRatings(env: WorkActivationEnvironment, a
     }
     if (!selected.length) return values;
     const inventories = selected.map(item => item.inventory);
-    if (inventories.some(inventory => inventory.recoveryGeneration !== inventories[0]!.recoveryGeneration)) unavailable();
+    if (inventories.some(inventory => inventory.recoveryGeneration !== inventories[0]!.recoveryGeneration
+      || inventory.standingGeneration !== inventories[0]!.standingGeneration)) unavailable();
     const branches = selected.map(({ target, inventory }) => `{ {
       ${standingComponentsSelect(env, [{ kind: input.kind, context: input.context }], target, [inventory])}
     } BIND(${iri(target.work)} AS ?targetWork) }`);
@@ -412,7 +414,7 @@ export async function queryWorkStandingRatings(env: WorkActivationEnvironment, a
           || error instanceof RevisionReadBudgetExceeded) throw error;
       }
     }
-    if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal)) unavailable();
+    if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal, inventories[0]!.standingGeneration)) unavailable();
     signal.throwIfAborted();
     return values;
   });

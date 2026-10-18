@@ -8,7 +8,10 @@ import {
   readRatingAggregateInventory,
   readStandingRatingReconstructionBatch,
   recordStandingRatingValues,
+  checkRatingAggregateFence,
 } from '../../../services/main/src/modules/rating/aggregate-inventory.ts';
+import { fenceStandingRatingTransition, refreshStandingRatingProjections } from '../../../services/main/src/modules/rating/standing-publication.ts';
+import { itemCommandKey } from '../../../services/main/src/modules/identity-merge/contract.ts';
 import { standingRatingSlotIri } from '../../../services/main/src/modules/rating/observation.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
@@ -114,6 +117,118 @@ test('standing components retain exact effective slots through 100/101/large, me
     expect(await expectExact(main)).toMatchObject({ slots: 2048, histogram: { '5': 2046, '8.5': 1 } });
     await pool.query('DELETE FROM access.rating_merge_selection WHERE context=$1 AND main_version=$2', [context, main]);
     expect(await expectExact(main)).toEqual({ slots: 1, unvalued: 0, histogram: { '8.5': 1 } });
+
+    // Deleting the witness at 102 leaves an immediately verifiable 101-person
+    // component, with no unrelated seal or reconstruction needed to heal it.
+    const deletionMain = id();
+    const deletable = items.slice(0, 102).map(item => ({ ...item, admission: randomUUID(), observation: id(), revision: id(),
+      slot: standingRatingSlotIri(item.principal, context, deletionMain) }));
+    await heads(deletable, deletionMain, work);
+    for (const population of [102, 101]) {
+      const before = await readRatingAggregateInventory(pool, context, deletionMain);
+      expect(before.standing!.slots).toBe(population);
+      expect(before.standing!.witness).toBeTruthy();
+      const removedSlot = before.standing!.witness!.slot;
+      await pool.query('DELETE FROM access.rating_aggregate_head WHERE context=$1 AND main_version=$2 AND slot=$3',
+        [context, deletionMain, removedSlot]);
+      const after = await readRatingAggregateInventory(pool, context, deletionMain);
+      expect(after.standing!.slots).toBe(population - 1);
+      expect(await expectExact(deletionMain)).toMatchObject({ slots: population - 1, histogram: { '5': population - 1 } });
+      if (population === 102) {
+        expect(after.standing!.witness).toBeTruthy();
+        expect(after.standing!.witness!.slot).not.toBe(removedSlot);
+      }
+    }
+
+    // One origin can occur in far more retained survivor selections than the
+    // address hop bound. A seal changes at most one projection synchronously;
+    // the durable pending fence prevents any stale component being called exact.
+    const retained = Array.from({ length: 137 }, () => ({ main: id(), work: id() })).sort((a, b) => a.main.localeCompare(b.main));
+    const source = items[5]!;
+    await pool.query(`INSERT INTO access.rating_merge_selection
+      (context,work,main_version,principal_id,origin_main_version,origin_slot,task_key)
+      SELECT $2,x.work,x.main,$3::uuid,$4,$5,$6 FROM jsonb_to_recordset($1::jsonb) x(work text,main text)`,
+    [JSON.stringify(retained), context, source.principal, originMain, source.slot, task]);
+    const countValue = async (value: number) => Number((await pool.query(`SELECT count(*) AS n FROM access.rating_standing_contribution
+      WHERE context=$1 AND main_version=ANY($2::text[]) AND value=$3`, [context, retained.map(target => target.main), value])).rows[0].n);
+    const oldCut = await readRatingAggregateInventory(pool, context, originMain);
+    await pool.query('UPDATE access.rating_aggregate_head SET value=4 WHERE context=$1 AND main_version=$2 AND slot=$3',
+      [context, originMain, source.slot]);
+    expect(await countValue(4)).toBe(1);
+    expect((await pool.query('SELECT pending FROM access.rating_standing_publication()')).rows[0].pending).toBe('1');
+    for (const target of [originMain, retained[0]!.main, retained.at(-1)!.main]) {
+      await expect(readRatingAggregateInventory(pool, context, target)).rejects.toThrow('publication is incomplete');
+    }
+    expect(await checkRatingAggregateFence(pool, oldCut.recoveryGeneration, undefined, oldCut.standingGeneration)).toBe(false);
+    expect(await refreshStandingRatingProjections(pool, { context, limit: 32 })).toMatchObject({ refreshed: 32, complete: false, publicationReady: false });
+    expect(await countValue(4)).toBe(33);
+
+    // A newer source seal rewinds the persisted frontier. Lost local cursors
+    // cannot skip the earlier targets now carrying that previous value.
+    await pool.query('UPDATE access.rating_aggregate_head SET value=3 WHERE context=$1 AND main_version=$2 AND slot=$3',
+      [context, originMain, source.slot]);
+    expect(await countValue(3)).toBe(1);
+    expect(await refreshStandingRatingProjections(pool, { context, limit: 100 })).toMatchObject({ refreshed: 100, complete: false });
+    expect(await refreshStandingRatingProjections(pool, { context, limit: 100 })).toMatchObject({ refreshed: 36, complete: true, publicationReady: true });
+    expect(await countValue(3)).toBe(137);
+    for (const target of retained) await expectExact(target.main);
+
+    // Deletion uses the same bounded path, retaining missing origins as unknown
+    // instead of dropping their selected slots or publishing truncated figures.
+    await pool.query('DELETE FROM access.rating_aggregate_head WHERE context=$1 AND main_version=$2 AND slot=$3',
+      [context, originMain, source.slot]);
+    expect(await refreshStandingRatingProjections(pool, { context })).toMatchObject({ refreshed: 100, complete: false });
+    expect(await refreshStandingRatingProjections(pool, { context })).toMatchObject({ refreshed: 36, complete: true, publicationReady: true });
+    expect(await expectExact(originMain)).toMatchObject({ slots: 2047, unvalued: 0 });
+    for (const target of retained) expect(await expectExact(target.main)).toEqual({ slots: 1, unvalued: 1, histogram: {} });
+
+    // Reconstruction also has bounded native fanout; it cannot hide 137
+    // projection updates behind one verified head's CAS.
+    const reconstructed = { ...source, admission: randomUUID(), observation: id(), revision: id() };
+    await heads([reconstructed], originMain, originWork, false);
+    expect(await refreshStandingRatingProjections(pool, { context })).toMatchObject({ refreshed: 100, complete: false });
+    expect(await refreshStandingRatingProjections(pool, { context })).toMatchObject({ refreshed: 36, complete: true });
+    const recovery = (await pool.query('SELECT generation FROM access.recovery_fence WHERE id')).rows[0].generation;
+    expect(await recordStandingRatingValues(pool, context, recovery,
+      [{ mainVersion: originMain, slot: reconstructed.slot, revision: reconstructed.revision, value: 5 }])).toBe(1);
+    expect(await countValue(5)).toBe(1);
+    expect(await refreshStandingRatingProjections(pool, { context })).toMatchObject({ refreshed: 100, complete: false });
+    expect(await refreshStandingRatingProjections(pool, { context })).toMatchObject({ refreshed: 36, complete: true, publicationReady: true });
+    expect(await countValue(5)).toBe(137);
+    await pool.query('DELETE FROM access.rating_merge_selection WHERE context=$1 AND main_version=ANY($2::text[])',
+      [context, retained.map(target => target.main)]);
+
+    // The fence is component-wide, regardless of a native/inherited witness.
+    // An attempted early journal completion cannot reopen it. The real identity
+    // graph interruption assertions remain in the isolated public prove phase.
+    const beforeTransition = await readRatingAggregateInventory(pool, context, originMain);
+    const oldest = await pool.connect();
+    try {
+      await oldest.query('BEGIN');
+      await oldest.query('SELECT pg_current_xact_id()'); // pin xmin before the identity transition
+      await fenceStandingRatingTransition(pool, task);
+      await fenceStandingRatingTransition(pool, task);
+      expect((await pool.query('SELECT pending FROM access.rating_standing_publication()')).rows[0].pending).toBe('1');
+      for (const target of [originMain, deletionMain]) {
+        await expect(readRatingAggregateInventory(pool, context, target)).rejects.toThrow('publication is incomplete');
+      }
+      const completion = () => pool.query(`INSERT INTO access.identity_merge_completion(task_key,receipt,command_key,result)
+        VALUES ($1,'urn:standing-owner-fixture:complete',$2,'null')`, [task, itemCommandKey(task, 'identity-merge', '$finalize')]);
+      await expect(completion()).rejects.toThrow('merge reconciliation is incomplete');
+      expect((await pool.query('SELECT pending FROM access.rating_standing_publication()')).rows[0].pending).toBe('1');
+      await pool.query(`INSERT INTO access.identity_merge_page(task_key,owner,page,exhausted)
+        VALUES ($1,'rating',1,true)`, [task]);
+      await completion();
+      await fenceStandingRatingTransition(pool, task); // completed replay must not create a new pending marker
+      // Even with no pending task, a late lower-xid commit must not hide behind
+      // a newer equality head. The indexed horizon probe holds until older work drains.
+      expect((await pool.query('SELECT pending FROM access.rating_standing_publication()')).rows[0].pending).toBe('1');
+      await expect(readRatingAggregateInventory(pool, context, originMain)).rejects.toThrow('publication is incomplete');
+      await oldest.query('COMMIT');
+    } finally { await oldest.query('ROLLBACK'); oldest.release(); }
+    expect((await pool.query('SELECT pending FROM access.rating_standing_publication()')).rows[0].pending).toBe('0');
+    expect(await checkRatingAggregateFence(pool, beforeTransition.recoveryGeneration, undefined, beforeTransition.standingGeneration)).toBe(false);
+    expect((await readRatingAggregateInventory(pool, context, originMain)).standing!.slots).toBe(2048);
 
     const legacy = items.slice(0, 201).map(item => ({ ...item, admission: randomUUID(), observation: id(), revision: id(),
       slot: standingRatingSlotIri(item.principal, context, legacyMain) }));

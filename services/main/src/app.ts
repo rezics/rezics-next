@@ -11,6 +11,7 @@ import { readingPositionsRoutes } from './routes/reading-positions.ts';
 import { withFusekiReadRequest, FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge,
   FusekiReadDeadlineExceeded, type FusekiClient } from './infrastructure/fuseki.ts';
 import { WORK_READ_COST } from './modules/work/read-contract.ts';
+import { reservedTransactionPool } from './infrastructure/pool-reservation.ts';
 import { accessAuthorityRoutes } from './routes/access-authority.ts';
 import { agentRoutes } from './routes/agents.ts';
 import { authorRoutes } from './routes/authors.ts';
@@ -333,6 +334,7 @@ function extraRoutes8(fuseki: FusekiClient, work: SearchRouteDependencies) {
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
 export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependencies) {
+  if (work?.identityMerge) reservedTransactionPool(work.identityMerge.accessPool);
   if (work?.environment && work.access?.admittedActingSubject) {
     work.environment.accessAdmission = { admittedActingSubject: work.access.admittedActingSubject.bind(work.access) };
   }

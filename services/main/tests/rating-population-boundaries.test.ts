@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import type { Pool } from 'pg';
+import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
 import { fusekiReadBudget, FusekiReadBudgetExceeded, type SparqlResult } from '../src/infrastructure/fuseki.ts';
-import type { RatingAggregateInventory } from '../src/modules/rating/aggregate-inventory.ts';
+import { STANDING_RATING_INVENTORY_SQL, type RatingAggregateInventory, type RatingInventoryHead } from '../src/modules/rating/aggregate-inventory.ts';
 import { RatingAggregateUnavailable } from '../src/modules/rating/aggregate.ts';
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE,
   REALM_STANDING_RATING_CONTEXT_PROFILE } from '../src/modules/rating/context.ts';
@@ -17,10 +19,12 @@ import { prepareComponent, type WorkActivationEnvironment } from '../src/modules
 type Row = NonNullable<SparqlResult['results']>['bindings'][number];
 const id = (n: number) => `https://rezics.com/id/019d0000-0000-7000-8000-${String(n).padStart(12, '0')}`;
 const work = id(1), mainVersion = id(2), actor = id(3), globalContext = id(4), realmContext = id(5), realm = id(6);
+const originWork = id(7), originMain = id(8);
 const uri = (value: string) => ({ type: 'uri', value });
 const literal = (value: string) => ({ type: 'literal', value });
 const inventories: Record<string, RatingAggregateInventory> = {};
 const rows: Record<string, Row[]> = {};
+const inheritedEvidence: Record<string, { head: RatingInventoryHead; row: Row }> = {};
 let directory: string;
 
 // Immutable data is built once. Every case gets isolated owner snapshots; the
@@ -48,38 +52,47 @@ beforeAll(() => {
       question: { type: 'literal', value: question, 'xml:lang': 'en' }, contextEpoch: literal('epoch'),
       contextSequence: literal('1'), receipt: uri(inventory.contextReceipt), scaleMin: literal('1'),
       scaleMax: literal(kind === 'global' ? '5' : '10') }];
-    const values = kind === 'global' ? Array<number>(101).fill(5) : [8, 6];
-    for (const [index, value] of values.entries()) {
+    const values = kind === 'global' ? Array<number>(101).fill(5) : [8, 6, ...Array<number>(99).fill(8)];
+    for (const [index, value] of [...values, values.at(-1)!].entries()) {
+      const inherited = index === 101, originalWork = inherited ? originWork : work, originalMain = inherited ? originMain : mainVersion;
       const observation = id(next++), revision = id(next++), slot = `urn:rezics:rating-slot:${String(next).padStart(64, '0')}`;
       const time = new Date(Date.UTC(2026, 9, 19, 0, 0, index)).toISOString();
-      const digest = (kind === 'global' ? globalRatingDigest : standingRatingDigest)({ context, work, mainVersion, value,
+      const digest = (kind === 'global' ? globalRatingDigest : standingRatingDigest)({ context, work: originalWork, mainVersion: originalMain, value,
         expectedRevisionHead: null, actingSubject: actor });
       const manifest = prepareComponent(directory, observation, { observation, revision, slot, context, contextRevision,
-        ...(kind === 'global' ? { populationOwner: owner } : { realm: owner }), work, mainVersion, value,
+        ...(kind === 'global' ? { populationOwner: owner } : { realm: owner }), work: originalWork, mainVersion: originalMain, value,
         predecessor: null, availability: 'available', evaluatedAt: time, submittedAt: time,
         originalSubmissionAt: time, revisedAt: time },
       kind === 'global' ? GLOBAL_OBSERVATION_PROFILE : STANDING_RATING_OBSERVATION_PROFILE);
       const receipt = `urn:rezics:observation:${kind}:${index}`;
-      inventory.heads.push({ slot, work, mainVersion, observation, revision, raterKey: `${kind}:${index}`,
+      const head = { slot, work: originalWork, mainVersion: originalMain, observation, revision, raterKey: `${kind}:${index}`,
         actingSubject: actor, requestDigest: digest, evaluatedAt: time, submittedAt: time, receipt,
-        dataEpoch: 'epoch', sequence: String(index + 2) });
-      rows[context]!.push({ kind: literal('observation'), component: literal(kind), epoch: literal('epoch'), sequence: literal('1000'),
+        dataEpoch: 'epoch', sequence: String(index + 2) };
+      const row = { kind: literal('observation'), component: literal(kind), epoch: literal('epoch'), sequence: literal('1000'),
         observation: uri(observation), slot: uri(slot), head: uri(revision), availability: uri('https://rezics.com/vocab/Available'),
         value: literal(String(value)), manifest: uri(`urn:rezics:sha256:${manifest}`), evaluatedAt: literal(time),
         submittedAt: literal(time), originalSubmissionAt: literal(time), revisedAt: literal(time),
-        revisionEpoch: literal('epoch'), revisionSequence: literal(String(index + 2)), receipt: uri(receipt), digest: literal(digest) });
+        revisionEpoch: literal('epoch'), revisionSequence: literal(String(index + 2)), receipt: uri(receipt), digest: literal(digest) };
+      if (inherited) inheritedEvidence[context] = { head, row };
+      else { inventory.heads.push(head); rows[context]!.push(row); }
     }
     inventories[context] = inventory;
   }
 });
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
-function fixture(population: number) {
+function fixture(population: number, realmPopulation = 2) {
   const inventory = structuredClone(inventories);
   const global = inventory[globalContext]!;
   global.heads = global.heads.slice(0, Math.min(population, 101));
   global.standing = { slots: population, unvalued: 0, histogram: population ? { '5': population } : {},
     witness: population > 100 ? global.heads.at(-1)! : null };
+  const community = inventory[realmContext]!;
+  community.heads = community.heads.slice(0, Math.min(realmPopulation, 101));
+  community.standing = { slots: realmPopulation, unvalued: 0, histogram: realmPopulation < 2 ? { '8': realmPopulation }
+    : { '8': realmPopulation - 1, '6': 1 }, witness: realmPopulation > 100 ? community.heads.at(-1)! : null };
+  const realmRows = realmPopulation > 100 ? [rows[realmContext]![0]!, rows[realmContext]!.at(-1)!]
+    : structuredClone(rows[realmContext]!.slice(0, realmPopulation + 1));
   const selectedRows = population > 100 ? [rows[globalContext]![0]!, rows[globalContext]!.at(-1)!]
     : structuredClone(rows[globalContext]!.slice(0, population + 1));
   const graph = { calls: 0, queries: [] as string[], rows: selectedRows,
@@ -106,8 +119,106 @@ function fixture(population: number) {
     async checkRatingAggregateFence(_generation: string, signal: AbortSignal) { signal.throwIfAborted(); return this.fenceOpen; },
   };
   const env = { fuseki: graph, objectDirectory: directory, lineage: { dataEpoch: 'epoch', routingEpoch: '1' } } as unknown as WorkActivationEnvironment;
-  return { inventory, graph, access, env, read: () => queryGlobalRatingAggregate(env, access, { context: globalContext, work, mainVersion }) };
+  return { inventory, graph, access, env, realmRows, read: () => queryGlobalRatingAggregate(env, access, { context: globalContext, work, mainVersion }) };
 }
+
+/** Only the external SQL transport is substituted. Registry, inventory,
+ * synthesis, graph budget and immutable-manifest verifier compose unchanged.
+ * Counts include transaction/control statements, as the retained native test
+ * does. This verifies adapter work, not PostgreSQL execution or trigger work. */
+function inventoryTransport(f: ReturnType<typeof fixture>) {
+  const state = { generation: '0'.repeat(64), pending: '0', statements: [] as string[], differentCut: false };
+  const headRow = (head: RatingInventoryHead, index: number) => ({ slot: head.slot, work: head.work,
+    main_version: head.mainVersion, target_release: null, observation: head.observation, revision: head.revision,
+    principal_id: `019d0000-0000-7000-8000-${String(index).padStart(12, '0')}`,
+    submitted_at: new Date(head.submittedAt), evaluated_at: new Date(head.evaluatedAt), acting_subject: head.actingSubject,
+    request_digest: head.requestDigest, state: 'sealed', graph_outcome: 'succeeded', graph_receipt: head.receipt,
+    graph_data_epoch: head.dataEpoch, graph_sequence: head.sequence, identity_valid: true });
+  const client = { release() {}, async query(sql: string, values: string[] = []) {
+    state.statements.push(sql);
+    if (['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', "SET LOCAL statement_timeout = '5s'", 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [] };
+    if (sql === STANDING_RATING_INVENTORY_SQL) {
+      const source = f.inventory[values[0]!]!;
+      const component = source.standing ?? { slots: 2, unvalued: 0, histogram: { '6': 1, '8': 1 }, witness: null };
+      const metadata = { realm: source.realm, context_revision: source.contextRevision, policy_revision: source.policyRevision,
+        open: true, generation: source.recoveryGeneration, context_state: 'sealed', context_outcome: 'succeeded',
+        context_receipt: source.contextReceipt, context_epoch: source.contextDataEpoch, context_sequence: source.contextSequence,
+        pending: state.pending, standing_generation: state.differentCut && values[0] === globalContext ? '1'.repeat(64) : state.generation };
+      return { rows: (source.heads.length ? source.heads : [null]).map((head, index) => ({ ...metadata,
+        ...(head ? headRow(head, index) : {}), ...(index ? {} : { standing_component: { ...component,
+          witnesses: component.witness ? [headRow(component.witness, 100)] : null } }) })) };
+    }
+    if (sql.includes('FROM access.recovery_fence f CROSS JOIN access.rating_standing_publication()')) {
+      return { rows: [{ open: true, generation: '7', standing_generation: state.generation, pending: state.pending }] };
+    }
+    throw new Error(`Unexpected inventory statement: ${sql}`);
+  } };
+  const pool = { async connect() { return client; } } as unknown as Pool;
+  return { state, access: new AccessAdmissionRegistry(pool) };
+}
+
+test('composed synthesis retains nine SQL statements including controls at 100/101/large and empty boundaries', async () => {
+  for (const [population, realmPopulation] of [[0, 2], [2, 2], [100, 100], [100, 101], [101, 100], [101, 101], [102, 2], [2048, 2048]] as const) {
+    const f = fixture(population, realmPopulation), transport = inventoryTransport(f);
+    f.graph.rows = [...f.realmRows, ...f.graph.rows];
+    const result = await queryRealmGlobalSynthesis(f.env, transport.access, { realmContext, globalContext, work, mainVersion });
+    expect(result.components.realm).toMatchObject({ count: realmPopulation, mean: (realmPopulation * 8 - 2) / realmPopulation });
+    expect(result.components.global).toMatchObject({ count: population, mean: population ? 5 : null });
+    expect(transport.state.statements).toHaveLength(9);
+    expect(transport.state.statements.filter(sql => sql === STANDING_RATING_INVENTORY_SQL)).toHaveLength(2);
+    expect(f.graph.calls).toBe(1);
+  }
+});
+
+test('neither a native nor inherited witness can release an interrupted Realm or Global component', async () => {
+  for (const context of [realmContext, globalContext]) {
+    for (const inherited of [false, true]) {
+      const f = fixture(101, 101);
+      if (inherited) {
+        const evidence = inheritedEvidence[context]!;
+        f.inventory[context]!.standing!.witness = structuredClone(evidence.head);
+        if (context === globalContext) f.graph.rows[1] = structuredClone(evidence.row);
+        else f.realmRows[1] = structuredClone(evidence.row);
+      }
+      f.graph.rows = [...f.realmRows, ...f.graph.rows];
+      const transport = inventoryTransport(f);
+      expect((await queryRealmGlobalSynthesis(f.env, transport.access, { realmContext, globalContext, work, mainVersion }))
+        .components.global.count).toBe(101);
+      if (inherited) expect(f.graph.queries[0]).toContain(`<${originWork}>)`);
+      expect(f.graph.queries[0]).toContain('rv:mergedInto+');
+      transport.state.pending = '1'; // graph identity changed; owner pages remain unfinished
+      await expect(queryRealmGlobalSynthesis(f.env, transport.access, { realmContext, globalContext, work, mainVersion }))
+        .rejects.toBeInstanceOf(RatingAggregateUnavailable);
+      expect(f.graph.calls).toBe(1);
+    }
+  }
+});
+
+test('search batches also reject a publication transition completed during their graph snapshot', async () => {
+  const f = fixture(101), transport = inventoryTransport(f);
+  f.graph.rows = f.graph.rows.map(row => ({ ...row, targetWork: uri(work) }));
+  const query = f.graph.query.bind(f.graph);
+  f.graph.query = async sql => { const result = await query(sql); transport.state.generation = '2'.repeat(64); return result; };
+  await expect(queryWorkStandingRatings(f.env, transport.access, { kind: 'global', context: globalContext, targets: [{ work, mainVersion }] }))
+    .rejects.toBeInstanceOf(RatingAggregateUnavailable);
+  expect(transport.state.statements).toHaveLength(5);
+});
+
+test('standing publication is held across a pending transition, mixed cuts and a transition completed during the graph read', async () => {
+  for (const condition of ['pending', 'mixed', 'completed-during-read'] as const) {
+    const f = fixture(101), transport = inventoryTransport(f);
+    f.graph.rows = [...f.realmRows, ...f.graph.rows];
+    if (condition === 'pending') transport.state.pending = '1';
+    if (condition === 'mixed') transport.state.differentCut = true;
+    if (condition === 'completed-during-read') {
+      const query = f.graph.query.bind(f.graph);
+      f.graph.query = async sql => { const result = await query(sql); transport.state.generation = '2'.repeat(64); return result; };
+    }
+    await expect(queryRealmGlobalSynthesis(f.env, transport.access, { realmContext, globalContext, work, mainVersion }))
+      .rejects.toBeInstanceOf(RatingAggregateUnavailable);
+    expect(f.graph.calls).toBe(condition === 'completed-during-read' ? 1 : 0);
+  }
+});
 
 test('standing aggregates are exact at empty, 100, 101 and large populations within the original request budget', async () => {
   for (const population of [0, 1, 100, 101, 102, 512, 2048]) {
@@ -130,7 +241,7 @@ test('large summaries retain withdrawals, independent community context and the 
   f.inventory[globalContext]!.standing!.histogram = { '5': 2047 };
   expect(await f.read()).toMatchObject({ count: 2047, withdrawnCount: 1, mean: 5 });
   const g = fixture(101);
-  g.graph.rows = [...structuredClone(rows[realmContext]!), ...g.graph.rows];
+  g.graph.rows = [...g.realmRows, ...g.graph.rows];
   const synthesized = await queryRealmGlobalSynthesis(g.env, g.access, { realmContext, globalContext, work, mainVersion });
   expect(synthesized.components.realm).toMatchObject({ count: 2, mean: 7 });
   expect(synthesized.components.global).toMatchObject({ count: 101, mean: 5 });

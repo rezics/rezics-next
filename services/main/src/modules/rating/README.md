@@ -67,19 +67,89 @@ Their sparse histogram retains the Context's exact decimal scale. The private
 effective-person ledger applies native precedence over merge selections, and
 merge, unmerge and source revisions subtract the recorded contribution before
 adding its replacement. Up to 100 heads retain full manifest verification; larger
-populations read the additive figures and verify the last sealed contribution's
+populations read the additive figures and verify a surviving sealed contribution's
 live head, receipt, digest and immutable manifest in the same single graph
 snapshot as the Context. The graph and manifest byte budgets and deadline are
 unchanged. A reader's own slot is an indexed selection, independent of population.
 The bounded private inventory still reads at most 101 heads, including its
 overflow sentinel; it is not the aggregate's population.
 
+Standing publication is held across identity merge/unmerge and deferred source
+projection changes. Before changing the graph identity edge, the identity owner
+commits a task marker on an independent Access checkout, even if its journal is
+inside an outer transaction. App composition reserves one connection from the
+existing Access pool limit for these independently committed fences: the default
+ten connections become nine ordinary connections plus one fence connection.
+The Access pool owns and closes both lanes. The usual nested-checkout guard
+still applies within each lane; a full ordinary pool cannot starve the fence.
+Reservation precedes request service and requires a pool limit of at least two.
+Only the existing journal's guarded completion,
+after every owner is exhausted, removes that marker. A native rollback or lost
+graph response retains the conservative hold until that exact task reconciles.
+The gate covers the whole component, including detached contributions other
+than the one chosen as witness, for both Realm and Global. An inherited witness
+must also retain its graph path to the requested Work. Deleting a native head
+reselects a surviving contribution with one indexed probe, so a consistent
+102-to-101 deletion does not need a later write to become readable.
+
+A source head seal, replacement, deletion or reconstruction CAS refreshes its
+native slot and at most one retained projection synchronously. An indexed second
+probe records any remaining projections in a durable keyset job; there is no
+trigger loop over all survivors. Thus a 100-head reconstruction has at most 200
+slot refreshes, including hidden trigger work. Run
+`task rating:reconstruct -- --env <apps.env> --refresh-standing-projections`
+to resume one page of at most 100 projections; `--context`, `--batch-size` and
+`--batches` narrow or bound the work as for reconstruction. Progress stays in
+Access, and a new source seal rewinds the cursor atomically. Page replay applies
+the same native-precedence/delta function as admission, under the recovery,
+authority and source gates. Missing originals remain explicitly unknown.
+
+The publication gate deliberately holds all standing reads, including own-slot
+reads and otherwise unaffected Contexts, while any identity marker or projection
+page remains pending. It returns unavailable rather than a partial exact figure.
+The refresh command's `complete` describes its selected projection jobs;
+`publicationReady` also accounts for unfinished identity tasks, jobs outside
+that selection and an unsettled transaction horizon. Completing projection pages
+cannot release an identity hold. Writers append one change per transaction,
+without updating a counter shared by unrelated targets. Two indexed change
+probes produce a settled equality head and detect changes at or above snapshot
+xmin. Those unsettled changes conservatively hold publication until older
+transactions drain, preventing a late lower-xid commit from hiding behind a newer
+head. A task that starts and finishes during a read changes its equality fence.
+The recovery generation leads transaction ids across logical restores.
+This coarse gate keeps validity checks constant: validating every dependent
+component during an interrupted identity change would recreate the unbounded
+fanout the continuation removes. Availability during reconciliation is the
+deliberate tradeoff; population size alone never closes the gate.
+The repeatable-read inventory returns candidates, component and witness in one
+SELECT: BEGIN, SET, SELECT, COMMIT per Context, plus one final fence SELECT for
+synthesis, preserving the retained nine-statement SQL contract at 100 and 101.
+The bounded projection worker prunes at most 256 settled change rows per page,
+retaining the equality head. It inspects publication readiness after committing
+its own page; neither requests nor head triggers prune or fold shared state.
+The five standing Access relations are explicit authority-cut entries in
+`work/access-recovery-coverage.ts`, with their derivation and restore dependencies;
+none can be cleared independently to reopen publication.
+
+This uses PostgreSQL's [stable repeatable-read snapshot](https://www.postgresql.org/docs/18/transaction-iso.html#XACT-REPEATABLE-READ),
+[AFTER-trigger visibility](https://www.postgresql.org/docs/18/trigger-datachanges.html)
+[transaction snapshot horizon](https://www.postgresql.org/docs/18/functions-info.html#FUNCTIONS-PG-SNAPSHOT)
+and [indexed ordered limits](https://www.postgresql.org/docs/18/indexes-ordering.html).
+Stack-free checks cover owner protocol, adapter call counts and manifest
+composition; they do not establish native interruption, trigger fanout, lock
+contention or restore correctness. Public 101/102-head outcomes, delayed seals
+and graph-only loss, old retained merge snapshots, cancellation and authenticated
+corpus/backup restores still require the isolated prove phase. A surviving
+witness is not an independent maximum-position seal for all earlier heads.
+
 For standing heads sealed before additive values existed, use
 `task rating:reconstruct -- --env <apps.env> --standing --list` and then
 `--standing --context <IRI> --target <MainVersion IRI>`. This uses the same bounded
 checkpoint procedure below and the aggregate owner's manifest verifier. A page
-of inherited slots records values at their original heads and refreshes retained
-merge contributions. No read silently calls an unvalued large population exact.
+of inherited slots records values at their original heads and schedules bounded
+retained-projection refresh when needed. Finish those projection pages before
+claiming publication is ready. No read silently calls an unvalued large
+population exact.
 
 `task rating:reconstruct -- --env <apps.env> --context <IRI> --target <IRI>`
 runs one bounded batch, retains an atomic checkpoint under

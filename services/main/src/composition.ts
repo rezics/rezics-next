@@ -208,6 +208,7 @@ import { WorkMaintainers } from './modules/work/maintainers.ts';
 import { StatementSeek, StatementSeekWorker } from './modules/statement/seek.ts';
 
 import type { Pool } from 'pg';
+import { reservedTransactionPool } from './infrastructure/pool-reservation.ts';
 import type { MainConfig } from './config.ts';
 import type { MediaDependencies } from './modules/media/commands.ts';
 import type { SearchRouteDependencies } from './routes/search.ts';
@@ -237,6 +238,7 @@ export interface ComposeMainInput {
 }
 
 export async function composeMain(input: ComposeMainInput) {
+  reservedTransactionPool(input.accessPool);
   const { config, fuseki } = input;
   const fusekiUrl = config.FUSEKI_URL;
   const pool = notificationReadPool(input.accessPool);
