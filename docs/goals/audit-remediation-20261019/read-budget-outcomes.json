@@ -13,13 +13,13 @@
     "dispatchedRevision": "50e53025617238f9d9d8127be78179c3fa3bc12c",
     "currency": "Required check refreshed worker to main 9f5a8ad20c4bacddda4be2b1583f4987f6d478a3; git diff 7df2e285d3..9f5a8ad20c -- services/main/src is empty. Exact tested heads are recorded per attempt; API code stays production-equivalent to revision.",
     "staticChecks": {
-      "job": "ad51ec21-4e8b-43d5-9268-f06e9f0bff1d",
+      "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
       "docs": "passed",
       "types": "passed",
       "lint": "passed",
       "ast": "passed",
       "guards": "passed in preceding job 952ad34f-5eba-4250-9cd5-37c617521094; not repeated after test premise edits",
-      "evidence": ".temp/goal/check/run-Zkvgln/output.log",
+      "evidence": ".temp/goal/check/run-mKmK79/output.log",
       "targetedHarness": "raw-update-scan and integration-shards passed in preceding run 20261018t200309-394b25"
     },
     "attempts": [
@@ -233,10 +233,38 @@
           "reuse": "retained .temp/audit-bounded-reads/zones/owners/backup.json"
         },
         "nextCheck": "Rerun only the corrected Zone persona queries and admission controls on the retained cut; no corpus rebuild or raised budget."
+      },
+      {
+        "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
+        "run": "20261018t215239-52567d",
+        "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
+        "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
+        "result": "setup unavailable; no outcome assertions reached",
+        "projectBudgetMs": 480000,
+        "capabilities": [
+          {
+            "capability": "zones",
+            "project": 1,
+            "wallMs": 161300,
+            "assertionReached": false,
+            "diagnosis": "Restore reauthenticates retained real Accounts and publicly selects each session Agent. A PUT /v1/me/session-agent returned 503 rate_limit_unavailable before fixture completion. SQL statement/connection timeouts co-occur in Main workers. This is setup unavailability, not official-population or personal-admission proof. Baseline rate-limit hook maps backing-store exceptions to that 503; no specific SQL cause inferred.",
+            "evidence": ".artifacts/qa/20261018t215239-52567d/logs/integration-1.log",
+            "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-d9c460b0ead34bab-evidence.json"
+          }
+        ],
+        "nextCheck": "One final targeted Zone attempt restores fixture sessions serially to reduce preparation demand. Default restore concurrency remains unchanged for other callers; no product timeout, candidate limit or assertion changes."
       }
     ],
     "harnessBase": "9f5a8ad20c4bacddda4be2b1583f4987f6d478a3",
-    "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36"
+    "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
+    "latestAttempt": {
+      "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
+      "run": "20261018t215239-52567d",
+      "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
+      "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
+      "assertionReached": false,
+      "status": "setup failed during restored Main session-Agent choice with 503 rate_limit_unavailable; previous visitor Zone proof remains valid, corrected signed-in and admission bodies not reached"
+    }
   },
   "fixture": {
     "composition": "Real Account HTTP and composeMain with lifecycle, relay, Content, Access, Fuseki and PostgreSQL; no owner mocks.",
@@ -264,7 +292,8 @@
     "productAssembler": "All four API-built corpus files are commandOnlyIntegrationFiles. This keeps source capture and restored product owners in the same closed raw-update mode.",
     "corpusLifetime": "New primary moderator and auxiliary notice assignments last 24 hours to support reusable cuts. Earlier query/rating cuts retain their original one-hour primary moderator validity; exact run timestamps determine that persona premise. Account sessions are freshly authenticated after each restore.",
     "preparationReadiness": "Cheap durable notification hints confirm progress without repeatedly hydrating the growing inbox. Each fixed readiness interval remains 45000 ms; outer active preparation remains 600000 ms and catalogue-disk project wall remains 480000 ms.",
-    "officialAuthority": "Zone population is prepared by the real platform administrator, with Account OAuth owner:operate consent in addition to zone:edit. Other measured personas still have no Access platform designation; public read disclosure is unchanged. Official and default-Realm authority also requires the Realm and Zone to share a Space; configuration heads are read through the public editor endpoint."
+    "officialAuthority": "Zone population is prepared by the real platform administrator, with Account OAuth owner:operate consent in addition to zone:edit. Other measured personas still have no Access platform designation; public read disclosure is unchanged. Official and default-Realm authority also requires the Realm and Zone to share a Space; configuration heads are read through the public editor endpoint.",
+    "sessionRestoration": "Retained real Accounts reauthenticate and select their existing Agents through public commands. This corpus restores one session at a time to reduce setup SQL demand; other restorePersonaRealms callers keep their previous concurrency. Outcome reads still have no retry masking."
   },
   "distinctions": {
     "null": "Absent optional subject/display/rating/diagnostic value; never fabricate a preview or zero count.",
@@ -598,7 +627,15 @@
           ],
           "status": "8 succeeds, 9/10 fail raw 503 at population assertion."
         },
-        "admissionTest": "zonesAdmission"
+        "admissionTest": "zonesAdmission",
+        "latestAttempt": {
+          "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
+          "run": "20261018t215239-52567d",
+          "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
+          "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
+          "assertionReached": false,
+          "status": "setup failed during restored Main session-Agent choice with 503 rate_limit_unavailable; previous visitor Zone proof remains valid, corrected signed-in and admission bodies not reached"
+        }
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -862,7 +899,15 @@
           ],
           "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
         },
-        "admissionTest": "zonesAdmission"
+        "admissionTest": "zonesAdmission",
+        "latestAttempt": {
+          "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
+          "run": "20261018t215239-52567d",
+          "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
+          "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
+          "assertionReached": false,
+          "status": "setup failed during restored Main session-Agent choice with 503 rate_limit_unavailable; previous visitor Zone proof remains valid, corrected signed-in and admission bodies not reached"
+        }
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -1125,7 +1170,15 @@
           ],
           "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
         },
-        "admissionTest": "zonesAdmission"
+        "admissionTest": "zonesAdmission",
+        "latestAttempt": {
+          "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
+          "run": "20261018t215239-52567d",
+          "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
+          "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
+          "assertionReached": false,
+          "status": "setup failed during restored Main session-Agent choice with 503 rate_limit_unavailable; previous visitor Zone proof remains valid, corrected signed-in and admission bodies not reached"
+        }
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -1388,7 +1441,15 @@
           ],
           "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
         },
-        "admissionTest": "zonesAdmission"
+        "admissionTest": "zonesAdmission",
+        "latestAttempt": {
+          "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
+          "run": "20261018t215239-52567d",
+          "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
+          "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
+          "assertionReached": false,
+          "status": "setup failed during restored Main session-Agent choice with 503 rate_limit_unavailable; previous visitor Zone proof remains valid, corrected signed-in and admission bodies not reached"
+        }
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -1651,7 +1712,15 @@
           ],
           "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
         },
-        "admissionTest": "zonesAdmission"
+        "admissionTest": "zonesAdmission",
+        "latestAttempt": {
+          "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
+          "run": "20261018t215239-52567d",
+          "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
+          "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
+          "assertionReached": false,
+          "status": "setup failed during restored Main session-Agent choice with 503 rate_limit_unavailable; previous visitor Zone proof remains valid, corrected signed-in and admission bodies not reached"
+        }
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -1914,7 +1983,15 @@
           ],
           "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
         },
-        "admissionTest": "zonesAdmission"
+        "admissionTest": "zonesAdmission",
+        "latestAttempt": {
+          "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
+          "run": "20261018t215239-52567d",
+          "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
+          "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
+          "assertionReached": false,
+          "status": "setup failed during restored Main session-Agent choice with 503 rate_limit_unavailable; previous visitor Zone proof remains valid, corrected signed-in and admission bodies not reached"
+        }
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -2052,6 +2129,6 @@
       "tests/qa/support/joining-auth.ts"
     ],
     "authority": "All eight support/capability paths were owner-checked as unclaimed before editing, including joining-auth.ts for optional fixture OAuth scopes. No schema, migration, route or production change.",
-    "reason": "Capability files keep each existing 480-second project isolated. Shared support retains real command-built backups, restores sessions, measures actual I/O, and adds optional OAuth scopes needed for official population preparation. All defaults remain unchanged for existing tests."
+    "reason": "Capability files keep each existing 480-second project isolated. Shared support retains real command-built backups, restores sessions, measures actual I/O, and adds optional OAuth scopes needed for official population preparation. All defaults remain unchanged for existing tests. An optional serial session-restore mode bounds this corpus setup traffic; existing callers retain their defaults."
   }
 }

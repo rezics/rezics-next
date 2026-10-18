@@ -535,24 +535,29 @@ export function retainPersonaRealm(sessions: PersonaSessions): RetainedPersonaRe
 /** Starts an independent application lifetime against the caller's isolated restored
  * environment. No Realm, membership, role or author is created during restoration. */
 export async function restorePersonaRealms(records: readonly RetainedPersonaRealm[],
-  options: Pick<PersonaOptions, 'rankingAt' | 'graphEndpoint' | 'observeMain'> = {}): Promise<PersonaSessions[]> {
+  options: Pick<PersonaOptions, 'rankingAt' | 'graphEndpoint' | 'observeMain'>
+    & { serialSignup?: boolean } = {}): Promise<PersonaSessions[]> {
   if (!records.length) throw new Error('Restored persona Realms are missing');
   const operator = records[0]!.identities.operator;
   if (records.some(record => record.identities.operator.accountId !== operator.accountId))
     throw new Error('Restored Realms must share their retained platform identity');
   if (records.some(record => JSON.stringify(record.auth) !== JSON.stringify(records[0]!.auth)))
     throw new Error('Restored Realms must share their retained Account issuer and OAuth clients');
-  const started = performance.now(), stack = await applications({ ...options,
+  const { serialSignup, ...applicationOptions } = options;
+  const started = performance.now(), stack = await applications({ ...applicationOptions,
     retainedOperator: operator, retainedAuth: records[0]!.auth });
   try {
     const sessions: PersonaSessions[] = [];
     for (const record of records) {
       const people = new Map<string, PersonaSession>();
-      await Promise.all(personaNames.filter(name => name !== 'visitor').map(async name => {
+      const restorePerson = async (name: Exclude<PersonaName, 'visitor'>) => {
         const identity = record.identities[name];
         const person = name === 'operator' ? stack.operator : await stack.signup(name, identity);
         people.set(name, person);
-      }));
+      };
+      const names = personaNames.filter(name => name !== 'visitor');
+      if (serialSignup) for (const name of names) await restorePerson(name);
+      else await Promise.all(names.map(restorePerson));
       sessions.push({ ...record, visitor: stack.visitor,
         stranger: people.get('stranger')!, member: people.get('member')!, owner: people.get('owner')!,
         moderator: people.get('moderator')!, operator: stack.operator,

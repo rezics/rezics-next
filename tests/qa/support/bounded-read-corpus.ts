@@ -363,7 +363,7 @@ export function useBoundedReadCorpus(capability: Capability) {
         OTEL_SERVICE_NAME: 'main' });
       unregister = registerTelemetryPeers({ FUSEKI_URL: new URL('product/', graph.url).href });
       [sessions, privateRealm, reserve] = await restorePersonaRealms(corpus.records,
-        { graphEndpoint: new URL('product/', graph.url).href }) as [PersonaSessions, PersonaSessions, PersonaSessions];
+        { graphEndpoint: new URL('product/', graph.url).href, serialSignup: true }) as [PersonaSessions, PersonaSessions, PersonaSessions];
       if (performance.now() - started - restore.admissionWaitMs > 600_000)
         throw new Error('SETUP restore and API readiness exceeded 600 seconds');
       record({ kind: 'preparation', capability, buildMs: corpus.preparedMs,
