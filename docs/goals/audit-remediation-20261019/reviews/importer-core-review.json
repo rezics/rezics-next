@@ -1,0 +1,1204 @@
+{
+  "schema": "rezics-importer-core-review-v1",
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2815",
+  "managerSession": "goal-audit-remediation-20261019",
+  "date": "2026-10-19",
+  "mode": "Independent report-only, stack-free source review; no nested agents or fallback",
+  "scope": {
+    "reviewedHash": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+    "baseHash": "4ede84dce8c380ebd3c299dbb4530f0cc8426025",
+    "comparison": "Complete seven-file owned change, including original core and attempt-8 integration; moving main/wave heads were not substituted",
+    "importerCommits": [
+      "9cc773a765e78830d9593d0e0009bb152c114e12",
+      "72de11c0dabfa454181f2a26147fcd0dcc9a2c52",
+      "9aafcf3a9d7fffe46cb810897e6517eddfa36886",
+      "343855ff3faf63ccc5509d7516e406a9d0fc1fc6",
+      "4d97fd3321ec84cc8f167ba45f14149152d79378",
+      "9ed19c3afc148a2d4f61e2f4d50cf208c2f91bfd"
+    ],
+    "sourceFiles": [
+      {
+        "path": "scripts/datasets/types.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "3450cc747ca3d6cb6c4dc7b6235e25eb9ef0f285",
+        "lines": 171,
+        "inspection": "full current pinned source and complete owned-file change against base"
+      },
+      {
+        "path": "scripts/datasets/import.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "75c948936209b7b2beb4d358197db55e18bb6a41",
+        "lines": 1924,
+        "inspection": "full current pinned source and complete owned-file change against base"
+      },
+      {
+        "path": "scripts/datasets/conformance.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "3ff6dd6123397f2e4a9038c4cb66c99d6ba0e56d",
+        "lines": 112,
+        "inspection": "full current pinned source and complete owned-file change against base"
+      },
+      {
+        "path": "scripts/datasets/native/context.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "158a6ff347f9aaa0fb1387d7e9a80e6ffa8346f0",
+        "lines": 20,
+        "inspection": "full current pinned source and complete owned-file change against base"
+      },
+      {
+        "path": "scripts/datasets/native/coverage.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "0f57df7e34aba08141ece8ee6b39a336f1b8fe2f",
+        "lines": 155,
+        "inspection": "full current pinned source and complete owned-file change against base"
+      },
+      {
+        "path": "tests/qa/unit/dataset-import-coverage.test.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "97817a054b235f03590f466cfbd0ba5d9f071acb",
+        "lines": 143,
+        "inspection": "full current pinned source and complete owned-file change against base"
+      },
+      {
+        "path": "tests/qa/unit/dataset-import.test.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "5b29119eaa0ad6aca911c5f955ecf6746af8f432",
+        "lines": 2222,
+        "inspection": "full current pinned source and complete owned-file change against base"
+      }
+    ],
+    "inspectedDependencies": [
+      {
+        "path": "scripts/datasets/selection.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "c22ba75edd5a9ba0d6ec06c8562c78070ab7c05d",
+        "inspection": "Types/result contract, bounded atomic refusal, original source/stored indices and accepted closure; lines 1-205, 205-305 and 490-659"
+      },
+      {
+        "path": "scripts/datasets/native/media.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "f550c53b93022e865b7c0a347c8ad5b0bddc68a7",
+        "inspection": "Full source: deterministic cover election, repaired consumption view, original occurrence paths, target/role/variant pending conditions and command-free default mapper"
+      },
+      {
+        "path": "scripts/datasets/snapshot.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "9e077fbe5e04e10f857bdcbd59dcf91e867e010d",
+        "inspection": "Lines 1-432: frozen identity, source contracts, retained capture verifier, provider validation and cloned repair view"
+      },
+      {
+        "path": "scripts/datasets/bangumi.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "2105f0eedb9bb856878f8cd579fcc3bd81f7debe",
+        "inspection": "Lines 271-312: official endpoint kind, canonical response id, namespace, cover/portrait role and /images/large contract"
+      },
+      {
+        "path": "scripts/datasets/vndb.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "ab44418ddaea1b624b40786992a61fba8798a3cd",
+        "inspection": "Lines 90-205: role/table/field, archive and canonical decoded COPY-row witness, historical tuple recovery limitation"
+      },
+      {
+        "path": "scripts/datasets/native/fields.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "340b46a5f74de101b8bdbe66e62a370cd6fdaedb",
+        "inspection": "Plan/source/evidence interfaces; exact-record validation, value/language/alias evidence and final source-only/delegation fallback (lines 1-190, 300-410, 716-780)"
+      },
+      {
+        "path": "scripts/datasets/native/relations.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "dd7f14db110a01bac2f36368fe7d41fd0e5e28d8",
+        "inspection": "Full source: candidate-only relation orchestration and classification/composition delegation"
+      },
+      {
+        "path": "scripts/datasets/native/classifications.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "9ff941e69a752a4a1161add002fbbca52943e00a",
+        "inspection": "Association/disposition contracts and exact Source Work/child binding, conversion, occurrence, CAS and fresh support/native-read verification (lines 1-225, 238-604)"
+      },
+      {
+        "path": "scripts/datasets/native/compositions.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "cb51ac506fd7bf94103c9a275c65afd4174cdf43",
+        "inspection": "Full source: separate medium/track occurrence candidates and Structure/source-adoption prerequisites"
+      },
+      {
+        "path": "scripts/datasets/native/credits.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "ff694283c7802a8ad2a3f817288215f00e6c5abe",
+        "inspection": "Binding/plan interfaces and mapping path (lines 1-95, 640-874): exact occurrence, role, conversion, CAS and acknowledged support receipt"
+      },
+      {
+        "path": "scripts/datasets/native/releases.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "8634ce166669c71d2258f622bc353a15b2ee78a6",
+        "inspection": "Interfaces and correspondence/mapping contracts (lines 1-100, 400-751): release-v2, exact realization revisions, raw field projection, pending Source and coverage gaps"
+      },
+      {
+        "path": "scripts/lib/command-journal.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "c2f118f78bd97bbfb96d2054e318e8561f152d61",
+        "inspection": "Full source: immutable saved request, intent checks, historical result replay and pending resend"
+      },
+      {
+        "path": "scripts/datasets/store.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "cfbe0dc1712e8606144dbf772344032fee20ee21",
+        "inspection": "Full source: canonical hashing, verified retained blob and atomic JSON writes"
+      },
+      {
+        "path": "scripts/datasets/lock.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "8a2c5691bab9d9edbd960fa97d1e48e7cd5ea0f4",
+        "inspection": "Full source: context lease and release behavior"
+      },
+      {
+        "path": "services/main/src/modules/source/cover-evidence.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "1b53aecb2f9c241400b0e91a4422d89c4f4a2923",
+        "inspection": "Lines 1-148: closed descriptor, exact retained observation and principal-scoped provenance verification"
+      },
+      {
+        "path": "services/main/src/modules/media/presentation-contract.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "c8944844485c2836bf147bf6c752f06a3b630e79",
+        "inspection": "Full source: Work-only importedCover intent, observation/byte provenance, ordinary use distinction"
+      },
+      {
+        "path": "services/main/src/modules/work/catalogue-import.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "85e88352f3e0698d89a036c0a18ae8af140ab457",
+        "inspection": "Lines 1-160, including complete input schema/normalization at 39-89: creation-only Work import, aliases/credits/classifications bounded and distinct from Source adoption"
+      },
+      {
+        "path": "services/main/src/modules/source/author-credit-schema.ts",
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "blob": "b7168ebbfb96173bbd265bc2f5ac626e21dabde2",
+        "inspection": "Full source: exact source-author-credit-adoption-v1 input and support/native result contracts"
+      }
+    ]
+  },
+  "conclusion": {
+    "boundedSourceReviewComplete": true,
+    "newImporterDefectsEstablished": 0,
+    "assessment": "No new importer defect established by this bounded source review. Original I1/C3 are addressed in the pinned caller/inventory at source level. F1 validation is consumed. Existing producer/contract prerequisites remain explicit pending/refusal conditions, not fabricated successful adoptions.",
+    "nativeOutcomeProven": false,
+    "syntheticEvidenceLimit": "Transport fixtures, identity/journal fixtures, structural coverage checks and source-plan candidates do not prove retained-provider conversion, native support, current native state, public delivery or persona/rendered outcomes.",
+    "implementationOwner": "G-2778 remains sole importer implementation owner.",
+    "landing": "This report may land separately only after manager acceptance. It grants no importer landing, Goal closure, original finding closure or product acceptance."
+  },
+  "reviewedInvariants": [
+    {
+      "invariant": "Atomic selection refusal before session lookup, requests or product writes",
+      "assessment": "selectDatasetRoots runs before localDatasetSession and catalogue epoch discovery. A refused result writes only its local diagnostic manifest, then throws. No partial selection reaches the transport.",
+      "locations": [
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 699,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 710
+        },
+        {
+          "path": "scripts/datasets/selection.ts",
+          "line": 234,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 281
+        },
+        {
+          "path": "scripts/datasets/selection.ts",
+          "line": 655,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 657
+        }
+      ],
+      "testBodySourceInspected": [
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 313,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 328
+        }
+      ],
+      "evidenceClassification": "source_inference; assertions read, not executed"
+    },
+    {
+      "invariant": "Accepted selection consumes its entire closure without a second record cap",
+      "assessment": "The accepted view supplies sources/records/edges/images. A present selection bypasses the legacy maxRecords slice, including maxRecords=0. The parent remains the source of record identity, inventory and original occurrence indices.",
+      "locations": [
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 711,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 751
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1146,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1200
+        }
+      ],
+      "testBodySourceInspected": [
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 330,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 355
+        }
+      ],
+      "evidenceClassification": "source_inference; assertions read, not executed"
+    },
+    {
+      "invariant": "Stable parent and journal identity",
+      "assessment": "Context includes origin, actor, product dataEpoch, parent snapshot id/digest and optional selection digest. Existing journal headers are checked; parent source references preserve record digest and ordered intake digests. Distinct selection views do not replace the parent. Product/actor identity lock serializes cross-snapshot reuse alongside the legacy exact-context lock.",
+      "locations": [
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 768,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 834
+        },
+        {
+          "path": "scripts/datasets/native/context.ts",
+          "line": 5,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 19
+        }
+      ],
+      "testBodySourceInspected": [
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 330,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 355
+        },
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 1175,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1195
+        }
+      ],
+      "evidenceClassification": "source_inference; assertions read, not executed"
+    },
+    {
+      "invariant": "Native identity reuse and both retained 113-identity epochs",
+      "assessment": "Only journals for the same API origin/actor/dataEpoch contribute identities. Conflicts refuse; unresolved previous native intents require resuming that snapshot before creation. Durable bulk child receipts recover after a crash. The 113-row fixture tests each of its two identity columns independently, excludes the other epoch, preserves old journal bytes and expects no creation or new mapped facts. This is not a live census of the original four current receipts or three historical receipts.",
+      "locations": [
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 457,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 549
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 981,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1033
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1209,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1307
+        },
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 1607,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 2222
+        }
+      ],
+      "testBodySourceInspected": [
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 530,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 592
+        },
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 666,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 686
+        },
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 2177,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 2222
+        }
+      ],
+      "evidenceClassification": "source_inference; assertions read, not executed"
+    },
+    {
+      "invariant": "Replay and CAS retain acknowledged intent and independent edits",
+      "assessment": "Command replay uses saved method/path/body/result. Mapper revision participates in the command label; fresh reads bypass the command journal. A stale uncommitted CAS is not silently rebased. Cover commands are rechecked for current owner fences, while previous responses remain in history. New cover selection refuses an existing image choice; an old selection intent is replayed verbatim.",
+      "locations": [
+        {
+          "path": "scripts/lib/command-journal.ts",
+          "line": 1,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 29
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 858,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 934
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1743,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1806
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1856,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1879
+        }
+      ],
+      "testBodySourceInspected": [
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 451,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 474
+        },
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 593,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 665
+        },
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 1273,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1359
+        },
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 1453,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1474
+        }
+      ],
+      "evidenceClassification": "source_inference; assertions read, not executed"
+    },
+    {
+      "invariant": "Acquisition/source digests remain exact and distinct",
+      "assessment": "Retained intake receipt byteDigest must equal SHA256 of the exact submitted part. Frozen image blobs are hash-verified and checked against capture length/type/URL; source record digest, original capture digest, importer evidence-observation digest and uploaded image digest keep distinct meanings. No new capture is substituted.",
+      "locations": [
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 935,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 979
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1559,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1604
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1615,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1715
+        },
+        {
+          "path": "scripts/datasets/store.ts",
+          "line": 1,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 41
+        }
+      ],
+      "testBodySourceInspected": [
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 502,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 514
+        },
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 1273,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1388
+        }
+      ],
+      "evidenceClassification": "source_inference; assertions read, not executed"
+    },
+    {
+      "invariant": "Producer plans cannot certify native adoption",
+      "assessment": "Field plans remain candidates without exact retained conversion/adoption support. Only previously acknowledged native projection values matching the current source are marked acknowledged-native-value; this is historical value correspondence, not Source support or a fresh native read. Unchanged source identity alone cannot claim adoption of a changed title. Default fields mapper is absent and remains pending.",
+      "locations": [
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 430,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 453
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1809,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1846
+        },
+        {
+          "path": "scripts/datasets/native/coverage.ts",
+          "line": 133,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 151
+        }
+      ],
+      "testBodySourceInspected": [
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 357,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 393
+        },
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 515,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 549
+        }
+      ],
+      "evidenceClassification": "source_inference; assertions read, not executed"
+    },
+    {
+      "invariant": "Alias and language evidence remains qualified",
+      "assessment": "Field plans validate exact source identity/digest. Alias evidence retains paths, raw values, digest and occurrence ordinal; explicit locale is retained. Language canonicalization is a projection and does not rewrite the frozen spelling. UI locale does not supply an alias language. Invalid/missing qualification stays pending/source evidence.",
+      "locations": [
+        {
+          "path": "scripts/datasets/native/fields.ts",
+          "line": 77,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 93
+        },
+        {
+          "path": "scripts/datasets/native/fields.ts",
+          "line": 172,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 190
+        },
+        {
+          "path": "scripts/datasets/native/fields.ts",
+          "line": 368,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 410
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1819,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1843
+        }
+      ],
+      "testBodySourceInspected": [
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 357,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 393
+        },
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 1072,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1155
+        }
+      ],
+      "evidenceClassification": "source_inference; assertions read, not executed"
+    },
+    {
+      "invariant": "Elected validated Work cover and frozen indices",
+      "assessment": "datasetWorkCoverImages validates/repairs a clone and elects only a supported Work cover. frozenCoverOccurrences matches immutable descriptor/capture/evidence content back to original occurrence queues, including evidence-free originals repaired in the clone. A failed repair cannot fall back to admitting raw evidence. Only the elected original occurrence can enter public source/media/selection commands; other cover candidates remain source-only.",
+      "locations": [
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 249,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 266
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1505,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1547
+        },
+        {
+          "path": "scripts/datasets/native/media.ts",
+          "line": 158,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 174
+        }
+      ],
+      "testBodySourceInspected": [
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 395,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 449
+        }
+      ],
+      "evidenceClassification": "source_inference; assertions read, not executed"
+    },
+    {
+      "invariant": "Coverage distinguishes absent, unacquired, source-only and mapped",
+      "assessment": "All parent source fields and original edges/images are inventoried; zero/false remain observed. Never-acquired candidates have /sources/<s>/images/<i> keys and not-acquired state, without invented /images indices. Mapping requires retained source, target, native read path and receipt, cannot map unavailable acquisition or downgrade/change an acknowledged target. Subordinate pending plans cannot erase mapped cover facts.",
+      "locations": [
+        {
+          "path": "scripts/datasets/native/coverage.ts",
+          "line": 50,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 127
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1847,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1869
+        }
+      ],
+      "testBodySourceInspected": [
+        {
+          "path": "tests/qa/unit/dataset-import-coverage.test.ts",
+          "line": 1,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 143
+        },
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 357,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 474
+        }
+      ],
+      "evidenceClassification": "source_inference; assertions read, not executed"
+    },
+    {
+      "invariant": "Transport completion does not imply native completeness",
+      "assessment": "journal.completed describes selected transport traversal. catalogueReady additionally requires all mapper phases, no unmapped inventory, native facts for parent roots and no pending selected acquisitions. Parent-wide entries remain visible outside a selected view, making readiness conservative. Offline conformance checks inventory/digest/disposition consistency, not independent native receipt authenticity.",
+      "locations": [
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1881,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1900
+        },
+        {
+          "path": "scripts/datasets/native/coverage.ts",
+          "line": 133,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 151
+        },
+        {
+          "path": "scripts/datasets/conformance.ts",
+          "line": 14,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 44
+        }
+      ],
+      "testBodySourceInspected": [
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 486,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 501
+        },
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 515,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 529
+        },
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "line": 2177,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 2222
+        }
+      ],
+      "evidenceClassification": "source_inference; assertions read, not executed"
+    }
+  ],
+  "producerIntegration": [
+    {
+      "area": "fields",
+      "existingOwners": [
+        "G-2781",
+        "Source and Semantic/Statement owners",
+        "G-2778 for later wiring"
+      ],
+      "location": {
+        "path": "scripts/datasets/import.ts",
+        "line": 1809,
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "endLine": 1846
+      },
+      "admittedInterface": "An exact retained provider observation/conversion and accepted native adoption/support binding; catalogue creation value receipts are a distinct interface.",
+      "actual": "Pure field plans plus matching historical creation projection values. Dataset-record envelopes and multipart parts are explicitly not converted as if they were raw provider input; candidates remain unmapped and the fields mapper stays pending.",
+      "nativeProof": "unexecuted"
+    },
+    {
+      "area": "relations/classification/composition",
+      "existingOwners": [
+        "G-2799",
+        "Source, Classification, Statement and Structure owners",
+        "G-2778 for later wiring"
+      ],
+      "location": {
+        "path": "scripts/datasets/import.ts",
+        "line": 1871,
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "endLine": 1879
+      },
+      "relatedLocations": [
+        {
+          "path": "scripts/datasets/native/relations.ts",
+          "line": 1,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 176
+        },
+        {
+          "path": "scripts/datasets/native/classifications.ts",
+          "line": 246,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 604
+        },
+        {
+          "path": "scripts/datasets/native/compositions.ts",
+          "line": 1,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 172
+        }
+      ],
+      "admittedInterface": "Qualified retained conversion, source-native-work-adoption-v1 binding and exact current support/Work head for source-native-child-adoption-v1; relation/classification/Structure candidates require their declared native policy/support interfaces.",
+      "actual": "Default relation mapper has no adoption bindings. Descriptive DatasetSourceRelation resources preserve direction and qualifiers but are not native relations. Source tag child path verifies conversion/occurrence/CAS/support and fresh current reads when a binding exists. No such binding is manufactured by the importer; composition candidates name missing Structure/source support.",
+      "nativeProof": "unexecuted"
+    },
+    {
+      "area": "credits",
+      "existingOwners": [
+        "G-2800",
+        "Source and Credit owners",
+        "G-2778 for later wiring"
+      ],
+      "location": {
+        "path": "scripts/datasets/import.ts",
+        "line": 734,
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "endLine": 735
+      },
+      "relatedLocations": [
+        {
+          "path": "scripts/datasets/native/credits.ts",
+          "line": 640,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 874
+        },
+        {
+          "path": "services/main/src/modules/source/author-credit-schema.ts",
+          "line": 5,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 28
+        }
+      ],
+      "admittedInterface": "source-author-credit-adoption-v1 exact proposal/conversion, occurrence/source ordinal/key/role, pinned Work head, base support/correspondence and exact acknowledged support/native receipt.",
+      "actual": "Default mapper receives no bindings and reports missing prerequisites. Descriptive people are not controlled Agents. No author identity, role correspondence, rights status or provider-specific support is fabricated. Qualified provider support remains the existing owner prerequisite.",
+      "nativeProof": "unexecuted"
+    },
+    {
+      "area": "releases",
+      "existingOwners": [
+        "G-2801",
+        "Source and Release/Realization owners",
+        "G-2778 for later wiring"
+      ],
+      "location": {
+        "path": "scripts/datasets/import.ts",
+        "line": 734,
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "endLine": 735
+      },
+      "relatedLocations": [
+        {
+          "path": "scripts/datasets/native/releases.ts",
+          "line": 400,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 532
+        },
+        {
+          "path": "scripts/datasets/native/releases.ts",
+          "line": 640,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 751
+        }
+      ],
+      "admittedInterface": "Exact source release correspondence to a receipt-backed release-v2 revision plus every distinct covered realization-v1 revision, linked native Work and correlated source field projection.",
+      "actual": "Default mapper receives no correspondences. Descriptive schema:PublicationEvent resources are not native releases. Work/source-child support cannot substitute for release adoption; unavailable exact revision or unsupported coverage grain stays pending without replacement identity or speculative publication.",
+      "nativeProof": "unexecuted"
+    },
+    {
+      "area": "media",
+      "existingOwners": [
+        "G-2780",
+        "Source/Media contract owners",
+        "G-2778 for caller integration"
+      ],
+      "location": {
+        "path": "scripts/datasets/import.ts",
+        "line": 1505,
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+        "endLine": 1806
+      },
+      "admittedInterface": "Existing Work-only source-cover-evidence-v1/media-imported-cover-v1 plus exact reserve/transfer/activation/selection responses. Non-Work target/role/Content variant and publication require separately admitted contracts.",
+      "actual": "Validated/elected Work cover path only. VNDB derivation is refused before evidence/upload because the current closed descriptor cannot carry archive/table/row custody. Non-Work/default mapper is command-free and emits pending conditions; MainVersion is never invented as a Content variant.",
+      "nativeProof": "unexecuted"
+    }
+  ],
+  "originalMediaReviewDispositions": [
+    {
+      "id": "I1",
+      "severity": "P2",
+      "classification": "repaired_in_source_native_proof_pending",
+      "title": "Elected/repaired Work cover integration",
+      "location": {
+        "path": "scripts/datasets/import.ts",
+        "line": 1505,
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251"
+      },
+      "relatedLocations": [
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 249,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 266
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 870,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 908
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1743,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1806
+        }
+      ],
+      "trigger": "Frozen roster contains ordinary, selected, vote or legacy evidence-free cover descriptors.",
+      "expectedBehavior": "Only the elected validated Work cover enters public commands; repaired clones retain original indices; replay preserves receipts and editor choices.",
+      "actualBehaviorAtReviewedHash": "Caller now invokes datasetWorkCoverImages and frozenCoverOccurrences; invalid view yields pending with no raw admission fallback. Original-index mapping and editor/replay guards are present. Tests at 395-474 and 651-665 describe these transport assertions but were not run here.",
+      "evidenceClassification": "source_inference; no runtime or outcome assertion reached",
+      "existingOwner": "G-2778",
+      "newImporterDefect": false
+    },
+    {
+      "id": "C3",
+      "severity": "P2",
+      "classification": "repaired_in_source_native_proof_pending",
+      "title": "Never-acquired source-image inventory",
+      "location": {
+        "path": "scripts/datasets/native/coverage.ts",
+        "line": 81,
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251"
+      },
+      "relatedLocations": [
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 734,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 735
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1847,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1869
+        },
+        {
+          "path": "scripts/datasets/native/coverage.ts",
+          "line": 143,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 150
+        }
+      ],
+      "trigger": "A source candidate has no corresponding stored image occurrence, including empty/covers-only acquisition.",
+      "expectedBehavior": "Expose not-acquired and block native completeness without inventing a frozen image index or erasing mapped cover evidence.",
+      "actualBehaviorAtReviewedHash": "Inventory uses original /sources/<s>/images/<i>; pendingAcquisitions and unmapped disposition remain. Default media mapper is registered, and its pending plans cannot downgrade mapped facts.",
+      "evidenceClassification": "source_inference; no runtime or outcome assertion reached",
+      "existingOwner": "G-2778",
+      "newImporterDefect": false
+    },
+    {
+      "id": "F1",
+      "severity": "P2",
+      "classification": "repaired_in_source_native_proof_pending",
+      "title": "Consumption of repaired Bangumi provider contract",
+      "location": {
+        "path": "scripts/datasets/snapshot.ts",
+        "line": 202,
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251"
+      },
+      "relatedLocations": [
+        {
+          "path": "scripts/datasets/bangumi.ts",
+          "line": 271,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 312
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1505,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1527
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1580,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1593
+        }
+      ],
+      "trigger": "Already-present Bangumi evidence asserts an incompatible provider endpoint, namespace, canonical response identity, role or field.",
+      "expectedBehavior": "Apply the same official endpoint/namespace/role/field checks as producer recovery, while allowing legitimate canonical response IDs.",
+      "actualBehaviorAtReviewedHash": "Pinned verifier checks pointer then derives bangumiImageCandidate from retained capture and compares role, URL, externalId, field and sourceUrl. Importer consumes snapshotMediaImages through election and calls verifyCoverSourceCapture before admission. Validation failure stays pending.",
+      "evidenceClassification": "source_inference; no runtime or outcome assertion reached",
+      "existingOwner": "G-2780; G-2778 consumes the repaired helper",
+      "newImporterDefect": false
+    }
+  ],
+  "findings": [],
+  "retainedOwnerPrerequisites": [
+    {
+      "id": "C1",
+      "severity": "P2",
+      "classification": "pending_owner_prerequisite",
+      "title": "VNDB v11 selected-cover archive/table/row/field custody",
+      "location": {
+        "path": "scripts/datasets/import.ts",
+        "line": 1589,
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251"
+      },
+      "relatedLocations": [
+        {
+          "path": "scripts/datasets/vndb.ts",
+          "line": 95,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 142
+        },
+        {
+          "path": "services/main/src/modules/source/cover-evidence.ts",
+          "line": 12,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 32
+        },
+        {
+          "path": "services/main/src/modules/media/presentation-contract.ts",
+          "line": 13,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 49
+        }
+      ],
+      "trigger": "Elected VNDB cover carries derivation from retained COPY archive.",
+      "expectedBehavior": "Native admission must retain exact archive URL/digest, table, row digest and selected field; unsupported custody remains pending.",
+      "actualBehaviorAtReviewedHash": "Explicit source-evidence-contract-unavailable refusal before Source cover intake or Media upload. Closed Source/Media contracts cannot express this witness. No replacement contract is admitted by this review.",
+      "evidenceClassification": "source_inference; no runtime or outcome assertion reached",
+      "existingOwner": "Source/Media contract owners; G-2780 producer; G-2778 after decision",
+      "newImporterDefect": false
+    },
+    {
+      "id": "C2",
+      "severity": "P2",
+      "classification": "pending_owner_prerequisite",
+      "title": "Non-Work media target/role/Content variant custody and publication",
+      "location": {
+        "path": "scripts/datasets/native/media.ts",
+        "line": 93,
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251"
+      },
+      "relatedLocations": [
+        {
+          "path": "scripts/datasets/native/media.ts",
+          "line": 125,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 153
+        },
+        {
+          "path": "scripts/datasets/native/media.ts",
+          "line": 176,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 206
+        },
+        {
+          "path": "services/main/src/modules/media/presentation-contract.ts",
+          "line": 13,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 49
+        }
+      ],
+      "trigger": "Character portrait, screenshot, release media or public/anonymous delivery needs qualified target/role/variant and publication authority.",
+      "expectedBehavior": "Require exact admitted target, role, API Content variant where needed, source observation, rights and authorized publication receipts.",
+      "actualBehaviorAtReviewedHash": "Work-only importedCover cannot supply these mechanisms. Default mapper emits pending/unmapped and issues no native commands. Variant accepts only a qualified receipt.variantId, never MainVersion. Descriptive Character resources cannot claim native Character support.",
+      "evidenceClassification": "source_inference; no runtime or outcome assertion reached",
+      "existingOwner": "Source/Media contract owners; G-2780 producer; G-2778 after decision",
+      "newImporterDefect": false
+    },
+    {
+      "id": "NATIVE-BINDINGS",
+      "severity": "P2",
+      "classification": "pending_owner_prerequisite",
+      "title": "Exact retained conversion/native-support bindings",
+      "location": {
+        "path": "scripts/datasets/import.ts",
+        "line": 1833,
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251"
+      },
+      "relatedLocations": [
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 734,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 735
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1809,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 1879
+        }
+      ],
+      "trigger": "Producer offers a field/relation/credit/release/composition candidate without the exact admitted retained observation, conversion, native target/head and support correspondence.",
+      "expectedBehavior": "Keep candidate/source-only/unmapped states; mark only exact acknowledged native facts and never promote envelopes, arbitrary multipart parts or descriptive resources into adoption.",
+      "actualBehaviorAtReviewedHash": "Importer records plans and honest limitations; default relation/credit/release factories receive no binding/correspondence, fields remains pending. Existing native adoption branches cannot be exercised successfully by this default importer without owner prerequisites.",
+      "evidenceClassification": "source_inference; no runtime or outcome assertion reached",
+      "existingOwner": "G-2781, G-2799, G-2800, G-2801 with Source and relevant native owners; G-2778 subsequent integration",
+      "newImporterDefect": false
+    },
+    {
+      "id": "F2",
+      "severity": "P2",
+      "classification": "conditional_unexecuted_premise",
+      "title": "Historical duplicate-witness premise remains unestablished",
+      "location": {
+        "path": "scripts/datasets/vndb.ts",
+        "line": 167,
+        "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251"
+      },
+      "relatedLocations": [
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 249,
+          "revision": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+          "endLine": 266
+        }
+      ],
+      "trigger": "Only if supported historical frozen evidence-free duplicate occurrences or a mandatory all-witness contract are established.",
+      "expectedBehavior": "Preserve frozen identity/indices; do not invent independent occurrence witnesses. Establish the historical premise before classifying a regression.",
+      "actualBehaviorAtReviewedHash": "Legacy recovery documents one canonical witness for a historically deduplicated tuple. This review did not inspect the real corpus and has no evidence establishing the conditional premise. F2 is not a confirmed importer/product failure and does not independently block historical corpus acceptance.",
+      "evidenceClassification": "source_inference; no runtime or outcome assertion reached",
+      "existingOwner": "G-2780 producer and Source owner, routed by Program",
+      "newImporterDefect": false
+    }
+  ],
+  "contractDecisionRouting": {
+    "deliveredQuestion": "mail:791317cf-98de-40c8-b9ea-030b6040f0a2",
+    "conditions": [
+      "C1",
+      "C2"
+    ],
+    "status": "Existing Program question retained; no answer, waiver or replacement contract inferred."
+  },
+  "verification": {
+    "sourceReview": {
+      "status": "completed",
+      "commands": [
+        "git show <reviewedHash>:<each of seven source paths and inspected helper paths>",
+        "git diff <baseHash> <reviewedHash> -- <seven owned paths>",
+        "git rev-parse <reviewedHash>:<path>",
+        "git ancestry/commit and status checks"
+      ],
+      "classification": "read-only source evidence"
+    },
+    "testsExecuted": [],
+    "testBodyAssertionsReached": [],
+    "setupFailures": [],
+    "unexecutedProof": "All importer/media native, public/persona/rendered and retained-corpus outcomes. Reading test bodies is not reaching an assertion.",
+    "focusedTestDecision": "No concrete new source concern remained that needed a focused stack-free experiment; brief selects no tests.",
+    "historicalChecks": {
+      "status": "reported evidence only, not independently verified or counted as this review receipts",
+      "selectionLimit": "The brief reports importer and later combined importer/media passing checks. Their exact run receipts/logs and the complete later combined selection are not staged here; no passing count is asserted or used as native proof.",
+      "stagedReviewOlderClaim": "G-2802 records an older producer-reported job 0382141b-5171-4eb8-b12c-599b1770d731 with a different historical selection. It is not the later combined repair receipt and is not substituted for it."
+    },
+    "reportChecks": [
+      {
+        "command": "JSON parse, pinned source location bounds, six commit ancestry, seven-file inventory, required issue fields and retained-copy comparison",
+        "status": "passed",
+        "classification": "report structure/source metadata validation; no product assertion"
+      },
+      {
+        "job": "19d026e2-cb6e-4704-a972-8061ba3fcfca",
+        "step": 1,
+        "command": "task docs:check",
+        "exitCode": 0,
+        "log": ".temp/goal/jobs/19d026e2-cb6e-4704-a972-8061ba3fcfca.1.log",
+        "result": "13 documentation-tool unit tests passed; documentation links/fragments/navigation passed for 225 Markdown files. External URLs/runtime behavior not tested.",
+        "classification": "documentation check only"
+      },
+      {
+        "job": "19d026e2-cb6e-4704-a972-8061ba3fcfca",
+        "step": 2,
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "log": ".temp/goal/jobs/19d026e2-cb6e-4704-a972-8061ba3fcfca.2.log",
+        "detailLog": ".temp/goal/check/run-Sx7jnY/output.log",
+        "changedPaths": [
+          "docs/goals/audit-remediation-20261019/reviews/importer-core-review.json"
+        ],
+        "sourceRevision": "Worker worktree report change; this does not execute the pinned importer.",
+        "groups": {
+          "types": "ok; no TypeScript workspace changed",
+          "lint": "ok; no source file changed",
+          "ast": "passed for report JSON",
+          "tests": "no test files named in brief; no importer/media tests run",
+          "guards": "1 of 44 guard files selected; 2 tests passed, 0 failures, 6 assertions"
+        },
+        "guardSelection": [
+          "scripts/static/one-language-parser-debt.test.ts"
+        ],
+        "junit": ".temp/goal/check/run-Sx7jnY/guards-0-artifacts/unit.xml",
+        "reachedGuardTestBodies": [
+          "language-tag parsing outside display-language stays at the frozen violations",
+          "a new language parser fails and a frozen violation does not"
+        ],
+        "classification": "report worker gate, not importer/native proof"
+      },
+      {
+        "job": "4407f173-5153-4199-8fd7-74eb63b291fc",
+        "command": "task docs:check",
+        "exitCode": 0,
+        "log": ".temp/goal/jobs/4407f173-5153-4199-8fd7-74eb63b291fc.log",
+        "result": "Final report check-receipt amendment validated: 13 documentation-tool tests and documentation checks passed for 225 Markdown files.",
+        "classification": "documentation check only; receipt metadata added afterward"
+      },
+      {
+        "command": "git diff --check",
+        "status": "passed",
+        "classification": "whitespace check; final staged report checked again before commit"
+      }
+    ],
+    "sourceOrAssertionEdits": false,
+    "stackOrCaptureOrImportOrSeedOrBrowserOrOutcomeExecution": false,
+    "testsExecutedScope": "Importer, media, integration and outcome tests at the reviewed hash; documentation/guard checks below are separate report validation.",
+    "testBodyAssertionsReachedScope": "No importer/media/native outcome assertion was reached; only the report gate guard assertions below were executed."
+  },
+  "retainedProof": {
+    "originalProductBaseline": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+    "unchangedImportSelections": [
+      "tests/qa/integration/outcomes/catalogue/import-fidelity.test.ts",
+      "tests/qa/integration/outcomes/catalogue/source-coverage.test.ts"
+    ],
+    "unchangedMediaSelections": [
+      "tests/qa/integration/outcomes/catalogue/releases-and-media.test.ts",
+      "tests/qa/integration/source-cover-attachment.test.ts",
+      "tests/qa/integration/source-cover-read.test.ts",
+      "tests/qa/integration/source-field-live.test.ts",
+      "tests/qa/integration/entity-page-structure.test.ts"
+    ],
+    "frozenParents": {
+      "vndb": "dataset-904aa4496a525e699074",
+      "bangumi": "dataset-424753e973cbd3609613",
+      "musicbrainz": "dataset-a178e59cbd2efe477b79"
+    },
+    "receiptEpochs": {
+      "current": "113 associations across four original receipts, pending real-corpus verification",
+      "historical": "Separate 113-association epoch across three receipts, pending real-corpus verification",
+      "sourceFixtureLimit": "The two-column 113-row transport fixture is not either original receipt census. Epoch identities must not be merged."
+    },
+    "preparation": "G-2791 corpus preparation remains pending: build data once, keep source bytes/selections and a certified consistent stopped all-owner backup, restore isolated writable copies for each selected file within the 600-second preparation budget. Import-fidelity/source-coverage retain separate serial per-file restores. This report creates no corpus or backup.",
+    "pending": "All public API, six-persona, twelve-cell import persona matrix, rendered page, actual image decode/delivery, source/credit/rights display, and retained identity/byte proof remain pending under their existing owners.",
+    "originalMediaCasesOpen": [
+      "C12",
+      "C13",
+      "C24"
+    ],
+    "originalAuditFindingsOpen": [
+      "A02",
+      "A03",
+      "A07",
+      "A10",
+      "A11",
+      "A13",
+      "A15"
+    ],
+    "assertionsWeakened": false,
+    "corpusChanged": false
+  },
+  "references": [
+    {
+      "path": ".temp/ref/G-2778.md",
+      "purpose": "Staged sole implementation owner brief and integration decisions"
+    },
+    {
+      "path": ".temp/ref/captured-media-review.json",
+      "purpose": "Original G-2802 I1/C3, F1/F2 and C1/C2 dispositions; original locations are historical and are not reused as pinned line numbers"
+    },
+    {
+      "path": "docs/goals/worker.md",
+      "purpose": "Worker source-review evidence and handoff protocol"
+    },
+    {
+      "path": ".agents/skills/goal-worker/SKILL.md",
+      "purpose": "Recorded docs/worker checks and parked-job procedure"
+    },
+    {
+      "path": ".agents/skills/product-audit/SKILL.md",
+      "purpose": "Class-level scan of importer invariants within the report-only scope"
+    },
+    {
+      "path": "docs/goals/audit-remediation-20261019/state.md",
+      "purpose": "Existing owner prerequisites and pending proof"
+    },
+    {
+      "path": "docs/goals/audit-remediation-20261019/tasks/G-2780.md",
+      "purpose": "F1 repaired helper integration and C1/C2/F2 boundaries"
+    },
+    {
+      "path": "docs/goals/audit-remediation-20261019/tasks/G-2769.md",
+      "purpose": "Unchanged independent import outcome selections"
+    },
+    {
+      "path": "docs/goals/audit-remediation-20261019/tasks/G-2791.md",
+      "purpose": "Frozen corpus, backup and isolated restore prerequisites"
+    },
+    {
+      "path": "docs/storage/workload-budgets.md",
+      "purpose": "600-second ordinary data preparation/restore ceiling"
+    }
+  ],
+  "handoffPolicy": {
+    "commitScope": [
+      "docs/goals/audit-remediation-20261019/reviews/importer-core-review.json"
+    ],
+    "retainedCopy": ".temp/goal/importer-core-review.json",
+    "unresolvedConditions": [
+      "C1",
+      "C2",
+      "NATIVE-BINDINGS",
+      "F2 premise",
+      "All native/public/persona/rendered and retained-corpus proof"
+    ],
+    "managerNext": "Review/accept this report, then route existing prerequisites to their owners. Keep G-2778 implementation ownership and pending proof; report acceptance alone authorizes no importer landing or closure."
+  }
+}
