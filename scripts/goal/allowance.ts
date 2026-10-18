@@ -1,8 +1,8 @@
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, realpathSync } from 'node:fs';
+import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { configuredAccounts, type CodexAccount, type SettingsOptions } from './config.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 
@@ -35,7 +35,7 @@ export interface AllowanceReport {
   credits: { authorized: boolean; hasCredits: boolean | null; unlimited: boolean | null; balance: string | null };
   resetCards: { authorized: boolean; availableCount: number | null; eligibleInDetails: number | null };
   redemption: Redemption | null;
-  error: 'configuration' | 'transport' | 'timeout' | 'protocol' | 'busy' | 'account-home' | null;
+  error: 'configuration' | 'transport' | 'timeout' | 'protocol' | 'busy' | 'account-home' | 'account-changed' | 'intent' | null;
 }
 
 class AllowanceError extends Error {
@@ -53,6 +53,45 @@ function window(value: unknown): Window | null {
 function canonicalHome(home: string): string {
   try { return realpathSync(home); } catch { return resolve(home); }
 }
+
+interface ResetIntent { version: 1; accountKey: string; creditId: string; idempotencyKey: string }
+const MAX_INTENT_BYTES = 4096;
+const identifier = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0 && value.length <= 512;
+function accountKey(value: unknown): string | null {
+  return identifier(value) ? createHash('sha256').update(value).digest('hex') : null;
+}
+function readIntent(path: string): ResetIntent | null {
+  try {
+    if (statSync(path).size > MAX_INTENT_BYTES) throw new Error('oversized');
+    const raw = object(JSON.parse(readFileSync(path, 'utf8')));
+    if (raw.version !== 1 || typeof raw.accountKey !== 'string' || !/^[0-9a-f]{64}$/.test(raw.accountKey)
+      || !identifier(raw.creditId) || typeof raw.idempotencyKey !== 'string'
+      || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(raw.idempotencyKey)) throw new Error('invalid');
+    return { version: 1, accountKey: raw.accountKey, creditId: raw.creditId, idempotencyKey: raw.idempotencyKey };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw new AllowanceError('intent');
+  }
+}
+function syncIntentDirectory(path: string): void {
+  const descriptor = openSync(dirname(path), 'r');
+  try { fsyncSync(descriptor); } finally { closeSync(descriptor); }
+}
+function saveIntent(path: string, intent: ResetIntent): void {
+  try {
+    const body = JSON.stringify(intent);
+    if (Buffer.byteLength(body) > MAX_INTENT_BYTES) throw new Error('oversized');
+    // One slot per home survives process loss; exclusive creation fails closed on an existing intent.
+    const descriptor = openSync(path, 'wx', 0o600);
+    try { writeFileSync(descriptor, body); fsyncSync(descriptor); } finally { closeSync(descriptor); }
+    syncIntentDirectory(path);
+  } catch { throw new AllowanceError('intent'); }
+}
+function clearIntent(path: string): void {
+  try { unlinkSync(path); syncIntentDirectory(path); }
+  catch { throw new AllowanceError('intent'); }
+}
+
 function emptyReport(): AllowanceReport {
   return { account: null, checkedAt: null, authenticated: null, ordinaryUsageAllowed: null,
     status: 'unavailable', canResume: false, next: 'retry-status', quota: null,
@@ -73,7 +112,7 @@ function applyStatus(report: AllowanceReport, value: unknown, now: number, conti
     balance: typeof credits.balance === 'string' && /^\d{1,30}(?:\.\d{1,30})?$/.test(credits.balance) ? credits.balance : null };
   report.resetCards.availableCount = integer(resets.availableCount);
   const cards = Array.isArray(resets.credits) ? resets.credits.map(object).filter(card => card.status === 'available'
-    && card.resetType === 'codexRateLimits' && typeof card.id === 'string' && card.id.trim().length > 0
+    && card.resetType === 'codexRateLimits' && identifier(card.id)
     && (card.expiresAt === null || (integer(card.expiresAt) !== null && (card.expiresAt as number) > now / 1000)))
     .map(card => ({ id: card.id as string, expiresAt: card.expiresAt as number | null }))
     .sort((a, b) => (a.expiresAt ?? Infinity) - (b.expiresAt ?? Infinity)) : null;
@@ -111,6 +150,9 @@ export async function inspectAllowance(engine: string, options: AllowanceOptions
     if (typeof initialized.codexHome !== 'string' || !isAbsolute(initialized.codexHome)
       || (account.home && canonicalHome(initialized.codexHome) !== canonicalHome(account.home))) throw new AllowanceError('account-home');
     rpc.notify('initialized');
+    // Keep durable intent in the account home, outside the disposable lease directory.
+    const intentPath = join(canonicalHome(initialized.codexHome), '.rezics-allowance-reset.json');
+    let intent: ResetIntent | null = null;
     if (options.continue) {
       const directory = options.lockDirectory ?? join(tmpdir(), 'rezics-allowance-leases');
       mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -123,34 +165,62 @@ export async function inspectAllowance(engine: string, options: AllowanceOptions
         lease = tryAcquireDirectoryLease(lock, { mode: 0o700 });
       }
       release = lease.release;
+      intent = readIntent(intentPath);
+      if (intent) report.redemption = 'unconfirmed';
     }
-    // Reload authority after waiting: a queued continuation must respect a revoked policy.
-    const current = configuredAccounts(options.settings).find(item => item.engine === engine);
-    if (!current || current.home !== account.home || current.launcher !== account.launcher) throw new AllowanceError('configuration');
-    report.credits.authorized = current.pastAllowance?.includes('credits') === true;
-    report.resetCards.authorized = current.pastAllowance?.includes('resetCards') === true;
+    let policy: string[] = [];
+    const authorize = () => {
+      const current = configuredAccounts(options.settings).find(item => item.engine === engine);
+      if (!current || current.home !== account.home || current.launcher !== account.launcher) throw new AllowanceError('configuration');
+      policy = current.pastAllowance ?? [];
+      report.credits.authorized = policy.includes('credits');
+      report.resetCards.authorized = policy.includes('resetCards');
+    };
+    // Reload authority after waiting and after status requests, immediately before any spend.
+    authorize();
     const auth = object(await rpc.request('account/read', { refreshToken: false }));
     report.authenticated = object(auth.account).type === 'chatgpt';
     if (!report.authenticated) { report.status = 'unauthenticated'; report.next = 'authenticate'; return report; }
-    const read = async () => applyStatus(report, await rpc!.request('account/rateLimits/read',
-      { excludeResetCreditDetails: false, supportsLunaReserve: false }), (options.now ?? Date.now)(), options.continue === true);
-    const cards = await read();
-    if (options.continue && report.ordinaryUsageAllowed === false && report.resetCards.authorized && cards.length) {
-      // A lost response is ambiguous. Do not retry a spend; read the backend's permission again.
-      report.redemption = 'unconfirmed';
-      try {
-        const redeemed = object(await rpc.request('account/rateLimitResetCredit/consume', { creditId: cards[0]!.id, idempotencyKey: randomUUID() }));
-        if (['reset', 'alreadyRedeemed', 'nothingToReset', 'noCredit'].includes(String(redeemed.outcome))) report.redemption = redeemed.outcome as Redemption;
-      } catch { /* A fresh read can confirm recovery even when the redemption response was lost. */ }
-      await read();
+    const read = async (expectedAccount?: string) => {
+      const raw = object(await rpc!.request('account/rateLimits/read', { excludeResetCreditDetails: false, supportsLunaReserve: false }));
+      authorize();
+      const key = accountKey(raw.accountId);
+      if (expectedAccount && key === null) throw new AllowanceError('protocol');
+      if (expectedAccount && key !== expectedAccount) throw new AllowanceError('account-changed');
+      return { raw, key, cards: applyStatus(report, raw, (options.now ?? Date.now)(), options.continue === true) };
+    };
+    const state = await read(intent?.accountKey);
+    if (intent && report.ordinaryUsageAllowed === true) { clearIntent(intentPath); return report; }
+    const preferred = policy.find(resource => resource === 'credits' ? report.status === 'credits-available'
+      : resource === 'resetCards' && (intent !== null || state.cards.length > 0));
+    if (!options.continue || report.ordinaryUsageAllowed !== false || preferred !== 'resetCards') return report;
+    const details = object(state.raw.rateLimitResetCredits).credits;
+    const pendingCard = intent?.creditId;
+    // A redeeming card is still in flight. Missing rows never establish cancellation.
+    if (pendingCard && Array.isArray(details) && details.some(card => object(card).id === pendingCard && object(card).status === 'redeeming')) return report;
+    if (!intent) {
+      if (state.key === null) throw new AllowanceError('protocol');
+      intent = { version: 1, accountKey: state.key, creditId: state.cards[0]!.id, idempotencyKey: randomUUID() };
+      saveIntent(intentPath, intent);
     }
+    report.redemption = 'unconfirmed';
+    try {
+      const redeemed = object(await rpc.request('account/rateLimitResetCredit/consume', { creditId: intent.creditId, idempotencyKey: intent.idempotencyKey }));
+      if (!['reset', 'alreadyRedeemed', 'nothingToReset', 'noCredit'].includes(String(redeemed.outcome))) throw new AllowanceError('protocol');
+      report.redemption = redeemed.outcome as Redemption;
+    } catch (error) { report.error = error instanceof AllowanceError ? error.code : 'transport'; }
+    if (report.redemption !== 'unconfirmed') clearIntent(intentPath);
+    const confirmed = await read(intent.accountKey);
+    // Permission can recover even when the actual consume response remains unknown.
+    if (report.redemption === 'unconfirmed' && confirmed.raw.ordinaryUsageAllowed === true) clearIntent(intentPath);
   } catch (error) {
     report.status = 'unavailable'; report.canResume = false;
-    report.error = error instanceof AllowanceError ? error.code : 'configuration';
-    report.next = report.error === 'configuration' || report.error === 'account-home' ? 'check-configuration' : 'retry-status';
+    report.error ??= error instanceof AllowanceError ? error.code : 'configuration';
+    report.next = ['configuration', 'account-home', 'account-changed', 'intent'].includes(report.error) ? 'check-configuration' : 'retry-status';
   } finally {
-    // Keep the lease until the request process is gone, including timed-out redemptions.
+    // The lease serializes callers; unresolved backend work remains durable after close.
     try { await rpc?.close(); }
+    catch { report.error ??= 'transport'; }
     finally { release?.(); }
   }
   return report;
