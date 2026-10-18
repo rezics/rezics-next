@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import type { SemanticValue } from '../../../../services/main/src/modules/semantic/value.ts';
+import { sectionIds } from '../../../../services/main/src/modules/entity-page/contract.ts';
 import {
   collectionCases, fieldStates, informationMatrix, orderCases, supportingRecords,
   type CollectionKey, type FieldState, type OrderKey, type SupportingKey,
@@ -38,6 +39,8 @@ export interface FactExpectation {
 }
 export interface ResourceFixture {
   resource: string; revision: string; registryType: string;
+  // Complete visible-only oracle, including zeroes for inapplicable inventories.
+  sectionCounts: Record<typeof sectionIds[number], { value: number; context: string; target: string }>;
   work?: string;
   source: { provider: string; namespace: string; externalId: string; key: string; url: string;
     snapshot: FrozenSupport; identityPointer: string; namePointer: string };
@@ -98,7 +101,8 @@ export interface EntityPage {
   target: { resource: string; revision: string; base: string; types: string[] };
   registry: { type: string; default: boolean; labels: { en: { one: string } } };
   summary: { reference: string; status: string; name?: { value: string } };
-  sections: { id: string; href: string; actions: string[] }[];
+  sections: { id: typeof sectionIds[number]; href: string; actions: string[];
+    count?: { value: number; precision: string; context: string; target: string } }[];
 }
 export interface FactItem {
   kind: string; statement?: string; revision: string; predicate: string; value: FactValue | SemanticValue;
@@ -201,6 +205,13 @@ export function loadInformationCorpus(): InformationCorpus {
     const record = corpus.records[key as SupportingKey];
     expect(record.source.provider, key).toBe(specification.provider);
     expect(record.registryType, key).toBe(specification.type);
+    expect(Object.keys(record.sectionCounts).toSorted(), key).toEqual([...sectionIds].toSorted());
+    for (const count of Object.values(record.sectionCounts)) {
+      expect(Number.isInteger(count.value)).toBe(true);
+      expect(count.value).toBeGreaterThanOrEqual(0);
+      expect(count.context).toMatch(/^https:\/\/rezics\.com\/id\//);
+      expect(count.target).toMatch(/^https:\/\/rezics\.com\/id\//);
+    }
     expect(record.source.externalId.length, key).toBeGreaterThan(0);
     expect(record.source.key.length, key).toBeGreaterThan(0);
     expect(record.name.length, key).toBeGreaterThan(0);
@@ -336,6 +347,9 @@ export function assertIdentity(page: EntityPage, key: SupportingKey, corpus: Inf
     .toBe(resourcePath(expected.resource, 'statements'));
   expect(page.sections.find(section => section.id === 'relations')?.href)
     .toBe(resourcePath(expected.resource, 'relations'));
+  for (const section of page.sections) {
+    if (section.count) expect(section.count).toEqual({ ...expected.sectionCounts[section.id], precision: 'exact' });
+  }
   noHidden(page, corpus);
 }
 
