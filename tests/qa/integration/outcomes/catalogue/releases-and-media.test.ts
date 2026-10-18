@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import sharp from 'sharp';
 import outcomes from '../../../../../scripts/qa/cases/outcomes/catalogue/releases-and-media.ts';
 import { outcomeTest } from '../../../support/outcome-test.ts';
-import { personaNames, type PersonaName, type PersonaSession } from '../../../support/personas.ts';
+import type { PersonaName, PersonaSession } from '../../../support/personas.ts';
 import { actorQuery, allPages, assertNoHidden, digest, jsonAnswer, openReleaseMediaFixture,
   pagePath, releaseQuery, retainedBytes, shortId, workPath,
   type BusinessPage, type ImageExpectation, type PageImage, type ReleaseSelection,
@@ -250,7 +250,7 @@ async function readerIsolation(name: PersonaName) {
 }
 
 // Every persona exercises each independent obligation even while other contracts fail.
-for (const name of personaNames) outcomeTest(outcomes, name, async () => {
+async function releasesAndMedia(name: PersonaName) {
   const failures: unknown[] = [];
   const person = prepared.sessions[name];
   const obligations: Array<[string, () => Promise<void>]> = [
@@ -265,4 +265,11 @@ for (const name of personaNames) outcomeTest(outcomes, name, async () => {
     catch (error) { failures.push(new Error(`${name}: ${label}`, { cause: error })); }
   }
   if (failures.length) throw new AggregateError(failures, `${name}: ${failures.length} release/media obligations failed`);
-});
+}
+
+outcomeTest(outcomes, 'visitor', () => releasesAndMedia('visitor'));
+outcomeTest(outcomes, 'stranger', () => releasesAndMedia('stranger'));
+outcomeTest(outcomes, 'member', () => releasesAndMedia('member'));
+outcomeTest(outcomes, 'owner', () => releasesAndMedia('owner'));
+outcomeTest(outcomes, 'moderator', () => releasesAndMedia('moderator'));
+outcomeTest(outcomes, 'operator', () => releasesAndMedia('operator'));

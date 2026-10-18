@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import nutrition from '../../../../../scripts/qa/cases/outcomes/recipes/nutrition-and-substitutions.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
-import { personaNames, type PersonaName } from '../../../support/personas.ts';
+import type { PersonaName } from '../../../support/personas.ts';
 import { addPrivateRecipeDraft, answer, ownCookProgress, publicDomainFixture,
   publishPublicRecipe, recipePages, short, viewer, type Call } from '../../../support/catalogue-public-domain.ts';
 import type { Measure, PublicRecipe } from '../../../fixtures/catalogue-public-domain.ts';
@@ -109,4 +109,9 @@ async function read(name: PersonaName) {
     }), name === 'visitor' ? 401 : 403);
   }
 }
-for (const name of personaNames) outcomeTest(nutrition, name, () => read(name), recording);
+outcomeTest(nutrition, 'visitor', () => read('visitor'), recording);
+outcomeTest(nutrition, 'stranger', () => read('stranger'), recording);
+outcomeTest(nutrition, 'member', () => read('member'), recording);
+outcomeTest(nutrition, 'owner', () => read('owner'), recording);
+outcomeTest(nutrition, 'moderator', () => read('moderator'), recording);
+outcomeTest(nutrition, 'operator', () => read('operator'), recording);

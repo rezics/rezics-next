@@ -12,7 +12,6 @@ import {
 } from '../../../../../scripts/load/corpus-backup-driver.ts';
 import { outcomeTest } from '../../../support/outcome-test.ts';
 import {
-  personaNames,
   restorePersonaRealms,
   type PersonaName,
   type PersonaSession,
@@ -470,7 +469,7 @@ async function boundContinuation(person: PersonaSession) {
   expect(full.last.complete).toBe(true);
 }
 
-for (const name of personaNames) outcomeTest(searchIntent, name, async () => {
+async function searchIntentFor(name: PersonaName) {
   const person = sessions[name];
   const checks = [
     ['catalogue adapter', () => catalogueAdapter(person)],
@@ -491,4 +490,11 @@ for (const name of personaNames) outcomeTest(searchIntent, name, async () => {
     }
   }
   if (failures.length) throw new AggregateError(failures, `SEARCH01 ${name}: pending search contract failures`);
-});
+}
+
+outcomeTest(searchIntent, 'visitor', () => searchIntentFor('visitor'));
+outcomeTest(searchIntent, 'stranger', () => searchIntentFor('stranger'));
+outcomeTest(searchIntent, 'member', () => searchIntentFor('member'));
+outcomeTest(searchIntent, 'owner', () => searchIntentFor('owner'));
+outcomeTest(searchIntent, 'moderator', () => searchIntentFor('moderator'));
+outcomeTest(searchIntent, 'operator', () => searchIntentFor('operator'));
