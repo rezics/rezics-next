@@ -1,0 +1,789 @@
+{
+  "format": "request-budget-source-review-v1",
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2813",
+  "reviewer": {
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "independent": true,
+    "nestedAgents": false,
+    "fallbackUsed": false
+  },
+  "status": "source-review-complete-with-one-source-finding; product-proof-pending",
+  "conclusion": {
+    "summary": "The pin implements a shared Main read allocation before admission and preserves it through Account waits, nested reads, retries and final fences. Native read interruption does not make publication-monitor acquisition cancellable. Source review therefore does not support a complete native release claim.",
+    "sourceFindings": 1,
+    "executedProductOutcomeFailures": 0,
+    "productOutcomeTestsExecutedByReviewer": 0,
+    "outcomesConfirmed": false,
+    "individualImplementationLandingAuthorized": false,
+    "automaticLanding": false,
+    "workerProtocolDisposition": "The source finding has no executed failing outcome assertion and is not a confirmed review-test blocker or a worker fix round. The report task is complete; the manager must decide remediation and combined prove."
+  },
+  "pin": {
+    "head": "3ad477734288c8578c72c6f5aa2e6b61364f4e4e",
+    "comparisonBase": "4c9dbf2be25bc48545bf88ed72b5c052af910436",
+    "comparisonBaseMeaning": "Parent of the first request-budget implementation commit, 5af7f5038a152247bbd8c8d016fb8adbe3359eef.",
+    "publicRegressionBaseline": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+    "baselineSeparation": "The source comparison base is not the product regression baseline. No moving wave or current main was substituted for the reviewed head.",
+    "branch": "goal/g-2813",
+    "reportBranchStartingHead": "2c3c12f5c478498f7b9a654e4997946272ee4a95",
+    "branchBasis": "The task started clean on committed main ancestry. Pinned source was read with git show/diff; no wave commits were merged, rebased or checked out into the task branch."
+  },
+  "scope": {
+    "method": "Read the complete changes for all 20 named files across the seven commits and the base-to-pin comparison; read final source, complete changed test files and unchanged owners needed to trace entry, authority, accounting, retained reads and native cleanup. Unrelated interleaved wave changes are outside this report.",
+    "commits": [
+      {
+        "head": "5af7f5038a152247bbd8c8d016fb8adbe3359eef",
+        "parents": [
+          "4c9dbf2be25bc48545bf88ed72b5c052af910436"
+        ],
+        "subject": "fix(main): share request read allocation and native cancellation boundary",
+        "files": [
+          "infra/jena/command-module/src/main/java/com/rezics/jena/CommandModule.java",
+          "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+          "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+          "infra/jena/command-module/src/main/java/com/rezics/jena/TemplateQueryService.java",
+          "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadBoundaryTest.java",
+          "services/main/src/app.ts",
+          "services/main/src/infrastructure/fuseki.ts",
+          "services/main/src/modules/display-language/public-request.ts",
+          "services/main/src/modules/work/read-problems.ts",
+          "services/main/src/modules/work/read-session.ts",
+          "services/main/tests/request-read-budget.test.ts",
+          "tests/qa/integration/request-read-budget.test.ts"
+        ]
+      },
+      {
+        "head": "52b50a5eb574a22461ee2671e6bf3420887902f2",
+        "parents": [
+          "5af7f5038a152247bbd8c8d016fb8adbe3359eef"
+        ],
+        "subject": "fix(jena): retain cancellation reason through supported Jena exception cause",
+        "files": [
+          "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+          "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadBoundaryTest.java"
+        ]
+      },
+      {
+        "head": "459d44b63007f2ca9fe90adb6230b6f14474ba00",
+        "parents": [
+          "52b50a5eb574a22461ee2671e6bf3420887902f2"
+        ],
+        "subject": "build(jena): regenerate combined request-boundary image pins",
+        "files": [
+          "docs/development/toolchain.md",
+          "infra/dev/compose.yaml",
+          "scripts/dev/release-manifest.ts"
+        ]
+      },
+      {
+        "head": "fd75c85a54b33789146b5dda508ce2b3aa7833ef",
+        "parents": [
+          "5adcdff7b4ab39852bc82a2bb8f4fef7eb45c16a"
+        ],
+        "subject": "fix(main): consume forwarded operation deadlines before reads",
+        "files": [
+          "services/main/src/infrastructure/fuseki.ts",
+          "services/main/tests/request-read-budget-deadline.test.ts",
+          "tests/qa/integration/request-read-budget.test.ts"
+        ]
+      },
+      {
+        "head": "056d0644a9594ba98fe9b48b1aa0b6fc1c8cc14c",
+        "parents": [
+          "9ed19c3afc148a2d4f61e2f4d50cf208c2f91bfd"
+        ],
+        "subject": "fix(main): bind Account admission to the read operation",
+        "files": [
+          "services/main/src/infrastructure/fuseki.ts",
+          "services/main/src/modules/account/verify-assertion.ts",
+          "services/main/tests/request-read-budget-account.test.ts"
+        ]
+      },
+      {
+        "head": "b058193e9acc5ae6141bfe6ca14e9d2686c886cc",
+        "parents": [
+          "260d5afda57f21febfa1a64d863aba5ae75633d7"
+        ],
+        "subject": "fix(main): bound coalesced Account admission waiters",
+        "files": [
+          "services/main/src/modules/rate-limit/hook.ts",
+          "services/main/src/modules/rate-limit/principal-cache.ts",
+          "services/main/tests/request-read-budget-account.test.ts"
+        ]
+      },
+      {
+        "head": "3ad477734288c8578c72c6f5aa2e6b61364f4e4e",
+        "parents": [
+          "30227838eb190084cfec4eb2966aab80531fc7f7"
+        ],
+        "subject": "fix(main): stop departed Account key verification waits",
+        "files": [
+          "services/main/src/modules/account/verify-assertion.ts",
+          "services/main/tests/request-read-budget-account.test.ts"
+        ]
+      }
+    ],
+    "changedFiles": [
+      {
+        "path": "services/main/src/app.ts",
+        "blob": "8353342a81e60f13750355d702950a8676307547"
+      },
+      {
+        "path": "services/main/src/infrastructure/fuseki.ts",
+        "blob": "2c24b3c6ee648792ef1bd1618605a3c96c8feb3e"
+      },
+      {
+        "path": "services/main/src/modules/display-language/public-request.ts",
+        "blob": "2bcfa335ca99cd90e6036072fccc2a8461e2b09d"
+      },
+      {
+        "path": "services/main/src/modules/work/read-session.ts",
+        "blob": "85381184a0704f74645f97e0b0327a2b13d0d27d"
+      },
+      {
+        "path": "services/main/src/modules/work/read-problems.ts",
+        "blob": "e7f9227957db02b784f523a9c854a252be92a065"
+      },
+      {
+        "path": "services/main/src/modules/account/verify-assertion.ts",
+        "blob": "8e2e575f544236b6445a4d5ff7df3931b2c1b97b"
+      },
+      {
+        "path": "services/main/src/modules/rate-limit/hook.ts",
+        "blob": "5ff060e61e3b97c32e42e411a1b4f576f31db3cb"
+      },
+      {
+        "path": "services/main/src/modules/rate-limit/principal-cache.ts",
+        "blob": "b790e626fbf9185ffe83a16da216067735c76347"
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandModule.java",
+        "blob": "6aeb816209b78c6d3a93bde1775eedcaf4fd6f73"
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+        "blob": "fbff75e13e18be905dc6920f09466d0b841a5510"
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+        "blob": "78accde53ffa273b93bad337ff5d9ef9140b25b7"
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/TemplateQueryService.java",
+        "blob": "aadd7911eaeeb0e7f72c09e293bd1da61abea90e"
+      },
+      {
+        "path": "services/main/tests/request-read-budget.test.ts",
+        "blob": "36255b6f437328ed057b8241df085fa47eaaf30f"
+      },
+      {
+        "path": "services/main/tests/request-read-budget-deadline.test.ts",
+        "blob": "75a41eb2ac3452cff9210e2095bd5de5004abdb1"
+      },
+      {
+        "path": "services/main/tests/request-read-budget-account.test.ts",
+        "blob": "df93414b93b58cad101c42277e335b060f5cb4f6"
+      },
+      {
+        "path": "tests/qa/integration/request-read-budget.test.ts",
+        "blob": "118f50e3dfdcd0dbe4922cefbbbd678f046bf8e2"
+      },
+      {
+        "path": "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadBoundaryTest.java",
+        "blob": "16a5b99871cba40d643778376bb5ce94898a3669"
+      },
+      {
+        "path": "docs/development/toolchain.md",
+        "blob": "cd85677db7628c88f72a4cd5941423f82d0c7dd9"
+      },
+      {
+        "path": "infra/dev/compose.yaml",
+        "blob": "b6844052cc4899c31b85dfe0ac18c69af22beab7"
+      },
+      {
+        "path": "scripts/dev/release-manifest.ts",
+        "blob": "eb16544bc5815fe7e80862b7eb92604b4fccf0e3"
+      }
+    ],
+    "unchangedOwnersRead": [
+      "services/main/src/infrastructure/graph-read-fence.ts",
+      "services/main/src/modules/work/read-contract.ts",
+      "services/main/src/modules/work/search-readiness.ts",
+      "services/main/src/modules/notification/request-budget.ts",
+      "services/main/src/modules/notification/store.ts",
+      "services/main/src/routes/notifications.ts",
+      "services/main/src/composition.ts",
+      "services/main/src/modules/query/budget.ts",
+      "services/main/src/modules/query/optional-preview.ts",
+      "services/main/src/modules/search/hydration.ts",
+      "services/main/src/modules/search/result-cards.ts",
+      "services/main/src/modules/search/card-reads.ts",
+      "services/main/src/routes/search.ts",
+      "services/main/src/modules/rate-limit/routes.ts",
+      "services/main/src/modules/rate-limit/budgets.ts",
+      "services/main/src/modules/access/admission.ts",
+      "services/main/src/modules/access/work-edit-authority.ts",
+      "infra/jena/command-module/src/main/java/com/rezics/jena/SearchDeltaJournal.java",
+      "infra/jena/command-module/src/main/java/com/rezics/jena/TemplateIndexService.java",
+      "infra/jena/Dockerfile",
+      "infra/jena/command-module/pom.xml",
+      "scripts/dev/fuseki-image.ts",
+      "apps/web/features/api/server-fetch.ts",
+      "apps/web/features/api/server-read.ts",
+      "apps/web/features/api/bff.ts",
+      "apps/web/app/api/main/[...path]/route.ts",
+      "tests/qa/integration/media-support.ts",
+      "services/main/package.json",
+      "yarn.lock",
+      "infra/jena/tests/native-module-suite.test.ts"
+    ],
+    "externalDependencyCorroboration": {
+      "path": "node_modules/@better-auth/core/src/oauth2/verify.ts",
+      "version": "1.7.9",
+      "pinnedResolution": "better-auth and @better-auth/core 1.7.9 in the pin package manifest/lockfile",
+      "reach": "The locally installed dependency awaits jwksFetch before jwtVerify. This corroborates the waiter placement; the installed dependency is not a git-pinned repository blob."
+    },
+    "webBoundary": "Only the absolute deadline/signal contract and Main consumers were traced. G-2804 owns the separate Web source review; neither review is authenticated cross-hop release proof."
+  },
+  "findings": [
+    {
+      "id": "request-budget-native-monitor-wait",
+      "severity": "P1",
+      "kind": "source-defect",
+      "confidence": "source-confirmed; runtime-outcome-unexecuted",
+      "file": "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+      "line": 175,
+      "title": "A cancelled native read cannot leave publication-monitor acquisition",
+      "reasoning": "Every ordinary query on a text-backed dataset enters SearchDeltaJournal.captureRead before creating its QueryExec. ReadCapture acquires the shared qualified monitor with Java synchronized. ReadBoundary.cancel only interrupts the worker and aborts a registered execution; there is no execution yet while this monitor is being acquired. Intrinsic monitor acquisition does not respond to interruption. A writer holding publicationMonitor through commit/qualification can therefore retain an expired or disconnected servlet worker beyond the required 300 ms native release grace. The check inside the begin callback runs only after the monitor becomes available. Main/proxy transport release cannot free this native waiter.",
+      "relatedLocations": [
+        {
+          "file": "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+          "line": 40,
+          "reason": "Cancellation interrupts the worker and invokes only an already registered engine abort."
+        },
+        {
+          "file": "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+          "line": 176,
+          "reason": "Cancellation check runs after acquiring the capture monitor."
+        },
+        {
+          "file": "infra/jena/command-module/src/main/java/com/rezics/jena/SearchDeltaJournal.java",
+          "line": 101,
+          "reason": "publicationMonitor is the same qualified monitor used by capture."
+        },
+        {
+          "file": "infra/jena/command-module/src/main/java/com/rezics/jena/SearchDeltaJournal.java",
+          "line": 120,
+          "reason": "Intrinsic monitor acquisition has no deadline/cancellation-aware wait."
+        },
+        {
+          "file": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+          "line": 1173,
+          "reason": "Writer retains this monitor across commit, dataset end and bounded qualification."
+        },
+        {
+          "file": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+          "line": 97,
+          "reason": "Readiness/delta proof uses the same capture path; its default begin callback has no ReadBoundary check."
+        },
+        {
+          "file": "infra/jena/command-module/src/main/java/com/rezics/jena/SearchDeltaJournal.java",
+          "line": 191,
+          "reason": "Default capture starts its READ transaction after monitor acquisition."
+        },
+        {
+          "file": "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadBoundaryTest.java",
+          "line": 36,
+          "reason": "SlowData is a transaction-memory fixture; engine work blocks using interruptible sleep, without a contended text publication monitor."
+        }
+      ],
+      "classReach": "Ordinary SPARQL reads on the text-backed dataset and native command capture consumers, including delta-readiness and exact-unit probes. The separate template engine watch does not repair capture-lock waiting.",
+      "outcomeImpact": "Departed readers can continue occupying native servlet capacity until publication finishes. A readiness capture may also begin its transaction after cancellation once the monitor becomes free. No unauthorized disclosure or executed regression is claimed.",
+      "whyExistingAssertionsDoNotDisprove": "RequestReadBoundaryTest exercises a SlowData engine fixture after query entry; it does not hold the real publication monitor or prove cleanup while a writer remains inside it. The composition case observes upstream proxy transports only.",
+      "recommendedRemediation": "Make publication/capture acquisition deadline- and cancellation-aware while preserving the atomic RDF/Lucene cut. Refuse the wait without starting a transaction or engine after expiry. Do not bypass or split the existing publication fence.",
+      "proposedFalsification": "Add a focused native case that holds the publication monitor longer than the grace, starts a real text-backed ordinary query or readiness capture, then expires or cancels it. Assert native request work exits within 300 ms while the holder is still held, no transaction/engine starts after departure, and an independent fresh read succeeds after release. This is a proposed follow-up, not an executed failure or a replacement for the manager prove selection.",
+      "executedFailingTest": null,
+      "assertionReached": false,
+      "workerFixRoundsConsumed": 0
+    }
+  ],
+  "invariantReview": [
+    {
+      "invariant": "Operation-wide entry and forwarded deadline",
+      "locations": [
+        {
+          "file": "services/main/src/app.ts",
+          "line": 349,
+          "reason": "Wraps eligible /v1 GET/HEAD and classified read POST before Elysia admission/preflight."
+        },
+        {
+          "file": "services/main/src/infrastructure/fuseki.ts",
+          "line": 103,
+          "reason": "Converts a positive safe-integer Unix deadline once to a monotonic remaining allocation; retains the shorter local cap."
+        },
+        {
+          "file": "services/main/src/infrastructure/fuseki.ts",
+          "line": 187,
+          "reason": "Checks monotonic expiry synchronously before work, even before an abort timer can run."
+        }
+      ],
+      "assessment": "Expired entry refuses before admission/graph work. Nested valid deadlines shorten the existing root, including active transports. Missing/malformed/distant headers cannot renew the local limit. The root closes escaped continuations on callback exit. Command/write classification and websocket upgrades are preserved."
+    },
+    {
+      "invariant": "One RPC/byte allocation across preflight, nested owners and retries",
+      "locations": [
+        {
+          "file": "services/main/src/infrastructure/fuseki.ts",
+          "line": 60,
+          "reason": "First declared owner selects its limits once after subtracting preflight cost; proxies retain parent state."
+        },
+        {
+          "file": "services/main/src/infrastructure/fuseki.ts",
+          "line": 291,
+          "reason": "Debit every ancestor only for remaining cost, preserving accessor-backed owners without double charging."
+        },
+        {
+          "file": "services/main/src/infrastructure/fuseki.ts",
+          "line": 486,
+          "reason": "Read streamed bytes under a bounded JSON/body reader and cancel the body on failure."
+        },
+        {
+          "file": "services/main/src/modules/work/read-session.ts",
+          "line": 491,
+          "reason": "Allocate outside the consistency retry loop; tighter ancestor signals/deadlines and local budgets survive."
+        }
+      ],
+      "assessment": "Siblings, plain scopes and accessor-backed owners cannot replenish RPC or response-byte balances. Cached graph inputs are checked before reuse. Every transport gets a shrinking native allocation independently of search diagnostics. Limits remain minima through query/search/notification owners; no allocation is reset on retry."
+    },
+    {
+      "invariant": "Hydration, readiness and final fences retain the operation",
+      "locations": [
+        {
+          "file": "services/main/src/modules/work/read-session.ts",
+          "line": 216,
+          "reason": "Checks activity before realm, source-author, child and principal/recovery authority fences."
+        },
+        {
+          "file": "services/main/src/modules/work/read-session.ts",
+          "line": 522,
+          "reason": "Checks before attempts, admission, reads, dependency/authority fences, closing graph fence and retry delay."
+        },
+        {
+          "file": "services/main/src/infrastructure/graph-read-fence.ts",
+          "line": 1,
+          "reason": "Replays only retained graph inputs; live SQL authority and closing graph-version validation remain outside replay."
+        },
+        {
+          "file": "services/main/src/modules/search/hydration.ts",
+          "line": 10,
+          "reason": "Own child cancellation and a 250 ms reserve bound optional card hydration."
+        },
+        {
+          "file": "services/main/src/modules/work/search-readiness.ts",
+          "line": 56,
+          "reason": "The 1500 ms search owner composes its local cap with the parent signal/allocation."
+        }
+      ],
+      "assessment": "The new checks cover retained-input paths as well as transport paths, and movement retries remain effect-free and share the original allocation. Optional hydration joins its sibling work and leaves disclosure/graph/recovery fences in place. Final SQL/authority operations are not all themselves interruptible transports; the pin prechecks and the pending combined proof must measure their real release."
+    },
+    {
+      "invariant": "Account admission, current authority and Request handoff",
+      "locations": [
+        {
+          "file": "services/main/src/modules/account/verify-assertion.ts",
+          "line": 40,
+          "reason": "Rejects a closed ambient operation and the original Request signal before accepting cached admission."
+        },
+        {
+          "file": "services/main/src/modules/account/verify-assertion.ts",
+          "line": 72,
+          "reason": "Request-keyed handoff is consumed once by a scoped read; retries verify again."
+        },
+        {
+          "file": "services/main/src/modules/account/verify-assertion.ts",
+          "line": 135,
+          "reason": "The verifier waits under the operation signal; the JWKS callback is itself bounded before signature verification resumes."
+        },
+        {
+          "file": "services/main/src/modules/account/verify-assertion.ts",
+          "line": 198,
+          "reason": "currentAssertion captures the operation signal and re-enters the same bounded verifier."
+        },
+        {
+          "file": "services/main/src/modules/account/verify-assertion.ts",
+          "line": 210,
+          "reason": "Shared JWKS refresh retains its independent lifetime and existing cache/backoff policy."
+        }
+      ],
+      "assessment": "With an open inbound connection, deadline expiry releases the individual waiter; caller abort uses the same boundary. A departed JWKS waiter cannot resume into later signature verification/introspection, while another waiter retains the shared refresh. Active introspection receives the composed signal and cancellation is rethrown before outage/denial mapping. Issuer/audience/lifetime, current session/subject, cnf, consent/scope and private/public authority checks remain in place. Escaped currentAssertion callbacks observe the root closure. Real Account storage/HTTP server release remains unmeasured here."
+    },
+    {
+      "invariant": "Coalesced rate-limit attribution is not authority",
+      "locations": [
+        {
+          "file": "services/main/src/modules/rate-limit/hook.ts",
+          "line": 52,
+          "reason": "The coalesced cache wait is wrapped by withFusekiReadWait under the current operation."
+        },
+        {
+          "file": "services/main/src/modules/rate-limit/principal-cache.ts",
+          "line": 51,
+          "reason": "Only the exact aborted original owner reason permits one direct retry with the surviving reader callback."
+        }
+      ],
+      "assessment": "Both first-owner and joining-waiter departure are handled. A surviving reader retries attribution at most once under its own ambient allocation. Its own cancellation stops retry; denials and unrelated outages are not retried. Token attribution caching does not become an operation authorization cache."
+    },
+    {
+      "invariant": "Typed refusal and bounded diagnostics",
+      "locations": [
+        {
+          "file": "services/main/src/modules/work/read-session.ts",
+          "line": 607,
+          "reason": "Budget failures retain causes; unavailable failures retain phase and attempt diagnostics."
+        },
+        {
+          "file": "services/main/src/modules/work/read-problems.ts",
+          "line": 1,
+          "reason": "Maps bounded failure to existing public problem statuses while logging detailed internal diagnostics."
+        },
+        {
+          "file": "services/main/src/infrastructure/fuseki.ts",
+          "line": 204,
+          "reason": "History/active diagnostics are bounded and retain phase/family/status/attempt."
+        }
+      ],
+      "assessment": "Budget exhaustion remains 422; deadline/cancellation remains unavailable rather than an authority denial. The Account regression checks admission-phase cause and attempt evidence. No response type, scope, revocation or privacy assertion was weakened."
+    },
+    {
+      "invariant": "Native ordinary/template cancellation and cleanup",
+      "locations": [
+        {
+          "file": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandModule.java",
+          "line": 67,
+          "reason": "Installs the native read boundary filter."
+        },
+        {
+          "file": "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+          "line": 76,
+          "reason": "Validates an optional 1..10000 ms allocation before servlet dispatch and registers Jetty transport failure cancellation."
+        },
+        {
+          "file": "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+          "line": 215,
+          "reason": "Watches ordinary QueryExec and closes it on failed registration."
+        },
+        {
+          "file": "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+          "line": 175,
+          "reason": "Retains read capture through lazy SELECT serialization and ends the read transaction in finally."
+        },
+        {
+          "file": "infra/jena/command-module/src/main/java/com/rezics/jena/TemplateQueryService.java",
+          "line": 141,
+          "reason": "Checks before preparation/candidates, limits engine time to the remaining boundary, watches execution and ends the dataset transaction in finally."
+        }
+      ],
+      "assessment": "Both engine APIs receive abort callbacks; boundary close cancels its scheduled task, clears its own interrupt and restores thread-local state. Native disconnect behavior and actual TDB2/Lucene cleanup still require execution. The publication-monitor wait is the source exception described in the finding."
+    },
+    {
+      "invariant": "Notification/query/search consumers and Web contract",
+      "locations": [
+        {
+          "file": "services/main/src/composition.ts",
+          "line": 242,
+          "reason": "Shares guarded Access/Content pool identities with notification readers."
+        },
+        {
+          "file": "services/main/src/modules/notification/request-budget.ts",
+          "line": 23,
+          "reason": "Races notification steps against the operation and prevents later subject/SQL reads."
+        },
+        {
+          "file": "services/main/src/modules/notification/store.ts",
+          "line": 759,
+          "reason": "Inbox subject work and final disclosure/recipient fences stay within notificationRead."
+        },
+        {
+          "file": "services/main/src/modules/notification/store.ts",
+          "line": 881,
+          "reason": "Unread scan uses the same step/final fences."
+        },
+        {
+          "file": "apps/web/features/api/server-fetch.ts",
+          "line": 125,
+          "reason": "Absolute operation deadline survives retries; forwarding uses the absolute timestamp, not a renewed duration."
+        },
+        {
+          "file": "apps/web/features/api/server-read.ts",
+          "line": 34,
+          "reason": "Composes request and caller signals and forwards the minimum request deadline."
+        },
+        {
+          "file": "apps/web/features/api/bff.ts",
+          "line": 299,
+          "reason": "BFF composes caller signals and reuses one absolute deadline for prereads and the final Main hop."
+        }
+      ],
+      "assessment": "Main consumes the forwarded absolute Unix deadline before admission and turns it into one monotonic boundary. Notification pools retire active SQL checkouts on cancellation; queued pool checkout cleanup happens once acquisition returns. Query/search owners keep their tighter local limits and use the common transport/accounting layer. This source trace is not proof that authenticated Web transport cancellation reaches real Account/native owners."
+    }
+  ],
+  "buildInputAlignment": {
+    "method": "Read-only reproduction of scripts/dev/fuseki-image.ts over pinned git blobs, including all non-stage COPY sources recursively; no generation, image build or native execution.",
+    "inputCount": 455,
+    "sha256": "7a9f8aae7f182b15952b6e1d312129e3305cbc5aba82810b560f9460afa90076",
+    "expectedTag": "rezics/fuseki:6.2.0-cmd0.5.43-7a9f8aae7f18",
+    "pinFiles": [
+      "infra/dev/compose.yaml",
+      "scripts/dev/release-manifest.ts",
+      "docs/development/toolchain.md"
+    ],
+    "allMatch": true,
+    "evidence": ".temp/request-budget-review/build-inputs.json",
+    "buildInputReach": "Native main/test source, copied query templates, generated model/profile/shapes, assemblers, owner/compact scripts, Thrift patch and Dockerfile all contribute; the seven-commit scope was not hashed in isolation from the pinned combined inputs.",
+    "moduleTestPolicy": "The module-test target runs Maven package with -DexcludedGroups=com.rezics.jena.ExternalFixture -DargLine=-Xmx384m -DforkCount=1 -DreuseForks=false. Runtime packaging with -DskipTests is not a native proof."
+  },
+  "assertionReach": [
+    {
+      "file": "services/main/tests/request-read-budget.test.ts",
+      "cases": 12,
+      "execution": "source-read-only",
+      "reach": "Plain/accessor/sibling/preflight calls and response bytes, root exhaustion, shrinking native headers, expired cached/no-start paths, public signal/no bearer, in-flight transport cancellation/fresh retry, typed phase/cause, shared retries and final dependency/authority fences.",
+      "limit": "Local HTTP and graph/authority fixtures; no real composition, Web, Account storage or native engine/locks. The HTTP cancellation case checks under 100 ms for its own local transport."
+    },
+    {
+      "file": "services/main/tests/request-read-budget-deadline.test.ts",
+      "cases": 15,
+      "execution": "source-read-only",
+      "reach": "Expired forwarded entry with/without ambient scope; partly spent 500 ms deadline across preflight, nested reads and consistency retry; distant headers, malformed/absent values, tighter ambient cap and shortening an already running parent.",
+      "limit": "Constructed Requests and local HTTP transport; header consumption tests do not execute the Web hop."
+    },
+    {
+      "file": "services/main/tests/request-read-budget-account.test.ts",
+      "cases": 17,
+      "execution": "source-read-only",
+      "exactNames": [
+        "an expired Main deadline starts no Account admission, introspection or graph work",
+        "%s releases the joining coalesced rate-limit admission without losing the other reader",
+        "%s releases the first coalesced rate-limit admission without losing the other reader",
+        "coalesced admission does not retry a denial or outage when its owner also closes",
+        "%s releases a shared-key waiter without cancelling another reader or starting later work",
+        "%s cancels active Account introspection before its default timeout and admits a fresh retry",
+        "a tighter ambient Main deadline also bounds Account waiting without a forwarded header",
+        "Account expiry retains the Work admission phase, typed cause and attempt diagnostics",
+        "%s bounds current-assertion authority rechecks without turning expiry into a denial",
+        "admission handoff keeps Request identity and cannot reuse a cached grant after cancellation",
+        "an authority assertion cannot escape its completed Main operation",
+        "current-session revocation and insufficient consent remain denials, with no graph disclosure"
+      ],
+      "parameters": "Each %s is deadline and caller cancellation.",
+      "reach": "Real verifier, signed JWTs, Elysia rate-limit hook and local HTTP; no-start expired admission, both positions of coalesced departure, no denial/outage retry, shared key waiter isolation with observed crypto verification calls, active introspection HTTP abort/fresh retry, bounded authority callbacks, handoff identity, revocation and scope privacy.",
+      "waiterAssertionMs": 500,
+      "limit": "The authority recheck case injects currentAssertion into the active-principal fixture; production Access.activePrincipalId itself checks Main SQL principal/recovery state. This proves callback bounding, not production real-Account recheck/storage release. The 500 ms waiter assertion cannot substitute for 100 ms composition or 300 ms native release."
+    },
+    {
+      "file": "tests/qa/integration/request-read-budget.test.ts",
+      "exactName": "composeMain rejects expired deadlines, closes cancelled nested public reads and admits a fresh retry",
+      "execution": "source-read-only",
+      "reach": "Expired forwarded deadline returns 503 with zero proxy-observed native starts; a 1500 ms live allocation is cancelled after nested work starts, active proxy transports reach zero at 100 ms, and no later work starts over the next 300 ms; fresh public 200/private 404 nondisclosure controls remain.",
+      "limit": "Uses in-process Main.handle Requests, anonymous public reads and media-support.ts bearer-table Account override. It cannot prove authenticated Web cancellation, real Account release or Jetty/native engine/lock cleanup."
+    },
+    {
+      "file": "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadBoundaryTest.java",
+      "execution": "source-read-only",
+      "methods": [
+        {
+          "name": "wallAllocationAbortsOrdinaryAndTemplateEnginesWithoutDiagnostics",
+          "reach": "Ordinary and template engines each receive a 1500 ms wall allocation without diagnostics, stop under the 1800 ms assertion, return non-200, and allow a fresh read."
+        },
+        {
+          "name": "clientCancellationReleasesNativeExecutionWithinGrace",
+          "reach": "Ordinary and template HTTP requests have a 10000 ms allocation, cancel after engine entry, finish within 300 ms with active engine count zero, then allow a fresh read."
+        },
+        {
+          "name": "invalidAllocationsNeverEnterTheEngine",
+          "reach": "Ordinary path rejects 0, 10001, -1, NaN and 1.5 with 400 and zero engine entry, then allows a fresh read."
+        }
+      ],
+      "limit": "Real servlet/HTTP plus an in-memory transactional SlowData engine using interruptible sleep. No contended publication/capture monitor, real TDB2/Lucene termination or exclusive-writer lock-release assertion. Invalid allocation coverage is ordinary-only; common filter implementation provides source parity, not a separately executed template assertion."
+    }
+  ],
+  "retainedWorkerEvidence": {
+    "handoff": ".temp/ref/request-budget-account-handoff.md",
+    "evidenceType": "retained worker report; not reviewer-executed or independently re-run",
+    "claimedPasses": 214,
+    "claimedFailures": 0,
+    "files": 21,
+    "ownerCases": 182,
+    "webCases": 32,
+    "latestQaRun": "20261018t224503-5e6de8",
+    "latestJob": "393e76d6-9c29-4330-aefb-bf7bc6d3e6ff",
+    "checksAt": "a8855ab1a7cdc7d782527aefd2b6e53899d77820",
+    "passingChecksClaimed": [
+      "guards",
+      "types",
+      "inference",
+      "lint",
+      "AST"
+    ],
+    "claimedLogs": [
+      ".artifacts/qa/20261018t224503-5e6de8/logs/owner.log",
+      ".artifacts/qa/20261018t224503-5e6de8/logs/unit.log",
+      ".temp/goal/check/run-Na5LaQ/output.log",
+      ".temp/goal/jobs/393e76d6-9c29-4330-aefb-bf7bc6d3e6ff.1.log",
+      ".temp/goal/jobs/393e76d6-9c29-4330-aefb-bf7bc6d3e6ff.5.log",
+      ".temp/goal/jobs/393e76d6-9c29-4330-aefb-bf7bc6d3e6ff.6.log"
+    ],
+    "claimedLogsAvailableInThisWorktree": false,
+    "acceptanceIdsPassed": 0,
+    "acceptanceIdsUncovered": 292,
+    "restriction": "These stack-free passes and checks are compatibility evidence reported by G-2762, not independent public outcome, mixed-reader, composition or native proof. The retained handoff is accessible; its original logs are not present in this isolated worktree."
+  },
+  "classDispositions": [
+    {
+      "id": "D5-001",
+      "retainedDisposition": "Main/Fuseki shared allocation, forwarded deadline, Account admission/rechecks and cancellation implemented; stack-free checks pass. Public/mixed/composition/native proof pending. The earlier direct-Main Account waiter gap is addressed.",
+      "reviewDisposition": "Source has bounded Main Account waiters; native monitor-wait source finding remains. No public class closure."
+    },
+    {
+      "id": "D5-002",
+      "retainedDisposition": "Parallel query-owner bounded discovery integrated; cost/cursor compatibility passes. Public discovery/mixed-load proof pending.",
+      "reviewDisposition": "Consumer compatibility reviewed; no independent public/mixed proof executed and no closure."
+    },
+    {
+      "id": "D5-003",
+      "retainedDisposition": "Parallel search-owner readiness integrated; compatibility passes. Public chapter-search/mixed-load proof pending.",
+      "reviewDisposition": "Readiness/hydration boundary traced; native capture cancellation gap applies. Public assertions remain pending."
+    },
+    {
+      "id": "AUD-001",
+      "retainedDisposition": "Parallel query-owner cursor behavior; stack-free compatibility passes, independent public traversal pending.",
+      "reviewDisposition": "Independent cursor round-trip, completeness, advancement and privacy assertions remain required."
+    },
+    {
+      "id": "D5-004",
+      "retainedDisposition": "Parallel refresh/diagnostic owner; independent public proof pending, no closure claimed here.",
+      "reviewDisposition": "Retain quiescent-refresh diagnostics/privacy control and the explicit unreached persistent-invalid-media assertion. No closure."
+    },
+    {
+      "id": "D5-006",
+      "retainedDisposition": "Parallel suggestion/rating owners; independent public proof pending, no closure claimed here.",
+      "reviewDisposition": "Preserve 8/9/10 official-Zone and 100/101/102 independent-principal controls across six personas. No closure."
+    }
+  ],
+  "unresolvedProductProof": {
+    "managerSelectionChanged": false,
+    "reason": "This task performs source review only. Required combined proof and wave merge remain separate manager decisions.",
+    "publicSuite": {
+      "retainedPath": ".temp/ref/bounded-read-outcome-spec.ts",
+      "exactNames": [
+        "D5-002 ${name}: legal default discovery returns a bounded page without private resources",
+        "AUD-001 ${name}: server cursors round-trip through a complete mixed-resource traversal",
+        "D5-003 ${name}: healthy chapter hits and exact no-match reads avoid foreground population qualification",
+        "D5-001 ${name}: inbox and unread count share a complete request allocation",
+        "D5-001 ${name}: personal admission and missing notification controls preserve privacy",
+        "D5-001 ${name}: leaving an inbox stops later subject reads and permits a fresh retry",
+        "D5-006: the ninth and tenth official Zones do not make six readers lose suggestions",
+        "D5-006: 100, 101 and 102 independently receipted ratings remain readable without revealing voters",
+        "D5-004 operator: quiescent refresh exposes deferred reasons without disclosing private scope identities"
+      ],
+      "personas": [
+        "visitor",
+        "stranger",
+        "member",
+        "owner",
+        "moderator",
+        "operator"
+      ],
+      "personaReach": "Preserve visitor 401/no-items controls in inbox and personal-admission cases. Positive inbox allocation and the leaving-inbox cancellation/fresh-retry cases cover the five signed-in personas.",
+      "independentSupportAssertions": "Preserve all assertions: costs/bytes/deadlines, nonempty legal discovery, private Work/Realm exclusion, complete/cursor equivalence and exact/at-least count, duplicate-free advancing traversal through complete book/Realm inclusion, healthy hit/exact no-match/private phrase and graph-advance controls with zero population audit, own/missing/alien inbox privacy, 100 ms cancellation grace plus 300 ms no-later-work and fresh retry, suggestion population bounds/privacy, exact rating counts/mean/completeness/budget and no voter identities, hashed refresh scope keys/allowed reasons/no private scope identities.",
+      "baselineCaveat": "The staged corpus recipe embeds a historical baseline value 7df2e285d3199c32b4e61c08c33ba9c25afaaa21. It is not evidence that the mandated 69eac3ceeaf885be70205a70248bc951e9d81cc9 product baseline was executed; manager proof must record the actual baseline/fixed revisions and preparation/admission separately. The staged assertions were not edited."
+    },
+    "mixedReaders": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "authenticatedCrossHop": "Prove authenticated Web-to-Main cancellation delivery and real Account admission/current-authority recheck release on the combined pin. Include deadline expiry while the inbound connection remains open during JWKS/introspection/recheck, caller cancellation, an unaffected concurrent shared-refresh waiter and a fresh retry. Measure Account-server work release rather than only local waiter settlement.",
+    "composition": {
+      "file": "tests/qa/integration/request-read-budget.test.ts",
+      "exactName": "composeMain rejects expired deadlines, closes cancelled nested public reads and admits a fresh retry",
+      "required": "Zero native starts on expiry; cancellation before forwarded 1500 ms deadline during nested work; bounded native allocations; proxy transport release within 100 ms; 300 ms without later work; fresh public 200/private 404."
+    },
+    "native": {
+      "file": "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadBoundaryTest.java",
+      "methods": [
+        "wallAllocationAbortsOrdinaryAndTemplateEnginesWithoutDiagnostics",
+        "clientCancellationReleasesNativeExecutionWithinGrace",
+        "invalidAllocationsNeverEnterTheEngine"
+      ],
+      "cancellationReleaseMs": 300,
+      "completeModuleTest": {
+        "file": "infra/jena/tests/native-module-suite.test.ts",
+        "exactName": "the complete native module suite passes at the pinned build inputs"
+      },
+      "gap": "Proxy release cannot prove native engine/transaction/lock release. Existing SlowData cases do not settle the publication-monitor source finding; a manager-authorized targeted contention proof/remediation is proposed in addition to the unchanged selection."
+    },
+    "authorityCompatibility": {
+      "file": "services/main/tests/account-assertion.integration.test.ts",
+      "exactName": "IAM02/IAM10 partial: signed Account token needs current enforcement"
+    },
+    "otherReview": "G-2804 separate Web source review is still independently required and is not cross-hop execution evidence.",
+    "landing": "No individual implementation landing or outcome confirmation. Manager decides report handoff, remediation, combined proof and wave merge."
+  },
+  "checksActuallyExecuted": [
+    {
+      "check": "Pinned git source/commit comparison and report-branch ancestry inspection",
+      "result": "pass",
+      "reach": "All seven exact commits and all 20 named changed files were identified; task branch began clean on committed main ancestry. No wave files imported."
+    },
+    {
+      "check": "Pinned native COPY-input digest reproduction",
+      "result": "pass",
+      "reach": "455 git-blob inputs produce the same expected image tag in Compose, release manifest and toolchain documentation. No native build or test executed.",
+      "evidence": ".temp/request-budget-review/build-inputs.json"
+    },
+    {
+      "check": "JSON parse, exact scope/blob/path/line bounds and commit ancestry validation",
+      "result": "pass",
+      "reach": "7 commits, 20 pinned changed blobs, all cited repository owner paths and source line ranges. No implementation execution."
+    }
+  ],
+  "reportDeliveryChecks": {
+    "status": "pending",
+    "required": [
+      "task docs:check",
+      "task goal -- check"
+    ],
+    "recordedJobCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check"
+  },
+  "retainedEvidence": [
+    ".temp/ref/request-budget-findings.json",
+    ".temp/ref/bounded-read-outcome-spec.ts",
+    ".temp/ref/request-budget-account-handoff.md",
+    ".temp/request-budget-review/build-inputs.json"
+  ],
+  "changeScope": {
+    "onlyClaimedReport": "docs/goals/audit-remediation-20261019/request-budget-review.json",
+    "sourceTestsAssertionsOtherReportsOrHandoffChanged": false,
+    "ownerChanges": [],
+    "stackBrowserNativeHeavyPublicBaselineFixedSharedRefreshOrCorpusPreparationExecuted": false
+  },
+  "retainedReferenceDigests": [
+    {
+      "path": ".temp/ref/request-budget-findings.json",
+      "sha256": "c558bb25c502ad78739882a56911808ed02a145e0a2acfad0ca8c2623fa99bdb"
+    },
+    {
+      "path": ".temp/ref/bounded-read-outcome-spec.ts",
+      "sha256": "8759937aedcc3816db457a7ccb1b965bbe4fb5db57b5d497216c9e3e0edcfc4f"
+    },
+    {
+      "path": ".temp/ref/request-budget-account-handoff.md",
+      "sha256": "a1cff11f1b3c8d6460f85cdefbe4b43779125ca2f1881e44e6bdaffefa7bfc93"
+    }
+  ]
+}
