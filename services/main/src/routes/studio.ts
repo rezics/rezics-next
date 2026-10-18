@@ -33,6 +33,7 @@ const item = t.Object({ id: readId, mainVersion: readId, workRevision: readId,
   cover: readAvatar, types: t.Array(t.String()),
   disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]),
   state: t.Union([t.Literal('empty'), t.Literal('draft'), t.Literal('published')]),
+  chapterCount: t.Nullable(t.Object({ value: t.Integer({ minimum: 0 }), complete: t.Boolean() })),
   texts: t.Array(text, { maxItems: 200 }), submissions: t.Array(submission, { maxItems: 200 }),
   createdAt: t.String(), updatedAt: t.String() });
 const page = t.Object({ items: t.Array(item, { maxItems: 20 }), ...pageFields });
@@ -58,9 +59,9 @@ export function studioRoutes(work: MainWorkDependencies) {
     query: t.Object({ state: t.Optional(t.Union([t.Literal('empty'), t.Literal('draft'),
       t.Literal('published')])), type: t.Optional(workType),
     view: t.Optional(t.Union([t.Literal('authored'), t.Literal('curated')])),
-    /** Case-insensitive title search over the inventory, including subsequent candidate pages. */
-    q: t.Optional(t.String({ maxLength: 200 })),
-    sort: t.Optional(t.Union([t.Literal('updated'), t.Literal('newest'), t.Literal('oldest')])),
+    // The owner validates scalar length after authority, returning invalid_read.
+    q: t.Optional(t.String({ description: 'NFKC title substring, at most 200 Unicode scalar values.' })),
+    sort: t.Optional(t.Union([t.Literal('recent'), t.Literal('created'), t.Literal('title')])),
     limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
     cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) },
     { additionalProperties: false }),

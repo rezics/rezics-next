@@ -55,16 +55,13 @@ test.each([
     .toBeGreaterThan(0);
 });
 
-// Studio's renderer receives a page and its navigation separately. Its count
-// traversal consumes every parent/cursor or explicitly reports a lower bound.
+// Studio's renderer receives an owner page and its navigation separately.
 // These exact exceptions must stop applying when either flow changes.
 test.each([
-  ['apps/web/features/studio/inventory-counts.ts', 'if (page.nextCursor) pending.push', 'if (false) pending.push'],
-  ['apps/web/features/studio/inventory-counts.ts', 'maxPages = 20', 'maxPages = 1'],
   ['apps/web/features/studio/read.ts', 'page: { ...page.data, items }', 'page: { ...page.data, items, nextCursor: null }'],
   ['apps/web/features/studio/studio-home.tsx', '{moreHref ? <Link', '{false ? <Link'],
   ['apps/web/app/[locale]/studio/[agent]/page.tsx', 'validCursor(query.cursor)', 'validCursor(query.cursor + "suffix")'],
-] as const)('Studio continuation evidence rejects dropped traversal or navigation: %s / %s', (path, before, after) => {
+] as const)('Studio continuation evidence rejects dropped owner continuation or navigation: %s / %s', (path, before, after) => {
   const original = readFileSync(join(root, path), 'utf8');
   expect(original).toContain(before);
   expect(changedContinuationGroups(continuationInventory([source(original, path)]), accepted.violations)).toEqual([]);

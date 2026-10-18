@@ -40,7 +40,6 @@ export const Works: Story = {
     await expect(items[0]).toHaveTextContent('Public');
     await userEvent.click(within(items[0]!).getByText('Details'));
     await expect(within(items[0]!).getByText(/Book · .*Chinese/)).toBeVisible();
-    await expect(within(items[0]!).getByText('2 published')).toBeVisible();
     // Studio names each kind as the catalogue does: a DigitalDocument is a Guide.
     await expect(items[1]).toHaveTextContent(/Guide · English/);
     await expect(items[2]).toHaveTextContent(/Recipe · English/);
@@ -86,7 +85,7 @@ export const Curated: Story = {
 
 export const DraftsEmpty: Story = {
   args: { content: { view: 'draft', works: { ok: true, data: { ...inventory, page: { ...inventory.page, items: [] },
-    books: {} } } } },
+    } } } },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByText(/No drafts/)).toBeInTheDocument();
   },
@@ -95,7 +94,7 @@ export const DraftsEmpty: Story = {
 /** A new writer: nothing to list yet, and one clear way to start. */
 export const Empty: Story = {
   args: { content: { view: 'all', works: { ok: true, data: { ...inventory, page: { ...inventory.page, items: [] },
-    books: {} } } } },
+    } } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Your Studio is ready' })).toBeInTheDocument();
@@ -160,10 +159,10 @@ const largeItems = Array.from({ length: 105 }, (_, index) => ({ ...inventory.pag
     : index % 2 ? `雨夜里的第${index + 1}间书店，与一封写给未来的长信 · Letters to Tomorrow`
       : `The Cartographer of Tides: an unfinished atlas of distant shores — Volume ${index + 1}`, language: 'en' },
 }));
-const query = { q: '', sort: 'updated' as const };
+const query = { q: '', sort: 'recent' as const };
 export const LargeInventory: Story = {
   args: { content: { view: 'all', works: { ok: true, data: {
-    page: { ...inventory.page, items: largeItems.slice(0, 20), nextCursor: 'page-two' }, books: {},
+    page: { ...inventory.page, items: largeItems.slice(0, 20), nextCursor: 'page-two' },
   } } }, query, moreHref: inventoryAddress(home, 'all', query, 'page-two') },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -176,9 +175,9 @@ export const LargeInventory: Story = {
       inventoryAddress(home, 'all', query, 'page-two'));
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     await userEvent.click(sort);
-    await chooseOption(within(document.body), 'Oldest first');
-    await expect(sort).toHaveTextContent('Oldest first');
-    await expect(new FormData(canvas.getByRole('search') as HTMLFormElement).get('sort')).toBe('oldest');
+    await chooseOption(within(document.body), 'Title');
+    await expect(sort).toHaveTextContent('Title');
+    await expect(new FormData(canvas.getByRole('search') as HTMLFormElement).get('sort')).toBe('title');
   },
 };
 
@@ -187,25 +186,25 @@ export const LargeInventoryPhone: Story = { ...LargeInventory, globals: { viewpo
 /** An owner-filtered result beyond page five, reopened with its address conditions intact. */
 export const LocatedWork: Story = {
   args: { content: { view: 'all', works: { ok: true, data: {
-    page: { ...inventory.page, items: [largeItems[104]!] }, books: {},
-  } } }, query: { q: '寻回最后一部作品', sort: 'oldest' } },
+    page: { ...inventory.page, items: [largeItems[104]!] },
+  } } }, query: { q: '寻回最后一部作品', sort: 'title' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const form = canvas.getByRole('search', { name: 'Find by title' });
     await expect(form).toHaveAttribute('method', 'get');
     await expect(canvas.getByRole('searchbox', { name: 'Find by title' })).toHaveValue('寻回最后一部作品');
-    await expect(canvas.getByRole('combobox', { name: 'Sort works' })).toHaveTextContent('Oldest first');
-    await expect(new FormData(form as HTMLFormElement).get('sort')).toBe('oldest');
+    await expect(canvas.getByRole('combobox', { name: 'Sort works' })).toHaveTextContent('Title');
+    await expect(new FormData(form as HTMLFormElement).get('sort')).toBe('title');
     await expect(canvas.getByRole('link', { name: 'Drafts' })).toHaveAttribute('href',
-      inventoryAddress(home, 'draft', { q: '寻回最后一部作品', sort: 'oldest' }));
+      inventoryAddress(home, 'draft', { q: '寻回最后一部作品', sort: 'title' }));
     await expect(canvas.getByRole('heading', { name: largeItems[104]!.title.value })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Clear search' })).toHaveAttribute('href',
-      inventoryAddress(home, 'all', { q: '', sort: 'oldest' }));
+      inventoryAddress(home, 'all', { q: '', sort: 'title' }));
   },
 };
 
 export const NoMatches: Story = {
-  args: { query: { q: 'Missing title', sort: 'updated' },
+  args: { query: { q: 'Missing title', sort: 'recent' },
     content: { view: 'all', works: { ok: true, data: { ...inventory, page: { ...inventory.page, items: [] } } } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -217,8 +216,8 @@ export const NoMatches: Story = {
 
 export const SearchContinuation: Story = {
   ...NoMatches,
-  args: { ...NoMatches.args, firstHref: inventoryAddress(home, 'all', { q: 'Missing title', sort: 'updated' }),
-    moreHref: inventoryAddress(home, 'all', { q: 'Missing title', sort: 'updated' }, 'next-candidates'),
+  args: { ...NoMatches.args, firstHref: inventoryAddress(home, 'all', { q: 'Missing title', sort: 'recent' }),
+    moreHref: inventoryAddress(home, 'all', { q: 'Missing title', sort: 'recent' }, 'next-candidates'),
     content: { view: 'all', works: { ok: true, data: {
       ...inventory, page: { ...inventory.page, items: [], nextCursor: 'next-candidates' },
     } } } },
@@ -234,18 +233,16 @@ export const SearchContinuation: Story = {
 
 export const IncompleteCounts: Story = {
   args: { content: { view: 'all', works: { ok: true, data: { ...inventory,
-    page: { ...inventory.page, items: [inventory.page.items[0]!, { ...inventory.page.items[0]!, id: 'other-book' }] },
-    books: { [inventory.page.items[0]!.id]: { count: 0, more: true, published: 0 },
-      'other-book': { count: 24, more: true, published: 3 } },
+    page: { ...inventory.page, items: [
+      { ...inventory.page.items[0]!, chapterCount: { value: 0, complete: false } },
+      { ...inventory.page.items[0]!, id: 'other-book', chapterCount: { value: 24, complete: false } },
+    ] },
   } } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Chapter count unavailable')).toBeVisible();
     await expect(canvas.getByText('At least 24 chapters')).toBeVisible();
     await expect(canvas.queryByText('0 chapters')).toBeNull();
-    const items = within(canvas.getByRole('region', { name: 'All works' })).getAllByRole('listitem');
-    await userEvent.click(within(items[1]!).getByText('Details'));
-    await expect(canvas.getByText('At least 3 published')).toBeVisible();
   },
 };
 
@@ -255,8 +252,8 @@ export const LifecycleStates: Story = {
       { ...inventory.page.items[0]!, texts: inventory.page.items[0]!.texts.map(text => ({ ...text, draftHead: 'new-draft' })),
         submissions: inventory.page.items[0]!.submissions.map(item => ({ ...item, state: 'changes-requested' })) },
       inventory.page.items[1]!, { ...inventory.page.items[0]!, id: 'empty-book', state: 'empty', texts: [],
-        disclosure: 'restricted', submissions: [] },
-    ] }, books: { ...inventory.books, 'empty-book': { count: 0, more: false, published: 0 } },
+        disclosure: 'restricted', submissions: [], chapterCount: { value: 0, complete: true } },
+    ] },
   } } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
