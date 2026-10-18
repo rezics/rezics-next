@@ -21,7 +21,7 @@ export function workTitle(work: Pick<CatalogueWork, 'id' | 'title'>, locale: UiL
  * out of the tab order and the accessibility tree; the title is the one stop.
  */
 export function CoverLink({ work, avatarQuery, size, className, children, locale, showCredit = true }: {
-  work: CatalogueWork; avatarQuery?: string; size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'fill'; className?: string;
+  work: CatalogueWork; avatarQuery?: string; size?: 'xs' | 'sm' | 'md' | 'preview' | 'lg' | 'xl' | 'fill'; className?: string;
   children?: ReactNode;
   locale?: UiLocale; showCredit?: boolean;
 }) {
@@ -42,10 +42,10 @@ export function CoverLink({ work, avatarQuery, size, className, children, locale
  * around it, the title in the Work-title face, authors in grey and a compact
  * rating. The shelf control sits on the cover's corner.
  */
-export function WorkTile({ work, slot = 2 / 3, headingLevel = 3, avatarQuery, locale, titleStart, titleEnd,
+export function WorkTile({ work, headingLevel = 3, avatarQuery, locale, titleStart, titleEnd,
   className }: {
   work: CatalogueWork;
-  /** The row's tallest cover proportion; shorter covers stand on its foot so titles line up. */
+  /** @deprecated Covers use their own proportions; retained for existing Zone and library adapters. */
   slot?: number;
   headingLevel?: 2 | 3 | 4;
   avatarQuery?: string;
@@ -64,12 +64,10 @@ export function WorkTile({ work, slot = 2 / 3, headingLevel = 3, avatarQuery, lo
   const title = workTitle(work, locale);
   const unfinished = work.completion === 'ongoing' || work.completion === 'hiatus';
   // Relative, so screen-reader-only text stays inside a scrolling row rather than widening the page.
-  return <article className={cn('group/tile relative flex min-w-0 flex-col', className)}>
-    <div className="relative w-full" style={{ aspectRatio: String(slot) }}>
-      <CoverLink work={work} avatarQuery={avatarQuery} showCredit={false} className="absolute inset-x-0 bottom-0 w-full">
-        <ShelfMark work={work.id} title={title} locale={locale} />
-      </CoverLink>
-    </div>
+  return <article className={cn('group/tile relative flex w-full min-w-0 max-w-32 flex-col', className)}>
+    <CoverLink work={work} avatarQuery={avatarQuery} size="preview" showCredit={false}>
+      <ShelfMark work={work.id} title={title} locale={locale} />
+    </CoverLink>
     <CatalogueCoverCredit work={work} avatarQuery={avatarQuery} locale={locale} className="mt-1.5" />
     <div className="mt-3 flex min-w-0 items-start gap-1.5">
       {titleStart}

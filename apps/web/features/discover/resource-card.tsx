@@ -49,8 +49,9 @@ function IdentityCard({ item, avatarQuery, label, icon: Icon, person = false, he
   label: string; icon?: LucideIcon; person?: boolean;
 }) {
   const Heading = `h${headingLevel}` as const;
-  return <article className="min-w-0">
-    <Link href={browseResourceHref(item)} className="flex min-w-0 items-start gap-3 rounded-2xl border
+  return <article className="@container min-w-0">
+    <Link href={browseResourceHref(item)} className="flex min-w-0 flex-col items-start gap-3 rounded-2xl border
+      @min-[14rem]:flex-row
       border-border/70 bg-card p-4 outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring">
       {Icon && item.icon.kind === 'fallback' ? <span aria-hidden="true" className={cn(
         'grid size-9 shrink-0 place-items-center bg-muted text-muted-foreground',
@@ -58,7 +59,7 @@ function IdentityCard({ item, avatarQuery, label, icon: Icon, person = false, he
         : <CommunityIcon icon={item.icon} name={item.name.value} person={person} size="md"
           avatarQuery={avatarQuery} />}
       <div className="grid min-w-0 gap-1">
-        <p className="text-muted-foreground text-xs">{label}</p>
+        <p className="break-words text-muted-foreground text-xs">{label}</p>
         <Heading className="break-words font-medium text-sm/snug">
           <bdi lang={item.name.language} dir={item.name.direction}>{item.name.value}</bdi>
         </Heading>

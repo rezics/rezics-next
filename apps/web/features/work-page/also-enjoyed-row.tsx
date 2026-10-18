@@ -5,7 +5,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { type CatalogueWork, slotRatio } from '../catalogue/work.ts';
+import type { CatalogueWork } from '../catalogue/work.ts';
 import { WorkTile } from '../catalogue/work-tile.tsx';
 import { messages } from './messages.ts';
 
@@ -37,8 +37,8 @@ const arrow = cn('absolute top-[38%] z-30 hidden size-11 -translate-y-1/2 place-
   'disabled:opacity-0 sm:pointer-fine:grid');
 
 /**
- * Goodreads' "Readers also enjoyed": four large covers to a page on a wide
- * screen, each with its title, authors and "★ 4.26 · 41.9K", paged by a
+ * Goodreads' "Readers also enjoyed": browse previews, each with its title,
+ * authors and "★ 4.26 · 41.9K", paged by a
  * round arrow and the dots above. Phones swipe, with the next cover peeking
  * in; the dots follow along. Every title is a link in the tab order, and a
  * focused one scrolls into view.
@@ -76,7 +76,6 @@ export function AlsoEnjoyedRow({ id, title, works, avatarQuery, locale }: {
     const left = Math.min(page * paging.perPage * stride(element).stride, element.scrollWidth - element.clientWidth);
     element.scrollTo({ left: direction * Math.max(0, left), behavior: scrollBehavior() });
   };
-  const slot = slotRatio(works);
   return <section aria-labelledby={id} className="grid min-w-0 grid-cols-1 gap-4">
     <header className="flex items-center justify-between gap-4">
       <h2 id={id} className="text-balance font-semibold text-xl tracking-tight">{title}</h2>
@@ -94,10 +93,9 @@ export function AlsoEnjoyedRow({ id, title, works, avatarQuery, locale }: {
     <div className="relative min-w-0">
       {/* min-w-0 keeps the row's scroll width from widening the page's grid. */}
       <ul ref={list} onScroll={measure} className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-x-4 overflow-x-auto
-        px-4 pt-1 pb-2 scrollbar-none sm:-mx-1 sm:scroll-px-1 sm:gap-x-6 sm:px-1">
-        {works.map(work => <li key={work.id} className="w-[42%] shrink-0 snap-start sm:w-[calc((100%-2*1.5rem)/3.35)]
-          lg:w-[calc((100%-3*1.5rem)/4)]">
-          <WorkTile work={work} slot={slot} avatarQuery={avatarQuery} locale={locale} />
+        px-4 pt-1 pb-2 scrollbar-none sm:-mx-1 sm:scroll-px-1 sm:px-1">
+        {works.map(work => <li key={work.id} className="w-32 max-w-full shrink-0 snap-start">
+          <WorkTile work={work} avatarQuery={avatarQuery} locale={locale} />
         </li>)}
       </ul>
       <button type="button" aria-label={t.previousPage} onClick={() => show(paging.page - 1)} disabled={paging.start}
