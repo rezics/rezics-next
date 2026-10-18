@@ -10,6 +10,7 @@ import { readSearchDecisionSupports } from './search-supports.ts';
 import { readWorkBasis, fenceWorkBasis } from './read-header.ts';
 import { readMetadataRelevance } from './metadata-read.ts';
 import { admittedReadPosition } from '../read-basis/admitted-position.ts';
+import { invalidWorkReadSource } from './read-source-fault.ts';
 import {
   decodeReadCursor,
   encodeReadCursor,
@@ -133,7 +134,7 @@ async function readSelectedWorkClassificationBatch(
       !row.concept ||
       own.some((prior) => prior.sense!.value === row.sense!.value)
     ) {
-      throw new WorkReadUnavailable('Classification candidates are ambiguous');
+      throw invalidWorkReadSource('Classification candidates are ambiguous');
     }
     own.push(row);
   }
@@ -278,7 +279,7 @@ export async function readPublicWorkClassifications(
     new Set(rows.map((row) => row.work?.value)).size !== rows.length ||
     rows.some((row) => !row.work || !row.main || !unique.includes(row.work.value))
   ) {
-    throw new WorkReadUnavailable('Classification Work bases are ambiguous');
+    throw invalidWorkReadSource('Classification Work bases are ambiguous');
   }
   const summaries = new Map((await session.summaries(unique)).map((row) => [row.reference, row]));
   const targets = rows

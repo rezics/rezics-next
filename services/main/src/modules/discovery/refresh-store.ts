@@ -38,6 +38,7 @@ export const DISCOVERY_REFRESH_COST = {
   recoveryMs: 10_000,
   retryMs: 30_000,
   maximumRetryMs: 300_000,
+  probeMs: 30_000,
   localStatements: 160,
   localGraphCalls: 12,
   irrelevantStatements: 50,
@@ -55,6 +56,26 @@ export interface RefreshJob {
   generation_id: string | null;
   lease_epoch: string;
   attempts?: string;
+  quarantine_basis?: RefreshSourceBasis | null;
+  quarantine_reason?: RefreshDisposition['reason'] | null;
+  last_outcome?: string | null;
+  last_error?: string | null;
+}
+export interface RefreshSourceBasis extends ReadPosition {
+  graphVersion: string | null;
+  accessRevision: string;
+  recoveryGeneration: string;
+  sourceProfile: string;
+}
+export interface RefreshDisposition {
+  basis: RefreshSourceBasis;
+  reason: 'basis-invalid' | 'basis-unavailable' | 'inactive';
+  error: string;
+}
+export function discoveryRefreshSourceChanged(left: RefreshSourceBasis, right: RefreshSourceBasis) {
+  return left.dataEpoch !== right.dataEpoch || left.sequence !== right.sequence ||
+    left.graphVersion !== right.graphVersion || left.accessRevision !== right.accessRevision ||
+    left.recoveryGeneration !== right.recoveryGeneration || left.sourceProfile !== right.sourceProfile;
 }
 export function discoveryRetryDelay(attempts = '1'): number {
   return Math.min(
@@ -87,7 +108,9 @@ export const discoveryGenerationCurrent = (
  * SKIP LOCKED is queue-only: https://www.postgresql.org/docs/18/sql-select.html
  * (reviewed 2026-09-28). Dataset correctness still uses the owner source fences. */
 export class DiscoveryRefreshStore {
-  constructor(private readonly pool: Pool) {}
+  // The queue clock is injectable for lease/backoff composition tests. Ordinary
+  // workers use database time; retirement and source owners keep their clocks.
+  constructor(private readonly pool: Pool, private readonly clock?: () => Date) {}
 
   async purge(): Promise<number> {
     return inAccess(this.pool, async (client) => {
@@ -196,8 +219,9 @@ export class DiscoveryRefreshStore {
       return (
         (
           await client.query<{ checkpoint: string }>(`UPDATE access.discovery_refresh_catalog
-        SET due_at = clock_timestamp() + interval '30 seconds' WHERE id AND due_at <= clock_timestamp()
-        RETURNING checkpoint`)
+        SET due_at = coalesce($1::timestamptz,clock_timestamp()) + interval '30 seconds'
+        WHERE id AND due_at <= coalesce($1::timestamptz,statement_timestamp())
+        RETURNING checkpoint`, [this.clock?.() ?? null])
         ).rows[0]?.checkpoint ?? null
       );
     });
@@ -208,8 +232,8 @@ export class DiscoveryRefreshStore {
       await requireRecoveryOpen(client);
       await client.query(
         `UPDATE access.discovery_refresh_catalog SET checkpoint = $2,
-        due_at = clock_timestamp() + interval '5 seconds' WHERE id AND checkpoint = $1`,
-        [checkpoint, after],
+        due_at = coalesce($3::timestamptz,clock_timestamp()) + interval '5 seconds' WHERE id AND checkpoint = $1`,
+        [checkpoint, after, this.clock?.() ?? null],
       );
     });
   }
@@ -217,37 +241,72 @@ export class DiscoveryRefreshStore {
   async claim(background = false): Promise<RefreshJob | null> {
     return inAccess(this.pool, async (client) => {
       await requireRecoveryOpen(client);
+      const now = this.clock?.() ?? null;
+      const probe = async () => (
+        await client.query<RefreshJob>(
+          `WITH budget AS MATERIALIZED (
+          UPDATE access.discovery_refresh_catalog
+          SET probe_due_at=coalesce($2::timestamptz,clock_timestamp())+make_interval(secs=>$1::double precision/1000)
+          WHERE id AND probe_due_at<=coalesce($2::timestamptz,statement_timestamp()) RETURNING id
+        ), candidate AS (
+          SELECT j.scope_key FROM access.discovery_refresh j CROSS JOIN budget
+          WHERE j.quarantine_basis IS NOT NULL AND j.due_at<=coalesce($2::timestamptz,statement_timestamp())
+          ORDER BY j.due_at,j.scope_key LIMIT 1 FOR UPDATE OF j SKIP LOCKED
+        ) UPDATE access.discovery_refresh j
+        SET due_at=coalesce($2::timestamptz,clock_timestamp())+interval '30 seconds',lease_epoch=j.lease_epoch+1
+        FROM candidate WHERE j.scope_key=candidate.scope_key
+        RETURNING j.*,j.lease_epoch::text,j.attempts::text`,
+          [DISCOVERY_REFRESH_COST.probeMs, now],
+        )
+      ).rows[0] ?? null;
+      // A finite foreground burst also gives probes a turn under continuous
+      // ordinary work. Empty probes consume the allowance, not graph reads.
+      if (background) {
+        const claimed = await probe();
+        if (claimed) return claimed;
+      }
       for (const priority of background ? [1, 0] : [0, 1]) {
         const claimed = (
           await client.query<RefreshJob>(
             `UPDATE access.discovery_refresh j
-        SET due_at = clock_timestamp() + interval '30 seconds', lease_epoch = j.lease_epoch + 1,
+        SET due_at = coalesce($2::timestamptz,clock_timestamp()) + interval '30 seconds', lease_epoch = j.lease_epoch + 1,
           attempts = attempts + 1
-        FROM (SELECT scope_key FROM access.discovery_refresh WHERE priority=$1 AND due_at <= statement_timestamp()
+        FROM (SELECT scope_key FROM access.discovery_refresh WHERE priority=$1 AND quarantine_basis IS NULL AND due_at <= coalesce($2::timestamptz,statement_timestamp())
           ORDER BY due_at, scope_key LIMIT 1 FOR UPDATE SKIP LOCKED) candidate
         WHERE j.scope_key = candidate.scope_key RETURNING j.*, j.lease_epoch::text, j.attempts::text`,
-            [priority],
+            [priority, now],
           )
         ).rows[0];
         if (claimed) return claimed;
       }
-      return null;
+      return background ? null : probe();
     });
   }
 
   /** `access` names the folded revision and the judged Statements after the
    * active generation's Access basis that reach this population. */
-  async inspect(job: RefreshJob, position: ReadPosition) {
-    return inAccess(this.pool, async (client) => {
+  async inspect(job: RefreshJob, position: ReadPosition, graphVersion: string | null = null) {
+    let rearmed = false;
+    const inspected = await inAccess(this.pool, async (client) => {
       // Folding first gives every committed change its key and revision. A
       // fold locks the fence row until this transaction ends; writers never do.
-      await foldSourceFence(client);
+      const fence = await foldSourceFence(client);
       const held = await client.query(
         `SELECT scope_key FROM access.discovery_refresh
-        WHERE scope_key = $1 AND lease_epoch = $2 AND due_at > clock_timestamp() FOR UPDATE`,
-        [job.scope_key, job.lease_epoch],
+        WHERE scope_key = $1 AND lease_epoch = $2 AND due_at > coalesce($3::timestamptz,clock_timestamp()) FOR UPDATE`,
+        [job.scope_key, job.lease_epoch, this.clock?.() ?? null],
       );
       if (!held.rowCount) throw new RecommendationStale('Refresh lease changed');
+      const sourceBasis: RefreshSourceBasis = { dataEpoch: position.dataEpoch, sequence: position.sequence,
+        graphVersion, accessRevision: fence.revision, recoveryGeneration: fence.generation,
+        sourceProfile: DISCOVERY_SOURCE_PROFILE };
+      if (job.quarantine_basis) {
+        if (!discoveryRefreshSourceChanged(job.quarantine_basis, sourceBasis))
+          return { fresh: false, row: null, principal: null, quarantined: true, sourceBasis };
+        await client.query(`UPDATE access.discovery_refresh SET quarantine_basis=NULL,quarantine_reason=NULL,last_error=NULL,attempts=1
+          WHERE scope_key=$1 AND lease_epoch=$2`, [job.scope_key, job.lease_epoch]);
+        rearmed = true;
+      }
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
         `discovery:${job.scope_key}`,
       ]);
@@ -269,7 +328,7 @@ export class DiscoveryRefreshStore {
               [job.basis.owner],
             )
           ).rows[0] ?? null;
-        if (!principal) return { fresh: false, row: null, principal: null, inactive: true };
+        if (!principal) return { fresh: false, row: null, principal: null, inactive: true, sourceBasis };
       }
       const since = prior
         ? await sourceChangesWithin(
@@ -280,7 +339,7 @@ export class DiscoveryRefreshStore {
           )
         : null;
       if (prior && since && discoveryGenerationCurrent(prior, position, since)) {
-        return { fresh: true, row: null, principal };
+        return { fresh: true, row: null, principal, sourceBasis };
       }
       const access = since ? { revision: since.revision, statements: since.statements } : null;
       const pending = (
@@ -314,7 +373,7 @@ export class DiscoveryRefreshStore {
           await repairAbandonedDiscoveryVersion(client, reuse);
           if (!(await discoveryStorageReusable(client, reuse))) reuse = null;
         }
-        return { fresh: false, row: null, principal, reuse, access };
+        return { fresh: false, row: null, principal, reuse, access, sourceBasis };
       }
       const row = {
         ...(await generation(client, pending.id)),
@@ -330,7 +389,7 @@ export class DiscoveryRefreshStore {
         row.source_profile === DISCOVERY_SOURCE_PROFILE &&
         (row.complete || !own.wide)
       )
-        return { fresh: false, row, principal, reuse, access };
+        return { fresh: false, row, principal, reuse, access, sourceBasis };
       // Obsolete work can never activate. Closing it releases the one-building
       // constraint and fences a delayed manager/worker commit through its state.
       await rollbackDiscoveryVersion(client, row);
@@ -339,8 +398,15 @@ export class DiscoveryRefreshStore {
         finished_at = clock_timestamp(), failure_reason = 'discovery-source-changed' WHERE id = $1`,
         [row.generation_id],
       );
-      return { fresh: false, row: null, principal, reuse, access };
+      return { fresh: false, row: null, principal, reuse, access, sourceBasis };
     });
+    // Keep the claimed snapshot intact if inspecting the new basis rolls back.
+    if (rearmed) {
+      job.attempts = '1';
+      job.quarantine_basis = null;
+      job.quarantine_reason = null;
+    }
+    return inspected;
   }
 
   /** Which of at most 2,000 Works a generation holds, one primary-key probe
@@ -369,8 +435,8 @@ export class DiscoveryRefreshStore {
       await requireRecoveryOpen(client);
       const result = await client.query(
         `UPDATE access.discovery_refresh SET generation_id = $3
-        WHERE scope_key = $1 AND lease_epoch = $2 AND due_at > clock_timestamp()`,
-        [job.scope_key, job.lease_epoch, generationId],
+        WHERE scope_key = $1 AND lease_epoch = $2 AND due_at > coalesce($4::timestamptz,clock_timestamp())`,
+        [job.scope_key, job.lease_epoch, generationId, this.clock?.() ?? null],
       );
       if (!result.rowCount) throw new RecommendationStale('Refresh lease changed');
     });
@@ -394,8 +460,8 @@ export class DiscoveryRefreshStore {
       }
       const held = await client.query(
         `SELECT scope_key FROM access.discovery_refresh
-        WHERE scope_key=$1 AND lease_epoch=$2 AND generation_id=$3 AND due_at > clock_timestamp() FOR UPDATE`,
-        [job.scope_key, job.lease_epoch, row.generation_id],
+        WHERE scope_key=$1 AND lease_epoch=$2 AND generation_id=$3 AND due_at > coalesce($4::timestamptz,clock_timestamp()) FOR UPDATE`,
+        [job.scope_key, job.lease_epoch, row.generation_id, this.clock?.() ?? null],
       );
       if (!held.rowCount) throw new RecommendationStale('Refresh lease changed');
       const result = await client.query(
@@ -452,8 +518,8 @@ export class DiscoveryRefreshStore {
         throw new RecommendationStale('Discovery acknowledgment fence changed');
       const held = await client.query(
         `SELECT scope_key FROM access.discovery_refresh
-        WHERE scope_key=$1 AND lease_epoch=$2 AND due_at>clock_timestamp() FOR UPDATE`,
-        [job.scope_key, job.lease_epoch],
+        WHERE scope_key=$1 AND lease_epoch=$2 AND due_at>coalesce($3::timestamptz,clock_timestamp()) FOR UPDATE`,
+        [job.scope_key, job.lease_epoch, this.clock?.() ?? null],
       );
       if (!held.rowCount) throw new RecommendationStale('Refresh lease changed');
       await client.query(
@@ -471,16 +537,19 @@ export class DiscoveryRefreshStore {
     outcome: string,
     duration: number,
     delay: number,
+    disposition?: RefreshDisposition,
   ): Promise<void> {
     await inAccess(this.pool, async (client) => {
       await requireRecoveryOpen(client);
       const result = await client.query(
         `UPDATE access.discovery_refresh SET generation_id = $3,
-        last_outcome = $4, last_duration_ms = $5,
+        last_outcome = $4, last_duration_ms = $5,quarantine_basis=$7,last_error=$8,quarantine_reason=$9,
         attempts = CASE WHEN $4 = 'retry' THEN attempts ELSE 0 END,
-        due_at = clock_timestamp() + make_interval(secs => $6::double precision / 1000)
-        WHERE scope_key = $1 AND lease_epoch = $2 AND due_at > clock_timestamp()`,
-        [job.scope_key, job.lease_epoch, generationId, outcome, Math.ceil(duration), delay],
+        due_at = coalesce($10::timestamptz,clock_timestamp()) + make_interval(secs => $6::double precision / 1000)
+        WHERE scope_key = $1 AND lease_epoch = $2 AND due_at > coalesce($10::timestamptz,clock_timestamp())`,
+        [job.scope_key, job.lease_epoch, generationId, outcome, Math.ceil(duration), delay,
+          disposition?.basis ?? null, disposition?.error.slice(0, 512) ?? null, disposition?.reason ?? null,
+          this.clock?.() ?? null],
       );
       if (!result.rowCount) throw new RecommendationStale('Refresh lease changed');
     });
