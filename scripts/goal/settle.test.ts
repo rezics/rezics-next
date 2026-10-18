@@ -224,7 +224,7 @@ function capacityManaged(task: Task): CapacityTask {
   const managed = task as CapacityTask;
   const attempt = managed.attempts.at(-1)!;
   attempt.engine = 'claude';
-  managed.claudeCapacity = { attempt: attempt.n, owner: { pid: attempt.pid } };
+  managed.claudeCapacity = { attempt: attempt.n, owner: { pid: attempt.pid, start: '1', boot: 'fixture', cgroup: '' } };
   return managed;
 }
 
