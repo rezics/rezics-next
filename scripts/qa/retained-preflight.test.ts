@@ -251,7 +251,7 @@ for (const [source, producer] of Object.entries(repairProducers)) test(`printed 
   const command = retainedPreflightSummary(refused).split('Build/repair: ')[1]!.trim();
   const child = Bun.spawn(command.split(' '), { cwd: f.directory, stdout: 'pipe', stderr: 'pipe',
     env: { ...process.env, GOAL_SETTINGS_DIRECTORY: join(f.directory, '.goalctl'),
-      GOAL_TURN_TOKEN: '', GOAL_TURN_STATE_DIR: '', GOAL_TASK_ID: '', GOAL_IN_SLOT: '1', GOAL_QA_HEAVY_RUN: '0' } });
+      GOAL_TURN_TOKEN: '', GOAL_TURN_STATE_DIR: '', GOAL_ID: '', GOAL_TASK_ID: '', GOAL_IN_SLOT: '1', GOAL_QA_HEAVY_RUN: '0' } });
   const [code, stdout, stderr] = await Promise.all([child.exited,
     new Response(child.stdout).text(), new Response(child.stderr).text()]);
   expect({ code, output: stdout + stderr }).toEqual({ code: 0, output: expect.any(String) });
