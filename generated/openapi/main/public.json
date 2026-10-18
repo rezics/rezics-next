@@ -296824,7 +296824,7 @@
             "name": "q",
             "required": false,
             "schema": {
-              "maxLength": 200,
+              "description": "NFKC title substring, at most 200 Unicode scalar values.",
               "type": "string"
             }
           },
@@ -296834,9 +296834,9 @@
             "required": false,
             "schema": {
               "enum": [
-                "updated",
-                "newest",
-                "oldest"
+                "recent",
+                "created",
+                "title"
               ],
               "type": "string"
             }
@@ -296892,6 +296892,27 @@
                     "items": {
                       "items": {
                         "properties": {
+                          "chapterCount": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "properties": {
+                              "complete": {
+                                "type": "boolean"
+                              },
+                              "value": {
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "complete"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "cover": {
                             "anyOf": [
                               {
@@ -297192,6 +297213,7 @@
                           "types",
                           "disclosure",
                           "state",
+                          "chapterCount",
                           "texts",
                           "submissions",
                           "createdAt",
@@ -297978,6 +298000,27 @@
                   "properties": {
                     "item": {
                       "properties": {
+                        "chapterCount": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "complete": {
+                              "type": "boolean"
+                            },
+                            "value": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "complete"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "cover": {
                           "anyOf": [
                             {
@@ -298278,6 +298321,7 @@
                         "types",
                         "disclosure",
                         "state",
+                        "chapterCount",
                         "texts",
                         "submissions",
                         "createdAt",

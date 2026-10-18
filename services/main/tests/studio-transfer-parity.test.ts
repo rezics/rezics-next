@@ -399,41 +399,29 @@ test('catalogue classification can produce a bounded empty authored page without
   expect(curated.nextCursor).not.toBeNull();
 });
 
-test('Studio date orders traverse 105 Works with microsecond cursors and put an edited older Work first', async () => {
+test('Studio recent, created and title orders traverse 105 Works without losing microsecond order', async () => {
   const owner = await controller(), targets = await works(owner, 105), r = reader(targets);
   await pool.query(`UPDATE access.admission a SET registered_at =
     timestamptz '2026-09-01 12:00:00+00' + seed.ordinal * interval '1 microsecond'
     FROM unnest($1::uuid[]) WITH ORDINALITY AS seed(id, ordinal) WHERE a.id = seed.id`,
   [targets.map(work => work.admission)]);
-  for (const sort of ['oldest', 'newest', 'updated'] as const) {
+  for (const sort of ['recent', 'created', 'title'] as const) {
     const found: string[] = [];
-    let after = '', afterTime: string | undefined;
-    for (;;) {
-      const page = await r.access.studioWorks(owner.principal, owner.actor, after, 20, { sort, afterTime });
-      if (!page.rows.length) break;
-      found.push(...page.rows.map(row => row.work));
-      const tail = page.rows.at(-1)!;
-      after = tail.work;
-      afterTime = tail.sort_key;
-      expect(afterTime).toBeTruthy();
+    let cursor: string | undefined;
+    do {
+      const page = await readStudioWorks(session(owner, r, { cursor }).value, owner.actor, { sort });
+      found.push(...page.items.map(item => item.id));
+      cursor = page.nextCursor ?? undefined;
       if (found.length > targets.length) throw new Error('Studio ordering repeated a Work');
-    }
-    expect(found).toEqual((sort === 'oldest' ? targets : [...targets].reverse()).map(work => work.resource));
+    } while (cursor);
+    const expected = sort === 'title'
+      ? [...targets].sort((a, b) => a.resource < b.resource ? -1 : a.resource > b.resource ? 1 : 0)
+      : [...targets].reverse();
+    expect(found).toEqual(expected.map(work => work.resource));
     expect(new Set(found).size).toBe(105);
   }
-  // Exercise the inventory's encrypted continuation too: converting its sort
-  // key through a JS Date would silently lose these sub-millisecond Works.
-  const found: string[] = [];
-  let cursor: string | undefined;
-  do {
-    const page = await readStudioWorks(session(owner, r, { cursor }).value, owner.actor, { sort: 'newest' });
-    found.push(...page.items.map(item => item.id));
-    cursor = page.nextCursor ?? undefined;
-    if (found.length > targets.length) throw new Error('Studio continuation repeated a Work');
-  } while (cursor);
-  expect(found).toEqual([...targets].reverse().map(work => work.resource));
-  const first = await readStudioWorks(session(owner, r).value, owner.actor, { sort: 'newest' });
-  for (const filters of [{ sort: 'oldest' as const }, { sort: 'newest' as const, q: 'another title' }]) {
+  const first = await readStudioWorks(session(owner, r).value, owner.actor, { sort: 'created' });
+  for (const filters of [{ sort: 'title' as const }, { sort: 'created' as const, q: 'another title' }]) {
     await expect(readStudioWorks(session(owner, r, { cursor: first.nextCursor! }).value, owner.actor, filters))
       .rejects.toBeInstanceOf(WorkReadInvalid);
   }
@@ -445,11 +433,11 @@ test('Studio date orders traverse 105 Works with microsecond cursors and put an 
     graph_data_epoch,graph_sequence,sealed_at) VALUES ($1,$2,$3,$4,'work.edit',$1::text,$5,0,
     now(),'sealed',$6,'succeeded','fixture',1,timestamptz '2026-09-02 12:00:00+00')`,
   [edit, owner.id, owner.actor, scope, digest(edit), `urn:rezics:receipt:${digest(edit).slice(0, 32)}`]);
-  expect((await r.access.studioWorks(owner.principal, owner.actor, '', 20, { sort: 'updated' }))
-    .rows[0]!.work).toBe(targets[0]!.resource);
-  expect((await r.access.studioWorks(owner.principal, owner.actor, '', 20, { sort: 'newest' }))
-    .rows[0]!.work).toBe(targets.at(-1)!.resource);
+  expect((await readStudioWorks(session(owner, r).value, owner.actor, { sort: 'recent' }))
+    .items[0]!.id).toBe(targets[0]!.resource);
+  expect((await readStudioWorks(session(owner, r).value, owner.actor, { sort: 'created' }))
+    .items[0]!.id).toBe(targets.at(-1)!.resource);
   await transfer(targets[0]!.resource, (await controller()).actor);
-  expect((await r.access.studioWorks(owner.principal, owner.actor, '', 20, { sort: 'updated' }))
-    .rows.some(row => row.work === targets[0]!.resource)).toBe(false);
+  expect((await readStudioWorks(session(owner, r).value, owner.actor, { sort: 'recent' }))
+    .items.some(item => item.id === targets[0]!.resource)).toBe(false);
 }, 30_000);

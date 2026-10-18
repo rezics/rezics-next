@@ -16,14 +16,14 @@ export type InventoryPage = Ok<ReturnType<Main['v1']['me']['agents']>['works']['
 export type InventoryWork = InventoryPage['items'][number];
 /** Main's authoring state: Recipes follow their Structure publication; other Works follow the Agent's texts. */
 export type InventoryState = InventoryWork['state'];
-export const inventoryOrders = ['updated', 'newest', 'oldest'] as const;
+export const inventoryOrders = ['recent', 'created', 'title'] as const;
 export type InventoryOrder = (typeof inventoryOrders)[number];
 export interface InventoryQuery { q: string; sort: InventoryOrder }
 
 /** Search and order live in the address, including on continuation and browser Back. */
 export function inventoryQuery(query: { q?: unknown; sort?: unknown }): InventoryQuery {
-  return { q: typeof query.q === 'string' ? query.q.trim().slice(0, 200) : '',
-    sort: inventoryOrders.find(order => order === query.sort) ?? 'updated' };
+  return { q: typeof query.q === 'string' ? query.q.trim() : '',
+    sort: inventoryOrders.find(order => order === query.sort) ?? 'recent' };
 }
 
 export function inventoryAddress(base: string, view: string, query: InventoryQuery, cursor?: string): string {

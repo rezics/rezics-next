@@ -5,7 +5,6 @@ import { browseTypeCondition, discoveryApi } from '../discover/api.ts';
 import { readTypes } from '../catalogue/types-read.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { chapterVariant } from './content-api.ts';
-import { countBookChapters, type BookChapters } from './inventory-counts.ts';
 import { editorValue } from '../document-editor/body.ts';
 import { chapterNoteEditors } from './chapter-draft.ts';
 import { type ChapterFacts, chapterFacts, type RawFact } from './outline.ts';
@@ -117,12 +116,8 @@ const mySubmissions =
 export const validCursor = (cursor: unknown) =>
   typeof cursor === 'string' && cursor.length > 0 && cursor.length <= 2048 ? cursor : undefined;
 
-export type { BookChapters } from './inventory-counts.ts';
-
 export interface InventoryView {
   page: InventoryPage;
-  /** Chapter counts per Book on the page. */
-  books: Record<string, BookChapters>;
 }
 
 /**
@@ -184,8 +179,7 @@ async function bookContents(
 /**
  * One page of the Studio Agent's Works: those it wrote (its author credit
  * names it), in one state or all, or those it imported or curates. Main lists
- * a Book, never its chapters; each Book's count follows the contents owner's
- * paginated levels and remains a lower bound when the traversal cannot finish.
+ * a Book, never its chapters, with the owner's explicit count completeness.
  */
 export async function readInventory(
   actingSubject: string,
@@ -215,26 +209,7 @@ export async function readInventory(
     updatedAt: iso(item.updatedAt),
     submissions: item.submissions.map(submissionTimes),
   }));
-  const books = items.filter((item) => workKind(item.types) === 'book');
-  const contents = await Promise.all(
-    books.map(
-      async (book) => {
-        const first = await bookContents(
-          main,
-          actingSubject,
-          book.id,
-          book.texts[0]?.language ?? ownLanguageOf(book),
-        );
-        const count = first.ok ? await countBookChapters(first.data, (parent, cursor) =>
-          contentsPage(main, actingSubject, book.id, cursor, first.data.language ?? undefined,
-            parent, first.data.version)) : undefined;
-        return [book.id, count] as const;
-      },
-    ),
-  );
-  const view: InventoryView = { page: { ...page.data, items }, books: {} };
-  for (const [book, count] of contents) if (count) view.books[book] = count;
-  return { ok: true, data: view };
+  return { ok: true, data: { page: { ...page.data, items } } };
 }
 
 export interface RealmInfo {
