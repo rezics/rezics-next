@@ -473,7 +473,7 @@ writeFileSync(args[args.indexOf('--output-last-message') + 1], '{"findings":[]}'
       else expect(await review).toEqual([]);
       const ran = readFileSync(calls, 'utf8').trim().split('\n')
         .map(line => JSON.parse(line) as { account: string; args: string[]; home: string });
-      expect(ran.map(call => call.account)).toEqual(expected);
+      expect(ran.map(call => call.account)).toEqual([...expected]);
       for (const call of ran) {
         expect(call.home).toBe(join(bin, `${call.account}-home`));
         expect(call.args).toContain('model_reasoning_effort=xhigh');
