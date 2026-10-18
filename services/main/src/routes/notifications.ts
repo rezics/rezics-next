@@ -17,6 +17,7 @@ import { workRead, WorkReadMissing } from '../modules/work/read-session.ts';
 import { readFollowTarget } from '../modules/follows/read.ts';
 import { resolveFollowIdentity } from '../modules/follows/targets.ts';
 import { homeError } from './follows.ts';
+import { notificationRead, notificationReadStep } from '../modules/notification/request-budget.ts';
 
 /** Bearer scope for the recipient's own notification state. */
 export const NOTIFICATION_SCOPE = 'notification:manage';
@@ -204,16 +205,17 @@ export function notificationRoutes(work: MainWorkDependencies) {
       response: transportResponses(openApiOperations["/v1/me/notifications"].get, { 200: streamPage, ...authorizedReadProblems }, 'GET'),
     }, async ({ request, query }) => {
       try {
-        const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
-        if (!owner) return unavailable();
-        const [generationPart, sequencePart] = query.after?.split(':') ?? [];
-        const page = await owner.store.readStream(principal,
-          generationPart && sequencePart ? { generation: generationPart, sequence: sequencePart } : null,
-          query.limit ?? 50,
-              { view: query.view, reason: query.reason },
-              query.before,
-            );
-        return Response.json({ profile: 'notification-stream-page-v1', ...page }, noStore);
+        return await notificationRead(request, async signal => {
+          const principal = await notificationReadStep(() => work.account.verify(new Request(request, { signal }), [NOTIFICATION_SCOPE]));
+          if (!owner) return unavailable();
+          const [generationPart, sequencePart] = query.after?.split(':') ?? [];
+          const page = await owner.store.readStream(principal,
+            generationPart && sequencePart ? { generation: generationPart, sequence: sequencePart } : null,
+            query.limit ?? 50,
+            { view: query.view, reason: query.reason },
+            query.before);
+          return Response.json({ profile: 'notification-stream-page-v1', ...page }, noStore);
+        });
           } catch (error) {
             return notificationError(error);
           }
@@ -330,10 +332,12 @@ export function notificationRoutes(work: MainWorkDependencies) {
       response: transportResponses(openApiOperations["/v1/me/notifications/unread-count"].get, { 200: unreadCount, ...authorizedReadProblems }, 'GET'),
     }, async ({ request }) => {
       try {
-        const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
-        if (!owner) return unavailable();
-        return Response.json({ profile: 'notification-unread-count-v1',
-          ...(await owner.store.unreadCount(principal)) }, noStore);
+        return await notificationRead(request, async signal => {
+          const principal = await notificationReadStep(() => work.account.verify(new Request(request, { signal }), [NOTIFICATION_SCOPE]));
+          if (!owner) return unavailable();
+          return Response.json({ profile: 'notification-unread-count-v1',
+            ...(await owner.store.unreadCount(principal)) }, noStore);
+        });
       } catch (error) { return notificationError(error); }
     })
     .put('/v1/me/notifications/:item/read', {

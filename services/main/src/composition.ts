@@ -119,6 +119,8 @@ import { VerificationCorrectionPublisher, VerificationCorrectionWorker }
   from './modules/verification/correction-delivery.ts';
 import { verificationCorrectionSubjectReader } from './modules/verification/correction-delivery.ts';
 import { NotificationStore } from './modules/notification/store.ts';
+import { notificationRead, notificationReadPool } from './modules/notification/request-budget.ts';
+import { notificationError } from './routes/notifications.ts';
 import { SourceIntakeStore } from './modules/source/intake.ts';
 import { SourceCoverEvidenceVerifier } from './modules/source/cover-evidence.ts';
 import { SourceAuthorNameStore } from './modules/source/author-name.ts';
@@ -237,8 +239,8 @@ export interface ComposeMainInput {
 export async function composeMain(input: ComposeMainInput) {
   const { config, fuseki } = input;
   const fusekiUrl = config.FUSEKI_URL;
-  const pool = input.accessPool;
-  const contentPool = input.contentPool;
+  const pool = notificationReadPool(input.accessPool);
+  const contentPool = notificationReadPool(input.contentPool);
   const relayPool = input.relayPool;
   const erasureRelayPool = input.erasureRelayPool;
   const ownerRelayPool = input.ownerRelayPool;
@@ -401,7 +403,7 @@ export async function composeMain(input: ComposeMainInput) {
   const notificationDispatcher = deliveryProvider
     ? new NotificationDispatcher(pool, deliveryProvider,
       currentContentSubjectReader(content, notificationStore, access),
-      { disclosureBasis: notificationProvider ? undefined : SAFETY_ALERT_BASIS }) : undefined;
+      { disclosureBasis: notificationProvider ? undefined : SAFETY_ALERT_BASIS, environment }) : undefined;
   if (safetyAlerts) notificationDispatcher?.registerSubjectReader(SAFETY_ALERT_BASIS, safetyAlerts);
   notificationDispatcher?.registerSubjectReader('verification-correction-subscription-v1',
     verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
@@ -623,7 +625,15 @@ export async function composeMain(input: ComposeMainInput) {
       : workRead(dependencies, new Request('http://main.internal/v1/compositions'),
         { publicViewer: currentDisclosureViewer(), localBasis: true }, read);
   };
-  const app = createMainApp(fuseki, dependencies);
+  const app = createMainApp(fuseki, dependencies).wrap(fetch => request => {
+    const path = new URL(request.url).pathname;
+    if (request.method !== 'GET' || !['/v1/me/notifications', '/v1/me/notifications/unread-count'].includes(path)) {
+      return fetch(request);
+    }
+    // Include rate admission and Account, before any route/subject owner runs.
+    return notificationRead(request, signal => Promise.resolve(fetch(new Request(request, { signal }))))
+      .catch(notificationError);
+  });
   libraryImport.setDispatch(request => app.handle(request));
   const savedViewNotifications = new SavedViewNotifications(pool, { environment, account, access, media, content,
     judgments: new AccessJudgments(pool),
