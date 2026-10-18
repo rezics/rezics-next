@@ -9,6 +9,7 @@ import { browseId, browseResources } from '../discover/browse-fixtures.ts';
 import type { ResourceCard } from '../discover/api.ts';
 import { ResourceList } from '../discover/resource-list.tsx';
 import { resourceWork } from '../discover/resource-card.tsx';
+import { chooseOption } from '../stories/choose-option.ts';
 import { AlsoEnjoyedRow } from '../work-page/also-enjoyed-row.tsx';
 import { WorkGrid, WorkShelf } from './work-shelf.tsx';
 
@@ -163,7 +164,7 @@ export const ContainerBreakpoints: Story = {
     const originalTitle = within(list).getByRole('link', { name: book.name.value });
     for (const width of widths) {
       await userEvent.click(canvas.getByRole('combobox', { name: 'Available width' }));
-      await userEvent.click(canvas.getByRole('option', { name: String(width), exact: true }));
+      await chooseOption(canvas, String(width));
       await waitFor(() => expect(list.getBoundingClientRect().width).toBeCloseTo(width, 0));
       const title = within(list).getByRole('link', { name: book.name.value });
       await expect(title).toBe(originalTitle);
