@@ -10,15 +10,18 @@ export interface CodexAccount {
 }
 export interface Settings {
   version: 1; accounts: CodexAccount[]; codexServiceTier: string; reviewEngine: string;
+  reviewEffort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
+  reviewFallbackEngines: string[] | null; reviewScope: 'sensitive' | 'all';
   codexCompactTokens: { sol: number; luna: number };
   confirmIntervalMinutes: number; gateLanes: number; qaSlots: number; regressLaneCount: number;
   unitGateScope: 'affected' | 'changed'; unitGateShards: number; telegramChat: string;
 }
 const defaults: Settings = { version: 1, accounts: [], codexServiceTier: 'fast', reviewEngine: 'sol',
+  reviewEffort: 'high', reviewFallbackEngines: null, reviewScope: 'sensitive',
   codexCompactTokens: { sol: 160_000, luna: 200_000 },
   confirmIntervalMinutes: 90, gateLanes: 2, qaSlots: 3, regressLaneCount: 2,
   unitGateScope: 'affected', unitGateShards: 4, telegramChat: '' };
-type Schema = { type?: string; const?: unknown; enum?: unknown[]; minimum?: number; minLength?: number;
+type Schema = { type?: string | string[]; const?: unknown; enum?: unknown[]; minimum?: number; minLength?: number;
   pattern?: string; required?: string[]; anyOf?: Schema[]; properties?: Record<string, Schema>;
   additionalProperties?: boolean; items?: Schema; uniqueItems?: boolean };
 
@@ -27,6 +30,10 @@ function validate(value: unknown, rule: Schema, field: string, file: string, rep
   const fail = (reason: string): never => { throw new Error(`${file}: ${field} ${reason}`); };
   if ('const' in rule && value !== rule.const) fail(`must be ${JSON.stringify(rule.const)}`);
   if (rule.enum && !rule.enum.includes(value)) fail(`must be one of ${rule.enum.join(', ')}`);
+  if (Array.isArray(rule.type)) {
+    if (value === null && rule.type.includes('null')) return;
+    rule = { ...rule, type: rule.type.find(type => type !== 'null') };
+  }
   if (rule.type === 'object') {
     if (!value || typeof value !== 'object' || Array.isArray(value)) fail('must be an object');
     const object = value as Record<string, unknown>;

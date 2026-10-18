@@ -4,7 +4,8 @@ import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, rea
 import { dirname, join, relative, resolve } from 'node:path';
 import { processAlive, processIdentity } from '../qa/process/identity.ts';
 import { configuredAccounts, loadSettings } from './config.ts';
-import { engineEnv, launcherOf, modelOf } from './types.ts';
+import { effortsOf, engineEnv, launcherOf, modelOf } from './types.ts';
+import { codexMcpOverrides } from './launch.ts';
 import { solAccount } from './handover.ts';
 import { readReviewProof, reviewProof, type ReviewTestResult } from './review-proof.ts';
 export type { ReviewTestResult } from './review-proof.ts';
@@ -215,7 +216,7 @@ export function reviewEngine(env: NodeJS.ProcessEnv = process.env, file = review
   const configured = env.GOAL_REVIEW_ENGINE?.trim() || loadSettings({ stateDirectory: dirname(file) }).settings.reviewEngine;
   const engine = configured === 'sol' ? solAccount() : configured;
   if (!reviewEngines().includes(engine)) {
-    throw new Error(`GOAL_REVIEW_ENGINE must be one of ${reviewEngines().join(', ')}`);
+    throw new Error(`${env.GOAL_REVIEW_ENGINE?.trim() ? 'GOAL_REVIEW_ENGINE' : 'settings.reviewEngine'} must be one of ${reviewEngines().join(', ')}`);
   }
   return engine as ReviewEngine;
 }
@@ -271,6 +272,7 @@ export const SENSITIVE_REVIEW_PATHS = [
 ] as const;
 
 export function needsReview(kind: string | undefined, files: readonly string[]): boolean {
+  if (loadSettings().settings.reviewScope === 'all') return files.length > 0;
   return (kind === 'implementation' || kind === 'mechanism')
     && files.some(file => SENSITIVE_REVIEW_PATHS.some(path => path.endsWith('/') ? file.startsWith(path) : file === path)
       || /^services\/(main|content)\/(src\/.*|migrations\/.*)(?:authority|disclosure|rights|erasure|account-deletion)[^/]*\.(?:ts|sql)$/.test(file));
@@ -301,10 +303,15 @@ Their failures did not reach an assertion in the test body. This is the setup co
 Return findings with the same test paths and corrected content. Keep each outcome assertion intact; put setup checks in helpers or hooks. Use the reported setup failure and existing QA helpers to correct authority, rights and other fixture premises. Do not add findings. If the test cannot be made runnable, omit it; it will be an unconfirmed finding for program, never a worker fix round.
 ${request.setupFailures.map(({ finding, failure }) => `<setup-failure>\n${failure}\n</setup-failure>\n<finding>\n${JSON.stringify(finding)}\n</finding>`).join('\n')}
 ${reviewRules(request)}`;
+  const all = loadSettings().settings.reviewScope === 'all';
   return `Review this exited Goal worker's committed branch against its assigned brief, once.
-Report confirmed authority, disclosure, rights, erasure or Account defects, not style or speculative improvements.
+${all
+    ? 'Report confirmed correctness defects in any changed code, including tooling, tests and configuration, not style or speculative improvements.'
+    : 'Report confirmed authority, disclosure, rights, erasure or Account defects, not style or speculative improvements.'}
 For each finding provide text and, if reproducible, a test object with path and content.
-Tests must be new files under tests/qa/integration/review/<capability>.test.ts, exercise the public HTTP API of the real QA stack, and mock none of our own modules. Use the existing QA support helpers; do not instantiate owners or route handlers. A failing assertion must show a persona reading or changing what its row refuses, or data lost or corrupted. No severity labels.
+Tests must be new files under tests/qa/integration/review/<capability>.test.ts, exercise the public HTTP API of the real QA stack, and mock none of our own modules. Use the existing QA support helpers; do not instantiate owners or route handlers. ${all
+    ? 'A failing assertion must demonstrate the reported defect. For defects outside the public HTTP API, omit the test and report the evidence in text for the manager.'
+    : 'A failing assertion must show a persona reading or changing what its row refuses, or data lost or corrupted.'} No severity labels.
 Keep setup checks in helpers or hooks and outcome assertions directly in the test body. The harness runs the test on this head and confirms the failing assertion's location before it can block. A setup failure returns to you once for correction, then becomes an unconfirmed finding for program.
 Inspect git diff ${request.base}..${request.head} and relevant source/tests in this worktree.
 ${reviewRules(request)}`;
@@ -335,7 +342,26 @@ function reviewRetryDelayMs(attempt: number, env: NodeJS.ProcessEnv = process.en
   return Number.isSafeInteger(override) && override >= 0 ? override : [15_000, 45_000][attempt] ?? 45_000;
 }
 
+function reviewPolicy(engine: ReviewEngine): { effort: string; accounts: ReviewEngine[]; explicitEffort: boolean } {
+  const { settings, sources } = loadSettings();
+  const configured = configuredAccounts().map(account => account.engine);
+  if (![...configured, 'sonnet'].includes(engine))
+    throw new Error(`settings.reviewEngine must be one of ${[...configured, 'sonnet'].join(', ')}: ${engine}`);
+  const fallback = settings.reviewFallbackEngines ?? configured.filter(account => account !== engine);
+  for (const account of fallback) {
+    if (!configured.includes(account))
+      throw new Error(`${sources.reviewFallbackEngines}: settings.reviewFallbackEngines contains an unconfigured account: ${account}`);
+  }
+  const accounts = engine === 'sonnet' ? [engine] : [engine, engine, ...fallback];
+  for (const account of new Set(accounts)) {
+    if (!effortsOf(account).includes(settings.reviewEffort))
+      throw new Error(`${sources.reviewEffort}: settings.reviewEffort ${settings.reviewEffort} is not supported by ${account}`);
+  }
+  return { effort: settings.reviewEffort, accounts, explicitEffort: sources.reviewEffort !== 'built-in' };
+}
+
 async function reviewPass(request: LandReview, engine: ReviewEngine, prompt: string): Promise<ReviewFinding[]> {
+  const { effort, accounts, explicitEffort } = reviewPolicy(engine);
   mkdirSync(request.directory, { recursive: true });
   const schema = join(request.directory, 'schema.json');
   const output = join(request.directory, 'review.json');
@@ -351,7 +377,7 @@ async function reviewPass(request: LandReview, engine: ReviewEngine, prompt: str
       : diff.stdout;
     const full = `${prompt}\n<diff>\n${text}\n</diff>\nReply with only the JSON object {"findings":[...]}.`;
     writeFileSync(join(request.directory, 'prompt.md'), full);
-    await runReviewer('claude', ['-p', '--model', SONNET_REVIEW_MODEL, '--allowedTools', 'Read', 'Grep', 'Glob',
+    await runReviewer('claude', ['-p', '--model', SONNET_REVIEW_MODEL, ...(explicitEffort ? ['--effort', effort] : []), '--allowedTools', 'Read', 'Grep', 'Glob',
       '--output-format', 'json', '--json-schema', readFileSync(schema, 'utf8')], request, full);
     const reply = JSON.parse(readFileSync(join(request.directory, 'stdout.log'), 'utf8')) as
       { result?: unknown; structured_output?: unknown; is_error?: boolean };
@@ -365,12 +391,11 @@ async function reviewPass(request: LandReview, engine: ReviewEngine, prompt: str
     writeFileSync(join(request.directory, 'prompt.md'), prompt);
     // The service refuses a request now and then ("Selected model is at capacity" stopped a landing on
     // 2026-10-12), and a refused launch must not cost the review: the same account is
-    // tried again, then the remaining configured accounts. A reviewer needs no MCP server.
-    const accounts: ReviewEngine[] = [engine, engine, ...configuredAccounts().filter(account => account.engine !== engine).map(account => account.engine)];
+    // tried again, then only the permitted fallback accounts. A reviewer needs no MCP server.
     for (const [attempt, account] of accounts.entries()) {
       try {
-        await runReviewer(launcherOf(account), ['exec', '-m', modelOf(account), '-c', 'model_reasoning_effort=high',
-          '-s', 'read-only', '-c', 'mcp_servers={}', '--output-schema', schema, '--output-last-message', output, '-'], request, prompt, attempt > 0, engineEnv(account));
+        await runReviewer(launcherOf(account), ['exec', '-m', modelOf(account), '-c', `model_reasoning_effort=${effort}`,
+          '-s', 'read-only', ...codexMcpOverrides(account), '--output-schema', schema, '--output-last-message', output, '-'], request, prompt, attempt > 0, engineEnv(account));
         break;
       } catch (error) {
         if (attempt === accounts.length - 1) throw error;
