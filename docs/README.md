@@ -28,6 +28,7 @@ Design documents do not claim that a capability or deployment is complete.
 - [Waves: build, then prove](goals/wave.md) — Build and prove phase boundaries; read only for wave work.
 - [Goal worker protocol](goals/worker.md) — Worker authority and handoff; read when assigned a Goal task.
 - [Frozen import outcome specification](goals/audit-remediation-20261019/import-outcomes.md) — Pending two-source import fidelity, conservative coverage and fixture prerequisites; read before reviewing or proving the import outcome rows.
+- [Information outcome specification handoff](goals/audit-remediation-20261019/information-outcomes.md) — Pending supporting information and ordered reads, proposed shared contracts and deferred baseline prerequisites; read before reviewing or proving these rows.
 
 ## Architecture
 
