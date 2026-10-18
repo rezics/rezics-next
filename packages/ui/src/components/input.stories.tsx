@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { expectControlBoundary } from '../test/control-contrast.ts';
+import { expectControlBoundary, expectInvalidFieldKeyboardFocus } from '../test/control-contrast.ts';
 import { Field, FieldError, FieldLabel } from './field.tsx';
 import { Input } from './input.tsx';
 
@@ -106,6 +106,44 @@ export const Invalid: Story = {
 };
 
 export const InvalidDark: Story = { ...Invalid, globals: { theme: 'dark' } };
+
+export const InvalidFields: Story = {
+  globals: { theme: 'light', viewport: { value: 'desktop1440' } },
+  render: () => (
+    <div className="flex flex-col gap-4">
+      <Field invalid>
+        <FieldLabel>Original title</FieldLabel>
+        <Input defaultValue="" />
+        <FieldError>Give the Work a title.</FieldError>
+      </Field>
+      <Field invalid>
+        <FieldLabel>Email</FieldLabel>
+        <Input defaultValue="reader@" type="email" />
+        <FieldError>Enter a complete email address.</FieldError>
+      </Field>
+    </div>
+  ),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    for (const input of canvas.getAllByRole('textbox')) {
+      await expectInvalidFieldKeyboardFocus(input);
+    }
+    await expect(canvas.getByText('Give the Work a title.')).toBeVisible();
+    await expect(canvas.getByText('Enter a complete email address.')).toBeVisible();
+  },
+};
+
+export const InvalidFieldsDark: Story = {
+  ...InvalidFields, globals: { theme: 'dark', viewport: { value: 'desktop1440' } },
+};
+
+export const InvalidFieldsPhone: Story = {
+  ...InvalidFields, globals: { theme: 'light', viewport: { value: 'phone' } },
+};
+
+export const InvalidFieldsDarkPhone: Story = {
+  ...InvalidFields, globals: { theme: 'dark', viewport: { value: 'phone' } },
+};
 
 export const Disabled: Story = {
   render: () => (

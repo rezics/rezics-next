@@ -1,4 +1,5 @@
-import { expect } from 'storybook/test';
+import { expect, userEvent } from 'storybook/test';
+import { settled } from '../stories/support.tsx';
 
 type Color = Uint8ClampedArray;
 
@@ -61,6 +62,36 @@ export async function expectControlBoundary(element: HTMLElement): Promise<void>
   const border = probe.color();
   await expect(contrast(border, probe.outside), 'control boundary against its outer surface').toBeGreaterThanOrEqual(3);
   await expect(contrast(border, probe.inside), 'control boundary against its fill').toBeGreaterThanOrEqual(3);
+}
+
+/** Keyboard focus must add a contrasting cue while the error and entered value survive. */
+export async function expectInvalidFieldKeyboardFocus(control: HTMLElement, frame = control): Promise<void> {
+  await expect(control).toBeInvalid();
+  await expect(control).not.toHaveFocus();
+  await settled(frame);
+  const resting = getComputedStyle(frame);
+  const border = resting.borderTopColor;
+  const outlineWidth = Number.parseFloat(resting.outlineWidth);
+  const text = getComputedStyle(control).color;
+  const value = (control as HTMLInputElement | HTMLTextAreaElement).value;
+  await expectControlBoundary(frame);
+
+  await userEvent.tab();
+  await expect(control).toHaveFocus();
+  await expect(control).toHaveAttribute('aria-invalid', 'true');
+  await expect(control).toHaveValue(value);
+  await settled(frame);
+  const focused = getComputedStyle(frame);
+  await expect(Number.parseFloat(focused.outlineWidth), 'focus adds a visible outline').toBeGreaterThan(outlineWidth);
+  await expect(Number.parseFloat(focused.outlineWidth), 'focus outline remains discernible').toBeGreaterThanOrEqual(2);
+  await expect(focused.outlineStyle).toBe('solid');
+  await expect(Number.parseFloat(focused.outlineOffset), 'focus is separated from the error boundary').toBeGreaterThanOrEqual(2);
+  const probe = colorProbe(frame);
+  probe.paint(focused.outlineColor);
+  await expect(contrast(probe.color(), probe.outside), 'focus indicator against the adjacent surface').toBeGreaterThanOrEqual(3);
+  await expect(focused.borderTopColor, 'error boundary survives focus').toBe(border);
+  await expect(getComputedStyle(control).color, 'error text survives focus').toBe(text);
+  await expectControlBoundary(frame);
 }
 
 /** Check the track's outline and the thumb that communicates the on/off position. */

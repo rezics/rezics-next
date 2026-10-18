@@ -30,6 +30,8 @@ export const inputGroupVariants = tv({
     'has-[input:disabled,textarea:disabled]:opacity-64',
     // Keyed to the element, not data-slot: Ark parts such as Combobox.Input replace the slot.
     'has-[input:focus-visible,textarea:focus-visible]:border-ring has-[input:focus-visible,textarea:focus-visible]:ring-2 has-[input:focus-visible,textarea:focus-visible]:ring-ring/20',
+    // The outer frame owns focus; error halos must not conceal the keyboard location.
+    'has-[input:focus-visible,textarea:focus-visible]:outline-2 has-[input:focus-visible,textarea:focus-visible]:outline-offset-2 has-[input:focus-visible,textarea:focus-visible]:outline-ring',
     'has-[[data-slot][aria-invalid=true]]:border-destructive has-[[data-slot][aria-invalid=true]]:ring-[3px] has-[[data-slot][aria-invalid=true]]:ring-destructive/24',
     'dark:has-[[data-slot][aria-invalid=true]]:border-destructive-foreground dark:has-[[data-slot][aria-invalid=true]]:ring-destructive-foreground/40',
     'motion-reduce:transition-none!',
@@ -203,7 +205,7 @@ export const InputGroupInput = (props: React.ComponentProps<typeof Input>) => {
         'h-full flex-1',
         'bg-transparent',
         'rounded-none border-0 shadow-none',
-        'focus-visible:ring-0',
+        'focus-visible:outline-none focus-visible:ring-0',
         'disabled:bg-transparent disabled:opacity-100 aria-invalid:ring-0 data-invalid:ring-0',
         'dark:bg-transparent dark:disabled:bg-transparent',
         className,
@@ -224,7 +226,7 @@ export const InputGroupTextarea = (props: React.ComponentProps<typeof Textarea>)
         'py-3',
         'bg-transparent',
         'resize-none rounded-none border-0 shadow-none',
-        'focus-visible:ring-0',
+        'focus-visible:outline-none focus-visible:ring-0',
         'disabled:bg-transparent disabled:opacity-100 aria-invalid:ring-0 data-invalid:ring-0',
         'dark:bg-transparent dark:disabled:bg-transparent',
         className,
