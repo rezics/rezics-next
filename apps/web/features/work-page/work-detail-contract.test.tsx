@@ -21,6 +21,7 @@ import * as levels from '../work-levels/fixtures.ts';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { ConnectionsPreviewView, PartsPreviewView } from '../work-levels/previews.tsx';
 import { connectionsHref, editionsHref } from '../work-levels/route.ts';
+import { RegionFailure } from './region.tsx';
 
 const router: AppRouterInstance = { bfcacheId: '', refresh() {}, push() {}, replace() {}, back() {}, forward() {}, prefetch() {} };
 const render = (node: ReactNode) => renderToStaticMarkup(<AppRouterContext.Provider value={router}>{node}</AppRouterContext.Provider>);
@@ -175,8 +176,21 @@ test('source records leave the fact list while domain facts, applicability and o
     hrefFor={() => '/next-facts'} locale="en" t={entityCopy('en')} messages={t} />)).toBe('');
   const failed = render(<WorkFactsView page={{ ok: false, failure: 'missing' }} names={new Map()}
     hrefFor={() => '/retry-facts'} locale="en" t={entityCopy('en')} messages={t} />);
-  expect(failed).toContain('role="alert"');
+  expect(failed).toContain('role="status"');
+  expect(failed).toContain(t.regionMissing);
+  expect(failed).toContain(t.retry);
   expect(failed).not.toContain(entityCopy('en').noStatementsBody);
+});
+
+test('missing resources stay explicit and retryable while read faults retain their alert', () => {
+  for (const failure of ['missing', 'budget', 'unavailable'] as const) {
+    const html = render(<RegionFailure title="Parts unavailable" failure={failure} messages={t} />);
+    expect(html).toContain(`role="${failure === 'missing' ? 'status' : 'alert'}"`);
+    expect(html).toContain('Parts unavailable');
+    expect(html).toContain(t.retry);
+    expect(html).toContain(failure === 'missing' ? t.regionMissing : failure === 'budget' ? t.budget : t.regionUnavailable);
+    expect(html).not.toContain(levelsCopy('en').noPartsBody);
+  }
 });
 
 test('one source section retains record identity, exact evidence, missing evidence and one copy of equal legal duties', () => {
