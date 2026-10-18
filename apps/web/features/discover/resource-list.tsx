@@ -2,7 +2,7 @@ import { buttonVariants } from '@rezics/ui/button';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
-import { slotRatio } from '../catalogue/work.ts';
+import { CatalogueGrid } from '../catalogue/catalogue-grid.tsx';
 import { WorkGrid } from '../catalogue/work-shelf.tsx';
 import type { ListPage, ResourceCard } from './api.ts';
 import { browseMessages } from './browse-messages.ts';
@@ -31,16 +31,16 @@ export function ResourceList({
   const works = items.filter(item => item.kind === 'work').map(item => resourceWork(item, scope, locale));
   if (works.length && works.length === items.length) return <WorkGrid works={works}
     locale={locale} avatarQuery={avatarQuery} headingLevel={headingLevel} />;
-  const slot = slotRatio(works);
   return items.length ? (
-    <ul className="grid min-w-0 items-start gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+    <CatalogueGrid className={works.length ? undefined
+      : 'grid-cols-[repeat(auto-fill,minmax(min(100%,16rem),1fr))]'}>
       {items.map((item) => (
         <li key={item.id} className="min-w-0">
-          <DiscoverResourceCard item={item} locale={locale} avatarQuery={avatarQuery} slot={slot} scope={scope}
+          <DiscoverResourceCard item={item} locale={locale} avatarQuery={avatarQuery} scope={scope}
             headingLevel={headingLevel} />
         </li>
       ))}
-    </ul>
+    </CatalogueGrid>
   ) : (
     <p className="text-muted-foreground text-sm">{t.empty}</p>
   );
