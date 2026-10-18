@@ -47,7 +47,7 @@ function SourceContinuity({ realization, all, names, locale, t }: {
     return <span>{t.continuityMain}{' '}
       <NameLink reference={source.mainVersion} names={names} unavailable={t.unavailable} unnamed={t.unnamed} /></span>;
   }
-  const from = all.find(item => item.id === source.realization);
+  const from = all.find(item => item.id === source.realization && item.revision === source.revision);
   return from ? <span>{t.continuityFrom}{' '}<LanguageName tag={from.language} locale={locale} /></span>
     : <span>{t.continuityOther}</span>;
 }

@@ -24,13 +24,13 @@ export async function StatementsSection({ section, cursor, position, frame, proj
     projection?: boolean; pageEndSources?: boolean; sourcesOnly?: boolean }) {
   const page = await readStatements(section, cursor, position, frame, client);
   const labels = page.ok ? await readPredicateLabels(page.data, rest.locale, client) : new Map();
-  if (sourcesOnly) return <StatementSourcesView page={page} labels={labels} locale={rest.locale} t={rest.t} />;
   // Values and the continuities a statement holds in are named together, so one read names both.
   const names = page.ok ? await namesOf(page.data.groups.flatMap(group => group.items.flatMap(item => [
     ...item.kind === 'statement' && item.value.kind === 'resource' ? [item.value.iri] : [],
     // An owner's own property can name a resource too (the Work a character belongs to).
     ...item.kind === 'component-property' && item.value.kind === 'resource' && typeof item.value.ref === 'string' ? [item.value.ref] : [],
     ...item.qualifiers.applicability])), position, client) : new Map();
+  if (sourcesOnly) return <StatementSourcesView page={page} labels={labels} names={names} hrefFor={rest.hrefFor} locale={rest.locale} t={rest.t} />;
   return projection
     ? <ProjectionFactsView page={page} labels={labels} names={names} ownName={ownName} cursor={cursor} hrefFor={rest.hrefFor}
       locale={rest.locale} t={rest.t} messages={rest.messages} pageEndSources={pageEndSources} />

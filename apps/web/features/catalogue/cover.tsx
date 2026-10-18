@@ -1,5 +1,7 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import { useMediaImagePresentation } from '@rezics/ui/media-image';
 import { WorkCover, type WorkCoverProps } from '@rezics/ui/work-cover';
 import { cn } from '@rezics/ui/utils';
@@ -17,16 +19,19 @@ function useCoverCredit(work: CoverWork, avatarQuery?: string) {
   return metadata === undefined ? image.coverCredit ?? null : metadata?.coverCredit ?? null;
 }
 
-export function CatalogueCoverCredit({ work, avatarQuery, locale, className }: {
+export function CatalogueCoverCredit({ work, avatarQuery, locale, className, children }: {
   work: CoverWork; avatarQuery?: string; locale?: UiLocale; className?: string;
+  /** A host can place the current credit in its own attribution region, only when there is credit to show. */
+  children?: (credit: ReactNode) => ReactNode;
 }) {
   const shell = useOptionalShell();
   const credit = useCoverCredit(work, avatarQuery);
   if (!credit) return null;
-  return <div className={cn('relative z-10 min-w-0', className)} onClick={event => event.stopPropagation()}
+  const mark = <div className={cn('relative z-10 min-w-0', className)} onClick={event => event.stopPropagation()}
     onMouseDown={event => event.stopPropagation()}>
     <CoverCreditMark credit={credit} locale={locale ?? shell?.locale ?? 'en'} />
   </div>;
+  return children ? children(mark) : mark;
 }
 
 /**

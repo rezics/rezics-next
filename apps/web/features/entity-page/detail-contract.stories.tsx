@@ -6,10 +6,11 @@ import { RelationshipControl } from '../relationships/control.tsx';
 import { attributed } from '../rights-mark/fixtures.ts';
 import Link from '../shell/localized-link.tsx';
 import { messages as workMessages } from '../work-page/messages.ts';
-import { importedSourceStatements, predicateLabels, projectionFor } from './fixtures.ts';
+import { citationNames, citedStatements, importedSourceStatements, predicateLabels, projectionFor } from './fixtures.ts';
 import { EntityHeader, SubjectDescription } from './header.tsx';
 import { copyOf } from './messages.ts';
 import { StatementSourcesView } from './sources.tsx';
+import { standaloneHrefFor } from './route.ts';
 import { StatementsView } from './views.tsx';
 
 // Contract-built states. Real endpoint replay and screenshots belong to the wave prove phase.
@@ -17,10 +18,14 @@ const subject = projectionFor({ base: 'resource', types: ['https://schema.org/Or
 const target = subject.target.resource;
 const here = resourceHref('/e/', target);
 const sourcePage = { ...importedSourceStatements(), factObligations: attributed, nextCursor: 'facts/+==' };
-const hrefFor = () => `${here}?statements=facts%2F%2B%3D%3D#statements`;
+const hrefFor = standaloneHrefFor({}, here);
 
-function Detail({ locale = 'en', long = false, unavailable = false }: { locale?: UiLocale; long?: boolean; unavailable?: boolean }) {
+function Detail({ locale = 'en', long = false, unavailable = false, claims }: {
+  locale?: UiLocale; long?: boolean; unavailable?: boolean; claims?: 'recorded' | 'withheld';
+}) {
   const t = copyOf(locale);
+  const page = claims ? { ...citedStatements(claims === 'withheld'), factObligations: attributed } : sourcePage;
+  const names = claims ? citationNames : new Map();
   return <div className="mx-auto grid max-w-4xl gap-7 px-4 py-6">
     <EntityHeader summary={subject.summary as Extract<typeof subject.summary, { status: 'available' }>}
       registry={subject.registry} locale={locale} t={t}
@@ -28,13 +33,13 @@ function Detail({ locale = 'en', long = false, unavailable = false }: { locale?:
       actions={<RelationshipControl target={target} kind="organization" name="Example Studio" locale={locale}
         signedIn={false} signInHref="/auth/start" reports={[{ target, kind: 'page' }]} />} />
     {long ? <SubjectDescription locale={locale}><p lang="en">{'The studio makes stories for readers around the world. '.repeat(90)}</p></SubjectDescription> : null}
-    <StatementsView page={unavailable ? { ok: false, failure: 'unavailable' } : { ok: true, data: sourcePage }}
-      names={new Map()} ownName="Example Studio" labels={predicateLabels} cursor={undefined}
+    <StatementsView page={unavailable ? { ok: false, failure: 'unavailable' } : { ok: true, data: page }}
+      names={names} ownName="Example Studio" labels={predicateLabels} cursor={undefined}
       hrefFor={hrefFor} locale={locale} t={t} messages={workMessages[locale]} pageEndSources />
     <section id="related" className="grid gap-2"><h2 className="font-semibold">{t.relations}</h2><p>Example series</p></section>
     <section id="discussion" className="grid gap-2"><h2 className="font-semibold">{t.discussion}</h2><p>{workMessages[locale].noDiscussionGlobal}</p></section>
-    <StatementSourcesView page={unavailable ? { ok: false, failure: 'unavailable' } : { ok: true, data: sourcePage }}
-      labels={predicateLabels} locale={locale} t={t} />
+    <StatementSourcesView page={unavailable ? { ok: false, failure: 'unavailable' } : { ok: true, data: page }}
+      labels={predicateLabels} names={names} hrefFor={hrefFor} locale={locale} t={t} />
   </div>;
 }
 
@@ -51,7 +56,8 @@ export const SourcesAtPageEnd: Story = {
       'https://example.test/organizations/studio-42/revisions/3');
     await expect(sources.compareDocumentPosition(canvas.getByRole('heading', { name: 'Discussion' })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     await expect(canvasElement.querySelectorAll('[data-rights-mark]')).toHaveLength(1);
-    await expect(canvas.getByRole('link', { name: 'Next page' })).toHaveAttribute('href', `/en${hrefFor()}`);
+    await expect(canvas.getByRole('link', { name: 'Next page' })).toHaveAttribute('href',
+      `/en${hrefFor({ kind: 'continue', section: 'statements', cursor: sourcePage.nextCursor })}`);
   },
 };
 
@@ -90,5 +96,45 @@ export const FactsUnavailable: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Example series')).toBeVisible();
     await expect(canvas.queryByRole('region', { name: 'Sources, licences and evidence' })).toBeNull();
+  },
+};
+
+export const ClaimCitations: Story = {
+  args: { claims: 'recorded' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const sources = canvas.getByRole('region', { name: 'Sources, licences and evidence' });
+    const footer = within(sources);
+    await expect(footer.getByText('Example Studio', { exact: true })).toBeVisible();
+    const first = footer.getByText('24', { exact: true }).closest('li')!;
+    const second = footer.getByText('31', { exact: true }).closest('li')!;
+    await expect(within(first).getByText('Annual report 1997')).toBeVisible();
+    await expect(within(first).queryByText('Annual report 2001')).toBeNull();
+    await expect(within(second).getByText('Annual report 2001')).toBeVisible();
+    await expect(within(second).getByRole('link', { name: 'Evidence 1' })).toHaveAttribute('href',
+      'https://example.test/studio/annual-report/2001');
+    await expect(footer.getByText('Evidence reference')).toBeVisible();
+    await expect(footer.getByText('Source fingerprint (SHA-256)')).toBeVisible();
+    await expect(footer.getByText('ByteRangeSelector')).toBeVisible();
+    await expect(sources.querySelector('blockquote')).toHaveTextContent('The studio employed 24 people in 1997.');
+    await expect(footer.getByText('No evidence is recorded for this revision.')).toBeVisible();
+    const evidence = citedStatements().groups[1]!.items[0]!;
+    await expect(footer.getByText(evidence.sources[0]!, { exact: true })).toBeVisible();
+    await expect(sources.querySelector(`a[href="${evidence.sources[0]}"]`)).toBeNull();
+    await expect(canvasElement.querySelectorAll('[data-rights-mark]')).toHaveLength(1);
+  },
+};
+
+export const ClaimCitationsPhone: Story = { ...ClaimCitations, globals: { viewport: { value: 'phone' } } };
+
+export const WithheldQuotation: Story = {
+  args: { claims: 'withheld' },
+  async play({ canvasElement }) {
+    const sources = within(canvasElement).getByRole('region', { name: 'Sources, licences and evidence' });
+    await expect(within(sources).getByText('The quoted passage is not available. Its source is still recorded.')).toBeVisible();
+    await expect(sources.querySelector('blockquote')).toBeNull();
+    await expect(within(sources).queryByText('The studio employed 24 people in 1997.')).toBeNull();
+    await expect(within(sources).getByText('ByteRangeSelector')).toBeVisible();
+    await expect(within(sources).getByText('Source fingerprint (SHA-256)')).toBeVisible();
   },
 };

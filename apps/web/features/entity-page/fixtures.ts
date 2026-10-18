@@ -107,6 +107,43 @@ export function importedSourceStatements(): StatementPage {
   ], count: { value: 5, kind: 'exact-page', total: null } };
 }
 
+/** Distinct claims, their applicability, and a retained public evidence projection. Not a recorded API answer. */
+export function citedStatements(withheld = false): StatementPage {
+  const name = statement(21, 'https://schema.org/name',
+    { kind: 'literal', lexical: 'Example Studio', datatype: 'rdf:langString', language: 'en' });
+  const first = statement(22, 'https://schema.org/numberOfEmployees',
+    { kind: 'literal', lexical: '24', datatype: 'http://www.w3.org/2001/XMLSchema#integer', language: null });
+  const second = statement(23, first.predicate,
+    { kind: 'literal', lexical: '31', datatype: 'http://www.w3.org/2001/XMLSchema#integer', language: null });
+  if (first.kind !== 'statement') throw new Error('Expected a statement fixture');
+  const evidence = revision(220);
+  const digest = 'a3'.repeat(32);
+  return { ...statements(), groups: [
+    { predicate: name.predicate, items: [{ ...name, sources: ['https://example.test/studio/name'] }] },
+    { predicate: first.predicate, items: [
+      { ...first, qualifiers: { ...qualifiers, applicability: [revision(201)] }, sources: [evidence], evidence: [{
+        id: evidence, sourceWork: revision(210), representationSha256: digest,
+        locator: { version: 'rezics-locator-v1',
+          source: { type: 'external', representationSha256: digest, mediaType: 'application/pdf' },
+          selector: { type: 'ByteRangeSelector', unit: 'byte', start: 128, end: 256 },
+          quote: withheld ? null : { type: 'TextQuoteSelector', exact: 'The studio employed 24 people in 1997.', prefix: '', suffix: '' } },
+        quote: withheld ? null : 'The studio employed 24 people in 1997.', quoteWithheld: withheld,
+        method: { type: 'manual', note: 'Checked against the annual report' }, modality: 'asserted',
+        submitter: revision(211), rightsBasis: 'license',
+      }] },
+      { ...second, qualifiers: { ...qualifiers, applicability: [revision(202)] },
+        sources: ['https://example.test/studio/annual-report/2001'] },
+    ] },
+    { predicate: 'https://schema.org/foundingDate', items: [statement(24, 'https://schema.org/foundingDate',
+      { kind: 'literal', lexical: '1997', datatype: 'http://www.w3.org/2001/XMLSchema#gYear', language: null })] },
+  ], count: { value: 4, kind: 'exact-page', total: null } };
+}
+
+export const citationNames = new Map([
+  [revision(201), summary(revision(201), 'Annual report 1997')],
+  [revision(202), summary(revision(202), 'Annual report 2001')],
+]);
+
 /** The labels Main selected for the statements' predicates; `memberOf` has none in the reader's language. */
 export const predicateLabels: PredicateLabels = new Map(Object.entries({ name: 'Name', alternateName: 'Also known as', birthDate: 'Born' })
   .map(([term, value]) => [`https://schema.org/${term}`, { value, language: 'en', direction: direction('en', value) }]));

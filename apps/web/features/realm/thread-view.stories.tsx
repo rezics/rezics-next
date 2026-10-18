@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { Button } from '@rezics/ui/button';
+import { MediaImageProvider } from '@rezics/ui/media-image';
 import { materializeData } from 'native-i18n';
 import { realmMessagesFor } from './catalog.ts';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -425,6 +427,53 @@ export const ContinuationRefresh: Story = {
     await expect(await canvas.findByRole('heading', { name: 'No comments yet' })).toBeVisible();
     await expect(canvas.queryByText('The next reply is still part of this branch.')).toBeNull();
     await expect(canvas.queryByRole('button', { name: 'More replies' })).toBeNull();
+  },
+};
+
+const coverRepresentation = '00000000-0000-4000-8000-000000009901';
+const nullCreditThread: ThreadRead = { ...storyThread, work: { ...storyThread.work, cover: {
+  kind: 'image', selection: storyThread.work.id, url: `/v1/media/representations/${coverRepresentation}/bytes`,
+  mediaType: 'image/png', width: 400, height: 600, crop: null,
+  basis: { policy: 'story', context: 'story' }, coverCredit: null,
+} } };
+
+/** A null serialized credit resolves through the same media owner as the cover, then refreshes independently. */
+function CurrentCreditThread(args: Args) {
+  const [version, setVersion] = useState(0);
+  const src = useMemo(() => URL.createObjectURL(new Blob([
+    '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600"><rect width="400" height="600" fill="#264550"/><path d="M40 80H360V520H40Z" fill="#f0d9a1"/></svg>',
+  ], { type: 'image/svg+xml' })), []);
+  useEffect(() => () => URL.revokeObjectURL(src), [src]);
+  const resolve = useCallback(async (references: Parameters<NonNullable<ComponentProps<typeof MediaImageProvider>['resolve']>>[0]) =>
+    references.map(reference => ({ ...reference, src, nsfw: 'sfw' as const,
+      ageRating: { status: 'unassessed' as const }, coverCredit: {
+        kind: 'copyright' as const, permittedRole: 'cover' as const,
+        holder: version ? 'Corrected holder' : 'Current holder', text: version ? '© Corrected holder' : '© Current holder',
+        source: { name: 'Current archive', href: version ? 'https://example.test/cover/corrected' : 'https://example.test/cover/current' },
+      } })), [src, version]);
+  return <MediaImageProvider resolve={resolve} refreshKey={version}
+    viewer={{ ready: true, signedIn: false, age: 'unknown', optIns: { general: true, r15: false, sexual: false, grotesque: false } }}>
+    <Button type="button" variant="outline" onClick={() => setVersion(value => value + 1)}>Refresh cover credit</Button>
+    <ThreadPage {...args} read={nullCreditThread} />
+  </MediaImageProvider>;
+}
+
+export const CurrentCoverCredit: Story = {
+  render: args => <CurrentCreditThread {...args} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const initial = await canvas.findByText('© Current holder');
+    const sources = canvas.getByRole('region', { name: 'Sources, licences and evidence' });
+    await expect(sources).toContainElement(initial);
+    await expect(canvasElement.querySelectorAll('[data-cover-credit]')).toHaveLength(1);
+    const comments = canvas.getByRole('heading', { name: 'Comments' });
+    await expect(sources.compareDocumentPosition(comments) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    await expect(within(sources).getByRole('link', { name: 'Current archive' })).toHaveAttribute('href', 'https://example.test/cover/current');
+    await userEvent.click(canvas.getByRole('button', { name: 'Refresh cover credit' }));
+    await expect(await canvas.findByText('© Corrected holder')).toBeVisible();
+    await waitFor(() => expect(canvas.queryByText('© Current holder')).toBeNull());
+    await expect(canvasElement.querySelectorAll('[data-cover-credit]')).toHaveLength(1);
+    await expect(within(sources).getByRole('link', { name: 'Current archive' })).toHaveAttribute('href', 'https://example.test/cover/corrected');
   },
 };
 

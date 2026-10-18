@@ -3,7 +3,7 @@ import { readAnimeRelationsConnections } from '../work-page/anime-relations-reco
 import { AnimeRelationsSections } from '../work-page/anime-relations-recorded-page.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkPageMessages } from '../work-page/messages.ts';
-import { idOf, iriOf, workRefOf } from '../work-page/route.ts';
+import { iriOf, workRefOf } from '../work-page/route.ts';
 import { buttonVariants } from '@rezics/ui/button';
 import Link from '../shell/localized-link.tsx';
 import { EditEntry } from '../work-levels-edit/edit-entry.tsx';
@@ -15,7 +15,8 @@ import {
   readCollectionMembers,
   readParts,
   readPeople,
-  readRealization,
+  readFollowedRealizations,
+  readReleaseRealizations,
   readRealizations,
   readRelease,
   readReleases,
@@ -24,7 +25,7 @@ import {
   readWholes,
 } from './read.ts';
 import type { ConnectionsQuery, EditionsQuery } from './route.ts';
-import type { Realization, ReleasePage } from './types.ts';
+import type { ReleasePage } from './types.ts';
 
 const outline = buttonVariants({ variant: 'outline', size: 'sm' });
 
@@ -44,27 +45,6 @@ export async function ConnectionsPage({ workRef, id, query, locale, pageMessages
     <AnimeRelationsSections view={view} workRef={workRef} id={id} query={query}
       locale={locale} pageMessages={pageMessages} />
   </div>;
-}
-
-/** The realizations the loaded ones follow (translations of a text on another page), so each names its source language. */
-async function followedBy(
-  loaded: readonly Realization[],
-  known: (realization: string) => boolean,
-): Promise<Realization[]> {
-  const followed = new Map(
-    loaded.flatMap((item) =>
-      item.source.kind === 'realization' && !known(item.source.realization)
-        ? [[item.source.realization, item.source.work] as const]
-        : [],
-    ),
-  );
-  return (
-    await Promise.all(
-      [...followed].map(([realization, work]) =>
-        readRealization(idOf(work) ?? work, idOf(realization) ?? realization),
-      ),
-    )
-  ).flatMap((read) => (read.ok ? [read.data] : []));
 }
 
 export async function EditionsPage({
@@ -89,9 +69,8 @@ export async function EditionsPage({
     readReleases(id, query.releasesAfter),
   ]);
   const listed = realizations.ok ? realizations.data.items : [];
-  const sources = await followedBy(listed, (realization) =>
-    listed.some((item) => item.id === realization),
-  );
+  const sourceReads = await readFollowedRealizations(listed);
+  const sources = sourceReads.flatMap(item => item.read.ok ? [item.read.data] : []);
   const references = [
     ...[...listed, ...sources].flatMap((item) => [
       ...item.translators,
@@ -136,23 +115,10 @@ export async function ReleasePage({
   if (!release.ok)
     return <ReleaseFailure failure={release.failure} messages={pageMessages} t={t} />;
   // Every coverage entry's realization is read (a release covers at most 64).
-  const entries = release.data.coverage.filter((entry) => entry.realization);
-  const realizations = new Map(
-    await Promise.all(
-      entries.map(
-        async (entry) =>
-          [
-            entry.realization!,
-            await readRealization(
-              idOf(entry.work) ?? entry.work,
-              idOf(entry.realization!) ?? entry.realization!,
-            ),
-          ] as const,
-      ),
-    ),
-  );
+  const realizations = await readReleaseRealizations(release.data.coverage);
   const loaded = [...realizations.values()].flatMap((read) => (read.ok ? [read.data] : []));
-  const sources = await followedBy(loaded, (realization) => realizations.has(realization));
+  const sourceReads = await readFollowedRealizations(loaded);
+  const sources = sourceReads.flatMap(item => item.read.ok ? [item.read.data] : []);
   const parties = [...loaded, ...sources].flatMap((item) => [
     ...item.translators,
     ...item.publishers,
@@ -167,6 +133,7 @@ export async function ReleasePage({
       release={release.data}
       realizations={realizations}
       sources={sources}
+      sourceReads={sourceReads}
       names={names}
       locale={locale}
       t={t}

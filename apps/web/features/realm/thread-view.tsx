@@ -395,11 +395,14 @@ export function ThreadView({
         )}
         {opening ? continuation(focus.reply) : null}
       </section>
-      {read.work.cover?.kind === 'image' && read.work.cover.coverCredit ? <SubjectSources locale={locale}>
-        <p className="font-medium" lang={read.work.title.language}>{read.work.title.value}</p>
-        <CatalogueCoverCredit work={{ id: read.work.id, title: read.work.title, cover: read.work.cover,
-          kind: coverKindOf([]), authors: [] }} avatarQuery={avatarQuery} locale={locale} />
-      </SubjectSources> : null}
+      {read.work.cover?.kind === 'image' ? <CatalogueCoverCredit
+        work={{ id: read.work.id, title: read.work.title, cover: read.work.cover,
+          kind: coverKindOf([]), authors: [] }} avatarQuery={avatarQuery} locale={locale}>
+        {credit => <SubjectSources locale={locale}>
+          <p className="font-medium" lang={read.work.title.language}>{read.work.title.value}</p>
+          {credit}
+        </SubjectSources>}
+      </CatalogueCoverCredit> : null}
     </div>
   );
 }
