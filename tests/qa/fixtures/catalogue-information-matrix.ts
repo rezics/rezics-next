@@ -93,3 +93,62 @@ export type CollectionKey = keyof typeof collectionCases;
 
 export const orderCases = ['episodes', 'media', 'tracks'] as const;
 export type OrderKey = typeof orderCases[number];
+
+/** Joint Source/native-owner proposal. The accepted information read contract
+ * above stays accepted; none of these admission additions has Program disposition.
+ * Source owns retained conversion/inventory verification, not native value policy.
+ */
+export const nativeInformationAdmission = {
+  state: 'pending-program-disposition',
+  current: {
+    semantic: 'POST /v1/semantic/changes; GET /v1/semantic/resources/{id}[/revisions/{revision}]. A resource component owns exact properties, semantic head, model generation and its command receipt.',
+    statement: 'POST /v1/statements; GET /v1/statements/{id}. A Statement owns subject/predicate/relationDefinition/value/applicability/interpretation/qualification and head. Recording, acceptance and support are separate commands and identities.',
+    synopsis: 'POST /v1/works/{id}/fields/synopsis/control owns Work editorial synopsis, content/control/work bases and human/source control. Current value is a nonempty string of at most 8000 characters with no supplied-language member. Work localized metadata has tagged single-line bounded text; it cannot losslessly stand in for every synopsis.',
+    attach: 'POST /v1/sources/field-supports, source-field-support-attachment-v1: target, slot, occurrence, context, sourceRecord, conversion, grain, sourceField, sourceOccurrence, sourcePointer, expectedHead, actingSubject; Idempotency-Key. Current verified adapters admit only work-metadata-v1#semantic-types, work-metadata-v1#scalar-value and bounded structure-occurrence-v1 paths. The proposed name adapter is not arbitrary semantic admission.',
+    receipt: '201 {support: source-field-support-v1, replayed:false}; exact retry 200 replayed:true. Support includes support/supportIdentity, sourceRecord/conversion/mappingRevision, valueDigest/nativeRevision/graphReceipt/headGuarantee/outcome. GET /v1/sources/field-supports/{support}; POST /v1/sources/withdrawals with support/expectedSupport/reason. Current withdrawal nativeEffect is none.',
+    refusal: '400 invalid_source_withdrawal for malformed/unsupported attachment; 409 source_support_changed for mismatched native value/head or changed key; 503 source_support_unavailable for unavailable mapped evidence; current Access, platform exposure, principal isolation and rights errors also apply.',
+  },
+  proposed: {
+    request: 'Extend the existing attachment with native (owner, component, predicate, exact typed value, qualifiers, expected head, command receipt; Statement identity/meaning/acceptance where applicable) and retained (exact conversion inventory key, normalized DatasetRecord identity/digest/pointer/presence/language, ordered retained observation parts and resolved observation pointer/digests). Existing top-level target/slot/occurrence/context/head must agree. Source conversion inventory items expose their verified retained binding. See NativeSupportAttachment and NativeSynopsisRequest in catalogue-information-contract.ts.',
+    verification: 'Semantic/Statement/editorial owners verify their exact current component, subject, field/property, value, qualifiers and actual acknowledged command receipt. Source verifies G-2769 conversion/inventory binding, original record identity and actual retained observation bytes, including part order and the normalized-to-observation mapping. Normalized, observation, source-value and typed-native digests have different meanings; equality is never assumed. Projection is neither admission nor support.',
+    receipt: 'Extend source-field-support-v1 with native, retained, publicEvidence and attachment {profile:source-field-attachment-certificate-v1,receipt,requestDigest,nativeReceipt}; graphReceipt is the verified native command receipt. An actual Source command issues this acknowledgement; a producer cannot manufacture it. Native revision/receipt remain owned by the native command, and the support stays independently withdrawable per sourceRecord. Keep the actual headGuarantee, including verified-before-commit; claim no stronger cross-owner atomicity.',
+    refusal: 'Reuse 409 source_support_changed for target/property/value/qualifiers/head/conversion/evidence-binding mismatches and changed idempotency intent; 503 source_support_unavailable for absent/incomplete retained bytes; 404 source_support_unavailable for another principal\'s evidence, without detail; 403 rights_denied for a scoped reuse denial. Proposed 400 invalid_source_attachment identifies an unadmitted native slot. Refusals return no support or receipt and leave native content unchanged.',
+    language: 'Native synopsis retains exact text and supplied language, without trimming, truncation, NFC rewriting, newline flattening or UI-locale substitution. Omitted language, explicit null and supplied spelling remain separate in retained.language. Extend the existing editorial owner rather than placing Work description into an arbitrary semantic property. Oversized/unrepresentable values need a lossless owner disposition or explicit pending/source-only reason; no successful attachment is inferred.',
+    attribution: 'Existing fact evidence gains public-safe attribution {sourceName,sourceUrl,licence} and language {state:omitted|null|value,value?}. Exact rightsBasis, source identity, source digest and locator remain. Source/rights owners resolve publicEvidence; an import/adoption grant never authorizes publication or private evidence disclosure.',
+    lifecycle: 'Repeated attachment is idempotent. Two different records supply separately withdrawable supports, not a claim of independent providers. Withdrawing one support preserves another qualifying support, exact native values, acceptance and human content/control. Source attachment and withdrawal never mint or replace native content.',
+    ownership: 'G-2769 specifies Source conversion/admission; this matrix specifies native verification and independent public reads. G-2781 only projects candidates, G-2778 alone wires the importer, and G-2791 alone prepares the genuine corpus. Separate implementation assignment and Program disposition are required.',
+  },
+} as const;
+
+// These are source-backed test obligations, never generated successful examples.
+// New proposed receipts are checked in test bodies, not required by corpus setup.
+export const nativeReadCases = {
+  'synopsis-tagged': { kind: 'synopsis', disposition: 'admitted', presence: 'value' },
+  'synopsis-multiline': { kind: 'synopsis', disposition: 'admitted', presence: 'value' },
+  'synopsis-untagged': { kind: 'synopsis', disposition: 'admitted', presence: 'value' },
+  'synopsis-oversized': { kind: 'synopsis', disposition: 'lossless-or-explicit', presence: 'value' },
+  'synopsis-omitted': { kind: 'synopsis', disposition: 'explicit', presence: 'omitted' },
+  'synopsis-null': { kind: 'synopsis', disposition: 'explicit', presence: 'null' },
+  'synopsis-empty': { kind: 'synopsis', disposition: 'lossless-or-explicit', presence: 'empty-string' },
+  'exact-number': { kind: 'domain-fact', disposition: 'admitted', presence: 'value' },
+  'date-precision': { kind: 'domain-fact', disposition: 'admitted', presence: 'value' },
+  'domain-fact': { kind: 'domain-fact', disposition: 'admitted', presence: 'value' },
+} as const;
+export type NativeReadKey = keyof typeof nativeReadCases;
+
+export const nativeAttachmentRefusals = {
+  target: { status: 409, code: 'source_support_changed' },
+  property: { status: 409, code: 'source_support_changed' },
+  value: { status: 409, code: 'source_support_changed' },
+  qualifiers: { status: 409, code: 'source_support_changed' },
+  head: { status: 409, code: 'source_support_changed' },
+  conversion: { status: 409, code: 'source_support_changed' },
+  'native-receipt': { status: 409, code: 'source_support_changed' },
+  'evidence-binding': { status: 409, code: 'source_support_changed' },
+  'parts-order': { status: 409, code: 'source_support_changed' },
+  'unavailable-evidence': { status: 503, code: 'source_support_unavailable' },
+  'private-evidence': { status: 404, code: 'source_support_unavailable' },
+  rights: { status: 403, code: 'rights_denied' },
+  'unsupported-slot': { status: 400, code: 'invalid_source_attachment' },
+} as const;
+export type NativeRefusalKey = keyof typeof nativeAttachmentRefusals;

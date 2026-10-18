@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from '
 import { collectionCases, type CollectionKey } from '../fixtures/catalogue-information-matrix.ts';
 import type { PersonaSessions } from '../support/personas.ts';
 import {
-  allPersonas, assertCollectionPurpose, body, command, loadInformationCorpus, noHidden,
+  allPersonas, assertCollectionPurpose, assertNativeSupportCommands, body, command, loadInformationCorpus, noHidden,
   openInformationCorpus, publicRead, resourcePath, type InformationCorpus, type PartsPage,
 } from './support/catalogue-information.ts';
 
@@ -35,6 +35,10 @@ describe('C29: explicit Collection purpose through shared membership and Structu
       }
     });
   }
+
+  test('six personas: native admission binds exact retained evidence; refused support and withdrawal preserve human content', async () => {
+    await assertNativeSupportCommands(sessions, corpus);
+  });
 
   test('six personas: cursors bind subject, parent and order; private changes preserve them, public changes restart explicitly', async () => {
     const order = corpus.orders.tracks;

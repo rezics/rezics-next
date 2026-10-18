@@ -2,10 +2,13 @@ import { expect } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
+import { canonicalJson } from '../../../../scripts/lib/canonical-json.ts';
 import type { SemanticValue } from '../../../../services/main/src/modules/semantic/value.ts';
 import { sectionIds } from '../../../../services/main/src/modules/entity-page/contract.ts';
 import {
-  collectionCases, fieldStates, informationMatrix, orderCases, supportingRecords,
+  collectionCases, fieldStates, informationMatrix, nativeAttachmentRefusals, nativeReadCases,
+  orderCases, supportingRecords, type CollectionKey, type FieldState, type NativeReadKey, type NativeRefusalKey,
+  type SupportingKey,
 } from '../../fixtures/catalogue-information-matrix.ts';
 import {
   restorePersonaRealms, type PersonaName, type PersonaSession, type PersonaSessions,
@@ -13,7 +16,9 @@ import {
 
 import type {
   FactValue, Support, FrozenSupport, FactExpectation, EdgeExpectation, PartExpectation,
-  CollectionFixture, InformationCorpus, Qualifiers, Acceptance,
+  CollectionFixture, InformationCorpus, Qualifiers, Acceptance, FixtureCommand,
+  NativeAdmissionFixture, NativeReadFixture, NativeSupportAttachment, NativeSupportReceipt,
+  ReadableEvidence,
 } from '../../fixtures/catalogue-information-contract.ts';
 export type {
   FactValue, Support, FrozenSupport, FactExpectation, ResourceFixture, EdgeExpectation,
@@ -30,8 +35,9 @@ export interface EntityPage {
 }
 export interface FactItem {
   kind: string; statement?: string; revision: string; predicate: string; value: FactValue | SemanticValue;
+  relationDefinition?: string;
   qualifiers: Qualifiers;
-  sources: string[]; evidence?: Support[];
+  sources: string[]; evidence?: (Support & Partial<Pick<ReadableEvidence, 'attribution' | 'language'>>)[];
   acceptance?: Acceptance | null;
 }
 export interface FactGroup {
@@ -346,7 +352,358 @@ export function assertField(groups: FactGroup[], expected: FactExpectation): voi
     });
     if (source.quoteWithheld)
       expect(item.evidence?.find(evidence => evidence.id === source.id)).toHaveProperty('quote', null);
-    expect(new Set(item.evidence?.map(evidence => evidence.id)).size).toBe(item.evidence?.length);
+    expect(item.evidence).toBeDefined();
+    expect(new Set(item.evidence?.map(evidence => evidence.id)).size).toBe(item.evidence!.length);
+  }
+}
+
+function jsonPointer(root: unknown, pointer: string): { present: boolean; value?: unknown } {
+  expect(pointer === '' || pointer.startsWith('/') && !/~(?![01])/.test(pointer)).toBe(true);
+  let value = root;
+  for (const token of pointer === '' ? [] : pointer.slice(1).split('/')) {
+    const key = token.replaceAll('~1', '/').replaceAll('~0', '~');
+    if (!value || typeof value !== 'object' || !Object.hasOwn(value, key)) return { present: false };
+    value = (value as Record<string, unknown>)[key];
+  }
+  return { present: true, value };
+}
+const valueDigest = (value: unknown) => createHash('sha256').update(canonicalJson(value)).digest('hex');
+
+/** Only called inside test bodies. Files/bytes are prerequisites; native admission,
+ * conversion resolution and acknowledged support are actual public API assertions.
+ */
+function retainedNativeSource(input: NativeReadFixture): unknown {
+  const { retained, frozen } = input;
+  const recordFile = JSON.parse(checkedBytes(frozen.record.file, frozen.record.sha256).toString());
+  const record = jsonPointer(recordFile, frozen.record.pointer);
+  expect(record.present).toBe(true);
+  expect(record.value).toMatchObject({ key: retained.sourceKey, provider: retained.record.provider,
+    externalId: retained.record.externalId });
+  expect(valueDigest(record.value)).toBe(retained.record.recordDigest);
+  const field = jsonPointer(record.value, retained.record.pointer);
+  expect(retained.sourceValueDigest).toBe(field.present ? valueDigest(field.value) : null);
+  const presence = !field.present ? 'omitted' : field.value === null ? 'null'
+    : field.value === '' ? 'empty-string' : Array.isArray(field.value) && !field.value.length ? 'empty-array'
+      : field.value && typeof field.value === 'object' && !Object.keys(field.value).length ? 'empty-object' : 'value';
+  expect(retained.presence).toBe(presence);
+  expect(retained.parts.length).toBeGreaterThan(0);
+  expect(new Set(retained.parts.map(part => part.observation)).size).toBe(retained.parts.length);
+  expect(frozen.parts.map(part => ({ observation: part.observation, byteDigest: part.sha256 }))).toEqual(retained.parts);
+  for (const part of frozen.parts) checkedBytes(part.file, part.sha256);
+  const part = frozen.parts.find(item => item.observation === retained.observation.observation);
+  expect(part).toBeDefined();
+  if (!part) throw new Error('Missing actual retained observation part');
+  expect(part.sha256).toBe(retained.observation.byteDigest);
+  const observation = jsonPointer(JSON.parse(checkedBytes(part.file, part.sha256).toString()), retained.observation.pointer);
+  expect(retained.observation.valueDigest).toBe(observation.present ? valueDigest(observation.value) : null);
+  const evidence = jsonPointer(JSON.parse(checkedBytes(input.evidence.file,
+    input.evidence.representationSha256).toString()), input.evidence.locator.pointer);
+  expect(evidence).toEqual(observation);
+  expect(input.evidence.language).toEqual(retained.language);
+  // The Source owner verifies conversion transforms for typed domain values.
+  // Synopsis text has no permissible trim/truncate/locale/normalization transform.
+  if (typeof field.value === 'string') expect(observation.value).toBe(field.value);
+  return field.value;
+}
+
+function nativeCases(corpus: InformationCorpus): NativeAdmissionFixture {
+  expect(corpus.nativeAdmission, 'The corpus producer must supply genuine retained native-admission inputs; no invented receipt fallback')
+    .toBeDefined();
+  if (!corpus.nativeAdmission) throw new Error('Missing native-admission corpus inputs; no product assertion reached');
+  return corpus.nativeAdmission;
+}
+
+function assertNativeItem(groups: FactGroup[], input: NativeReadFixture): void {
+  const native = input.native;
+  expect(native, 'A candidate/projection is not an acknowledged native value').toBeDefined();
+  if (!native) throw new Error('No acknowledged native owner binding');
+  expect(native.target).toBe(input.resource);
+  expect(native.predicate).toBe(input.field.predicate);
+  expect(native.receipt.length).toBeGreaterThan(0);
+  const item = groups.find(group => group.predicate === native.predicate)?.items.find(entry =>
+    canonicalJson(entry.value) === canonicalJson(native.value));
+  expect(item).toBeDefined();
+  expect(item?.revision).toBe(native.expectedHead);
+  expect(item?.qualifiers).toEqual(native.qualifiers);
+  if (native.owner === 'statement') {
+    expect(item?.kind).toBe('statement');
+    expect(item?.statement).toBe(native.component);
+    expect(item?.relationDefinition).toBe(native.relationDefinition);
+    expect(item?.acceptance).toEqual(native.acceptance);
+  } else {
+    expect(item?.kind).toBe('component-property');
+    expect(item).not.toHaveProperty('statement');
+    expect(item).not.toHaveProperty('acceptance');
+  }
+  const evidence = item?.evidence?.find(entry => entry.id === input.evidence.id);
+  expect(evidence).toMatchObject({ id: input.evidence.id, sourceWork: input.evidence.sourceWork,
+    representationSha256: input.evidence.representationSha256, locator: input.evidence.locator,
+    rightsBasis: input.evidence.rightsBasis, quoteWithheld: input.evidence.quoteWithheld,
+    attribution: input.evidence.attribution, language: input.evidence.language });
+  expect(input.evidence.attribution.sourceName.trim().length).toBeGreaterThan(0);
+  expect(input.evidence.attribution.sourceUrl).toMatch(/^https:\/\//);
+  if (input.evidence.quoteWithheld) expect(evidence).toHaveProperty('quote', null);
+}
+
+/** Six independent ordinary public readers; no actingSubject or import authority. */
+export async function assertReadableNativeFacts(read: Read, corpus: InformationCorpus): Promise<void> {
+  const fixtures = nativeCases(corpus);
+  expect(Object.keys(fixtures.cases).toSorted()).toEqual(Object.keys(nativeReadCases).toSorted());
+  expect(Object.values(fixtures.cases).some(input => input.retained.parts.length > 1),
+    'At least one exact field resolves through an ordered multipart intake').toBe(true);
+  for (const key of Object.keys(nativeReadCases) as NativeReadKey[]) {
+    const input = fixtures.cases[key], requirement = nativeReadCases[key];
+    const raw = retainedNativeSource(input);
+    expect(input.retained.presence, key).toBe(requirement.presence);
+    const groups = await factGroups(read, input.resource, corpus);
+    assertField(groups, input.field);
+    if (requirement.disposition === 'admitted') expect(input.disposition.state, key).toBe('admitted');
+    if (requirement.disposition === 'explicit') expect(input.disposition.state, key).not.toBe('admitted');
+    if (key === 'synopsis-multiline') expect(String(raw)).toContain('\n');
+    if (key === 'synopsis-oversized') expect(String(raw).length).toBeGreaterThan(8000);
+    if (key === 'synopsis-tagged') {
+      expect(input.retained.language.state).toBe('value');
+      if (input.retained.language.state === 'value') expect(input.retained.language.value).not.toBe('en');
+    }
+    if (key === 'synopsis-untagged') expect(input.retained.language.state).toBe('omitted');
+    if (input.disposition.state !== 'admitted') {
+      expect(input.disposition.reason?.length, key).toBeGreaterThan(0);
+      expect(input.field.state).not.toBe('adopted');
+      expect(input.field.values).toEqual([]);
+      expect(input.native).toBeUndefined();
+      continue;
+    }
+    expect(input.field.state).toBe('adopted');
+    expect(input.field.values.length).toBeGreaterThan(0);
+    assertNativeItem(groups, input);
+    const native = input.native!;
+    if (native.owner === 'statement') {
+      const owner = await body<{ profile: string; statement: string; subject: string; predicate: string;
+        relationDefinition: string; revision: string; value: FactValue; state: string; applicability: string[];
+        meaningBasis: { state: string; interpretationDefinitions?: string[] }; qualification?: Record<string, unknown> }>(
+        read, `/v1/statements/${native.component.slice(-36)}`);
+      noHidden(owner, corpus);
+      expect(owner).toMatchObject({ profile: 'statement-v1', statement: native.component,
+        subject: native.target, predicate: native.predicate, relationDefinition: native.relationDefinition,
+        revision: native.expectedHead, value: native.value, state: 'active',
+        applicability: native.qualifiers.applicability });
+      expect(['none', 'defined', 'readable']).toContain(owner.meaningBasis.state);
+      expect(owner.meaningBasis.state === 'none' ? [] : owner.meaningBasis.interpretationDefinitions)
+        .toEqual(native.qualifiers.interpretationDefinitions);
+      expect(owner.qualification).toEqual(native.qualifiers.qualification);
+    } else if (native.owner === 'semantic') {
+      const owner = await body<{ profile: string; component: string; revision: string;
+        state: { component: string; properties: { predicate: string; value: SemanticValue }[] } }>(
+        read, `/v1/semantic/resources/${native.component.slice(-36)}`);
+      noHidden(owner, corpus);
+      expect(owner).toMatchObject({ profile: 'semantic-change-v1', component: native.target,
+        revision: native.expectedHead, state: { component: 'resource' } });
+      expect(owner.state.properties).toContainEqual(expect.objectContaining({ predicate: native.predicate, value: native.value }));
+    }
+    if (requirement.kind === 'synopsis') {
+      expect(native.owner).toBe('work-editorial');
+      expect(typeof raw).toBe('string');
+      expect(raw).toBe('lexical' in native.value && native.value.lexical);
+      if (native.owner === 'work-editorial') expect(native.language).toEqual(input.retained.language);
+      if (input.retained.language.state === 'value')
+        expect(native.value).toMatchObject({ kind: 'language-string', language: input.retained.language.value });
+      else {
+        expect(native.value.kind).toBe('string');
+        expect(native.value).not.toHaveProperty('language');
+      }
+    } else expect(['semantic', 'statement']).toContain(native.owner);
+    if (key === 'exact-number') {
+      expect(['integer', 'decimal', 'literal']).toContain(native.value.kind);
+      if (native.value.kind === 'literal') expect([
+        'http://www.w3.org/2001/XMLSchema#integer', 'http://www.w3.org/2001/XMLSchema#decimal',
+      ]).toContain(native.value.datatype);
+      expect('lexical' in native.value).toBe(true);
+      if ('lexical' in native.value) expect(typeof native.value.lexical).toBe('string');
+      expect(typeof raw, 'A retained exact decimal lexical cannot be reconstructed from a rounded JSON number').toBe('string');
+      expect(raw).toBe('lexical' in native.value && native.value.lexical);
+      expect(raw).toMatch(/^-?\d+(?:\.\d+)?$/);
+    }
+    if (key === 'date-precision') {
+      const value = native.value;
+      expect(value.kind === 'temporal' || value.kind === 'literal').toBe(true);
+      // Independently check exact date precision, including retained YYYYMMDD
+      // values whose 99 components mean unknown month/day, not invented dates.
+      const source = String(raw);
+      const date = /^\d{8}$/.test(source) ? source.slice(4) === '9999' ? source.slice(0, 4)
+        : source.slice(6) === '99' ? `${source.slice(0, 4)}-${source.slice(4, 6)}`
+          : `${source.slice(0, 4)}-${source.slice(4, 6)}-${source.slice(6)}` : source;
+      expect(date).toMatch(/^\d{4}(?:-\d{2}(?:-\d{2})?)?$/);
+      const precision = date.length === 4 ? 'year' : date.length === 7 ? 'month' : 'day';
+      expect('lexical' in value && value.lexical).toBe(date);
+      if (value.kind === 'temporal') {
+        expect(value.precision).toBe(precision);
+        expect(value.calendar).toBe('gregorian');
+      } else if (value.kind === 'literal')
+        expect(value.datatype).toBe(`http://www.w3.org/2001/XMLSchema#${precision === 'year' ? 'gYear' : precision === 'month' ? 'gYearMonth' : 'date'}`);
+    }
+  }
+}
+
+function assertSupportReceipt(actual: NativeSupportReceipt, request: NativeSupportAttachment): void {
+  expect(actual).toMatchObject({ profile: 'source-field-support-v1', state: 'recorded',
+    target: request.target, slot: request.slot, occurrence: request.occurrence, context: request.context,
+    sourceRecord: request.sourceRecord, conversion: request.conversion,
+    mappingRevision: request.retained.mappingRevision, grain: request.grain, sourceField: request.sourceField,
+    sourceOccurrence: request.sourceOccurrence, nativeRevision: request.expectedHead,
+    outcome: 'attached', withdrawal: null, native: request.native, retained: request.retained,
+    attachment: { profile: 'source-field-attachment-certificate-v1', nativeReceipt: request.native.receipt } });
+  expect(actual.support).toMatch(/^https:\/\/rezics\.com\/id\//);
+  expect(actual.supportIdentity).toMatch(/^https:\/\/rezics\.com\/id\//);
+  expect(actual.attachment.receipt.length).toBeGreaterThan(0);
+  expect(actual.attachment.requestDigest).toMatch(/^[a-f0-9]{64}$/);
+  expect(actual.graphReceipt).toBe(request.native.receipt);
+  expect(actual.publicEvidence.language).toEqual(request.retained.language);
+  expect(actual.publicEvidence.attribution.sourceName.trim().length).toBeGreaterThan(0);
+  expect(actual.publicEvidence.attribution.sourceUrl).toMatch(/^https:\/\//);
+}
+
+/** Real public commands on dedicated isolated subjects, never seed SQL/RDF or a
+ * mapper pretending to be admission. All missing proposed behavior fails here.
+ */
+export async function assertNativeSupportCommands(sessions: PersonaSessions, corpus: InformationCorpus): Promise<void> {
+  const { controls, cases } = nativeCases(corpus);
+  const primary = controls.primary.request, secondary = controls.secondary.request;
+  expect(Object.values(cases).map(input => input.resource)).not.toContain(primary.target);
+  expect(primary.native).toEqual(secondary.native);
+  expect(primary.sourceRecord).not.toBe(secondary.sourceRecord);
+  expect(primary.retained.parts.length).toBeGreaterThanOrEqual(2);
+  expect(controls.publicField.resource).toBe(primary.target);
+  for (const request of [primary, secondary]) {
+    expect(request.native.target).toBe(request.target);
+    expect(request.native.expectedHead).toBe(request.expectedHead);
+    expect(request.retained).toMatchObject({ sourceRecord: request.sourceRecord,
+      conversion: request.conversion, grain: request.grain, sourceField: request.sourceField,
+      observation: { pointer: request.sourcePointer } });
+  }
+  const path = '/v1/sources/field-supports';
+  for (const persona of allPersonas.filter(name => name !== 'operator')) {
+    const response = await sessions[persona].main('POST', path,
+      { ...primary, actingSubject: sessions[persona].actingSubject }, `denied-${persona}-${controls.primary.key}`);
+    expect(response.status).toBe(persona === 'visitor' ? 401 : 403);
+    noHidden(await response.json(), corpus);
+  }
+  const read = publicRead(sessions.visitor);
+  const before = await factGroups(read, primary.target, corpus);
+  // Proposed Source-owned inventory extension. Its retained binding must be an
+  // actual server-verified normalized-record -> observation resolution, including
+  // the complete ordered part list, not a producer envelope or digest equality.
+  for (const request of [primary, secondary]) {
+    let cursor: string | null = null;
+    const seen = new Set<string>();
+    const cursors = new Set<string>();
+    let selected: { key: string; retained: NativeSupportAttachment['retained'] } | undefined;
+    do {
+      const query = new URLSearchParams({ limit: '20', ...(cursor ? { cursor } : {}) });
+      const response = await sessions.operator.main('GET',
+        `/v1/sources/conversions/${request.conversion.slice(-36)}/inventory?${query}`);
+      expect(response.status, await response.clone().text()).toBe(200);
+      const page = await response.json() as { items: { key: string; retained: NativeSupportAttachment['retained'] }[];
+        nextCursor: string | null };
+      for (const item of page.items) {
+        expect(seen.has(item.key)).toBe(false);
+        seen.add(item.key);
+        if (item.key === request.retained.inventoryKey) selected = item;
+      }
+      cursor = page.nextCursor;
+      expect(seen.size).toBeLessThanOrEqual(1024);
+      if (cursor) {
+        expect(cursors.has(cursor), 'conversion inventory continuation must advance').toBe(false);
+        cursors.add(cursor);
+        expect(cursors.size).toBeLessThan(64);
+      }
+    } while (cursor);
+    expect(selected?.retained).toEqual(request.retained);
+  }
+  expect(Object.keys(controls.refusals).toSorted()).toEqual(Object.keys(nativeAttachmentRefusals).toSorted());
+  for (const key of Object.keys(nativeAttachmentRefusals) as NativeRefusalKey[]) {
+    const input = controls.refusals[key], expected = nativeAttachmentRefusals[key];
+    // Each control must change the named basis rather than accidentally exercise
+    // the same generic invalid request for every named mismatch.
+    const select = (request: NativeSupportAttachment): unknown => ({
+      target: request.target, property: request.native.predicate, value: request.native.value,
+      qualifiers: request.native.qualifiers, head: request.expectedHead, conversion: request.conversion,
+      'native-receipt': request.native.receipt,
+      'evidence-binding': request.retained.observation.pointer, 'parts-order': request.retained.parts,
+      'unavailable-evidence': request.retained.observation.observation,
+      'private-evidence': request.sourceRecord, rights: request.sourceRecord, 'unsupported-slot': request.slot,
+    })[key];
+    expect(select(input.request), key).not.toEqual(select(primary));
+    if (key === 'parts-order') expect(input.request.retained.parts).toEqual([...primary.retained.parts].toReversed());
+    const response = await sessions.operator.main('POST', path, input.request, input.key);
+    expect(response.status, `${key}: ${await response.clone().text()}`).toBe(expected.status);
+    const refused = await response.json();
+    expect(refused).toMatchObject({ status: expected.status, code: expected.code });
+    expect(refused).not.toHaveProperty('support');
+    expect(refused).not.toHaveProperty('receipt');
+    noHidden(refused, corpus);
+    expect(await factGroups(read, primary.target, corpus), `${key} must not mutate native content`).toEqual(before);
+  }
+  const attach = async (input: typeof controls.primary, status: number) => {
+    const response = await sessions.operator.main('POST', path, input.request, input.key);
+    expect(response.status, await response.clone().text()).toBe(status);
+    const answer = await response.json() as { support: NativeSupportReceipt; replayed: boolean };
+    expect(answer.replayed).toBe(status === 200);
+    assertSupportReceipt(answer.support, input.request);
+    const saved = await sessions.operator.main('GET', `${path}/${answer.support.support.slice(-36)}`);
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toEqual(answer.support);
+    return answer.support;
+  };
+  const a = await attach(controls.primary, 201);
+  expect(await attach(controls.primary, 200)).toEqual(a);
+  const changed = await sessions.operator.main('POST', path,
+    { ...primary, native: { ...primary.native, value: secondary.native.value,
+      predicate: `${primary.native.predicate}-changed` } }, controls.primary.key);
+  expect(changed.status).toBe(409);
+  const b = await attach(controls.secondary, 201);
+  expect(a.support).not.toBe(b.support);
+  expect(a.supportIdentity).not.toBe(b.supportIdentity);
+  expect(a.retained.sourceRecord).not.toBe(b.retained.sourceRecord);
+
+  // Same-value human confirmation must remain a native editorial decision. Source
+  // receipt/control ownership is never transferred by attachment or withdrawal.
+  expect(primary.native.owner).toBe('work-editorial');
+  expect(controls.human.path).toBe(`/v1/works/${primary.target.slice(-36)}/fields/synopsis/control`);
+  expect(controls.human.body).toMatchObject({ origin: 'human', source: null });
+  if (primary.native.owner === 'work-editorial') expect(controls.human.body.language).toEqual(primary.native.language);
+  expect(controls.human.body.value).toBe('lexical' in primary.native.value && primary.native.value.lexical);
+  const human = await command(sessions.owner, controls.human);
+  expect(human).toMatchObject({ outcome: 'succeeded', receipt: expect.any(String), content: expect.any(String), control: expect.any(String) });
+  const humanGroups = await factGroups(read, primary.target, corpus);
+  assertField(humanGroups, controls.publicField.field);
+  const signature = (groups: FactGroup[]) => groups.find(group => group.predicate === primary.native.predicate)?.items.map(item => ({
+    kind: item.kind, statement: item.statement, revision: item.revision, value: item.value,
+    qualifiers: item.qualifiers, acceptance: item.acceptance,
+  }));
+  const withdrawn = await sessions.operator.main('POST', '/v1/sources/withdrawals', {
+    profile: 'source-field-withdrawal-v1', support: a.support, expectedSupport: a.supportIdentity,
+    reason: 'Withdraw one retained record support while preserving the other and human content',
+  }, `withdraw-${controls.primary.key}`);
+  expect(withdrawn.status, await withdrawn.clone().text()).toBe(201);
+  expect(await withdrawn.json()).toMatchObject({ support: { state: 'withdrawn', support: a.support,
+    withdrawal: { nativeEffect: 'none' } }, replayed: false });
+  const remaining = await sessions.operator.main('GET', `${path}/${b.support.slice(-36)}`);
+  expect(remaining.status).toBe(200);
+  expect(await remaining.json()).toMatchObject({ state: 'recorded', support: b.support, withdrawal: null });
+  const ownerSubject = sessions.owner.actingSubject;
+  expect(ownerSubject).toMatch(/^https:\/\/rezics\.com\/id\//);
+  if (!ownerSubject) throw new Error('The retained owner must have an acting subject');
+  const control = await sessions.owner.main('GET', `${controls.human.path}?actingSubject=${encodeURIComponent(ownerSubject)}`);
+  expect(control.status).toBe(200);
+  expect(await control.json()).toMatchObject({ mode: 'human-controlled', value: controls.human.body.value,
+    language: controls.human.body.language });
+  for (const persona of allPersonas) {
+    const groups = await factGroups(publicRead(sessions[persona]), primary.target, corpus);
+    expect(signature(groups)).toEqual(signature(humanGroups));
+    const item = groups.find(group => group.predicate === primary.native.predicate)?.items.find(entry =>
+      canonicalJson(entry.value) === canonicalJson(primary.native.value));
+    expect(item?.sources).toContain(b.publicEvidence.id);
+    expect(item?.evidence?.find(entry => entry.id === b.publicEvidence.id)).toMatchObject(b.publicEvidence);
   }
 }
 

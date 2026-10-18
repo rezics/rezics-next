@@ -4,7 +4,7 @@ import { supportingRecords, type SupportingKey } from '../../../fixtures/catalog
 import { outcomeTest } from '../../../support/outcome-test.ts';
 import type { PersonaName, PersonaSessions } from '../../../support/personas.ts';
 import {
-  assertEdge, assertField, assertIdentity, body, factGroups, loadInformationCorpus,
+  assertEdge, assertField, assertIdentity, assertReadableNativeFacts, body, factGroups, loadInformationCorpus,
   noHidden, openInformationCorpus, publicRead, relations, resourcePath,
   type EntityPage, type InformationCorpus,
 } from '../../support/catalogue-information.ts';
@@ -64,6 +64,7 @@ async function supportingInformation(persona: PersonaName): Promise<void> {
     expect(response.status, await response.clone().text()).toBe(persona === 'visitor' ? 401 : 403);
     noHidden(await response.json(), corpus);
   }
+  await assertReadableNativeFacts(read, corpus);
 }
 
 describe(declaration.rowId, () => {
