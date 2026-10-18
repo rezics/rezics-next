@@ -175,7 +175,7 @@ function inheritedMcp(account: CodexAccount, env: NodeJS.ProcessEnv, timeout: nu
 }
 
 async function connectAllowance(account: CodexAccount, requestTimeout = 10_000): Promise<AllowanceTransport> {
-  const env = { ...process.env };
+  const env: NodeJS.ProcessEnv = { ...process.env, RUST_LOG: 'off' };
   // Launcher-only accounts select their own home; never inherit the calling worker's account.
   delete env.CODEX_HOME;
   if (account.home) env.CODEX_HOME = account.home;

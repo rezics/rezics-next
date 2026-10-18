@@ -191,6 +191,54 @@ test('lost redemption response is not retried or exposed; fresh permission deter
   } finally { f.cleanup(); }
 });
 
+test('a failed confirmation read cannot authorize resume or another redemption', async () => {
+  const f = fixture();
+  try {
+    f.rates(captured(false));
+    f.consume(() => { f.rates(null); return { outcome: 'reset' }; });
+    expect(await inspectAllowance('sample-c', { ...f.options, continue: true })).toMatchObject({
+      status: 'unavailable', canResume: false, next: 'retry-status', redemption: 'reset', error: 'protocol',
+    });
+    expect(f.calls.filter(call => call.method.endsWith('/consume'))).toHaveLength(1);
+  } finally { f.cleanup(); }
+});
+
+test('a continuation waiting for the lease honors revoked authorization', async () => {
+  const f = fixture();
+  let finish!: () => void;
+  const held = new Promise<void>(resolve => { finish = resolve; });
+  let started!: () => void;
+  const consuming = new Promise<void>(resolve => { started = resolve; });
+  const runs: Array<Promise<Awaited<ReturnType<typeof inspectAllowance>>>> = [];
+  try {
+    f.rates(captured(false));
+    f.consume(async () => { started(); await held; return { outcome: 'nothingToReset' }; });
+    runs.push(inspectAllowance('sample-c', { ...f.options, continue: true }));
+    await consuming;
+    let connected!: () => void;
+    const waiting = new Promise<void>(resolve => { connected = resolve; });
+    runs.push(inspectAllowance('sample-c', { ...f.options, continue: true, connect: async () => { connected(); return f.transport; } }));
+    await waiting;
+    testAccountSettings(f.directory, [{ engine: 'sample-c', launcher: join(f.directory, 'launcher'), home: f.home, pastAllowance: [] }]);
+    finish();
+    const results = await Promise.all(runs);
+    expect(results[1]).toMatchObject({ status: 'exhausted', canResume: false, credits: { authorized: false }, resetCards: { authorized: false } });
+    expect(f.calls.filter(call => call.method.endsWith('/consume'))).toHaveLength(1);
+  } finally { finish(); await Promise.allSettled(runs); f.cleanup(); }
+});
+
+for (const blocked of ['spend-control', 'workspace-limit']) test(`credits do not authorize resume through ${blocked}`, async () => {
+  const f = fixture(['credits']);
+  try {
+    const rates = captured(false);
+    if (blocked === 'spend-control') rates.rateLimits.spendControlReached = true;
+    else rates.rateLimits.rateLimitReachedType = 'workspace_owner_usage_limit_reached' as unknown as null;
+    f.rates(rates);
+    expect(await inspectAllowance('sample-c', { ...f.options, continue: true })).toMatchObject({ status: 'exhausted', canResume: false });
+    expect(f.calls.some(call => call.method.endsWith('/consume'))).toBe(false);
+  } finally { f.cleanup(); }
+});
+
 test('missing authentication and mismatched account homes cannot redeem', async () => {
   const f = fixture();
   try {
@@ -222,7 +270,7 @@ test('CLI gives actionable exit codes and rejects unknown accounts and flags wit
 function launcher(f: ReturnType<typeof fixture>, mode = 'normal') {
   const path = join(f.directory, 'launcher');
   writeFileSync(path, `#!/usr/bin/env bun
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, writeFileSync } from 'node:fs';
 const directory = ${JSON.stringify(f.directory)};
 const mode = ${JSON.stringify(mode)};
 appendFileSync(directory + '/launches.jsonl', JSON.stringify({ args: process.argv.slice(2), home: process.env.CODEX_HOME }) + '\\n');
@@ -242,7 +290,13 @@ else {
    let result = {};
    if (request.method === 'initialize') result = { codexHome: process.env.CODEX_HOME };
    if (request.method === 'account/read') result = { account: { type: 'chatgpt', email: 'private@example.com', planType: 'pro' } };
-   if (request.method === 'account/rateLimits/read') result = ${JSON.stringify(captured())};
+   if (request.method === 'account/rateLimits/read') {
+    result = ${JSON.stringify(captured())};
+    if (mode === 'concurrent') result.ordinaryUsageAllowed = existsSync(directory + '/restored');
+   }
+   if (request.method === 'account/rateLimitResetCredit/consume') {
+    await Bun.sleep(50); writeFileSync(directory + '/restored', 'yes'); result = { outcome: 'reset' };
+   }
    console.log(JSON.stringify({ method: 'account/updated', params: { email: 'private@example.com' } }));
    console.log(JSON.stringify({ id: request.id, result }));
   }
@@ -268,4 +322,30 @@ for (const mode of ['normal', 'timeout', 'error']) test(`real stdio transport di
     expect(JSON.stringify(result)).not.toMatch(/private|secret|@/);
     if (mode === 'normal') expect(existsSync(join(f.directory, 'requests.jsonl'))).toBe(true);
   } finally { f.cleanup(); }
+}, 5000);
+
+test('separate manager processes share the account lease and a concurrent retry consumes only one card', async () => {
+  const f = fixture();
+  const children: Bun.Subprocess<'ignore', 'pipe', 'pipe'>[] = [];
+  try {
+    launcher(f, 'concurrent');
+    const source = `import { inspectAllowance } from ${JSON.stringify(join(import.meta.dir, 'allowance.ts'))};
+      console.log(JSON.stringify(await inspectAllowance('sample-c', { continue: true,
+        settings: { directory: ${JSON.stringify(f.settings)} }, lockDirectory: ${JSON.stringify(f.options.lockDirectory)} })));`;
+    for (let index = 0; index < 2; index++) children.push(Bun.spawn([process.execPath, '-e', source], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' }));
+    const results = await Promise.all(children.map(async child => {
+      const [code, output, errors] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+      expect({ code, errors }).toEqual({ code: 0, errors: '' });
+      return JSON.parse(output);
+    }));
+    expect(results.every(result => result.canResume && result.status === 'included')).toBe(true);
+    const requests = readFileSync(join(f.directory, 'requests.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    expect(requests.filter(request => request.method === 'account/rateLimitResetCredit/consume')).toHaveLength(1);
+    expect(requests.filter(request => request.method === 'account/rateLimits/read')).toHaveLength(3);
+    expect(JSON.stringify(results)).not.toMatch(/private|secret|@|creditId/);
+  } finally {
+    for (const child of children) child.kill();
+    await Promise.allSettled(children.map(child => child.exited));
+    f.cleanup();
+  }
 }, 5000);
