@@ -8,7 +8,9 @@ import { httpTelemetry } from '@rezics/observability/elysia';
 import { mcpRoutes } from './routes/mcp.ts';
 import { entityPageRoutes, setMountedReads } from './routes/entity-pages.ts';
 import { readingPositionsRoutes } from './routes/reading-positions.ts';
-import type { FusekiClient } from './infrastructure/fuseki.ts';
+import { withFusekiReadRequest, FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge,
+  FusekiReadDeadlineExceeded, type FusekiClient } from './infrastructure/fuseki.ts';
+import { WORK_READ_COST } from './modules/work/read-contract.ts';
 import { accessAuthorityRoutes } from './routes/access-authority.ts';
 import { agentRoutes } from './routes/agents.ts';
 import { authorRoutes } from './routes/authors.ts';
@@ -140,6 +142,7 @@ import { wikiRoutes, wikiSchemaError } from './routes/wiki.ts';
 import { wikiHistoryRoutes } from './routes/wiki-history.ts';
 import { wikiEvidenceRoutes } from './routes/wiki-evidence.ts';
 import { rateLimitHook } from './modules/rate-limit/hook.ts';
+import { rateLimitFamily } from './modules/rate-limit/budgets.ts';
 import { composeDisclosure } from './modules/disclosure/assembly.ts';
 
 export type { MainWorkDependencies } from './routes/dependencies.ts';
@@ -343,6 +346,27 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
   // https://bun.sh/docs/runtime/http/server#idletimeout
   const app = new Elysia({ serve: { idleTimeout: 180 } })
     .use(httpTelemetry())
+    .wrap(fetch => async (request, ...rest) => {
+      const path = new URL(request.url).pathname;
+      const family = rateLimitFamily(request.method, path);
+      const read = request.method === 'GET' || request.method === 'HEAD'
+        || request.method === 'POST' && (family === null || family === 'search');
+      if (!read || !path.startsWith('/v1/') || request.headers.get('upgrade')?.toLowerCase() === 'websocket') {
+        return fetch(request, ...rest);
+      }
+      try {
+        return await withFusekiReadRequest(request, { calls: WORK_READ_COST.graphCalls,
+          bytes: WORK_READ_COST.graphBytes, deadlineMs: WORK_READ_COST.deadlineMs }, () => fetch(request, ...rest));
+      } catch (error) {
+        if (error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge) {
+          return problem(422, 'work_read_budget_exceeded', 'Work read exceeds its budget');
+        }
+        if (request.signal.aborted || error instanceof FusekiReadDeadlineExceeded) {
+          return problem(503, 'work_read_unavailable', 'Work read is unavailable');
+        }
+        return typedRefusal(error) ?? problem(500, 'internal_error', 'Request could not be processed');
+      }
+    })
     .onRequest(({ request }) => {
       if (new URL(request.url).pathname.startsWith('/health/')) return;
       const types = work?.types;

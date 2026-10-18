@@ -3,7 +3,9 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
 import { withTelemetrySpan } from '@rezics/observability/runtime';
 import { GraphReadFence, fencedGraphQuery, graphReadVersion } from '../../infrastructure/graph-read-fence.ts';
-import { fusekiReadBudget, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded,
+import { assertFusekiReadActive, fusekiReadBudget, withFusekiReadRequest, FusekiReadDeadlineExceeded,
+  snapshotFusekiReadDiagnostics, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded,
+  type FusekiReadDiagnosticSnapshot,
   type SparqlResult } from '../../infrastructure/fuseki.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 // `deps.media` is declared by module augmentation in the media routes; import it
@@ -36,9 +38,13 @@ export class WorkReadExpired extends WorkReadMoved {}
  * read refused (the class alone cannot tell a moved basis from a missing one). */
 export class WorkReadUnavailable extends Error {
   readonly code: string;
-  constructor(message?: string, options?: ErrorOptions) {
+  readonly phase?: string;
+  readonly diagnostics?: FusekiReadDiagnosticSnapshot;
+  constructor(message?: string, options?: ErrorOptions & { phase?: string; diagnostics?: FusekiReadDiagnosticSnapshot }) {
     super(message, options);
     this.code = (message ?? 'unavailable').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32);
+    this.phase = options?.phase;
+    this.diagnostics = options?.diagnostics;
   }
 }
 export class WorkReadLimit extends Error {}
@@ -120,12 +126,15 @@ export class WorkReadSession {
   /** Share hydration within this attempt; the registered dependency still reads
    * its owner afresh at completion. Never share this cache across requests. */
   async retained<T>(key: string, read: () => Promise<T>): Promise<T> {
+    this.checkDeadline();
     let value = this.retainedReads.get(key);
     if (!value) {
       value = read();
       this.retainedReads.set(key, value);
     }
-    return structuredClone(await value) as T;
+    const result = await value;
+    this.checkDeadline();
+    return structuredClone(result) as T;
   }
   private readonly children = new Set<WorkReadSession>();
   private captureDependencies = true;
@@ -145,9 +154,11 @@ export class WorkReadSession {
     this.position.sequence = position.sequence;
   }
   async dependency(name: string, read: () => Promise<unknown>): Promise<string> {
+    this.checkDeadline();
     return this.observeDependency(name, await read(), read);
   }
   async canPreviewWork(work: string): Promise<boolean> {
+    this.checkDeadline();
     if (!this.principal || !this.options.actingSubject) return false;
     const read = () => {
       if (!this.deps.access.canPreviewWork) throw new WorkReadUnavailable('Work preview authority is unavailable');
@@ -170,6 +181,7 @@ export class WorkReadSession {
    * result, rather than retaining every candidate's descriptive revision. */
   async selection<T>(name: string, read: (probe: WorkReadSession) => Promise<T>,
     selectedValue: (value: T) => unknown = value => value): Promise<T> {
+    this.checkDeadline();
     const reread = async () => {
       const probe = new WorkReadSession(this.deps, this.request, this.options, { ...this.position });
       probe.captureDependencies = false;
@@ -187,6 +199,7 @@ export class WorkReadSession {
   }
   /** Recheck only the bounded inputs consumed by this page. Retries share its HTTP budget. */
   async fenceDependencies() {
+    this.checkDeadline();
     for (const [body, prior] of this.queryDependencies) {
       const rows = await this.query(body, prior.limit, prior.fenceRows, prior.maxBytes);
       if (readRowsToken(prior.fenceRows ? prior.fenceRows(rows) : rows) !== prior.token) {
@@ -194,24 +207,28 @@ export class WorkReadSession {
       }
     }
     for (const prior of this.ownerDependencies.values()) {
+      this.checkDeadline();
       if (readDependencyToken(await prior.read()) !== prior.token) throw new WorkReadMoved('Selected dependency changed');
     }
     await this.fenceSummaryMedia();
-    for (const child of this.children) await child.fenceDependencies();
+    for (const child of this.children) { this.checkDeadline(); await child.fenceDependencies(); }
   }
   async fenceAuthority(): Promise<void> {
+    this.checkDeadline();
     try {
       await this.fenceRealms();
       // A selection probe's mutable attribution is part of its registered
       // selected result, rather than a fence on every candidate it inspected.
       if (this.captureDependencies) await fenceAuthorNames(this);
-      for (const child of this.children) await child.fenceAuthority();
+      for (const child of this.children) { this.checkDeadline(); await child.fenceAuthority(); }
     } finally {
       try {
+        this.checkDeadline();
         if (this.principal && !await this.deps.access.activePrincipalId(this.principal)) {
           throw new AccountAssertionDenied('Principal is inactive');
         }
       } finally {
+        this.checkDeadline();
         await this.deps.access.assertRecoveryOpen();
       }
     }
@@ -241,6 +258,7 @@ export class WorkReadSession {
   get viewer() { return this.principal ? disclosureViewer(this.principal, this.options.actingSubject)
     : this.options.publicViewer ?? disclosureViewer(null); }
   async disclosure(targets: readonly DisclosureTarget[], channel: DisclosureChannel = 'read') {
+    this.checkDeadline();
     const read = () => discloseInventory(this.deps.environment, targets, this.viewer, channel);
     const result = await read();
     this.observeDependency(`disclosure:${channel}:${JSON.stringify(targets)}`, result, read);
@@ -274,6 +292,7 @@ export class WorkReadSession {
 
   async fenceRealms() {
     for (const [realm, proof] of this.realmProofs) {
+      this.checkDeadline();
       if (await this.deps.access.realmReadProof?.(this.principal!, this.options.actingSubject!, realm) !== proof) {
         throw new WorkReadMissing('Realm is unavailable');
       }
@@ -399,7 +418,7 @@ export class WorkReadSession {
     return { kind, realm: this.options.realm ?? null };
   }
 
-  checkDeadline(): void { fusekiReadBudget.getStore()?.signal.throwIfAborted(); }
+  checkDeadline(): void { assertFusekiReadActive(); }
 }
 
 async function position(deps: MainWorkDependencies, fresh = false, restoreLineage = false): Promise<ReadPosition & {
@@ -458,8 +477,13 @@ export const currentWorkReadSession = () => activeReadSession.getStore();
 export async function publicWorkRead<T>(deps: MainWorkDependencies, request: Request,
   options: Omit<ReadOptions, 'actingSubject' | 'publicViewer'>,
   operation: (session: WorkReadSession) => Promise<T>, url: string | URL = request.url): Promise<T> {
+  if (!fusekiReadBudget.getStore()) return withFusekiReadRequest(request, {
+    calls: WORK_READ_COST.graphCalls, bytes: WORK_READ_COST.graphBytes, deadlineMs: WORK_READ_COST.deadlineMs,
+  }, () => publicWorkRead(deps, request, options, operation, url));
+  assertFusekiReadActive();
   const principal = request.headers.has('authorization')
     ? await verifyRequestAccount(deps.account, request, ['work:read']) : null;
+  assertFusekiReadActive();
   return workRead(deps, publicLanguageRequest(request, url),
     { ...options, publicViewer: disclosureViewer(principal) }, operation);
 }
@@ -469,14 +493,15 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
   complete?: (result: T, session: WorkReadSession) => T): Promise<T> {
   const outer = fusekiReadBudget.getStore();
   const deadline = AbortSignal.timeout(WORK_READ_COST.deadlineMs);
-  const signal = outer ? AbortSignal.any([deadline, outer.signal]) : deadline;
+  const signal = AbortSignal.any([request.signal, deadline, ...(outer ? [outer.signal] : [])]);
   let callsLeft: number = WORK_READ_COST.graphCalls, bytesLeft: number = WORK_READ_COST.graphBytes;
   // Allocate once, outside the retry loop: every attempt debits both this read
   // and any enclosing search's call/byte budget and shares their deadline.
   const budget = { signal,
     attempt: 1,
     diagnostics: outer?.diagnostics,
-    deadline: outer?.deadline,
+    deadline: Math.min(performance.now() + WORK_READ_COST.deadlineMs, outer?.deadline ?? Infinity),
+    readPhase: 'position',
     get callsLeft() { return Math.min(callsLeft, outer?.callsLeft ?? callsLeft); },
     set callsLeft(value: number) { const used = this.callsLeft - value; callsLeft -= used; if (outer) outer.callsLeft -= used; },
     get bytesLeft() { return Math.min(bytesLeft, outer?.bytesLeft ?? bytesLeft); },
@@ -495,22 +520,28 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
       const attempts = !options.movingGraph && (!hasCursor || options.retainedBasis) && (request.method === 'GET' || options.readOnlyTemplate)
         && url.pathname.startsWith('/v1/') ? WORK_READ_COST.attempts : 1;
       for (let attempt = 0; ; attempt++) {
+        assertFusekiReadActive();
         const callsBefore = budget.callsLeft, bytesBefore = budget.bytesLeft;
         budget.attempt = attempt + 1;
         try {
           return await withTelemetrySpan('main.work_read.attempt', async () => {
+            budget.readPhase = 'position';
             const located = await position(deps, options.localBasis
               || searchGraphSnapshot.getStore()?.graphBasis === 'selected-units', url.searchParams.get('sort') === 'new');
             const session = new WorkReadSession(deps, request, options,
               { dataEpoch: located.dataEpoch, sequence: located.sequence }, false, attempt + 1);
             session.restorePriors = located.priors;
+            budget.readPhase = 'admission';
+            session.checkDeadline();
             if (request.headers.has('authorization')) {
               if (!options.actingSubject) throw new WorkReadInvalid('actingSubject is required for authenticated reads');
               // The rate-limit admission covers this attempt only. A retry verifies
               // again, and each attempt rechecks that the principal remains active.
               session.principal = await verifyRequestAccount(deps.account, request, ['work:read']);
+              session.checkDeadline();
               if (!await deps.access.activePrincipalId(session.principal)) throw new AccountAssertionDenied('Principal is inactive');
               if (deps.personPreferences) {
+                session.checkDeadline();
                 session.readingLanguages = await deps.personPreferences.languagesForReader(session.principal);
               }
             } else if (options.actingSubject) throw new AccountAssertionDenied('Authentication is required');
@@ -521,8 +552,11 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
               // Every completed attempt closes its authority check, including a
               // failed consistency fence; retries cannot defer revocation.
               try {
+                budget.readPhase = 'read';
+                session.checkDeadline();
                 result = located.graphVersion && !options.movingGraph
                   ? await graphFence.capture(() => operation(session)) : await operation(session);
+                budget.readPhase = 'closing-position';
                 const after = await position(deps, true);
                 if (after.dataEpoch !== session.position.dataEpoch
                   || options.movingGraph && after.sequence !== session.position.sequence) {
@@ -532,15 +566,19 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
                     throw new WorkReadMoved('Graph changed during the read');
                   }
                 }
+                budget.readPhase = 'dependency-fence';
                 if (located.graphVersion && after.graphVersion === located.graphVersion && !options.movingGraph) {
                   // Graph inputs can be retained; every SQL owner check stays live.
                   await graphFence.verify(() => session.fenceDependencies());
                   closingVersion = after.graphVersion;
                 } else await session.fenceDependencies();
               } finally {
+                if (!signal.aborted) budget.readPhase = 'authority-fence';
                 await session.fenceAuthority();
               }
               if (graphFence.reused) {
+                budget.readPhase = 'closing-fence';
+                session.checkDeadline();
                 // Close after authority too: an owner callback may commit graph inputs.
                 const closed = await position(deps, true);
                 if (closed.dataEpoch !== session.position.dataEpoch || closed.graphVersion !== closingVersion) {
@@ -549,17 +587,19 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
                   finally { await session.fenceAuthority(); }
                 }
               }
-              signal.throwIfAborted();
+              session.checkDeadline();
               return complete ? complete(result, session) : result;
             }));
           });
         } catch (error) {
+          assertFusekiReadActive();
           if (!(error instanceof WorkReadMoved || error instanceof SearchSnapshotMoved)
             || error instanceof WorkReadExpired || attempts === 1) throw error;
           const callsUsed = callsBefore - budget.callsLeft, bytesUsed = bytesBefore - budget.bytesLeft;
           if (attempt + 1 === attempts || budget.callsLeft < callsUsed || budget.bytesLeft < bytesUsed) {
             throw new WorkReadUnavailable('A consistent graph read could not be obtained within its budget', { cause: error });
           }
+          budget.readPhase = 'retry-wait';
           await delay(Math.min(WORK_READ_COST.retryDelayMs * 2 ** attempt,
             WORK_READ_COST.maximumRetryDelayMs), undefined, { signal });
         }
@@ -567,9 +607,13 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
     });
   } catch (error) {
     if (error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge) {
-      throw new WorkReadLimit('Work read budget exceeded');
+      throw new WorkReadLimit('Work read budget exceeded', { cause: error });
     }
-    if (signal.aborted) throw new WorkReadUnavailable('Work read deadline exceeded');
+    if (signal.aborted || error instanceof FusekiReadDeadlineExceeded) {
+      throw new WorkReadUnavailable(request.signal.aborted ? 'Work read cancelled' : 'Work read deadline exceeded', {
+        cause: error, phase: budget.readPhase, diagnostics: snapshotFusekiReadDiagnostics(budget),
+      });
+    }
     throw error;
   }
 }
