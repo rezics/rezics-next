@@ -1,6 +1,17 @@
 import type { PostMessages } from '../messages.ts';
 
 export default {
+  unwritten: "サーバーへの書き込みはありません。下書きの編集、投稿先の変更、この試行のキャンセルができます。",
+  writeUnknown: "直前の書き込み結果を確認できません。同じ試行を続けて安全に確認してください。",
+  writeAcknowledged: "投稿の一部はサーバーに保存されています。二重投稿を防ぐため、同じ試行を続けてください。",
+  cancelAttempt: "試行をキャンセル",
+  retryPost: "投稿を再試行",
+  exportDraft: "下書きをエクスポート",
+  retrySave: "保存を再試行",
+  draftIncomplete: "現在の変更は未保存です。開き直すと前回保存した版に戻ります。離れる前に再試行するかエクスポートしてください。",
+  draftSaveFailed: "この端末に保存できません。ページを開いたままにするか、下書きをエクスポートしてください。",
+  draftSaving: "下書きを保存中…",
+
   banned: 'このコミュニティからBANされているため、投稿できません。下書きは残っています。',
   title: '投稿を作成', intro: 'コミュニティで会話を始めましょう。', community: 'コミュニティ',
   communitySearch: 'コミュニティを探す', communityChange: 'コミュニティを変更', work: '作品',
