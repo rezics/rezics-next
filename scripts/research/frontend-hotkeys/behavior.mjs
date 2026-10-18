@@ -60,6 +60,10 @@ for (const candidate of candidates) {
     if (!html) throw new Error('Fixture server did not return successful SSR');
     writeFileSync(`${captures}/${candidate}-ssr.html`, html);
     entry.ssr = { status: html.includes('Keyboard comparison:') ? 'pass' : 'fail', bytes: Buffer.byteLength(html), browserGlobalsError: /ReferenceError: (window|document|navigator)/.test(html) };
+    entry.ssr.concurrent = await Promise.all([1,2].map(async () => {
+      const response = await fetch(origin); const body = await response.text();
+      return { status: response.status, neutralBinding: body.includes('Mod+K'), browserGlobalsError: /ReferenceError: (window|document|navigator)/.test(body) };
+    }));
     browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
     entry.browser = browser.version();
     const context = await browser.newContext({ viewport: { width: 1280, height: 960 }, reducedMotion: 'reduce' });
