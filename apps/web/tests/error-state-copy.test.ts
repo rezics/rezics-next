@@ -133,7 +133,8 @@ describe('failure copy', () => {
     });
     expect(failureText('missing', copy)).toMatchObject({ title: feed.feedMissing, action: 'none', reference: false });
     expect(failureText('sign-in', copy)).toMatchObject({ title: feed.deniedTitle, action: 'sign-in' });
-    expect(failureText('moved', copy).kind === 'shown' && failureText('invalid', copy)).toMatchObject({ action: 'restart' });
+    expect(failureText('moved', copy)).toMatchObject({ action: 'restart' });
+    expect(failureText('invalid', copy)).toMatchObject({ title: feed.failed, action: 'retry' });
     expect(failureText('budget', copy)).toMatchObject({ description: feed.budgetBody, reference: false });
   });
 

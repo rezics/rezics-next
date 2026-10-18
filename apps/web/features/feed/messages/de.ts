@@ -78,6 +78,7 @@ export default {
 
   // The list
   posts: 'Beiträge', loadMore: 'Mehr Beiträge anzeigen', loadingMore: 'Weitere Beiträge werden geladen…',
+  refreshing: 'Beiträge werden aktualisiert…',
   newPosts: plural({ one: insert('{{count}} neuer Beitrag'), other: insert('{{count}} neue Beiträge') },
     { count: asValue(number()) }),
   newPostsAtLeast: plural({ one: insert('{{count}}+ neuer Beitrag'), other: insert('{{count}}+ neue Beiträge') },
