@@ -116,7 +116,33 @@ console.log(JSON.stringify(loadSettings(${JSON.stringify({ directory: f.director
     } finally { f.cleanup(); }
   });
 
+  test('review policy layers preserve defaults and an explicit empty fallback', () => {
+    const f = fixture();
+    try {
+      expect(loadSettings(f.options).settings).toMatchObject({
+        reviewEngine: 'sol', reviewEffort: 'high', reviewFallbackEngines: null, reviewScope: 'sensitive',
+      });
+      f.layer('shared', { reviewEffort: 'max', reviewFallbackEngines: ['sample-b'], reviewScope: 'all' });
+      f.layer('user', { reviewEngine: 'sample-a', reviewEffort: 'xhigh', reviewFallbackEngines: [],
+        accounts: [{ engine: 'sample-a', home: './account', weight: 1 }] });
+      const loaded = loadSettings(f.options);
+      expect(loaded.settings).toMatchObject({
+        reviewEngine: 'sample-a', reviewEffort: 'xhigh', reviewFallbackEngines: [], reviewScope: 'all',
+      });
+      expect(loaded.sources.reviewEffort).toEndWith('settings.user.json');
+      expect(loaded.sources.reviewFallbackEngines).toEndWith('settings.user.json');
+      expect(loaded.sources.reviewScope).toEndWith('settings.json');
+      f.layer('user', { reviewFallbackEngines: null });
+      expect(loadSettings(f.options).settings.reviewFallbackEngines).toBeNull();
+    } finally { f.cleanup(); }
+  });
+
   test.each([
+    [{ reviewEffort: 'turbo' }, 'reviewEffort'],
+    [{ reviewScope: 'sometimes' }, 'reviewScope'],
+    [{ reviewFallbackEngines: false }, 'reviewFallbackEngines'],
+    [{ reviewFallbackEngines: ['sample-b', 'sample-b'] }, 'reviewFallbackEngines'],
+    [{ reviewFallbackEngines: [''] }, 'reviewFallbackEngines[0]'],
     [{ codexCompactTokens: { sol: 0, luna: 200000 } }, 'codexCompactTokens.sol'],
     [{ codexCompactTokens: { sol: 160000.5, luna: 200000 } }, 'codexCompactTokens.sol'],
     [{ codexCompactTokens: { sol: 160000 } }, 'codexCompactTokens'],
