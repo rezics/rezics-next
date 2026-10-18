@@ -1,0 +1,772 @@
+{
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2807",
+  "managerSession": "goal-audit-remediation-20261019",
+  "reviewer": {
+    "engine": "codex-1",
+    "assignedModel": "gpt-6.1-sol",
+    "assignedEffort": "xhigh",
+    "nestedAgents": false,
+    "fallbackModel": false
+  },
+  "completedAt": "2026-10-18T22:35:40.168543+00:00",
+  "outcome": {
+    "status": "done",
+    "focusedReview": "No remaining defect confirmed in the pinned four-control source and the observed rendered states.",
+    "independentEvidence": true,
+    "productionEdits": false,
+    "storyEdits": false,
+    "originalAssertionEdits": false,
+    "commits": [],
+    "pushes": [],
+    "landingAuthorized": false,
+    "D4_001Closed": false,
+    "decisionBoundary": "This independently reviews the complete shared Input/InputGroup/Switch/standalone Textarea patch at c7e948dd. It does not authorize individual landing or close D4-001: remaining product proof and combined-wave acceptance belong to the manager."
+  },
+  "source": {
+    "startedAt": "2026-10-18T22:16:58.683162+00:00",
+    "initialHead": "12cc0e69cb082434c2cb573ba461f7a7c3ab7ad1",
+    "initiallyClean": true,
+    "branch": "goal/g-2807",
+    "source": "c7e948dd21369900f3eee05adefe6c9ca2b46f2f",
+    "rootTree": "84f040dcd4e9ba6bcdeccb6e51a672fbca121e67",
+    "trees": {
+      "packages/ui": "e7d9c4f0865e0fc700ba7e216a897c0a2673c237",
+      "apps/web": "c47e93a51e5277c35ac873453d55855d0ae1116f"
+    },
+    "originalBaseline": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+    "baselineTrees": {
+      "packages/ui": "62c3b8788c991ca04acd20f977f3f6576d41354e",
+      "apps/web": "b613353fccd95f45210d77eaed7f9bd539502b73"
+    },
+    "sourceBlobs": {
+      "packages/ui/src/components/input.tsx": "9e43bdd3d21feaab808b5e27184462227c8b029a",
+      "packages/ui/src/components/input-group.tsx": "303ff0590a4c40c5582da1251a1aca94a8412fef",
+      "packages/ui/src/components/switch.tsx": "33a87fd0d1678836f480fcb9b6df3fbb0568532e",
+      "packages/ui/src/components/textarea.tsx": "9ca71735c53c3526462fe1d2e6d84d53cfd84713",
+      "packages/ui/src/components/input.stories.tsx": "c7446f0d4ce417d749f9a5dbad4fddcbd09503a8",
+      "packages/ui/src/components/input-group.stories.tsx": "ef2de3172af6418886041a8e0c8d7459a4a89309",
+      "packages/ui/src/components/switch.stories.tsx": "b1b0bf25c6363e022385a531be9846a00515cae2",
+      "packages/ui/src/components/textarea.stories.tsx": "13c643a5dd945f95ff1829ef148ce8962caed5c4",
+      "packages/ui/src/styles.css": "692d5d3f4fdd8e24b8f332cab2f35e096b24c663",
+      "packages/ui/src/test/control-contrast.ts": "3631b266d17b26c5058c64bb55fb27c3a0357533"
+    },
+    "readOnlyRetainedManifestVerified": 592,
+    "changedOrMissing": [],
+    "sourceStayedPinnedThroughoutChecks": true,
+    "finalIdentity": "final-identity.json",
+    "originalBaselineUse": "Source comparison is against original product 69eac3ceeaf885be70205a70248bc951e9d81cc9. No fresh original-product browser baseline was run. Older rendered sources below are diagnostic inputs only.",
+    "sourceComparison": "baseline-source.diff",
+    "preservedCorrections": [
+      "0b64ee10c767ca88682f5bebaedc77a094230ef9",
+      "0215222300fb8573a6d2438ac98b96d47198dea7",
+      "988794e91747cc25a66764fb039f0163fdfbee7e",
+      "c7e948dd21369900f3eee05adefe6c9ca2b46f2f"
+    ],
+    "diagnosticSources": {
+      "retainedG2782RenderedSource": "8f07c6b4e834dea67898513f00032b29c5fe05d9",
+      "workerStoryOnlyTextareaBaseline": "bbf66c522a4d749e76bfa6a025b54be5e8cf1baf",
+      "rebasedStoryOnlyBaseline": "988794e91747cc25a66764fb039f0163fdfbee7e",
+      "storyOnlyBaselineUiTree": "31e954eb598cc1a8026ee0acdd447f7ee72f53e6",
+      "acceptanceUse": "None of these diagnostic sources replaces the original product baseline or supplies this independent acceptance."
+    }
+  },
+  "retainedInputs": {
+    "root": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/control-four-controls-c7e948dd",
+    "manifest": ".temp/ref/manifest.json",
+    "manifestSha256": "e560a3d188f8180f883029e53f1e75568008a2eafd8a17ce48d75cf346a33b9c",
+    "files": 592,
+    "changedOrMissing": [],
+    "readOnly": true,
+    "completionVerification": "retained-input-final-verification.json",
+    "G2782ReportPreserved": ".temp/ref/control-review.json",
+    "workerEvidenceUse": "592 manifest entries verified by size/SHA256 before review. G-2756 prior 59/59, static checks, 140 fixed-source PNGs and retained focus evidence were read as inputs, not counted as independent results.",
+    "stagedReferenceIdentities": "final-identity.json:referenceSha256"
+  },
+  "method": {
+    "skills": [
+      ".agents/skills/goal-worker/SKILL.md",
+      ".agents/skills/storybook-ui-review/SKILL.md",
+      ".agents/skills/product-audit/SKILL.md"
+    ],
+    "browser": "Repository Storybook addon-vitest / Playwright Chromium fallback. Browser/MCP servers were not available in the tool inventory.",
+    "versions": {
+      "bun": "1.4.3",
+      "node": "v26.8.2",
+      "task": "3.53.1",
+      "vitest": "5.0.4",
+      "@playwright/test": "1.63.0",
+      "@storybook/addon-vitest": "11.0.0-alpha.6",
+      "@ark-ui/react": "5.39.3"
+    },
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "viewports": [
+      {
+        "width": 1440,
+        "height": 1000
+      },
+      {
+        "width": 390,
+        "height": 844
+      }
+    ],
+    "viewportMeaning": "CSS viewport sizes in desktop Chromium, not a real phone or touch/mobile emulation.",
+    "baseConfig": "apps/web/vitest.config.ts",
+    "captureConfig": "config.ts",
+    "sharedHelper": "packages/ui/src/test/control-contrast.ts",
+    "configurationIdentities": [
+      "configuration-identity.json",
+      "final-identity.json"
+    ],
+    "instrumentationDifferencesFromWorker": [
+      "Reused worker config/capture commands and byte-identical observations.setup.ts; original helper, base config, story bodies and assertions unchanged.",
+      "Moved output into own review root and added an exact HEAD/clean-source requirement.",
+      "Appended extra.setup.tsx only in .temp: native pointer hover, keyboard, extra surfaces/group addon transitions, Switch sizes, disabled semantics, ErrorRecovery and caller fixtures.",
+      "Extra snapshots use the same captureStoryScreenshot helper, field crop plus 8 CSS pixels and recorded provider geometry. Fonts settle; transitions/animations are suppressed and root theme/viewport restored.",
+      "The one setup correction sanitizes temporary caller capture captions only; correction output is separate. Exact first, correction and supplemental association harness versions are retained and hashed.",
+      "Final evidence-gap check appends associations.setup.ts for only 12 InvalidFields cases in Input/InputGroup/Textarea. It asserts before/after focus descriptions and live/error links without modifying original assertions; separate association-check output preserves earlier captures.",
+      "Offline measure.py independently reads unmodified PNGs and computes sRGB contrast at recorded coordinates. No image editing, story assertion replacement or production instrumentation."
+    ],
+    "effectiveContrastPremise": "Canvas composites actual computed colors over the solid ancestor chain. Enabled probes reject ancestor opacity or background images. Offline luminance calculation recomputes ratios from RGBA samples for extra probes and all switch surfaces; reused original observation ratios are separately checked against fresh PNG samples.",
+    "pixelContrastPremise": "Original PNGs, integer floor coordinates at recorded provider CSS bounds. Left straight-edge midpoints; midpoint focus outline and neighbors; exact provider thumb bounds for all sizes, center and 3x3 patches. sRGB WCAG relative luminance. Never transform PNGs. Not an exhaustive antialiased edge minimum.",
+    "threshold": {
+      "enabledBoundaryTrackThumb": 3,
+      "focusPixelVersusRest": 3,
+      "meaning": "Task/shared-helper adjacent-color criterion; this is not a complete WCAG conformance assessment."
+    },
+    "premiseRevisions": [
+      {
+        "evidence": "rejected-measurement-premises.json",
+        "script": "measure-first-premise.py",
+        "reason": "Left .35/.65 samples fall into rounded pill corners; first primary-color row run is not the center of the on track. These sampling premises were rejected, not reported as product failures."
+      },
+      {
+        "evidence": "rejected-top-edge-premises.json",
+        "script": "measure-top-premise.py",
+        "reason": "Flooring fractional top-edge geometry can sample the preceding or antialiased row. The final criterion uses stable straight left midpoints rather than claiming every antialiased pixel is an opaque boundary."
+      }
+    ]
+  },
+  "checks": [
+    {
+      "job": "job:f5cf2b0d-04e6-4d7a-b660-242d452f0019",
+      "launcher": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+      "command": "bun scripts/goal/goalctl.ts test packages/ui/src/components/input.stories.tsx packages/ui/src/components/input-group.stories.tsx packages/ui/src/components/switch.stories.tsx packages/ui/src/components/textarea.stories.tsx --config ../../.temp/control-four-controls-review/vitest.after.config.mts",
+      "then": "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2807 task goal -- check",
+      "qaRun": "20261018t221901-5ae770",
+      "exit": 201,
+      "resultClass": "harness",
+      "result": "Input 11/11, InputGroup 17/17 and Switch 10/10 passed. Textarea 20/21 passed; original ErrorRecovery play assertions completed, then temporary caller screenshot naming failed in afterEach. Total 58/59; no product outcome assertion failure.",
+      "assertionReached": {
+        "originalErrorRecovery": true,
+        "callerErrorAttributeBeforeCapture": true,
+        "remainingCallerFixturesInThisAttempt": false
+      },
+      "failure": "Error: Story screenshot requires a story export name. Hyphen in temporary Caller_caller-error caption; extra.setup.tsx capture:71, caller loop:203.",
+      "thenStarted": false,
+      "evidence": [
+        "job-logs/f5cf2b0d-04e6-4d7a-b660-242d452f0019.1.log",
+        "qa-runs/20261018t221901-5ae770/summary.md",
+        "setup-correction.json",
+        "instrumentation-attempt1/"
+      ],
+      "warnings": [
+        "@storybook/react-dom-shim optimizeDeps include resolution warning did not prevent story execution.",
+        "Vite native-loader future compatibility warnings did not fail outcomes."
+      ]
+    },
+    {
+      "job": "job:9ee89b34-51e5-4276-9e38-5b32fdfaac8a",
+      "launcher": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+      "command": "bun scripts/goal/goalctl.ts test packages/ui/src/components/textarea.stories.tsx --config ../../.temp/control-four-controls-review/vitest.after.config.mts",
+      "then": "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2807 task goal -- check",
+      "qaRun": "20261018t222059-cab23f",
+      "exit": 0,
+      "resultClass": "passed",
+      "result": "Textarea 21/21 passed, including original ErrorRecovery and all temporary recovery/caller probes. Only the failed file was rerun after the single harness correction.",
+      "evidence": [
+        "job-logs/9ee89b34-51e5-4276-9e38-5b32fdfaac8a.1.log",
+        "qa-runs/20261018t222059-cab23f/summary.md"
+      ]
+    },
+    {
+      "job": "job:9ee89b34-51e5-4276-9e38-5b32fdfaac8a",
+      "sequenceStep": 2,
+      "command": "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2807 task goal -- check",
+      "exit": 0,
+      "result": "Worker integrity check passed on unchanged prepared source; 0/45 guards selected, no changed TypeScript workspace/source/AST paths, and no test files in worker brief. This does not constitute an independent full static gate for the patch.",
+      "pinProtection": "Supported GOAL_CHECK_PREPARED_TREE path avoids the normal clean-branch refresh. Exact source trees verified after both jobs.",
+      "evidence": [
+        "job-logs/9ee89b34-51e5-4276-9e38-5b32fdfaac8a.2.log",
+        "job-logs/worker-check.log"
+      ]
+    },
+    {
+      "job": "job:b4f5df58-aa39-4d7d-8f37-98b20d5f544c",
+      "launcher": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+      "command": "bun scripts/goal/goalctl.ts test packages/ui/src/components/input.stories.tsx packages/ui/src/components/input-group.stories.tsx packages/ui/src/components/textarea.stories.tsx --config ../../.temp/control-four-controls-review/vitest.associations.config.mts --testNamePattern \"Invalid Fields\"",
+      "qaRun": "20261018t223347-bba9d9",
+      "exit": 0,
+      "resultClass": "passed",
+      "result": "12 invalid-field cases passed across Input/InputGroup/Textarea; 37 unrelated cases in those files skipped by name. Added observer verifies 32 empty/populated field rest/focus pairs retain their DOM error associations, accessible descriptions, labels, value and visible error. No implementation fix or additional setup correction.",
+      "assertionsReached": true,
+      "evidence": [
+        "job-logs/b4f5df58-aa39-4d7d-8f37-98b20d5f544c.log",
+        "qa-runs/20261018t223347-bba9d9/summary.md",
+        "invalid-association-check.json",
+        "association-check/"
+      ]
+    },
+    {
+      "kind": "offline artifact analysis",
+      "script": "measure.py",
+      "result": "408 fresh capture PNGs measured, including diagnostic first Textarea run; zero sampled contrast violations. Acceptance subset contains 328 measured PNGs, with zero sampled violations.",
+      "evidence": [
+        "independent-pixel-measurements.json",
+        "independently-measured-states.json"
+      ]
+    }
+  ],
+  "coverage": {
+    "files": [
+      "packages/ui/src/components/input.stories.tsx",
+      "packages/ui/src/components/input-group.stories.tsx",
+      "packages/ui/src/components/switch.stories.tsx",
+      "packages/ui/src/components/textarea.stories.tsx"
+    ],
+    "independentPassingStoryCases": 59,
+    "states": [
+      "Enabled empty Input, group input and group textarea: rest, native Playwright hover (:hover asserted) and keyboard focus across light/dark and both viewports; background/card/muted surface observations.",
+      "Invalid empty and populated Input; invalid empty and populated grouped input with inline addons; invalid empty and populated grouped textarea with block addons; standalone invalid empty/populated Textarea. Rest/focus pairs in light/dark and both sizes.",
+      "Group read-only invite-link input remains unchanged after typing; focus transitions from frame to actionable addon. Populated textarea reply and addon button retain separate focus ownership.",
+      "Standalone Textarea read-only/disabled/enabled Availability variants in four theme/viewport contexts. Read-only typing leaves value intact; disabled controls are skipped by keyboard.",
+      "Input, InputGroup and Switch disabled native/ARIA behavior and keyboard skip in four contexts. Disabled opacity remains in PNGs and is excluded from enabled-contrast thresholds.",
+      "Switch enabled on/off across background/card/muted surfaces in original story assertions/computed observations. PNG composite capture shows the first surface pair; independent size PNGs cover sm/md/lg off/on plus keyboard focus and Space toggle in four contexts.",
+      "Textarea ErrorRecovery invalid -> valid -> invalid across four contexts with custom helper/error IDs; caller fixtures for custom Field IDs, explicit aria-errormessage, explicit undefined, caller description/id/name/data-slot/class, missing error element, and valid state.",
+      "Supplemental invalid-field observer directly verifies stable before/after focus error IDs, DOM accessible descriptions, associated labels, error visibility and live settings in 32 pairs across all Input/group/standalone modes and four theme/viewport contexts."
+    ],
+    "focusOwnership": "InputGroup outer frame owns input/textarea focus. Inner outline is none, error chrome/text persist, addon focus uses button ring without keeping frame outline.",
+    "observedLayout": "Viewed fields/addons fit their crops at both viewport sizes; phone error/help text wraps. Long read-only URL uses the input native horizontal text viewport. Extra observations recorded no document horizontal overflow in these story contexts.",
+    "callerFixtureScope": "Temporary fixture screenshots are attribute diagnostics; neighboring fixture text may appear at crop edges. Caller-controlled id/data-slot/class values are asserted, not offered as production layout or generated-label association proof.",
+    "detailedStateLedger": "independently-measured-states.json",
+    "focusedAssociationLedger": "invalid-association-check.json"
+  },
+  "measurements": {
+    "acceptedPixelMinima": {
+      "light": {
+        "boundaryInside": {
+          "ratio": 3.029805659447528,
+          "evidence": "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_desktop_Field5_rest.png"
+        },
+        "boundaryOutside": {
+          "ratio": 3.247640390401708,
+          "evidence": "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_desktop_Field5_rest.png"
+        },
+        "focusVersusRest": {
+          "ratio": 3.8123868860924404,
+          "evidence": "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsPhone_phone_Field3_focus.png"
+        },
+        "offThumbTrack": {
+          "ratio": 3.79268061643258,
+          "evidence": "after/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_desktop_states.png"
+        },
+        "offTrackOutside": {
+          "ratio": 3.79268061643258,
+          "evidence": "after/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_desktop_states.png"
+        },
+        "onThumbTrack": {
+          "ratio": 5.554930349600407,
+          "evidence": "after/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_desktop_states.png"
+        },
+        "onTrackOutside": {
+          "ratio": 5.554930349600407,
+          "evidence": "after/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_desktop_states.png"
+        },
+        "outlineInnerNeighbor": {
+          "ratio": 3.596856721912083,
+          "evidence": "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsPhone_phone_Field1_focus.png"
+        },
+        "outlineOutside": {
+          "ratio": 5.078962480875375,
+          "evidence": "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_desktop_Field5_focus.png"
+        },
+        "thumbTrack": {
+          "ratio": 3.79268061643258,
+          "evidence": "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_desktop_Switch5_focus.png"
+        },
+        "trackOutside": {
+          "ratio": 3.79268061643258,
+          "evidence": "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_desktop_Switch5_focus.png"
+        }
+      },
+      "dark": {
+        "boundaryInside": {
+          "ratio": 3.1719387409412123,
+          "evidence": "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_desktop_Field5_rest.png"
+        },
+        "boundaryOutside": {
+          "ratio": 3.4501165535079465,
+          "evidence": "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_desktop_Field5_rest.png"
+        },
+        "focusVersusRest": {
+          "ratio": 4.4224844631379465,
+          "evidence": "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDarkPhone_phone_Field3_focus.png"
+        },
+        "offThumbTrack": {
+          "ratio": 3.1420292841175526,
+          "evidence": "after/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOffDark_desktop_states.png"
+        },
+        "offTrackOutside": {
+          "ratio": 4.719358405245393,
+          "evidence": "after/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOffDark_desktop_states.png"
+        },
+        "onThumbTrack": {
+          "ratio": 7.980531649378945,
+          "evidence": "after/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOffDark_desktop_states.png"
+        },
+        "onTrackOutside": {
+          "ratio": 8.267476789288835,
+          "evidence": "after/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOffDark_desktop_states.png"
+        },
+        "outlineInnerNeighbor": {
+          "ratio": 4.187986639866849,
+          "evidence": "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDarkPhone_phone_Field1_focus.png"
+        },
+        "outlineOutside": {
+          "ratio": 6.388382798148544,
+          "evidence": "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_desktop_Field5_focus.png"
+        },
+        "thumbTrack": {
+          "ratio": 3.1420292841175526,
+          "evidence": "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_desktop_Switch5_focus.png"
+        },
+        "trackOutside": {
+          "ratio": 4.65479496640917,
+          "evidence": "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_desktop_Switch1_focus.png"
+        }
+      }
+    },
+    "acceptedEffectiveCompositedMinima": {
+      "light": {
+        "boundaryInside": {
+          "ratio": 3.235113316027727,
+          "evidence": "after/extra-observations/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_desktop_Field5_rest.json"
+        },
+        "boundaryOutside": {
+          "ratio": 3.4677091053337934,
+          "evidence": "after/extra-observations/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_desktop_Field5_rest.json"
+        },
+        "outlineOutside": {
+          "ratio": 5.078962480875376,
+          "evidence": "correction/after/observations/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsPhone_phone_Field3_focus.json"
+        },
+        "thumbTrack": {
+          "ratio": 3.79268061643258,
+          "evidence": "after/observations/packages-ui-src-components-switch.stories.tsx/OnAndOff_desktop_states.json"
+        },
+        "trackOutside": {
+          "ratio": 3.4677091053337934,
+          "evidence": "after/observations/packages-ui-src-components-switch.stories.tsx/OnAndOff_desktop_states.json"
+        }
+      },
+      "dark": {
+        "boundaryInside": {
+          "ratio": 3.352678675784677,
+          "evidence": "after/extra-observations/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_desktop_Field5_rest.json"
+        },
+        "boundaryOutside": {
+          "ratio": 3.646707311404599,
+          "evidence": "after/extra-observations/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_desktop_Field5_rest.json"
+        },
+        "outlineOutside": {
+          "ratio": 6.388382798148544,
+          "evidence": "correction/after/observations/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsDarkPhone_phone_Field3_focus.json"
+        },
+        "thumbTrack": {
+          "ratio": 3.1420292841175526,
+          "evidence": "after/observations/packages-ui-src-components-switch.stories.tsx/OnAndOffDark_desktop_states.json"
+        },
+        "trackOutside": {
+          "ratio": 3.646707311404599,
+          "evidence": "after/observations/packages-ui-src-components-switch.stories.tsx/OnAndOffDark_desktop_states.json"
+        }
+      }
+    },
+    "rawPixelReport": "independent-pixel-measurements.json",
+    "acceptedStateReport": "independently-measured-states.json",
+    "acceptedCapturePngs": 372,
+    "acceptedPixelMeasuredPngs": 328,
+    "allFreshCapturePngs": 521,
+    "firstTwoRunsCapturePngs": 457,
+    "allMeasuredIncludingDiagnosticTextarea": 408,
+    "supplementalAssociationCapturePngs": 64,
+    "supplementalCaptureUse": "64 additional original-observer PNGs retained by the final association run; contrast and viewed-PNG counts above refer to the first two runs. These 64 repeats were not separately opened or offline pixel-measured.",
+    "exclusionsAllRuns": {
+      "disabledOpacity": 24,
+      "callerAttributeFixtures": 25
+    },
+    "acceptedPairedFieldFocusTransitions": 104,
+    "darkOffThumb": {
+      "trackRgb": [
+        122,
+        128,
+        136
+      ],
+      "thumbRgb": [
+        231,
+        228,
+        223
+      ],
+      "effectiveAndPixelContrast": 3.1420292841175526,
+      "marginAboveThree": 0.14202928411755256,
+      "size3x3PatchMinimum": 3.1420292841175526,
+      "evidence": "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_phone_Switch1_rest.png",
+      "assessment": "The reported narrow margin reproduces independently in the fresh actual pixels and composited colors. All sm/md/lg center patches pass; do not generalize this margin to other rendering engines or arbitrary consumer surfaces."
+    },
+    "errorFocus": "104 accepted field rest/focus pairs have a separate keyboard outline. Minimum sampled focus-vs-rest ratio is 3.8123868860924404 light and 4.4224844631379465 dark. Invalid paired samples preserve value, red border and text color; focus is not inferred only from native text selection.",
+    "limits": "Point/patch samples, not every antialiased edge pixel. Pixel minima differ from effective token ratios because of inset shadows and rasterization. No complete text contrast audit, focus-area conformance proof, timing/animation assessment or screen-reader announcement measurement is claimed."
+  },
+  "sourceReview": [
+    {
+      "files": [
+        "packages/ui/src/styles.css"
+      ],
+      "finding": "Opaque functional --control tokens light #827d75 / dark #7a8088 are exposed via --color-control. Decorative --border and --input tokens are not changed by this patch. Controls consume border-control or unchecked bg-control.",
+      "basis": "Original-product source diff and actual effective/pixel contrast on the supplied surfaces."
+    },
+    {
+      "files": [
+        "packages/ui/src/components/input.tsx",
+        "packages/ui/src/components/input-group.tsx"
+      ],
+      "finding": "Independent focus-visible solid 2px outline with 2px offset survives invalid border/halo selectors. Group selectors use input/textarea focus, and wrappers suppress the inner outline/ring. Prefix/suffix/block addons and actionable buttons retain expected ownership.",
+      "basis": "Full source and story diff; native hover and keyboard probes; viewed invalid empty/populated rest/focus and addon pairs."
+    },
+    {
+      "files": [
+        "packages/ui/src/components/switch.tsx"
+      ],
+      "finding": "The original-product source delta changes unchecked bg-input to bg-control. Existing controlled native hidden input synchronization, role, checked handling and caller spreading remain. On/off/small geometry and Space interaction passed.",
+      "basis": "Source diff and all three size state/keyboard observations, with track/thumb PNG measurements."
+    },
+    {
+      "files": [
+        "packages/ui/src/components/textarea.tsx"
+      ],
+      "finding": "Adds the same boundary/outline repairs and conditional aria-errormessage inferred from invalid Field context only when its registered described-by tokens contain the error ID. The inferred attribute precedes caller spread; caller explicit values and undefined override it. cn/class merging and final data-slot/id/name attributes preserve caller precedence.",
+      "basis": "Source/Ark context and field connector read; ErrorRecovery, automatic/custom IDs, overrides, missing error and valid fixtures.",
+      "callerCaveat": "Overriding a native id alone does not retarget FieldLabel. The diagnostic caller-id fixture verifies precedence, not label association; callers must coordinate Field IDs/labels. This behavior predates this patch."
+    },
+    {
+      "files": [
+        "packages/ui/src/components/input.stories.tsx",
+        "packages/ui/src/components/input-group.stories.tsx",
+        "packages/ui/src/components/switch.stories.tsx",
+        "packages/ui/src/components/textarea.stories.tsx",
+        "packages/ui/src/test/control-contrast.ts"
+      ],
+      "finding": "Read the full relevant source/story changes and unchanged assertion helper. Stories check DOM roles/state, effective boundaries, keyboard behavior and distinct invalid outline. Shared contrast helper composes colors over actual ancestors. Assertions and stories were left intact.",
+      "basis": "All four authorized files ran independently on the pinned source, with passing completed assertions selected above. Original 69eac3ceea product source remains the comparison baseline."
+    }
+  ],
+  "confirmedFindings": [],
+  "observationsRequiringManagerContext": [
+    {
+      "id": "textarea-dual-error-link",
+      "classification": "DOM observation; screen-reader effect unverified",
+      "observed": "While invalid, Textarea ErrorRecovery has aria-errormessage=\"review-validation-error\" and aria-describedby=\"review-validation-error review-validation-helper\". Both resolve to the same visible error text. Ark FieldError error-text connector supplies aria-live=\"polite\". On recovery, aria-errormessage disappears and describedby keeps only review-validation-helper; clearing restores the error links.",
+      "evidence": [
+        "correction/after/extra-observations/packages-ui-src-components-textarea.stories.tsx/Extra_ErrorRecovery_dark_phone_invalidagain.json",
+        "correction/after/extra-observations/packages-ui-src-components-textarea.stories.tsx/Extra_ErrorRecovery_dark_phone_recovered.json",
+        "independently-measured-states.json:associations",
+        "invalid-association-check.json"
+      ],
+      "source": "packages/ui/src/components/textarea.tsx plus installed @ark-ui/react Field hook/error-text behavior, pinned through yarn.lock and hashed in final-identity.json. Supplemental DOM snapshots also confirm aria-live=\"polite\" on each error.",
+      "inference": "Some screen reader/browser combinations may announce the same error through descriptive and error-message relationships and/or the live region. This review did not run a screen reader, so duplicate speech is neither confirmed nor ruled out. Do not strip Ark description or relax assertions on this inference alone.",
+      "next": "Manager accessibility proof should test supported screen-reader/browser combinations during invalid focus, live validation and recovery. Implementation remains G-2756 if a failing outcome is confirmed."
+    }
+  ],
+  "unverifiedContexts": [
+    "Accounts sign-up and signed-in Settings under supported local-development fixtures; broader consumer paths and clipping/overflow contexts.",
+    "Combined-wave acceptance and remaining manager product proof required to confirm D4-001 or authorize landing.",
+    "Actual screen-reader announcements, repetition, ordering and timing; DOM association and live-region settings are not speech proof.",
+    "Other browser engines, operating systems, real devices, touch interaction, forced colors, zoom/text scaling, RTL, reduced-motion rendering and animation transitions.",
+    "Arbitrary caller CSS, opacity, gradients/background images or colors outside these story surfaces; consumer-provided invalid/error IDs and labels that do not follow Field contracts.",
+    "Backend/API outcomes, product frontend/backend startup, full Storybook campaign, shared refresh, import and broader static acceptance."
+  ],
+  "imagesActuallyViewed": {
+    "tool": "view_image",
+    "count": 230,
+    "ledger": "viewed-pngs.json",
+    "paths": [
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFields_desktop_Field1_rest.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFields_desktop_Field1_focus.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFields_desktop_Field2_rest.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFields_desktop_Field2_focus.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFieldsDarkPhone_phone_Field1_rest.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFieldsDarkPhone_phone_Field1_focus.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFieldsDarkPhone_phone_Field2_rest.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFieldsDarkPhone_phone_Field2_focus.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFieldsPhone_phone_Field1_rest.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFieldsPhone_phone_Field1_focus.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFieldsPhone_phone_Field2_rest.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFieldsPhone_phone_Field2_focus.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFieldsDark_desktop_Field1_rest.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFieldsDark_desktop_Field1_focus.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFieldsDark_desktop_Field2_rest.png",
+      "after/rendered/packages-ui-src-components-input.stories.tsx/InvalidFieldsDark_desktop_Field2_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_desktop_Field1_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_desktop_Field1_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_desktop_Field2_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_desktop_Field2_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_desktop_Field3_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_desktop_Field3_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_desktop_Field4_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_desktop_Field4_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDarkPhone_phone_Field1_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDarkPhone_phone_Field1_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDarkPhone_phone_Field2_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDarkPhone_phone_Field2_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDarkPhone_phone_Field3_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDarkPhone_phone_Field3_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDarkPhone_phone_Field4_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDarkPhone_phone_Field4_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsPhone_phone_Field1_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsPhone_phone_Field1_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsPhone_phone_Field2_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsPhone_phone_Field2_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsPhone_phone_Field3_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsPhone_phone_Field3_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsPhone_phone_Field4_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsPhone_phone_Field4_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDark_desktop_Field1_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDark_desktop_Field1_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDark_desktop_Field2_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDark_desktop_Field2_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDark_desktop_Field3_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDark_desktop_Field3_focus.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDark_desktop_Field4_rest.png",
+      "after/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFieldsDark_desktop_Field4_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFields_desktop_Field1_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFields_desktop_Field1_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFields_desktop_Field2_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFields_desktop_Field2_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFieldsDark_desktop_Field1_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFieldsDark_desktop_Field1_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFieldsDark_desktop_Field2_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFieldsDark_desktop_Field2_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFieldsPhone_phone_Field1_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFieldsPhone_phone_Field1_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFieldsPhone_phone_Field2_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFieldsPhone_phone_Field2_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFieldsDarkPhone_phone_Field1_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFieldsDarkPhone_phone_Field1_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFieldsDarkPhone_phone_Field2_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFieldsDarkPhone_phone_Field2_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFields_light_desktop_Field1_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFields_light_desktop_Field1_hover.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFields_light_desktop_Field1_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFields_light_phone_Field1_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFields_light_phone_Field1_hover.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFields_light_phone_Field1_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFieldsDark_dark_desktop_Field1_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFieldsDark_dark_desktop_Field1_hover.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFieldsDark_dark_desktop_Field1_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFieldsDark_dark_phone_Field1_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFieldsDark_dark_phone_Field1_hover.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFieldsDark_dark_phone_Field1_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFields_light_phone_Field3_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFields_light_phone_Field3_hover.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFields_light_phone_Field3_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFieldsDark_dark_phone_Field3_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFieldsDark_dark_phone_Field3_hover.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_EmptyFieldsDark_dark_phone_Field3_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_desktop_Field1_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_desktop_Field1_hover.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_desktop_Field1_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_desktop_Field2_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_desktop_Field2_hover.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_desktop_Field2_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_phone_Field1_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_phone_Field1_hover.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_phone_Field1_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_phone_Field2_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_phone_Field2_hover.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFields_light_phone_Field2_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_desktop_Field1_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_desktop_Field1_hover.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_desktop_Field1_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_desktop_Field2_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_desktop_Field2_hover.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_desktop_Field2_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_phone_Field1_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_phone_Field1_hover.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_phone_Field1_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_phone_Field2_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_phone_Field2_hover.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_EmptyFieldsDark_dark_phone_Field2_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFields_desktop_Field1_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFields_desktop_Field1_hover.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFields_desktop_Field1_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsDark_desktop_Field1_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsDark_desktop_Field1_hover.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsDark_desktop_Field1_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsPhone_phone_Field1_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsPhone_phone_Field3_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsPhone_phone_Field1_hover.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsPhone_phone_Field3_hover.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsPhone_phone_Field1_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsPhone_phone_Field3_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsDarkPhone_phone_Field1_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsDarkPhone_phone_Field3_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsDarkPhone_phone_Field1_hover.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsDarkPhone_phone_Field3_hover.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsDarkPhone_phone_Field1_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFieldsDarkPhone_phone_Field3_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/Availability_desktop_Field1_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/Availability_desktop_Field1_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/Availability_desktop_Field2_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/AvailabilityDark_desktop_Field1_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/AvailabilityDark_desktop_Field1_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/AvailabilityDark_desktop_Field2_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/AvailabilityPhone_phone_Field1_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/AvailabilityPhone_phone_Field1_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/AvailabilityPhone_phone_Field2_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/AvailabilityDarkPhone_phone_Field1_rest.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/AvailabilityDarkPhone_phone_Field1_focus.png",
+      "correction/after/rendered/packages-ui-src-components-textarea.stories.tsx/AvailabilityDarkPhone_phone_Field2_rest.png",
+      "after/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_desktop_states.png",
+      "after/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_phone_states.png",
+      "after/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOffDark_desktop_states.png",
+      "after/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOffDark_phone_states.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_desktop_Switch1_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_desktop_Switch2_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_desktop_Switch3_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_desktop_Switch4_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_desktop_Switch5_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_desktop_Switch6_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_phone_Switch1_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_phone_Switch2_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_phone_Switch3_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_phone_Switch4_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_phone_Switch5_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_phone_Switch6_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_desktop_Switch1_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_desktop_Switch2_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_desktop_Switch3_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_desktop_Switch4_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_desktop_Switch5_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_desktop_Switch6_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_phone_Switch1_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_phone_Switch2_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_phone_Switch3_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_phone_Switch4_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_phone_Switch5_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_phone_Switch6_rest.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_desktop_Switch1_focus.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_desktop_Switch1_toggled.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_desktop_Switch3_focus.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_desktop_Switch3_toggled.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_phone_Switch1_focus.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_phone_Switch1_toggled.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_phone_Switch3_focus.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_light_phone_Switch3_toggled.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_desktop_Switch1_focus.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_desktop_Switch1_toggled.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_desktop_Switch3_focus.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_desktop_Switch3_toggled.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_phone_Switch1_focus.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_phone_Switch1_toggled.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_phone_Switch3_focus.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Sizes_dark_phone_Switch3_toggled.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Disabled_light_desktop_Field1_disabled.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Disabled_light_desktop_Field2_disabled.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_Disabled_light_desktop_Field1_disabled.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_Disabled_light_desktop_Field1_disabled.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Disabled_dark_phone_Field1_disabled.png",
+      "after/extra-rendered/packages-ui-src-components-switch.stories.tsx/Extra_Disabled_dark_phone_Field2_disabled.png",
+      "after/extra-rendered/packages-ui-src-components-input.stories.tsx/Extra_Disabled_dark_phone_Field1_disabled.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_Disabled_dark_phone_Field1_disabled.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithButton_light_desktop_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithButton_light_desktop_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithButton_light_desktop_addonfocus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithButton_light_phone_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithButton_light_phone_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithButton_light_phone_addonfocus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithButton_dark_desktop_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithButton_dark_desktop_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithButton_dark_desktop_addonfocus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithButton_dark_phone_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithButton_dark_phone_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithButton_dark_phone_addonfocus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithTextarea_light_desktop_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithTextarea_light_desktop_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithTextarea_light_desktop_addonfocus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithTextarea_light_phone_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithTextarea_light_phone_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithTextarea_light_phone_addonfocus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithTextarea_dark_desktop_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithTextarea_dark_desktop_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithTextarea_dark_desktop_addonfocus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithTextarea_dark_phone_rest.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithTextarea_dark_phone_focus.png",
+      "after/extra-rendered/packages-ui-src-components-input-group.stories.tsx/Extra_WithTextarea_dark_phone_addonfocus.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Extra_ErrorRecovery_light_desktop_invalid.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Extra_ErrorRecovery_light_desktop_recovered.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Extra_ErrorRecovery_light_desktop_invalidagain.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Extra_ErrorRecovery_light_phone_invalid.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Extra_ErrorRecovery_light_phone_recovered.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Extra_ErrorRecovery_light_phone_invalidagain.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Extra_ErrorRecovery_dark_desktop_invalid.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Extra_ErrorRecovery_dark_desktop_recovered.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Extra_ErrorRecovery_dark_desktop_invalidagain.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Extra_ErrorRecovery_dark_phone_invalid.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Extra_ErrorRecovery_dark_phone_recovered.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Extra_ErrorRecovery_dark_phone_invalidagain.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Caller_automatic_dark_phone.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Caller_caller_error_dark_phone.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Caller_caller_undefined_dark_phone.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Caller_caller_description_dark_phone.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Caller_missing_error_dark_phone.png",
+      "correction/after/extra-rendered/packages-ui-src-components-textarea.stories.tsx/Caller_valid_dark_phone.png"
+    ],
+    "scope": "Direct inspection of original newly generated PNGs, including rest/native-hover/focus, empty/populated invalid, addons, readonly/disabled, Switch on/off/small and ErrorRecovery/caller diagnostics. Neither retained-worker PNGs nor unviewed default QA screenshots are counted."
+  },
+  "artifactRetention": {
+    "directory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2807/.temp/control-four-controls-review",
+    "manifest": "manifest.json",
+    "capturePngs": 521,
+    "captureObservationJson": 521,
+    "defaultQaScreenshotCopies": 91,
+    "diagnosticTextareaFirstAttemptCapturePngs": 85,
+    "firstAttemptInstrumentation": "instrumentation-attempt1/",
+    "correctionInstrumentation": "instrumentation-correction/",
+    "associationInstrumentation": "config.ts / vitest.associations.config.mts / associations.setup.ts / extra.setup.tsx / observations.setup.ts",
+    "logs": "job-logs/",
+    "qaArtifacts": "qa-runs/",
+    "manifestRule": "SHA256/size of every file in this directory except manifest.json itself. Retained-original 592-file manifest is a separate read-only input identity.",
+    "managerAction": "Retain review.json, manifest and the whole review directory before worker closure. No source/report commit or wave/main push is required by this read-only brief."
+  },
+  "instructionEffect": {
+    "sourcePin": "Task brief explicitly requires pinning to c7e948dd before checks and forbids moving-wave source changes; supported prepared-tree check was used to preserve that premise.",
+    "singleSetupCorrection": {
+      "document": "docs/goals/worker.md",
+      "quote": "the reviewer gets one setup correction, with the failure evidence.",
+      "effect": "Classified first capture-hook failure as harness, returned its evidence, corrected only temporary caption naming, and reran only Textarea. No implementation fix round."
+    },
+    "scopeBoundary": {
+      "document": "task brief",
+      "effect": "Focused four-control exception only. No product stack, broader campaign, nested agents, source changes, commits or landing."
+    }
+  },
+  "delivery": {
+    "result": "done",
+    "remainingTestPremise": null,
+    "ownerChanges": [],
+    "implementationOwner": "codex-2/max G-2756",
+    "next": "Manager retains evidence, addresses unverified contexts and combines with remaining product/wave proof before any acceptance or landing decision."
+  }
+}
