@@ -128,7 +128,15 @@ mail:6cc87bcf-857d-4b93-a11e-b72bfe61c4d6. The joint
 G-2781/G-2769/G-2772 retained-evidence question reached Program as
 mail:8f269be0-048c-41aa-b12c-6c7bbb574c25 and
 mail:1375e916-bd53-4d0b-bf64-d9538836c580; those verified deliveries supersede
-the routing failures and need no further copy. G-2799's Source/Structure
+the routing failures and need no further copy. Audit additionally confirmed
+the joint G-2769/G-2772 retained-record/native-verification referral as
+mail:62f46ce7-da2b-4733-a43f-4e3f1ada4fb4 and the later G-2772 alignment as
+mail:3ef945f0-f274-4a84-9448-260494f8d484. The earlier
+mail:88c0b19f-d32d-4288-a1ac-25f4c8e089c4 to this Goal supplies no Program
+delivery; no duplicate referral is needed. The confirmation
+mail:04f16668-595f-49f9-8aec-2cb576c0fee6 is acknowledged. Program disposition
+still gates implementation and corpus/proof execution; the accepted
+information-read contract remains accepted. G-2799's Source/Structure
 question was delivered as mail:cb1d21db-9507-47a4-ad32-8b7bef2e5f63,
 G-2770's OA1–OA3 question as mail:18fd84a5-f0e7-4edb-89b6-a2c2bb2a8d4e,
 and G-2783's instrumentation question as
@@ -140,8 +148,8 @@ model/write prerequisites, G-2773's interfaces, G-2799's Source/Structure
 contracts, G-2769's other proposals and G-2783's instrumentation ruling.
 G-2808's pinned codex-1/xhigh review of 0eafea6bbb and 65a496efdf releases no
 backend implementation or proof;
-G-2778 retains importer integration ownership. All nine handled mail deliveries
-covered by this checkpoint are acknowledged. Existing holds remain.
+G-2778 retains importer integration ownership. The nine earlier checkpointed
+deliveries and this confirmation are acknowledged. Existing holds remain.
 
 G-2799/G-2800/G-2801 retain relation/credit/release mapping ownership, G-2778
 owns importer wiring. G-2799's partial producer at 49907513bac2 still needs
