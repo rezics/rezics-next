@@ -22,6 +22,21 @@ across related works, editions and languages, delivered on the same one-graph
 architecture, so that the first launch already exercises what later expansion
 reuses.
 
+## Positioning
+
+The core product is a **universal index plus community**: one identity for every
+thing in one shared graph, and the discussion, ratings, lists, wikis and sites
+people build around it. The universal engine is what makes that one product
+rather than many. Because a new kind of thing is configuration, the same
+platform is at once a book store and library, an anime, manga and game
+catalogue, a game and software store, a visual-novel database, a forum, a
+fandom wiki, and a hub for MCP servers, agent skills and APIs. The reference set
+is Steam, itch.io, Amazon's book store, Reddit and Fandom; public copy describes
+what REZICS does and never names them. Outward presentation follows this split:
+products are the kinds people use (books, anime, manga, games, software, visual
+novels, MCP servers, skills, APIs, each listed separately once it is big enough),
+and engine modules are what every kind is built from.
+
 ## Three values, one bet
 
 1. **One graph.** One identity per referent across domains, languages and
