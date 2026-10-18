@@ -68,6 +68,27 @@ final class QueryWorkService extends SPARQL_QueryDataset {
             ReadBoundary current = CURRENT.get();
             if (current != null) current.check();
         }
+        /** A capture can wait before an engine exists to watch. Use the same
+         * deadline and interrupt that cancel that engine, including while a
+         * publisher is still inside its atomic RDF/Lucene fence. */
+        static void lockForRead(java.util.concurrent.locks.ReentrantLock lock) {
+            ReadBoundary current = CURRENT.get();
+            checkCurrent();
+            try {
+                if (current == null) lock.lockInterruptibly();
+                else if (!lock.tryLock(Math.max(0, current.deadline - System.nanoTime()),
+                        java.util.concurrent.TimeUnit.NANOSECONDS)) {
+                    current.cancel("deadline");
+                    current.check();
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                checkCurrent();
+                throw new org.apache.jena.query.QueryCancelledException(interrupted);
+            }
+            try { checkCurrent(); }
+            catch (RuntimeException cancelled) { lock.unlock(); throw cancelled; }
+        }
         @Override public synchronized void close() {
             closed = true; execution = null; expiry.cancel(false);
             // The servlet executor reuses this thread for unrelated requests.
@@ -191,7 +212,7 @@ final class QueryWorkService extends SPARQL_QueryDataset {
                     sendResults(action, result, query.getPrologue());
                 }
             } catch (java.io.IOException unavailable) {
-                SearchDeltaJournal.invalidate(data, "committed reader unavailable", "query");
+                SearchDeltaJournal.invalidateRead(data, "committed reader unavailable", "query");
                 if (requireQualified && !action.getResponse().isCommitted()) {
                     action.getResponse().setHeader(READ_CUT_HEADER, org.apache.jena.atlas.json.JSON.toStringFlat(
                         unavailableHeader("committed-reader-unavailable", SearchDeltaJournal.textIndexUncertain(data))));
