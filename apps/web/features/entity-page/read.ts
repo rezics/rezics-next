@@ -4,10 +4,25 @@ import { readLinkedStatements, readResourcePage } from '../work-page/anime-hub-r
 import { reader, settle, type SuppliedClient } from '../work-page/read.ts';
 import { followHref } from './href.ts';
 import type { EntityProjection, EntitySection, RelationsPage, StatementPage } from './types.ts';
+import type { AvailableSummary } from '../work-levels/types.ts';
 
 // Server reads for the generic resource page. Each returns a `Loaded` result so
 // one section's failure never takes down another, and every section read
 // follows the link the projection gave it.
+
+/** Select the admitted resource grain before requesting a page capability.
+ * Collections own their members read, not the generic discussion target page. */
+export const readEntityEntry = cache(async (id: string, position?: string, client?: SuppliedClient):
+  Promise<Loaded<AvailableSummary>> => {
+  const { main, actingSubject } = client ?? await reader();
+  const reference = id.startsWith('https://rezics.com/id/') ? id : `https://rezics.com/id/${id}`;
+  const read = await settle(() => main.v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
+    resources: [reference],
+    actingSubject, ...(position ? { position } : {}) }));
+  if (!read.ok) return read;
+  const summary = read.data.summaries[0];
+  return summary?.status === 'available' ? { ok: true, data: summary } : { ok: false, failure: 'missing' };
+});
 
 /**
  * `entity-page-v1` for a resource, once per request; a hidden and a missing resource answer alike (`missing`).

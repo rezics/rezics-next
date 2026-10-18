@@ -101,6 +101,8 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     const selected = new Request(url,{ headers: request.headers,signal: request.signal });
     return boundedReadingPositionRead(work,selected,principal,input.actingSubject,(boundary, session) =>
       session.summaryBatch({ resources: input.resources,
+        // Addressed Collections use the same disclosure/name owners as all other summaries.
+        includeCollections: true,
         settleNonAgentNameOwners: 'includingAbsent',
         channel: input.channel,
         context: input.context ?? DEFAULT_MEDIA_CONTEXT, language: input.language ?? null,

@@ -203,7 +203,8 @@ export async function readAddress(
         retryAfter: String(Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 60),
       };
     }
-    if (!response.ok) return { kind: 'unavailable' };
+    if (!response.ok) return { kind: 'unavailable',
+      ...(response.headers.get('retry-after') ? { retryAfter: response.headers.get('retry-after')! } : {}) };
     const data = resolvedAddress(await response.json());
     if (data?.scope !== lookup.scope) return { kind: 'unavailable' };
     if (cacheKey && data.key === lookup.key)

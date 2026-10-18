@@ -14,7 +14,7 @@ import type { Loaded as WorkLoaded, RatingContextPage, RatingRead } from './type
 type Host = { main: MainClient; actingSubject?: string; signedIn?: boolean };
 
 /** Client boundary shared by the production connections readers and recorded visits. */
-export function animeRelationsReads({ main, actingSubject, signedIn }: Host) {
+export function animeRelationsReads({ main, actingSubject }: Host) {
   const readNames = async (resources: string, position?: string): Promise<Names> => {
     const refs = [...new Set(resources.split(' ').filter(Boolean))];
     const names = new Map<string, Summary>();
@@ -44,7 +44,6 @@ export function animeRelationsReads({ main, actingSubject, signedIn }: Host) {
     namesOf: (resources: readonly string[], position?: string) => readNames([...new Set(resources)].sort().join(' '), position),
     readPeople,
     readCollectionMembers: async (collection: string, query: { after?: string; limit?: number }): Promise<Loaded<CollectionMembers>> => {
-      if (!actingSubject) return { ok: false, failure: signedIn ? 'identity' : 'sign-in' };
       const page = await settle(() => main.v1.collections({ id: collection }).get({ query: {
         actingSubject, after: query.after, limit: query.limit } }), query.after);
       if (!page.ok) return page;
