@@ -93,6 +93,7 @@ import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 await Bun.stdin.text();
 appendFileSync(process.env.REVIEW_LOG!, JSON.stringify(args) + '\\n');
+if (process.env.REVIEW_ACCOUNT_LOG) appendFileSync(process.env.REVIEW_ACCOUNT_LOG, process.env.CODEX_HOME + '\\n');
 if (process.env.REVIEW_MUTATE === 'yes') {
   writeFileSync('services/account/src/value.ts', 'export const value = 99;\\n');
   Bun.spawnSync(['git', 'commit', '-qam', 'Changed during review']);
@@ -178,7 +179,7 @@ process.exit(result.exitCode);`);
       : [join(import.meta.dir, 'goalctl.ts'), command, task.id, ...extraArgs],
       { cwd: dir, env, encoding: 'utf8', timeout: 30_000 });
   };
-  return { dir, worktree, runDir, log, base, task, run, git,
+  return { dir, worktree, runDir, log, base, task, run, git, settingsDirectory,
     ledger: () => JSON.parse(readFileSync(ledgerPath, 'utf8')) as Ledger,
     save: (ledger: Ledger) => writeFileSync(ledgerPath, JSON.stringify(ledger)),
     cleanup: () => rmSync(dir, { recursive: true, force: true }) };
@@ -233,6 +234,21 @@ describe('Goal landing', () => {
       }
       expect(r.git(r.dir, 'ls-tree', '-r', '--name-only', 'archive/goals')).toContain('handoffs/G-001.md');
       expect(readdirSync(r.runDir).some(name => name.startsWith('review-'))).toBe(true);
+    } finally { r.cleanup(); }
+  });
+
+  test('an explicit review account and effort reach the launcher unchanged', () => {
+    const r = repo();
+    try {
+      const file = join(r.settingsDirectory, 'settings.user.json');
+      const settings = JSON.parse(readFileSync(file, 'utf8'));
+      writeFileSync(file, JSON.stringify({ ...settings, reviewEngine: 'sample-b', reviewEffort: 'xhigh', reviewFallbackEngines: [] }));
+      const accounts = join(r.runDir, 'review-accounts.log');
+      const result = r.run('land', { REVIEW_ACCOUNT_LOG: accounts });
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      const args = JSON.parse(readFileSync(r.log, 'utf8').trim()) as string[];
+      expect(args.slice(0, 7)).toEqual(['exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=xhigh', '-s', 'read-only']);
+      expect(readFileSync(accounts, 'utf8').trim()).toBe(join(r.dir, '.temp/second-home'));
     } finally { r.cleanup(); }
   });
 
@@ -368,6 +384,34 @@ describe('Goal landing', () => {
     expect(() => findingsFromText('no object here')).toThrow();
   });
 
+  test.each([
+    { settings: { reviewEffort: 'turbo' }, engine: 'codex', field: 'reviewEffort' },
+    { settings: {}, engine: 'absent-account', field: 'reviewEngine' },
+    { settings: { reviewEngine: 'absent-account' }, field: 'reviewEngine' },
+    { settings: { reviewFallbackEngines: ['absent-account'] }, engine: 'codex', field: 'reviewFallbackEngines' },
+    { settings: { reviewFallbackEngines: ['sonnet'] }, engine: 'codex', field: 'reviewFallbackEngines' },
+    { settings: { reviewEffort: 'ultra' }, engine: 'sonnet', field: 'reviewEffort' },
+  ])('invalid review policy is rejected before any reviewer starts: %j', async ({ settings, engine, field }) => {
+    const r = repo();
+    const previousSettings = process.env.GOAL_SETTINGS_DIRECTORY;
+    const previousLog = process.env.GOAL_TEST_LAUNCH_LOG;
+    try {
+      const file = join(r.settingsDirectory, 'settings.user.json');
+      writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), ...settings }));
+      process.env.GOAL_SETTINGS_DIRECTORY = r.settingsDirectory;
+      process.env.GOAL_TEST_LAUNCH_LOG = r.log;
+      await expect(reviewBranch({ directory: join(r.runDir, 'review-invalid'), worktree: r.worktree,
+        base: r.base, head: r.git(r.worktree, 'rev-parse', 'HEAD'), brief: 'brief', handoff: 'RESULT: done' }, engine))
+        .rejects.toThrow(field);
+      expect(existsSync(r.log)).toBe(false);
+    } finally {
+      process.env.GOAL_SETTINGS_DIRECTORY = previousSettings;
+      if (previousLog === undefined) delete process.env.GOAL_TEST_LAUNCH_LOG;
+      else process.env.GOAL_TEST_LAUNCH_LOG = previousLog;
+      r.cleanup();
+    }
+  });
+
   /** A `codex exec` stand-in: keeps its prompt beside the output file and answers with REVIEW_REPLY's content. */
   function reviewerStub() {
     const bin = mkdtempSync(join(tmpdir(), 'goal-review-bin-'));
@@ -385,36 +429,63 @@ cat "${reply}" > "$out"
       cleanup: () => { process.env.PATH = path; rmSync(bin, { recursive: true, force: true }); } };
   }
 
-  test('a review pass the service refuses is run again, last on the other account', async () => {
+  test.each([
+    { name: 'default fallback', fallback: null, expected: ['codex', 'codex', 'sample-b'] },
+    { name: 'same-account retries', fallback: [], expected: ['codex', 'codex'] },
+    { name: 'ordered fallback', fallback: ['sample-c', 'sample-b'], expected: ['codex', 'codex', 'sample-c', 'sample-b'] },
+  ])('capacity retries retain review effort and account MCP disablement: $name', async ({ fallback, expected }) => {
     const r = repo();
     const bin = mkdtempSync(join(tmpdir(), 'goal-review-bin-'));
     const path = process.env.PATH;
     const previousSettings = process.env.GOAL_SETTINGS_DIRECTORY;
     try {
-      // `codex` always refuses; `sample-b` answers. Each records that it ran.
+      // Only sample-b answers. Each attempt records its account, effort and MCP overrides.
       const calls = join(bin, 'calls.log');
-      writeFileSync(join(bin, 'codex'), `#!/bin/sh\ncat > /dev/null\necho codex >> "${calls}"\necho "ERROR: Selected model is at capacity." >&2\nexit 1\n`);
-      writeFileSync(join(bin, 'sample-b'), `#!/bin/sh
-out=""; prev=""
-for arg in "$@"; do [ "$prev" = "--output-last-message" ] && out="$arg"; prev="$arg"; done
-cat > /dev/null
-echo sample-b >> "${calls}"
-echo '{"findings":[]}' > "$out"
-`);
-      for (const name of ['codex', 'sample-b']) chmodSync(join(bin, name), 0o755);
+      const stub = `#!/usr/bin/env bun
+import { appendFileSync, writeFileSync } from 'node:fs';
+import { basename } from 'node:path';
+const args = process.argv.slice(2);
+await Bun.stdin.text();
+const account = basename(process.argv[1]);
+appendFileSync(${JSON.stringify(calls)}, JSON.stringify({ account, args, home: process.env.CODEX_HOME }) + '\\n');
+if (account !== 'sample-b') { console.error('ERROR: Selected model is at capacity.'); process.exit(1); }
+writeFileSync(args[args.indexOf('--output-last-message') + 1], '{"findings":[]}');
+`;
+      const names = ['codex', 'sample-b', 'sample-c'];
+      for (const name of names) {
+        writeFileSync(join(bin, name), stub);
+        chmodSync(join(bin, name), 0o755);
+        mkdirSync(join(bin, `${name}-home`));
+        writeFileSync(join(bin, `${name}-home/config.toml`), `[mcp_servers."${name}.enabled"]\ncommand = "unused"\n`
+          + `[mcp_servers."${name}.disabled"]\ncommand = "unused"\nenabled = false\n`);
+      }
       process.env.PATH = `${bin}:${path}`;
-      process.env.GOAL_SETTINGS_DIRECTORY = testAccountSettings(bin, [
-        { engine: 'codex', launcher: join(bin, 'codex') },
-        { engine: 'sample-b', launcher: join(bin, 'sample-b') },
-      ]);
+      process.env.GOAL_SETTINGS_DIRECTORY = testAccountSettings(bin, names.map(engine => ({
+        engine, launcher: join(bin, engine), home: join(bin, `${engine}-home`),
+      })));
+      const settingsFile = join(process.env.GOAL_SETTINGS_DIRECTORY, 'settings.user.json');
+      writeFileSync(settingsFile, JSON.stringify({ ...JSON.parse(readFileSync(settingsFile, 'utf8')),
+        reviewEffort: 'xhigh', reviewFallbackEngines: fallback }));
       const directory = join(r.runDir, 'review-1000-first');
-      expect(await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
-        base: r.base, head: r.git(r.worktree, 'rev-parse', 'HEAD') }, 'codex')).toEqual([]);
-      const ran = readFileSync(calls, 'utf8').trim().split('\n');
-      expect(ran.filter(name => name === 'codex')).toHaveLength(2);
-      expect(ran.filter(name => name === 'sample-b')).toHaveLength(1);
+      const review = reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
+        base: r.base, head: r.git(r.worktree, 'rev-parse', 'HEAD') }, 'codex');
+      if (fallback?.length === 0) await expect(review).rejects.toThrow('reviewer exited 1');
+      else expect(await review).toEqual([]);
+      const ran = readFileSync(calls, 'utf8').trim().split('\n')
+        .map(line => JSON.parse(line) as { account: string; args: string[]; home: string });
+      expect(ran.map(call => call.account)).toEqual(expected);
+      for (const call of ran) {
+        expect(call.home).toBe(join(bin, `${call.account}-home`));
+        expect(call.args).toContain('model_reasoning_effort=xhigh');
+        const overrides = call.args.filter(arg => arg.startsWith('mcp_servers='));
+        expect(overrides).toHaveLength(1);
+        expect(Bun.TOML.parse(overrides[0]!)).toEqual({ mcp_servers: {
+          [`${call.account}.enabled`]: { enabled: false }, [`${call.account}.disabled`]: { enabled: false },
+        } });
+      }
       // The refused tries stay in the pass's log.
-      expect(readFileSync(join(directory, 'stderr.log'), 'utf8').match(/at capacity/g)).toHaveLength(2);
+      expect(readFileSync(join(directory, 'stderr.log'), 'utf8').match(/at capacity/g))
+        .toHaveLength(expected.filter(name => name !== 'sample-b').length);
     } finally {
       process.env.PATH = path;
       if (previousSettings === undefined) delete process.env.GOAL_SETTINGS_DIRECTORY;
@@ -461,6 +532,32 @@ echo '{"findings":[]}' > "$out"
     for (const kind of ['outcome', 'surface', 'tooling', undefined]) {
       expect(needsReview(kind, ['services/account/src/login.ts'])).toBe(false);
     }
+  });
+
+  test('all review scope covers every changed file and broadens the defect review', () => {
+    const file = join(process.env.GOAL_SETTINGS_DIRECTORY!, 'settings.user.json');
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), reviewScope: 'all' }));
+    for (const kind of ['implementation', 'mechanism', 'outcome', 'surface', 'tooling', undefined]) {
+      for (const path of ['apps/web/page.tsx', 'scripts/goal/land.ts', '.goalctl/settings.schema.json', 'docs/design.md'])
+        expect(needsReview(kind, [path])).toBe(true);
+      expect(needsReview(kind, [])).toBe(false);
+    }
+    const prompt = reviewPrompt({ worktree: '/w', base: 'a', head: 'b', brief: 'brief', handoff: 'RESULT: done', directory: '/d' });
+    expect(prompt).toContain('correctness defects in any changed code');
+    expect(prompt).not.toContain('Report confirmed authority, disclosure, rights, erasure or Account defects');
+  });
+
+  test.each(['outcome', 'tooling'])('all review scope actually reviews a %s landing', kind => {
+    const r = repo();
+    try {
+      const file = join(r.settingsDirectory, 'settings.user.json');
+      writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), reviewScope: 'all' }));
+      writeFileSync(r.task.brief, readFileSync(r.task.brief, 'utf8').replace('kind: implementation', `kind: ${kind}`));
+      const result = r.run();
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(readFileSync(r.log, 'utf8').trim().split('\n')).toHaveLength(1);
+      expect(r.ledger().tasks[r.task.id]!.state).toBe('verified');
+    } finally { r.cleanup(); }
   });
 
   test.each(['outcome', 'tooling'])('%s lands sensitive changes on gates without review', kind => {
@@ -793,17 +890,21 @@ test('private name is refused', () => { prepare(); expect(Number(process.env.OUT
       // The stub copies its stdin aside and answers like `claude -p --output-format json`.
       const reply = join(bin, 'reply.json');
       writeFileSync(reply, JSON.stringify({ is_error: false, result: 'Done. {"findings":["P1 stub"]}' }));
-      writeFileSync(join(bin, 'claude'), `#!/bin/sh\ncat > "${directory}/stdin.txt"\ncat "${reply}"\n`);
+      writeFileSync(join(bin, 'claude'), `#!/bin/sh\nprintf '%s\\n' "$@" > "${directory}/args.txt"\ncat > "${directory}/stdin.txt"\ncat "${reply}"\n`);
       chmodSync(join(bin, 'claude'), 0o755);
       process.env.PATH = `${bin}:${path}`;
       const findings = await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
         base, head }, 'sonnet');
       expect(findings).toEqual([{ text: 'P1 stub' }]);
       expect(readFileSync(join(directory, 'stdin.txt'), 'utf8')).toContain('+reviewed change');
+      expect(readFileSync(join(directory, 'args.txt'), 'utf8')).not.toContain('--effort');
+      const settingsFile = join(process.env.GOAL_SETTINGS_DIRECTORY!, 'settings.user.json');
+      writeFileSync(settingsFile, JSON.stringify({ ...JSON.parse(readFileSync(settingsFile, 'utf8')), reviewEffort: 'xhigh' }));
       // A schema-validated object from the CLI wins over the text.
       writeFileSync(reply, JSON.stringify({ is_error: false, result: 'prose', structured_output: { findings: ['P2 structured'] } }));
       expect(await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
         base, head }, 'sonnet')).toEqual([{ text: 'P2 structured' }]);
+      expect(readFileSync(join(directory, 'args.txt'), 'utf8')).toContain('--effort\nxhigh\n');
       writeFileSync(reply, JSON.stringify({ is_error: true, result: 'limit' }));
       await expect(reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
         base, head }, 'sonnet')).rejects.toThrow('reported an error');

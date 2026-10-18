@@ -45,6 +45,41 @@ that command. The [project settings](../../../../.goalctl/settings.json) hold
 the portable limits. [Launch code](../../../../scripts/goal/launch.ts) owns the
 context window and launch arguments.
 
+`reviewEngine` selects a configured Codex account, `sol` for automatic account
+selection, or `sonnet`. `GOAL_REVIEW_ENGINE` overrides it for one command.
+`reviewEffort` defaults to `high` for Codex; Sonnet retains its CLI default
+unless a settings layer supplies an effort. Supported values are in the schema,
+and the selected reviewer must support the chosen effort. Invalid accounts or efforts
+fail before any reviewer launches; retries keep the same effort.
+
+`reviewFallbackEngines` defaults to `null`: a refused Codex review tries its
+selected account twice, then each other configured account in configuration
+order. An array replaces that fallback order and may contain only configured
+Codex account names. Set it to `[]` for two tries on the selected account and
+no account switch. Sonnet runs once without account fallback. Codex review
+launches disable each MCP server from the attempted account's configuration;
+an empty table would leave inherited servers configured.
+
+`reviewScope` defaults to `sensitive`, retaining review of implementation and
+mechanism changes in sensitive owners. Set it to `all` to review every changed
+file for every brief kind, including tooling, tests and configuration, for
+correctness defects. Findings without runnable public HTTP API proof remain
+recorded observations for the manager under the existing landing procedure.
+For a review policy pinned to `codex-1` at `xhigh`, use these user-layer fields
+alongside the existing `version` and `accounts`:
+
+```json
+{
+  "reviewEngine": "codex-1",
+  "reviewEffort": "xhigh",
+  "reviewFallbackEngines": [],
+  "reviewScope": "all"
+}
+```
+
+Worker engine and effort still come from each brief; select `codex-2` and
+`max` there for implementation work with that account and effort.
+
 Other settings and their allowed values are defined by the schema. Existing
 environment overrides still apply to individual commands. A zero
 `confirmIntervalMinutes` disables scheduled confirmation.

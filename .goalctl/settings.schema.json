@@ -34,6 +34,13 @@
       }
     },
     "reviewEngine": { "type": "string", "minLength": 1 },
+    "reviewEffort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max", "ultra"] },
+    "reviewFallbackEngines": {
+      "type": ["array", "null"],
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
+    },
+    "reviewScope": { "type": "string", "enum": ["sensitive", "all"] },
     "confirmIntervalMinutes": { "type": "number", "minimum": 0 },
     "gateLanes": { "type": "integer", "minimum": 1 },
     "qaSlots": { "type": "integer", "minimum": 1 },
