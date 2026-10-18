@@ -6,8 +6,7 @@ import { getMessages } from '../../i18n/server.ts';
 import { zoneText } from '../realm/adapt.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { loadWork } from '../work-page/read.ts';
-import { RightsMark, rightsRuns } from '../rights-mark/rights-mark.tsx';
-import { type CatalogueFacts, readCatalogueFacts } from './catalogue-facts.ts';
+import { readCatalogueFacts } from './catalogue-facts.ts';
 import { SlotBoundary } from './slot-boundary.tsx';
 import { ZoneAboutDiscussion } from './about-discussion-entry.tsx';
 import { aboutDiscussionAddress } from './about-discussion-intent.ts';
@@ -60,14 +59,6 @@ export function workBase(
  * The Work's own page and tabs inside the Zone's frame, with the Zone's Realm as their scope unless the URL
  * names another. Nothing here is a second copy of the Work page; `base` only moves its addresses.
  */
-/** One rights mark per run of the statement pages behind the imported facts. */
-function CatalogueFactRights({ facts, locale }: { facts: CatalogueFacts; locale: UiLocale }) {
-  const imported = facts.format !== null || facts.years.length > 0 || facts.count !== null;
-  if (!imported || facts.unavailable) return null;
-  return rightsRuns(facts.factObligations, item => item).map((run, index) =>
-    <RightsMark key={index} rights={run.rights} locale={locale} />);
-}
-
 const recordedStatus = (value: string | null | undefined): ZoneWork['status'] =>
   value === 'ongoing' || value === 'completed' || value === 'hiatus' || value === 'upcoming'
     || value === 'cancelled' ? value : null;
@@ -113,7 +104,8 @@ export async function ZoneWorkPage({
   const editions = tab === 'editions' ? parseEditionsQuery(search) : null;
   return (
     <WorkFrameView {...common} work={work.header} lead={lead}
-      sources={facts ? <CatalogueFactRights facts={facts} locale={locale} /> : null}>
+      factObligations={facts && !facts.unavailable && (facts.format !== null || facts.years.length || facts.count !== null)
+        ? facts.factObligations : undefined}>
       {tab === 'overview' ? (
         <>
           {facts && Panel && zone ? <SlotBoundary slot="cataloguePanel" fallback={null}>
@@ -129,11 +121,11 @@ export async function ZoneWorkPage({
       ) : tab === 'versions' ? (
         <WorkVersions {...common} query={parseVersionQuery(search)} />
       ) : tab === 'connections' ? (
-        connections ? <ConnectionsPage workRef={base.ref} id={work.id}
+        connections ? <ConnectionsPage workRef={base} id={work.id}
           query={connections} locale={locale} pageMessages={messages} />
           : <RegionFailure title={messages.connectionsView} failure="invalid" messages={messages} />
       ) : tab === 'editions' ? (
-        editions ? <EditionsPage workRef={base.ref} id={work.id}
+        editions ? <EditionsPage workRef={base} id={work.id}
           query={editions} locale={locale} pageMessages={messages} />
           : <RegionFailure title={messages.editionsView} failure="invalid" messages={messages} />
       ) : tab === 'history' ? (

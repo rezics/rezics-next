@@ -5,12 +5,20 @@ import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '@rezics/u
 import { cn } from '@rezics/ui/utils';
 import { ChevronDownIcon, StarIcon } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import { RateWork } from '../catalogue/reader-actions.tsx';
 import { ACTION_ATTRIBUTE, ACTION_ID } from './hub.ts';
-import { scopeAt, tabOf, type WorkAt, workHref, workNavigationQuery, type WorkTab, workTabs } from './route.ts';
+import { scopeAt, tabOf, type WorkAt, workHref, workNavigationQuery, type WorkTab, workTabs, workTaskHref } from './route.ts';
+
+/** Keep an overview task reachable from the shared header on any subview or Zone mount. */
+export function WorkTaskLink({ workRef, anchor, children, className }: {
+  workRef: WorkAt; anchor: string; children: ReactNode; className?: string;
+}) {
+  const href = workTaskHref(workRef, usePathname(), new URLSearchParams(useSearchParams()), anchor);
+  return <Link href={href} {...{ [ACTION_ATTRIBUTE]: '' }} className={className}>{children}</Link>;
+}
 
 /** The existing rating editor, one quiet step from the identity instead of a second primary panel. */
 export function WorkRating({ work, locale, label }: { work: string; locale: UiLocale; label: string }) {
@@ -67,7 +75,7 @@ export function OnThisPage({ workRef, label, sections, labels, viewsLabel }: {
       window.removeEventListener('hashchange', dismiss);
     };
   }, [open]);
-  const item = 'flex min-h-11 items-center rounded-lg px-3 text-sm outline-none hover:bg-accent '
+  const item = 'flex min-h-11 scroll-mb-40 items-center rounded-lg px-3 text-sm outline-none hover:bg-accent '
     + 'focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:font-semibold aria-[current=page]:text-primary';
   return <div ref={root} className="relative sm:hidden" onBlur={event => {
     if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
@@ -76,7 +84,7 @@ export function OnThisPage({ workRef, label, sections, labels, viewsLabel }: {
       className={cn(buttonVariants({ variant: 'outline', size: 'md', pill: true }), 'w-full justify-between')}>
       {label}<ChevronDownIcon aria-hidden="true" className={cn('transition-transform', open && 'rotate-180')} />
     </button>
-    {open ? <nav id={menu} aria-label={label} className="absolute inset-x-0 top-full z-20 mt-1 grid max-h-[70vh]
+    {open ? <nav id={menu} aria-label={label} className="mt-2 grid max-h-[70svh]
       gap-1 overflow-y-auto rounded-2xl border border-border bg-popover p-2 shadow-lg">
       {sections.length ? <>
       <p className="px-3 pt-1 text-muted-foreground text-xs">{label}</p>

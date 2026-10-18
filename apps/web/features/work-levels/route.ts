@@ -2,7 +2,7 @@
 // `/w/{ref}/editions`, `/releases/{id}` and `/isbn/{isbn}`. Pure functions
 // shared by the routes, the components and their tests.
 
-import { globalWorkHref, idOf } from '../work-page/route.ts';
+import { globalWorkHref, idOf, workHref, type WorkAt } from '../work-page/route.ts';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 const single = (value: string | string[] | undefined) => (Array.isArray(value) ? undefined : value || undefined);
@@ -60,12 +60,12 @@ function withQuery(path: string, query: Record<string, string | undefined>, anch
   return `${entries.length ? `${path}?${new URLSearchParams(entries)}` : path}${anchor ? `#${anchor}` : ''}`;
 }
 
-export const connectionsHref = (ref: string, query: Partial<ConnectionsQuery> = {}, anchor?: string) =>
-  withQuery(`${globalWorkHref(ref)}/connections`, { ...query,
+export const connectionsHref = (ref: WorkAt, query: Partial<ConnectionsQuery> = {}, anchor?: string) =>
+  withQuery(workHref(ref, 'connections'), { ...query,
     grain: query.grain === 'parts' ? 'parts' : undefined }, anchor);
 
-export const editionsHref = (ref: string, query: EditionsQuery = {}, anchor?: string) =>
-  withQuery(`${globalWorkHref(ref)}/editions`, { ...query }, anchor);
+export const editionsHref = (ref: WorkAt, query: EditionsQuery = {}, anchor?: string) =>
+  withQuery(workHref(ref, 'editions'), { ...query }, anchor);
 
 /** A Work anywhere on the site, by the ID Main names it with. */
 export const workLinkHref = (iri: string) => {

@@ -5,7 +5,7 @@ import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
-import { ReaderActionsProvider, type ReaderActions } from '../catalogue/reader-actions.tsx';
+import type { ReaderActions } from '../catalogue/reader-actions.tsx';
 import { createReaderStore } from '../catalogue/reader-store.ts';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { EditionsPreviewView } from '../work-levels/previews.tsx';
@@ -14,7 +14,8 @@ import { gamesAnswerLabel, readGamesHub, recordedGamesSelections } from './games
 import { messages } from './messages.ts';
 import { NextActionView } from './primary-action.tsx';
 import { Region } from './region.tsx';
-import { WorkAbout, WorkHeader } from './work-header.tsx';
+import { WorkAbout } from './work-header.tsx';
+import { WorkFrame } from './work-frame.tsx';
 import { YourEdition } from './your-edition.tsx';
 
 type Hub = Awaited<ReturnType<typeof readGamesHub>>;
@@ -60,17 +61,18 @@ export function GamesHubRecordedPage({ record, persona, mode, locale }: {
   if (hub.book) return <pre role="alert" className="p-6">{pageMessages.unavailableBody}</pre>;
   const work = hub.header.data;
   const id = work.id.slice(-36);
-  return <ReaderActionsProvider signedIn={persona !== 'visitor'} signInHref="/auth/start" actions={actions}>
-    <main className="mx-auto grid min-w-0 max-w-3xl grid-cols-1 gap-6 px-4 py-6" lang={locale}>
-      <WorkHeader work={work} credits={null} locale={locale} messages={pageMessages} />
-      {hub.action ? <NextActionView action={hub.action} workRef={id} locale={locale} messages={pageMessages} /> : null}
+  return <div lang={locale}>
+    <WorkFrame workRef={id} work={work} credits={null} experience={hub.experience} locale={locale} messages={pageMessages}
+      signedIn={persona !== 'visitor'} signInHref="/auth/start" readerActions={actions}
+      readAction={hub.action ? <NextActionView action={hub.action} workRef={id} locale={locale} messages={pageMessages} /> : null}
+      sections={hub.shown ? [{ id: 'availability', label: pageMessages.sectionAvailability }] : []}>
       <WorkAbout work={work} locale={locale} messages={pageMessages} />
-      {hub.shown ? <Region id="work-availability" title={pageMessages.sectionAvailability}>
+      {hub.shown ? <Region id="availability" title={pageMessages.sectionAvailability}>
         <YourEdition work={work.id} signInHref="/auth/start" locale={locale} messages={pageMessages} />
         <EditionsPreviewView realizations={hub.realizations} releases={hub.releases} workRef={id} locale={locale}
           pageMessages={pageMessages} t={levelsCopy(locale)} />
       </Region> : null}
-    </main>
-  </ReaderActionsProvider>;
+    </WorkFrame>
+  </div>;
 }
 

@@ -51,9 +51,12 @@ export async function readSuppliedStart(client: Host, id: string, work: string, 
   return { kind: 'contents' as const };
 }
 
-const absent = (read: { ok: true; data: { items?: readonly unknown[]; parts?: readonly unknown[] } } | { ok: false; failure: string }) =>
-  read.ok ? !(read.data.items ?? read.data.parts)?.length
-    : read.failure === 'missing' || read.failure === 'sign-in' || read.failure === 'identity';
+const absent = (read: { ok: true; data: { items?: readonly unknown[]; parts?: readonly unknown[]; nextCursor?: string | null; next?: string | null } }
+  | { ok: false; failure: string }) => {
+  if (!read.ok) return false;
+  const page = { entries: read.data.items, nextCursor: read.data.nextCursor };
+  return !(page.entries ?? read.data.parts)?.length && !page.nextCursor && !read.data.next;
+};
 
 /** The one sample with this label. Two names are the same production read when this row kept an earlier label. */
 export function gamesAnswerLabel(record: AnswerRecord, persona: AnswerPersona, labels: readonly string[]): string {

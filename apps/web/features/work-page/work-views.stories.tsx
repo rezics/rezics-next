@@ -280,6 +280,23 @@ const scaledRecipe: RecipeWorkPage = {
   ],
 };
 
+export const RecipeCookingFromLink: Story = {
+  ...RecipeCooking,
+  async play({ canvasElement }) {
+    const prior = window.location.href;
+    try {
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}#cook`);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      const dialog = await screen.findByRole('dialog', { name: 'Cooking mode' });
+      await expect(within(dialog).getByRole('button', { name: 'Close cooking mode' })).toHaveFocus();
+      await userEvent.keyboard('{Escape}');
+      await expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      await expect(within(canvasElement).getByRole('button', { name: 'Cook this' })).toHaveFocus();
+      await expect(window.location.hash).toBe('');
+    } finally { window.history.replaceState(window.history.state, '', prior); }
+  },
+};
+
 export const ScaledIngredients: Story = {
   parameters: at('overview'),
   render: () => (

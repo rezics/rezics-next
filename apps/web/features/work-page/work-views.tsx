@@ -51,7 +51,8 @@ import { WorkAbout } from './work-header.tsx';
 import { readOwnWorkShowcase, readShowcaseImages } from '../api/showcase.ts';
 import { workShowcaseHeader } from '../showcase/work-header.tsx';
 import { WorkTypeSections } from '../zones/work-sections.tsx';
-import { AboutFacts, Availability, DiscussionHub, Parts, PrimaryAction, Status } from './hub-sections.tsx';
+import { AboutFacts, Availability, DiscussionHub, Parts, PrimaryAction, readWorkFacts, Status } from './hub-sections.tsx';
+import type { DisplayObligations } from '../rights-mark/rights-mark.tsx';
 import { type HubSection, hubLabels, hubPlan } from './hub.ts';
 import { WikiSection, WikiShortcut } from './wiki-server.tsx';
 import { readEntityProjection } from '../entity-page/read.ts';
@@ -212,7 +213,7 @@ async function ReadSlot({ workRef, id, work, experience, locale, messages, clien
   }
   const hub = experience.typeSection && experience.kind !== 'recipe' ? await readHubWorkPage(experience.typeSection.href)
     : null;
-  return <WorkKindActions kind={experience.kind} workId={work.id} title={work.title.value} locale={locale}
+  return <WorkKindActions kind={experience.kind} workId={work.id} workRef={workRef} title={work.title.value} locale={locale}
     messages={messages} hubText={hub?.ok ? hub.data?.content ?? null : null}
     words={shelfWords(experience, messages)} />;
 }
@@ -224,9 +225,10 @@ export const readHubPlan = async (id: string, client?: WorkPageClient): Promise<
 };
 
 /** Header and tabs around every Work view; credits and the rating summary stream in on their own. */
-export async function WorkFrameView({ workRef, id, work, locale, messages, lead, children, sources, client, readerActions, relationships }: Common & {
+export async function WorkFrameView({ workRef, id, work, locale, messages, lead, children, sources, factObligations, client, readerActions, relationships }: Common & {
   workRef: WorkAt; id: string; work: Header; children: ReactNode;
   sources?: ReactNode;
+  factObligations?: readonly DisplayObligations[];
   readerActions?: ReaderActions; relationships?: RelationshipsApi;
   /** The sections a Zone's page leads with (`ZonePackage.hubOrder`). */
   lead?: readonly HubSection[];
@@ -234,7 +236,7 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
   const experience = await readExperience(id, work.types, client);
   if (experience.kind === 'recipe') {
     return recipeWorkFrame({ host: await recipePageHost(), workRef, id, work, locale, messages, children, sources,
-      readerActions, relationships });
+      factObligations, readerActions, relationships });
   }
   const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, plan, art, showcaseMessages] = await Promise.all([
     readingAgent(client), (client ?? browseReader()), animeReaderState(id, client), readRatings(id, EVERYONE, undefined, client),
@@ -250,7 +252,9 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
   const context = ratings.ok ? ratings.data.context : null;
   const ratingTarget = context ? { work: work.id, context: context.context, mainVersion: work.mainVersion,
     max: context.scale.max } : null;
+  const facts = await readWorkFacts(id, locale, client);
   return <WorkFrame workRef={workRef} work={work} experience={experience} locale={locale} messages={messages} signedIn={signedIn}
+    statementSources={facts.page} sourceLabels={facts.labels} factObligations={factObligations}
     showcase={workShowcaseHeader(art.item, showcaseMessages, art.images)}
     actingSubject={seed ? actingSubject : null} readerSeed={seed ?? undefined} ratingTarget={ratingTarget} readerActions={readerActions} relationships={relationships}
     signInHref={signInPath(localizedPath(workHref(workRef), locale))} avatarQuery={avatarQuery}
@@ -261,8 +265,8 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
     ratingLine={<Suspense fallback={null}>{(client ? RatingLineSlot({ id, experience, locale, messages, client }) : <RatingLineSlot id={id} experience={experience} locale={locale} messages={messages} />)}</Suspense>}
     sources={<>
       {sources}
-      <Suspense fallback={null}>{plan.includes('about') ? (client ? AboutFacts({ id, locale, messages, client })
-        : <AboutFacts id={id} locale={locale} messages={messages} />) : null}</Suspense>
+      <Suspense fallback={null}>{client ? AboutFacts({ id, locale, messages, client })
+        : <AboutFacts id={id} locale={locale} messages={messages} />}</Suspense>
       <Suspense fallback={<WorkRecord work={work} locale={locale} messages={messages} />}>
         {client ? Record({ id, workRef, work, locale, messages, client })
           : <Record id={id} workRef={workRef} work={work} locale={locale} messages={messages} />}

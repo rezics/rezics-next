@@ -4,6 +4,9 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { zoneMemberHref } from '../address/path.ts';
 import { workExperience } from '../entity-page/experience.ts';
+import * as entity from '../entity-page/fixtures.ts';
+import type { StatementPage } from '../entity-page/types.ts';
+import { copyOf as entityCopy } from '../entity-page/messages.ts';
 import { attributed } from '../rights-mark/fixtures.ts';
 import { messages as relationshipMessages } from '../relationships/messages.ts';
 import * as levels from '../work-levels/fixtures.ts';
@@ -20,6 +23,7 @@ import { WorkKindActions } from './types/actions.tsx';
 import { OverviewLayout, WorkFrame } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
 import { WikiSectionView } from './wiki.tsx';
+import { WorkFactsView } from './work-sources.tsx';
 
 const english = [
   'At the harbour entrance, the chart shows a channel between the old breakwater and a line of green buoys. '
@@ -223,5 +227,74 @@ export const MixedReadFailures: Story = {
     for (const alert of canvas.getAllByRole('alert')) await expect(within(alert).getByRole('button', { name: messages.en.retry })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Join the discussion' })).toBeVisible();
     await expect(canvas.getByRole('heading', { level: 1 })).toBeVisible();
+  },
+};
+
+function SourcedWork() {
+  const t = messages.en;
+  const page: StatementPage = { ...entity.statements(), factObligations: attributed, groups: [
+    { predicate: 'https://schema.org/identifier', items: [{ ...entity.componentStatements.groups[0]!.items[0]!, kind: 'component-property',
+      predicate: 'https://schema.org/identifier', value: { kind: 'external', provider: 'Open Library', namespace: 'works', key: 'OL123W' },
+      sources: ['https://openlibrary.org/works/OL123W?revision=7'] }] },
+    ...entity.statements().groups,
+  ] };
+  const work = { ...fixture.work, factObligations: attributed, descriptionObligations: attributed };
+  return <WorkFrame workRef={fixture.workRef} work={work} credits={null} locale="en" messages={t}
+    statementSources={{ ok: true, data: page }} sourceLabels={entity.predicateLabels} factObligations={[attributed]}>
+    <WorkAbout work={work} messages={t} />
+    <WorkFactsView page={{ ok: true, data: page }} labels={entity.predicateLabels} names={new Map()}
+      hrefFor={() => workHref(fixture.workRef)} locale="en" t={entityCopy('en')} messages={t} />
+  </WorkFrame>;
+}
+export const SourcesAndEvidence: Story = {
+  render: () => <SourcedWork />, globals: { viewport: { value: 'desktop1440' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const sources = canvas.getByRole('region', { name: messages.en.sourcesAndEvidence });
+    await expect(canvasElement.querySelectorAll('[data-work-sources]')).toHaveLength(1);
+    await expect(within(sources).getAllByRole('link', { name: 'CC BY-SA 3.0' })).toHaveLength(1);
+    await expect(within(sources).getByText('Open Library · works · OL123W')).toBeVisible();
+    const details = within(sources).getByText(messages.en.fieldEvidence, { selector: 'summary' });
+    details.focus();
+    await userEvent.keyboard('{Enter}');
+    const evidence = within(sources).getByRole('link', { name: 'Evidence 1' });
+    await expect(evidence).toHaveAttribute('href', 'https://openlibrary.org/works/OL123W?revision=7');
+    await expect(within(sources).getAllByText(messages.en.fieldEvidenceUnavailable).length).toBeGreaterThan(0);
+    evidence.focus();
+    await expect(evidence).toHaveFocus();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+export const MobileSourcesAndEvidence: Story = { ...SourcesAndEvidence, globals: { viewport: { value: 'phone' } } };
+
+function CrossViewTask({ kind }: { kind: 'recipe' | 'guide' }) {
+  const t = messages.en;
+  return <WorkFrame workRef={zone} work={fixture.work} credits={null} locale="en" messages={t}
+    experience={workExperience(null, [kind === 'recipe' ? 'https://schema.org/Recipe' : 'https://schema.org/DigitalDocument'])}
+    readAction={<WorkKindActions kind={kind} workId={fixture.work.id} workRef={zone} title={fixture.work.title.value}
+      locale="en" messages={t} />}>
+    <p>Connections for {fixture.work.title.value}</p>
+  </WorkFrame>;
+}
+export const RecipeTaskFromConnections: Story = {
+  render: () => <CrossViewTask kind="recipe" />, globals: { viewport: { value: 'phone' } },
+  parameters: { route: { pathname: workHref(zone, 'connections'), search: navigationSearch } },
+  async play({ canvasElement }) {
+    const link = within(canvasElement).getByRole('link', { name: messages.en.cookThis });
+    const url = new URL(link.getAttribute('href')!, window.location.origin);
+    await expect(url.pathname).toBe(localizedPath(workHref(zone), 'en'));
+    await expect(url.hash).toBe('#cook');
+    await expect(url.searchParams.get('language')).toBe('ja');
+    await expect(url.searchParams.get('scope')).toBe('global');
+  },
+};
+export const GuideTaskFromConnections: Story = {
+  ...RecipeTaskFromConnections, render: () => <CrossViewTask kind="guide" />,
+  async play({ canvasElement }) {
+    const link = within(canvasElement).getByRole('link', { name: messages.en.viewGuide });
+    const url = new URL(link.getAttribute('href')!, window.location.origin);
+    await expect(url.pathname).toBe(localizedPath(workHref(zone), 'en'));
+    await expect(url.hash).toBe('#guide-experience');
+    await expect(url.searchParams.get('language')).toBe('ja');
   },
 };

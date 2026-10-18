@@ -10,22 +10,19 @@ import { createReaderStore } from '../catalogue/reader-store.ts';
 import type { MainClient } from '../discover/types.ts';
 import { copyOf as entityCopy } from '../entity-page/messages.ts';
 import { workExperience } from '../entity-page/experience.ts';
-import { StatementsView } from '../entity-page/views.tsx';
+import { WorkFactsView } from './work-sources.tsx';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { EditionsPreviewView } from '../work-levels/previews.tsx';
 import { EDITION_SAVED } from '../tracking/series-progress-panel.tsx';
 import type { EditionPreference } from '../tracking/types.ts';
 import { booksEditionReads, readBooksEditionStatus } from './books-edition-page.read.ts';
 import { messages } from './messages.ts';
-import { IdentityStatus } from './primary-action.tsx';
+import { IdentityStatus, NextActionView } from './primary-action.tsx';
 import { YourEdition } from './your-edition.tsx';
-import { shelfWords } from './shelf-words.ts';
-import { WorkKindActions } from './types/actions.tsx';
 import { WorkCredits } from './credits.tsx';
 import { Region } from './region.tsx';
 import { workHref } from './route.ts';
 import { WorkFrame } from './work-frame.tsx';
-import { WorkHeader } from './work-header.tsx';
 import { readDatedAnimeHub, readUndatedAnimeHub } from './anime-hub-recorded-page.ts';
 
 seedServedTypes();
@@ -97,28 +94,36 @@ export function AnimeHubRecordedPage({ persona, actingSubject, main, workId, kin
   const facts = entityCopy(locale);
   const signInHref = signInPath(localizedPath(workHref(workId), locale));
   if (undated?.header.ok) {
-    return <main className="mx-auto grid min-w-0 max-w-3xl gap-6 px-4 py-6" lang={locale}>
+    return <div lang={locale}>
       {who}
-      <WorkHeader work={undated.header.data} credits={null} locale={locale} messages={pageMessages} />
-      <StatementsView page={undated.statements} names={new Map()} cursor={undefined} hrefFor={() => workHref(workId)}
+      <WorkFrame workRef={workId} work={undated.header.data} credits={null} readAction={null}
+        locale={locale} messages={pageMessages} signedIn={Boolean(actingSubject)} signInHref={signInHref}
+        statementSources={undated.statements}>
+      <WorkFactsView page={undated.statements} names={new Map()} hrefFor={() => workHref(workId)}
         locale={locale} t={facts} messages={pageMessages} />
-    </main>;
+      </WorkFrame>
+    </div>;
   }
   if (!dated?.header.ok || !dated.statements) return null;
+  const inventory = [dated.realizations, dated.releases].some(read => {
+    if (!read.ok) return false;
+    const page = { entries: read.data.items, nextCursor: read.data.nextCursor };
+    return page.entries.length > 0 || page.nextCursor !== null;
+  });
   const experience = workExperience(dated.projection.ok ? dated.projection.data : null, dated.header.data.types);
-  const words = shelfWords(experience, pageMessages);
   return <div className="grid min-w-0 gap-3" lang={locale}>
     <div className="px-4 pt-4 sm:px-6">{who}</div>
     <WorkFrame workRef={workId} work={dated.header.data} experience={experience} locale={locale} messages={pageMessages}
       signedIn={Boolean(actingSubject)} signInHref={signInHref} readerActions={actions} readerSeed={dated.seed ?? undefined}
+      statementSources={dated.statements}
       credits={<WorkCredits agentCredits={dated.agentCredits} credits={dated.credits} locale={locale} messages={pageMessages} />}
-      readAction={<WorkKindActions kind={experience.kind} workId={dated.header.data.id} title={dated.header.data.title.value}
-        locale={locale} messages={pageMessages} words={words} />}
+      readAction={inventory ? <NextActionView action={{ kind: 'choose', href: '#availability', part: null }}
+        workRef={workId} locale={locale} messages={pageMessages} /> : null}
       status={identity ? <IdentityStatus {...identity} locale={locale} messages={pageMessages} /> : undefined}
-      sections={[{ id: 'statements', label: facts.statements }, { id: 'work-availability', label: pageMessages.sectionAvailability }]}>
-      <StatementsView page={dated.statements} names={new Map()} ownName={dated.header.data.title.value} cursor={undefined}
+      sections={[{ id: 'statements', label: facts.statements }, { id: 'availability', label: pageMessages.sectionAvailability }]}>
+      <WorkFactsView page={dated.statements} names={new Map()} ownName={dated.header.data.title.value}
         hrefFor={() => workHref(workId)} locale={locale} t={facts} messages={pageMessages} />
-      {dated.shown ? <Region id="work-availability" title={pageMessages.sectionAvailability}>
+      {dated.shown ? <Region id="availability" title={pageMessages.sectionAvailability}>
         <YourEdition work={dated.header.data.id} signInHref={signInHref} locale={locale} messages={pageMessages} />
         <EditionsPreviewView realizations={dated.realizations} releases={dated.releases} workRef={workId} locale={locale}
           pageMessages={pageMessages} t={levelsCopy(locale)} />

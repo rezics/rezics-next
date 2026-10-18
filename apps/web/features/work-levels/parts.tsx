@@ -1,3 +1,4 @@
+import type { WorkAt } from '../work-page/route.ts';
 import { Badge } from '@rezics/ui/badge';
 import { buttonVariants } from '@rezics/ui/button';
 import { LocalizedText } from '@rezics/ui/localized-text';
@@ -114,7 +115,7 @@ function PartRow({
 }: {
   part: Part;
   names: Names;
-  workRef: string;
+  workRef: WorkAt;
   query: ConnectionsQuery;
   t: Copy;
 }) {
@@ -177,7 +178,7 @@ export function PartsSection({
   parts: Loaded<PartsPage>;
   wholes: Loaded<WholesPage> | null;
   names: Names;
-  workRef: string;
+  workRef: WorkAt;
   query: ConnectionsQuery;
   locale: UiLocale;
   t: Copy;
