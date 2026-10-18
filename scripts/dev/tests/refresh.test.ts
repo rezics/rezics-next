@@ -1,6 +1,10 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 // sql-relations-allow: access.online_probe -- Synthetic index used only by mocked rehearsal clients.
+// sql-relations-allow: public.refresh_probe_dependency -- Dependent migration fixture in an isolated PostgreSQL container.
+// sql-relations-allow: public.refresh_probe_sequence -- Called sequence fixture in an isolated PostgreSQL container.
+// sql-relations-allow: public.refresh_probe_uncalled -- Uncalled sequence fixture in an isolated PostgreSQL container.
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { Client } from 'pg';
@@ -8,7 +12,7 @@ import { acquireHeavy, withRecovery } from '../../goal/goalctl.ts';
 import { acquireSharedLifecycle } from '../../goal/qa-slots.ts';
 import { startDevCompose } from '../cli.ts';
 import { GiB } from '../../qa/memory-admission.ts';
-import { appEnvironment, readEnv } from '../config.ts';
+import { appEnvironment } from '../config.ts';
 import { activeBackend,
   activateBackend,
   appHostSourceHash,
@@ -33,6 +37,7 @@ import { officialTheme } from '../seed/official-plan.ts';
 import { parseOptions } from '../seed/cli.ts';
 import { stableId } from '../seed/state.ts';
 import { sqlMigration } from '../../lib/concurrent-index.ts';
+import { snapshotRefreshDatabase } from '../refresh-rehearsal.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const current: RefreshInputs = { revision: 'committed-main', previousRevision: 'committed-main',
@@ -1184,6 +1189,7 @@ describe('shared stack refresh execution and guards', () => {
 describe('pending SQL migration rehearsal', () => {
   const env = { ACCESS_DATABASE_URL: 'access-db', MAIN_RELAY_DATABASE_URL: 'relay-db',
     CONTENT_DATABASE_URL: 'content-db', ACCOUNT_DATABASE_URL: 'account-db' };
+  const prepareDatabase = async (url: string) => ({ url, dispose: async () => {} });
 
   function fixture() {
     mkdirSync(join(root, '.temp'), { recursive: true });
@@ -1214,18 +1220,18 @@ WHERE note <> 'CONCURRENTLY;';`;
       operations.rehearseMigrations = () => rehearseRefreshMigrations(dir, env, [first], () => ({
         connect: async () => {},
         query: async query => {
-          events.push(query.startsWith('DO $$') ? 'isolate-sequences' : query);
+          events.push(query);
           if (query.includes('missing_column')) throw new Error('column missing_column does not exist');
         },
         end: async () => { events.push('end'); },
-      }));
+      }), prepareDatabase);
       try {
         const run = executeRefresh(refreshPlan({ ...current, pendingMigrations: [first] }), operations);
         if (fails) {
           await expect(run).rejects.toThrow(`Migration rehearsal failed: ${first}: column missing_column does not exist`);
           expect(events).not.toContain('stopWriters');
         } else await run;
-        expect(events.slice(0, 6)).toEqual(['BEGIN', 'isolate-sequences', 'DROP INDEX IF EXISTS access.online_probe',
+        expect(events.slice(0, 5)).toEqual(['BEGIN', 'DROP INDEX IF EXISTS access.online_probe',
           sql.replace('/* build */ CONCURRENTLY', '/* build */ '), 'ROLLBACK', 'end']);
         expect(readFileSync(join(dir, first), 'utf8')).toBe(sql);
       } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -1257,13 +1263,13 @@ WHERE note <> 'CONCURRENTLY;';`;
     try {
       await rehearseRefreshMigrations(dir, env, [content, second, first], url => ({
         connect: async () => { events.push(`connect:${url}`); },
-        query: async sql => { events.push(sql.startsWith('DO $$') ? 'isolate-sequences' : sql); },
+        query: async sql => { events.push(sql); },
         end: async () => { events.push('end'); },
-      }));
-      expect(events).toEqual(['connect:access-db', 'BEGIN', 'isolate-sequences',
+      }), prepareDatabase);
+      expect(events).toEqual(['connect:access-db', 'BEGIN',
         readFileSync(join(dir, first), 'utf8'),
         readFileSync(join(dir, second), 'utf8'), 'ROLLBACK', 'end',
-        'connect:content-db', 'BEGIN', 'isolate-sequences', readFileSync(join(dir, content), 'utf8'), 'ROLLBACK', 'end']);
+        'connect:content-db', 'BEGIN', readFileSync(join(dir, content), 'utf8'), 'ROLLBACK', 'end']);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
@@ -1279,7 +1285,7 @@ WHERE note <> 'CONCURRENTLY;';`;
       operations.rehearseMigrations = () => rehearseRefreshMigrations(dir, env, [second, first], () => ({
         connect: async () => { events.push('connect'); },
         query: async sql => {
-          events.push(sql.startsWith('DO $$') ? 'isolate-sequences' : sql);
+          events.push(sql);
           if (sql.startsWith('CREATE TABLE')) tableExists = true;
           if (sql.startsWith('INSERT')) {
             if (!tableExists) throw new Error('relation dependency does not exist');
@@ -1288,7 +1294,7 @@ WHERE note <> 'CONCURRENTLY;';`;
           if (sql === 'ROLLBACK') tableExists = false;
         },
         end: async () => { events.push('end'); },
-      }));
+      }), prepareDatabase);
       try {
         const run = executeRefresh(refreshPlan({ ...current, pendingMigrations: [second, first] }), operations);
         if (fails) {
@@ -1300,7 +1306,7 @@ WHERE note <> 'CONCURRENTLY;';`;
           expect(events.indexOf('stopWriters')).toBeGreaterThan(events.indexOf('ROLLBACK'));
           expect(events.at(-1)).toBe('recordSuccess');
         }
-        expect(events.slice(0, 7)).toEqual(['connect', 'BEGIN', 'isolate-sequences',
+        expect(events.slice(0, 6)).toEqual(['connect', 'BEGIN',
           readFileSync(join(dir, first), 'utf8'), readFileSync(join(dir, second), 'utf8'), 'ROLLBACK', 'end']);
         expect(tableExists).toBe(false);
       } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -1316,16 +1322,16 @@ WHERE note <> 'CONCURRENTLY;';`;
       operations.rehearseMigrations = () => rehearseRefreshMigrations(dir, env, [first, second, content], url => ({
         connect: async () => { events.push(`connect:${url}`); },
         query: async sql => {
-          events.push(sql.startsWith('DO $$') ? 'isolate-sequences' : sql);
+          events.push(sql);
           if (sql.startsWith('UPDATE')) throw new Error(diagnostic);
           if (sql === 'ROLLBACK' && diagnostic.includes('transaction timeout')) throw new Error('Connection closed');
         },
         end: async () => { events.push('end'); },
-      }));
+      }), prepareDatabase);
       try {
         await expect(executeRefresh(refreshPlan({ ...current, pendingMigrations: [first, second, content] }), operations))
           .rejects.toThrow(`Migration rehearsal failed: ${first}: ${diagnostic}. Writers were not stopped`);
-        expect(events).toEqual(['connect:access-db', 'BEGIN', 'isolate-sequences',
+        expect(events).toEqual(['connect:access-db', 'BEGIN',
           readFileSync(join(dir, first), 'utf8'), 'ROLLBACK', 'end']);
       } finally { rmSync(dir, { recursive: true, force: true }); }
     });
@@ -1335,45 +1341,244 @@ WHERE note <> 'CONCURRENTLY;';`;
     await rehearseRefreshMigrations(root, env, [], () => { throw new Error('Must not connect'); });
   });
 
-  for (const fails of [false, true]) {
-    test.skipIf(process.env.REZICS_REFRESH_SEQUENCE_PROBE !== '1')(`live PostgreSQL dependent migrations ${fails ? 'fail in the second file' : 'pass'} and restore schema, rows and sequences`, async () => {
-      const git = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'],
-        { cwd: root, encoding: 'utf8' });
-      if (git.status !== 0) throw new Error('Cannot locate the shared checkout');
-      const sharedEnv = readEnv(join(dirname(git.stdout.trim()), '.temp/stack/rezics-dev/dev.env'));
-      const { dir, first, second } = fixture();
-      const client = new Client({ connectionString: sharedEnv.ACCESS_DATABASE_URL, connectionTimeoutMillis: 5_000,
-        lock_timeout: 1_000, statement_timeout: 5_000, options: '-c transaction_timeout=10000' });
-      writeFileSync(join(dir, first), 'CREATE TEMP TABLE refresh_probe_dependency(value integer CHECK (value > 0));');
-      writeFileSync(join(dir, second), `SELECT nextval('pg_temp.refresh_probe_sequence');
-        SELECT setval('pg_temp.refresh_probe_sequence', 900);
-        UPDATE refresh_probe_rows SET value = 2;
-        INSERT INTO refresh_probe_dependency VALUES (${fails ? -1 : 1});`);
+  test('SQL and close failures retain the permanent diagnostic and still dispose the isolated database', async () => {
+    const { dir, first } = fixture();
+    const events: string[] = [];
+    try {
+      await expect(rehearseRefreshMigrations(dir, env, [first], url => ({
+        connect: async () => { events.push(`connect:${url}`); },
+        query: async sql => {
+          events.push(sql);
+          if (sql.startsWith('UPDATE')) throw new Error('permanent constraint error');
+        },
+        end: async () => { events.push('end'); throw new Error('close failed'); },
+      }), async url => {
+        events.push(`snapshot:${url}`);
+        return { url: 'isolated-db', dispose: async () => { events.push('dispose'); } };
+      })).rejects.toThrow('permanent constraint error; close failed. Writers were not stopped');
+      expect(events).toEqual(['snapshot:access-db', 'connect:isolated-db', 'BEGIN',
+        readFileSync(join(dir, first), 'utf8'), 'ROLLBACK', 'end', 'dispose']);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+describe('isolated PostgreSQL migration rehearsal', () => {
+  let container: string;
+  let source: Client;
+  let sourceUrl: string;
+  const fixtureName = `refresh-rehearsal-${randomBytes(8).toString('hex')}`;
+  const image = readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8')
+    .match(/postgres:\s*\n\s*image:\s*(\S+)/)![1]!;
+
+  function docker(args: string[], budgetMs = 15_000): string {
+    const result = spawnSync('docker', args, { encoding: 'utf8', timeout: budgetMs });
+    if (result.error || result.status !== 0)
+      throw new Error(`Scratch PostgreSQL ${args[0]} failed: ${result.error?.message ?? result.stderr}`);
+    return result.stdout.trim();
+  }
+
+  function client(url = sourceUrl, idleMs = 5_000): Client {
+    return new Client({ connectionString: url, connectionTimeoutMillis: 2_000,
+      lock_timeout: 1_000, statement_timeout: 5_000, query_timeout: 6_000,
+      options: `-c transaction_timeout=10000 -c idle_in_transaction_session_timeout=${idleMs}` });
+  }
+
+  beforeAll(async () => {
+    // Bound scratch resource use separately from the migration SQL deadlines.
+    // A loaded Docker daemon can take longer to start than a SQL statement.
+    container = docker(['run', '--detach', '--rm', '--name', fixtureName,
+      '--pull=never', '--memory=512m', '-e', 'POSTGRES_PASSWORD=fixture-admin',
+      '-p', '127.0.0.1::5432', image], 45_000);
+    const port = docker(['port', container, '5432/tcp']).split(':').at(-1)!;
+    const adminUrl = `postgres://postgres:fixture-admin@127.0.0.1:${port}/postgres`;
+    const deadline = Date.now() + 15_000;
+    while (true) {
+      const admin = client(adminUrl);
       try {
-        const run = rehearseRefreshMigrations(dir, sharedEnv, [second, first], () => ({
+        await admin.connect();
+        await admin.query("CREATE ROLE refresh_owner LOGIN PASSWORD 'fixture-owner'");
+        await admin.query('CREATE DATABASE refreshsource OWNER refresh_owner');
+        break;
+      } catch (error) {
+        if (Date.now() >= deadline) throw error;
+        await Bun.sleep(100);
+      } finally { await admin.end(); }
+    }
+    sourceUrl = `postgres://refresh_owner:fixture-owner@127.0.0.1:${port}/refreshsource`;
+    source = client();
+    await source.connect();
+    await source.query(`CREATE SCHEMA access;
+      CREATE TABLE access.principal(id integer PRIMARY KEY, value integer NOT NULL);
+      INSERT INTO access.principal VALUES (1, 1);
+      CREATE TABLE access.rating_aggregate_head(principal_id integer);
+      CREATE TABLE access.target_rating_head(principal_id integer);
+      CREATE SEQUENCE public.refresh_probe_sequence START 42;
+      SELECT nextval('public.refresh_probe_sequence');
+      CREATE SEQUENCE public.refresh_probe_uncalled START 17;
+      CREATE FUNCTION public.refresh_probe_advance() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN PERFORM nextval('public.refresh_probe_sequence'); RETURN NEW; END $$;
+      CREATE TRIGGER refresh_probe_advance AFTER UPDATE ON access.principal
+        FOR EACH ROW EXECUTE FUNCTION public.refresh_probe_advance();`);
+  }, 90_000);
+
+  afterAll(async () => {
+    try { await source?.end(); }
+    // Container/volume removal can outlast SQL; it has its own cleanup budget.
+    finally { docker(['rm', '--force', '--volumes', fixtureName], 45_000); }
+  }, 50_000);
+
+  function migrations() {
+    const dir = mkdtempSync(join(root, '.temp/refresh-snapshot-'));
+    for (const owner of ['services/main/migrations/access', 'services/main/migrations/relay',
+      'services/content/migrations', 'services/account/migrations']) mkdirSync(join(dir, owner), { recursive: true });
+    const first = 'services/main/migrations/access/001_dependency.sql';
+    const second = 'services/main/migrations/access/002_principal.sql';
+    return { dir, first, second, env: { ACCESS_DATABASE_URL: sourceUrl } };
+  }
+
+  test('live writers can retain a principal read lock and consume sequences during dependent rehearsal', async () => {
+    const { dir, first, second, env } = migrations();
+    const firstSql = 'CREATE TABLE public.refresh_probe_dependency(value integer CHECK (value > 0));';
+    writeFileSync(join(dir, first), firstSql);
+    const secondSql = `${readFileSync(join(root, 'services/main/migrations/access/2163_library_rating_position.sql'), 'utf8')}
+      INSERT INTO public.refresh_probe_dependency SELECT value FROM access.principal;`;
+    writeFileSync(join(dir, second), secondSql);
+    // Source fixtures deliberately retain locks across Docker calls. Their
+    // ten-second transaction wall still bounds them independently of idle time.
+    const writer = client(sourceUrl, 20_000);
+    await writer.connect();
+    let sequence: Promise<unknown> | undefined;
+    let copiedUrl: string | undefined;
+    try {
+      const run = rehearseRefreshMigrations(dir, env, [second, first], url => {
+        copiedUrl = url;
+        const rehearsal = client(url);
+        return {
+          connect: () => rehearsal.connect(),
+          query: async sql => {
+            const result = await rehearsal.query(sql);
+            if (sql === firstSql) {
+              await writer.query('BEGIN');
+              await writer.query('SELECT id FROM access.principal');
+              // The old sequence RESTART makes this writer wait while it holds
+              // AccessShareLock on principal. Later ALTER then waits on it.
+              sequence = writer.query("SELECT nextval('public.refresh_probe_sequence')");
+              void sequence.catch(() => {});
+            }
+            if ((sql === secondSql || sql === 'ROLLBACK') && sequence) {
+              // Keep the read lock through ALTER, then release it before
+              // synchronous Docker cleanup, which no longer needs the lock.
+              await sequence;
+              await writer.query('ROLLBACK');
+            }
+            return result;
+          },
+          end: () => rehearsal.end(),
+        };
+      }, url => snapshotRefreshDatabase(container, url));
+      const failure = await run.then(() => undefined, error => error as Error);
+      expect(failure?.message).toBeUndefined();
+      await expect(sequence).resolves.toMatchObject({ rows: [{ nextval: '43' }] });
+      expect(copiedUrl).not.toBe(sourceUrl);
+      expect((await source.query(`SELECT value FROM access.principal`)).rows).toEqual([{ value: 1 }]);
+      expect((await source.query(`SELECT count(*)::int AS count FROM information_schema.columns
+        WHERE table_schema='access' AND table_name='principal' AND column_name='library_rating_version'`)).rows)
+        .toEqual([{ count: 0 }]);
+      expect((await source.query("SELECT datname FROM pg_database WHERE datname LIKE 'rezics_rehearsal_%'")).rows).toEqual([]);
+    } finally {
+      await sequence?.catch(() => {});
+      try { await writer.query('ROLLBACK'); } finally { await writer.end(); }
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  for (const outcome of ['pass', 'data error', 'SQL error'] as const) {
+    test(`dependent migrations ${outcome} on copied real rows and leave source schema and both sequence states intact`, async () => {
+      const { dir, first, second, env } = migrations();
+      await source.query(`SELECT setval('public.refresh_probe_sequence', 42, true);
+        SELECT setval('public.refresh_probe_uncalled', 17, false);`);
+      writeFileSync(join(dir, first), `CREATE TABLE public.refresh_probe_dependency(value integer NOT NULL CHECK (value=2));
+        UPDATE access.principal SET value=2;`);
+      writeFileSync(join(dir, second), `DO $$ BEGIN
+          IF (SELECT last_value FROM public.refresh_probe_sequence) <> 43 THEN
+            RAISE EXCEPTION 'copied update trigger did not advance the sequence';
+          END IF;
+        END $$;
+        SELECT nextval('public.refresh_probe_sequence');
+        SELECT setval('public.refresh_probe_sequence', 900);
+        SELECT nextval('public.refresh_probe_uncalled');
+        SELECT setval('public.refresh_probe_uncalled', 99, false);
+        INSERT INTO public.refresh_probe_dependency VALUES
+          ((SELECT value FROM access.principal WHERE id=1)${outcome === 'data error' ? '+1' : ''});
+        ${outcome === 'SQL error' ? 'SELECT missing_column FROM access.principal;' : ''}`);
+      const events: string[] = [];
+      const operations = actions(events);
+      let copiedState: unknown;
+      operations.rehearseMigrations = () => rehearseRefreshMigrations(dir, env, [second, first], url => {
+        const rehearsal = client(url);
+        return {
           connect: async () => {
-            await client.connect();
-            await client.query('CREATE TEMP SEQUENCE refresh_probe_sequence START 42');
-            await client.query('SELECT nextval(\'pg_temp.refresh_probe_sequence\')');
-            await client.query('CREATE TEMP TABLE refresh_probe_rows(value integer)');
-            await client.query('INSERT INTO refresh_probe_rows VALUES (1)');
+            await rehearsal.connect();
+            copiedState = (await rehearsal.query(`SELECT current_user AS owner,
+              (SELECT last_value::text FROM public.refresh_probe_sequence) AS called_value,
+              (SELECT is_called FROM public.refresh_probe_sequence) AS called,
+              (SELECT last_value::text FROM public.refresh_probe_uncalled) AS uncalled_value,
+              (SELECT is_called FROM public.refresh_probe_uncalled) AS uncalled`)).rows;
           },
-          query: sql => client.query(sql),
-          end: async () => {
-            try {
-              expect((await client.query('SELECT last_value::text, is_called FROM pg_temp.refresh_probe_sequence')).rows)
-                .toEqual([{ last_value: '42', is_called: true }]);
-              expect((await client.query('SELECT value FROM refresh_probe_rows')).rows).toEqual([{ value: 1 }]);
-              expect((await client.query("SELECT to_regclass('pg_temp.refresh_probe_dependency') AS relation")).rows)
-                .toEqual([{ relation: null }]);
-            } finally { await client.end(); }
-          },
-        }));
-        if (fails) await expect(run).rejects.toThrow(`Migration rehearsal failed: ${second}:`);
-        else await run;
+          query: sql => rehearsal.query(sql),
+          end: () => rehearsal.end(),
+        };
+      }, url => snapshotRefreshDatabase(container, url));
+      try {
+        const run = executeRefresh(refreshPlan({ ...current, pendingMigrations: [second, first] }), operations);
+        if (outcome === 'pass') {
+          await expect(run).resolves.toBeUndefined();
+          expect(events).toContain('stopWriters');
+        } else {
+          await expect(run).rejects.toThrow(`Migration rehearsal failed: ${second}:`);
+          expect(events).not.toContain('stopWriters');
+          expect(events).not.toContain('recordSuccess');
+        }
+        expect(copiedState).toEqual([{ owner: 'refresh_owner', called_value: '42', called: true,
+          uncalled_value: '17', uncalled: false }]);
+        expect((await source.query('SELECT value FROM access.principal')).rows).toEqual([{ value: 1 }]);
+        expect((await source.query('SELECT last_value::text, is_called FROM public.refresh_probe_sequence')).rows)
+          .toEqual([{ last_value: '42', is_called: true }]);
+        expect((await source.query('SELECT last_value::text, is_called FROM public.refresh_probe_uncalled')).rows)
+          .toEqual([{ last_value: '17', is_called: false }]);
+        expect((await source.query("SELECT to_regclass('public.refresh_probe_dependency') AS relation")).rows)
+          .toEqual([{ relation: null }]);
+        expect((await source.query("SELECT datname FROM pg_database WHERE datname LIKE 'rezics_rehearsal_%'")).rows)
+          .toEqual([]);
       } finally { rmSync(dir, { recursive: true, force: true }); }
     }, 30_000);
   }
+
+  test('a conflicting source DDL lock bounds snapshot failure, cleans up and leaves writers running', async () => {
+    const { dir, first, env } = migrations();
+    writeFileSync(join(dir, first), 'SELECT 1;');
+    const writer = client(sourceUrl, 20_000);
+    await writer.connect();
+    const events: string[] = [];
+    const operations = actions(events);
+    operations.rehearseMigrations = () => rehearseRefreshMigrations(dir, env, [first], client,
+      url => snapshotRefreshDatabase(container, url));
+    try {
+      await writer.query('BEGIN');
+      await writer.query('LOCK TABLE access.principal IN ACCESS EXCLUSIVE MODE');
+      const started = Date.now();
+      await expect(executeRefresh(refreshPlan({ ...current, pendingMigrations: [first] }), operations))
+        .rejects.toThrow('Rehearsal database snapshot/restore failed');
+      expect(Date.now() - started).toBeLessThan(10_000);
+      expect(events).not.toContain('stopWriters');
+      expect((await writer.query('SELECT value FROM access.principal')).rows).toEqual([{ value: 1 }]);
+      expect((await source.query("SELECT datname FROM pg_database WHERE datname LIKE 'rezics_rehearsal_%'")).rows)
+        .toEqual([]);
+    } finally {
+      try { await writer.query('ROLLBACK'); } finally { await writer.end(); }
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
 });
 
 describe('official Zone approval refresh', () => {
@@ -1464,7 +1669,7 @@ describe('refresh image build', () => {
     expect(imageBuildBudgetMs).toBe(10 * 60_000);
   });
 
-  test('a build that outlives the budget reports a timeout', async () => {
+  test('image preparation that outlives the budget reports a timeout', async () => {
     const { dir, docker, log } = stack('echo started; exec sleep 30');
     try {
       const started = Date.now();
@@ -1474,7 +1679,9 @@ describe('refresh image build', () => {
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toContain(`image build task jena:image failed; output in ${log}`);
       expect((error as Error).message).toContain('exceeded 0.3 s');
-      expect(readFileSync(log, 'utf8')).toContain('started');
+      // The wall also includes lock and memory admission waits, so the fake
+      // Docker process need not start before timeout on a loaded host.
+      expect(existsSync(log)).toBe(true);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
