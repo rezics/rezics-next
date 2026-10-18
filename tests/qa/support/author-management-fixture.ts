@@ -30,7 +30,7 @@ export type AuthorManagementCorpus = {
   inventory: { matching: Work[]; draft: Work; otherType: Work; foreign: Work;
     alternateAgent: string; alternate: Work; edited: string };
   book: Work; composition: Composition; chapterOccurrence: string;
-  group: string; nestedGroup: string; chapterCount: number;
+  group: string; chapterGroup: string; chapterCount: number;
   chapter: Content; chapterWorkRevision: string; post: Content; postWorkRevision: string;
   adoption: { work: Work; structure: string; revision: string; publication: string };
   reply: Reply; independentPlacement: string; independentReply: Reply;
@@ -182,9 +182,10 @@ export async function buildAuthorManagementCorpus(): Promise<void> {
     };
     const [group] = await change([{ op: 'insert', parent: composition.structure, position: 'last', role: 'group',
       division: 'volume', label: { value: 'Volume', language: 'en' } }]);
-    const [nestedGroup] = await change([{ op: 'insert', parent: group, position: 'last', role: 'group',
+    // Book permits two occurrence levels: root groups hold chapters, not more groups.
+    const [chapterGroup] = await change([{ op: 'insert', parent: composition.structure, position: 'last', role: 'group',
       division: 'part', label: { value: 'Part', language: 'en' } }]);
-    for (const [parent, count] of [[composition.structure, 16], [composition.structure, 4], [nestedGroup!, 2]] as const)
+    for (const [parent, count] of [[composition.structure, 16], [composition.structure, 4], [chapterGroup!, 2]] as const)
       await change(Array.from({ length: count }, (_, index) => ({ op: 'insert', parent,
         position: 'last', role: 'chapter', target: chapter.post,
         label: { value: `Original chapter occurrence ${index}`, language: 'en' } })));
@@ -250,7 +251,7 @@ export async function buildAuthorManagementCorpus(): Promise<void> {
       compatibility: loadCompatibility(root).digest, recipeDigest: recipeDigest(), backup,
       preparedMs: startupMs + budget.elapsed(), realms, inventory: { matching, draft, otherType, foreign,
         alternateAgent: agent.agent, alternate, edited: edited.work }, book, composition,
-      chapterOccurrence: chapter.occurrence, group: group!, nestedGroup: nestedGroup!, chapterCount: 23,
+      chapterOccurrence: chapter.occurrence, group: group!, chapterGroup: chapterGroup!, chapterCount: 23,
       chapter: chapterContent, chapterWorkRevision: chapter.revision,
       post: postContent, postWorkRevision: postHeader.revision,
       adoption: { work: adoptionWork, structure: adoptionStructure.structure, revision: adoptionChange.revision,

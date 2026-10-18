@@ -202,7 +202,7 @@ describe('AMGT01:', () => {
         cursor = page.nextCursor;
       } while (cursor);
     }
-    expect(visited.has(metadata.nestedGroup)).toBe(true);
+    expect(visited.has(metadata.chapterGroup)).toBe(true);
     expect(pageCount).toBeGreaterThan(3);
     expect(new Set(chapters).size).toBe(23);
     expect(chapters).toHaveLength(23);
