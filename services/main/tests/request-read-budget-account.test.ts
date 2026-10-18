@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Elysia } from 'elysia';
@@ -189,6 +189,7 @@ test('coalesced admission does not retry a denial or outage when its owner also 
 test.each(['deadline', 'caller'] as const)(
   '%s releases a shared-key waiter without cancelling another reader or starting later work', async mode => {
     const f = await fixture(true);
+    const signatures = spyOn(crypto.subtle, 'verify');
     const controller = new AbortController();
     const reason = new DOMException('Reader left admission', 'AbortError');
     try {
@@ -203,14 +204,17 @@ test.each(['deadline', 'caller'] as const)(
       else expect(error).toBe(reason);
       expect(error).not.toBeInstanceOf(AccountAssertionDenied);
       expect(completed).toBe(false);
+      expect(signatures).not.toHaveBeenCalled();
       expect(f.state).toMatchObject({ keyCalls: 1, keyAborts: 0, introspections: 0, graphCalls: 0 });
       f.keys.release();
       expect(await unaffected).toMatchObject({ issuer, subject: 'reader', accountScopes: ['work:read'] });
       await delay(30);
       expect(f.state).toMatchObject({ keyCalls: 1, keyAborts: 0, introspections: 1, graphCalls: 1 });
+      expect(signatures).toHaveBeenCalledTimes(1);
       expect(await f.read(f.request())).toMatchObject({ subject: 'reader' });
       expect(f.state).toMatchObject({ keyCalls: 1, introspections: 2, graphCalls: 2 });
-    } finally { await f.stop(); }
+      expect(signatures).toHaveBeenCalledTimes(2);
+    } finally { signatures.mockRestore(); await f.stop(); }
   });
 
 test.each(['deadline', 'caller'] as const)(

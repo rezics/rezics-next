@@ -149,11 +149,10 @@ export class AccountAssertionVerifier {
       // Own the refresh clock: the provider's kid-driven cache lets arbitrary
       // forged key IDs trigger outbound work. Account publishes staged keys
       // for this cache lifetime before activation; introspection enforces retirement.
-      signed = await verifyJwsAccessToken(token, { jwksFetch: () => {
-        signal.throwIfAborted();
-        assertFusekiReadActive();
-        return this.fetchJwks();
-      },
+      signed = await verifyJwsAccessToken(token, {
+        // Stop this verifier's key wait too: releasing only its outer caller
+        // would let signature work resume after the shared refresh completes.
+        jwksFetch: () => withFusekiReadWait(signal, () => this.fetchJwks()),
         verifyOptions: { issuer: this.config.issuer, audience: this.config.audience } });
     } catch (error) {
       signal.throwIfAborted();
