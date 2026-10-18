@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { settled } from '../stories/support.tsx';
+import { expectSwitchContrast } from '../test/control-contrast.ts';
 import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from './field.tsx';
 import { Switch } from './switch.tsx';
 
@@ -47,17 +49,75 @@ export const Default: Story = {
 
 export const Checked: Story = { args: { defaultChecked: true } };
 
+export const OnAndOff: Story = {
+  globals: { theme: 'light' },
+  render: () => (
+    <div className="flex max-w-md flex-col gap-4">
+      {['bg-background', 'bg-card', 'bg-muted'].map(surface => (
+        <div className={`flex flex-col gap-4 rounded-2xl border p-4 ${surface}`} key={surface}>
+          <Field orientation="horizontal">
+            <Switch />
+            <FieldLabel>Email digest</FieldLabel>
+          </Field>
+          <Field orientation="horizontal">
+            <Switch defaultChecked />
+            <FieldLabel>Blur spoilers in reviews</FieldLabel>
+          </Field>
+        </div>
+      ))}
+    </div>
+  ),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    for (const toggle of canvas.getAllByRole('switch')) {
+      await expect(toggle).toBeEnabled();
+      await expect(toggle).not.toHaveFocus();
+      await expectSwitchContrast(toggle);
+      await userEvent.hover(toggle);
+      await settled(toggle);
+      await expectSwitchContrast(toggle);
+      await userEvent.unhover(toggle);
+    }
+    const toggle = canvas.getAllByRole('switch', { name: 'Email digest' })[0]!;
+    await expect(toggle).not.toBeChecked();
+    await userEvent.tab();
+    await expect(toggle).toHaveFocus();
+    await userEvent.keyboard(' ');
+    await expect(toggle).toBeChecked();
+    await settled(toggle);
+    await expectSwitchContrast(toggle);
+    await userEvent.keyboard(' ');
+    await expect(toggle).not.toBeChecked();
+    await settled(toggle);
+    await expectSwitchContrast(toggle);
+    toggle.blur();
+  },
+};
+
+export const OnAndOffDark: Story = { ...OnAndOff, globals: { theme: 'dark' } };
+
 export const Sizes: Story = {
   render: () => (
     <div className="flex flex-col gap-4">
       {(['sm', 'md', 'lg'] as const).map((size) => (
-        <Field className="w-fit" key={size} orientation="horizontal">
-          <Switch defaultChecked size={size} />
-          <FieldLabel>Size {size}</FieldLabel>
-        </Field>
+        <div className="grid gap-4 sm:grid-cols-2" key={size}>
+          <Field className="w-fit" orientation="horizontal">
+            <Switch size={size} />
+            <FieldLabel>Email digest ({size})</FieldLabel>
+          </Field>
+          <Field className="w-fit" orientation="horizontal">
+            <Switch defaultChecked size={size} />
+            <FieldLabel>Blur spoilers ({size})</FieldLabel>
+          </Field>
+        </div>
       ))}
     </div>
   ),
+  async play({ canvasElement }) {
+    for (const toggle of within(canvasElement).getAllByRole('switch')) {
+      await expectSwitchContrast(toggle);
+    }
+  },
 };
 
 export const WithDescription: Story = {

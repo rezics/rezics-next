@@ -30,7 +30,7 @@ const switchVariants = tv({
     'data-invalid:border-destructive data-invalid:ring-[3px] data-invalid:ring-destructive/24',
     'dark:data-invalid:border-destructive-foreground dark:data-invalid:ring-destructive-foreground/20',
     'data-[state=checked]:bg-primary',
-    'data-[state=unchecked]:bg-input',
+    'data-[state=unchecked]:bg-control',
     'data-disabled:pointer-events-none data-disabled:opacity-64',
     'motion-reduce:transition-none!',
   ],

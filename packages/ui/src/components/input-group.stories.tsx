@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CheckIcon, CopyIcon, LinkIcon, SearchIcon, SendIcon } from 'lucide-react';
 import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
+import { expectControlBoundary } from '../test/control-contrast.ts';
 import { Field, FieldError, FieldLabel } from './field.tsx';
 import {
   InputGroup,
@@ -62,6 +63,58 @@ export const Search: Story = {
     await expect(input).toHaveValue('三体');
   },
 };
+
+export const EmptyFields: Story = {
+  globals: { theme: 'light' },
+  render: () => (
+    <div className="flex flex-col gap-4">
+      {['bg-background', 'bg-card', 'bg-muted'].map(surface => (
+        <div className={`flex flex-col gap-4 rounded-2xl border p-4 ${surface}`} key={surface}>
+          <Field>
+            <FieldLabel>Realm address</FieldLabel>
+            <InputGroup>
+              <InputGroupAddon>
+                <InputGroupText>rezics.com/r/</InputGroupText>
+              </InputGroupAddon>
+              <InputGroupInput />
+            </InputGroup>
+          </Field>
+          <Field>
+            <FieldLabel>Reply</FieldLabel>
+            <InputGroup>
+              <InputGroupTextarea />
+            </InputGroup>
+          </Field>
+        </div>
+      ))}
+    </div>
+  ),
+  async play({ canvasElement }) {
+    const controls = within(canvasElement).getAllByRole('textbox');
+    for (const control of controls) {
+      await expect(control).toBeEnabled();
+      await expect(control).toHaveValue('');
+      await expect(control).not.toHaveFocus();
+      const group = control.closest<HTMLElement>('[data-slot="input-group"]')!;
+      await expectControlBoundary(group);
+      await userEvent.hover(group);
+      await expectControlBoundary(group);
+      await userEvent.unhover(group);
+    }
+    for (const control of controls.slice(0, 2)) {
+      await userEvent.tab();
+      await expect(control).toHaveFocus();
+      await expectControlBoundary(control.closest<HTMLElement>('[data-slot="input-group"]')!);
+    }
+    const reply = controls[1]!;
+    await userEvent.type(reply, 'Thanks for the recommendation.');
+    await expect(reply).toHaveValue('Thanks for the recommendation.');
+    await userEvent.clear(reply);
+    reply.blur();
+  },
+};
+
+export const EmptyFieldsDark: Story = { ...EmptyFields, globals: { theme: 'dark' } };
 
 export const Sizes: Story = {
   render: () => (
@@ -197,9 +250,16 @@ export const Invalid: Story = {
     </Field>
   ),
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('textbox')).toBeInvalid();
+    const input = within(canvasElement).getByRole('textbox');
+    await expect(input).toBeInvalid();
+    const group = input.closest<HTMLElement>('[data-slot="input-group"]')!;
+    await expectControlBoundary(group);
+    await userEvent.hover(group);
+    await expectControlBoundary(group);
   },
 };
+
+export const InvalidDark: Story = { ...Invalid, globals: { theme: 'dark' } };
 
 export const Disabled: Story = {
   render: () => (

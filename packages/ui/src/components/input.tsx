@@ -11,7 +11,7 @@ export const inputVariants = tv({
     'w-full min-w-0',
     'bg-primary/5 text-foreground',
     'text-base md:text-sm',
-    'rounded-xl border border-border/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-border',
+    'rounded-xl border border-control shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-muted-foreground',
     'placeholder:text-muted-foreground',
     'file:inline-flex file:h-7 file:items-center file:border-0',
     'file:font-medium file:text-foreground file:text-sm',
