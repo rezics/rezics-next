@@ -25,20 +25,28 @@ const record = (overrides: Partial<DatasetRecord> = {}): DatasetRecord => ({
   data: {},
   ...overrides,
 });
-const source = (input: DatasetRecord): DatasetSourceReference => ({
-  key: input.key,
-  provider: input.provider,
-  namespace: input.kind,
-  externalId: input.externalId,
-  snapshot: 'frozen-shape',
-  snapshotDigest: 'a'.repeat(64),
-  recordDigest: datasetRecordDigest(input),
-  // Retained intake may have multiple parts; no part is silently made the whole record.
-  observations: [
-    'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
-    'https://rezics.com/id/00000000-0000-4000-8000-000000000002',
-  ],
-});
+const source = (input: DatasetRecord): DatasetSourceReference => {
+  const reference = {
+    key: input.key,
+    provider: input.provider,
+    namespace: input.kind,
+    externalId: input.externalId,
+    snapshot: 'frozen-shape',
+    snapshotDigest: 'a'.repeat(64),
+    recordDigest: datasetRecordDigest(input),
+    // Retained intake may have multiple parts; no part is silently made the whole record.
+    observations: [
+      'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
+      'https://rezics.com/id/00000000-0000-4000-8000-000000000002',
+    ],
+    intakes: [1, 2].map((index) => ({
+      record: 'https://rezics.com/id/00000000-0000-4000-8000-000000000003',
+      observation: `https://rezics.com/id/00000000-0000-4000-8000-00000000000${index}`,
+      byteDigest: String(index).repeat(64),
+    })),
+  };
+  return reference;
+};
 const project = (overrides: Partial<DatasetRecord>) => {
   const input = record(overrides);
   return projectDatasetFields(input, source(input));
@@ -49,6 +57,42 @@ const valueAt = (plan: DatasetFieldPlan, path: string) =>
   at(plan, path)[0]?.native?.property?.value;
 
 describe('source field projection over retained shapes', () => {
+  test('readable Work synopsis and source-language names go to the existing metadata owner', () => {
+    const plan = project({
+      kind: 'subject',
+      native: 'work',
+      data: {
+        summary: '作品简介。',
+        name_cn: '中文作品名',
+        eps: 12,
+      },
+    });
+    expect(at(plan, '/data/summary')[0]).toMatchObject({
+      disposition: 'candidate',
+      native: {
+        owner: 'work-metadata',
+        material: 'expression',
+        property: {
+          predicate: `${SCHEMA}description`,
+          value: {
+            kind: 'language-string',
+            lexical: '作品简介。',
+            language: 'zh-Hans',
+          },
+        },
+      },
+    });
+    expect(at(plan, '/title')[0]!.native).toMatchObject({
+      owner: 'work-metadata',
+      property: { value: { lexical: '原名', language: 'ja' } },
+    });
+    expect(at(plan, '/data/name_cn')[0]!.native).toMatchObject({
+      owner: 'work-metadata',
+      property: { value: { lexical: '中文作品名', language: 'zh-Hans' } },
+    });
+    expect(at(plan, '/data/eps')[0]!.native).toMatchObject({ owner: 'semantic', material: 'fact' });
+  });
+
   test('positive synopsis, names and aliases keep their own language, source pointer and exact attribution', () => {
     const input = record({
       data: {
@@ -169,6 +213,7 @@ describe('source field projection over retained shapes', () => {
       lexical: 'Namae',
       language: 'ja-Latn',
     });
+    expect(at(plan, '/data/tables/chars_names/0/latin')[0]!.evidence[0]!.language).toBe('ja-Hani');
     expect(valueAt(plan, '/data/tables/chars_alias/0/name')).toEqual({
       kind: 'string',
       lexical: 'Literal alias',

@@ -285,6 +285,7 @@ export function projectDatasetFields(
     predicate: string,
     language: string | null | undefined,
     expression = false,
+    nativeLanguage: string | null | undefined = language,
   ) =>
     emit(
       child(base, key),
@@ -293,7 +294,7 @@ export function projectDatasetFields(
       predicate,
       (value) => {
         if (typeof value !== 'string' || !value.trim()) throw new Error('Expected source text');
-        return languageValue(value, language);
+        return languageValue(value, nativeLanguage);
       },
       { exists: Object.hasOwn(row, key), language, expression },
     );
@@ -545,7 +546,18 @@ export function projectDatasetFields(
           } catch {
             /* The source's script column still identifies Latin text. */
           }
-          text(row, path, 'latin', 'aliases', `${SCHEMA}alternateName`, latinLanguage);
+          // Keep the supplied language in evidence; the Latin column supplies
+          // the native script refinement, not a new source-language assertion.
+          text(
+            row,
+            path,
+            'latin',
+            'aliases',
+            `${SCHEMA}alternateName`,
+            language,
+            false,
+            latinLanguage,
+          );
         }
       });
     }
