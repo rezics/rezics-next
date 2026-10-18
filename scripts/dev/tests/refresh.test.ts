@@ -1384,27 +1384,31 @@ describe('isolated PostgreSQL migration rehearsal', () => {
   }
 
   beforeAll(async () => {
-    // Bound scratch resource use separately from the migration SQL deadlines.
-    // A loaded Docker daemon can take longer to start than a SQL statement.
+    // initdb must finish its disk sync before TCP is ready. Bound the entire
+    // scratch startup separately from the migration SQL deadlines.
+    const deadline = Date.now() + 60_000;
     container = docker(['run', '--detach', '--rm', '--name', fixtureName,
       '--pull=never', '--memory=512m', '-e', 'POSTGRES_PASSWORD=fixture-admin',
       '-p', '127.0.0.1::5432', image], 45_000);
     const port = docker(['port', container, '5432/tcp']).split(':').at(-1)!;
     const adminUrl = `postgres://postgres:fixture-admin@127.0.0.1:${port}/postgres`;
-    const deadline = Date.now() + 15_000;
     while (true) {
       const admin = client(adminUrl);
       try {
-        await admin.connect();
+        // Only connection readiness is retryable; permanent setup SQL errors
+        // must fail immediately instead of replaying partially completed DDL.
+        try { await admin.connect(); }
+        catch (error) {
+          if (Date.now() >= deadline) {
+            const logs = spawnSync('docker', ['logs', '--tail', '30', container], { encoding: 'utf8', timeout: 5_000 });
+            throw new Error(`Scratch PostgreSQL startup failed: ${String(error)}\n${logs.stdout}${logs.stderr}`, { cause: error });
+          }
+          await Bun.sleep(100);
+          continue;
+        }
         await admin.query("CREATE ROLE refresh_owner LOGIN PASSWORD 'fixture-owner'");
         await admin.query('CREATE DATABASE refreshsource OWNER refresh_owner');
         break;
-      } catch (error) {
-        if (Date.now() >= deadline) {
-          const logs = spawnSync('docker', ['logs', '--tail', '30', container], { encoding: 'utf8', timeout: 5_000 });
-          throw new Error(`Scratch PostgreSQL startup failed: ${String(error)}\n${logs.stdout}${logs.stderr}`, { cause: error });
-        }
-        await Bun.sleep(100);
       } finally { await admin.end(); }
     }
     sourceUrl = `postgres://refresh_owner:fixture-owner@127.0.0.1:${port}/refreshsource`;
