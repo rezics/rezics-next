@@ -142,10 +142,14 @@ for (const candidate of candidates) {
     await page.getByLabel('Pending trial action').uncheck();
     await page.getByRole('button', { name:'Open nested modal', exact:true }).click();
     await page.getByLabel('Nested input').waitFor();
+    // Presence can be visible before the existing owner's deferred focus work.
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Nested input', undefined, { timeout: 3000 }).catch(() => {});
     entry.nested = { initialFocus: await page.getByLabel('Nested input').evaluate(node => document.activeElement === node) };
     await page.keyboard.press('Tab');
     entry.nested.focusContained = await page.evaluate(() => !!document.activeElement.closest('[role=dialog]'));
     await page.keyboard.press('Escape');
+    await page.getByLabel('Nested input').waitFor({state:'hidden'});
+    await page.waitForTimeout(100);
     entry.nested.parentSurvives = await page.locator('#modal-input').isVisible();
     await page.screenshot({path:`${captures}/${candidate}-modal.png`,fullPage:true});
     await page.locator('#modal-input').dispatchEvent('keydown', { key:'Escape', code:'Escape', keyCode:229, isComposing:false });
