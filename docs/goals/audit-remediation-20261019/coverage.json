@@ -1,0 +1,555 @@
+{
+  "source": "site-audit-2026-10-18 + catalogue-audit-20261018, canonical round-3 union",
+  "total": 61,
+  "findings": [
+    {
+      "id": "D5-001",
+      "severity": "P0",
+      "sourceConfidence": "confirmed",
+      "title": "通知读取缺少共同预算和取消，遗留工作在无用户时继续耗尽共享读取容量",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D5-002",
+      "severity": "P0",
+      "sourceConfidence": "confirmed",
+      "title": "Discover默认合法列表耗尽自身32次调用预算，单用户稳定422",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A11",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "上线领域缺少真实公开核心任务闭环证明",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A01",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "来源知识没有进入可消费的原生与反向投影",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A07",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "资料映射止于身份，简介与领域事实未被消费",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A08",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "未知、读取失败与无数据混成空白并改变对象语义",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "AUD-002",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "6/6 站点入口返回 503 白屏",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D4-007",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "身份发现与会话 Agent 读取均返回 503，Library、Studio 和个人关系导航被同一门槛阻断",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D5-004",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "Discovery刷新对持续失败无限期重试，无用户仍持续消耗共享读取",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D6-002",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "全站搜索未覆盖公开可读角色、称号与讨论帖子",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A03",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "真实图片的取得、依据、导入与交付链路断开",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A04",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "角色与 trait 查询缺少可读的完整语境绑定",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A05",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "通用 occurrence 与 native 署名的读取覆盖不一致",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A06",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "描述性发行没有成为可选择的原生 release",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A09",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "公开能力发现与实际查询、导航资格不一致",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A10",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "非书籍的基础图片与角色消费被展示能力门槛阻挡",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A13",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "来源、许可与证据没有在页末统一区域集中呈现",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "AUD-001",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "Discover 自己生成的超长游标无法续页",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "AUD-006",
+      "severity": "P1",
+      "sourceConfidence": "intermittent",
+      "title": "一次 SSR useState 异常使开发错误遮罩盖住 Discover",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D2-003",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "图片编辑失败没有传到草稿状态，显示已保存却在刷新后丢图",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D2-004",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "作者操作只覆盖创建发布，缺少发布后的更正与撤回旅程",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D4-008",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "公开作品到正文的阅读链路失败；不可用与“章节不存在”还被混在一起",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D4-010",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "章节全文搜索收到后继游标，却只显示“首批”文字，无法继续查完",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "AUD-003",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "Lists 首屏 20/20 链接返回 404 白屏",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "AUD-005",
+      "severity": "P1",
+      "sourceConfidence": "injected",
+      "title": "一次游标冲突后 Refresh 在三次 30 秒等待内都不能恢复",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D2-002",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "发帖把一次尝试当作已提交内容，写入前失败也锁死草稿",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D3-001",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "公开 Feed 的匿名降级没有传到客户端，登录但无可用 Agent 时续页请求违反认证契约",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D3-002",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "服务端路由调用客户端模块的普通函数，Proposals 列表在身份检查前崩溃",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D5-003",
+      "severity": "P1",
+      "sourceConfidence": "confirmed",
+      "title": "正文搜索在前台做全人口Content资格化，索引健康时仍1.5秒503",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "I1-001",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "详情页缺少稳定的主体、分类型页头、动作区和信息顺序契约",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A02",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "开发切片丢失已选作品的核心邻接资料",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A12",
+      "severity": "P2",
+      "sourceConfidence": "inferred",
+      "title": "高入度、混合权限与来源更新的资格边界未被证明",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A15",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "描述类型保留却没有绑定实体页面注册表",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A17",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "普通书单与菜谱精选被当成 Franchises 系列",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A19",
+      "severity": "P2",
+      "sourceConfidence": "inferred",
+      "title": "菜谱阅读没有消费契约中的营养与替代关系",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "AUD-010",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "未完成扫描被呈现为空白或无匹配，筛选没有可理解的进度",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D5-006",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "一次候选配额成为全业务人口上限，超出即整份正常读取失败",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D6-005",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "搜索卡片缺少选择摘要，无法区分同名候选",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "A18",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "公开结构未就绪时仍提供无反馈的做菜主操作",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "AUD-007",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "混合卡片没有 masonry，外部行高和内部占位共同制造大空洞",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "AUD-008",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "断点叠加使视口变宽 1px、卡片反而骤缩",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "AUD-009",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "New sites 后的全体结果缺少可见分区标题",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "AUD-011",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "分卷作品实际有 4 章，Studio 却显示 0 chapters",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "AUD-012",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "手机底栏可见名称与辅助名称不一致",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "AUD-013",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "浏览卡片封面过大，并随混排分支改变尺寸",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "AUD-014",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "保存精选用不完整summary合成作品卡，同一本Book变成document并改变封面设计和信用信息",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D1-002",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "手机详情导航浮层缺少 Escape、外点关闭与一致的焦点行为",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D1-003",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "Work 子视图没有统一导航模型，Connections 错标 Overview",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D1-005",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "非书籍散文正文沿用全宽容器，指南缺少阅读行宽",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D2-005",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "设置共用 busy 状态，却让可操作的语言控件静默丢弃输入",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D4-001",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "中性装饰色同时承担输入控件识别，空字段和亮色关闭开关对比不足",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D4-002",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "横向导航在整页进入时丢掉当前选项的位置",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D4-003",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "Library以目标、统计和搬运工具占据首屏，正在读的作品最后出现",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D4-004",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "手机通知偏好矩阵滚动后失去通道含义",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D4-005",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "自动保存反馈放在45个开关之后，操作结果在手机屏外",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D4-011",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "Home把获客横幅与空侧栏放在内容之前，首屏没有证明值得关注什么",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D4-014",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "Studio用展示卡管理作品，却缺少定位和排序，状态与元数据挤成高卡",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D4-015",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "通知把每条两枚分拣按钮放在事件与时间之间，正文对象没有稳定视觉焦点",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D4-016",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "Feed预览复述刚读过的标题，有限预览空间没有新增判断信息",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D6-003",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "关键词查询过于依赖严格短语，漏词与小错没有找回路径",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    },
+    {
+      "id": "D6-004",
+      "severity": "P2",
+      "sourceConfidence": "confirmed",
+      "title": "有效筛选条件不可见，编辑当前查询会隐性清空范围",
+      "status": "pending",
+      "owner": null,
+      "proof": []
+    }
+  ]
+}
