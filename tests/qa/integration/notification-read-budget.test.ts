@@ -25,9 +25,10 @@ for (const name of personaNames) {
       expect(result.graphBytes).toBeLessThanOrEqual(WORK_READ_COST.graphBytes);
       expect(result.elapsedMs).toBeLessThan(WORK_READ_COST.deadlineMs);
     }
-    const items = stream.body.items as { id: string; subject: { ref: string } | null }[];
-    expect(items.length).toBeGreaterThan(0);
-    expect(JSON.stringify(stream.body)).toContain(corpus.book.work);
+    const items = stream.body.items as { id: string; subject: { ref: string } | null;
+      display: { kind: string; realm: string | null } | null }[];
+    expect(items.filter(item => item.subject !== null && item.display?.kind === 'realm_role_change'
+      && item.display.realm === corpus.notificationRealm).length).toBeGreaterThanOrEqual(24);
     const alien = await sessions[name === 'stranger' ? 'operator' : 'stranger'].main('PUT',
       `/v1/me/notifications/${items[0]!.id}/read`, undefined, undefined, raw);
     expect(alien.status).toBe(404);

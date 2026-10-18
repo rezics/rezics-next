@@ -5,22 +5,22 @@
   "baseline": {
     "revision": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
     "workingTree": "Outcome tests and minimal QA support only; production code unchanged.",
-    "run": null,
-    "recordedJob": null,
-    "assertionReached": "pending corrected fixture setup; prior runs reached no API outcome assertion",
+    "run": "20261018t200319-27bb3a",
+    "recordedJob": "952ad34f-5eba-4250-9cd5-37c617521094",
+    "assertionReached": "D5-003 yes; D5-006 ratings answers observed but wrong population assertion corrected for next run; D5-002/AUD-001 response envelope premise corrected; D5-001 Feed subjects hidden before graph work; Zones setup no; D5-004 persistent fault no",
     "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test tests/qa/integration/audit-bounded-reads.test.ts tests/qa/integration/notification-read-budget.test.ts tests/qa/integration/official-zone-read-budget.test.ts tests/qa/integration/rating-population-read-budget.test.ts",
     "expectedGate": "Intentionally failing baseline regression, never a passing done gate.",
     "dispatchedRevision": "50e53025617238f9d9d8127be78179c3fa3bc12c",
-    "currency": "Required goal check refreshed this worker onto current main. The three intervening commits touch Goal allowance tooling and an archived brief only; no API owner changed.",
+    "currency": "Required Goal check adopted current main 95945af96a (Goal tooling/docs/QA guard fixes only). API owners remain production-equivalent to 7df2e285d3. sourceRevision is the exact tested worker head; revision identifies that unchanged production baseline.",
     "staticChecks": {
-      "job": "2f114ba2-b43d-4738-b30f-73ca3ac33a57",
+      "job": "952ad34f-5eba-4250-9cd5-37c617521094",
       "docs": "passed",
       "types": "passed",
       "lint": "passed",
       "ast": "passed",
-      "guards": "failed: unrelated retained fixture-small repair canary inherited worker authority; two timed-out guards passed their automatic retries",
-      "evidence": ".temp/goal/check/run-eMhCAf/output.log",
-      "mainCorrection": "a34ba22336 fixes the canary authority in main; required currency check will adopt it. No API owner changed."
+      "guards": "passed",
+      "evidence": ".temp/goal/check/run-9m0jFG/output.log",
+      "targetedHarness": "scripts/qa/raw-update-scan.test.ts and scripts/qa/integration-shards.test.ts passed in 20261018t200309-394b25"
     },
     "attempts": [
       {
@@ -68,7 +68,7 @@
             "capability": "zones",
             "project": 3,
             "wallMs": 59300,
-            "diagnosis": "Extra Zone creation returned authority_denied (403): fixture omitted the explicit space:create:root / space.create mandate. This is setup admission, not a suggestions defect.",
+            "diagnosis": "Extra Zone creation returned authority_denied (403): fixture omitted the explicit space:create:root / space.create mandate. This is setup admission, not a suggestions defect. Later diagnosis: baseline-member quota takes precedence over that grant; operator preparation is required for this fixture population.",
             "evidence": ".artifacts/qa/20261018t192818-8c2569/logs/integration-3.log"
           },
           {
@@ -88,18 +88,62 @@
           "result": "passed",
           "scope": "Only four disposable stacks 20261018t192818-8c2569-{1,2,3,4}, using task stack:reset -- --profile qa --run-id <id> --persistent --raw-update"
         }
+      },
+      {
+        "job": "952ad34f-5eba-4250-9cd5-37c617521094",
+        "run": "20261018t200319-27bb3a",
+        "sourceRevision": "14e9e69f12423acc7d49de1ef43dd41035075c4a",
+        "command": "bun scripts/goal/goalctl.ts test tests/qa/integration/audit-bounded-reads.test.ts tests/qa/integration/notification-read-budget.test.ts tests/qa/integration/official-zone-read-budget.test.ts tests/qa/integration/rating-population-read-budget.test.ts",
+        "result": "mixed-outcome-and-premise-failures",
+        "projectBudgetMs": 480000,
+        "capabilities": [
+          {
+            "capability": "queries",
+            "project": 1,
+            "wallMs": 349400,
+            "diagnosis": "D5-003 body reached for six personas; unrelated graph advancement caused one foreground population audit in all six traces. Twelve exact absent/private phrase controls and diagnostic control passed. D5-002/AUD-001 incorrectly unwrapped the query envelope: their TypeErrors are not API defects. Stranger default returned a raw 503/deadline, separately observed.",
+            "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+            "wireEvidence": ".temp/audit-bounded-reads/queries/bounded-4bf4630348464ed9-evidence.json"
+          },
+          {
+            "capability": "notifications",
+            "project": 2,
+            "wallMs": 512200,
+            "diagnosis": "Project exceeded 480 seconds. All five readers received 24 real Feed notices with null subjects/display, so four cancellation preconditions saw zero graph calls. Moderator only exercised an unrelated existing role notice. All six admission/missing/alien controls passed. This run does not prove the audited Feed budget/cancellation.",
+            "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-2.log",
+            "wireEvidence": ".temp/audit-bounded-reads/notifications/bounded-3a60145daea2464f-evidence.json"
+          },
+          {
+            "capability": "zones",
+            "project": 3,
+            "wallMs": 51300,
+            "diagnosis": "No suggestions assertion. Extra Zone returned 403 because member baseline creation quota was exhausted; an explicit fixture mandate does not bypass the earlier baseline-member admission branch. Next fixture uses the existing operator for population preparation.",
+            "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-3.log"
+          },
+          {
+            "capability": "ratings",
+            "project": 4,
+            "wallMs": 466400,
+            "diagnosis": "All six personas observed 200 at 100 and 422 query_budget_exceeded at both 101 and 102. Test incorrectly expected population to contain the policy string; corrected to population=N and populationPolicy=global-account-principal before counting a failing boundary assertion.",
+            "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-4.log",
+            "wireEvidence": ".temp/audit-bounded-reads/ratings/bounded-cb4555528692460d-evidence.json"
+          }
+        ],
+        "correction": "Unwrap query.result; use numeric aggregate population and separate populationPolicy; prepare Zones as operator; replace hidden Feed hot-path premise with 24 real governance role notices per reader from a separate Account in an auxiliary Realm. Reuse the stopped query/rating cuts, retaining the previous Feed evidence."
       }
-    ]
+    ],
+    "harnessBase": "95945af96abf9635773ebc6c26c43f24548efd76",
+    "sourceRevision": "14e9e69f12423acc7d49de1ef43dd41035075c4a"
   },
   "fixture": {
     "composition": "Real Account HTTP and composeMain with lifecycle, relay, Content, Access, Fuseki and PostgreSQL; no owner mocks.",
-    "creation": "Public commands for Works, chapter Content and eligibility, real follows and followed-chapter notifications, Realms/Zones, and independent Account rating observations. grantPersonaFixtureAuthority only for narrow preparation authority.",
-    "reuse": "Capability-specific consistent stopped owner backups under .temp/audit-bounded-reads/{queries,notifications,zones,ratings}/owners and mode-0600 corpus.json; all runs restore isolated fresh owners, never shared development storage.",
+    "creation": "Public commands for Works, chapter Content/eligibility, real follows, independent Realm role-impact/change receipts and produced notices, operator-created Realms/Zones, and independent Account rating observations. Only the existing fixture authority helper supplies narrow preparation mandates.",
+    "reuse": "Consistent stopped backups and mode-0600 corpus.json under .temp/audit-bounded-reads/{queries,notifications-governance,zones,ratings}/owners. The original notifications directory retains the disproved Feed fixture evidence. Every execution restores fresh isolated owners; no shared development storage.",
     "preparationBudgetMs": 600000,
     "privacy": "Retained credentials never enter this document or Git.",
     "instrumentation": "Transparent HTTP proxy records actual graph requests, bytes, timing and trace IDs; optional 20 ms latency exposes in-flight cancellation without replacing an owner. Real OTLP runtime propagates traces. SQL/engine bounds are unknown until separately instrumented, never inferred as zero.",
     "populations": {
-      "notifications": "24 public, independently published chapters by a separate Account; all five signed-in readers follow the public Book before publication. Stream limit 50 and unread scan 256 are unchanged. This is a smaller counterexample, not proof of the full 50/256 populations.",
+      "notifications": "One real followed-chapter notice plus 24 acknowledged permission changes affecting each of five signed-in recipients, authored by a separate Account in an auxiliary public Realm. Last change removes auxiliary permissions. Primary Realm persona roles remain unchanged. Stream limit 50 and unread scan 256 remain unchanged.",
       "officialZones": [
         8,
         9,
@@ -109,11 +153,13 @@
         100,
         101,
         102
-      ]
+      ],
+      "zones": "Ten operator-created public Realm/Zone pairs prepared through public commands; the first eight official at the retained cut, then the ninth and tenth configured official in the test. Each adopts the same public original through its own Realm-local selection."
     },
     "preparationScope": "Each capability build and restore independently remains within the existing 600-second active preparation ceiling; each regression project retains its existing 480-second wall. No raised timeout, candidate or population verifier limit.",
     "setupProgress": "Preparation emits phase/count/elapsed records with assertionReached false, so a setup failure cannot be reported as an outcome assertion.",
-    "productAssembler": "All four API-built corpus files are commandOnlyIntegrationFiles. This keeps source capture and restored product owners in the same closed raw-update mode."
+    "productAssembler": "All four API-built corpus files are commandOnlyIntegrationFiles. This keeps source capture and restored product owners in the same closed raw-update mode.",
+    "corpusLifetime": "New primary moderator and auxiliary notice assignments last 24 hours to support reusable cuts. Earlier query/rating cuts retain their original one-hour primary moderator validity; exact run timestamps determine that persona premise. Account sessions are freshly authenticated after each restore."
   },
   "distinctions": {
     "null": "Absent optional subject/display/rating/diagnostic value; never fabricate a preview or zero count.",
@@ -204,23 +250,23 @@
     },
     "notificationAuthority": {
       "file": "tests/qa/integration/notification-read-budget.test.ts",
-      "line": 39,
+      "line": 40,
       "titleTemplate": "test(`D5-001 ${name}: personal admission and missing notification controls preserve privacy`, async () => {"
     },
     "notificationCancel": {
       "file": "tests/qa/integration/notification-read-budget.test.ts",
-      "line": 63,
+      "line": 64,
       "titleTemplate": "test(`D5-001 ${name}: leaving an inbox stops later subject reads and permits a fresh retry`, async () => {"
     },
     "zones": {
       "file": "tests/qa/integration/official-zone-read-budget.test.ts",
-      "line": 9,
-      "titleTemplate": "test('D5-006: the ninth and tenth official Zones do not make six readers lose suggestions', async () => {"
+      "line": 28,
+      "titleTemplate": "for (const name of personaNames) test(`D5-006 ${name}: ninth and tenth official Zones preserve bounded suggestions`, async () => {"
     },
     "ratings": {
       "file": "tests/qa/integration/rating-population-read-budget.test.ts",
-      "line": 8,
-      "titleTemplate": "test('D5-006: 100, 101 and 102 independently receipted ratings remain readable without revealing voters', async () => {"
+      "line": 28,
+      "titleTemplate": "for (const name of personaNames) test(`D5-006 ${name}: 100, 101 and 102 ratings remain readable without revealing voters`, async () => {"
     },
     "refreshControl": {
       "file": "tests/qa/integration/audit-bounded-reads.test.ts",
@@ -236,7 +282,7 @@
   "personas": [
     {
       "persona": "visitor",
-      "authority": "No Account, bearer, Agent, Realm membership or administrative authority.",
+      "authority": "Anonymous visitor; no Account, Agent, Realm membership or platform mandate.",
       "discovery": {
         "case": "D5-002",
         "test": "discovery",
@@ -244,7 +290,23 @@
         "disclosure": "Published public resources only; unpublished Work and unrelated private Realm absent.",
         "cancellationRetry": "One raw request; do not retry a 422/503 into apparent success.",
         "budget": "resourceList",
-        "traversal": "cursor"
+        "traversal": "cursor",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "premise-corrected; raw status separately recorded",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 26,
+              "graphBytes": 71109,
+              "elapsedMs": 2853,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "e258036e303719f6f99c449999a71caa"
+            }
+          ]
+        }
       },
       "cursor": {
         "case": "AUD-001",
@@ -253,7 +315,23 @@
         "disclosure": "No duplicate IDs or unpublished Work; known public Book and Realm present at completion.",
         "cancellationRetry": "Submit each issued cursor unchanged in the next request. Empty incomplete pages must advance. No retry masking.",
         "budget": "resourceList; existing cursor schema admission (2048 characters), not a larger limit.",
-        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs."
+        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "next cursor not followed because of wrong query envelope; unconfirmed",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 25,
+              "graphBytes": 68273,
+              "elapsedMs": 1325,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "1bd9792dc8b4e896c40e102aae51a44b"
+            }
+          ]
+        }
       },
       "chapter": {
         "case": "D5-003",
@@ -266,7 +344,50 @@
         "tests": [
           "chapter",
           "chapterDisclosure"
-        ]
+        ],
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "failed: foreground audit on unrelated graph advancement; exact disclosure controls passed",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 34,
+              "graphBytes": 141737,
+              "elapsedMs": 1253,
+              "populationAudits": 1,
+              "code": null,
+              "trace": "60d4dac6d42f9416256d0e2921b3affc"
+            },
+            {
+              "http": 200,
+              "graphCalls": 12,
+              "graphBytes": 93826,
+              "elapsedMs": 183,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "f845d515ead89433db8b3690b22740c3"
+            },
+            {
+              "http": 200,
+              "graphCalls": 12,
+              "graphBytes": 93826,
+              "elapsedMs": 158,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "54b7205c61c2b642a17719c4801c1b6e"
+            },
+            {
+              "http": 200,
+              "graphCalls": 34,
+              "graphBytes": 141737,
+              "elapsedMs": 778,
+              "populationAudits": 1,
+              "code": null,
+              "trace": "d577ccc3c2f310b49d3ba22d15d63345"
+            }
+          ]
+        }
       },
       "notifications": {
         "case": "D5-001",
@@ -277,8 +398,14 @@
         "authority": "Stream, unread count and item mutation require bearer; all 401.",
         "disclosure": "Denied response exposes no inbox items.",
         "cancellationRetry": "In-flight inbox cancellation is irrelevant: admission refuses before personal storage work. Retry without authority remains denied.",
-        "budget": "Admission denial before personal data",
-        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap."
+        "budget": "Authentication denial; hydration/cancellation allocation is irrelevant because there is no personal inbox.",
+        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-2.log",
+          "status": "passed: personal authentication denial; cancellation irrelevant",
+          "admissionControls": "visitor: stream/missing 401; signed-in: own stream 200, missing/alien item 404"
+        }
       },
       "officialZones": {
         "case": "D5-006-zones",
@@ -287,7 +414,12 @@
         "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
         "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
         "budget": "suggestions",
-        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit."
+        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-3.log",
+          "status": "setup failure; assertion not reached"
+        }
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -296,7 +428,17 @@
         "disclosure": "Exact complete aggregates for 100, 101 and 102 value-5 votes; count N, mean 5, withdrawnCount 0; no principal IDs or rating slots.",
         "cancellationRetry": "Single raw aggregate read per population; no timeout or candidate-cap increases.",
         "budget": "globalAggregate",
-        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation."
+        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-4.log",
+          "status": "observed 200/422/422; numeric population assertion corrected for rerun",
+          "httpByPopulation": {
+            "100": 200,
+            "101": 422,
+            "102": 422
+          }
+        }
       },
       "refresh": {
         "case": "D5-004",
@@ -305,7 +447,12 @@
         "disclosure": "Health sample uses opaque scope hashes; no private Realm or owner identity. Null refresh means diagnostic unavailable, not an empty healthy sample.",
         "cancellationRetry": "Desired: permanent source failure ceases automatic retries until its evidence/basis changes; transient failure retains bounded backoff and recovery. Original invalid-media trigger is stale at baseline and is not asserted by the diagnostic control.",
         "budget": "refreshDesired; no proven persistent-fault budget assertion.",
-        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete."
+        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "diagnostic control passed; persistent failure not asserted"
+        }
       },
       "irrelevant": [
         "Authenticated inbox cancellation: visitor has no admitted inbox read.",
@@ -314,7 +461,7 @@
     },
     {
       "persona": "stranger",
-      "authority": "Ordinary signed-in Account and Agent; no membership in the public fixture Realm. Explicitly watches its public thread.",
+      "authority": "Ordinary Account/Agent, outside the primary public fixture Realm; no authorship or primary role. For notification cases only, joins the auxiliary notice Realm.",
       "discovery": {
         "case": "D5-002",
         "test": "discovery",
@@ -322,7 +469,23 @@
         "disclosure": "Published public resources only; unpublished Work and unrelated private Realm absent.",
         "cancellationRetry": "One raw request; do not retry a 422/503 into apparent success.",
         "budget": "resourceList",
-        "traversal": "cursor"
+        "traversal": "cursor",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "premise-corrected; raw status separately recorded",
+          "answers": [
+            {
+              "http": 503,
+              "graphCalls": 19,
+              "graphBytes": 51201,
+              "elapsedMs": 10287,
+              "populationAudits": 0,
+              "code": "work_read_unavailable",
+              "trace": "51a61f56f70c9f216f9728b400380657"
+            }
+          ]
+        }
       },
       "cursor": {
         "case": "AUD-001",
@@ -331,7 +494,23 @@
         "disclosure": "No duplicate IDs or unpublished Work; known public Book and Realm present at completion.",
         "cancellationRetry": "Submit each issued cursor unchanged in the next request. Empty incomplete pages must advance. No retry masking.",
         "budget": "resourceList; existing cursor schema admission (2048 characters), not a larger limit.",
-        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs."
+        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "next cursor not followed because of wrong query envelope; unconfirmed",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 25,
+              "graphBytes": 68273,
+              "elapsedMs": 1318,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "d2cde2a4ae4bb5aca2cbe55032a6d349"
+            }
+          ]
+        }
       },
       "chapter": {
         "case": "D5-003",
@@ -344,7 +523,50 @@
         "tests": [
           "chapter",
           "chapterDisclosure"
-        ]
+        ],
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "failed: foreground audit on unrelated graph advancement; exact disclosure controls passed",
+          "answers": [
+            {
+              "http": 503,
+              "graphCalls": 15,
+              "graphBytes": 83059,
+              "elapsedMs": 1524,
+              "populationAudits": 0,
+              "code": "search_index_unavailable",
+              "trace": "ec1a7df1615b334677cd391418da01b8"
+            },
+            {
+              "http": 200,
+              "graphCalls": 12,
+              "graphBytes": 93826,
+              "elapsedMs": 224,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "5b8080a2f38a93081512ae27ebfffc8d"
+            },
+            {
+              "http": 200,
+              "graphCalls": 12,
+              "graphBytes": 93826,
+              "elapsedMs": 348,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "69aff95afbedf7b545ba36781e4cadcc"
+            },
+            {
+              "http": 200,
+              "graphCalls": 34,
+              "graphBytes": 141737,
+              "elapsedMs": 786,
+              "populationAudits": 1,
+              "code": null,
+              "trace": "5665ec3a944d3e2dbceeb7cb28864ada"
+            }
+          ]
+        }
       },
       "notifications": {
         "case": "D5-001",
@@ -354,10 +576,16 @@
           "notificationCancel"
         ],
         "authority": "Own Account inbox only; alien item and random missing item both 404.",
-        "disclosure": "Nonempty public reply subjects; no cross-account item ownership disclosure. Nullable subject/display retains its meaning.",
+        "disclosure": "At least 24 visible role-change subjects from acknowledged changes affecting this reader in an auxiliary Realm; no cross-account item ownership disclosure. Other null subject/display values remain undisclosed and are not counted as graph work.",
         "cancellationRetry": "Abort while real graph calls are in flight; 100 ms grace, observe 300 ms with no new graph call or active graph exchange; fresh limit=1 retry returns one item.",
         "budget": "notificationRead",
-        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap."
+        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-2.log",
+          "status": "admission controls passed; Feed budget/cancel premise unconfirmed",
+          "admissionControls": "visitor: stream/missing 401; signed-in: own stream 200, missing/alien item 404"
+        }
       },
       "officialZones": {
         "case": "D5-006-zones",
@@ -366,7 +594,12 @@
         "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
         "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
         "budget": "suggestions",
-        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit."
+        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-3.log",
+          "status": "setup failure; assertion not reached"
+        }
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -375,7 +608,17 @@
         "disclosure": "Exact complete aggregates for 100, 101 and 102 value-5 votes; count N, mean 5, withdrawnCount 0; no principal IDs or rating slots.",
         "cancellationRetry": "Single raw aggregate read per population; no timeout or candidate-cap increases.",
         "budget": "globalAggregate",
-        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation."
+        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-4.log",
+          "status": "observed 200/422/422; numeric population assertion corrected for rerun",
+          "httpByPopulation": {
+            "100": 200,
+            "101": 422,
+            "102": 422
+          }
+        }
       },
       "refresh": {
         "case": "D5-004",
@@ -384,7 +627,12 @@
         "disclosure": "Health sample uses opaque scope hashes; no private Realm or owner identity. Null refresh means diagnostic unavailable, not an empty healthy sample.",
         "cancellationRetry": "Desired: permanent source failure ceases automatic retries until its evidence/basis changes; transient failure retains bounded backoff and recovery. Original invalid-media trigger is stale at baseline and is not asserted by the diagnostic control.",
         "budget": "refreshDesired; no proven persistent-fault budget assertion.",
-        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete."
+        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "diagnostic control passed; persistent failure not asserted"
+        }
       },
       "irrelevant": [
         "Per-person refresh scheduling: one real lifecycle worker serves the isolated composition; roles do not alter its retry state."
@@ -392,7 +640,7 @@
     },
     {
       "persona": "member",
-      "authority": "Ordinary Account and Agent; member of the public fixture Realm and author of the watched original. Self-authored notices are excluded; a moderator-authored reply is the nonempty control.",
+      "authority": "Ordinary Account/Agent joined to the primary public Realm, without primary staff permissions or Book authorship. For notification cases also joins the auxiliary notice Realm.",
       "discovery": {
         "case": "D5-002",
         "test": "discovery",
@@ -400,7 +648,23 @@
         "disclosure": "Published public resources only; unpublished Work and unrelated private Realm absent.",
         "cancellationRetry": "One raw request; do not retry a 422/503 into apparent success.",
         "budget": "resourceList",
-        "traversal": "cursor"
+        "traversal": "cursor",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "premise-corrected; raw status separately recorded",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 26,
+              "graphBytes": 71109,
+              "elapsedMs": 2187,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "4f0784d301a8979d652d432b513fe2c8"
+            }
+          ]
+        }
       },
       "cursor": {
         "case": "AUD-001",
@@ -409,7 +673,23 @@
         "disclosure": "No duplicate IDs or unpublished Work; known public Book and Realm present at completion.",
         "cancellationRetry": "Submit each issued cursor unchanged in the next request. Empty incomplete pages must advance. No retry masking.",
         "budget": "resourceList; existing cursor schema admission (2048 characters), not a larger limit.",
-        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs."
+        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "next cursor not followed because of wrong query envelope; unconfirmed",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 25,
+              "graphBytes": 68273,
+              "elapsedMs": 1209,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "3917195e985b520e179c2cb3485172cf"
+            }
+          ]
+        }
       },
       "chapter": {
         "case": "D5-003",
@@ -422,7 +702,50 @@
         "tests": [
           "chapter",
           "chapterDisclosure"
-        ]
+        ],
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "failed: foreground audit on unrelated graph advancement; exact disclosure controls passed",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 27,
+              "graphBytes": 105097,
+              "elapsedMs": 1005,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "deb3a08ddff168d43ac482d7909b59dd"
+            },
+            {
+              "http": 200,
+              "graphCalls": 12,
+              "graphBytes": 93826,
+              "elapsedMs": 301,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "3fcf3c4e44205dc8946949a480bfe22e"
+            },
+            {
+              "http": 200,
+              "graphCalls": 12,
+              "graphBytes": 93826,
+              "elapsedMs": 359,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "091eb9d36b7757fa44d401e1897ae17d"
+            },
+            {
+              "http": 200,
+              "graphCalls": 34,
+              "graphBytes": 141737,
+              "elapsedMs": 832,
+              "populationAudits": 1,
+              "code": null,
+              "trace": "7609ff79ec66bbfbe93b8cb3d1a06570"
+            }
+          ]
+        }
       },
       "notifications": {
         "case": "D5-001",
@@ -432,10 +755,16 @@
           "notificationCancel"
         ],
         "authority": "Own Account inbox only; alien item and random missing item both 404.",
-        "disclosure": "Nonempty public reply subjects; no cross-account item ownership disclosure. Nullable subject/display retains its meaning.",
+        "disclosure": "At least 24 visible role-change subjects from acknowledged changes affecting this reader in an auxiliary Realm; no cross-account item ownership disclosure. Other null subject/display values remain undisclosed and are not counted as graph work.",
         "cancellationRetry": "Abort while real graph calls are in flight; 100 ms grace, observe 300 ms with no new graph call or active graph exchange; fresh limit=1 retry returns one item.",
         "budget": "notificationRead",
-        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap."
+        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-2.log",
+          "status": "admission controls passed; Feed budget/cancel premise unconfirmed",
+          "admissionControls": "visitor: stream/missing 401; signed-in: own stream 200, missing/alien item 404"
+        }
       },
       "officialZones": {
         "case": "D5-006-zones",
@@ -444,7 +773,12 @@
         "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
         "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
         "budget": "suggestions",
-        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit."
+        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-3.log",
+          "status": "setup failure; assertion not reached"
+        }
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -453,7 +787,17 @@
         "disclosure": "Exact complete aggregates for 100, 101 and 102 value-5 votes; count N, mean 5, withdrawnCount 0; no principal IDs or rating slots.",
         "cancellationRetry": "Single raw aggregate read per population; no timeout or candidate-cap increases.",
         "budget": "globalAggregate",
-        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation."
+        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-4.log",
+          "status": "observed 200/422/422; numeric population assertion corrected for rerun",
+          "httpByPopulation": {
+            "100": 200,
+            "101": 422,
+            "102": 422
+          }
+        }
       },
       "refresh": {
         "case": "D5-004",
@@ -462,7 +806,12 @@
         "disclosure": "Health sample uses opaque scope hashes; no private Realm or owner identity. Null refresh means diagnostic unavailable, not an empty healthy sample.",
         "cancellationRetry": "Desired: permanent source failure ceases automatic retries until its evidence/basis changes; transient failure retains bounded backoff and recovery. Original invalid-media trigger is stale at baseline and is not asserted by the diagnostic control.",
         "budget": "refreshDesired; no proven persistent-fault budget assertion.",
-        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete."
+        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "diagnostic control passed; persistent failure not asserted"
+        }
       },
       "irrelevant": [
         "Per-person refresh scheduling: one real lifecycle worker serves the isolated composition; roles do not alter its retry state."
@@ -470,7 +819,7 @@
     },
     {
       "persona": "owner",
-      "authority": "Ordinary Account and Agent; owns the public fixture Realm and public Book. Ownership does not widen global public disclosure or another Account inbox.",
+      "authority": "Ordinary Account/Agent owning the primary public Realm; owns the public Book except in the notification corpus, whose separate author prevents self-notification exclusion.",
       "discovery": {
         "case": "D5-002",
         "test": "discovery",
@@ -478,7 +827,23 @@
         "disclosure": "Published public resources only; unpublished Work and unrelated private Realm absent.",
         "cancellationRetry": "One raw request; do not retry a 422/503 into apparent success.",
         "budget": "resourceList",
-        "traversal": "cursor"
+        "traversal": "cursor",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "premise-corrected; raw status separately recorded",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 26,
+              "graphBytes": 71109,
+              "elapsedMs": 829,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "1f9c385c541a1ed74adfd40c462fcc64"
+            }
+          ]
+        }
       },
       "cursor": {
         "case": "AUD-001",
@@ -487,7 +852,23 @@
         "disclosure": "No duplicate IDs or unpublished Work; known public Book and Realm present at completion.",
         "cancellationRetry": "Submit each issued cursor unchanged in the next request. Empty incomplete pages must advance. No retry masking.",
         "budget": "resourceList; existing cursor schema admission (2048 characters), not a larger limit.",
-        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs."
+        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "next cursor not followed because of wrong query envelope; unconfirmed",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 25,
+              "graphBytes": 68273,
+              "elapsedMs": 737,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "3ad2d20de8d404beac39f15a5e23b551"
+            }
+          ]
+        }
       },
       "chapter": {
         "case": "D5-003",
@@ -500,7 +881,50 @@
         "tests": [
           "chapter",
           "chapterDisclosure"
-        ]
+        ],
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "failed: foreground audit on unrelated graph advancement; exact disclosure controls passed",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 27,
+              "graphBytes": 105097,
+              "elapsedMs": 811,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "6a4903d160394ca1267bcf59d08bef5c"
+            },
+            {
+              "http": 200,
+              "graphCalls": 12,
+              "graphBytes": 93826,
+              "elapsedMs": 220,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "be943b48c48affe3670ae16d4c4020e6"
+            },
+            {
+              "http": 200,
+              "graphCalls": 12,
+              "graphBytes": 93826,
+              "elapsedMs": 327,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "0e1bfd6c74b2d292814400de4d61b7b3"
+            },
+            {
+              "http": 200,
+              "graphCalls": 34,
+              "graphBytes": 141745,
+              "elapsedMs": 580,
+              "populationAudits": 1,
+              "code": null,
+              "trace": "c2cc2debf92634d45e708dc9188f823e"
+            }
+          ]
+        }
       },
       "notifications": {
         "case": "D5-001",
@@ -510,10 +934,16 @@
           "notificationCancel"
         ],
         "authority": "Own Account inbox only; alien item and random missing item both 404.",
-        "disclosure": "Nonempty public reply subjects; no cross-account item ownership disclosure. Nullable subject/display retains its meaning.",
+        "disclosure": "At least 24 visible role-change subjects from acknowledged changes affecting this reader in an auxiliary Realm; no cross-account item ownership disclosure. Other null subject/display values remain undisclosed and are not counted as graph work.",
         "cancellationRetry": "Abort while real graph calls are in flight; 100 ms grace, observe 300 ms with no new graph call or active graph exchange; fresh limit=1 retry returns one item.",
         "budget": "notificationRead",
-        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap."
+        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-2.log",
+          "status": "admission controls passed; Feed budget/cancel premise unconfirmed",
+          "admissionControls": "visitor: stream/missing 401; signed-in: own stream 200, missing/alien item 404"
+        }
       },
       "officialZones": {
         "case": "D5-006-zones",
@@ -522,7 +952,12 @@
         "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
         "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
         "budget": "suggestions",
-        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit."
+        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-3.log",
+          "status": "setup failure; assertion not reached"
+        }
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -531,7 +966,17 @@
         "disclosure": "Exact complete aggregates for 100, 101 and 102 value-5 votes; count N, mean 5, withdrawnCount 0; no principal IDs or rating slots.",
         "cancellationRetry": "Single raw aggregate read per population; no timeout or candidate-cap increases.",
         "budget": "globalAggregate",
-        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation."
+        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-4.log",
+          "status": "observed 200/422/422; numeric population assertion corrected for rerun",
+          "httpByPopulation": {
+            "100": 200,
+            "101": 422,
+            "102": 422
+          }
+        }
       },
       "refresh": {
         "case": "D5-004",
@@ -540,7 +985,12 @@
         "disclosure": "Health sample uses opaque scope hashes; no private Realm or owner identity. Null refresh means diagnostic unavailable, not an empty healthy sample.",
         "cancellationRetry": "Desired: permanent source failure ceases automatic retries until its evidence/basis changes; transient failure retains bounded backoff and recovery. Original invalid-media trigger is stale at baseline and is not asserted by the diagnostic control.",
         "budget": "refreshDesired; no proven persistent-fault budget assertion.",
-        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete."
+        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "diagnostic control passed; persistent failure not asserted"
+        }
       },
       "irrelevant": [
         "Per-person refresh scheduling: one real lifecycle worker serves the isolated composition; roles do not alter its retry state."
@@ -548,7 +998,7 @@
     },
     {
       "persona": "moderator",
-      "authority": "Ordinary Account and Agent; public Realm moderator with explicit review.decide and publication.adopt role permissions. These permissions do not widen global public disclosure or personal inbox access.",
+      "authority": "Ordinary Account/Agent joined to the primary public Realm with the explicit governance.moderate role. No wider global disclosure or personal inbox authority.",
       "discovery": {
         "case": "D5-002",
         "test": "discovery",
@@ -556,7 +1006,23 @@
         "disclosure": "Published public resources only; unpublished Work and unrelated private Realm absent.",
         "cancellationRetry": "One raw request; do not retry a 422/503 into apparent success.",
         "budget": "resourceList",
-        "traversal": "cursor"
+        "traversal": "cursor",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "premise-corrected; raw status separately recorded",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 26,
+              "graphBytes": 71113,
+              "elapsedMs": 641,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "452018b97a278b7fa2f99d75e805d982"
+            }
+          ]
+        }
       },
       "cursor": {
         "case": "AUD-001",
@@ -565,7 +1031,23 @@
         "disclosure": "No duplicate IDs or unpublished Work; known public Book and Realm present at completion.",
         "cancellationRetry": "Submit each issued cursor unchanged in the next request. Empty incomplete pages must advance. No retry masking.",
         "budget": "resourceList; existing cursor schema admission (2048 characters), not a larger limit.",
-        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs."
+        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "next cursor not followed because of wrong query envelope; unconfirmed",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 25,
+              "graphBytes": 68277,
+              "elapsedMs": 583,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "4a2be95096f13e0eaf0d52e00d976736"
+            }
+          ]
+        }
       },
       "chapter": {
         "case": "D5-003",
@@ -578,7 +1060,50 @@
         "tests": [
           "chapter",
           "chapterDisclosure"
-        ]
+        ],
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "failed: foreground audit on unrelated graph advancement; exact disclosure controls passed",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 27,
+              "graphBytes": 105104,
+              "elapsedMs": 433,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "9564098cf2a55435f0d519cf70e2fdfb"
+            },
+            {
+              "http": 200,
+              "graphCalls": 12,
+              "graphBytes": 93833,
+              "elapsedMs": 138,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "4318fb82e45b474ee1e8a97fbaf6f69f"
+            },
+            {
+              "http": 200,
+              "graphCalls": 12,
+              "graphBytes": 93833,
+              "elapsedMs": 140,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "941efc9d7c120479429b92b6428867c1"
+            },
+            {
+              "http": 200,
+              "graphCalls": 34,
+              "graphBytes": 141745,
+              "elapsedMs": 915,
+              "populationAudits": 1,
+              "code": null,
+              "trace": "6ce84e5b7a5dc9957ca2cb3b302a7b21"
+            }
+          ]
+        }
       },
       "notifications": {
         "case": "D5-001",
@@ -588,10 +1113,16 @@
           "notificationCancel"
         ],
         "authority": "Own Account inbox only; alien item and random missing item both 404.",
-        "disclosure": "Nonempty public reply subjects; no cross-account item ownership disclosure. Nullable subject/display retains its meaning.",
+        "disclosure": "At least 24 visible role-change subjects from acknowledged changes affecting this reader in an auxiliary Realm; no cross-account item ownership disclosure. Other null subject/display values remain undisclosed and are not counted as graph work.",
         "cancellationRetry": "Abort while real graph calls are in flight; 100 ms grace, observe 300 ms with no new graph call or active graph exchange; fresh limit=1 retry returns one item.",
         "budget": "notificationRead",
-        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap."
+        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-2.log",
+          "status": "admission controls passed; Feed budget/cancel premise unconfirmed",
+          "admissionControls": "visitor: stream/missing 401; signed-in: own stream 200, missing/alien item 404"
+        }
       },
       "officialZones": {
         "case": "D5-006-zones",
@@ -600,7 +1131,12 @@
         "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
         "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
         "budget": "suggestions",
-        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit."
+        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-3.log",
+          "status": "setup failure; assertion not reached"
+        }
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -609,7 +1145,17 @@
         "disclosure": "Exact complete aggregates for 100, 101 and 102 value-5 votes; count N, mean 5, withdrawnCount 0; no principal IDs or rating slots.",
         "cancellationRetry": "Single raw aggregate read per population; no timeout or candidate-cap increases.",
         "budget": "globalAggregate",
-        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation."
+        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-4.log",
+          "status": "observed 200/422/422; numeric population assertion corrected for rerun",
+          "httpByPopulation": {
+            "100": 200,
+            "101": 422,
+            "102": 422
+          }
+        }
       },
       "refresh": {
         "case": "D5-004",
@@ -618,7 +1164,12 @@
         "disclosure": "Health sample uses opaque scope hashes; no private Realm or owner identity. Null refresh means diagnostic unavailable, not an empty healthy sample.",
         "cancellationRetry": "Desired: permanent source failure ceases automatic retries until its evidence/basis changes; transient failure retains bounded backoff and recovery. Original invalid-media trigger is stale at baseline and is not asserted by the diagnostic control.",
         "budget": "refreshDesired; no proven persistent-fault budget assertion.",
-        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete."
+        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "diagnostic control passed; persistent failure not asserted"
+        }
       },
       "irrelevant": [
         "Per-person refresh scheduling: one real lifecycle worker serves the isolated composition; roles do not alter its retry state."
@@ -626,7 +1177,7 @@
     },
     {
       "persona": "operator",
-      "authority": "First platform administrator on this isolated stack, using a real Account bearer and Agent. Administrative authority does not widen global public reads or another Account inbox.",
+      "authority": "The existing platform administrator Account/Agent. Population fixture commands use its legitimate authority; measured public reads and its own inbox retain normal disclosure.",
       "discovery": {
         "case": "D5-002",
         "test": "discovery",
@@ -634,7 +1185,23 @@
         "disclosure": "Published public resources only; unpublished Work and unrelated private Realm absent.",
         "cancellationRetry": "One raw request; do not retry a 422/503 into apparent success.",
         "budget": "resourceList",
-        "traversal": "cursor"
+        "traversal": "cursor",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "premise-corrected; raw status separately recorded",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 26,
+              "graphBytes": 71113,
+              "elapsedMs": 1130,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "35e0a6017fab1612a7c5bdabc0d64bae"
+            }
+          ]
+        }
       },
       "cursor": {
         "case": "AUD-001",
@@ -643,7 +1210,23 @@
         "disclosure": "No duplicate IDs or unpublished Work; known public Book and Realm present at completion.",
         "cancellationRetry": "Submit each issued cursor unchanged in the next request. Empty incomplete pages must advance. No retry masking.",
         "budget": "resourceList; existing cursor schema admission (2048 characters), not a larger limit.",
-        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs."
+        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "next cursor not followed because of wrong query envelope; unconfirmed",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 25,
+              "graphBytes": 68277,
+              "elapsedMs": 1106,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "284d0fce357fb8ea3c031b4d8baf3092"
+            }
+          ]
+        }
       },
       "chapter": {
         "case": "D5-003",
@@ -656,7 +1239,50 @@
         "tests": [
           "chapter",
           "chapterDisclosure"
-        ]
+        ],
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "failed: foreground audit on unrelated graph advancement; exact disclosure controls passed",
+          "answers": [
+            {
+              "http": 200,
+              "graphCalls": 27,
+              "graphBytes": 105104,
+              "elapsedMs": 797,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "d6b97e71e1fd7f34134eede9c6e1ba23"
+            },
+            {
+              "http": 200,
+              "graphCalls": 12,
+              "graphBytes": 93833,
+              "elapsedMs": 317,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "8363d6c620ed990c317f3cd0ee25e303"
+            },
+            {
+              "http": 200,
+              "graphCalls": 12,
+              "graphBytes": 93833,
+              "elapsedMs": 269,
+              "populationAudits": 0,
+              "code": null,
+              "trace": "96d483a87974796990b119c8644575fa"
+            },
+            {
+              "http": 200,
+              "graphCalls": 34,
+              "graphBytes": 141745,
+              "elapsedMs": 739,
+              "populationAudits": 1,
+              "code": null,
+              "trace": "d255989fd832fe9c4f0ce5bea790ea2b"
+            }
+          ]
+        }
       },
       "notifications": {
         "case": "D5-001",
@@ -666,10 +1292,16 @@
           "notificationCancel"
         ],
         "authority": "Own Account inbox only; alien item and random missing item both 404.",
-        "disclosure": "Nonempty public reply subjects; no cross-account item ownership disclosure. Nullable subject/display retains its meaning.",
+        "disclosure": "At least 24 visible role-change subjects from acknowledged changes affecting this reader in an auxiliary Realm; no cross-account item ownership disclosure. Other null subject/display values remain undisclosed and are not counted as graph work.",
         "cancellationRetry": "Abort while real graph calls are in flight; 100 ms grace, observe 300 ms with no new graph call or active graph exchange; fresh limit=1 retry returns one item.",
         "budget": "notificationRead",
-        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap."
+        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-2.log",
+          "status": "admission controls passed; Feed budget/cancel premise unconfirmed",
+          "admissionControls": "visitor: stream/missing 401; signed-in: own stream 200, missing/alien item 404"
+        }
       },
       "officialZones": {
         "case": "D5-006-zones",
@@ -678,7 +1310,12 @@
         "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
         "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
         "budget": "suggestions",
-        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit."
+        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-3.log",
+          "status": "setup failure; assertion not reached"
+        }
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -687,7 +1324,17 @@
         "disclosure": "Exact complete aggregates for 100, 101 and 102 value-5 votes; count N, mean 5, withdrawnCount 0; no principal IDs or rating slots.",
         "cancellationRetry": "Single raw aggregate read per population; no timeout or candidate-cap increases.",
         "budget": "globalAggregate",
-        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation."
+        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-4.log",
+          "status": "observed 200/422/422; numeric population assertion corrected for rerun",
+          "httpByPopulation": {
+            "100": 200,
+            "101": 422,
+            "102": 422
+          }
+        }
       },
       "refresh": {
         "case": "D5-004",
@@ -696,7 +1343,12 @@
         "disclosure": "Health sample uses opaque scope hashes; no private Realm or owner identity. Null refresh means diagnostic unavailable, not an empty healthy sample.",
         "cancellationRetry": "Desired: permanent source failure ceases automatic retries until its evidence/basis changes; transient failure retains bounded backoff and recovery. Original invalid-media trigger is stale at baseline and is not asserted by the diagnostic control.",
         "budget": "refreshDesired; no proven persistent-fault budget assertion.",
-        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete."
+        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete.",
+        "observed": {
+          "run": "20261018t200319-27bb3a",
+          "evidence": ".artifacts/qa/20261018t200319-27bb3a/logs/integration-1.log",
+          "status": "diagnostic control passed; persistent failure not asserted"
+        }
       },
       "irrelevant": [
         "Per-person refresh scheduling: operator observes one common lifecycle worker, not a second scheduler."
@@ -712,6 +1364,18 @@
       "reason": "Baseline explicitly projects identities and source evidence, never title/media/metadata. The audit invalid-media foreground-hydration producer cannot be used to assert persistent refresh failure here.",
       "remainingEvidence": "refresh.ts still maps arbitrary failures to retry with bounded exponential delay but no terminal classification. This code observation alone does not prove the public failure.",
       "managerAction": "Do not dispatch an API repair based on the passing diagnostic control. Require an admitted public persistent-fault producer or a separately owned owner/fault proof."
+    },
+    {
+      "case": "D5-001 Feed-specific hot path",
+      "status": "stale-identity-premise; public budget/cancel contract rerun via governance producer",
+      "assertionReached": false,
+      "source": [
+        "services/main/src/modules/content-publication/eligibility.ts:contentSearchEligibilityDecisionIri",
+        "services/main/src/modules/feed/source.ts:chapterFeedActivity",
+        "services/main/src/modules/notification-producers/feed-subjects.ts:resolve"
+      ],
+      "reason": "Real published chapter eligibility activities use urn:rezics:content-search-eligibility:<digest>; the Feed subject reader rejects a non-native ref before graph I/O. Null subject/display is actual undisclosure, not a cheap successful hydration proof. No storage identifiers are forged to reach the audited path.",
+      "managerAction": "Treat the original Feed graph-budget premise as unconfirmed; separately consider producer/reader identity compatibility. Use the current governance case for the public notification request contract if its assertions reach the body."
     }
   ],
   "rootCauseHypotheses": [
@@ -723,7 +1387,7 @@
         "services/main/src/modules/notification-producers/feed-subjects.ts",
         "services/main/src/modules/notification/store.ts"
       ],
-      "status": "Await baseline trace; desired behavior does not prescribe batching/cache mechanism."
+      "status": "Feed hot path is gated by URN/native-ID mismatch. Governance producer is the next public request-budget/cancel premise; no owner mock or forged notice."
     },
     {
       "case": "D5-002",
@@ -732,7 +1396,7 @@
         "services/main/src/modules/query/resources.ts",
         "services/main/src/modules/query/budget.ts"
       ],
-      "status": "Await baseline assertion."
+      "status": "Five first pages were 200 and one 503; schema TypeErrors do not establish the audited budget cause. Corrected rerun pending."
     },
     {
       "case": "AUD-001",
@@ -741,7 +1405,7 @@
         "services/main/src/modules/query/resources.ts",
         "services/main/src/api-list.ts"
       ],
-      "status": "A first-page 422 does not prove cursor round-trip; record actual assertion location."
+      "status": "First pages were 200; wrong envelope prevented round-trip. Corrected traversal pending."
     },
     {
       "case": "D5-003",
@@ -750,7 +1414,7 @@
         "services/main/src/modules/content-publication/search.ts",
         "services/main/src/modules/content-publication/eligibility-state.ts"
       ],
-      "status": "Await trace; no requirement to weaken eligibility or privacy."
+      "status": "One foreground eligibility inventory audit observed after unrelated graph advancement for all six personas; no-match/private controls passed."
     },
     {
       "case": "D5-006-zones",
@@ -759,7 +1423,7 @@
         "services/main/src/modules/onboarding/suggestions.ts",
         "services/main/src/modules/zone/publication.ts"
       ],
-      "status": "Await 8/9/10 public assertions."
+      "status": "No body assertion; corrected operator quota premise pending."
     },
     {
       "case": "D5-006-ratings",
@@ -768,7 +1432,7 @@
         "services/main/src/modules/rating/global-aggregate.ts",
         "services/main/src/modules/rating/aggregate-inventory.ts"
       ],
-      "status": "Await 100/101/102 public assertions."
+      "status": "100/101/102 responses observed for all six; 101 and 102 return query_budget_exceeded. Corrected numeric-population assertion pending."
     }
   ],
   "qaSupportChanges": {

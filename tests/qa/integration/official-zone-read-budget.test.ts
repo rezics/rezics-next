@@ -6,21 +6,29 @@ import { useBoundedReadCorpus, sessions, privateRealm, corpus, measured, record,
 
 useBoundedReadCorpus('zones');
 
-test('D5-006: the ninth and tenth official Zones do not make six readers lose suggestions', async () => {
+// Sample one command-created population transition for all readers; assertion
+// failures remain separate persona cases and cannot mask another reader's result.
+let observations: ReturnType<typeof sample> | undefined;
+async function sample() {
   const answers = [];
   for (const population of [8, 9, 10]) {
     if (population > 8) {
       const zone = corpus.zones[population - 1]!;
-      await command(sessions.owner, 'PUT', `/v1/zones/${short(zone.zone)}/configuration`, {
-        expectedHead: zone.revision, official: {}, actingSubject: sessions.owner.actingSubject });
+      await command(sessions.operator, 'PUT', `/v1/zones/${short(zone.zone)}/configuration`, {
+        expectedHead: zone.revision, official: {}, actingSubject: sessions.operator.actingSubject });
     }
     for (const name of personaNames) {
       answers.push({ population, persona: name, result: await measured(sessions[name], 'GET',
         '/v1/onboarding/suggested-follows?languages=en') });
     }
   }
-  record({ case: 'D5-006-zones', assertionReached: true,
-    answers: answers.map(({ population, persona, result }) => ({ population, persona, status: result.status })) });
+  return answers;
+}
+
+for (const name of personaNames) test(`D5-006 ${name}: ninth and tenth official Zones preserve bounded suggestions`, async () => {
+  const answers = (await (observations ??= sample())).filter(answer => answer.persona === name);
+  record({ case: 'D5-006-zones', persona: name, assertionReached: true,
+    answers: answers.map(({ population, result }) => ({ population, status: result.status })) });
   for (const { result } of answers) {
     expect(result.status, JSON.stringify(result)).toBe(200);
     expect((result.body.items as unknown[]).length).toBeGreaterThan(0);

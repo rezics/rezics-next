@@ -15,7 +15,7 @@ for (const name of personaNames) {
       context: 'global', scope: { kind: 'all' }, sort: 'newest', limit: 20 });
     record({ case: 'D5-002', persona: name, assertionReached: true });
     expect(result.status, JSON.stringify(result)).toBe(200);
-    const page = result.body as unknown as Page;
+    const page = result.body.result as Page;
     expect(result.graphCalls).toBeGreaterThan(0);
     // All includes the Realm directory's own declared supplement.
     expect(result.graphCalls).toBeLessThanOrEqual(RESOURCE_LIST_COST.graphCalls + REALM_DIRECTORY_COST.graphCalls);
@@ -37,7 +37,7 @@ for (const name of personaNames) {
         context: 'global', scope: { kind: 'all' }, sort: 'newest', limit: 1, ...(cursor ? { cursor } : {}) });
       record({ case: 'AUD-001', persona: name, page: index, assertionReached: true, cursorLength: cursor?.length ?? 0 });
       expect(result.status, JSON.stringify(result)).toBe(200);
-      const page = result.body as unknown as Page;
+      const page = result.body.result as Page;
       for (const item of page.items) {
         expect(seen.has(item.id), 'A resource occurs once across the traversal').toBe(false);
         expect(item.id).not.toBe(corpus.privateWork);

@@ -5,7 +5,10 @@ import { useBoundedReadCorpus, sessions, reserve, corpus, measured, record, comm
 
 useBoundedReadCorpus('ratings');
 
-test('D5-006: 100, 101 and 102 independently receipted ratings remain readable without revealing voters', async () => {
+// Advance the same retained population once and share its real API observations,
+// so every persona gets an independent assertion without rebuilding 100 voters.
+let observations: ReturnType<typeof sample> | undefined;
+async function sample() {
   const answers = [];
   for (const population of [100, 101, 102]) {
     if (population > 100) {
@@ -19,12 +22,17 @@ test('D5-006: 100, 101 and 102 independently receipted ratings remain readable w
         profile: GLOBAL_AGGREGATE_PROFILE, context: corpus.context,
         work: corpus.book.work, mainVersion: corpus.book.mainVersion }) });
   }
-  record({ case: 'D5-006-ratings', assertionReached: true,
-    answers: answers.map(({ population, persona, result }) => ({ population, persona, status: result.status })) });
+  return answers;
+}
+
+for (const name of personaNames) test(`D5-006 ${name}: 100, 101 and 102 ratings remain readable without revealing voters`, async () => {
+  const answers = (await (observations ??= sample())).filter(answer => answer.persona === name);
+  record({ case: 'D5-006-ratings', persona: name, assertionReached: true,
+    answers: answers.map(({ population, result }) => ({ population, status: result.status })) });
   for (const { population, result } of answers) {
     expect(result.status, JSON.stringify(result)).toBe(200);
     expect(result.body).toMatchObject({ complete: true, count: population, withdrawnCount: 0, mean: 5,
-      population: 'global-account-principal' });
+      population, populationPolicy: 'global-account-principal' });
     expect(result.graphCalls).toBe(GLOBAL_AGGREGATE_BUDGET.graphCalls);
     expect(result.graphBytes).toBeLessThanOrEqual(GLOBAL_AGGREGATE_BUDGET.graphBytes);
     expect(result.elapsedMs).toBeLessThan(GLOBAL_AGGREGATE_BUDGET.deadlineMs);

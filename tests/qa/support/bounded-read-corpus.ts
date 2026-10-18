@@ -40,6 +40,7 @@ type Capability = 'queries' | 'notifications' | 'zones' | 'ratings';
 type Corpus = { format: 'bounded-public-reads-v2'; capability: Capability; baseline: string; backup: string;
   records: RetainedPersonaRealm[]; book: Work; privateWork: string; chapter: string;
   phrase: string; privatePhrase: string; chapters: string[]; context: string; zones: Zone[];
+  notificationRealm: string;
   preparedMs: number; startupMs: number };
 export type Page = { items: { id: string; kind: string }[]; nextCursor: string | null;
   complete: boolean; count: { value: number; kind: 'exact' | 'at-least' }; stale: boolean };
@@ -57,7 +58,7 @@ export async function command<T>(person: PersonaSession, method: string, path: s
   statuses: number[] = [200, 201]): Promise<T> {
   const response = await person.main(method, path, body);
   const text = await response.text();
-  if (!statuses.includes(response.status)) throw new Error(`SETUP ${method} ${path}: ${response.status} ${text}`);
+  if (!statuses.includes(response.status)) throw new Error(`SETUP ${method} ${path} (${(body as { profile?: string } | undefined)?.profile ?? 'command'}): ${response.status} ${text}`);
   return JSON.parse(text) as T;
 }
 export async function until<T>(label: string, read: () => Promise<T>, ready: (value: T) => boolean, ms = 45_000) {
@@ -149,6 +150,48 @@ async function chapterContent(person: PersonaSession, resourceId: string, body: 
     publicationDecision: published.decision, expectedEligibilityHead: null,
     rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: person.actingSubject });
 }
+async function governanceNotices(author: PersonaSession, readers: PersonaSessions,
+  progress: (phase: string, completed?: number) => void) {
+  // This independent Realm leaves the six readers' primary Realm roles intact.
+  // A separate Account authors public commands; no quota or notification row is forged.
+  const realm = await command<{ realm: string }>(author, 'POST', '/v1/spaces', {
+    profile: 'space-realm-v2', name: 'Bounded notice team', language: 'en', capabilities: ['realm'],
+    actingSubject: author.actingSubject, initialSettings: { visibility: 'public', reviewRequired: false,
+      reviewMode: 'open', whoMaySubmit: 'members', selfJoin: true, rules: [] } });
+  const root = '/v1/realms/' + short(realm.realm);
+  await command(author, 'POST', root + '/management', { actingSubject: author.actingSubject });
+  for (const name of names) {
+    const person = readers[name];
+    const policy = await command<{ membershipGeneration: string; policyRevision: string; termsRevision: string }>(
+      person, 'GET', root + '/joining?actingSubject=' + encodeURIComponent(person.actingSubject!));
+    await command(person, 'POST', root + '/join', { actingSubject: person.actingSubject,
+      expectedMembershipGeneration: policy.membershipGeneration, expectedPolicyRevision: policy.policyRevision,
+      termsRevision: policy.termsRevision, listed: false });
+  }
+  const changeRole = async (change: object) => {
+    const roles = await command<{ generation: string }>(author, 'GET',
+      root + '/roles?actingSubject=' + encodeURIComponent(author.actingSubject!));
+    const input = { actingSubject: author.actingSubject, expectedGeneration: roles.generation,
+      reason: 'Exercise acknowledged team permission changes', change };
+    const preview = await command<{ digest: string }>(author, 'POST', root + '/role-impact', input);
+    await command(author, 'POST', root + '/role-changes', { ...input, impactDigest: preview.digest });
+  };
+  const roleId = randomUUID();
+  await changeRole({ kind: 'role', roleId, name: 'Notice team', permissions: [] });
+  for (const name of names) await changeRole({ kind: 'assignment', roleId,
+    member: readers[name].actingSubject, assigned: true,
+    validUntil: new Date(Date.now() + 86_400_000).toISOString() });
+  for (let index = 0; index < 24; index++) {
+    await changeRole({ kind: 'role', roleId, name: 'Notice team',
+      permissions: index % 2 === 0 ? ['governance.moderate'] : [] });
+    progress('acknowledged governance notice sources', index + 1);
+  }
+  await until('governance notice producer catches up', () => command<{ items: {
+    subject: { ref: string } | null; display: { kind: string; realm: string | null } | null }[] }>(readers.stranger,
+    'GET', '/v1/me/notifications?limit=50'), value => value.items.filter(item =>
+      item.subject !== null && item.display?.realm === realm.realm && item.display.kind === 'realm_role_change').length >= 24);
+  return realm.realm;
+}
 async function build(capability: Capability): Promise<Corpus> {
   const started = performance.now();
   const run = Bun.env.REZICS_QA_RUN_ID!;
@@ -159,9 +202,9 @@ async function build(capability: Capability): Promise<Corpus> {
   const progress = (phase: string, completed?: number) => record({
     kind: 'preparation-progress', capability, phase, completed,
     elapsedMs: Math.round(performance.now() - started), startupMs, assertionReached: false });
-  const source = await personaSessions('public');
+  const source = await personaSessions('public', { moderatorLifetimeMs: 86_400_000 });
   try {
-    const hidden = await personaSessions('private');
+    const hidden = await personaSessions('private', { moderatorLifetimeMs: 86_400_000 });
     progress('six personas and private control');
     const publisher = capability === 'notifications' ? hidden.owner : source.owner;
     const book = await publicBook(publisher, 'Bounded reading catalogue');
@@ -173,6 +216,7 @@ async function build(capability: Capability): Promise<Corpus> {
     const chapters: string[] = [];
     const records = [retainPersonaRealm(source), retainPersonaRealm(hidden)];
     let ratingContext = '';
+    let notificationRealm = '';
     const zones: Zone[] = [];
 
     if (capability === 'queries' || capability === 'notifications') {
@@ -184,10 +228,10 @@ async function build(capability: Capability): Promise<Corpus> {
       const structure = await command<{ structure: string; revision: string }>(publisher, 'POST', '/v1/compositions', {
         profile: 'book-composition', work: book.work, mainVersion: book.mainVersion, actingSubject: publisher.actingSubject });
       let head = structure.revision;
-      // A separate author makes every signed-in reader a genuine recipient.
-      // Twenty-four Feed subjects challenge the existing whole-request budget;
-      // the public stream limit remains fifty.
-      const population = capability === 'notifications' ? 24 : 1;
+      // Retain one real Feed notice as a null-disclosure control. Current Feed
+      // subjects use eligibility URNs, which the native-ID reader hides before
+      // graph work; they cannot prove the graph budget or cancellation premise.
+      const population = 1;
       for (let index = 0; index < population; index++) {
         const chapter = await command<{ post: string; compositionRevision: string }>(publisher, 'POST',
           '/v1/works/' + short(book.work) + '/chapters', {
@@ -211,6 +255,7 @@ async function build(capability: Capability): Promise<Corpus> {
       } else {
         await until('followed chapter producer catches up', () => command<{ head: string }>(source.stranger,
           'GET', '/v1/me/notifications/hint'), value => BigInt(value.head) >= BigInt(population));
+        notificationRealm = await governanceNotices(hidden.owner, source, progress);
       }
     }
     if (capability === 'ratings') {
@@ -248,29 +293,29 @@ async function build(capability: Capability): Promise<Corpus> {
       ]);
     }
     if (capability === 'zones') {
-      await grantPersonaFixtureAuthority(source.owner, [
-        { scope: 'space:create:root', action: 'space.create' },
-      ]);
+      // A baseline member has a three-Space creation quota. The platform
+      // operator prepares population fixtures using its existing authority.
+      const creator = source.operator;
       for (let index = 0; index < 10; index++) {
-        const realm = await command<{ realm: string }>(source.owner, 'POST', '/v1/spaces', {
+        const realm = await command<{ realm: string }>(creator, 'POST', '/v1/spaces', {
           profile: 'space-realm-v2', name: 'Bounded official Realm ' + index, language: 'en', capabilities: ['realm'],
-          actingSubject: source.owner.actingSubject, initialSettings: { visibility: 'public', reviewRequired: false,
+          actingSubject: creator.actingSubject, initialSettings: { visibility: 'public', reviewRequired: false,
             reviewMode: 'open', whoMaySubmit: 'members', selfJoin: true, rules: [] } });
-        const zone = await command<{ zone: string; zoneRevision: string }>(source.owner, 'POST', '/v1/spaces', {
+        const zone = await command<{ zone: string; zoneRevision: string }>(creator, 'POST', '/v1/spaces', {
           profile: 'space-zone-v1', name: 'Bounded official Zone ' + index, language: 'en', capabilities: ['zone'],
-          actingSubject: source.owner.actingSubject });
-        await grantPersonaFixtureAuthority(source.owner, [
+          actingSubject: creator.actingSubject });
+        await grantPersonaFixtureAuthority(creator, [
           { scope: 'zone:official:' + zone.zone, action: 'zone.official' },
           { scope: 'publication:adopt:' + realm.realm, action: 'publication.adopt' },
         ]);
-        const configured = await command<{ revision: string }>(source.owner, 'PUT',
+        const configured = await command<{ revision: string }>(creator, 'PUT',
           '/v1/zones/' + short(zone.zone) + '/configuration', {
             expectedHead: zone.zoneRevision, defaultRealm: realm.realm, ...(index < 8 ? { official: {} } : {}),
-            actingSubject: source.owner.actingSubject });
-        await command(source.owner, 'POST', '/v1/publication-selections', { profile: 'realm-local-selection-v1',
+            actingSubject: creator.actingSubject });
+        await command(creator, 'POST', '/v1/publication-selections', { profile: 'realm-local-selection-v1',
           context: { kind: 'realm-local', id: realm.realm }, work: book.work, mainVersion: book.mainVersion,
           contribution: book.contribution, publicationDecision: book.publicationDecision, expectedSelectionHead: null,
-          selectionBasis: 'realm-manager-review', actingSubject: source.owner.actingSubject });
+          selectionBasis: 'realm-manager-review', actingSubject: creator.actingSubject });
         zones.push({ ...zone, realm: realm.realm, revision: configured.revision });
         progress('official Zone candidates', index + 1);
       }
@@ -283,7 +328,7 @@ async function build(capability: Capability): Promise<Corpus> {
     const result: Corpus = { format: 'bounded-public-reads-v2', capability,
       baseline: '7df2e285d3199c32b4e61c08c33ba9c25afaaa21',
       backup: '', records, book, privateWork: privateWork.work, chapter: chapters[0] ?? '',
-      phrase, privatePhrase, chapters, context: ratingContext, zones, preparedMs: 0, startupMs };
+      phrase, privatePhrase, chapters, context: ratingContext, zones, notificationRealm, preparedMs: 0, startupMs };
     progress('source ready for consistent stopped backup');
     await source.close();
     result.backup = await retainStoppedOwnerBackup(run, 'bounded-reads-' + capability, resolve(directory, 'owners'), Date.now(), {
@@ -298,7 +343,7 @@ async function build(capability: Capability): Promise<Corpus> {
 }
 
 export function useBoundedReadCorpus(capability: Capability) {
-  directory = resolve('.temp/audit-bounded-reads', capability);
+  directory = resolve('.temp/audit-bounded-reads', capability === 'notifications' ? 'notifications-governance' : capability);
   beforeAll(async () => {
     if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use goalctl test with an isolated QA stack');
     mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -325,7 +370,8 @@ export function useBoundedReadCorpus(capability: Capability) {
       record({ kind: 'preparation', capability, buildMs: corpus.preparedMs,
         restoreMs: performance.now() - started - restore.admissionWaitMs, admissionMs: restore.admissionWaitMs,
         backup: corpus.backup, isolatedRun: run, population: capability === 'ratings' ? 100 : null,
-        officialZones: capability === 'zones' ? 8 : null, chapterNotices: capability === 'notifications' ? 24 : null });
+        officialZones: capability === 'zones' ? 8 : null, chapterNotices: capability === 'notifications' ? 1 : null,
+        governanceNoticesPerReader: capability === 'notifications' ? 24 : null });
     } catch (error) {
       record({ kind: 'setup-failure', capability, assertionReached: false, error: String(error) });
       throw error;
