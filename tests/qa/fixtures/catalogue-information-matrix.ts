@@ -5,7 +5,7 @@
  */
 export const informationMatrix = {
   state: 'pending',
-  baselineProduct: '79be80d4d0e1cad1639b6a65e8f0795d6a95929a',
+  baselineProduct: '69eac3ceeaf885be70205a70248bc951e9d81cc9',
   preparationLimitMs: 600_000,
   sourceFixture: {
     path: '.temp/fixtures/catalogue-information/corpus.json',
