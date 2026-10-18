@@ -5,13 +5,13 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { messages as pageMessages } from '../work-page/messages.ts';
-import { ConnectionsSection, type Franchise } from './connections.tsx';
+import { ConnectionsSection, PublicCollectionPage, type Franchise } from './connections.tsx';
 import * as fixture from './fixtures.ts';
 import { copyOf } from './messages.ts';
 import { namedWorkHref } from './names.tsx';
 import { ConnectionsPreviewView } from './previews.tsx';
 import type { ConnectionsQuery } from './route.ts';
-import type { Loaded, RelationsPage } from './types.ts';
+import type { AvailableSummary, Loaded, RelationsPage } from './types.ts';
 
 const franchise = (grain: 'series' | 'parts', paged = false): Franchise => ({
   collection: fixture.summary(
@@ -203,5 +203,48 @@ export const SignInNeeded: Story = {
     await expect(within(canvasElement).getByRole('alert')).toHaveTextContent(
       'Connections could not be loaded.',
     );
+  },
+};
+
+const publicList = fixture.summary(fixture.iri('900'), 'A public reading list', 'en', 'collection') as AvailableSummary;
+const collectionTask = `${resourceHref('/e/', publicList.address as CanonicalAddress)}?language=sv&tag=a&tag=b`;
+const publicMembers = {
+  occurrences: [
+    { occurrence: fixture.iri('81'), parent: fixture.iri('9'), role: 'member', target: fixture.iri('300'), orderKey: 'a', labels: [] },
+    { occurrence: fixture.iri('82'), parent: fixture.iri('9'), role: 'group', orderKey: 'b',
+      labels: [{ value: 'مكتبة الأدب', language: 'ar' }] },
+  ], names: fixture.names, nextCursor: 'members-page-2',
+};
+
+/** Anonymous Collection entry has real member destinations, groups and Main's continuation. */
+export const PublicList: Story = {
+  render: ({ locale }) => <PublicCollectionPage summary={publicList} page={{ ok: true, data: publicMembers }}
+    currentUrl={collectionTask} locale={locale} messages={pageMessages[locale]} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { name: publicList.name.value })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Show more' })).toHaveAttribute('href',
+      localizedPath(`${collectionTask}&after=members-page-2`, 'en'));
+    await expect(canvas.getByRole('link', { name: 'مكتبة الأدب' })).toHaveAttribute('href',
+      localizedPath(`${collectionTask}&parent=${encodeURIComponent(fixture.iri('82'))}`, 'en'));
+  },
+};
+
+export const PublicListPhone: Story = {
+  ...PublicList,
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('heading', { name: publicList.name.value })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+export const PublicListUnavailable: Story = {
+  render: ({ locale }) => <PublicCollectionPage summary={publicList} page={{ ok: false, failure: 'unavailable' }}
+    currentUrl={`${collectionTask}&after=members-page-2`} locale={locale} messages={pageMessages[locale]} />,
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('alert')).toBeVisible();
+    await expect(within(canvasElement).getByRole('button', { name: 'Retry' })).toBeVisible();
+    await expect(within(canvasElement).getByRole('link', { name: 'Lists' })).toBeVisible();
   },
 };
