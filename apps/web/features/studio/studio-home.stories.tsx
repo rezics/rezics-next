@@ -1,11 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
+import { chooseOption } from '../stories/choose-option.ts';
 import { agents, curated, inventory, now, review } from './fixtures.ts';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { StudioFrame, StudioIdentityMissing } from './studio-frame.tsx';
-import { StudioHome } from './studio-home.tsx';
+import { StudioHome, StudioHomePending } from './studio-home.tsx';
+import { inventoryAddress } from './types.ts';
 
 type Props = ComponentProps<typeof StudioHome> & { session?: (typeof agents)[number] | null };
 
@@ -34,11 +36,14 @@ export const Works: Story = {
     const list = canvas.getByRole('region', { name: 'All works' });
     const items = within(list).getAllByRole('listitem');
     await expect(items).toHaveLength(3);
-    await expect(items[0]).toHaveTextContent(/Book·3 chapters·2 published/);
-    await expect(items[0]!.querySelector('[data-slot="work-cover"]')).toHaveTextContent('Lin Mei 林梅');
+    await expect(items[0]).toHaveTextContent('3 chapters');
+    await expect(items[0]).toHaveTextContent('Public');
+    await userEvent.click(within(items[0]!).getByText('Details'));
+    await expect(within(items[0]!).getByText(/Book · .*Chinese/)).toBeVisible();
+    await expect(within(items[0]!).getByText('2 published')).toBeVisible();
     // Studio names each kind as the catalogue does: a DigitalDocument is a Guide.
-    await expect(items[1]).toHaveTextContent(/Guide·English/);
-    await expect(items[2]).toHaveTextContent(/Recipe·English/);
+    await expect(items[1]).toHaveTextContent(/Guide · English/);
+    await expect(items[2]).toHaveTextContent(/Recipe · English/);
     await expect(items[0]).toHaveTextContent('1 Realm reviewing');
     await expect(within(items[0]!).getByRole('link', { name: 'Chapters' })).toHaveAttribute('href',
       `${home}/works/00000000-0000-4000-8000-000000000101?tab=chapters`);
@@ -147,6 +152,125 @@ export const Phone: Story = {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
+
+/** A twenty-item page of 105 works; production search and ordering are owned by Main. */
+const largeItems = Array.from({ length: 105 }, (_, index) => ({ ...inventory.page.items[index % 3]!,
+  id: `https://rezics.com/id/00000000-0000-4000-8000-${String(1000 + index).padStart(12, '0')}`,
+  title: { value: index === 104 ? '寻回最后一部作品 · The last work beyond five pages'
+    : index % 2 ? `雨夜里的第${index + 1}间书店，与一封写给未来的长信 · Letters to Tomorrow`
+      : `The Cartographer of Tides: an unfinished atlas of distant shores — Volume ${index + 1}`, language: 'en' },
+}));
+const query = { q: '', sort: 'updated' as const };
+export const LargeInventory: Story = {
+  args: { content: { view: 'all', works: { ok: true, data: {
+    page: { ...inventory.page, items: largeItems.slice(0, 20), nextCursor: 'page-two' }, books: {},
+  } } }, query, moreHref: inventoryAddress(home, 'all', query, 'page-two') },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const region = canvas.getByRole('region', { name: 'All works' });
+    await expect(within(region).getAllByRole('listitem')).toHaveLength(20);
+    await expect(canvas.getByRole('searchbox', { name: 'Find by title' })).toHaveValue('');
+    const sort = canvas.getByRole('combobox', { name: 'Sort works' });
+    await expect(sort).toHaveTextContent('Recently edited');
+    await expect(canvas.getByRole('link', { name: 'Show more' })).toHaveAttribute('href',
+      inventoryAddress(home, 'all', query, 'page-two'));
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    await userEvent.click(sort);
+    await chooseOption(within(document.body), 'Oldest first');
+    await expect(sort).toHaveTextContent('Oldest first');
+    await expect(new FormData(canvas.getByRole('search') as HTMLFormElement).get('sort')).toBe('oldest');
+  },
+};
+
+export const LargeInventoryPhone: Story = { ...LargeInventory, globals: { viewport: { value: 'phone' } } };
+
+/** An owner-filtered result beyond page five, reopened with its address conditions intact. */
+export const LocatedWork: Story = {
+  args: { content: { view: 'all', works: { ok: true, data: {
+    page: { ...inventory.page, items: [largeItems[104]!] }, books: {},
+  } } }, query: { q: '寻回最后一部作品', sort: 'oldest' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const form = canvas.getByRole('search', { name: 'Find by title' });
+    await expect(form).toHaveAttribute('method', 'get');
+    await expect(canvas.getByRole('searchbox', { name: 'Find by title' })).toHaveValue('寻回最后一部作品');
+    await expect(canvas.getByRole('combobox', { name: 'Sort works' })).toHaveTextContent('Oldest first');
+    await expect(new FormData(form as HTMLFormElement).get('sort')).toBe('oldest');
+    await expect(canvas.getByRole('link', { name: 'Drafts' })).toHaveAttribute('href',
+      inventoryAddress(home, 'draft', { q: '寻回最后一部作品', sort: 'oldest' }));
+    await expect(canvas.getByRole('heading', { name: largeItems[104]!.title.value })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Clear search' })).toHaveAttribute('href',
+      inventoryAddress(home, 'all', { q: '', sort: 'oldest' }));
+  },
+};
+
+export const NoMatches: Story = {
+  args: { query: { q: 'Missing title', sort: 'updated' },
+    content: { view: 'all', works: { ok: true, data: { ...inventory, page: { ...inventory.page, items: [] } } } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('No matching works on this page.')).toBeVisible();
+    await expect(canvas.queryByText('Your Studio is ready')).toBeNull();
+    await expect(canvas.getByRole('searchbox')).toHaveValue('Missing title');
+  },
+};
+
+export const SearchContinuation: Story = {
+  ...NoMatches,
+  args: { ...NoMatches.args, firstHref: inventoryAddress(home, 'all', { q: 'Missing title', sort: 'updated' }),
+    moreHref: inventoryAddress(home, 'all', { q: 'Missing title', sort: 'updated' }, 'next-candidates'),
+    content: { view: 'all', works: { ok: true, data: {
+      ...inventory, page: { ...inventory.page, items: [], nextCursor: 'next-candidates' },
+    } } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('More works may match. Continue with Show more.')).toBeVisible();
+    await expect(canvas.queryByText('No matching works on this page.')).toBeNull();
+    await expect(canvas.getByRole('link', { name: 'Show more' })).toHaveAttribute('href',
+      expect.stringContaining('cursor=next-candidates'));
+    await expect(canvas.getByRole('link', { name: 'Back to first page' })).toBeVisible();
+  },
+};
+
+export const IncompleteCounts: Story = {
+  args: { content: { view: 'all', works: { ok: true, data: { ...inventory,
+    page: { ...inventory.page, items: [inventory.page.items[0]!, { ...inventory.page.items[0]!, id: 'other-book' }] },
+    books: { [inventory.page.items[0]!.id]: { count: 0, more: true, published: 0 },
+      'other-book': { count: 24, more: true, published: 3 } },
+  } } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Chapter count unavailable')).toBeVisible();
+    await expect(canvas.getByText('At least 24 chapters')).toBeVisible();
+    await expect(canvas.queryByText('0 chapters')).toBeNull();
+    const items = within(canvas.getByRole('region', { name: 'All works' })).getAllByRole('listitem');
+    await userEvent.click(within(items[1]!).getByText('Details'));
+    await expect(canvas.getByText('At least 3 published')).toBeVisible();
+  },
+};
+
+export const LifecycleStates: Story = {
+  args: { content: { view: 'all', works: { ok: true, data: { ...inventory,
+    page: { ...inventory.page, items: [
+      { ...inventory.page.items[0]!, texts: inventory.page.items[0]!.texts.map(text => ({ ...text, draftHead: 'new-draft' })),
+        submissions: inventory.page.items[0]!.submissions.map(item => ({ ...item, state: 'changes-requested' })) },
+      inventory.page.items[1]!, { ...inventory.page.items[0]!, id: 'empty-book', state: 'empty', texts: [],
+        disclosure: 'restricted', submissions: [] },
+    ] }, books: { ...inventory.books, 'empty-book': { count: 0, more: false, published: 0 } },
+  } } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Unpublished changes')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Changes requested' })).toHaveAttribute('href',
+      expect.stringContaining('tab=realms'));
+    await expect(canvas.getAllByText('Private')).toHaveLength(2);
+    await expect(canvas.getByText('Not started')).toBeVisible();
+    await expect(canvas.getByText('0 chapters')).toBeVisible();
+  },
+};
+
+export const LifecycleStatesPhone: Story = { ...LifecycleStates, globals: { viewport: { value: 'phone' } } };
+export const Loading: Story = { render: args => <StudioHomePending label={args.messages.loadingTab} /> };
 
 /** An address for an identity this person does not act for: reported, never switched. */
 export const NotYourIdentity: Story = {

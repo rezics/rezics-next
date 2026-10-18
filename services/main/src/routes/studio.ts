@@ -58,6 +58,9 @@ export function studioRoutes(work: MainWorkDependencies) {
     query: t.Object({ state: t.Optional(t.Union([t.Literal('empty'), t.Literal('draft'),
       t.Literal('published')])), type: t.Optional(workType),
     view: t.Optional(t.Union([t.Literal('authored'), t.Literal('curated')])),
+    /** Case-insensitive title search over the inventory, including subsequent candidate pages. */
+    q: t.Optional(t.String({ maxLength: 200 })),
+    sort: t.Optional(t.Union([t.Literal('updated'), t.Literal('newest'), t.Literal('oldest')])),
     limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
     cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) },
     { additionalProperties: false }),
@@ -68,7 +71,7 @@ export function studioRoutes(work: MainWorkDependencies) {
       return Response.json(await workRead(work, request,
         { actingSubject: agent, limit: query.limit, cursor: query.cursor },
         session => readStudioWorks(session, agent, { state: query.state, type: query.type,
-          view: query.view })),
+          view: query.view, q: query.q, sort: query.sort })),
       { headers: { 'cache-control': 'private, no-store' } });
     } catch (error) {
       if (error instanceof ControlDenied) return problem(403, 'studio_denied', 'Agent control is unavailable');

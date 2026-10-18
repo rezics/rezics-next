@@ -36,7 +36,7 @@ const recipeStateBindings = (work: string, main: string) => `
   BIND(EXISTS { ${publishedStructuredWork(work, main)} } AS ?recipePublished)`;
 
 export interface StudioWorkFilters { state?: 'draft' | 'published' | 'empty'; type?: WorkType;
-  view?: 'authored' | 'curated' }
+  view?: 'authored' | 'curated'; q?: string; sort?: 'updated' | 'newest' | 'oldest' }
 
 /** Exact Agent Work, including chapters omitted from the inventory. One Work
  * graph head and at most 200 of the Agent's texts and submissions. */
@@ -115,12 +115,15 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
   }
   const limit = session.options.limit ?? 20;
   const view = filters.view ?? 'authored';
+  const q = filters.q?.trim() ?? '';
   const first = await access.studioWorks(principal, agent,
     '', 1);
-  const binding = ['studio-works-v2', agent, view, filters.state ?? null, filters.type ?? null, first.stamp];
+  const binding = ['studio-works-v3', agent, view, filters.state ?? null, filters.type ?? null,
+    q, filters.sort ?? null, first.stamp];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const after = cursor?.after ?? '';
-  const page = await access.studioWorks(principal, agent, after, STUDIO_WORK_COST.candidateAdmissions + 1);
+  const sortOptions = filters.sort ? { sort: filters.sort, afterTime: cursor?.order } : undefined;
+  const page = await access.studioWorks(principal, agent, after, STUDIO_WORK_COST.candidateAdmissions + 1, sortOptions);
   if (page.stamp !== first.stamp) throw new WorkReadMoved('Studio controller changed');
   const admissions = page.rows.slice(0, STUDIO_WORK_COST.candidateAdmissions);
   const byAdmission = new Map(admissions.map(row => [row.id, row]));
@@ -140,6 +143,7 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
       FILTER ${view === 'authored' ? 'EXISTS' : 'NOT EXISTS'} {
         ${writerCreditPattern('?work', '?writer')}
       }
+      ${q ? `FILTER CONTAINS(LCASE(STR(?title)), LCASE(${lit(q)}))` : ''}
       ${recipeStateBindings("?work", "?main")}
     } LIMIT ${STUDIO_WORK_COST.candidateAdmissions + 1}`,
   STUDIO_WORK_COST.candidateAdmissions + 1) : [];
@@ -226,13 +230,13 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
       createdAt, updatedAt }];
   });
   const again = await access.studioWorks(principal, agent, after,
-    STUDIO_WORK_COST.candidateAdmissions + 1);
+    STUDIO_WORK_COST.candidateAdmissions + 1, sortOptions);
   if (again.stamp !== page.stamp || JSON.stringify(again.rows) !== JSON.stringify(page.rows)) {
     throw new WorkReadMoved('Studio Work inventory changed');
   }
   const more = workRows.length > limit || page.rows.length > STUDIO_WORK_COST.candidateAdmissions;
-  const tail = workRows.length > limit ? byAdmission.get(selectedRows.at(-1)?.admission?.value ?? '')?.work
-    : admissions.at(-1)?.work;
+  const tail = workRows.length > limit ? byAdmission.get(selectedRows.at(-1)?.admission?.value ?? '')
+    : admissions.at(-1);
   return pageResult(session, items, more && tail
-    ? encodeReadCursor(binding, session.position, tail) : null);
+    ? encodeReadCursor(binding, session.position, tail.work, tail.sort_key ?? '') : null);
 }

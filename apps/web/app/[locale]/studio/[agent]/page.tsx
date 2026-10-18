@@ -8,6 +8,7 @@ import { readInventory, readReviewPage, validCursor } from '../../../../features
 import { studioAgent } from '../../../../features/studio/route.ts';
 import { type HomeContent, type HomeView, homeViews, StudioHome, StudioHomePending } from '../../../../features/studio/studio-home.tsx';
 import { getMessages, getTranslation, requestLocale } from '../../../../i18n/server.ts';
+import { inventoryAddress, inventoryQuery, type InventoryQuery } from '../../../../features/studio/types.ts';
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getTranslation('studio', [await requestLocale()]);
@@ -15,7 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function StudioHomePage({ params, searchParams }: {
-  params: Promise<{ agent: string }>; searchParams: Promise<{ view?: string; cursor?: string }>;
+  params: Promise<{ agent: string }>; searchParams: Promise<{ view?: string; cursor?: string; q?: string; sort?: string }>;
 }) {
   const [{ agent: segment }, query] = await Promise.all([params, searchParams]);
   const agent = await studioAgent(segment);
@@ -23,22 +24,24 @@ export default async function StudioHomePage({ params, searchParams }: {
   const locale = await requestLocale();
   const view: HomeView = homeViews.find(item => item === query.view) ?? 'all';
   const cursor = validCursor(query.cursor);
+  const inventory = inventoryQuery(query);
   const [messages, { t }] = await Promise.all([getMessages('studio', locale), getTranslation('studio', [locale])]);
   return <Suspense fallback={<StudioHomePending label={t.loadingTab} />}>
-    <Home agent={agent} view={view} cursor={cursor} locale={locale} messages={messages} />
+    <Home agent={agent} view={view} cursor={cursor} query={inventory} locale={locale} messages={messages} />
   </Suspense>;
 }
 
-async function Home({ agent, view, cursor, locale, messages }: {
-  agent: AgentOption; view: HomeView; cursor: string | undefined; locale: UiLocale; messages: StudioMessages;
+async function Home({ agent, view, cursor, query, locale, messages }: {
+  agent: AgentOption; view: HomeView; cursor: string | undefined; query: InventoryQuery; locale: UiLocale; messages: StudioMessages;
 }) {
   const content: HomeContent = view === 'review'
     ? { view, review: await readReviewPage(agent.iri, cursor, locale) }
-    : { view, works: await readInventory(agent.iri, view === 'curated' ? { view: 'curated' } : { view: 'authored',
-      ...(view === 'all' ? {} : { state: view }) }, cursor) };
+    : { view, works: await readInventory(agent.iri, { ...query,
+      ...(view === 'curated' ? { view: 'curated' as const } : { view: 'authored' as const,
+        ...(view === 'all' ? {} : { state: view }) }) }, cursor) };
   const next = content.view === 'review' ? content.review.submissions.ok ? content.review.submissions.data.nextCursor : null
     : content.works.ok ? content.works.data.page.nextCursor : null;
-  const base = view === 'all' ? `${studioHref(agent)}?` : `${studioHref(agent)}?view=${view}&`;
   return <StudioHome agent={agent} content={content} now={Date.now()} locale={locale} messages={messages}
-    moreHref={next ? `${base}cursor=${encodeURIComponent(next)}` : null} />;
+    query={query} firstHref={cursor ? inventoryAddress(studioHref(agent), view, query) : null}
+    moreHref={next ? inventoryAddress(studioHref(agent), view, query, next) : null} />;
 }
