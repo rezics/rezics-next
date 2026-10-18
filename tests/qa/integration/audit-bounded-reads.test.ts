@@ -46,7 +46,7 @@ for (const name of personaNames) {
       expect(page.complete).toBe(page.nextCursor === null);
       if (page.complete) {
         expect(page.count).toEqual({ kind: 'exact', value: seen.size });
-        expect(seen.has(corpus.book.work)).toBe(true);
+        expect(seen.has(corpus.book!.work)).toBe(true);
         expect(seen.has(sessions.realm)).toBe(true);
         return;
       }
@@ -80,7 +80,7 @@ for (const name of personaNames) {
       expect(result.graphBytes).toBeLessThanOrEqual(MAX_SEARCH_FUSEKI_BYTES);
       expect(result.populationAudits, 'A reader must not qualify the unrelated Content population').toBe(0);
       if (index === 1 || index === 2) expect(result.body).toMatchObject({ total: 0, relationComplete: true, results: [] });
-      else expect(JSON.stringify(result.body)).toContain(corpus.book.work);
+      else expect(JSON.stringify(result.body)).toContain(corpus.book!.work);
     }
   }, 30_000);
 

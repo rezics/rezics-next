@@ -14,13 +14,13 @@ async function sample() {
     if (population > 100) {
       const person = population === 101 ? reserve.owner : reserve.member;
       await command(person, 'POST', '/v1/global-rating-observations', { profile: 'global-rating-standing-observation-v1',
-        context: corpus.context, work: corpus.book.work, mainVersion: corpus.book.mainVersion, value: 5,
+        context: corpus.context, work: corpus.book!.work, mainVersion: corpus.book!.mainVersion, value: 5,
         expectedRevisionHead: null, actingSubject: person.actingSubject });
     }
     for (const name of personaNames) answers.push({ population, persona: name,
       result: await measured(sessions[name], 'POST', '/v1/global-rating-aggregates', {
         profile: GLOBAL_AGGREGATE_PROFILE, context: corpus.context,
-        work: corpus.book.work, mainVersion: corpus.book.mainVersion }) });
+        work: corpus.book!.work, mainVersion: corpus.book!.mainVersion }) });
   }
   return answers;
 }

@@ -6,7 +6,7 @@ import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.
 import { bootstrapWebAuth } from '../../../scripts/dev/web-auth-bootstrap.ts';
 
 /** The shard's Account persists across files; never borrow another fixture's operator or client. */
-export async function joiningAuthFixture(runId: string) {
+export async function joiningAuthFixture(runId: string, extraScopes: readonly string[] = []) {
   const pool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
   try {
     const base = Bun.env.ACCOUNT_BASE_URL!;
@@ -26,7 +26,7 @@ export async function joiningAuthFixture(runId: string) {
     await pool.query("INSERT INTO rezics_account_operator(user_id,role) VALUES($1,'owner')", [id]);
     const name = `g-1005-auth-${randomUUID()}`;
     const fixture = await bootstrapWebAuth({ runId, redirectUris: ['http://localhost:3000/auth/callback'],
-      fixture: { name, operator: { id, email, password }, extraScopes: ['source:intake', 'source:adopt'] } });
+      fixture: { name, operator: { id, email, password }, extraScopes: ['source:intake', 'source:adopt', ...extraScopes] } });
     return { ...fixture, name, operatorId: id };
   } finally { await pool.end(); }
 }

@@ -245,6 +245,8 @@ interface PersonaOptions {
   notificationProvider?: { url: string; token: string; callbackSecret: string };
   /** A transparent HTTP proxy may delay real storage responses for race proofs. */
   graphEndpoint?: string;
+  /** Additional consent scopes for a fixture's public preparation commands. */
+  extraScopes?: readonly string[];
   observeAccount?: PersonaOptions['observeMain'];
   retainedOperator?: RetainedPersonaIdentity;
   retainedAuth?: RetainedPersonaAuth;
@@ -266,7 +268,7 @@ async function applications(options: PersonaOptions) {
     firstOperator = { runId, email: fixture.member.email, password: fixture.member.password,
       actingSubject: fixture.actingSubject };
   }
-  const auth = options.retainedAuth ? undefined : await joiningAuthFixture(runId);
+  const auth = options.retainedAuth ? undefined : await joiningAuthFixture(runId, options.extraScopes);
   const authDirectory = auth ? dirname(auth.publicConfigPath) : undefined;
   const runtime = auth ? readEnv(auth.runtimeEnvPath) : {
     ACCOUNT_ISSUER: `${options.retainedAuth!.accountOrigin}/api/auth`,
