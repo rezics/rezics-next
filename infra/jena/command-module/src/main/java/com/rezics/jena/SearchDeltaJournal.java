@@ -53,12 +53,14 @@ final class SearchDeltaJournal {
     private static final Node CONTENT_BODY_DIGEST = uri(RV + "searchDeltaContentBodyDigest");
     private static final Node WRITE_EPOCH = uri(RV + "searchDeltaWriteEpoch");
     private static final Node RESET = uri(RV + "searchDeltaReset");
+    private static final Node CONTENT_QUALIFICATION_CHANGED = uri(RV + "searchDeltaContentQualificationChanged");
     private static final Node GENERATION = uri(RV + "textIndexGeneration");
     private static final Node DATA_EPOCH = uri(RV + "dataEpoch");
     private static final Node SEQUENCE = uri(RV + "sequence");
 
     private record Qualification(String epoch, String generation, long ordinal,
-                                 long luceneGeneration, long population, String sequence) {}
+                                 long luceneGeneration, long population, String sequence,
+                                 ContentSearchQualification.Witness content) {}
     /** Only an observed mismatch authorizes repair; an unreadable cut needs a retry. */
     private record AuditResult(Qualification baseline, boolean inconsistent) {}
     private static final Map<DatasetGraph, Qualification> qualified = new WeakHashMap<>();
@@ -156,12 +158,14 @@ final class SearchDeltaJournal {
                     // maintenance owner repairs drift without a writer request.
                     if (!ready && Boolean.TRUE.equals(cut.get("available")) && exclusiveStartupProved(data))
                         invalidate(data, "captured generation unqualified", "captureRead");
-                    qualification = ready ? Map.of("available", true, "dataEpoch", baseline.epoch(), "generation", baseline.generation(),
+                    Map<String, Object> proof = ready ? new LinkedHashMap<>(Map.of("available", true, "dataEpoch", baseline.epoch(), "generation", baseline.generation(),
                             "sequence", cut.get("sequence"), "luceneGeneration", Long.toString(generation),
-                            "ordinal", Long.toString(baseline.ordinal()), "qualifiedPopulation", Long.toString(baseline.population()))
+                            "ordinal", Long.toString(baseline.ordinal()), "qualifiedPopulation", Long.toString(baseline.population())))
                         : unavailable(data, uncertain ? UnavailableReason.TEXT_INDEX_UNCERTAIN
                             : !Boolean.TRUE.equals(cut.get("available")) ? UnavailableReason.CUT_UNAVAILABLE
                             : UnavailableReason.GENERATION_UNQUALIFIED);
+                    if (ready && baseline.content() != null) proof.put("contentQualification", baseline.content().envelope());
+                    qualification = Map.copyOf(proof);
                     Map<String, Object> capturedEvidence = new LinkedHashMap<>(cut);
                     capturedEvidence.remove("available");
                     capturedEvidence.put("version", 1);
@@ -645,9 +649,17 @@ final class SearchDeltaJournal {
                 } finally { org.apache.jena.atlas.iterator.Iter.close(units); }
                 if (population != seen.size())
                     return refuse("index population differs from public MatchUnit count", null, true);
+                ContentSearchQualification.Witness content = null;
+                try { content = ContentSearchQualification.audit(data, seen, position.epoch().getLiteralLexicalForm(),
+                    position.sequence(), deadline); }
+                catch (ContentSearchQualification.Refusal unresolved) {
+                    // General text can be qualified while Content has an
+                    // unprojected approval. Its readers require this witness.
+                    auditFailed("Content publication qualification is unresolved", null);
+                }
                 return new AuditResult(new Qualification(position.epoch().getLiteralLexicalForm(),
                     position.textGeneration().getURI(), ordinal(data),
-                    reader.getIndexCommit().getGeneration(), population, position.sequence().toString()), false);
+                    reader.getIndexCommit().getGeneration(), population, position.sequence().toString(), content), false);
             } catch (IOException | IllegalStateException | TextIndexException ex) {
                 if (ex instanceof AuditRefusal refusal) {
                     auditFailed(refusal.getMessage(), refusal.subject);
@@ -855,8 +867,11 @@ final class SearchDeltaJournal {
         if (capture != null && capture.data == data) {
             if (!Boolean.TRUE.equals(capture.qualification().get("available"))) return capture.qualification();
             Map<String, Object> response = new LinkedHashMap<>(proof(data, since, writeEpoch));
-            if (Boolean.TRUE.equals(response.get("available")))
+            if (Boolean.TRUE.equals(response.get("available"))) {
                 response.put("qualifiedPopulation", capture.qualification().get("qualifiedPopulation"));
+                if (capture.qualification().containsKey("contentQualification"))
+                    response.put("contentQualification", capture.qualification().get("contentQualification"));
+            }
             return Boolean.TRUE.equals(response.get("available")) ? response
                 : unavailable(data, UnavailableReason.REPLAY_UNAVAILABLE);
         }
@@ -873,6 +888,10 @@ final class SearchDeltaJournal {
         }
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> deltas = (List<Map<String, Object>>) replay.get("deltas");
+        if (deltas.stream().anyMatch(delta -> Boolean.TRUE.equals(delta.get("contentQualificationChanged")))) {
+            invalidate(data, "Content qualification changed", "qualifiedProof");
+            return unavailable(data, UnavailableReason.GENERATION_UNQUALIFIED);
+        }
         long population = baseline.population();
         for (Map<String, Object> delta : deltas) {
             @SuppressWarnings("unchecked")
@@ -889,7 +908,7 @@ final class SearchDeltaJournal {
         }
         Qualification next = new Qualification(baseline.epoch(), baseline.generation(),
             Long.parseLong((String) replay.get("ordinal")), luceneGeneration, population,
-            (String) replay.get("sequence"));
+            (String) replay.get("sequence"), baseline.content());
         try (var fence = publicationFence()) {
             // A slower read must not overwrite a later writer's qualification.
             if (qualified.get(data) == baseline) {
@@ -903,6 +922,7 @@ final class SearchDeltaJournal {
             return unavailable(data, UnavailableReason.REPLAY_UNAVAILABLE);
         Map<String, Object> response = new LinkedHashMap<>(requested);
         response.put("qualifiedPopulation", Long.toString(population));
+        if (next.content() != null) response.put("contentQualification", next.content().envelope());
         return response;
     }
 
@@ -948,6 +968,7 @@ final class SearchDeltaJournal {
         private boolean scopeApplied;
         private final Set<Node> headTouchedUnits = new LinkedHashSet<>(), publicTouchedUnits = new LinkedHashSet<>();
         private boolean reset;
+        private boolean contentQualificationChanged;
         private final long deadline;
         private boolean contentReplayIntact;
         boolean contentReplayIntact() { return contentReplayIntact; }
@@ -1011,6 +1032,7 @@ final class SearchDeltaJournal {
             if (action != TextQuadAction.ADD && action != TextQuadAction.DELETE) return;
             TemplateIndexService.workScopeBudget(deadline);
             var quad = new org.apache.jena.sparql.core.Quad(graph, subject, predicate, object);
+            contentQualificationChanged |= ContentSearchQualification.changed(data, quad);
             semanticSources.change(action, quad);
             if (!reset && PublicNameProjection.nameSourceQuad(quad) && !sourceBefore.containsKey(quad)) {
                 // Match the existing item savepoint's retained primary-quad
@@ -1094,7 +1116,8 @@ final class SearchDeltaJournal {
         return claimed == null ? live.isEmpty() : live.equals(Set.of(claimed));
     }
     record Delta(long ordinal, String dataEpoch, String sequence, String generation,
-                 long writeEpoch, boolean reset, List<Change> changes, Map<String, String> contentSources) {}
+                 long writeEpoch, boolean reset, boolean contentQualificationChanged,
+                 List<Change> changes, Map<String, String> contentSources) {}
 
     static void initialize(DatasetGraph data) {
         if (data.contains(GRAPH, STATE, ORDINAL, Node.ANY))
@@ -1151,9 +1174,11 @@ final class SearchDeltaJournal {
         data.add(GRAPH, id, SEQUENCE, literal(position.sequence().toString()));
         data.add(GRAPH, id, GENERATION, position.textGeneration());
         data.add(GRAPH, id, WRITE_EPOCH, literal(Long.toString(completedWriteEpoch)));
-        // Async source-head replacement closes qualification until relay/audit;
-        // it does not request the physical full rebuild represented by capture.reset.
+        // Source replacement can also fence the physical delivery. Content's
+        // completeness witness has a separate fence so ordinary delta replay
+        // and rebuild adoption retain their existing meaning.
         data.add(GRAPH, id, RESET, literal(Boolean.toString(capture.reset || !staleHeads.isEmpty())));
+        data.add(GRAPH, id, CONTENT_QUALIFICATION_CHANGED, literal(Boolean.toString(capture.contentQualificationChanged)));
         for (int i = 0; i < changes.size(); i++) {
             Change value = changes.get(i);
             Node item = change(next, i);
@@ -1210,6 +1235,10 @@ final class SearchDeltaJournal {
         Node generation = one(data, GRAPH, id, GENERATION);
         Node write = one(data, GRAPH, id, WRITE_EPOCH);
         Node reset = one(data, GRAPH, id, RESET);
+        Node contentChanged = one(data, GRAPH, id, CONTENT_QUALIFICATION_CHANGED);
+        if (contentChanged == null ? data.contains(GRAPH, id, CONTENT_QUALIFICATION_CHANGED, Node.ANY)
+            : !literal("true").equals(contentChanged) && !literal("false").equals(contentChanged))
+            throw new IllegalStateException("Content qualification delta malformed");
         if (epoch == null || !epoch.isLiteral() || sequence == null || !sequence.isLiteral()
             || generation == null || !generation.isURI() || write == null || !write.isLiteral()
             || reset == null || !reset.isLiteral()) throw new IllegalStateException("search delta gap");
@@ -1251,7 +1280,8 @@ final class SearchDeltaJournal {
         }
         return new Delta(number, epoch.getLiteralLexicalForm(), sequence.getLiteralLexicalForm(),
             generation.getURI(), Long.parseLong(write.getLiteralLexicalForm()),
-            Boolean.parseBoolean(reset.getLiteralLexicalForm()), List.copyOf(changes), Map.copyOf(contentSources));
+            Boolean.parseBoolean(reset.getLiteralLexicalForm()), literal("true").equals(contentChanged),
+            List.copyOf(changes), Map.copyOf(contentSources));
     }
 
     static Map<String, Object> proof(DatasetGraph data, long since, long writeEpoch) {
@@ -1317,6 +1347,7 @@ final class SearchDeltaJournal {
                     responseDeltas.add(Map.of("ordinal", Long.toString(delta.ordinal()),
                         "dataEpoch", delta.dataEpoch(), "sequence", delta.sequence(),
                         "generation", delta.generation(), "writeEpoch", Long.toString(delta.writeEpoch()),
+                        "contentQualificationChanged", delta.contentQualificationChanged(),
                         "changes", responseChanges));
                 }
                 return Map.of("available", true, "ordinal", Long.toString(head),
