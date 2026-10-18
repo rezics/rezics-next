@@ -210,7 +210,8 @@ product code and overlay only the specification, with the command-created
 corpus restored into an isolated QA environment. The baseline manifest records
 `phase: baseline`, that revision, `digest(matrix)` and measured preparation.
 Run each prove file serially against its own fresh restore. Pending cells use
-`outcomeTest` expected-failure behavior; a green runner exit is **not** proof.
+`outcomeTest(..., undefined, { pending: 'assert' })` to report genuine assertion
+failures without expected-failure inversion. A green runner exit is **not** proof.
 Record the exact body title, first failed assertion and whether it was reached.
 An authentication/setup/restore failure is a premise failure, never a confirmed
 product defect. A candidate proof needs the same selection and backup, successful

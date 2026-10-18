@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import declaration from '../../../../../scripts/qa/cases/outcomes/catalogue/source-coverage.ts';
-import { personas } from '../../../../../scripts/qa/cases/outcome-cells.ts';
+import type { Persona } from '../../../../../scripts/qa/cases/outcome-cells.ts';
 import { outcomeTest } from '../../../support/outcome-test.ts';
 import { assertAtomicRefresh, assertCoverageStates, assertIndependentWithdrawal, assertInventory,
   assertNativeFacts, confirmHumanValue, coverage, deniedSourceCommands, matrix, openImportFixture,
@@ -11,7 +11,7 @@ let fixture: ImportFixture;
 beforeAll(async () => { fixture = await openImportFixture(declaration); }, 600_000);
 afterAll(async () => { await fixture?.close(); });
 
-for (const persona of personas) outcomeTest(declaration, persona, async () => {
+async function sourceCoverage(persona: Persona): Promise<void> {
   const person = fixture.people[persona];
   await assertCoverageStates(person, fixture);
   await assertNativeFacts(person, fixture);
@@ -29,4 +29,11 @@ for (const persona of personas) outcomeTest(declaration, persona, async () => {
     await assertIndependentWithdrawal(fixture);
     await assertAtomicRefresh(fixture);
   }
-});
+}
+
+outcomeTest(declaration, 'visitor', () => sourceCoverage('visitor'), undefined, { pending: 'assert' });
+outcomeTest(declaration, 'stranger', () => sourceCoverage('stranger'), undefined, { pending: 'assert' });
+outcomeTest(declaration, 'member', () => sourceCoverage('member'), undefined, { pending: 'assert' });
+outcomeTest(declaration, 'owner', () => sourceCoverage('owner'), undefined, { pending: 'assert' });
+outcomeTest(declaration, 'moderator', () => sourceCoverage('moderator'), undefined, { pending: 'assert' });
+outcomeTest(declaration, 'operator', () => sourceCoverage('operator'), undefined, { pending: 'assert' });

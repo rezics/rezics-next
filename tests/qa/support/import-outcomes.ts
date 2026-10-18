@@ -110,8 +110,9 @@ function frozenRecords(sourceRoot: string): Map<string, DatasetRecord> {
     expect(snapshot.id).toBe(pin.id);
     const source = snapshot.sources.find(value => value.provider === pin.provider);
     if (!source) throw new Error(`Frozen provider is absent: ${pin.provider}`);
+    const recordDigests: Record<string, string | undefined> = pin.recordDigests;
     for (const record of exactRecords(source.records, pin.recordKeys)) {
-      expect(digest(record)).toBe((pin.recordDigests as Record<string, string>)[record.key]);
+      expect(digest(record)).toBe(recordDigests[record.key]!);
       selected.set(record.key, record);
     }
     const edges = pin.edgeIndexes.map(index => {
@@ -141,7 +142,9 @@ export async function openImportFixture(row: RowOutcomes): Promise<ImportFixture
   expect(corpus.productRevision).toMatch(/^[a-f0-9]{40}$/);
   expect(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim()).toBe(corpus.productRevision);
   if (corpus.phase === 'baseline') expect(corpus.productRevision).toBe(matrix.baselineProduct);
-  expect(corpus.runId).toBe(Bun.env.REZICS_QA_RUN_ID);
+  const restoredRunId = Bun.env.REZICS_QA_RUN_ID;
+  if (!restoredRunId) throw new Error('TEST PREMISE: missing isolated restored REZICS_QA_RUN_ID');
+  expect(corpus.runId).toBe(restoredRunId);
   expect(corpus.runId).not.toBe(corpus.backup.sourceRunId);
   expect(localFile(corpus.fixtureRoot)).toBe(localFile(Bun.env.REZICS_FIXTURE_ROOT ?? ''));
   const backup = readFileSync(localFile(corpus.backup.manifest));
@@ -284,6 +287,10 @@ export async function coverage(person: PersonaSession, fixture: ImportFixture, s
   expect(new Set(result.items.map(item => item.key)).size).toBe(result.items.length);
   publicSafe(result, fixture);
   for (const entry of result.items) {
+    for (const binding of entry.native) {
+      expect(binding.resource).toMatch(native);
+      expect(binding.revision).toMatch(native);
+    }
     if (entry.state === 'adopted') {
       expect(entry.native.length).toBeGreaterThan(0);
       expect(entry.source?.provider).toBe(fixture.records.get(sourceKey)!.provider);
@@ -436,7 +443,10 @@ export async function assertNativeRelations(person: PersonaSession, fixture: Imp
       expect.objectContaining({ role: expected.fromRole, participant: { kind: 'resource', ref: source } }),
       expect.objectContaining({ role: expected.toRole, participant: { kind: 'resource', ref: destination } }),
     ]));
-    expect(inverse.items.some(item => item.relation === relation!.relation), 'same exact occurrence is navigable in reverse').toBe(true);
+    expect(relation!.rendering!.viewingRole).toBe(expected.fromRole);
+    const inverseOccurrence = inverse.items.find(item => item.relation === relation!.relation);
+    expect(inverseOccurrence, 'same exact occurrence is navigable in reverse').toBeDefined();
+    expect(inverseOccurrence!.rendering?.viewingRole).toBe(expected.toRole);
     const priorMeaning = meaningByKind.get(expected.kind);
     if (priorMeaning) expect(relation!.rendering!.meaning.definition).toBe(priorMeaning);
     meaningByKind.set(expected.kind, relation!.rendering!.meaning.definition);
@@ -558,7 +568,7 @@ export async function assertCoverageStates(person: PersonaSession, fixture: Impo
     if (!items) { items = (await coverage(person, fixture, row.sourceKey)).items; bySource.set(row.sourceKey, items); }
     const entry = items.find(item => item.key === row.publicKey);
     expect(entry, `public field coverage is discoverable: ${row.sourceKey} ${row.publicKey}`).toBeDefined();
-    expect(entry!.state).toBe(row.disposition);
+    expect(row.disposition).toBe(entry!.state);
     if (row.disposition === 'acquisition-failed') {
       expect(entry!.retry).toMatchObject({ allowed: true });
       expect(entry!.retry!.afterMs).toBeGreaterThanOrEqual(0);
@@ -606,6 +616,10 @@ export async function assertInventory(fixture: ImportFixture): Promise<void> {
     const actual = observed.find(row => row.key === expected.key)!;
     expect(actual).toMatchObject({ sourceKey: expected.sourceKey, valueDigest: expected.valueDigest,
       disposition: expected.disposition });
+    for (const binding of actual.native) {
+      expect(binding.resource).toMatch(native);
+      expect(binding.revision).toMatch(native);
+    }
     const record = fixture.records.get(expected.sourceKey)!;
     const pin = matrix.sources.find(source => source.provider === record.provider)!;
     expect(actual.source).toMatchObject({ provider: record.provider, namespace: record.kind,
