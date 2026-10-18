@@ -77,3 +77,70 @@ export interface DatasetSnapshot {
   images: StoredImage[];
   createdAt: string;
 }
+
+/** API receipts remain authoritative; this is a view of the existing import journal. */
+export interface DatasetNativeRecord {
+  id: string;
+  kind: string;
+  receipt: Record<string, unknown>;
+  urls: string[];
+  /** Exact values written by this producer, never inferred from a reused identity. */
+  projection?: { recordDigest: string; fields: Record<string, unknown> };
+}
+
+export type DatasetMapperId = 'fields' | 'relations' | 'credits' | 'releases' | 'media';
+
+export interface DatasetSourceReference {
+  key: string;
+  provider: Provider;
+  namespace: string;
+  externalId: string;
+  snapshot: string;
+  snapshotDigest: string;
+  recordDigest: string;
+  /** Ordered retained intake parts. Multiple parts are not one convertible observation. */
+  observations: readonly string[];
+}
+
+export interface DatasetMappingReceipt {
+  /** API-returned target at its exact grain. */
+  target: string;
+  /** Public consuming read, not a retained source JSON URL. */
+  readPath: string;
+  /** Exact acknowledged command result; an attempted write is not a mapping. */
+  receipt: Record<string, unknown>;
+}
+
+export interface DatasetCoverageKey {
+  record: string;
+  kind: 'field' | 'edge' | 'image';
+  /** RFC 6901 pointer in record, or the snapshot for edge/image occurrences. */
+  path: string;
+}
+
+export type DatasetMappingDisposition =
+  | { status: 'mapped'; reason: string; mapping: DatasetMappingReceipt }
+  | { status: 'source-only' | 'unmapped' | 'absent'; reason: string };
+
+/** Small shared adapter over the importer, not a second source or command owner.
+ * Mappers consume public source conversion/adoption/support APIs through command.
+ * A new revision uses a new label; it never rewrites a previous request or support. */
+export interface DatasetMappingContext {
+  snapshot: DatasetSnapshot;
+  actingSubject: string;
+  selected: ReadonlySet<string>;
+  records: ReadonlyMap<string, DatasetRecord>;
+  native: ReadonlyMap<string, DatasetNativeRecord>;
+  source(key: string): DatasetSourceReference;
+  command(label: string, method: 'POST' | 'PUT', path: string,
+    body: unknown): Promise<Record<string, unknown>>;
+  /** Fresh owner reads supply CAS heads; do not journal a changing read. */
+  read(path: string): Promise<Record<string, unknown>>;
+  disposition(key: DatasetCoverageKey, disposition: DatasetMappingDisposition): void;
+}
+
+export interface DatasetNativeMapper {
+  id: DatasetMapperId;
+  revision: string;
+  map(context: DatasetMappingContext): Promise<void>;
+}
