@@ -342,7 +342,8 @@ export function projectDatasetCredits(context: DatasetMappingContext): DatasetCr
     Array<{ record: DatasetRecord; alias: Row; index: number }>
   >();
   for (const record of context.records.values()) {
-    if (record.provider !== 'vndb' || record.kind !== 'staff') continue;
+    if (!context.selected.has(record.key) || record.provider !== 'vndb' || record.kind !== 'staff')
+      continue;
     rows(row(record.data.tables)?.staff_alias).forEach((alias, index) => {
       if (alias.id !== record.externalId || !scalarId(alias.aid)) return;
       aliasIndex.set(alias.aid, [...(aliasIndex.get(alias.aid) ?? []), { record, alias, index }]);
@@ -393,9 +394,11 @@ export function projectDatasetCredits(context: DatasetMappingContext): DatasetCr
         ...(alias && consistent
           ? {
               creditedName: typeof alias.alias.name === 'string' ? alias.alias.name : undefined,
-              aliasEvidence: context.selected.has(alias.record.key)
-                ? field(alias.record, `/data/tables/staff_alias/${alias.index}`, alias.alias)
-                : undefined,
+              aliasEvidence: field(
+                alias.record,
+                `/data/tables/staff_alias/${alias.index}`,
+                alias.alias,
+              ),
             }
           : {}),
       },
@@ -453,7 +456,6 @@ export function projectDatasetCredits(context: DatasetMappingContext): DatasetCr
     const from = context.records.get(edge.from)!;
     if (!context.selected.has(from.key)) continue;
     const work = from.kind === 'vn' ? from : find('vndb', 'vn', edge.data.id);
-    if (work && !context.selected.has(work.key)) continue;
     const ownEvidence = evidence(from, { record: from.key, kind: 'edge', path }, edge);
     const key = signature(work?.externalId ?? edge.data.id, edge.kind, edge.data);
     const use = canonical([key, from.key]),
@@ -514,7 +516,6 @@ export function projectDatasetCredits(context: DatasetMappingContext): DatasetCr
       continue;
     const voice = edge.kind === 'voice';
     const work = find('bangumi', 'subject', edge.data.subject_id);
-    if (work && !context.selected.has(work.key)) continue;
     const person = voice ? from : context.records.get(edge.to);
     const character = voice ? context.records.get(edge.to) : undefined;
     const ownEvidence = evidence(from, { record: from.key, kind: 'edge', path }, edge);

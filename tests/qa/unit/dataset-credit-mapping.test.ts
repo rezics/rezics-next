@@ -282,7 +282,6 @@ describe('exact retained credit candidates', () => {
   });
 
   test('ambiguous or missing staff alias bindings remain evidence, with no main-alias guess', () => {
-    const f = staffFixture();
     const duplicate = record(
       'vndb',
       'staff',
@@ -290,7 +289,11 @@ describe('exact retained credit candidates', () => {
       { tables: { staff_alias: [{ id: 's9', aid: '15810', name: 'Another person' }] } },
       'person',
     );
-    f.context.records = new Map([...f.context.records, [duplicate.key, duplicate]]);
+    const f = fixture([
+      record('vndb', 'vn', 'v50', { tables: { vn_staff: [translator] } }, 'work'),
+      translationStaff(),
+      duplicate,
+    ]);
     let candidate = projectDatasetCredits(f.context).credits[0]!;
     expect(credited(candidate).participant).toEqual({
       kind: 'external',
@@ -334,6 +337,68 @@ describe('exact retained credit candidates', () => {
     expect(
       candidates[1]!.participations.find((value) => value.role === 'character')!.sourceIdentity.key,
     ).toBe('c41605');
+  });
+
+  test('unselected staff records cannot supply credited spelling without retained alias evidence', () => {
+    const f = staffFixture();
+    f.context.selected = new Set(['vndb:vn:v50']);
+    const candidate = projectDatasetCredits(f.context).credits[0]!;
+    expect(credited(candidate).creditedName).toBeUndefined();
+    expect(credited(candidate).participant).toEqual({
+      kind: 'external',
+      provider: 'vndb',
+      namespace: 'staff-alias',
+      key: '15810',
+    });
+    expect(candidate.requirements.map((value) => value.contract)).toContain('staff-alias-binding');
+    expect(credited(candidate).evidence).toHaveLength(1);
+  });
+
+  test('selected voice evidence survives an unselected Work in both VNDB and Bangumi', () => {
+    const work = record('vndb', 'vn', 'v11', {}, 'work');
+    const character = record('vndb', 'character', 'c41605', {}, 'character');
+    const staff = voiceStaff();
+    const subject = record('bangumi', 'subject', '311310', {}, 'work');
+    const person = record('bangumi', 'person', '4141', {}, 'person');
+    const bgmCharacter = record('bangumi', 'character', '100710', {}, 'character');
+    const f = fixture(
+      [work, character, staff, subject, person, bgmCharacter],
+      [
+        { from: character.key, to: staff.key, kind: 'voice-actor', data: voice },
+        {
+          from: person.key,
+          to: bgmCharacter.key,
+          kind: 'voice',
+          data: {
+            character_id: 100710,
+            person_id: 4141,
+            subject_id: 311310,
+            summary: '',
+            type: 0,
+          },
+        },
+      ],
+    );
+    f.context.selected = new Set([character.key, staff.key, person.key, bgmCharacter.key]);
+    f.native.delete(work.key);
+    f.native.delete(subject.key);
+    const candidates = projectDatasetCredits(f.context).credits;
+    expect(candidates).toHaveLength(2);
+    for (const candidate of candidates) {
+      expect(candidate.work).toBeUndefined();
+      expect(candidate.participations.map((value) => value.role)).toEqual([
+        'work',
+        'credited',
+        'character',
+      ]);
+      expect(candidate.participations[0]!.participant.kind).toBe('external');
+      expect(candidate.requirements.map((value) => value.contract)).toContain(
+        'native-work-binding',
+      );
+      expect(candidate.evidence[0]!.coverage.kind).toBe('edge');
+    }
+    expect(candidates[0]!.participations[0]!.sourceIdentity.key).toBe('v11');
+    expect(candidates[1]!.participations[0]!.sourceIdentity.key).toBe('311310');
   });
 
   test('Bangumi voice rows bind their own subject, person and character and retain numeric staff positions', () => {
