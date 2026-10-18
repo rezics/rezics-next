@@ -88,7 +88,7 @@ function ProjectionFeed({ initial, locale, scenario: fixture, query: input = que
         <div className="mx-auto max-w-[46rem] py-6 sm:px-6">
           <FeedList
             initial={{ ok: true, data: initial }}
-            query={input}
+            query={{ ...input, actingSubject: storyId(801, 'bbbb') }}
             allHref={`/${locale}?tab=all`}
             headInterval={100}
             empty={

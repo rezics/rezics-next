@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { post } from './fixtures.ts';
+import { post, storyId } from './fixtures.ts';
 import { feedExcerpt } from './preview.ts';
 
 const title = '25. Minestra di mattoncini di ricotta';
@@ -40,7 +40,8 @@ test('books and guides retain new information and meaningful sentences that begi
 });
 
 test('chapter and release excerpts describe their own events, even when they name the Work', () => {
-  const chapter = post(3, { card: { kind: 'chapter', number: 1, excerpt: 'Work 3\nThe opening scene.' } });
+  const chapter = post(3, { card: { kind: 'chapter', occurrence: storyId(31, 'dddd'), parent: storyId(3, 'eeee'),
+    number: 1, excerpt: 'Work 3\nThe opening scene.' } });
   expect(feedExcerpt(chapter)).toBe('Work 3\nThe opening scene.');
   const release = post(4, { card: { kind: 'release', changelogExcerpt: 'Work 4\nFixes saved games.' } });
   expect(feedExcerpt(release)).toBe('Work 4\nFixes saved games.');
