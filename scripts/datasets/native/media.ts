@@ -174,8 +174,11 @@ export function datasetWorkCoverImages(root: string, snapshot: DatasetSnapshot):
 }
 
 /** The current API cannot attach source portraits or publish imported-cover assets.
- * Keep those coverage cells open until that owner supplies target/role/variant-aware
- * admission and an exact receipt; ordinary uploads would assert the wrong custody. */
+ * The importer owns Work cover receipts and must consume datasetWorkCoverImages;
+ * this mapper must never downgrade one of its acknowledged cover mappings.
+ * Source candidates without a frozen image have no image occurrence in the shared
+ * coverage inventory yet. They remain visible in datasetMediaCandidates, rather
+ * than inventing a coverage key or declaring their acquisition absent. */
 export function datasetMediaMapper(root: string): DatasetNativeMapper {
   return {
     id: 'media',
@@ -183,16 +186,13 @@ export function datasetMediaMapper(root: string): DatasetNativeMapper {
     async map(context) {
       for (const candidate of datasetMediaCandidates(root, context)) {
         if (!context.selected.has(candidate.record)) continue;
+        if (candidate.role === 'cover' || !candidate.path.startsWith('/images/')) continue;
         const reason =
           candidate.status !== 'captured'
             ? candidate.reason
             : candidate.role === 'portrait'
               ? 'api-contract-unavailable: importedCover requires a Work; no source portrait admission/receipt'
-              : candidate.role === 'screenshot'
-                ? 'api-contract-unavailable: imported images cannot enter media-set-v1 with source/rights custody'
-                : candidate.sourceEvidence?.derivation
-                  ? 'api-contract-unavailable: source-cover-evidence-v1 cannot retain the archive derivation'
-                  : 'native-use-unproved: cover selection needs its exact receipt and public target/role/source/rights read';
+              : 'api-contract-unavailable: imported images cannot enter media-set-v1 with source/rights custody';
         context.disposition(
           { record: candidate.record, kind: 'image', path: candidate.path },
           {

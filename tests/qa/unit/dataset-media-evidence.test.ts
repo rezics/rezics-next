@@ -10,6 +10,7 @@ import {
   electedDatasetCovers,
 } from '../../../scripts/datasets/native/media.ts';
 import { datasetSourceIdentity } from '../../../scripts/datasets/native/context.ts';
+import { datasetCoverage, datasetCoverageId } from '../../../scripts/datasets/native/coverage.ts';
 import {
   checkSources,
   freezeSnapshot,
@@ -541,6 +542,30 @@ test('unacquired, missing and unelected media stay pending; a placeholder is nev
     });
 
     const dispositions: DatasetMappingDisposition[] = [];
+    const selected = new Set(
+      snapshot.sources.flatMap((source) => source.records).map((record) => record.key),
+    );
+    const coverage = datasetCoverage(snapshot, selected);
+    for (const key of selected) coverage.retain(key);
+    const coverIndex = snapshot.images.findIndex((image) => image.role === 'selected-cover');
+    const cover = snapshot.images[coverIndex]!;
+    const coverKey = {
+      record: cover.record,
+      kind: 'image' as const,
+      path: `/images/${coverIndex}`,
+    };
+    // A prior acknowledged importer receipt is immutable. This models that
+    // contract; fixture bytes and this stub receipt prove no actual media Use.
+    coverage.disposition(coverKey, {
+      status: 'mapped',
+      reason: 'acknowledged-cover-selection',
+      mapping: {
+        target: native(snapshot).get(cover.record)!.id,
+        readPath: '/v1/resources/00000000-0000-4000-8000-000000000001',
+        receipt: { selection: '00000000-0000-4000-8000-000000000002' },
+      },
+    });
+    const coverBefore = canonical(coverage.entries.get(datasetCoverageId(coverKey)));
     const context: DatasetMappingContext = {
       snapshot,
       native: native(snapshot),
@@ -548,9 +573,7 @@ test('unacquired, missing and unelected media stay pending; a placeholder is nev
       records: new Map(
         snapshot.sources.flatMap((source) => source.records).map((record) => [record.key, record]),
       ),
-      selected: new Set(
-        snapshot.sources.flatMap((source) => source.records).map((record) => record.key),
-      ),
+      selected,
       command: async () => {
         throw new Error('No source-art upload bypass is allowed');
       },
@@ -560,15 +583,27 @@ test('unacquired, missing and unelected media stay pending; a placeholder is nev
       source: () => {
         throw new Error('No replacement source identity is allowed');
       },
-      disposition: (_key, disposition) => {
+      disposition: (key, disposition) => {
+        coverage.disposition(key, disposition);
         dispositions.push(disposition);
       },
     };
     await datasetMediaMapper(root).map(context);
-    expect(dispositions).toHaveLength(6);
+    expect(dispositions).toHaveLength(2);
     expect(dispositions.some((disposition) => disposition.status === 'mapped')).toBe(false);
+    expect(canonical(coverage.entries.get(datasetCoverageId(coverKey)))).toBe(coverBefore);
     expect(dispositions.some((disposition) => disposition.reason.includes('media-set-v1'))).toBe(
       true,
+    );
+    const emptyCoverage = datasetCoverage(empty, selected);
+    for (const key of selected) emptyCoverage.retain(key);
+    await datasetMediaMapper(root).map({
+      ...context,
+      snapshot: empty,
+      disposition: emptyCoverage.disposition,
+    });
+    expect([...emptyCoverage.entries.values()].filter((entry) => entry.kind === 'image')).toEqual(
+      [],
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
