@@ -272,17 +272,20 @@ test('large transferred inventory remains bounded and pages by current membershi
   expect((await r.access.studioWorks(creator.principal, creator.actor, '', 201)).rows).toEqual([]);
 }, 30_000);
 
-test('stale or erased receipt evidence denies list and exact read while bounded empty pages can continue', async () => {
+test('stale or erased receipt evidence denies list and exact read while later admissible Works reach the first page', async () => {
   const owner = await controller(), targets = await works(owner, 203), r = reader(targets);
   const sorted = [...targets].sort((left, right) => left.resource.localeCompare(right.resource));
   for (const target of sorted.slice(0, 200)) target.erased = true;
-  const first = await readStudioWorks(session(owner, r).value, owner.actor, {});
-  expect(first.items).toEqual([]);
-  expect(first.nextCursor).not.toBeNull();
-  const next = await readStudioWorks(session(owner, r, { cursor: first.nextCursor! }).value, owner.actor, {});
-  expect(next.items.map(item => item.id)).toEqual(sorted.slice(200).map(work => work.resource));
+  const first = await readStudioWorks(session(owner, r).value, owner.actor, { sort: 'title' });
+  expect(first.items.map(item => item.id)).toEqual(sorted.slice(200).map(work => work.resource));
+  expect(first.count).toEqual({ value: 3, kind: 'exact-page', total: null });
+  expect(first.nextCursor).toBeNull();
   expect((await r.access.studioWork(owner.principal, owner.actor, sorted[0]!.resource)).row).toBeNull();
   r.library.get(sorted[200]!.resource)!.digest = digest('stale receipt');
+  const afterStale = await readStudioWorks(session(owner, r).value, owner.actor, { sort: 'title' });
+  expect(afterStale.items.map(item => item.id)).toEqual(sorted.slice(201).map(work => work.resource));
+  expect(afterStale.count).toEqual({ value: 2, kind: 'exact-page', total: null });
+  expect(afterStale.nextCursor).toBeNull();
   expect((await r.access.studioWork(owner.principal, owner.actor, sorted[200]!.resource)).row).toBeNull();
   expect((await r.access.studioWorks(owner.principal, owner.actor, sorted[199]!.resource, 20)).rows[0]!.generation).toBeNull();
 });
@@ -384,18 +387,19 @@ test('ordinary catalogue Works stay curated and original native writer credits c
   }
 });
 
-test('catalogue classification can produce a bounded empty authored page without hiding later authored Works', async () => {
+test('catalogue classification filters the full inventory before authored and curated pagination', async () => {
   const owner = await controller(), targets = await works(owner, 201), r = reader(targets);
   const sorted = [...targets].sort((left, right) => left.resource.localeCompare(right.resource));
   for (const target of sorted.slice(0, 200)) target.nativeCredit = false;
-  const first = await readStudioWorks(session(owner, r).value, owner.actor, { view: 'authored' });
-  expect(first.items).toEqual([]);
-  expect(first.nextCursor).not.toBeNull();
-  const next = await readStudioWorks(session(owner, r, { cursor: first.nextCursor! }).value, owner.actor, { view: 'authored' });
-  expect(next.items.map(item => item.id)).toEqual([sorted[200]!.resource]);
-  expect(next.nextCursor).toBeNull();
-  const curated = await readStudioWorks(session(owner, r).value, owner.actor, { view: 'curated' });
+  const first = await readStudioWorks(session(owner, r).value, owner.actor, { view: 'authored', sort: 'title' });
+  expect(first.items.map(item => item.id)).toEqual([sorted[200]!.resource]);
+  expect(first.items[0]!.relationship).toBe('authored');
+  expect(first.count).toEqual({ value: 1, kind: 'exact-page', total: null });
+  expect(first.nextCursor).toBeNull();
+  const curated = await readStudioWorks(session(owner, r).value, owner.actor, { view: 'curated', sort: 'title' });
   expect(curated.items.map(item => item.id)).toEqual(sorted.slice(0, 20).map(work => work.resource));
+  expect(curated.items.every(item => item.relationship === 'curated')).toBe(true);
+  expect(curated.count).toEqual({ value: 20, kind: 'exact-page', total: null });
   expect(curated.nextCursor).not.toBeNull();
 });
 
