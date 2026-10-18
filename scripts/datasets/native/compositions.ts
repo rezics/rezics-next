@@ -57,49 +57,67 @@ export function datasetCompositionCandidates(
         },
       );
       candidates.push(candidate);
-      if (!Array.isArray(medium?.tracks)) return;
-      medium.tracks.forEach((trackValue, trackIndex) => {
-        const track = associationObject(trackValue),
-          recording = associationObject(track?.recording);
-        const recordingKey =
-          typeof recording?.id === 'string' ? `musicbrainz:recording:${recording.id}` : null;
-        const at = `${path}/tracks/${trackIndex}`;
-        candidates.push(
-          associationCandidate(
-            context,
-            { record: record.key, kind: 'field', path: at },
-            trackValue,
-            {
-              kind: 'musicbrainz-track',
-              participants: [
-                associationParticipant(context, 'release', record.key),
-                ...(recordingKey
-                  ? [associationParticipant(context, 'recording', recordingKey)]
-                  : []),
-              ],
-              native: {
-                owner: 'structure',
-                operation: '/v1/compositions',
-                grain: 'track-occurrence',
-                missing: [
-                  'Structure profile/owner policy for release medium groups and track occurrences',
-                  'source Structure conversion/adoption/support adapter; track ID/number/title/position qualifiers',
+      for (const list of ['tracks', 'data-tracks'] as const) {
+        const tracks = medium?.[list];
+        if (!Array.isArray(tracks)) continue;
+        tracks.forEach((trackValue, trackIndex) => {
+          const track = associationObject(trackValue),
+            recording = associationObject(track?.recording);
+          const recordingKey =
+            typeof recording?.id === 'string' ? `musicbrainz:recording:${recording.id}` : null;
+          const at = `${path}/${list}/${trackIndex}`;
+          const recordingParticipant = recordingKey
+            ? associationParticipant(context, 'recording', recordingKey)
+            : null;
+          candidates.push(
+            associationCandidate(
+              context,
+              { record: record.key, kind: 'field', path: at },
+              trackValue,
+              {
+                kind: list === 'data-tracks' ? 'musicbrainz-data-track' : 'musicbrainz-track',
+                participants: [
+                  associationParticipant(context, 'release', record.key),
+                  ...(recordingParticipant ? [recordingParticipant] : []),
                 ],
+                native: {
+                  owner: 'structure',
+                  operation: '/v1/compositions',
+                  grain: 'track-occurrence',
+                  missing: [
+                    'Structure profile/owner policy for release medium groups and track occurrences',
+                    'source Structure conversion/adoption/support adapter; track ID/number/title/position qualifiers',
+                    ...(!recordingParticipant?.target
+                      ? [
+                          `recording target unresolved: ${recordingKey ?? 'embedded recording ID absent'}; no native target is inferred or acquired`,
+                        ]
+                      : []),
+                  ],
+                },
               },
-            },
-            { ...track, medium: { ...medium, tracks: undefined }, parentCandidate: candidate.key },
-          ),
-        );
-        const matches = trackEdges.get(
-          canonical([
-            record.key,
-            recordingKey,
-            { ...track, medium: { ...medium, tracks: undefined } },
-          ]),
-        );
-        const matched = matches?.shift();
-        if (matched) consumedTracks.add(matched);
-      });
+              {
+                ...track,
+                medium: { ...medium, tracks: undefined, 'data-tracks': undefined },
+                parentCandidate: candidate.key,
+              },
+            ),
+          );
+          // The retained acquisition emits ordinary-track edges only. A data
+          // track has its own frozen field pointer and cannot consume that edge.
+          const matches =
+            list === 'tracks'
+              ? trackEdges.get(
+                  canonical([
+                    record.key,
+                    recordingKey,
+                    { ...track, medium: { ...medium, tracks: undefined } },
+                  ]),
+                )
+              : undefined;
+          const matched = matches?.shift();
+          if (matched) consumedTracks.add(matched);
+        });
+      }
     });
   }
   context.snapshot.sources.forEach((source, sourceIndex) =>

@@ -1,4 +1,5 @@
 import { sourceChildOccurrence } from '../../../services/main/src/modules/source/child-correspondence.ts';
+import { DatasetApiError } from '../auth.ts';
 import { canonical, sha256 } from '../store.ts';
 import type {
   DatasetCoverageKey,
@@ -251,22 +252,40 @@ export async function mapDatasetClassifications(context: DatasetMappingContext):
     let mappings: ReadonlyMap<string, DatasetMappingReceipt> = new Map();
     const row = associationObject(candidate.value),
       record = context.records.get(candidate.coverage.record)!;
-    if (
-      candidate.native.owner === 'work-native-child' &&
-      row &&
-      typeof row.name === 'string' &&
-      /\/tags\/[0-9]+$/.test(candidate.coverage.path)
-    ) {
-      if (!bases.has(record.key)) bases.set(record.key, tagBasis(context, record));
-      const basis = await bases.get(record.key)!;
-      if (basis) mappings = await adoptTagName(context, candidate, basis, receipts);
-    }
-    for (const mapping of mappings.values()) {
-      const support = associationObject(mapping.receipt.support)!;
-      const prior = children.get(mapping.target);
-      if (prior && prior !== support.sourceOccurrence)
-        throw new Error('Distinct source tag occurrences returned the same native child');
-      children.set(mapping.target, support.sourceOccurrence as string);
+    try {
+      if (
+        candidate.native.owner === 'work-native-child' &&
+        row &&
+        typeof row.name === 'string' &&
+        /\/tags\/[0-9]+$/.test(candidate.coverage.path)
+      ) {
+        if (!bases.has(record.key)) bases.set(record.key, tagBasis(context, record));
+        const basis = await bases.get(record.key)!;
+        if (basis) mappings = await adoptTagName(context, candidate, basis, receipts);
+      }
+      for (const mapping of mappings.values()) {
+        const support = associationObject(mapping.receipt.support)!;
+        const prior = children.get(mapping.target);
+        if (prior && prior !== support.sourceOccurrence)
+          throw new Error('Distinct source tag occurrences returned the same native child');
+        children.set(mapping.target, support.sourceOccurrence as string);
+      }
+    } catch (error) {
+      const reason = `source-tag-mapping-refused: ${error instanceof Error ? error.message : String(error)}`;
+      try {
+        disposeAssociation(context, {
+          ...candidate,
+          native: { ...candidate.native, missing: [reason] },
+        });
+      } catch (dispositionError) {
+        // Coverage owns historical/independent mappings. Never erase one to make
+        // a current refusal fit; the caller must retain both through that owner.
+        throw new AggregateError(
+          [error, dispositionError],
+          `${reason}; current-refusal-disposition-rejected: coverage must retain history and current refusal separately`,
+        );
+      }
+      throw error;
     }
     disposeAssociation(context, candidate, mappings);
   }
@@ -278,6 +297,18 @@ interface TagBasis {
   raw: Row;
   expectedHead: string;
 }
+
+async function readTagOwner(context: DatasetMappingContext, path: string): Promise<Row> {
+  try {
+    return await context.read(path);
+  } catch (error) {
+    throw new Error(
+      `source-tag-owner-read-refused: GET ${path}; ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+}
+
 async function tagBasis(
   context: DatasetMappingContext,
   record: DatasetRecord,
@@ -295,7 +326,9 @@ async function tagBasis(
     !nativeAssociationId(native.receipt.workRevision)
   )
     return null;
-  const support = await context.read(`/v1/works/${native.id.slice(-36)}/source-support`);
+  const support = await readTagOwner(context, `/v1/works/${native.id.slice(-36)}/source-support`);
+  if (support.state === 'withdrawn')
+    throw new Error(`source-tag-work-binding-withdrawn: ${String(support.binding)}`);
   if (
     support.profile !== 'native-work-source-support-v1' ||
     support.state !== 'recorded' ||
@@ -314,12 +347,15 @@ async function tagBasis(
       support.sourceRecord,
     ].every(nativeAssociationId)
   )
-    throw new Error('Source tag binding is withdrawn, stale or differs from the native adoption');
+    throw new Error(
+      'source-tag-work-binding-stale-or-mismatched: Source tag binding differs from the native adoption',
+    );
   const intake = context
     .source(record.key)
     .intakes.find((item) => item.observation === support.sourceObservation);
   if (!intake || intake.record !== support.sourceRecord) return null;
-  const observation = await context.read(
+  const observation = await readTagOwner(
+    context,
     `/v1/sources/observations/${(support.sourceObservation as string).slice(-36)}`,
   );
   const bytes =
@@ -350,7 +386,8 @@ async function tagBasis(
     return null;
   }
   if (!raw || String(raw.id) !== record.externalId || !Array.isArray(raw.tags)) return null;
-  const conversion = await context.read(
+  const conversion = await readTagOwner(
+    context,
     `/v1/sources/conversions/${(support.sourceConversion as string).slice(-36)}`,
   );
   if (
@@ -361,7 +398,9 @@ async function tagBasis(
     conversion.observation !== support.sourceObservation ||
     conversion.sourceDigest !== intake.byteDigest
   )
-    throw new Error('Source tag conversion differs from the retained observation');
+    throw new Error(
+      'source-tag-conversion-mismatched: Source tag conversion differs from the retained observation',
+    );
   return { support, conversion, raw, expectedHead: native.receipt.workRevision };
 }
 
@@ -432,7 +471,22 @@ async function adoptTagName(
         body,
       ),
     );
-  const receipt = await receipts.get(label)!;
+  let receipt: Row;
+  try {
+    receipt = await receipts.get(label)!;
+  } catch (error) {
+    const refusal = error instanceof DatasetApiError ? 'refused' : 'unconfirmed';
+    const cas =
+      error instanceof DatasetApiError &&
+      error.status === 409 &&
+      error.detail.code === 'native_child_changed'
+        ? ' (Work-head/protection/child CAS)'
+        : '';
+    throw new Error(
+      `source-tag-child-command-${refusal}${cas}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
   const acknowledged = associationObject(receipt.support),
     child = associationObject(acknowledged?.child);
   if (
@@ -462,16 +516,87 @@ async function adoptTagName(
     child.actingSubject !== context.actingSubject ||
     child.retiredBy !== null ||
     child.expectedHead !== basis.expectedHead ||
+    typeof child.dataEpoch !== 'string' ||
+    !child.dataEpoch ||
+    typeof child.sequence !== 'string' ||
+    !/^[0-9]+$/.test(child.sequence) ||
     !nativeAssociationId(child.child) ||
     !nativeAssociationId(child.revision)
   )
     throw new Error('Source tag adoption has no exact acknowledged child/support receipt');
+  const readPath = `/v1/works/${(support.work as string).slice(-36)}/native-children/${child.child.slice(-36)}/revisions/${child.revision.slice(-36)}?actingSubject=${encodeURIComponent(context.actingSubject)}`;
+  // A journaled command is historical evidence. Independent Source withdrawal
+  // and human retirement do not invalidate the parent Work's source binding.
+  // Read these exact identities afresh, even when command() returns its cache.
+  const currentSupport = await readTagOwner(
+    context,
+    `/v1/sources/native-child-supports/${acknowledged.support.slice(-36)}`,
+  );
+  const currentChild = await readTagOwner(context, readPath);
+  const supportChild = associationObject(currentSupport.child);
+  const supportKeys = [
+    'profile',
+    'support',
+    'work',
+    'field',
+    'proposal',
+    'conversion',
+    'record',
+    'observation',
+    'sourceOccurrence',
+    'sourceOrdinal',
+    'sourceKey',
+    'baseSupport',
+    'correspondence',
+    'nativeReceipt',
+  ];
+  const childKeys = [
+    'profile',
+    'work',
+    'child',
+    'revision',
+    'field',
+    'sourceKey',
+    'nativeOrdinal',
+    'expectedHead',
+    'actingSubject',
+    'dataEpoch',
+    'sequence',
+  ];
+  if (
+    !supportKeys.every((key) => currentSupport[key] === acknowledged[key]) ||
+    !supportChild ||
+    !childKeys.every((key) => currentChild[key] === child[key] && supportChild[key] === child[key])
+  )
+    throw new Error(
+      `source-tag-current-support-or-child-mismatched: ${acknowledged.support}; ${readPath}`,
+    );
+  if (currentSupport.state === 'withdrawn')
+    throw new Error(`source-tag-child-support-withdrawn: ${acknowledged.support}`);
+  if (
+    currentChild.state === 'retired' ||
+    supportChild.state === 'retired' ||
+    nativeAssociationId(currentChild.retiredBy) ||
+    nativeAssociationId(supportChild.retiredBy)
+  )
+    throw new Error(`source-tag-native-child-retired: ${child.child}; revision ${child.revision}`);
+  if (
+    currentSupport.state !== 'recorded' ||
+    currentSupport.withdrawal !== null ||
+    currentChild.state !== 'active' ||
+    supportChild.state !== 'active' ||
+    currentChild.retiredBy !== null ||
+    supportChild.retiredBy !== null
+  )
+    throw new Error(
+      `source-tag-current-support-or-child-unavailable: ${acknowledged.support}; ${readPath}`,
+    );
   return new Map([
     [
       `${candidate.coverage.path}/name`,
       {
         target: child.child,
-        readPath: `/v1/works/${(support.work as string).slice(-36)}/native-children/${child.child.slice(-36)}/revisions/${child.revision.slice(-36)}?actingSubject=${encodeURIComponent(context.actingSubject)}`,
+        readPath,
         receipt,
       },
     ],
