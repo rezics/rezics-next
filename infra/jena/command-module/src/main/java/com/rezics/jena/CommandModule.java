@@ -64,6 +64,7 @@ public final class CommandModule implements FusekiAutoModule {
     @Override public void prepare(FusekiServer.Builder builder, Set<String> datasetNames, Model configModel) {
         searchEvidence.install();
         builder.addFilter("/*", searchEvidence);
+        builder.addFilter("/*", new QueryWorkService.ReadBoundaryFilter());
         builder.registerOperation(COMMAND, new CommandService(profiles));
         builder.registerOperation(Operation.Query, org.apache.jena.riot.WebContent.contentTypeSPARQLQuery,
             new QueryWorkService());
