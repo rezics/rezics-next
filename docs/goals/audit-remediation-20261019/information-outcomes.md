@@ -81,20 +81,25 @@ These facts come from the current
 
 Proposed additions through those same owners are:
 
-- `NativeSupportAttachment` adds `native: NativeValueBinding` and
-  `retained: RetainedFieldBinding`. Native verification binds exact target,
-  owner component/Statement, predicate, typed value, qualifiers, current head and
-  genuine native receipt; a Statement also binds meaning and existing acceptance.
+- `NativeSupportAttachment` consumes G-2769's proposed
+  `source-field-support-attachment-v2` and its `evidence` binding/full-record field
+  coordinate. `AcknowledgedNativeBasis` extends the shared `NativeFieldBasis`
+  with the actual owner/component and native command receipt, Statement relation
+  definition or editorial field/language. Exact target, typed property/value,
+  qualifiers, current revision and existing acceptance remain shared fields.
   Component properties gain no Statement identity or acceptance.
-- G-2769's Source conversion inventory exposes each entry's verified `retained`
-  binding: exact inventory/source key, record/conversion/mapping/grain/field,
-  normalized record identity/digest/pointer, presence and supplied language,
-  resolved observation/pointer/digest and the complete ordered intake part list.
-  A normalized `/data/...` pointer is not an observation pointer. Record, raw
-  observation, source-value and typed-native digests have distinct meanings;
-  the owning conversion must verify the mapping, including multipart intake.
-- `NativeSupportReceipt` extends `source-field-support-v1` with those checked
-  bindings, rights-filtered `publicEvidence`, and
+- `RetainedFieldBinding` reuses Source's `RetainedRecordBinding`,
+  `RetainedFieldCoordinate` and admission `correspondence`, including original
+  record identity/digest, ordered actual intake receipts and reconstructed payload
+  digest/length. Full-record `/data/...` and inventory `.data` coordinates remain
+  distinct from the actual payload pointers. The existing `reconstructIntake`
+  verifies ordered chunk framing, decoding and assembled bytes; tests resolve
+  pointers after reconstruction, never within a fictional provider/chunk envelope.
+  Record, raw observation, payload, source-value and typed-native digests have
+  distinct meanings. Only Source's registered rule verifies correspondence.
+- `NativeSupportReceipt` consumes Source's proposed
+  `admission: source-field-support-admission-v1`, extends its native basis with
+  the checked acknowledgement, and adds rights-filtered `publicEvidence` and
   `attachment: {profile, receipt, requestDigest, nativeReceipt}` using
   `source-field-attachment-certificate-v1`. `graphReceipt` is the verified native
   receipt. Keep the actual `headGuarantee`; verified-before-commit does not claim
@@ -116,11 +121,14 @@ Proposed additions through those same owners are:
 
 Refusals preserve native content and return no successful support/receipt:
 target, property, value, qualifiers, head, conversion, native receipt, resolved
-evidence or part-order mismatches use 409 `source_support_changed`; absent or
+evidence mismatches use 409 `source_support_changed`; absent or
 incomplete retained evidence uses 503 `source_support_unavailable`; another
 principal's evidence uses indistinguishable 404 `source_support_unavailable`;
-rights refusal uses 403 `rights_denied`. Proposed 400 `invalid_source_attachment`
-identifies an unadmitted slot; the current malformed-attachment code is
+rights refusal uses 403 `rights_denied`. Source's proposed 422
+`source_mapping_unverified` identifies an unadmitted native verifier. Reversed
+multipart intake refuses at the existing conversion operation with 409
+`source_conversion_changed`, `basis: part-order`, preserving the retained binding
+and native content. The current malformed-attachment code remains
 `invalid_source_withdrawal`. Exact idempotent replay returns the original support;
 a changed request under that key refuses with 409. Each genuine source record
 keeps a separately withdrawable support. Withdrawal preserves another qualifying
@@ -128,10 +136,12 @@ support, native values, acceptance and human content/control. Two records do not
 prove independent providers.
 
 Coordination with G-2769 was sent through Goal mail
-`mail:c008fe27-61cb-4e30-a326-80a4408a27e4`. The proposed `retained` shape above
-is the consumer requirement to reconcile with that owner's conversion/inventory
-specification before implementation; no agreement or Program disposition is
-inferred from delivery. G-2781 remains a producer adapter and G-2778 the sole
+`mail:c008fe27-61cb-4e30-a326-80a4408a27e4`. Its wave proposal at `e7db8bc4d7`
+now supplies the shared record, coordinate, v2 request, admission and refusal
+shapes consumed here; see the [Source contract](import-admission-contract.md).
+The native acknowledgement, readable public evidence and language additions here
+remain pending Program disposition; consuming that owner's proposal establishes
+neither reciprocal agreement nor approval. G-2781 remains a producer adapter and G-2778 the sole
 importer wiring owner. Both consume only admitted contracts backed by actual
 public native/Source command acknowledgements. No producer or wiring code changes
 under this specification.
@@ -164,7 +174,7 @@ producer or ad hoc seeds. The consumer requires:
   proposed native/support result: absent bindings/receipts are observed in test
   bodies, never filled with successful source data.
 
-Real-command gaps remain: Source's verified normalized-record/multipart inventory
+Real-command gaps remain: Source's verified normalized-record/multipart conversion
 resolution, native owner adapters beyond current slots, language-preserving
 editorial admission/read, and acknowledged support/public attribution for those
 bindings. G-2791 must retain the actual commands and answers, compatible persona
