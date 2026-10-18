@@ -11,6 +11,7 @@ import { ensureTermspacesSession, termspacesSession, missingTermspacesReason, te
 import { JobStore, jobDirectory, wakeJobs, type JobPassOptions } from './job.ts';
 import { pidAlive, readLedger, withLedger } from './ledger.ts';
 import { engineOf, programOf, isCodex, type Ledger } from './types.ts';
+import { coordinateClaudeCapacity } from './claude-capacity.ts';
 
 /** A parked command may run for hours. Recording its caller's end must not wait for a wake or settlement. */
 export async function recordWorkerEnds(ledger: Ledger, options: JobPassOptions = {}): Promise<void> {
@@ -38,6 +39,8 @@ export async function recordWorkerEnds(ledger: Ledger, options: JobPassOptions =
 /** A coordinator pass retries worker wakes missed by their executor; commands retain their detached
  * executor while queued or running, so taking over never restarts a command or acquires a second slot. */
 export async function coordinateWorkerJobs(ledger: Ledger = readLedger(), options: JobPassOptions = {}): Promise<void> {
+  // Capacity interruption/checkpoints precede job wakes; test adapters retain their isolated ledger.
+  if (!options.mutate) await coordinateClaudeCapacity();
   await recordWorkerEnds(ledger, options);
   for (const cwd of new Set(Object.values(ledger.tasks).map(task => task.worktree))) {
     const directory = jobDirectory(cwd);

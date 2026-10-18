@@ -1,4 +1,5 @@
 import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, type Ledger, isClaudeCode, isCodex, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
+import { assertClaudeCapacity, type CapacityTask } from './claude-capacity.ts';
 import { root, withLedger, briefGoal, briefClaimConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, preserveTaskOutputs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH, REGENERATION_COMMIT_SUBJECT } from './ledger.ts';
 import { pathToFileURL } from 'node:url';
 import { drainManagerCommits } from './manager-commit.ts';
@@ -114,6 +115,7 @@ export async function dispatch(briefPath: string, flags: Set<string>, overrideEn
     const needs = neededFileWaits(brief);
     if (needs.length) throw new Error(needs.join('\n'));
     const engine = dispatchEngine(brief.engine ?? DEFAULT_ENGINE);
+    assertClaudeCapacity(engine, brief, ledger);
     const { live, limit, usage, account } = admitWorkers(tasks, engine, flags.has('--force-usage'));
     const name = brief.worktree ? `${goal ?? 'legacy'}-${brief.worktree}` : brief.id.toLowerCase();
     const worktree = join(root, '.temp', 'worktrees', name);
@@ -203,7 +205,7 @@ export async function finishAttempt(id: string, attemptNumber: number) {
     const current = taskOf(ledger, id);
     const last = lastAttempt(current);
     if (last.n !== attemptNumber) return { kind: 'replaced' as const, task: current };
-    if (current.waitingResume) return { kind: 'replaced' as const, task: current };
+    if (current.waitingResume || (current as CapacityTask).claudeCapacity?.pause) return { kind: 'replaced' as const, task: current };
     last.endedAt ??= new Date().toISOString();
     if (result.session && !last.session) last.session = result.session;
     if (parkedOnJob(current, last.n, result.text)) {
@@ -519,6 +521,7 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
       if (task.state === 'merged' || (changes.ahead === 0 && changes.dirty.length === 0)) round = 'step';
     }
     if (!result.error && handoffResult(result.text) === 'blocked' && blockedAttemptUnchanged(task, previous)) round = 'step';
+    if ((task as CapacityTask).claudeCapacity?.pause) round = 'step';
     const refusal = round === 'fix' ? resumeDecisionError(task.attempts, source.text) : undefined;
     if (refusal) throw new Error(`${task.id}: ${refusal}`);
     const previousEngine = engineOf(previous);
@@ -529,10 +532,13 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
     if (!effortsOf(nextEngine).includes(nextEffort)) {
       throw new Error(`${nextEngine} effort must be one of ${effortsOf(nextEngine).join(', ')}`);
     }
-    try { admitWorkers(Object.values(ledger.tasks), nextEngine, forceUsage); }
+    try {
+      assertClaudeCapacity(nextEngine, task, ledger);
+      admitWorkers(Object.values(ledger.tasks), nextEngine, forceUsage);
+    }
     catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      if (!gateRefusal(reason) || reason.startsWith('Claude usage is ')) throw error;
+      if (!gateRefusal(reason)) throw error;
       task.waitingResume = { token: waitingToken ?? randomUUID(),
         queuedAt: waitingToken ? task.waitingResume!.queuedAt : new Date().toISOString(),
         reason, message, effort, engine, fresh, forceUsage, resumeClass };
@@ -630,6 +636,7 @@ export async function stopTask(id: string): Promise<void> {
     assertOwner(task);
     assertPrepared(task);
     delete task.waitingResume;
+    delete (task as CapacityTask).claudeCapacity;
     const attempt = lastAttempt(task);
     const program = programOf(engineOf(attempt));
     const signalGroup = (signal: NodeJS.Signals) => {

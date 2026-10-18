@@ -429,8 +429,8 @@ test('other resume refusals fail without being kept', async () => {
     five_hour: { used_percentage: 100, resets_at: Date.now() / 1000 + 3600 },
   } }));
   const usage = f.run('resume', task.id, '-m', 'Continue.', '--engine', 'claude', '--effort', 'high');
-  expect(usage.status).toBe(1); expect(usage.stderr).toContain('Claude usage is critical');
-  expect(f.ledger().tasks[task.id]!.waitingResume).toBeUndefined();
+  expect(usage.status).toBe(0); expect(usage.stdout).toContain('Claude usage is restricted');
+  expect(f.ledger().tasks[task.id]!.waitingResume!.reason).toContain('policy disabled or independent review missing');
 });
 
 test('concurrent passes start a waiting resume once', async () => {

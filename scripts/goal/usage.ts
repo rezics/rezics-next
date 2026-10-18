@@ -1,9 +1,12 @@
 import { type UsageSample, type UsageSnapshot, type UsageReport, type AccountUsage, type CodexResetStatus, type CodexResetLoad } from './types.ts';
 import { configuredAccounts } from './config.ts';
 import { readFileSync, mkdirSync, writeFileSync, readdirSync, statSync, openSync, readSync, closeSync } from 'node:fs';
-import { usagePath, usageHistoryPath, stateDir, codexResetCachePath, CODEX_RESET_CACHE_MS, CODEX_RESET_URL } from './ledger.ts';
+import { codexResetCachePath, CODEX_RESET_CACHE_MS, CODEX_RESET_URL } from './ledger.ts';
 import { join, dirname } from 'node:path';
+import { capacityStatus } from './claude-capacity.ts';
 
+// Historical projection helpers remain public for complete snapshots. New launch admission uses
+// fresh native OAuth evidence and the local reserve policy in claude-capacity.ts.
 const FIVE_HOURS = 5 * 3600;
 const SEVEN_DAYS = 7 * 24 * 3600;
 // The 5h window keeps the manager alive: new Claude work stops while the burn rate would end the
@@ -135,28 +138,16 @@ export function parseCodexUsage(text: string, nowMs: number): Partial<AccountUsa
   return {};
 }
 
-function readUsage(): UsageSnapshot | undefined {
-  try { return JSON.parse(readFileSync(usagePath, 'utf8')) as UsageSnapshot; } catch { return undefined; }
-}
-
-// The status line keeps only the latest snapshot, so goalctl records its own six-hour history
-// to measure the recent 5h and 7d burn rates.
+// Admission and reporting share the authoritative normalized observation. Legacy status-line
+// snapshots (including seven-day-only output) never establish fresh session capacity.
 export function currentUsage(): UsageReport {
-  const snapshot = readUsage();
-  let history: UsageSample[] = [];
-  try { history = JSON.parse(readFileSync(usageHistoryPath, 'utf8')) as UsageSample[]; } catch { /* first sample */ }
-  const five = snapshot?.rate_limits?.five_hour;
-  const week = snapshot?.rate_limits?.seven_day;
-  const resets = resetSeconds(five?.resets_at);
-  if (snapshot?.at && typeof five?.used_percentage === 'number' && resets !== undefined
-    && !history.some(s => s.at === snapshot.at)) {
-    history = [...history.filter(s => s.at >= snapshot.at! - 6 * 3600),
-      { at: snapshot.at, used: five.used_percentage, resets, week: week?.used_percentage,
-        weekResets: resetSeconds(week?.resets_at) }];
-    try { mkdirSync(stateDir, { recursive: true }); writeFileSync(usageHistoryPath, JSON.stringify(history)); }
-    catch { /* history is an optimisation */ }
-  }
-  return usageLevel(snapshot, Date.now(), history);
+  const { cache, decision } = capacityStatus();
+  const current = cache?.current;
+  return { level: decision.reason === 'capacity-unknown' || current?.error ? 'unknown'
+    : decision.reason === 'allowance-exhausted' ? 'critical' : decision.admit ? 'normal' : 'restricted',
+    reason: decision.reason, used: current?.five_hour?.used, weekUsed: current?.seven_day?.used,
+    ageSeconds: current ? Math.round((Date.now() - current.observedAt) / 1000) : undefined,
+    resetInMinutes: current?.five_hour ? Math.round((current.five_hour.resetsAt - Date.now()) / 60_000) : undefined };
 }
 
 // Rollouts live under sessions/YYYY/MM/DD/; a resumed session keeps appending to its first day's file,
@@ -278,7 +269,7 @@ export async function usageReport(options: {
   const interval = reset.status?.data?.stats?.avg_interval_days;
   const accounts = codexAccounts();
   return {
-    claude: { ...currentUsage(), file: usagePath },
+    claude: { ...currentUsage(), file: capacityStatus().files.observation },
     codex: accounts.map(account => {
       const paceStart = reset.available ? codexPaceStartSeconds(account, announcedAt) : undefined;
       const publicAccount = Object.fromEntries(Object.entries(account)

@@ -13,6 +13,7 @@ import { engineOf, type Ledger, type Task } from './types.ts';
 import { processAlive, processIdentity, type ProcessIdentity } from '../qa/process/identity.ts';
 import { gateRefusal } from './queue.ts';
 import { GoalMailStore } from './mail.ts';
+import type { CapacityTask } from './claude-capacity.ts';
 
 export const JOB_INLINE_MS = 20_000;
 // A parked worker costs nothing while it waits; a dead command is caught by the owner check, so this bound only
@@ -50,6 +51,7 @@ export interface Job {
   code?: number; ended?: number; resumedAttempt?: number; reason?: string;
   sequence?: JobStep[]; current?: number; timeoutMs?: number;
   resultClass?: JobResultClass;
+  capacityPausedAt?: number; capacityDelayMs?: number;
 }
 
 /** Jobs stay with their worktree; the resident coordinator discovers them from its task ledger. */
@@ -322,12 +324,29 @@ export async function wakeJobs(store: JobStore, options: JobPassOptions = {}, id
       if (job.phase === 'waking' && next?.continuedFor === 'job') {
         woke = next.n; return;
       }
+      const pause = (task as CapacityTask | undefined)?.claudeCapacity?.pause;
+      const now = options.now ?? Date.now();
+      const waitingSince = job.sequence ? job.ended : job.created;
+      // Quota interruption retains the worker's continuation; it is neither a handoff nor a lost job.
+      // A native capacity resume owns the next turn. The ordinary adoption path below then reconciles
+      // this job with that turn, without a second concurrent wake or charging the reset wait as a hang.
+      if (pause && task?.state === 'stopped') {
+        if (job.capacityPausedAt === undefined) store.update(job.id, current => { current.capacityPausedAt = pause.at; });
+        return;
+      }
+      if (job.capacityPausedAt !== undefined) {
+        const updated = store.update(job.id, current => {
+          current.capacityDelayMs = (current.capacityDelayMs ?? 0)
+            + Math.max(0, now - Math.max(current.capacityPausedAt!, waitingSince ?? now));
+          delete current.capacityPausedAt;
+        });
+        job.capacityDelayMs = updated.capacityDelayMs;
+      }
       const report = (reason: string) => {
         (options.report ?? reportJob)(job, reason, ledger);
         store.update(job.id, current => { current.phase = 'reported'; current.reason = reason; });
       };
-      const waitingSince = job.sequence ? job.ended : job.created;
-      if (waitingSince !== undefined && (options.now ?? Date.now()) - waitingSince > JOB_WAIT_MS) { report('wait exceeded 4 hours'); return; }
+      if (waitingSince !== undefined && now - waitingSince - (job.capacityDelayMs ?? 0) > JOB_WAIT_MS) { report('wait exceeded 4 hours'); return; }
       const later = task && lastAttempt(task).n > job.attempt && !['verified', 'cancelled', 'stopped'].includes(task.state)
         ? lastAttempt(task) : undefined;
       if (later) {
