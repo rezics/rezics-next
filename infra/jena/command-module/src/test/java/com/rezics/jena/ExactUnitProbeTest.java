@@ -148,7 +148,7 @@ public class ExactUnitProbeTest {
                 try {
                     fixture.data.delete(ConsistentReadCaptureTest.uri(graph), ConsistentReadCaptureTest.uri(unit),
                         org.apache.jena.vocabulary.RDF.type.asNode(), ConsistentReadCaptureTest.p("MatchUnit"));
-                    synchronized (SearchDeltaJournal.publicationMonitor()) { fixture.data.commit(); }
+                    try (var publication = SearchDeltaJournal.publicationFence()) { fixture.data.commit(); }
                 } finally { fixture.data.end(); }
                 assertEquals("damaged", probe(fixture, graph, unit, "alpha beta"));
                 assertEquals("damaged", probe(fixture, graph, unit, "gamma delta"));
@@ -158,7 +158,7 @@ public class ExactUnitProbeTest {
 
     @Test public void missingPostingCannotBecomeACompleteAbsentAnswer() throws Exception {
         try (var fixture = new ConsistentReadCaptureTest.Fixture()) {
-            synchronized (SearchDeltaJournal.publicationMonitor()) {
+            try (var publication = SearchDeltaJournal.publicationFence()) {
                 fixture.lucene.getIndexWriter().deleteDocuments(new Term("uri", ConsistentReadCaptureTest.PRIVATE_UNIT));
                 fixture.lucene.commit();
             }
@@ -189,7 +189,7 @@ public class ExactUnitProbeTest {
                                        boolean duplicate) throws Exception {
         var entity = new Entity(ConsistentReadCaptureTest.PRIVATE_UNIT, CommandPolicy.PRIVATE_SEARCH, language, null);
         entity.put("privateBody", body);
-        synchronized (SearchDeltaJournal.publicationMonitor()) {
+        try (var publication = SearchDeltaJournal.publicationFence()) {
             if (!duplicate) fixture.lucene.getIndexWriter().deleteDocuments(new Term("uri", ConsistentReadCaptureTest.PRIVATE_UNIT));
             fixture.lucene.getIndexWriter().addDocument(org.apache.jena.query.text.RezicsLuceneDocument.build(fixture.lucene, entity));
             fixture.lucene.commit();
@@ -239,7 +239,7 @@ public class ExactUnitProbeTest {
                 fixture.data.add(ConsistentReadCaptureTest.uri(CommandPolicy.CONTROL),
                     ConsistentReadCaptureTest.uri("urn:rezics:dataset:product"), ConsistentReadCaptureTest.p("restoreHold"),
                     org.apache.jena.graph.NodeFactory.createLiteralByValue(true));
-                synchronized (SearchDeltaJournal.publicationMonitor()) { fixture.data.commit(); }
+                try (var publication = SearchDeltaJournal.publicationFence()) { fixture.data.commit(); }
             } finally { fixture.data.end(); }
             assertEquals("unavailable", probe(fixture, CommandPolicy.PRIVATE_SEARCH,
                 ConsistentReadCaptureTest.PRIVATE_UNIT, "gamma delta"));
