@@ -211,4 +211,27 @@ describe('AMGT01:', () => {
     expect((await recipeDetail.json() as { item: Item }).item.chapterCount).toBeNull();
     console.info('Author-management count corpus', authorManagementManifest);
   });
+
+  test.failing('AMGT01 Studio rejects a continuation whose valid inventory source basis moved', async () => {
+    const { metadata, sessions } = fixture, owner = sessions.owner;
+    const first = await read('owner', owner.actingSubject!);
+    expect(first.status, first.raw).toBe(200);
+    const cursor = (JSON.parse(first.raw) as Page).nextCursor;
+    expect(cursor).toBeString();
+    const work = metadata.inventory.matching[0]!;
+    const edited = await owner.main('POST', '/v1/content-edits', { profile: 'metadata-only-v1',
+      work: work.work, expectedHead: work.workRevision, title: `${work.title} corrected`,
+      actingSubject: owner.actingSubject });
+    const raw = await edited.text();
+    expect(edited.status, raw).toBe(200);
+    expect(JSON.parse(raw)).toMatchObject({ work: work.work, predecessor: work.workRevision });
+    const continued = await read('owner', owner.actingSubject!, { cursor: cursor! });
+    expect(continued.status, continued.raw).toBe(409);
+    expect(JSON.parse(continued.raw)).toMatchObject({ code: 'read_basis_changed' });
+    const refreshed = await read('owner', owner.actingSubject!, { q: `${work.title} corrected` });
+    expect(refreshed.status, refreshed.raw).toBe(200);
+    expect((JSON.parse(refreshed.raw) as Page).items).toContainEqual(expect.objectContaining({
+      id: work.work, title: expect.objectContaining({ value: `${work.title} corrected` }),
+    }));
+  });
 });

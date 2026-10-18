@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fromPlainText } from '@rezics/document';
+import { readEnv } from '../../../scripts/dev/config.ts';
 import { FixtureWorkBudget } from '../../../scripts/fixture/budget.ts';
 import { dockerEnvironment, root, stream } from '../../../scripts/fixture/stack.ts';
 import { loadCompatibility } from '../../../scripts/load/compatibility.ts';
@@ -124,6 +125,10 @@ export async function buildAuthorManagementCorpus(): Promise<void> {
   if (!Bun.env.REZICS_QA_RUN_ID || Bun.env.AUTHOR_MANAGEMENT_PREPARE !== '1')
     throw new Error('Prepare only through the named isolated QA selection with AUTHOR_MANAGEMENT_PREPARE=1');
   if (existsSync(authorManagementManifest)) throw new Error('Retained corpus exists; reuse it without rebuilding');
+  const compose = readEnv(join(root, '.temp/stack', `rezics-qa-${Bun.env.REZICS_QA_RUN_ID}`, 'compose.env'));
+  if (compose.REZICS_STACK_STORAGE !== 'persistent' || compose.REZICS_STACK_RAW_UPDATE !== '0')
+    throw new Error('Enroll both author-management prove files in commandOnlyIntegrationFiles before preparing '
+      + 'a persistent corpus with the closed product assembler');
   const baselineProduct = Bun.env.AUTHOR_MANAGEMENT_BASELINE;
   if (!baselineProduct || !/^[0-9a-f]{40}$/.test(baselineProduct)) throw new Error('Pin AUTHOR_MANAGEMENT_BASELINE to a pristine product commit');
   const productChanges = execFileSync('git', ['diff', '--name-only', baselineProduct, '--',

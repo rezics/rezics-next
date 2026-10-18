@@ -43,7 +43,7 @@
         "POST /v1/content-search-eligibility profile=content-search-eligibility-v1 with the new publicationDecision and expectedEligibilityHead",
         "POST /v1/realm-reply-placements profile=realm-reply-placement-v1 to advance the author's own direct placement to the exact corrected reply revision"
       ],
-      "receipt": "Content draft: same resourceId/variantId, new revisionId, predecessor=expectedHead, exact byteDigest, sourcePosition.owner=content and replayed=false. Reply draft: same reply/variantId, new revisionId/revisionDigest, predecessor=expectedHead, replayed=false. Metadata: same work, new revision, predecessor=expectedHead. Successful identical-key retry is 200 with the identical receipt and replayed=true; fresh-key stale head or changed intent under the same key is 409. No replacement Work, Post or reply identity is created.",
+      "receipt": "Content draft: same resourceId/variantId, new revisionId, predecessor=expectedHead, exact byteDigest, sourcePosition.owner=content and replayed=false. Reply draft: same reply/variantId, new revisionId/revisionDigest, predecessor=expectedHead, replayed=false. Exact-reader reference.byteDigest is SHA-256 of serializedJson UTF-8 bytes and equals the acknowledged byteDigest (revisionDigest for a reply); exact reference retains author and predecessor. Metadata: same work, new revision, predecessor=expectedHead. Successful identical-key retry is 200 with the identical receipt and replayed=true; fresh-key stale head or changed intent under the same key is 409. No replacement Work, Post or reply identity is created.",
       "publicTransition": "Saving a draft does not publish it or replace current public bytes. Republish and qualify the exact new Content revision, or place the exact corrected reply revision. Historical exact author reads retain bytes and attribution. A superseded Post revision with no independent support is unavailable to an anonymous reader; the original chapter revision remains public through a separately published Recipe instruction adoption.",
       "exactHistoryRead": "Reuse GET /v1/content-revisions/{revisionUUID}?actingSubject={nativeAgentIRI} and GET /v1/revisions/{workRevisionUUID}?actingSubject={nativeAgentIRI}. Explicitly extend the Content exact reader's existing resource resolution to retained member-reply revisions. Public reply exact bytes require an active placement for that exact revision; author private history uses existing Account/Access authority and retained author provenance even after placement withdrawal. Unknown or unauthorized private exact revisions are 404. This extension adds no independent history store, publication authority or erase bypass.",
       "identityAndRights": "Original contribution provenance retains the creating Person. Reply rootTarget/rootRevision, parent and origin Realm coordinates are immutable. A correction does not borrow membership, moderator or operator powers. All normal rights, disclosure, restrictions and erasure checks continue."
@@ -108,7 +108,9 @@
     "preparation": "Pin pristine product baseline, start one named isolated scale producer, enforce 600 seconds including startup/migrations/readiness/smoke/backup excluding admission wait. Retain one stopped consistent all-owner backup and its compatibility/producer digest. Each proof restores an isolated writable copy, applies existing restore migrations, logs in retained actors and smokes exact anonymous Content reads within 600 seconds; lifecycle bodies restore separately so a red predecessor cannot corrupt a later premise.",
     "prerequisites": [
       "Pinned baseline with this test-only specification cherry-picked; git diff baseline -- apps packages services model infra must be empty.",
+      "Enroll both prove-file paths in scripts/qa/isolated-integration-files.ts commandOnlyIntegrationFiles so the persistent producer uses the closed product assembler. Scale alone selects raw-update mode for unenrolled files; that mode is incompatible with this command-only stopped-backup lifecycle. The producer now rejects that premise before creating data.",
       "Existing scale stack and backup engine images available, isolated admission granted, normal Main and Account readiness.",
+      "Existing stopCorpusSourcePostgres must certify the stopped source with a successful bounded read-only pg_controldata container, followed by successful stopped all-owner backup publication. A timeout, incomplete backup or failed restart is a fixture blocker, never outcome evidence.",
       "Successful original-contribution publication and qualification receipts plus anonymous non-null exact bytes for chapter and Post.",
       "Successful separately published Recipe instruction adoption and independently reviewed second-Realm reply placement.",
       "No user content or unknown public rights claim is used. Fixture-only scoped authority uses grantPersonaFixtureAuthority, not production policy changes."
@@ -131,7 +133,8 @@
       "additionalBodies": [
         "AMGT01 Studio recent created and title sorts are stable across every page",
         "AMGT01 Studio continuations bind query sort filters page size and controlled acting Agent",
-        "AMGT01 Studio counts nested and paginated chapter occurrences without counting groups"
+        "AMGT01 Studio counts nested and paginated chapter occurrences without counting groups",
+        "AMGT01 Studio rejects a continuation whose valid inventory source basis moved"
       ]
     },
     {
@@ -162,14 +165,66 @@
     "jobOwner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command> from the worker worktree",
     "wrapperSemantics": "Every declaration and additional body uses pending/test.failing. A reached assertion failure is expected red product evidence, not proof; an unexpectedly passing pending body is reported honestly. Setup, readiness, corpus, admission, missing registry or storage failures never count as product assertion failures. No answer captures are generated.",
     "baseline": {
-      "status": "not-run",
+      "status": "blocked-before-outcome-assertions",
       "product": "79be80d4d0e1cad1639b6a65e8f0795d6a95929a",
-      "specificationCommit": null,
+      "specificationCommit": "fa61f143828e78e6e66497d6a059931349495181",
+      "waveSpecificationCommit": "044189e41b1f6fc26976d24885ea30c2fb6b2e6b",
+      "pinVerification": "The named producer ran from a clean baseline checkout with only the six specification/declaration/prove/support files added or changed. All other tracked files, including product and QA harness, matched the pinned baseline. Later specification hardening and this evidence update were not executed as baseline assertions.",
+      "preparationBudgetMs": 600000,
       "preparationMs": null,
+      "retainedCorpus": null,
       "assertionReached": false,
       "failingBodies": [],
-      "blocker": null
-    }
+      "unexecutedSelection": "AMGT01 over both prove files: no persona or additional outcome body reached an assertion; the ordered job stopped at AMGT00 preparation failure.",
+      "attempts": [
+        {
+          "job": "job:438a4b6b-ffeb-4346-8231-048a2689a5a0",
+          "producerRun": "20261018t194924-fd010c",
+          "proofRun": "20261018t195142-ccbfb7",
+          "stage": "selection / pool reset",
+          "result": "The producer's original AMGT00 title lacked the colon required by the acceptance-ID matcher: zero bodies ran despite exit 0. No corpus was created. The subsequent AMGT01 shard stopped during a Fuseki docker restart timeout before any test. The explicit AMGT00: title and AMGT01: describe prefixes now fix selection; persistent scale avoids this disposable pool reset.",
+          "assertionReached": false,
+          "backupPublished": false
+        },
+        {
+          "job": "job:1cf6c970-e48a-42b8-86e0-d840499a1dde",
+          "qaRun": "20261018t195727-b5748c",
+          "failedPreparationBody": "AMGT00: retains one command-created author-management corpus",
+          "producerBodyMs": 101075,
+          "stage": "composition fixture topology",
+          "result": "POST /v1/compositions/{id}/changes returned 409 composition_conflict when inserting a Part under a Volume. Existing Book maxDepth=2 forbids group-under-group. Corrected the fixture to root Volume and Part, with chapters nested under the Part; all 23 occurrence and pagination assertions remain.",
+          "assertionReached": false,
+          "backupPublished": false
+        },
+        {
+          "job": "job:07c130ea-16df-41ff-8cbb-cb29c0d9770b",
+          "qaRun": "20261018t200648-4ee118",
+          "source": "fa61f143828e78e6e66497d6a059931349495181",
+          "failedPreparationBody": "AMGT00: retains one command-created author-management corpus",
+          "producerBodyMs": 197811,
+          "runActiveMs": 271424,
+          "runAdmissionWaitMs": 13172,
+          "stage": "stopped all-owner backup certification",
+          "result": "Public command setup completed through original publications, Recipe adoption, two-Realm reply placements and anonymous exact chapter/Post smoke reads. stopCorpusSourcePostgres then failed: its read-only docker run --entrypoint pg_controldata exceeded 30000ms (exited null). The backup was not published. Recovery and QA cleanup also failed with Saved stack raw-update mode differs; use a new QA run-id. The full run active time is recorded, not a claimed successful preparation duration.",
+          "log": ".artifacts/qa/20261018t200648-4ee118/logs/integration-1.log",
+          "assertionReached": false,
+          "backupPublished": false
+        }
+      ],
+      "blocker": "Command-only QA enrollment for these two prove files is missing, and the baseline PostgreSQL shutdown certifier's read-only pg_controldata container timed out before a reusable stopped all-owner corpus could be retained. No successful 600-second preparation or product assertion failure is claimed. Enroll the existing command-only set and resolve bounded shutdown certification before rerunning AMGT00 then AMGT01 on the pristine product pin."
+    },
+    "staticChecks": [
+      {
+        "job": "job:786934e9-d384-4f0a-9e39-cc8416c1eb72",
+        "command": "task goal -- check --only types,lint,guards",
+        "result": "Types/lint/AST passed. Guards failed before declarations could load: unknown outcome row realm/published-author-lifecycle pending G-2768 registry enrollment; retained-preflight repair guard also hit the worker wide-QA restriction. No other author's assertions or registry files were changed."
+      },
+      {
+        "job": "job:7258ab90-4bca-493a-a69a-da9ed0e3a071",
+        "commands": ["task goal -- check --only types,lint", "task docs:check"],
+        "result": "Passed on wave specification 044189e41b1f6fc26976d24885ea30c2fb6b2e6b before the final assertion/evidence hardening. Final checks are reported in the worker handoff."
+      }
+    ]
   },
   "implementationHandoff": [
     "Review the explicit q/sort/chapterCount and two withdrawal union contracts before a separate API author starts. These are proposed interface details, not claims that baseline implements them.",

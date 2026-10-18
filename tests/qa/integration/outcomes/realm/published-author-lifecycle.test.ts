@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import declaration from '../../../../../scripts/qa/cases/outcomes/realm/published-author-lifecycle.ts';
 import { outcomeTest } from '../../../support/outcome-test.ts';
 import { type PersonaName, type PersonaSession } from '../../../support/personas.ts';
@@ -117,6 +117,7 @@ outcomeTest(declaration, 'owner', async () => {
       revisionId: saved.revisionId, predecessor: content.revisionId, byteDigest: saved.byteDigest,
       provenance: { author: owner.actingSubject } });
     expect(next.serializedJson).toContain(body.body);
+    expect(createHash('sha256').update(next.serializedJson).digest('hex')).toBe(saved.byteDigest);
     expect(await answer<Exact>(owner.main('GET', exactPath(content.revisionId, owner)))).toEqual(old);
     expect(await answer<Exact>(sessions.visitor.main('GET', exactPath(content.revisionId)))).toEqual(old);
     await answer(sessions.visitor.main('GET', exactPath(saved.revisionId)), 404);
@@ -131,6 +132,7 @@ outcomeTest(declaration, 'owner', async () => {
     expect(await answer(owner.main('POST', '/v1/content-edits', edit, metadataKey)))
       .toEqual({ ...receipt, replayed: true });
     await answer(owner.main('POST', '/v1/content-edits', edit), 409);
+    await answer(owner.main('POST', '/v1/content-edits', { ...edit, title: 'Changed metadata retry intent' }, metadataKey), 409);
     expect(await answer(owner.main('GET', `/v1/revisions/${short(workHead)}?${actorQuery(owner)}`))).toEqual(oldMetadata);
     const refreshed = await answer<{ item: { id: string; workRevision: string; title: { value: string } } }>(
       owner.main('GET', `/v1/me/agents/${short(owner.actingSubject!)}/works/${short(content.resourceId)}`));
@@ -149,10 +151,18 @@ outcomeTest(declaration, 'owner', async () => {
   expect(revision).toMatchObject({ reply: reply.reply, variantId: reply.variantId,
     predecessor: reply.revisionId, replayed: false });
   expect(revision.revisionId).not.toBe(reply.revisionId);
+  expect(revision.revisionDigest).toMatch(/^[0-9a-f]{64}$/);
   expect(revision.revisionDigest).not.toBe(reply.revisionDigest);
   expect(await answer(owner.main('POST', '/v1/member-reply-drafts', request, key))).toEqual({ ...revision, replayed: true });
   await answer(owner.main('POST', '/v1/member-reply-drafts', request), 409);
   await answer(owner.main('POST', '/v1/member-reply-drafts', { ...request, body: 'Changed intent.' }, key), 409);
+  const corrected = await answer<Exact>(owner.main('GET', exactPath(revision.revisionId, owner)));
+  expect(corrected.reference).toMatchObject({ resourceId: reply.reply, variantId: reply.variantId,
+    revisionId: revision.revisionId, predecessor: reply.revisionId, byteDigest: revision.revisionDigest,
+    provenance: { author: reply.author } });
+  expect(corrected.serializedJson).toContain(request.body);
+  expect(createHash('sha256').update(corrected.serializedJson).digest('hex')).toBe(revision.revisionDigest);
+  await answer(sessions.visitor.main('GET', exactPath(revision.revisionId)), 404);
   const placement = await answer<Placement>(owner.main('POST', '/v1/realm-reply-placements', {
     profile: 'realm-reply-placement-v1', realm: sessions.realm, reply: reply.reply,
     revisionId: revision.revisionId, revisionDigest: revision.revisionDigest,
@@ -162,7 +172,8 @@ outcomeTest(declaration, 'owner', async () => {
   expect(placement.placement).not.toBe(reply.placement);
   const refreshed = await answer<Placement>(owner.main('GET', placedPath(sessions.realm, reply.reply, owner)));
   expect(refreshed).toMatchObject({ placement: placement.placement, reply: reply.reply,
-    revisionId: revision.revisionId, author: reply.author, rootTarget: reply.rootTarget });
+    revisionId: revision.revisionId, author: reply.author, rootTarget: reply.rootTarget, rootRevision: reply.rootRevision });
+  expect(await answer(sessions.visitor.main('GET', exactPath(revision.revisionId)))).toEqual(corrected);
   expect(await answer<Exact>(owner.main('GET', exactPath(reply.revisionId, owner)))).toEqual(oldReply);
   const independent = await answer<Placement>(fixture.independent.moderator.main('GET',
     placedPath(fixture.independent.realm, reply.reply, fixture.independent.moderator)));
@@ -216,9 +227,10 @@ async function withdrawQualification(content: Content): Promise<EligibilityWithd
     .toEqual({ ...receipt, replayed: true });
   const stale = await answer<{ code: string }>(owner.main('POST', '/v1/content-search-eligibility', request), 409);
   expect(stale.code).toBe('stale_eligibility_head');
-  await answer(owner.main('POST', '/v1/content-search-eligibility', {
+  const changed = await answer<{ code: string }>(owner.main('POST', '/v1/content-search-eligibility', {
     ...request, publicationDecision: `https://rezics.com/id/${randomUUID()}`,
   }, key), 409);
+  expect(changed.code).toBe('idempotency_conflict');
   return receipt;
 }
 
@@ -295,7 +307,10 @@ test.failing('AMGT01 owner placement withdrawal preserves another publisher plac
   expect(await answer(owner.main('POST', '/v1/realm-reply-placements', body, key))).toEqual({ ...receipt, replayed: true });
   const stale = await answer<{ code: string }>(owner.main('POST', '/v1/realm-reply-placements', body), 409);
   expect(stale.code).toBe('realm_reply_stale');
-  await answer(owner.main('POST', '/v1/realm-reply-placements', { ...body, realm: independent.realm }, key), 409);
+  const changed = await answer<{ code: string }>(owner.main('POST', '/v1/realm-reply-placements', {
+    ...body, realm: independent.realm,
+  }, key), 409);
+  expect(changed.code).toBe('idempotency_conflict');
   await answer(owner.main('GET', placedPath(sessions.realm, reply.reply, owner)), 404);
   expect(await answer(independent.moderator.main('GET', placedPath(independent.realm, reply.reply, independent.moderator)))).toEqual(other);
   expect(await answer(sessions.member.main('GET', `/v1/member-replies/${short(metadata.independentReply.reply)}`))).toEqual(otherAuthor);
