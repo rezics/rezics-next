@@ -1,8 +1,31 @@
 {
   "schemaVersion": 1,
   "goal": "audit-remediation-20261019",
-  "purpose": "Desired public outcomes and measured baseline evidence. Root-cause suggestions are separate and are not implementation requirements.",
+  "purpose": "Desired public outcomes and supplementary later-revision API observations. Required original-baseline failures and fixed-product passes remain pending; root-cause suggestions are separate from the product contract.",
   "baseline": {
+    "revision": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+    "role": "required original product baseline",
+    "run": null,
+    "recordedJob": null,
+    "assertionReached": false,
+    "originalBaselineFailures": "pending explicitly admitted isolated proof",
+    "fixedProductPasses": "pending explicitly admitted isolated proof",
+    "independentReview": "pending",
+    "backupCompatibility": "unknown; later physical backups are not certified for this revision"
+  },
+  "evidenceQualification": {
+    "managerDecision": {
+      "event": "task:G-2750:14",
+      "snapshot": "59e6959cceed85fb3a5e5bd1642dc4862a699c97",
+      "path": "docs/goals/audit-remediation-20261019/tasks/G-2750.md",
+      "section": "Decision: event task:G-2750:14"
+    },
+    "scope": "All existing attempts, persona observations, confirmed flags, baseline exceptions, root-cause statuses and passing-control reports describe supplementary historical API observations at 7df2e285d3. They do not establish original-baseline failures, fixed-product passes or canonical finding proof.",
+    "immutableEvidence": "Actual run IDs, harness/test source revisions, commands, setup failures, assertion reach, response bodies, measured budgets and results are retained unchanged. Historical source revisions remain exact even after worker rebases.",
+    "continuation": "Stack-free matrix metadata and prerequisite handoff only. No stack, preparation, restore, integration/outcome run, production edit, new mechanism or landing is authorized or performed.",
+    "canonicalProof": "pending explicit manager admission of isolated original/fixed proof and independent review"
+  },
+  "supplementaryHistoricalEvidence": {
     "revision": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
     "workingTree": "Outcome tests and minimal QA support only; production code unchanged.",
     "run": "20261018t220049-e353cb",
@@ -297,7 +320,25 @@
       "ratings": "20261018t204708-fb68cb",
       "notificationCancellationAndControls": "20261018t212935-ae08d6",
       "zonesAndAdmission": "20261018t220049-e353cb"
-    }
+    },
+    "classification": "supplementary-later-revision-evidence-only",
+    "canonicalFindingProof": "pending original-baseline failures, fixed passes and independent review"
+  },
+  "originalBaselineRatingShape": {
+    "revision": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+    "source": "services/main/src/modules/rating/global-api.ts",
+    "sourceLines": [
+      49,
+      52,
+      55
+    ],
+    "expectation": {
+      "population": "numeric exact account-principal population count",
+      "populationPolicy": "global-account-principal"
+    },
+    "disposition": "The original baseline already defines this aggregate component shape. The earlier author correction is an admitted test-premise correction, not a product regression or a weaker population outcome.",
+    "retainedAssertions": "HTTP success at 100/101/102, complete exact counts and population, mean, voter privacy, response shape and unchanged cost allocation all remain asserted in the existing rating test.",
+    "runtimeProof": "pending; source inspection does not establish an aggregate outcome"
   },
   "fixture": {
     "composition": "Real Account HTTP and composeMain with lifecycle, relay, Content, Access, Fuseki and PostgreSQL; no owner mocks.",
@@ -2164,6 +2205,371 @@
     "authority": "All eight support/capability paths were owner-checked as unclaimed before editing, including joining-auth.ts for optional fixture OAuth scopes. No schema, migration, route or production change.",
     "reason": "Capability files keep each existing 480-second project isolated. Shared support retains real command-built backups, restores sessions, measures actual I/O, and adds optional OAuth scopes needed for official population preparation. All defaults remain unchanged for existing tests. An optional serial session-restore mode bounds this corpus setup traffic; existing callers retain their defaults."
   },
+  "preparationHandoff": {
+    "owner": "G-2791",
+    "scope": "Consumer/corpus/receipt/backup/compatibility disposition only; the single existing shared preparation owner receives these inputs without execution, certification or another producer.",
+    "ready": false,
+    "executedThisContinuation": false,
+    "inspectionSources": {
+      "consumerRevision": "f7abe00e6a27a9a47be5dad0652ed6920a502744",
+      "sharedProducerRevision": "e7db8bc4d77570e75df3b164172b611966ee7fc5",
+      "sharedProducerDocs": "docs/testing/audit-corpus.md",
+      "sharedProducerContract": "tests/qa/fixtures/audit-corpus-contract.ts",
+      "observation": "The inspected shared auditConsumers contract has no bounded-public-reads-v2 entry. These four consumers already have retained capability corpora, so absence from that projection does not demonstrate a missing shared fixture or authorize a second format/mechanism. Reconcile actual receipt/readiness prerequisites through G-2791 before any later admitted adoption."
+    },
+    "backupPolicy": "Retained capability backups remain supplementary historical evidence. No compatibility result, ready manifest, new source corpus or successful original-baseline binding is created here. G-2791 retains its existing one consistent stopped-owner backup and isolated compatible restore policy for any subsequently admitted shared preparation.",
+    "dispositions": [
+      {
+        "capability": "queries",
+        "consumer": "tests/qa/integration/audit-bounded-reads.test.ts",
+        "namedCases": [
+          {
+            "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+            "line": 12,
+            "titleTemplate": "test(`D5-002 ${name}: legal default discovery returns a bounded page without private resources`, async () => {"
+          },
+          {
+            "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+            "line": 31,
+            "titleTemplate": "test(`AUD-001 ${name}: server cursors round-trip through a complete mixed-resource traversal`, async () => {"
+          },
+          {
+            "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+            "line": 64,
+            "titleTemplate": "test(`D5-003 ${name}: healthy chapter hits and exact no-match reads avoid foreground population qualification`, async () => {"
+          },
+          {
+            "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+            "titleTemplate": "test('D5-003 ' + name + ': absent and unpublished chapter phrases remain exact private controls', async () => {",
+            "line": 91
+          },
+          {
+            "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+            "line": 103,
+            "titleTemplate": "test('D5-004 operator: quiescent refresh exposes deferred reasons without disclosing private scope identities', async () => {"
+          }
+        ],
+        "readinessDisposition": "historical artifacts located; original-baseline prerequisite and compatibility pending; no ready manifest certified or published",
+        "consumerContract": {
+          "parser": "tests/qa/support/bounded-read-corpus.ts:useBoundedReadCorpus",
+          "format": "bounded-public-reads-v2",
+          "capability": "queries",
+          "corpus": ".temp/audit-bounded-reads/queries/corpus.json",
+          "backup": ".temp/audit-bounded-reads/queries/owners/backup.json",
+          "privateBindings": "Existing retained Account/OAuth/persona records stay private; no credentials or command receipts enter Git."
+        },
+        "publicCommands": [
+          "POST /v1/works (metadata-only-v1), /v1/contributions (text-contribution-v1), /v1/contribution-publications (text-publication-v1), /v1/publication-selections (main-default-selection-v1)",
+          "POST /v1/compositions (book-composition), /v1/works/{work}/chapters (book-chapter-create-v1), /v1/content-drafts (content-text-v1), /v1/content-publications (content-publication-v1), /v1/content-search-eligibility (content-search-eligibility-v1)",
+          "POST /v1/content-drafts for a separate unpublished private phrase; unrelated POST /v1/works advancement occurs only in the isolated test body"
+        ],
+        "genuineReceiptDisposition": {
+          "retainedResponsePointers": [
+            "/book/admissionId",
+            "/book/sourcePosition",
+            "/book/workRevision",
+            "/book/draftRevision",
+            "/book/publicationDecision",
+            "/chapter",
+            "/chapters"
+          ],
+          "location": ".temp/audit-bounded-reads/queries/corpus.json",
+          "historicalWireEvidence": ".temp/audit-bounded-reads/queries/bounded-4281cf0334c642b4-evidence.json",
+          "gap": "The corpus retains genuine Work/contribution/publication response fields and chapter identity, but not individual composition, Content draft/publication/eligibility or main-selection command receipt files. Read answers in wire evidence are not replacement mutation receipts. G-2791 needs actual admitted command responses and readiness bindings for the original pin, without reconstructing IDs or relabelling this corpus.",
+          "requiredCustody": "Use G-2791 existing command:<id>/receipt:<id> owners: retain each actual successful command response, replay key, status and path/SHA-256 pin. Failed or unexecuted commands have no successful binding. Existing answer/progress evidence is not a single-command receipt file."
+        },
+        "preparation": {
+          "classification": "historical measurements only; no preparation or restore executed in this continuation",
+          "sourceBuildAndBackupMs": 161214.07316700002,
+          "sourceStartupMs": 42582,
+          "sourceActiveTotalMs": 203796.07316700002,
+          "stoppedBackupSegmentMs": 101693,
+          "historicalProofRestoreMs": 183741.799309,
+          "historicalProofAdmissionWaitMs": 68129,
+          "budgetMs": 600000,
+          "budgetDisposition": "Retained timing facts are not a G-2791 preparation estimate or readiness certification. Its eventual admitted inspection/setup/backup/round-trip must fit the existing 600-second active budget, with each proof restore separately budgeted; only host admission wait is excluded."
+        },
+        "historicalAssertionReach": {
+          "run": "20261018t204708-fb68cb",
+          "project": 1,
+          "log": ".artifacts/qa/20261018t204708-fb68cb/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/queries/bounded-4281cf0334c642b4-evidence.json",
+          "assertionReached": true,
+          "outcome": "Historical assertions reached: six D5-003 foreground audits fail; stranger D5-002 returns 503 with SQL timeouts co-occurring; five default-discovery controls, six complete cursor traversals and six absent/unpublished controls pass. Operator refresh diagnostic passes, but no persistent-fault assertion is reached."
+        },
+        "originalBaselineAssertionReached": false,
+        "readinessPredicate": "Six actual persona sessions plus public/private Realm controls, the selected public Book and one publicly searchable chapter, an unpublished private phrase and a private Work; GET /health/ready and /health/search-ready must be ready before the cut. Query-under-proof results remain body assertions, never a preparation oracle.",
+        "compatibility": {
+          "requiredProductRevision": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+          "recordedCorpusRevision": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
+          "recordedBackupFormat": "command-catalogue-backup-v1",
+          "recordedBackupRun": "20261018t200319-27bb3a-1",
+          "recordedCompatibilityDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056",
+          "recordedCompatibilityInputCount": 525,
+          "originalBaselineStatus": "unknown; not certified by metadata or source inspection",
+          "fixedProductStatus": "unknown; not executed or certified",
+          "prerequisite": "G-2791 must retain the actual source/model/restore-generation and stopped-owner compatibility/integrity receipts, preserve raw-update mode and operator/OAuth identity, and establish an independently restored compatible copy in a later explicitly admitted phase. Do not relabel this later physical backup or publish a ready manifest from source inspection."
+        },
+        "unsupportedOriginalBaselinePrerequisites": [
+          "No original-baseline producer run, command receipt ledger or compatible restore is established for this consumer. The existing helper hardcodes the later revision; it must not be relabelled.",
+          "The historical query cut has one-hour moderator authority. A later proof needs valid supported authority/session receipts rather than relying on an expired retained assignment.",
+          "The D5-004 persistent-fault producer is unconfirmed; the passing health diagnostic cannot supply it. D5-002 source/cost cause remains confounded by SQL timeouts."
+        ],
+        "existingRepairOwners": {
+          "chapterQualification": "G-2765",
+          "discovery": "G-2764",
+          "refresh": "G-2766"
+        }
+      },
+      {
+        "capability": "notifications",
+        "consumer": "tests/qa/integration/notification-read-budget.test.ts",
+        "namedCases": [
+          {
+            "file": "tests/qa/integration/notification-read-budget.test.ts",
+            "line": 12,
+            "titleTemplate": "test(`D5-001 ${name}: inbox and unread count share a complete request allocation`, async () => {"
+          },
+          {
+            "file": "tests/qa/integration/notification-read-budget.test.ts",
+            "line": 40,
+            "titleTemplate": "test(`D5-001 ${name}: personal admission and missing notification controls preserve privacy`, async () => {"
+          },
+          {
+            "file": "tests/qa/integration/notification-read-budget.test.ts",
+            "line": 64,
+            "titleTemplate": "test(`D5-001 ${name}: leaving an inbox stops later subject reads and permits a fresh retry`, async () => {"
+          }
+        ],
+        "readinessDisposition": "historical artifacts located; original-baseline prerequisite and compatibility pending; no ready manifest certified or published",
+        "consumerContract": {
+          "parser": "tests/qa/support/bounded-read-corpus.ts:useBoundedReadCorpus",
+          "format": "bounded-public-reads-v2",
+          "capability": "notifications",
+          "corpus": ".temp/audit-bounded-reads/notifications-governance/corpus.json",
+          "backup": ".temp/audit-bounded-reads/notifications-governance/owners/backup.json",
+          "privateBindings": "Existing retained Account/OAuth/persona records stay private; no credentials or command receipts enter Git."
+        },
+        "publicCommands": [
+          "POST /v1/spaces (space-realm-v2) by a separate real Account; POST /v1/realms/{realm}/management; GET joining policy then POST /v1/realms/{realm}/join for each of five recipients",
+          "GET /v1/realms/{realm}/roles; POST /v1/realms/{realm}/role-impact followed by /role-changes using the real generation and impactDigest; assign five recipients and acknowledge 24 alternating permission changes",
+          "GET /v1/me/notifications/hint per recipient between changes, then public inbox subject/readiness verification; no repeated growing-inbox hydration during production"
+        ],
+        "genuineReceiptDisposition": {
+          "retainedResponsePointers": [
+            "/notificationRealm"
+          ],
+          "location": ".temp/audit-bounded-reads/notifications-governance/corpus.json",
+          "historicalWireEvidence": ".temp/audit-bounded-reads/notifications-governance/bounded-bbcac2c38dbc48b2-evidence.json",
+          "gap": "Corpus retains the genuine auxiliary Realm identity. Wire evidence retains 24 acknowledged/produced progress events and actual inbox answers, not standalone role-impact, role-change, joining or per-recipient hint receipt files. G-2791 must retain those genuine command responses, generations, impact digests and durable recipient frontiers from admitted production.",
+          "requiredCustody": "Use G-2791 existing command:<id>/receipt:<id> owners: retain each actual successful command response, replay key, status and path/SHA-256 pin. Failed or unexecuted commands have no successful binding. Existing answer/progress evidence is not a single-command receipt file."
+        },
+        "preparation": {
+          "classification": "historical measurements only; no preparation or restore executed in this continuation",
+          "sourceBuildAndBackupMs": 281716.04627,
+          "sourceStartupMs": 46058,
+          "sourceActiveTotalMs": 327774.04627,
+          "stoppedBackupSegmentMs": 84214,
+          "historicalProofRestoreMs": 50846.04414200003,
+          "historicalProofAdmissionWaitMs": 2379,
+          "budgetMs": 600000,
+          "budgetDisposition": "Retained timing facts are not a G-2791 preparation estimate or readiness certification. Its eventual admitted inspection/setup/backup/round-trip must fit the existing 600-second active budget, with each proof restore separately budgeted; only host admission wait is excluded."
+        },
+        "historicalAssertionReach": {
+          "run": "20261018t212935-ae08d6",
+          "project": 1,
+          "log": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/notifications-governance/bounded-bbcac2c38dbc48b2-evidence.json",
+          "assertionReached": true,
+          "outcome": "Historical assertions reached: all five signed-in cancellations fail with late graph work; fresh one-item retries and all six request-budget/admission/missing/alien controls pass. Visitor cancellation is irrelevant because the API refuses personal reads. Request-wide allocation exhaustion is not proved."
+        },
+        "originalBaselineAssertionReached": false,
+        "readinessPredicate": "Five distinct signed-in recipients receive at least 24 non-null disclosed realm_role_change subjects from an independent author in an auxiliary public Realm. All primary persona roles and private/alien controls stay intact; book is null. Visitor admission, signed-in cancellation and fresh retry remain body assertions.",
+        "compatibility": {
+          "requiredProductRevision": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+          "recordedCorpusRevision": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
+          "recordedBackupFormat": "command-catalogue-backup-v1",
+          "recordedBackupRun": "20261018t212935-ae08d6-1",
+          "recordedCompatibilityDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056",
+          "recordedCompatibilityInputCount": 525,
+          "originalBaselineStatus": "unknown; not certified by metadata or source inspection",
+          "fixedProductStatus": "unknown; not executed or certified",
+          "prerequisite": "G-2791 must retain the actual source/model/restore-generation and stopped-owner compatibility/integrity receipts, preserve raw-update mode and operator/OAuth identity, and establish an independently restored compatible copy in a later explicitly admitted phase. Do not relabel this later physical backup or publish a ready manifest from source inspection."
+        },
+        "unsupportedOriginalBaselinePrerequisites": [
+          "No original-baseline governance producer/readiness receipt or compatible restore is established. The retained source and its 24-hour assignments cannot be assumed valid at another revision or execution time.",
+          "The original Feed corpus remains separately at .temp/audit-bounded-reads/notifications/corpus.json and owners/backup.json. Its eligibility URN/native-ref reader incompatibility yields null subjects; it is not an allocation-exhaustion fixture.",
+          "A genuine admitted visible-subject producer that exhausts the existing allocation remains unconfirmed; no forged identity, new fault injection, larger limit or duplicate repair owner is selected."
+        ],
+        "existingRepairOwners": {
+          "notificationCancellation": "G-2763",
+          "allocationAndFeedPremise": null
+        }
+      },
+      {
+        "capability": "zones",
+        "consumer": "tests/qa/integration/official-zone-read-budget.test.ts",
+        "namedCases": [
+          {
+            "file": "tests/qa/integration/official-zone-read-budget.test.ts",
+            "line": 30,
+            "titleTemplate": "for (const name of personaNames) test(`D5-006 ${name}: ninth and tenth official Zones preserve bounded suggestions`, async () => {"
+          },
+          {
+            "file": "tests/qa/integration/official-zone-read-budget.test.ts",
+            "line": 46,
+            "titleTemplate": "for (const name of personaNames) test(`D5-006 ${name}: suggestions require authentication and the acting Agent together`, async () => {"
+          }
+        ],
+        "readinessDisposition": "historical artifacts located; original-baseline prerequisite and compatibility pending; no ready manifest certified or published",
+        "consumerContract": {
+          "parser": "tests/qa/support/bounded-read-corpus.ts:useBoundedReadCorpus",
+          "format": "bounded-public-reads-v2",
+          "capability": "zones",
+          "corpus": ".temp/audit-bounded-reads/zones/corpus.json",
+          "backup": ".temp/audit-bounded-reads/zones/owners/backup.json",
+          "privateBindings": "Existing retained Account/OAuth/persona records stay private; no credentials or command receipts enter Git."
+        },
+        "publicCommands": [
+          "POST /v1/spaces (space-realm-v2) by the actual platform operator for ten public Realm Spaces; POST /v1/zones with each Zone in its default Realm Space",
+          "GET then PUT /v1/zones/{zone}/configuration using the returned revision; first eight official at the stopped cut, ninth/tenth non-official with genuine retained heads",
+          "POST /v1/publication-selections (realm-local-selection-v1) adopts the same public original into each Realm; PUT official configuration for the ninth and tenth occurs only in the isolated test body"
+        ],
+        "genuineReceiptDisposition": {
+          "retainedResponsePointers": [
+            "/book/admissionId",
+            "/book/sourcePosition",
+            "/book/publicationDecision",
+            "/zones/*/zone",
+            "/zones/*/realm",
+            "/zones/*/revision"
+          ],
+          "location": ".temp/audit-bounded-reads/zones/corpus.json",
+          "historicalWireEvidence": ".temp/audit-bounded-reads/zones/bounded-6905ecc8c6534699-evidence.json",
+          "gap": "The corpus retains genuine configuration revision answers for all ten Zone/Realm identities, plus public Book fields. It does not retain individual Space/Zone creation, realm-local selection or OAuth/authority receipt files. G-2791 needs those actual responses and default-Realm/Space bindings, preserving the eight-official stopped cut and genuine expected heads for the two body transitions.",
+          "requiredCustody": "Use G-2791 existing command:<id>/receipt:<id> owners: retain each actual successful command response, replay key, status and path/SHA-256 pin. Failed or unexecuted commands have no successful binding. Existing answer/progress evidence is not a single-command receipt file."
+        },
+        "preparation": {
+          "classification": "historical measurements only; no preparation or restore executed in this continuation",
+          "sourceBuildAndBackupMs": 231959.491948,
+          "sourceStartupMs": 58017,
+          "sourceActiveTotalMs": 289976.49194800004,
+          "stoppedBackupSegmentMs": 94946,
+          "historicalProofRestoreMs": 79567.465803,
+          "historicalProofAdmissionWaitMs": 55666,
+          "budgetMs": 600000,
+          "budgetDisposition": "Retained timing facts are not a G-2791 preparation estimate or readiness certification. Its eventual admitted inspection/setup/backup/round-trip must fit the existing 600-second active budget, with each proof restore separately budgeted; only host admission wait is excluded."
+        },
+        "historicalAssertionReach": {
+          "run": "20261018t220049-e353cb",
+          "project": 1,
+          "log": ".artifacts/qa/20261018t220049-e353cb/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-6905ecc8c6534699-evidence.json",
+          "assertionReached": true,
+          "outcome": "Historical assertions reached for all six personas: eight-Zone suggestions/privacy/cost controls pass, nine and ten return 503 instead of HTTP success. All six Account/acting-Agent admission controls pass with zero graph work."
+        },
+        "originalBaselineAssertionReached": false,
+        "readinessPredicate": "Ten real Realm/Zone pairs share the correct Space per pair, first eight official and publicly adopting the same selected work. Actual platform authority, Account owner:operate consent, supported zone:edit/zone:official/publication:adopt grants and fresh sessions are required. Each signed-in suggestions request pairs its bearer with its own acting Agent; anonymous and mismatched admission controls remain asserted.",
+        "compatibility": {
+          "requiredProductRevision": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+          "recordedCorpusRevision": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
+          "recordedBackupFormat": "command-catalogue-backup-v1",
+          "recordedBackupRun": "20261018t214255-42a748-1",
+          "recordedCompatibilityDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056",
+          "recordedCompatibilityInputCount": 525,
+          "originalBaselineStatus": "unknown; not certified by metadata or source inspection",
+          "fixedProductStatus": "unknown; not executed or certified",
+          "prerequisite": "G-2791 must retain the actual source/model/restore-generation and stopped-owner compatibility/integrity receipts, preserve raw-update mode and operator/OAuth identity, and establish an independently restored compatible copy in a later explicitly admitted phase. Do not relabel this later physical backup or publish a ready manifest from source inspection."
+        },
+        "unsupportedOriginalBaselinePrerequisites": [
+          "No original-baseline producer/cut or compatible restore is established. Later same-Space configuration heads and operator/OAuth bindings cannot be treated as original-baseline receipts.",
+          "Supported operator designation, owner:operate consent and scoped grants must be retained through genuine fixture responses; member creation quota or a role label cannot substitute.",
+          "The failed parallel session restore is preserved as setup unavailability; later historical serial restoration does not certify another pin, source/model generation or raw-update mode."
+        ],
+        "existingRepairOwners": {
+          "zonePopulation": "G-2786"
+        }
+      },
+      {
+        "capability": "ratings",
+        "consumer": "tests/qa/integration/rating-population-read-budget.test.ts",
+        "namedCases": [
+          {
+            "file": "tests/qa/integration/rating-population-read-budget.test.ts",
+            "line": 28,
+            "titleTemplate": "for (const name of personaNames) test(`D5-006 ${name}: 100, 101 and 102 ratings remain readable without revealing voters`, async () => {"
+          }
+        ],
+        "readinessDisposition": "historical artifacts located; original-baseline prerequisite and compatibility pending; no ready manifest certified or published",
+        "consumerContract": {
+          "parser": "tests/qa/support/bounded-read-corpus.ts:useBoundedReadCorpus",
+          "format": "bounded-public-reads-v2",
+          "capability": "ratings",
+          "corpus": ".temp/audit-bounded-reads/ratings/corpus.json",
+          "backup": ".temp/audit-bounded-reads/ratings/owners/backup.json",
+          "privateBindings": "Existing retained Account/OAuth/persona records stay private; no credentials or command receipts enter Git."
+        },
+        "publicCommands": [
+          "Public Work/contribution/publication/main-default-selection commands create one genuine public original; POST /v1/global-rating-contexts (global-rating-standing-context-v1) by the properly granted operator",
+          "Real independent Account signup/authentication and supported rating:observe grants; 100 acknowledged POST /v1/global-rating-observations (global-rating-standing-observation-v1), value 5 and expectedRevisionHead null per distinct principal",
+          "Retain a third real persona Realm with reserve owner/member grants; the two genuine additional observations producing 101/102 occur only in the isolated test body"
+        ],
+        "genuineReceiptDisposition": {
+          "retainedResponsePointers": [
+            "/book/admissionId",
+            "/book/sourcePosition",
+            "/book/publicationDecision",
+            "/context",
+            "/records/2"
+          ],
+          "location": ".temp/audit-bounded-reads/ratings/corpus.json",
+          "historicalWireEvidence": ".temp/audit-bounded-reads/ratings/bounded-444e651d382f4867-evidence.json",
+          "gap": "Corpus retains the genuine context identity, public Book response fields and private reserve persona bindings. Progress records acknowledge 100 commands and wire evidence records real aggregate responses, but individual context/observation receipt files and all 100 independent principal command bindings were not retained as a ledger. G-2791 must obtain the actual successful responses rather than infer them from an exact aggregate.",
+          "requiredCustody": "Use G-2791 existing command:<id>/receipt:<id> owners: retain each actual successful command response, replay key, status and path/SHA-256 pin. Failed or unexecuted commands have no successful binding. Existing answer/progress evidence is not a single-command receipt file."
+        },
+        "preparation": {
+          "classification": "historical measurements only; no preparation or restore executed in this continuation",
+          "sourceBuildAndBackupMs": 351709.5869,
+          "sourceStartupMs": 64060,
+          "sourceActiveTotalMs": 415769.5869,
+          "stoppedBackupSegmentMs": 103331,
+          "historicalProofRestoreMs": 101684.51613300003,
+          "historicalProofAdmissionWaitMs": 194237,
+          "budgetMs": 600000,
+          "budgetDisposition": "Retained timing facts are not a G-2791 preparation estimate or readiness certification. Its eventual admitted inspection/setup/backup/round-trip must fit the existing 600-second active budget, with each proof restore separately budgeted; only host admission wait is excluded."
+        },
+        "historicalAssertionReach": {
+          "run": "20261018t204708-fb68cb",
+          "project": 4,
+          "log": ".artifacts/qa/20261018t204708-fb68cb/logs/integration-4.log",
+          "wireEvidence": ".temp/audit-bounded-reads/ratings/bounded-444e651d382f4867-evidence.json",
+          "assertionReached": true,
+          "outcome": "Historical assertions reached for all six: exact 100-vote shape/mean/privacy/allocation controls pass; 101 and 102 return 422 query_budget_exceeded instead of HTTP success. No population, candidate or deadline limit is raised."
+        },
+        "originalBaselineAssertionReached": false,
+        "readinessPredicate": "One public selected work/context, exactly 100 independent Account-principal observations of 5 at the cut, and two separate authorized reserves with no observations yet. Public/private controls and all six personas remain available. Exact aggregate shape/count/privacy/cost assertions stay in the body; numeric population plus string populationPolicy is already source-confirmed at the required original baseline.",
+        "compatibility": {
+          "requiredProductRevision": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+          "recordedCorpusRevision": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
+          "recordedBackupFormat": "command-catalogue-backup-v1",
+          "recordedBackupRun": "20261018t200319-27bb3a-4",
+          "recordedCompatibilityDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056",
+          "recordedCompatibilityInputCount": 525,
+          "originalBaselineStatus": "unknown; not certified by metadata or source inspection",
+          "fixedProductStatus": "unknown; not executed or certified",
+          "prerequisite": "G-2791 must retain the actual source/model/restore-generation and stopped-owner compatibility/integrity receipts, preserve raw-update mode and operator/OAuth identity, and establish an independently restored compatible copy in a later explicitly admitted phase. Do not relabel this later physical backup or publish a ready manifest from source inspection."
+        },
+        "unsupportedOriginalBaselinePrerequisites": [
+          "No original-baseline producer/cut, per-principal receipt ledger or compatible restore is established; later observations cannot be relabelled as original proof.",
+          "The historical rating cut has one-hour primary moderator authority; required supported persona/session/authority bindings must be valid for any later admitted proof.",
+          "Numeric population plus global-account-principal populationPolicy is an admitted original-baseline test expectation; no API-shape repair or weakened 101/102 assertion is required."
+        ],
+        "existingRepairOwners": {
+          "ratingPopulation": "G-2786"
+        }
+      }
+    ]
+  },
   "handoff": {
     "result": "partial",
     "managerReadRequiredBeforeApiDispatch": true,
@@ -2251,6 +2657,21 @@
         "reason": "Isolate the stranger default all availability failure from co-occurring SQL pool timeouts before choosing the query/shared-budget owner repair. Keep five passing persona controls."
       }
     ],
-    "limitations": "Expected baseline failures, not a passing done gate. SQL engine allocation is unmeasured/unknown. No production implementation or shared development stack operation. Exact setup errors and earlier wrong request premises remain recorded; only the final admitted bodies confirm outcomes."
+    "limitations": "Expected baseline failures, not a passing done gate. SQL engine allocation is unmeasured/unknown. No production implementation or shared development stack operation. Exact setup errors and earlier wrong request premises remain recorded; only the final admitted bodies confirm outcomes.",
+    "evidenceScope": "All existing confirmed/passing-control/implementationReady entries below are supplementary historical observations only, not canonical proof or a new dispatch decision.",
+    "requiredOriginalBaseline": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+    "originalBaselineFailures": "pending",
+    "fixedProductPasses": "pending",
+    "canonicalFindingProof": "pending explicit isolated proof and independent review",
+    "existingRepairOwners": {
+      "D5-001 cancellation": "G-2763",
+      "D5-003 chapter qualification": "G-2765",
+      "D5-006 Zones and ratings": "G-2786",
+      "D5-002 discovery": "G-2764",
+      "D5-004 refresh": "G-2766"
+    },
+    "repairDisposition": "Existing contracts cover the four repair observations. Do not create duplicate owners or restart exited wave builds merely to receive this matrix. Discovery cause, Feed allocation/identity and persistent refresh trigger stay unconfirmed.",
+    "preparationOwner": "G-2791",
+    "authorizedNext": "G-2791 receives the four stack-free prerequisite dispositions; manager admission is still required for any preparation or original/fixed proof. This correction returns partial and does not authorize landing."
   }
 }
