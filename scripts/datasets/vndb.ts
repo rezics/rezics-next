@@ -164,6 +164,9 @@ function retainedImageEvidence(
       return true;
     })
     .sort((left, right) => canonical(left).localeCompare(canonical(right)));
+  // Historical evidence-free descriptors were deduplicated by record/role/URL.
+  // One recovered witness supports that tuple; it does not identify independent
+  // occurrences or assert that this view contains every supporting archive row.
   const row = image.sourceEvidence
     ? rows.find((candidate) => sha256(canonical(candidate)) === image.sourceEvidence!.recordDigest)
     : rows[0];

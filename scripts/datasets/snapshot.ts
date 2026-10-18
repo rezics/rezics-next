@@ -199,14 +199,35 @@ function sourceCaptureVerifier(
       }
       records.set(capture.digest, row);
     }
-    // The exact endpoint record must own the candidate even when a provider redirected its URL.
-    if (
-      evidence.provider === 'bangumi' &&
-      row &&
-      typeof row === 'object' &&
-      String((row as Record<string, unknown>).id) !== evidence.externalId
-    )
-      throw new Error('Media source capture identifies a different record');
+    if (evidence.provider === 'bangumi') {
+      if (
+        !row ||
+        typeof row !== 'object' ||
+        Array.isArray(row) ||
+        (evidence.namespace !== 'subject' && evidence.namespace !== 'character')
+      )
+        throw new Error('Invalid Bangumi media source record or namespace');
+      // Present evidence and legacy recovery follow the same provider rules.
+      // A merged subject may have a different canonical response ID from the
+      // requested endpoint; its namespace, role and large-image field still bind.
+      const expected = bangumiImageCandidate(
+        row as Record<string, unknown>,
+        evidence.namespace,
+        capture.url,
+        capture.digest,
+      );
+      if (!expected) throw new Error('Bangumi media evidence has no supported image field');
+      const expectedEvidence = expected.sourceEvidence!;
+      if (expectedEvidence.externalId !== evidence.externalId)
+        throw new Error('Media source capture identifies a different record');
+      if (
+        image.role !== expected.role ||
+        image.url !== expected.url ||
+        evidence.field !== expectedEvidence.field ||
+        evidence.sourceUrl !== expectedEvidence.sourceUrl
+      )
+        throw new Error('Bangumi media evidence differs from its endpoint role or image field');
+    }
     if (jsonPointerValue(row, evidence.field) !== image.url)
       throw new Error(`Cover field locator does not identify its image URL: ${evidence.field}`);
     if (evidence.holder && jsonPointerValue(row, evidence.holder.field) !== evidence.holder.name)

@@ -171,6 +171,7 @@ function bangumi(
   root: string,
   acquisition: Acquisition,
   kind: 'subject' | 'character',
+  requestedId?: number,
 ): DatasetSource {
   const row = {
     id: kind === 'subject' ? 975 : 10,
@@ -183,7 +184,7 @@ function bangumi(
   const capture = retain(
     root,
     acquisition,
-    `https://api.bgm.tv/v0/${kind === 'subject' ? 'subjects' : 'characters'}/${row.id}`,
+    `https://api.bgm.tv/v0/${kind === 'subject' ? 'subjects' : 'characters'}/${requestedId ?? row.id}`,
     Buffer.from(JSON.stringify(row)),
   );
   const image = bangumiImageCandidate(row, kind, capture.url, capture.digest)!;
@@ -394,6 +395,138 @@ test('Bangumi captured subject and character JSON preserve endpoint roles and un
       status: 'captured',
       rights: { basis: 'unknown', license: null },
     });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+for (const defect of [
+  'portrait relabeled screenshot',
+  'character on subject endpoint',
+  'subject on character endpoint',
+  'unsupported namespace',
+  'unsupported matching image field',
+  'noncanonical response id type',
+  'unofficial endpoint',
+  'different canonical source page',
+] as const) {
+  test(`present Bangumi media evidence rejects ${defect}`, async () => {
+    const root = temporary();
+    try {
+      const owner = acquisition(root);
+      const source = bangumi(
+        root,
+        owner,
+        defect === 'subject on character endpoint' ? 'subject' : 'character',
+      );
+      const image = source.images[0]!;
+      const evidence = image.sourceEvidence!;
+      const row = JSON.parse(readFileSync(blobPath(root, evidence.recordDigest), 'utf8'));
+      if (defect === 'portrait relabeled screenshot') image.role = 'screenshot';
+      else if (defect === 'character on subject endpoint')
+        evidence.captureUrl = `https://api.bgm.tv/v0/subjects/${row.id}`;
+      else if (defect === 'subject on character endpoint')
+        evidence.captureUrl = `https://api.bgm.tv/v0/characters/${row.id}`;
+      else if (defect === 'unsupported namespace') evidence.namespace = 'person';
+      else if (defect === 'unsupported matching image field') {
+        row.images.common = row.images.large;
+        evidence.field = '/images/common';
+      } else if (defect === 'noncanonical response id type') row.id = String(row.id);
+      else if (defect === 'unofficial endpoint')
+        evidence.captureUrl = `https://records.example.test/characters/${row.id}`;
+      else {
+        evidence.sourceUrl = `https://bgm.tv/character/999`;
+        source.records[0]!.sourceUrl = evidence.sourceUrl;
+      }
+      // Each refusal has real retained fixture bytes with a matching hash and
+      // matching URL pointer. The defect is the provider meaning, not corruption.
+      const capture = retain(root, owner, evidence.captureUrl, Buffer.from(JSON.stringify(row)));
+      evidence.recordDigest = capture.digest;
+      expect(row.images[evidence.field.split('/').at(-1)!]).toBe(image.url);
+      expect(() => verifyCoverSourceCapture(root, [...owner.captures.values()], image)).toThrow();
+      await expect(freezeSnapshot(owner, [source], 'all')).rejects.toThrow();
+      expect(
+        [...owner.captures.values()].every((item) => item.mediaType === 'application/json'),
+      ).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test('Bangumi merged-subject canonical identity survives present and legacy evidence verification', async () => {
+  const root = temporary();
+  try {
+    const owner = acquisition(root);
+    const source = bangumi(root, owner, 'subject', 974);
+    const snapshot = await freezeSnapshot(owner, [source], 'all');
+    const expected = {
+      record: 'bangumi:subject:975',
+      role: 'cover',
+      sourceEvidence: {
+        captureUrl: 'https://api.bgm.tv/v0/subjects/974',
+        namespace: 'subject',
+        externalId: '975',
+        sourceUrl: 'https://bgm.tv/subject/975',
+        field: '/images/large',
+        holder: null,
+      },
+    };
+    expect(snapshotMediaImages(root, snapshot)[0]).toMatchObject(expected);
+    const old = legacy(snapshot);
+    const before = canonical(old);
+    const indices = old.images.map((image, index) => [index, image.record, image.role, image.url]);
+    const recovered = snapshotMediaImages(root, old);
+    expect(recovered[0]).toMatchObject(expected);
+    expect(recovered.map((image, index) => [index, image.record, image.role, image.url])).toEqual(
+      indices,
+    );
+    expect(canonical(old)).toBe(before);
+    expect(datasetMediaCandidates(root, { snapshot: old, native: native(old) })[0]).toMatchObject({
+      role: 'cover',
+      status: 'captured',
+      variant: null,
+      rights: { basis: 'unknown', license: null, holder: null },
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a historically deduplicated legacy image recovers one retained witness without inventing occurrences', async () => {
+  const root = temporary();
+  try {
+    const owner = acquisition(root);
+    const overrides = { vn_image_votes: ['v11\tu1\tcv4', 'v11\tu2\tcv4'] };
+    const retained = vndb(root, owner, overrides);
+    // Without new evidence fields, selectFate still projects the historical
+    // {record,role,url} tuple and deduplicates it. Restore only its retained
+    // archive link, as supplied by the historical fetchVndb producer.
+    const source = selectFate(new VndbDump(tar(overrides)));
+    source.scope = retained.scope;
+    expect(source.images.filter((image) => image.role === 'candidate-cover')).toHaveLength(1);
+    const old = legacy(await freezeSnapshot(owner, [source], 'all'));
+    const before = canonical(old);
+    const indices = old.images.map((image, index) => [index, image.record, image.role, image.url]);
+    const recovered = snapshotMediaImages(root, old);
+    const votes = recovered.filter((image) => image.role === 'candidate-cover');
+    const witnesses = [...new VndbDump(tar(overrides)).rows('vn_image_votes')].map((row) =>
+      sha256(canonical(row)),
+    );
+    expect(new Set(witnesses).size).toBe(2);
+    expect(votes).toHaveLength(1);
+    expect(witnesses).toContain(votes[0]!.sourceEvidence!.recordDigest);
+    expect(votes[0]!.sourceEvidence!.derivation).toMatchObject({
+      table: 'vn_image_votes',
+      imageId: 'cv4',
+    });
+    verifyCoverSourceCapture(root, old.captures, votes[0]!);
+    expect(recovered.map((image, index) => [index, image.record, image.role, image.url])).toEqual(
+      indices,
+    );
+    expect(canonical(old)).toBe(before);
+    // One witness proves the deduplicated image. It establishes no association
+    // between indistinguishable occurrences or a contract for all supporting rows.
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
