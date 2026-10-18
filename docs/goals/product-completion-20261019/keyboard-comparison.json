@@ -30,7 +30,7 @@
     "origin": "Manager judgment for a small accelerator; not measured limits. No tighter numerical route budget was found in the retained library report or the relevant performance/development documentation read; owner must confirm before production."
   },
   "provenance": {
-    "integration_base": "1ab1f6ca61",
+    "integration_base": "1ab1f6ca61f7084844df438ab913adc6564ce483",
     "behavior_revision": "e57f1d474f2032919023ed6a49637134973a8785",
     "accounts_build_revision": "e57f1d474f2032919023ed6a49637134973a8785",
     "web_build_revision": "3c2dc9cbea730c4365631ef2ca1ce16c7dabc932",
@@ -57,7 +57,16 @@
       "@tanstack/react-hotkeys": "0.15.0",
       "@tanstack/hotkeys": "0.16.0"
     },
-    "evidence_date": "2026-10-18T21:31:59.915Z"
+    "evidence_date": "2026-10-18T21:31:59.915Z",
+    "worker_gate_rebase": {
+      "command": "task goal -- check",
+      "job": "e3dd5a32-24c2-43d8-af17-fce544875d77",
+      "old_head": "4e3c69f4497389fd699276eec24bc8a2258587ad",
+      "new_head": "ba16f0f8c3c3a6414433590e8f79db04b3e09f69",
+      "new_integration_base": "3f7d25f58714205a937414db34a8fbb4b080b1dc",
+      "reason": "The worker gate automatically rebased the 44-commit-behind worktree before its successful guards/types/lint/AST checks.",
+      "measurement_integrity": "Historical behavior/build revision IDs above remain the immutable measurement revisions. All 17 harness source blobs match the pre-rebase head, and a post-rebase report validation verified all 81 original capture/source hashes. No production source imported or hashed by the experiment changed."
+    }
   },
   "fixture": {
     "sources": [
@@ -100,7 +109,18 @@
         "G-2784 request cancellation",
         "G-2777 search intent/CJK"
       ],
-      "authorization": "Manager brief authorizes this isolated trial following G-2788 and audit-remediation mail:45070a9f-d154-459a-ad9a-3ae55fa655e1. Do not wait for G-2787/G-2792; their output is not claimed as proof."
+      "authorization": "Manager brief authorizes this isolated trial following G-2788 and audit-remediation mail:45070a9f-d154-459a-ad9a-3ae55fa655e1. Do not wait for G-2787/G-2792; their output is not claimed as proof.",
+      "journey_refresh": {
+        "path": "docs/goals/product-completion-20261019/journey-research.json",
+        "revision": "3f7d25f58714205a937414db34a8fbb4b080b1dc",
+        "sha256": "7141a127e009e6ca8faed3f14d943ebf0d0e340383cbb7cbd2f51cac0ee7a84a",
+        "sections": [
+          "frontend_handoff",
+          "uncertainties_and_recommendation_changes: U-OWNERS, U-LIBRARY-VALUE, U-ALL-LANGUAGES"
+        ],
+        "finding": "G-2787 requires a failing real interaction and bounded comparison, lower maintenance and better observed behavior before a library trial/adoption, and actual keyboard/focus/screen-reader observations. Its research does not prove current runtime or all-locale behavior.",
+        "effect_on_decision": "No candidate decision changes. Imported native owners fail the selected editor/IME/modal fixture vectors; corrected native removes those failures with no added dependency. The library candidates do not reduce shared policy in this workload. Real IME/assistive-technology, all-locale integration and Web loaded-route costs remain separate gates; journey composition must reuse existing API authority and owners."
+      }
     },
     "logical_workload": "Search, editor link, editor bold, sidebar, navigation/help. Three adapter globals plus two selected editor behaviors make 5; 45 unique inactive-product filler chords scale globals to 48 at 50. All fillers are enabled in the final rows. Other built-in Tiptap bindings remain fixed across contenders.",
     "as_is_preservation": "Actual unmodified SearchField, SidebarProvider and usePageKeys are imported for native-as-is. Count 50 does not create new owners there; its 50 timing is explicitly an unchanged-load control. Its diagnostic count is hardcoded3 after teardown and is not a measured leak.",
@@ -6923,7 +6943,32 @@
         "cause": "Nested modal was visible before deferred focus settled, causing an Escape race; corrected harness sequencing, later QA passed."
       }
     ],
-    "final_validation": "Pending recorded report/reference validation, docs:check and worker check; see final handoff for result."
+    "final_validation": {
+      "job": "e3dd5a32-24c2-43d8-af17-fce544875d77",
+      "status": "pass",
+      "commands": [
+        {
+          "command": "task --taskfile scripts/research/frontend-hotkeys/Taskfile.yml validate -- --captures",
+          "status": "pass",
+          "observations": "9 acceptance groups, 4 adapters and 81 trial-time capture/source hashes verified.",
+          "log": ".temp/goal/jobs/e3dd5a32-24c2-43d8-af17-fce544875d77.1.log"
+        },
+        {
+          "command": "task docs:check",
+          "status": "pass",
+          "observations": "228 Markdown files; 13 checker tests passed.",
+          "log": ".temp/goal/jobs/e3dd5a32-24c2-43d8-af17-fce544875d77.2.log"
+        },
+        {
+          "command": "task goal -- check",
+          "status": "pass",
+          "observations": "8/44 applicable guards passed; types, lint and AST passed. The brief names no tests; targeted adapter behavior QA is recorded separately above.",
+          "log": ".temp/goal/jobs/e3dd5a32-24c2-43d8-af17-fce544875d77.3.log",
+          "full_output": ".temp/goal/check/run-Toh1Z2/output.log"
+        }
+      ],
+      "limits": "Successful characterization and repository checks do not close unproved real OS IME, assistive-technology, all-locale or Web production-route cost gates. Initial setup failures and the unsuccessful Web preview are retained above."
+    }
   },
   "commands": {
     "prepare": "task --taskfile scripts/research/frontend-hotkeys/Taskfile.yml prepare",
@@ -7345,13 +7390,18 @@
         "path": "docs/goals/product-completion-20261019/library-research.json",
         "bytes": 87023,
         "sha256": "d2ec47d00967d856f6cbda285b1b34a33d2938edc91ff61c9e1da62fc0ea6762"
+      },
+      "docs/goals/product-completion-20261019/journey-research.json": {
+        "path": "docs/goals/product-completion-20261019/journey-research.json",
+        "bytes": 271117,
+        "sha256": "7141a127e009e6ca8faed3f14d943ebf0d0e340383cbb7cbd2f51cac0ee7a84a"
       }
     },
     "evidence_index": {
       "path": ".temp/frontend-hotkeys/evidence.json",
       "sha256": "cb50d0dab96ed48ecd3307762aab5047c953d279999eb5b77b22103dd601c5ff"
     },
-    "retention": "Larger raw samples, HTML/PNG/logs, private builds and emitted module maps stay under the worker capture root. Essential samples and source/capture hashes are retained in this report; no repository data was uploaded."
+    "retention": "Larger raw samples, HTML/PNG/logs, private builds and emitted module maps stay under the worker capture root. Essential samples and source/capture hashes are retained in this report; no repository data was uploaded. The evidence index is the immutable trial-time index; the additional journey source row was inspected during finalization after the worker-gate rebase."
   },
   "follow_ups": [
     {
