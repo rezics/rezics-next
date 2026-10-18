@@ -1,6 +1,6 @@
 // Account's OAuth endpoints as the web server uses them. Every function takes
 // its endpoint configuration and `fetch`, so tests drive them without a stack.
-import { serverRead, serverDeadline } from '../api/server-read.ts';
+import { serverRead, serverDeadline, serverSignal, withoutServerRequest } from '../api/server-read.ts';
 import { SERVER_READ_LIMITS, waitForServerRead } from '../api/server-fetch.ts';
 
 export interface AccountClient {
@@ -114,7 +114,7 @@ async function waitForRefresh(
   deadlineAt?: number,
 ): Promise<TokenResult> {
   try {
-    return await waitForServerRead(result, deadlineAt ?? (await serverDeadline()));
+    return await waitForServerRead(result, deadlineAt ?? (await serverDeadline()), serverSignal());
   } catch {
     return { status: 'unavailable' };
   }
@@ -145,7 +145,7 @@ export function refreshTokens(
     refreshes.delete(settled[0]);
   }
   const entry: { result: Promise<TokenResult>; settledAt?: number } = {
-    result: tokenRequest(client, { grant_type: 'refresh_token', refresh_token: refreshToken }).then(
+    result: withoutServerRequest(() => tokenRequest(client, { grant_type: 'refresh_token', refresh_token: refreshToken })).then(
       (result) => {
         // A transient failure is retried by the next request instead of replayed.
         if (result.status === 'unavailable') refreshes.delete(cacheKey);
