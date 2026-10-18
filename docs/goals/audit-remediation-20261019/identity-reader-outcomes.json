@@ -202,14 +202,15 @@
   },
   "baseline": {
     "selection": "identity-reader-api-baseline",
-    "status": "setup-failed; correction prepared for the same selection",
+    "status": "blocked-during-preparation",
     "productRevision": "79be80d4d0e1cad1639b6a65e8f0795d6a95929a",
     "pinProcedure": "Commit this complete specification; detach this worker worktree at the product revision and overlay only the authored declaration, tests, test fixture, test-registration helper and its unit coverage, and matrix. Verify the exact seven-path allowlist; production code and the QA runner remain pristine. Keep main and all other worktrees read-only.",
     "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test tests/qa/integration/outcomes/realm/identity-discovery.test.ts tests/qa/integration/audit-public-reading.test.ts",
     "expectedResult": "Ordinary assertions may fail. Report the actual failing test body, reached assertion and actual response; never count setup, transport failure, health or a test.failing wrapper as the requested product failure.",
     "failingBodies": [],
     "assertionsReached": false,
-    "preparation": { "budgetMs": 600000, "backupCreated": false, "restoreReached": false },
+    "preparation": { "budgetMs": 600000, "lastPhase": "create-public-book", "backupCreated": false, "restoreReached": false, "emptyAccountCreationReached": false },
+    "blocker": "The exact work-structure-publication-v1 publish command for the command-created public Book returns 404 contribution_unavailable after its native chapter drafts, native publications and public search-eligibility commands succeed. Establish that supported publication prerequisite before claiming either file's outcome failures. No successful source data, rights grant or published cut is fabricated to bypass it.",
     "attempts": [
       {
         "job": "6b07d19a-f509-4c96-9b37-e584b3d38be7",
@@ -226,13 +227,51 @@
         "failingBodies": [],
         "hookElapsedMs": { "combinedReader": 10317.20, "combinedIdentity": 11449.01, "automaticIsolatedReader": 10414.76, "automaticIsolatedIdentity": 17367.16 },
         "preparation": "Budget 600000ms. No backup or manifest was created; restore was not reached. These hook durations exclude the runner's source startup and are not complete preparation measurements.",
-        "evidence": [".artifacts/qa/20261018t195139-618183/summary.md", ".artifacts/qa/20261018t195139-618183/logs/integration-1.log", ".artifacts/qa/20261018t195139-618183/logs/integration-r1.log", ".artifacts/qa/20261018t195139-618183/logs/integration-r2.log", ".temp/identity-reader/baseline-pin.json"]
+        "evidence": [".artifacts/qa/20261018t195139-618183/summary.md", ".artifacts/qa/20261018t195139-618183/logs/integration-1.log", ".artifacts/qa/20261018t195139-618183/logs/integration-r1.log", ".artifacts/qa/20261018t195139-618183/logs/integration-r2.log", ".temp/identity-reader/baseline-pin-8f07c6b4e834dea67898513f00032b29c5fe05d9.json"]
+      },
+      {
+        "job": "3f79ebcf-cdf9-4317-9a21-ec407fe53fa8",
+        "run": "20261018t195855-5055f7",
+        "selection": "identity-reader-api-baseline; same two-file selection after the setup correction",
+        "productRevision": "79be80d4d0e1cad1639b6a65e8f0795d6a95929a",
+        "specificationRevision": "4cddf34c79572fb07fc293f122d526fa83011530",
+        "sourceStable": true,
+        "productAndRunnerChanges": [],
+        "result": "SETUP; no failing outcome body or product defect is established by this run",
+        "failingHooks": ["audit-public-reading.test.ts beforeAll", "outcomes/realm/identity-discovery.test.ts beforeAll"],
+        "failure": {
+          "file": "tests/qa/support/identity-reader-fixture.ts",
+          "function": "createBook",
+          "request": { "method": "POST", "path": "/v1/work-publications", "profile": "work-structure-publication-v1", "operation": "publish", "work": "actual command-created Book IRI", "expectedWorkHead": "actual owner GET revision", "expectedMainVersion": "actual created mainVersion", "structure": "actual created composition", "expectedStructureHead": "actual final chapter compositionRevision", "expectedPublicationHead": null, "rightsBasis": "original-contribution", "disclosure": "public", "actingSubject": "actual owner Person" },
+          "expectedSetupStatus": 201,
+          "actual": { "type": "https://rezics.com/problems/contribution_unavailable", "title": "Contribution is unavailable", "status": 404, "code": "contribution_unavailable" }
+        },
+        "assertionsReached": false,
+        "failingBodies": [],
+        "preparation": {
+          "budgetMs": 600000,
+          "phase": "create-public-book",
+          "elapsedMs": { "combinedReader": 82803, "combinedIdentity": 15194, "automaticIsolatedReader": 50654, "automaticIsolatedIdentity": 48637 },
+          "measurement": "The first hook in each process includes admitted source startup via the runner's preparation timestamp; the second hook in the combined process measures its separate attempted build. Host admission is excluded by the runner.",
+          "withinBudget": true,
+          "backupCreated": false,
+          "restoresCompleted": 0,
+          "emptyAccountCreationReached": false
+        },
+        "evidence": [".artifacts/qa/20261018t195855-5055f7/summary.md", ".artifacts/qa/20261018t195855-5055f7/logs/integration-1.log", ".artifacts/qa/20261018t195855-5055f7/logs/integration-r1.log", ".artifacts/qa/20261018t195855-5055f7/logs/integration-r2.log", ".temp/identity-reader/baseline-pin.json"],
+        "preparationEvidence": [".temp/identity-reader/preparation-20261018t195855-5055f7-1-identity-reader-220b8fde-5d41-44d3-9aa6-b513f6ada5fb.json", ".temp/identity-reader/preparation-20261018t195855-5055f7-1-identity-reader-ebc0a36a-12a2-4e05-8703-6f27afc28900.json", ".temp/identity-reader/preparation-20261018t195855-5055f7-r1-identity-reader-6ee94244-7c29-45f6-83b2-268c597375a7.json", ".temp/identity-reader/preparation-20261018t195855-5055f7-r2-identity-reader-5d5a30da-5163-4d69-90a4-7a1b3b104fe7.json"]
       }
     ]
   },
+  "stackFreeVerification": {
+    "selectedFileTypes": { "job": "df19eebb-46f0-435a-8b37-001b9b74dfa0", "result": "passed", "command": "task goal:type-files -- --project scripts/tsconfig.json scripts/qa/cases/outcomes/realm/identity-discovery.ts tests/qa/integration/outcomes/realm/identity-discovery.test.ts tests/qa/integration/audit-public-reading.test.ts tests/qa/support/identity-reader-fixture.ts tests/qa/support/outcome-test.ts tests/qa/support/outcome-test.test.ts", "checkedFilesIncludingImports": 1633, "reason": "The incremental Goal types check may skip test-only changes; explicit file typing found and corrected a HeadersInit inference error without changing assertions." },
+    "typesLintAstDocsAndHelperUnit": { "job": "0a221406-e5ab-42a7-b2dc-c866c113b37f", "result": "passed", "unitFile": "tests/qa/support/outcome-test.test.ts", "unitTests": 14 },
+    "setupCorrectionLintAstAndDocs": { "job": "3f79ebcf-cdf9-4317-9a21-ec407fe53fa8", "steps": [1, 2], "result": "passed" },
+    "initialGuards": { "job": "f4d143b4-ffe3-4184-b0c5-e3a04aa1c779", "result": "failed", "failures": ["Repository declarations: unknown outcome row catalogue/releases-and-media before loading the identity declaration; registry enrollment belongs to G-2768.", "Printed fixture-small repair: nested wide QA preparation was rejected by worker admission; no assertion was changed."], "evidence": ".temp/goal/check/run-5nOYx7/output.log" }
+  },
   "remainingPrerequisites": [
     "G-2768 enrolls the pending identity row and the exact prove files without editing these declarations/assertions. Corpus-owning tests must receive the runner's appropriate isolation enrollment before wider prove campaigns.",
-    "The baseline must pin pristine product code, successfully construct the supported public publication and empty-Account premises, and finish preparation within 600 seconds before a claimed outcome failure.",
+    "The pristine baseline pin succeeded. Public Book work-structure publication must be established through supported commands; its current 404 contribution_unavailable blocks both beforeAll hooks. Empty-Account creation, the one consistent backup and isolated restoration remain unexercised. No failing outcome baseline has been claimed.",
     "A saved Agent whose representation is later revoked requires a supported independent fixture authority transition; do not manufacture private rows or an eligible:false success response.",
     "Separate browser author proves rendered login return, menu/focus, and preserved independent sections. This API specification author has no browser execution authority."
   ]

@@ -43,7 +43,8 @@ const nextFor = (name: PersonaName) => `/en/library?view=reading&from=${name}&ne
 outcomeTest(declaration, 'visitor', async () => {
   const id = 'D4-007/visitor';
   for (const path of paths) {
-    const headers = path.endsWith('/session-agent') ? { 'x-session-key': randomUUID() } : {};
+    const headers = new Headers();
+    if (path.endsWith('/session-agent')) headers.set('x-session-key', randomUUID());
     const denied = await answer<{ code: string }>(id, path, fetch(new URL(path, fixture.mainOrigin), { headers }), 401);
     expect(denied.code).toBe('account_assertion_denied');
   }
