@@ -32,3 +32,5 @@ existing imported identities and data; prepare reusable isolated fixtures within
 the documented budget. Do not replace substantive fixtures with placeholders.
 
 The [current state](state.md) records progress and the next executable action.
+The [outcome decisions](decisions.md) settle the remaining search, inventory,
+author lifecycle and generic catalogue contracts.
