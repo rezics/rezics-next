@@ -108,6 +108,7 @@ export default {
   signInToTakePart: '登录后即可投票、关注和收藏',
 
   posts: '动态列表', loadMore: '显示更多', loadingMore: '正在加载更多…',
+  refreshing: '正在刷新动态…',
   newPosts: plural({ other: insert('{{count}} 条新动态') }, { count: asValue(number()) }),
   newPostsAtLeast: plural({ other: insert('至少 {{count}} 条新动态') }, { count: asValue(number()) }),
   caughtUp: '你已看完所有新动态',

@@ -1,5 +1,5 @@
 import { browserMainApi } from '../api/browser.ts';
-import { settleFeedRead } from './read.ts';
+import { readFeedPage, settleFeedRead } from './read.ts';
 import { type FeedbackKind, type FeedbackStrength, type FeedHead, type FeedPage, type FeedQuery, type FollowKind,
   type Loaded, type MainClient, settle, type SuggestedFollow, uuidOf, type Vote } from './types.ts';
 
@@ -34,42 +34,48 @@ export interface FeedApi {
     key: string): Promise<Loaded<unknown>>;
 }
 
-export function mainFeedApi(main: MainClient = browserMainApi()): FeedApi {
+export function mainFeedApi(main?: MainClient, anonymous?: MainClient): FeedApi {
+  const supplied = main;
+  const authenticated = () => main ??= browserMainApi();
+  // Home's query carries its reader choice. A signed-in account without an
+  // eligible Agent reads publicly, including successors, head and recovery.
+  const reader = (actingSubject?: string) => actingSubject ? authenticated()
+    : anonymous ??= supplied ?? browserMainApi(undefined, { anonymous: true });
   const headers = (key: string) => ({ headers: { 'idempotency-key': key } });
   return {
-    page: query => settleFeedRead(() => main.v1.feed.get({ query })),
+    page: query => readFeedPage(reader(query.actingSubject), query),
 
-    vote: (item, input, key) => settle(() => main.v1.feed({ id: uuidOf(item) }).vote.post({
+    vote: (item, input, key) => settle(() => authenticated().v1.feed({ id: uuidOf(item) }).vote.post({
       profile: 'feed-vote-command-v1', ...input }, headers(key))),
 
     async follow(target, kind, following, actingSubject, key) {
-      const state = await settle(() => main.v1.follows({ id: uuidOf(target) }).get({ query: { kind, actingSubject } }));
+      const state = await settle(() => authenticated().v1.follows({ id: uuidOf(target) }).get({ query: { kind, actingSubject } }));
       if (!state.ok) return state;
       if (state.data.following === following) return { ok: true, data: { following } };
-      const written = await settle(() => main.v1.follows.post({ profile: 'follow-command-v1', target, kind,
+      const written = await settle(() => authenticated().v1.follows.post({ profile: 'follow-command-v1', target, kind,
         actingSubject, following, expectedRevision: state.data.revision }, headers(key)));
       return written.ok ? { ok: true, data: { following: written.data.following } } : written;
     },
 
-    batchFollow: (targets, actingSubject, key) => settle(() => main.v1.me.follows.batch.post({
+    batchFollow: (targets, actingSubject, key) => settle(() => authenticated().v1.me.follows.batch.post({
       profile: 'follow-batch-v1', actingSubject, targets: [...targets] }, headers(key))),
 
     async suggestions(input) {
-      const read = await settle(() => main.v1.onboarding['suggested-follows'].get({ query: { locale: input.locale,
+      const read = await settle(() => reader(input.actingSubject).v1.onboarding['suggested-follows'].get({ query: { locale: input.locale,
         ...(input.concepts.length ? { concepts: [...input.concepts] } : {}),
         ...(input.languages.length ? { languages: [...input.languages] } : {}),
         ...(input.actingSubject ? { actingSubject: input.actingSubject } : {}) } }));
       return read.ok ? { ok: true, data: read.data.items } : read;
     },
 
-    feedback: (input, key) => settle(() => main.v1.me['feed-feedback'].post(input, headers(key))),
+    feedback: (input, key) => settle(() => authenticated().v1.me['feed-feedback'].post(input, headers(key))),
 
-    hideContinue: (work, hidden, actingSubject, key) => settle(() => main.v1.me.continue({ work: uuidOf(work) })
+    hideContinue: (work, hidden, actingSubject, key) => settle(() => authenticated().v1.me.continue({ work: uuidOf(work) })
       .hidden.put({ actingSubject, hidden }, headers(key))),
 
-    head: input => settleFeedRead(() => main.v1.feed.head.get({ query: input })),
+    head: input => settleFeedRead(() => reader(input.actingSubject).v1.feed.head.get({ query: input })),
 
-    watermark: (scope, input, key) => settle(() => main.v1.me['feed-watermarks']({ scope }).put({ ...input, scope },
+    watermark: (scope, input, key) => settle(() => authenticated().v1.me['feed-watermarks']({ scope }).put({ ...input, scope },
       headers(key))),
   };
 }

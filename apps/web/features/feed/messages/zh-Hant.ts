@@ -70,6 +70,7 @@ export default {
   undo: '復原', feedbackFailed: '無法儲存，請再試一次。',
   signInToTakePart: '登入即可投票、追蹤社群和儲存作品',
   posts: '貼文', loadMore: '顯示更多貼文', loadingMore: '正在載入更多貼文…',
+  refreshing: '正在重新整理貼文…',
   newPosts: plural({ one: insert('{{count}} 則新貼文'), other: insert('{{count}} 則新貼文') },
     { count: asValue(number()) }),
   newPostsAtLeast: plural({ one: insert('{{count}}+ 則新貼文'), other: insert('{{count}}+ 則新貼文') },

@@ -10,7 +10,6 @@ import {
   RotateCwIcon,
   TriangleAlertIcon,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { EmptyState, failureDetail } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -21,7 +20,7 @@ import { relativeTime } from './time.ts';
 import { useFeed } from './feed-context.tsx';
 import { appendPosts, projecting, recoverProjection, sameProjection } from './projection.ts';
 import { feedHeadScope } from './read.ts';
-import { failureText, type FeedHead, type FeedItem, type FeedPage, type FeedQuery, type Loaded, type ReadFailure } from './types.ts';
+import { failureText, isOfflineError, type FeedHead, type FeedItem, type FeedPage, type FeedQuery, type Loaded, type ReadFailure } from './types.ts';
 
 /** How often an open feed asks whether newer posts exist. */
 const HEAD_INTERVAL_MS = 60_000;
@@ -102,10 +101,9 @@ export function feedContinuation(
 
 /** The first page failed: say what failed, and offer the one next step. */
 function FeedFailure({ failure, reference, status, retry }: {
-  failure: ReadFailure; reference?: string; status?: number; retry?: () => void;
+  failure: ReadFailure; reference?: string; status?: number; retry: () => void;
 }) {
   const { t, signInHref } = useFeed();
-  const router = useRouter();
   const text = status === 403 && failure !== 'closed'
     ? { kind: 'shown' as const, title: t.forbiddenTitle, description: t.forbiddenBody,
       action: 'none' as const, reference: false }
@@ -126,7 +124,7 @@ function FeedFailure({ failure, reference, status, retry }: {
     >
       {text.action === 'none' ? null : text.action === 'sign-in'
         ? <LocalizedLink href={signInHref} className={buttonVariants()}>{t.signIn}</LocalizedLink>
-        : <Button onClick={moved ? () => router.refresh() : retry ?? (() => router.refresh())}>
+        : <Button onClick={retry}>
           <RotateCwIcon aria-hidden="true" />
           {moved ? t.refresh : t.retry}
         </Button>}
@@ -138,11 +136,11 @@ function FeedFailure({ failure, reference, status, retry }: {
  * Asks Main, while the page is visible, how many posts arrived since the one
  * the reader is looking at began; never inserts them above the reader.
  */
-function useNewPosts(page: FeedPage, scope: string | null, interval: number) {
-  const { api, actingSubject, signedIn } = useFeed();
+function useNewPosts(page: FeedPage, scope: string | null, interval: number, actingSubject?: string) {
+  const { api } = useFeed();
   const [head, setHead] = useState<FeedHead | null>(null);
   useEffect(() => {
-    if ((signedIn && !actingSubject) || !scope) return;
+    if (!scope) return;
     setHead(null);
     const polled = scope;
     let stopped = false;
@@ -176,7 +174,6 @@ function useNewPosts(page: FeedPage, scope: string | null, interval: number) {
   }, [
     api,
     actingSubject,
-    signedIn,
     page.sourcePosition.sequence,
     page.sourcePosition.dataEpoch,
     page.projection.reviewSequence,
@@ -193,8 +190,8 @@ function useNewPosts(page: FeedPage, scope: string | null, interval: number) {
 }
 
 /** Records how far the reader has seen, so the navigation's new-activity dots clear. */
-function useWatermark(page: FeedPage, scope: 'following' | 'all' | null, recovering: boolean) {
-  const { api, actingSubject } = useFeed();
+function useWatermark(page: FeedPage, scope: 'following' | 'all' | null, recovering: boolean, actingSubject?: string) {
+  const { api } = useFeed();
   const sent = useRef<string | null>(null);
   useEffect(() => {
     if (recovering) return;
@@ -236,15 +233,62 @@ export function FeedList({
   /** How often to ask for newer posts; stories shorten it. */
   headInterval?: number;
 }) {
-  if (!initial.ok) return <FeedFailure {...initial} />;
+  return <FeedGeneration key={JSON.stringify(query)} initial={initial} query={query} empty={empty}
+    allHref={allHref} headInterval={headInterval} />;
+}
+
+/** A restart owns a new cursor chain, even when Main's projection sequence did not move. */
+function FeedGeneration({ initial, query, empty, allHref, headInterval }: {
+  initial: Loaded<FeedPage>; query: FeedQuery; empty: ReactNode; allHref: string; headInterval: number;
+}) {
+  const { api, t } = useFeed();
+  const [generation, setGeneration] = useState({ source: initial, read: initial, number: 0 });
+  const [restarting, setRestarting] = useState(false);
+  const request = useRef(0);
+  const pending = useRef(false);
+  // An RSC answer is also a new generation. Object identity, rather than the
+  // activity sequence, includes review and personal-condition changes.
+  if (generation.source !== initial)
+    setGeneration({ source: initial, read: initial, number: generation.number + 1 });
+  useEffect(() => {
+    setRestarting(false);
+    pending.current = false;
+    return () => { request.current++; };
+  }, [initial]);
+
+  const restart = useCallback(async () => {
+    if (pending.current) return;
+    pending.current = true;
+    const attempt = ++request.current;
+    setRestarting(true);
+    let read: Loaded<FeedPage>;
+    try {
+      // Read directly: a slow or interrupted RSC refresh cannot strand the
+      // list, and the URL and all of its filters stay with the reader.
+      read = await api().page({ ...query, cursor: undefined });
+    } catch (error) {
+      read = { ok: false, failure: isOfflineError(error) ? 'offline' : 'unavailable' };
+    }
+    if (request.current !== attempt) return;
+    pending.current = false;
+    setGeneration(current => ({ ...current, read, number: current.number + 1 }));
+    setRestarting(false);
+  }, [api, query]);
+
+  if (!generation.read.ok) return restarting
+    ? <div aria-busy="true"><p role="status" className="px-4 py-6 text-muted-foreground text-sm">{t.refreshing}</p>
+      <FeedSkeleton /></div>
+    : <FeedFailure {...generation.read} retry={() => void restart()} />;
   return (
     <FeedPages
-      key={`${JSON.stringify(query)}:${initial.data.projection.sequence}`}
-      page={initial.data}
+      key={generation.number}
+      page={generation.read.data}
       query={query}
       empty={empty}
       allHref={allHref}
       headInterval={headInterval}
+      restarting={restarting}
+      restart={() => void restart()}
     />
   );
 }
@@ -255,15 +299,18 @@ function FeedPages({
   empty,
   allHref,
   headInterval,
+  restarting,
+  restart,
 }: {
   page: FeedPage;
   query: FeedQuery;
   empty: ReactNode;
   allHref: string;
   headInterval: number;
+  restarting: boolean;
+  restart: () => void;
 }) {
   const { t, api } = useFeed();
-  const router = useRouter();
   const [state, setState] = useState(() => initialState(page));
   const list = useRef<HTMLDivElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
@@ -273,16 +320,16 @@ function FeedPages({
   const restore = useRef<{ id: string; top: number } | null>(null);
   const retryProjection = useRef<(() => Promise<void>) | null>(null);
   useEffect(() => {
-    active.current = true;
+    active.current = !restarting;
     return () => {
       active.current = false;
     };
-  }, []);
+  }, [restarting]);
   // A pinned tab is only part of All: its new posts and what was seen are not All's.
   const scope = query.savedFilter ? null : (query.scope ?? 'all');
   const sparseLimit = query.savedFilter ? PINNED_SPARSE_PAGES : SPARSE_PAGES;
-  const fresh = useNewPosts(page, feedHeadScope(query), headInterval);
-  useWatermark(state.page, scope, state.recovering);
+  const fresh = useNewPosts(page, restarting ? null : feedHeadScope(query), headInterval, query.actingSubject);
+  useWatermark(state.page, scope, state.recovering || restarting, query.actingSubject);
 
   useLayoutEffect(() => {
     const anchor = restore.current;
@@ -298,7 +345,7 @@ function FeedPages({
   // The head probe does not report target-index readiness. Ask the page, even
   // when it is empty or has a Saved Filter, and retry while its owner is building.
   useEffect(() => {
-    if (!state.recovering) return;
+    if (!state.recovering || restarting) return;
     let stopped = false;
     async function check(manual = false) {
       if (stopped || (!manual && state.failure) || reading.current || document.visibilityState !== 'visible') return;
@@ -359,11 +406,11 @@ function FeedPages({
       document.removeEventListener('visibilitychange', onVisible);
       retryProjection.current = null;
     };
-  }, [api, query, state, sparseLimit, headInterval]);
+  }, [api, query, state, sparseLimit, headInterval, restarting]);
 
   const loadMore = useCallback(async () => {
     const cursor = state.cursor;
-    if (!cursor || reading.current || state.failure === 'closed') return;
+    if (!cursor || reading.current || restarting || state.failure === 'closed') return;
     reading.current = true;
     setState((current) => ({ ...current, loading: true, failure: null, reference: undefined,
       status: undefined, problem: undefined }));
@@ -388,12 +435,12 @@ function FeedPages({
         sparse: items.length > current.items.length ? 0 : current.sparse + 1,
       };
     });
-  }, [api, query, state.cursor, state.failure, state.loading]);
+  }, [api, query, state.cursor, state.failure, state.loading, restarting]);
 
   // Near the end, the next page loads by itself; the button below stays for keyboards and screen readers.
   useEffect(() => {
     const target = sentinel.current;
-    if (!target || !state.cursor || state.loading || state.failure || state.sparse >= sparseLimit)
+    if (!target || !state.cursor || state.loading || restarting || state.failure || state.sparse >= sparseLimit)
       return;
     const observer = new IntersectionObserver(
       (entries) => {
@@ -403,15 +450,15 @@ function FeedPages({
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [loadMore, state.cursor, state.loading, state.failure, state.sparse, sparseLimit]);
+  }, [loadMore, state.cursor, state.loading, state.failure, state.sparse, sparseLimit, restarting]);
 
   function showNewest() {
     window.scrollTo({ top: 0, behavior: scrollBehavior() });
-    router.refresh();
+    restart();
   }
 
   const { items } = state;
-  const finished = !state.cursor && !state.loading;
+  const finished = !state.cursor && !state.loading && !restarting;
   const catchingUp = state.recovering;
   return (
     <div ref={list} className="relative">
@@ -420,6 +467,7 @@ function FeedPages({
           <Button
             size="sm"
             onClick={showNewest}
+            disabled={restarting}
             className="rounded-full shadow-lg"
           >
             <ArrowUpIcon aria-hidden="true" />
@@ -430,7 +478,7 @@ function FeedPages({
         </div>
       ) : null}
       {items.length ? (
-        <div role="feed" aria-label={t.posts} aria-busy={state.loading}>
+        <div role="feed" aria-label={t.posts} aria-busy={state.loading || restarting}>
           {items.map((item, index) => (
             <div key={item.id} data-feed-item={item.id}>
               <FeedCard
@@ -444,7 +492,8 @@ function FeedPages({
       ) : finished && !catchingUp ? (
         empty
       ) : null}
-      {state.loading ? (
+      {restarting ? <p role="status" className="px-4 py-6 text-muted-foreground text-sm">{t.refreshing}</p>
+        : state.loading ? (
         <>
           <span role="status" className="sr-only">
             {t.loadingMore}
@@ -453,17 +502,18 @@ function FeedPages({
         </>
       ) : null}
       <div ref={sentinel} aria-hidden="true" />
-      {feedContinuation(state.failure, state.cursor, state.loading) === 'error' ? (
+      {feedContinuation(restarting ? null : state.failure, state.cursor, state.loading || restarting) === 'error' ? (
         <FeedFailure failure={state.failure!} reference={state.reference} status={state.status}
-          retry={() => void (catchingUp ? retryProjection.current?.() : loadMore())} />
-      ) : feedContinuation(state.failure, state.cursor, state.loading) === 'more' ? (
+          retry={state.failure === 'moved' ? restart
+            : () => void (catchingUp ? retryProjection.current?.() : loadMore())} />
+      ) : feedContinuation(state.failure, state.cursor, state.loading || restarting) === 'more' ? (
         <div className="flex justify-center px-4 py-6">
           <Button variant="outline" onClick={() => void loadMore()}>
             {t.loadMore}
           </Button>
         </div>
       ) : null}
-      {catchingUp && !state.failure ? (
+      {catchingUp && !state.failure && !restarting ? (
         <FeedEnd caughtUp={state.caughtUp} catchingUp allHref={allHref} />
       ) : finished && items.length && !state.failure ? (
         <FeedEnd caughtUp={state.caughtUp} allHref={allHref} />

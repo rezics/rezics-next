@@ -57,9 +57,9 @@ export function readFailureNotice(failure: ReadFailure): FailureNotice {
     case 'offline': return 'offline';
     case 'missing': return 'missing';
     case 'sign-in': return 'denied';
-    case 'moved': case 'invalid': return 'moved';
+    case 'moved': return 'moved';
     case 'budget': return 'budget';
-    case 'unavailable': return 'server';
+    case 'invalid': case 'unavailable': return 'server';
   }
 }
 

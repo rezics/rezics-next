@@ -70,6 +70,7 @@ export default {
   undo: '元に戻す', feedbackFailed: '保存できませんでした。もう一度お試しください。',
   signInToTakePart: 'ログインして投票、フォロー、保存',
   posts: '投稿', loadMore: '投稿をさらに表示', loadingMore: '投稿を読み込み中…',
+  refreshing: '投稿を再読み込み中…',
   newPosts: plural({ one: insert('新着投稿{{count}}件'), other: insert('新着投稿{{count}}件') },
     { count: asValue(number()) }),
   newPostsAtLeast: plural({ one: insert('新着投稿{{count}}件以上'), other: insert('新着投稿{{count}}件以上') },

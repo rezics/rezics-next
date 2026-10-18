@@ -17,6 +17,7 @@ import { threadPath } from './discussion.ts';
 import { useFeed } from './feed-context.tsx';
 import { followsPoster, metaLead } from './lead.ts';
 import { type AttachedWork, barAction, MetaLine, PostRow, PostTime, rowLink, useIdentity, WorkAttachment } from './post-row.tsx';
+import { feedExcerpt } from './preview.ts';
 import type { FeedItem } from './types.ts';
 
 type T = ReturnType<typeof useFeed>['t'];
@@ -120,13 +121,6 @@ function details(item: FeedItem, t: T): string[] {
     facts.push(card.kind === 'review' ? t.moreReviews(item.group.count - 1) : t.moreUpdates(item.group.count - 1));
   }
   return facts;
-}
-
-function excerptOf(item: FeedItem): string | null {
-  const { card } = item;
-  if (card.kind === 'chapter' && card.excerpt) return card.excerpt;
-  if (card.kind === 'release' && card.changelogExcerpt) return card.changelogExcerpt;
-  return item.target.excerpt;
 }
 
 /**
@@ -310,7 +304,7 @@ function FeedPost({ item, position, total }: { item: FeedItem; position?: number
   const { card } = item;
   const hidden = spoilerHidden(item);
   const facts = details(item, t);
-  const excerpt = hidden ? null : excerptOf(item);
+  const excerpt = hidden ? null : feedExcerpt(item);
   const byline = authorLine(item.authors);
   const attached: AttachedWork | null = item.target.work ? { id: item.target.work,
     address: 'address' in item.target ? item.target.address as AddressTarget : undefined,
