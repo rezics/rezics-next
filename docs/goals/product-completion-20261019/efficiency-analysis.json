@@ -1,0 +1,1747 @@
+{
+  "goal": "product-completion-20261019",
+  "purpose": "Finite diagnosis of delivery cost from one retained window and three task histories; no product acceptance verdict.",
+  "source_sha": "83f052aca5e0459289bead523f45841386e1c139",
+  "window": {
+    "since": "2026-10-18T08:36:08.000Z",
+    "until": "2026-10-18T20:36:08.000Z",
+    "recorded_at": "2026-10-18T20:36:29.395Z",
+    "hours": 12,
+    "selection_semantics": "Inclusive session-start cohort, not event-time usage clipped to twelve hours."
+  },
+  "prior_audit": {
+    "available": false,
+    "specified_history_records_at_read": 1,
+    "earlier_records": 0,
+    "finding": "The specified shared ledger contains only this record; no earlier audit or before/after baseline is available there.",
+    "evidence": [
+      "audit-history@1"
+    ]
+  },
+  "measurement": {
+    "sessions": {
+      "total": 135,
+      "workers": 67,
+      "landingReviews": 2,
+      "other": 66
+    },
+    "steps": 6647,
+    "cumulative_model_input": 552471326,
+    "cached_model_input": 527629312,
+    "uncached_model_input": 24842014,
+    "cached_share_percent": 95.503475,
+    "by_role": {
+      "worker": {
+        "sessions": 67,
+        "inputTokens": 345771190,
+        "inputShare": 63
+      },
+      "landingReviews": {
+        "sessions": 2,
+        "inputTokens": 1636421,
+        "inputShare": 0
+      },
+      "other": {
+        "sessions": 66,
+        "inputTokens": 205063715,
+        "inputShare": 37
+      }
+    },
+    "worker_turn_buckets": {
+      "1-3": 280846566,
+      "4-6": 48434682,
+      "7-12": 16489942,
+      "13+": 0
+    },
+    "worker_action_input": {
+      "read": 196138057,
+      "other": 22477397,
+      "edit": 55777117,
+      "wait": 17655720,
+      "think": 19710246,
+      "test": 27762817,
+      "commit": 6249836
+    },
+    "worker_read_share_percent": 56.724812,
+    "worker_wait_test_commit_input": 51668373,
+    "worker_wait_test_commit_share_percent": 14.942938,
+    "observed_worker_task_count": 49,
+    "one_turn_task_count": 9,
+    "selected_task_input": 67227440,
+    "selected_share_of_worker_input_percent": 19.442753,
+    "selected_share_of_all_input_percent": 12.168494,
+    "interpretation": [
+      "Input sums tokens processed over model calls, repeatedly including prior context. Cached input is part of input, not an additional quantity.",
+      "Uncached input is input minus cached input. It is not a count of unique new prompt text, quota debit or money; repeated context can be uncached too. Output, provider pricing and billing are not in the aggregate, so no spending or saving is calculated.",
+      "Attempt turn.completed usage is cumulative within a resumed native session. The attempt table subtracts the preceding completion for the same session, then sums session endpoints; it never sums cumulative endpoints as separate turns.",
+      "The read action has the largest classified worker share, but reading includes necessary discovery. The noDecisionShare label combines waits, tests and commits; those include useful verification and delivery, so neither classifier estimates avoidable waste.",
+      "Actions split a step weight equally across unique pending action names. Classification by command regex is approximate, not measured wall time or a causal allocation.",
+      "Nine one-turn tasks out of 49 observed task IDs do not establish first-attempt landing share. A parked continuation is a resumed worker turn, not automatically rework or a failed review."
+    ],
+    "evidence": [
+      "snapshot",
+      "collector"
+    ]
+  },
+  "coverage_and_attribution_limits": [
+    {
+      "limit": "readSession rejects an entire session whose first relevant timestamp precedes since, even if resumed during the window. Older-started managers/workers are omitted; their number and cost cannot be recovered from this aggregate.",
+      "evidence": [
+        "collector"
+      ]
+    },
+    {
+      "limit": "After admission by first timestamp, readSession does not clip subsequent events at until. The snapshot was collected 21.395 seconds after until and may include a selected session tail through collection. It is not an exact event-time twelve-hour ledger.",
+      "evidence": [
+        "collector",
+        "snapshot",
+        "manager-event@90"
+      ]
+    },
+    {
+      "limit": "Only configured session-home files recognized by the collector are represented. Missing homes, unrecognized providers/formats, outputs, executor CPU, queue time and external service costs are not a complete delivery-cost ledger.",
+      "evidence": [
+        "collector"
+      ]
+    },
+    {
+      "limit": "Task assignment takes the first worktrees/g-N mention anywhere in a log. Role assignment uses the first eligible user message and two review prefixes. A mentioned worktree can therefore influence attribution independently of the actual owner.",
+      "evidence": [
+        "collector"
+      ]
+    },
+    {
+      "limit": "The 66 other sessions and 205063715 input tokens are not a measured manager-only numerator. The two recognized landing reviews used 1636421 input tokens (0.2962% of all input despite the rounded 0% field); unrecognized or older-started reviews may be elsewhere or omitted. Manager/worker/review shares cannot be completed by inference.",
+      "evidence": [
+        "snapshot",
+        "collector"
+      ]
+    },
+    {
+      "limit": "byEngine is empty, and the snapshot retains only the ten largest of 49 task totals. It has no session/event identifiers or task-kind/landing join. Model comparisons and a full same-kind landed denominator with matching inputs are unavailable.",
+      "evidence": [
+        "snapshot",
+        "collector"
+      ]
+    },
+    {
+      "limit": "The collector sums last_token_usage for each matching token_count record. The aggregate lacks invocation identifiers to test for repeated count records. This is an instrumentation uncertainty, not a demonstrated duplicate-count defect.",
+      "evidence": [
+        "collector"
+      ]
+    },
+    {
+      "limit": "Retained task logs are used for causes and their own session deltas. Post-window ledger state is used only with dated train/merge receipts; no current state or worker handoff substitutes for historical landing or product proof.",
+      "evidence": [
+        "task-ledger",
+        "landing-train@503",
+        "merge-history@15"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "task": "G-2743",
+      "kind": "tooling",
+      "snapshot": {
+        "task": "G-2743",
+        "turns": 11,
+        "steps": 212,
+        "inputTokens": 29416291,
+        "sessions": 3
+      },
+      "retained_worker_usage": {
+        "input": 4778598,
+        "cached": 4595200,
+        "sessions": 2,
+        "uncached": 183398
+      },
+      "reconciliation": {
+        "snapshot_sessions": 3,
+        "retained_worker_sessions": 2,
+        "snapshot_turns": 11,
+        "retained_worker_attempt_turns": 9,
+        "unreconciled_input": 24637693,
+        "finding": "The retained worker endpoints total 4778598 input, not the snapshot 29416291. The extra session/two turns are not identified by this snapshot. Do not assign their 24637693 input to worker rework, manager work or review without instrumentation."
+      },
+      "useful_delivery": "Review configuration and launch behavior gained tested controls; a confirmed empty-diff launch defect was fixed. A dated train/merge receipt proves this tooling task landed on main.",
+      "attempts_by_trigger": {
+        "initial": 1,
+        "fix_round": 1,
+        "job_continuation": 7,
+        "job_continuation_results": {
+          "assertion": 3,
+          "harness": 2,
+          "passed": 2
+        }
+      },
+      "rework_by_cause": [
+        {
+          "cause": "Inherited documentation reachability and duplicate navigation edit after automatic refresh.",
+          "attempts": [
+            3,
+            4
+          ],
+          "evidence": [
+            "g-2743-a3@5",
+            "g-2743-a4@22"
+          ]
+        },
+        {
+          "cause": "New test assertion type and inherited GOAL_ID in a synthetic fixture child required separate corrections.",
+          "attempts": [
+            4
+          ],
+          "evidence": [
+            "g-2743-a4@3",
+            "g-2743-a4@22"
+          ]
+        },
+        {
+          "cause": "One confirmed review defect: an empty diff represented as an empty path triggered an unnecessary review. Its failing assertion and fix are useful validation, not a fixture failure.",
+          "attempts": [
+            6,
+            7
+          ],
+          "evidence": [
+            "g-2743-a6@10",
+            "g-2743-a7@10"
+          ]
+        },
+        {
+          "cause": "Unsupported test selector caused an inline harness rejection, then the same test file ran through the supported interface.",
+          "attempts": [
+            6
+          ],
+          "evidence": [
+            "g-2743-a6@41"
+          ]
+        },
+        {
+          "cause": "Automatic check refresh hit the known retained-preflight integration conflict before validation; a pinned worker-tree check passed.",
+          "attempts": [
+            8,
+            9
+          ],
+          "evidence": [
+            "g-2743-a8@5",
+            "g-2743-a9@8"
+          ]
+        }
+      ],
+      "outcome_evidence": {
+        "landed_sha": "2dee8fbc88294a0f74ff85018af5b01143bc77dd",
+        "landed_at": "2026-10-18T20:31:37.503Z",
+        "final_worker_check_job": "a2d65c1e-47af-4228-a28d-c65e3e5cfb05",
+        "focused_regression_run": "20261018t193624-07a380",
+        "focused_tests_passed": 123,
+        "train_observation": "An earlier queue entry was stopped and requeued; the retained successful candidate gate passed in 211.886 seconds. A removed queue entry alone is not a failed worker fix round.",
+        "evidence": [
+          "g-2743-a9@8",
+          "landing-train@337",
+          "landing-train@339",
+          "landing-train@502",
+          "landing-train@503",
+          "merge-history@15"
+        ]
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "round": "initial",
+          "wake_result_class": null,
+          "started_at": "2026-10-18T18:37:44.082Z",
+          "ended_at": "2026-10-18T18:41:56.342Z",
+          "additional_processed_input": 833658,
+          "cached_processed_input": 775040,
+          "uncached_processed_input": 58618,
+          "work_and_trigger": "Initial configuration work and intentional failing regression run.",
+          "evidence": [
+            "g-2743-a1@75"
+          ]
+        },
+        {
+          "attempt": 2,
+          "round": "continuation",
+          "wake_result_class": "assertion",
+          "started_at": "2026-10-18T18:44:19.246Z",
+          "ended_at": "2026-10-18T18:49:04.817Z",
+          "additional_processed_input": 837889,
+          "cached_processed_input": 806016,
+          "uncached_processed_input": 31873,
+          "work_and_trigger": "Implement behavior after the expected failing assertions; focused checks pass, docs stop the sequence.",
+          "evidence": [
+            "g-2743-a2@35"
+          ]
+        },
+        {
+          "attempt": 3,
+          "round": "continuation",
+          "wake_result_class": "harness",
+          "started_at": "2026-10-18T18:50:55.472Z",
+          "ended_at": "2026-10-18T18:53:09.367Z",
+          "additional_processed_input": 602550,
+          "cached_processed_input": 597632,
+          "uncached_processed_input": 4918,
+          "work_and_trigger": "Repair inherited documentation reachability, then start the remaining check sequence.",
+          "evidence": [
+            "g-2743-a3@30"
+          ]
+        },
+        {
+          "attempt": 4,
+          "round": "continuation",
+          "wake_result_class": "assertion",
+          "started_at": "2026-10-18T18:56:10.061Z",
+          "ended_at": "2026-10-18T18:58:23.394Z",
+          "additional_processed_input": 1014573,
+          "cached_processed_input": 995456,
+          "uncached_processed_input": 19117,
+          "work_and_trigger": "Fix a new readonly-tuple assertion type and inherited fixture child ownership; remove a duplicate navigation edit after refresh.",
+          "evidence": [
+            "g-2743-a4@40"
+          ]
+        },
+        {
+          "attempt": 5,
+          "round": "continuation",
+          "wake_result_class": "passed",
+          "started_at": "2026-10-18T19:03:27.544Z",
+          "ended_at": "2026-10-18T19:05:31.269Z",
+          "additional_processed_input": 167636,
+          "cached_processed_input": 153344,
+          "uncached_processed_input": 14292,
+          "work_and_trigger": "Passing check result and initial handoff.",
+          "evidence": [
+            "g-2743-a5@13"
+          ]
+        },
+        {
+          "attempt": 6,
+          "round": "fix",
+          "wake_result_class": null,
+          "started_at": "2026-10-18T19:29:48.252Z",
+          "ended_at": "2026-10-18T19:32:18.837Z",
+          "additional_processed_input": 352293,
+          "cached_processed_input": 320256,
+          "uncached_processed_input": 32037,
+          "work_and_trigger": "One legitimate review fix round: reproduce empty-diff review launch; reject an unsupported test selector and rerun the file.",
+          "evidence": [
+            "g-2743-a6@45"
+          ]
+        },
+        {
+          "attempt": 7,
+          "round": "continuation",
+          "wake_result_class": "assertion",
+          "started_at": "2026-10-18T19:34:04.870Z",
+          "ended_at": "2026-10-18T19:39:21.055Z",
+          "additional_processed_input": 519517,
+          "cached_processed_input": 510848,
+          "uncached_processed_input": 8669,
+          "work_and_trigger": "Fix the empty-path predicate and run regression plus full check.",
+          "evidence": [
+            "g-2743-a7@24"
+          ]
+        },
+        {
+          "attempt": 8,
+          "round": "continuation",
+          "wake_result_class": "harness",
+          "started_at": "2026-10-18T19:39:43.689Z",
+          "ended_at": "2026-10-18T19:43:15.299Z",
+          "additional_processed_input": 312396,
+          "cached_processed_input": 300544,
+          "uncached_processed_input": 11852,
+          "work_and_trigger": "Inspect automatic refresh conflict; run the check on the pinned worker revision.",
+          "evidence": [
+            "g-2743-a8@20"
+          ]
+        },
+        {
+          "attempt": 9,
+          "round": "continuation",
+          "wake_result_class": "passed",
+          "started_at": "2026-10-18T19:47:24.416Z",
+          "ended_at": "2026-10-18T19:51:29.305Z",
+          "additional_processed_input": 138086,
+          "cached_processed_input": 136064,
+          "uncached_processed_input": 2022,
+          "work_and_trigger": "Passing pinned check and final handoff.",
+          "evidence": [
+            "g-2743-a9@9"
+          ]
+        }
+      ]
+    },
+    {
+      "task": "G-2757",
+      "kind": "surface",
+      "snapshot": {
+        "task": "G-2757",
+        "turns": 8,
+        "steps": 239,
+        "inputTokens": 22165414,
+        "sessions": 1
+      },
+      "retained_worker_usage": {
+        "input": 22165414,
+        "cached": 21260416,
+        "sessions": 1,
+        "uncached": 904998
+      },
+      "reconciliation": "One session endpoint exactly matches snapshot input; eight log attempts are eight turns, including seven job continuations.",
+      "useful_delivery": "Four wave commits implement WORK identity/actions/navigation, source footer, shared exact-target menus and retryable missing-resource states; meaningful tests and explicit prove obligations were delivered.",
+      "delivered_commits": [
+        "067f9f65b5",
+        "5e1b56efb6",
+        "92d7487e2d",
+        "4c9dbf2be2"
+      ],
+      "attempts_by_trigger": {
+        "initial": 1,
+        "job_continuation": 7,
+        "job_continuation_results": {
+          "assertion": 3,
+          "harness": 1,
+          "passed": 3
+        }
+      },
+      "rework_by_cause": [
+        {
+          "cause": "Three failed static sequences rediscovered fixture/story typing and dropped continuations: optional instructions, invalid story/statement fixtures, nextCursor versus the API next field, and changed continuation contexts.",
+          "attempts": [
+            2,
+            3,
+            4
+          ],
+          "input_in_mixed_turns": 8665193,
+          "evidence": [
+            "g-2757-a2@13",
+            "g-2757-a2@40",
+            "g-2757-a3@5",
+            "g-2757-a3@9",
+            "g-2757-a4@5"
+          ]
+        },
+        {
+          "cause": "Shared menu primitives arrived later and were integrated; this is useful dependency work, not automatically avoidable rework.",
+          "attempts": [
+            5,
+            6
+          ],
+          "evidence": [
+            "g-2757-a6@3",
+            "g-2757-a8@41"
+          ]
+        },
+        {
+          "cause": "Self-review found four existing assertions had been changed; worker restored them and corrected missing-resource behavior before final tests.",
+          "attempts": [
+            6
+          ],
+          "evidence": [
+            "g-2757-a6@14",
+            "g-2757-a6@31"
+          ]
+        },
+        {
+          "cause": "Final checks passed but branch advancement rejected publication, requiring rebase and another type check.",
+          "attempts": [
+            7,
+            8
+          ],
+          "evidence": [
+            "g-2757-a7@3",
+            "g-2757-a8@41"
+          ]
+        },
+        {
+          "cause": "Two Zone cases remained unresolved after wave module-reader changes: module readiness reached its assertion at line 235; mounted Collection setup threw before its outcome assertion at line 255.",
+          "attempts": [
+            2,
+            8
+          ],
+          "evidence": [
+            "g-2757-a2@84",
+            "g-2757-a8@41"
+          ]
+        }
+      ],
+      "outcome_evidence": {
+        "targeted_tests_passed": 107,
+        "targeted_file_count": 9,
+        "final_test_and_static_job": "39e0db93-9762-4774-a062-1a0fe4436a77",
+        "publication_job": "2f11d89d-70a6-47bf-a15d-17df4e645c86",
+        "status": "Worker-reported build delivered to local wave. Main landing, recorded API, rendered stories and screenshots are not established by this handoff.",
+        "evidence": [
+          "work-brief",
+          "g-2757-a8@41"
+        ]
+      },
+      "fixture_owner_route": {
+        "owner": "G-2791 via this manager",
+        "additional_requirement": "For missing shared source/manifests, retain the failing consumer and prerequisite stage, emit the existing schema and supported readiness receipts, and preserve assertions. The two Zone cases are unit reader/fixture mismatches, not proven shared-corpus omissions; manager must identify whether their missing readiness belongs to G-2791 inputs or the existing module owner before assigning implementation.",
+        "consumer": "apps/web/tests/g-655-zone-site.test.ts",
+        "cases": [
+          "every module card and row whose Work is in the population links inside /z/{ref}/",
+          "a card from a mounted Collection opens under its mount, the rest under /w"
+        ],
+        "evidence": [
+          "corpus-owner",
+          "g-2757-a2@84",
+          "g-2757-a8@41"
+        ]
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "round": "initial",
+          "wake_result_class": null,
+          "started_at": "2026-10-18T18:50:11.157Z",
+          "ended_at": "2026-10-18T19:22:18.156Z",
+          "additional_processed_input": 9507041,
+          "cached_processed_input": 9211136,
+          "uncached_processed_input": 295905,
+          "work_and_trigger": "Main WORK implementation, meaningful regression failures and corrections, then first static check.",
+          "evidence": [
+            "g-2757-a1@332"
+          ]
+        },
+        {
+          "attempt": 2,
+          "round": "continuation",
+          "wake_result_class": "assertion",
+          "started_at": "2026-10-18T19:23:03.761Z",
+          "ended_at": "2026-10-18T19:32:18.842Z",
+          "additional_processed_input": 1855369,
+          "cached_processed_input": 1746176,
+          "uncached_processed_input": 109193,
+          "work_and_trigger": "Repair story/fixture types, hardcoded test URLs and continuation handling; two Zone reader/fixture failures appear after rebase.",
+          "evidence": [
+            "g-2757-a2@91"
+          ]
+        },
+        {
+          "attempt": 3,
+          "round": "continuation",
+          "wake_result_class": "assertion",
+          "started_at": "2026-10-18T19:42:10.442Z",
+          "ended_at": "2026-10-18T20:04:06.244Z",
+          "additional_processed_input": 5593395,
+          "cached_processed_input": 5416704,
+          "uncached_processed_input": 176691,
+          "work_and_trigger": "Fix wrong nextCursor field and continuation obligations while continuing source-footer and recorded-layout implementation.",
+          "evidence": [
+            "g-2757-a3@166"
+          ]
+        },
+        {
+          "attempt": 4,
+          "round": "continuation",
+          "wake_result_class": "assertion",
+          "started_at": "2026-10-18T20:04:06.249Z",
+          "ended_at": "2026-10-18T20:11:53.735Z",
+          "additional_processed_input": 1216429,
+          "cached_processed_input": 1137536,
+          "uncached_processed_input": 78893,
+          "work_and_trigger": "Repair new statement-fixture types and continuation context; integrate the current wave.",
+          "evidence": [
+            "g-2757-a4@53"
+          ]
+        },
+        {
+          "attempt": 5,
+          "round": "continuation",
+          "wake_result_class": "passed",
+          "started_at": "2026-10-18T20:11:53.739Z",
+          "ended_at": "2026-10-18T20:17:44.930Z",
+          "additional_processed_input": 1817936,
+          "cached_processed_input": 1776640,
+          "uncached_processed_input": 41296,
+          "work_and_trigger": "Consume the newly available shared menu/evidence primitives and extend precise report targets.",
+          "evidence": [
+            "g-2757-a5@47"
+          ]
+        },
+        {
+          "attempt": 6,
+          "round": "continuation",
+          "wake_result_class": "passed",
+          "started_at": "2026-10-18T20:17:44.933Z",
+          "ended_at": "2026-10-18T20:22:31.323Z",
+          "additional_processed_input": 1607483,
+          "cached_processed_input": 1456896,
+          "uncached_processed_input": 150587,
+          "work_and_trigger": "Restore four existing assertions found changed during self-review; implement retryable missing-resource state; verify and attempt publication.",
+          "evidence": [
+            "g-2757-a6@35"
+          ]
+        },
+        {
+          "attempt": 7,
+          "round": "continuation",
+          "wake_result_class": "harness",
+          "started_at": "2026-10-18T20:23:43.058Z",
+          "ended_at": "2026-10-18T20:27:09.916Z",
+          "additional_processed_input": 255298,
+          "cached_processed_input": 226304,
+          "uncached_processed_input": 28994,
+          "work_and_trigger": "Recover from wave publication race, rebase and queue type check plus push.",
+          "evidence": [
+            "g-2757-a7@18"
+          ]
+        },
+        {
+          "attempt": 8,
+          "round": "continuation",
+          "wake_result_class": "passed",
+          "started_at": "2026-10-18T20:28:18.464Z",
+          "ended_at": "2026-10-18T20:32:18.041Z",
+          "additional_processed_input": 312463,
+          "cached_processed_input": 289024,
+          "uncached_processed_input": 23439,
+          "work_and_trigger": "Successful wave publication and handoff; retain the earlier Zone failures and pending runtime proof.",
+          "evidence": [
+            "g-2757-a8@42"
+          ]
+        }
+      ]
+    },
+    {
+      "task": "G-2758",
+      "kind": "surface",
+      "snapshot": {
+        "task": "G-2758",
+        "turns": 7,
+        "steps": 179,
+        "inputTokens": 15645735,
+        "sessions": 1
+      },
+      "retained_worker_usage": {
+        "input": 15645735,
+        "cached": 15009536,
+        "sessions": 1,
+        "uncached": 636199
+      },
+      "reconciliation": "One session endpoint exactly matches snapshot input; seven log attempts are seven turns, including six job continuations.",
+      "useful_delivery": "Shared non-WORK subject headers/actions, precise subject report menus and page-end evidence were published in one wave commit with tests and a partial handoff that names API/projection/reporting gaps.",
+      "delivered_commits": [
+        "b6d6ecc2e1"
+      ],
+      "attempts_by_trigger": {
+        "initial": 1,
+        "job_continuation": 6,
+        "job_continuation_results": {
+          "assertion": 2,
+          "harness": 1,
+          "passed": 3
+        }
+      },
+      "rework_by_cause": [
+        {
+          "cause": "Two failed static sequences: dropped continuations, a Concept story type, four new unpaged loops entered under the wrong inventory section, and changed renderer contexts.",
+          "attempts": [
+            2,
+            3
+          ],
+          "input_in_mixed_turns": 6969191,
+          "evidence": [
+            "g-2758-a2@5",
+            "g-2758-a2@13",
+            "g-2758-a3@7",
+            "g-2758-a3@38",
+            "g-2758-a3@41"
+          ]
+        },
+        {
+          "cause": "A shared continuation-inventory conflict during rebase required preserving both wave and slice entries and checking the resolved inventory.",
+          "attempts": [
+            4
+          ],
+          "evidence": [
+            "g-2758-a4@19",
+            "g-2758-a4@32"
+          ]
+        },
+        {
+          "cause": "Two wave publication races led to repeated passing whole-web type checks and one repeated continuation-guard run. Sequenced check/push did not prevent the second race.",
+          "attempts": [
+            5,
+            6,
+            7
+          ],
+          "evidence": [
+            "g-2758-a5@11",
+            "g-2758-a5@39",
+            "g-2758-a6@3",
+            "g-2758-a6@9",
+            "g-2758-a7@24"
+          ]
+        },
+        {
+          "cause": "The projection gives imported source URLs and homepages the same role; richer source roles and revision/report selections remain API/independent-owner prerequisites, rather than an excuse for more unready proof attempts.",
+          "attempts": [
+            3,
+            7
+          ],
+          "evidence": [
+            "g-2758-a3@100",
+            "g-2758-a7@24"
+          ]
+        }
+      ],
+      "outcome_evidence": {
+        "targeted_tests_passed": 21,
+        "targeted_file_count": 2,
+        "passing_test_and_static_job": "2ab5fdd3-7eb2-4508-98dd-ebc3621ded1b",
+        "final_typecheck_and_publication_job": "815a605b-664f-40cb-af70-a16227d180cb",
+        "status": "Worker-reported partial build on local wave; missing API/source-role/report-target capabilities and runtime/screenshot proof are explicitly pending. This report does not reassess another Goal acceptance.",
+        "evidence": [
+          "entity-brief",
+          "g-2758-a7@24"
+        ]
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "round": "initial",
+          "wake_result_class": null,
+          "started_at": "2026-10-18T18:50:28.984Z",
+          "ended_at": "2026-10-18T19:04:06.569Z",
+          "additional_processed_input": 6250261,
+          "cached_processed_input": 6006272,
+          "uncached_processed_input": 243989,
+          "work_and_trigger": "Main non-WORK subject/header/action/source implementation, then first static check.",
+          "evidence": [
+            "g-2758-a1@338"
+          ]
+        },
+        {
+          "attempt": 2,
+          "round": "continuation",
+          "wake_result_class": "assertion",
+          "started_at": "2026-10-18T19:10:22.802Z",
+          "ended_at": "2026-10-18T19:26:27.020Z",
+          "additional_processed_input": 5431736,
+          "cached_processed_input": 5240960,
+          "uncached_processed_input": 190776,
+          "work_and_trigger": "Repair projection/continuation violations and finish regression and source-section work.",
+          "evidence": [
+            "g-2758-a2@234"
+          ]
+        },
+        {
+          "attempt": 3,
+          "round": "continuation",
+          "wake_result_class": "assertion",
+          "started_at": "2026-10-18T19:33:36.386Z",
+          "ended_at": "2026-10-18T19:43:15.303Z",
+          "additional_processed_input": 1537455,
+          "cached_processed_input": 1418368,
+          "uncached_processed_input": 119087,
+          "work_and_trigger": "Repair Concept story type and continuation inventory placement; distinguish ordinary URLs from typed source roles.",
+          "evidence": [
+            "g-2758-a3@127"
+          ]
+        },
+        {
+          "attempt": 4,
+          "round": "continuation",
+          "wake_result_class": "passed",
+          "started_at": "2026-10-18T19:53:36.705Z",
+          "ended_at": "2026-10-18T20:01:22.093Z",
+          "additional_processed_input": 1732000,
+          "cached_processed_input": 1689728,
+          "uncached_processed_input": 42272,
+          "work_and_trigger": "Commit, resolve shared continuation-inventory rebase conflict, then run rebased types and guard.",
+          "evidence": [
+            "g-2758-a4@68"
+          ]
+        },
+        {
+          "attempt": 5,
+          "round": "continuation",
+          "wake_result_class": "passed",
+          "started_at": "2026-10-18T20:01:22.096Z",
+          "ended_at": "2026-10-18T20:04:19.934Z",
+          "additional_processed_input": 343905,
+          "cached_processed_input": 315264,
+          "uncached_processed_input": 28641,
+          "work_and_trigger": "Passing checks, first rejected wave push, clean rebase and another check/push sequence.",
+          "evidence": [
+            "g-2758-a5@41"
+          ]
+        },
+        {
+          "attempt": 6,
+          "round": "continuation",
+          "wake_result_class": "harness",
+          "started_at": "2026-10-18T20:06:40.802Z",
+          "ended_at": "2026-10-18T20:09:21.128Z",
+          "additional_processed_input": 163865,
+          "cached_processed_input": 160896,
+          "uncached_processed_input": 2969,
+          "work_and_trigger": "Second wave push race despite sequenced checks/push; rebase and retry types/push.",
+          "evidence": [
+            "g-2758-a6@19"
+          ]
+        },
+        {
+          "attempt": 7,
+          "round": "continuation",
+          "wake_result_class": "passed",
+          "started_at": "2026-10-18T20:09:21.131Z",
+          "ended_at": "2026-10-18T20:15:07.345Z",
+          "additional_processed_input": 186513,
+          "cached_processed_input": 178048,
+          "uncached_processed_input": 8465,
+          "work_and_trigger": "Successful wave publication and partial handoff with explicit missing capabilities and proof.",
+          "evidence": [
+            "g-2758-a7@25"
+          ]
+        }
+      ]
+    }
+  ],
+  "cross_task_findings": {
+    "strongest_recurring_cause": "Late alignment of surface code and fixtures with typed responses and continuation/projection guards, amplified by changing shared wave context.",
+    "failed_surface_static_sequences": 5,
+    "sequence_ids": [
+      "a0def069-89eb-486f-aa44-f289df062254",
+      "167d0483-83f0-43c2-89fd-8c7b5d077bcc",
+      "18cb3c28-fbd1-4350-89de-fe72481c0b27",
+      "5d63063c-3217-42da-822e-9802318400fc",
+      "9d16236a-ea6f-428d-be1a-a51c39fe7f33"
+    ],
+    "surface_tasks_in_static_sequence_baseline": 2,
+    "failed_static_sequences_per_surface_build": 2.5,
+    "input_in_mixed_repair_turns": 15634384,
+    "repair_turns": {
+      "G-2757": [
+        2,
+        3,
+        4
+      ],
+      "G-2758": [
+        2,
+        3
+      ]
+    },
+    "interpretation": "This is the largest quantified recurring repair context in the inspected surface logs, not a proven cause of most whole-window tokens. These turns also implement useful remaining scope; all 15634384 input tokens cannot be called waste or prospective savings.",
+    "publication_races": {
+      "rejected_publications": 3,
+      "surface_tasks": 2,
+      "rejections_per_build": 1.5,
+      "input_in_final_recovery_and_handoff_turns": 918139,
+      "turns": {
+        "G-2757": [
+          7,
+          8
+        ],
+        "G-2758": [
+          6,
+          7
+        ]
+      },
+      "interpretation": "Recovery and handoff inputs include useful checks and final reporting. Earlier integration/first-rejection turns are mixed with implementation and are excluded from this small, reproducible subtotal."
+    },
+    "counterevidence": "The second G-2758 publication race happened even with check and push in the same recorded job; job batching alone has already failed to prevent branch movement.",
+    "evidence": [
+      "g-2757-a2@13",
+      "g-2757-a2@40",
+      "g-2757-a3@5",
+      "g-2757-a3@9",
+      "g-2757-a4@5",
+      "g-2758-a2@5",
+      "g-2758-a3@7",
+      "g-2758-a3@38",
+      "g-2757-a7@3",
+      "g-2758-a5@11",
+      "g-2758-a5@39",
+      "g-2758-a6@3"
+    ]
+  },
+  "same_kind_landing_comparisons": {
+    "complete_window_tokens_per_landed_task": {
+      "available": false,
+      "value": null,
+      "reason": "No complete event-time numerator joined to landed tasks by kind; 49 observed task IDs and top-ten inputs are not landed-task counts."
+    },
+    "tooling_observation": {
+      "cohort": [
+        "G-2743"
+      ],
+      "landed_tasks": 1,
+      "main_landing_at": "2026-10-18T20:31:37.503Z",
+      "landed_sha": "2dee8fbc88294a0f74ff85018af5b01143bc77dd",
+      "snapshot_attributed_input_per_known_landing": 29416291,
+      "retained_worker_session_input_per_known_landing": 4778598,
+      "interpretation": "One tooling task has both a snapshot-attributed numerator and a dated main landing. The worker-only subtotal is separately reconstructed. The unreconciled third session prevents treating the snapshot value as verified worker cost; neither number is a full tooling cohort, whole-system cost or before/after comparison.",
+      "evidence": [
+        "snapshot",
+        "task-ledger",
+        "landing-train@503",
+        "merge-history@15",
+        "landed-source"
+      ]
+    },
+    "surface_observation": {
+      "cohort": [
+        "G-2757",
+        "G-2758"
+      ],
+      "input": 37811149,
+      "observed_main_landings_for_these_tasks": 0,
+      "tokens_per_main_landed_task": null,
+      "reason": "Worker receipts establish local wave publication, not task-attributed main landing. No train or merge receipt in this window attributes a main landing to either task; dividing by their two handoffs would invent a denominator.",
+      "evidence": [
+        "g-2757-a8@41",
+        "g-2758-a7@24",
+        "task-ledger",
+        "landing-train",
+        "merge-history"
+      ]
+    },
+    "before_after_same_kind": {
+      "available": false,
+      "value": null,
+      "reason": "No prior recorded audit, corrected comparison window or reconciled matching cohort. No improvement claim is made."
+    }
+  },
+  "ranked_improvements": [
+    {
+      "rank": 1,
+      "proposal": "Validate one representative typed response, source group and continuation path before expanding a surface slice.",
+      "smallest_same_day_correction": "In the next ready surface brief, the manager names the current API response type and one existing paged-read/source-group example. The current surface owner checks its first reusable component with admitted types and the exact continuation guard in one recorded sequence, fixes every reported mismatch, then expands the remaining views and runs the normal final gate. This requires brief sequencing through existing owners, no new tooling, corpus or parallel approval step.",
+      "recorded_sequence_for_that_owner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'bun scripts/goal/goalctl.ts test scripts/static/web-continuations.test.ts' -- task goal -- check --only types",
+      "why_first": "Five failed static sequences across two surface builds, including next versus nextCursor and new typed story/statement fixtures; the mixed repair-turn input subtotal is 15634384.",
+      "cost_and_tradeoff": "One earlier focused check and a concrete type/example reference; it can move discovery earlier but cannot remove actual design work or later API changes. Repeated full gates after each file would add more compiler work.",
+      "falsifying_measure": {
+        "baseline": "5 failed type/continuation-bearing sequences / 2 comparable surface builds = 2.5 per build.",
+        "observation": "For the next two comparable surface builds, retain their first-component check, later type/continuation failures, API/base revisions, turns and cached/uncached input separately. Count the early failures too.",
+        "falsifies": "If total failed type/continuation sequences per build remains at least 2.5, or the same already-discovered contract mismatch recurs after the early check on an unchanged contract, the proposed reduction in repair is not supported.",
+        "delivery_guard": "Existing assertions and eventual outcome proof remain intact. Cost-per-landed-task improvement stays unclaimed until same-kind inputs and main landings can be joined."
+      },
+      "status": "Proposed; not implemented or measured.",
+      "evidence": [
+        "#/cross_task_findings",
+        "g-2757-a3@5",
+        "g-2757-a4@5",
+        "g-2758-a3@7",
+        "g-2758-a3@41"
+      ]
+    },
+    {
+      "rank": 2,
+      "proposal": "Use the existing wave/scheduling owner to protect the short final rebase, required check and publication interval.",
+      "next_action": "Ask the existing wave owner to coordinate compatible final publication slots so the branch does not advance during a worker final check/push. Retain required checks after a changed base; do not add a second scheduler or solve it by rerunning every passing suite.",
+      "cost_and_tradeoff": "A small coordination interval may delay another push; it trades that delay against already observed repeat checks. Sequencing check and push alone was already tried and did not prevent the race.",
+      "falsifying_measure": {
+        "baseline": "3 publication rejections / 2 surface builds = 1.5 per build.",
+        "observation": "Retain before/after wave SHA, check-to-push interval and rejected pushes for the next two coordinated publications; separately count repeated passing type/guard work.",
+        "falsifies": "If rejections remain at least 1.5 per build under the coordinated interval, or queue delay offsets the avoided check-to-publication time without reducing turns/input, do not claim an efficiency improvement."
+      },
+      "status": "Proposed through the existing owner; no scheduler or wave changes made.",
+      "evidence": [
+        "g-2757-a7@3",
+        "g-2758-a5@11",
+        "g-2758-a5@39",
+        "g-2758-a6@3"
+      ]
+    },
+    {
+      "rank": 3,
+      "proposal": "Route missing proof/setup prerequisites to the existing shared corpus producer and validate readiness before proof admission.",
+      "next_action": "Through this manager handoff, give G-2791 the exact existing consumer contracts and failed-stage evidence for missing shared manifests or source/read-ready inputs. Require schema-valid command receipts, existing assertions, one consistent backup and isolated restores. Keep unit-reader contract failures explicitly distinguished from missing shared corpus; the manager should triage the two Zone failures before assigning their repair.",
+      "cost_and_tradeoff": "Reuse one producer and the existing preparation budget. No additional corpus or proof attempt is created by this report; this sample does not quantify corpus-related savings.",
+      "falsifying_measure": {
+        "baseline": "Two unresolved Zone cases are retained: one module-readiness assertion, one setup failure. No verified count of missing shared-corpus proof retries is available in these three build histories.",
+        "observation": "At the separately authorized G-2791 execution/prove phase, count first-attempt schema/read-ready preflight successes per existing consumer and repeated missing-input failures; record preparation time against the existing 600-second budget.",
+        "falsifies": "A preflight-ready receipt followed by the same missing-input/setup failure, changed assertions, or preparation exceeding the budget disproves readiness or the proposed avoidance for that consumer. No before/after savings can be inferred without the missing baseline."
+      },
+      "status": "Already owned by G-2791; additional requirements go only through the manager.",
+      "evidence": [
+        "corpus-owner",
+        "g-2757-a2@84",
+        "g-2757-a8@41"
+      ]
+    }
+  ],
+  "retained_manager_event_example": {
+    "trigger": "mail:94d9c6fe-1a3a-421f-99e5-f54320b919fb",
+    "goal": "product-completion-20261019",
+    "attempt_token": "b589fad1-517f-480b-b0dd-e760ca3bf981",
+    "started_at": "2026-10-18T20:34:26.106Z",
+    "ended_at": "2026-10-18T20:40:52.359Z",
+    "window_relationship": "This event began before until, measured while still in progress, and ended after both until and record creation. Its completed totals are retrospective event evidence, not an addition to the closed snapshot or proof that the full event was measured. Snapshot membership cannot be joined from this record.",
+    "completed_event_usage": {
+      "cumulative_model_input": 1427681,
+      "cached_model_input": 1351040,
+      "uncached_model_input": 76641,
+      "output": 15760
+    },
+    "reads_and_status_attempts": [
+      {
+        "action": "Read Goal state/charter/skill, current briefs, worker handoffs, CLI source and the measurement implementation.",
+        "evidence": [
+          "manager-event@5",
+          "manager-event@7",
+          "manager-event@22",
+          "manager-event@30",
+          "manager-event@36",
+          "manager-event@77"
+        ]
+      },
+      {
+        "action": "Initial mail inbox and status commands both failed on PRAGMA synchronous=FULL after a 5000 ms SQLite lock wait; later inbox and status attempts succeeded.",
+        "evidence": [
+          "manager-event@27",
+          "manager-event@28",
+          "manager-event@38",
+          "manager-event@61"
+        ]
+      },
+      {
+        "action": "CLI discovery included --help exit 201 and a missing scripts/goal/cli.ts lookup. Repeated raw reads of worker attempt logs occurred before choosing slices; their separate input cost is not available.",
+        "evidence": [
+          "manager-event@34",
+          "manager-event@40",
+          "manager-event@48",
+          "manager-event@60"
+        ]
+      }
+    ],
+    "recorded_measurement": {
+      "command": "task goal -- efficiency --since 2026-10-18T08:36:08Z --until 2026-10-18T20:36:08Z --record --json",
+      "recorded_at": "2026-10-18T20:36:29.395Z",
+      "actions": "Recorded one explicit window and retained the JSON copy; this report uses it without collecting another window.",
+      "evidence": [
+        "manager-event@90",
+        "manager-event@98",
+        "audit-history@1",
+        "snapshot"
+      ]
+    },
+    "coordination_actions": [
+      {
+        "action": "Reserved and wrote G-2794 for finite diagnosis, with existing G-2791 corpus ownership retained.",
+        "evidence": [
+          "manager-event@114",
+          "manager-event@124"
+        ]
+      },
+      {
+        "action": "Sent durable disposition to the originating audit manager, including a request to the existing scheduling owner for retained measurement events and correction ownership.",
+        "mail_id": "mail:1d9e882f-09cd-4f48-b1c0-3fea34bbf336",
+        "evidence": [
+          "manager-event@124"
+        ]
+      },
+      {
+        "action": "Queue first failed because the brief was absent from main during manager-commit processing. Verified the brief commit landed, then retried queue; retained final status showed G-2794 starting.",
+        "brief_landing_sha": "602fcc892e10024bdfc649cd771e28d8a480c834",
+        "evidence": [
+          "manager-event@128",
+          "manager-event@149",
+          "manager-event@150",
+          "manager-event@152"
+        ]
+      },
+      {
+        "action": "Acknowledged the triggering mail.",
+        "evidence": [
+          "manager-event@132"
+        ]
+      }
+    ],
+    "attribution": "This example shows useful coordination plus lock/queue/discovery friction. Completed-event usage is not allocated to individual actions; no causal token saving is inferred.",
+    "evidence": [
+      "coordinator-events",
+      "manager-event@156"
+    ]
+  },
+  "manager_questions": [
+    {
+      "question": "Can the existing efficiency owner identify the third session and two extra turns attributed to G-2743, reconcile its 24637693-input gap against the two retained worker sessions, and retain session/event or invocation IDs with explicit task/role, event timestamps and cached/uncached/output deltas joined to task kind and train/merge receipts, including in-window work from older-started sessions?",
+      "why_needed": "Without this join, manager/review attribution, exact window coverage, whole-kind tokens per landing and later correction comparisons remain unavailable. This is a concrete instrumentation question for the manager, not authorization for this worker to implement it.",
+      "evidence": [
+        "snapshot",
+        "collector",
+        "task-ledger",
+        "landing-train@503"
+      ]
+    }
+  ],
+  "validation_scope": "JSON parsing, local source/citation/hash checks, exact arithmetic/session-delta reconciliation, task docs:check and the required recorded worker guard check. No product suites, service refresh, timers, external recipients or automatic landing.",
+  "source_resolution": {
+    "worktree": "Paths relative to this worker checkout at source_sha.",
+    "main-read-only": "Paths relative to the main checkout; shared orchestration artifacts were only read. Temporary evidence is retained there and is not added to Git."
+  },
+  "sources": {
+    "snapshot": {
+      "origin": "worktree",
+      "path": ".temp/ref/efficiency-20261018T203608Z.json",
+      "sha256": "3d37ce1a42a44f11ea3b0fcee01b193f82eb951d0ec4d4a5af1de2641e5fd3ec"
+    },
+    "original-snapshot": {
+      "origin": "main-read-only",
+      "path": ".temp/product-completion-20261019/efficiency-20261018T203608Z.json",
+      "sha256": "3d37ce1a42a44f11ea3b0fcee01b193f82eb951d0ec4d4a5af1de2641e5fd3ec"
+    },
+    "audit-history": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/efficiency.jsonl",
+      "anchors": [
+        {
+          "line": 1,
+          "contains": "2026-10-18T20:36:29.395Z",
+          "line_sha256": "5f8880855ea31ee782fe30db0bd0b253fe5dbe0c7aecc87f34b8ac4a5d80f990"
+        }
+      ],
+      "retention": "Shared mutable history; only the cited lines or selected records establish this observation."
+    },
+    "collector": {
+      "origin": "worktree",
+      "path": "scripts/goal/efficiency.ts",
+      "sha256": "5ddc5e97b8def4f8cbbc50f0a0f067c316e3ec5ee94aa6e432dd083880419b9b"
+    },
+    "charter": {
+      "origin": "worktree",
+      "path": "docs/goals/manager.md",
+      "sha256": "500585f9119670acead3a3128c93d992da0346563a599b9ddde9ac26a940048d"
+    },
+    "audit-procedure": {
+      "origin": "worktree",
+      "path": ".agents/skills/goal-management/SKILL.md",
+      "sha256": "d652697288a94fb28a5d7e2d63d6746752d0bb9c60e3515ba3ecd26d14b20226"
+    },
+    "check-currency": {
+      "origin": "worktree",
+      "path": "scripts/goal/tree-currency.ts",
+      "sha256": "9aad267e065d7edbbd3d57315f38990c084301ded5998a9b184fa4326af66283"
+    },
+    "corpus-owner": {
+      "origin": "worktree",
+      "path": "docs/goals/audit-remediation-20261019/tasks/G-2791.md",
+      "sha256": "a3632eb25d7e2445c2fc91f1fa9ce713a5140c18187ad2feac9cb762b285adb9"
+    },
+    "work-brief": {
+      "origin": "worktree",
+      "path": "docs/goals/audit-remediation-20261019/tasks/G-2757.md",
+      "sha256": "7da00df897ef56b474f7b2ecec92e2510b7e2e1e74c25c96c48b034cca50e856"
+    },
+    "entity-brief": {
+      "origin": "worktree",
+      "path": "docs/goals/audit-remediation-20261019/tasks/G-2758.md",
+      "sha256": "f88275254dc61186b098b5524cb133324d3423e4405edaa2f22ab1be0a805864"
+    },
+    "task-ledger": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/ledger.json",
+      "retention": "Shared mutable history; only the cited lines or selected records establish this observation."
+    },
+    "landing-train": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/train-events.jsonl",
+      "anchors": [
+        {
+          "line": 337,
+          "contains": "queued",
+          "line_sha256": "8cc84bb2784f693f953b7b8d7e110c67cfc785457cb07e95f6a673cb53e699e6"
+        },
+        {
+          "line": 339,
+          "contains": "entry stopped",
+          "line_sha256": "c8afe6a771c4f63b1c18b91211405be38847f36cac4d5fcc204b52d56c68b322"
+        },
+        {
+          "line": 502,
+          "contains": "gate-end",
+          "line_sha256": "94c9bfda437adb897e8b48b981d89eaf295ba7dda9810db964b38f695b49e1e1"
+        },
+        {
+          "line": 503,
+          "contains": "landed",
+          "line_sha256": "a8791cc058df56077fc18bbb2506a927f336ee8587f5f076138a85f444e9870c"
+        }
+      ],
+      "retention": "Shared mutable history; only the cited lines or selected records establish this observation."
+    },
+    "merge-history": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/merges.jsonl",
+      "anchors": [
+        {
+          "line": 15,
+          "contains": "2dee8fbc88294a0f74ff85018af5b01143bc77dd",
+          "line_sha256": "b62e2bb7a6f18d4ee6734eeade17b178b44ce36e251d1971b72c0eef3fa17f74"
+        }
+      ],
+      "retention": "Shared mutable history; only the cited lines or selected records establish this observation."
+    },
+    "landed-source": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2743/train-source.json",
+      "sha256": "f469d54eb78f5ffec2ce0e2992cf9e5104290136639e8c4f8878a76fa1b42acc"
+    },
+    "g-2743-a1": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2743/attempt-1.json",
+      "sha256": "9db6d329e7014487b038dbe158c2dbf01b14d4e0d0f286b26d60761a308c29f9",
+      "anchors": [
+        {
+          "line": 75,
+          "contains": "turn.completed",
+          "line_sha256": "c9b77a8fb8328240ee9e39be724cf8cacfd265c2e769eaf4dbd6c96eaa17d669"
+        }
+      ]
+    },
+    "g-2743-a2": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2743/attempt-2.json",
+      "sha256": "a51f78c0e6543f33d84cab9fb2ddd017ab1bc261f5668fa58cffe2f7d3e198f8",
+      "anchors": [
+        {
+          "line": 35,
+          "contains": "turn.completed",
+          "line_sha256": "f7764f7575fb69853e618410d129be906e38d30beac5d07e4268300cbf551b36"
+        },
+        {
+          "line": 20,
+          "contains": "20 failures",
+          "line_sha256": "0eb70161adfbb8803611939f316a9f8d65860680b61b3e82a7dff2bc5bc99a2c"
+        }
+      ]
+    },
+    "g-2743-a3": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2743/attempt-3.json",
+      "sha256": "3d2d60e763463853a2b2b2329a2d3906fe9ba95e8f41ff3211e883e9e93cee95",
+      "anchors": [
+        {
+          "line": 30,
+          "contains": "turn.completed",
+          "line_sha256": "88edaeadbe412cc110acab830b44c0f4fb174e33a24c1006e52085a6cc7b9639"
+        },
+        {
+          "line": 5,
+          "contains": "unreachable from docs/README.md",
+          "line_sha256": "4c7239bbe0fe499d8202aeff519b3948310644119b9448181bfc6070763793c1"
+        },
+        {
+          "line": 14,
+          "contains": "122 focused tests",
+          "line_sha256": "5e972afe1edc402113b489bbf110f8358651ea3506aaaa0a3299168efba6e082"
+        }
+      ]
+    },
+    "g-2743-a4": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2743/attempt-4.json",
+      "sha256": "5b8c94e0a3aa03d06104ceaf2117aef290918fda84f64d49e5f700f3ee41b9d7",
+      "anchors": [
+        {
+          "line": 40,
+          "contains": "turn.completed",
+          "line_sha256": "34be55769c16d9616dcd1ea8e346c31cbd6a39c7f2bb3d8154d4643621aaee20"
+        },
+        {
+          "line": 3,
+          "contains": "TypeScript error",
+          "line_sha256": "f0f887763eb8593278fefae315c84a48ee8f1388367d5470828d28891cefb6d4"
+        },
+        {
+          "line": 22,
+          "contains": "inherited",
+          "line_sha256": "a31dd8cd84a9c3d749060e45d1039b91a32a625de0b830579a9573a6ef59dae3"
+        }
+      ]
+    },
+    "g-2743-a5": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2743/attempt-5.json",
+      "sha256": "082f5f765d81740f5ef818a8f76c879f6708d1bbde116f135b15a55f227fbbcc",
+      "anchors": [
+        {
+          "line": 13,
+          "contains": "turn.completed",
+          "line_sha256": "57fc1c123a488ec0907308490ea6f19dc1751cedd334432adb2a0a63cbed37e8"
+        }
+      ]
+    },
+    "g-2743-a6": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2743/attempt-6.json",
+      "sha256": "d88f8aec2820bf4d32d18179193f23b20148e8abf0435651caf248c1d20f280c",
+      "anchors": [
+        {
+          "line": 45,
+          "contains": "turn.completed",
+          "line_sha256": "33d5900fad623478516f1cbee76f49675a4b2dd5b521eade01930210702a8c9d"
+        },
+        {
+          "line": 10,
+          "contains": "empty Git diff",
+          "line_sha256": "840f63d1294d165b443cd8c31341f78b7cde0c1b1419cd5cd3274b6b66b5c600"
+        },
+        {
+          "line": 41,
+          "contains": "QA stack selection accepts only -t",
+          "line_sha256": "cfe45934984011ca159379dd1e4c57b8aed0874b5f155eda6510e986cdc2ff30"
+        }
+      ]
+    },
+    "g-2743-a7": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2743/attempt-7.json",
+      "sha256": "f3468341bf130f6f64dd19db94700a47f3280c32299be7f6cd54115157c69fe2",
+      "anchors": [
+        {
+          "line": 24,
+          "contains": "turn.completed",
+          "line_sha256": "1427f4623fb2e31bcca45e9f436d1ea0332eb429e6fc5360572be73bc238abe6"
+        },
+        {
+          "line": 10,
+          "contains": "only failure",
+          "line_sha256": "5572a7cc446868dfbc7c8a15b7f4811d5d99f79f621d15a5f5b41eb392852b40"
+        }
+      ]
+    },
+    "g-2743-a8": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2743/attempt-8.json",
+      "sha256": "d21f196c8dea3765f270b5c252b4e60b0a29f395900812067a09781ef098919f",
+      "anchors": [
+        {
+          "line": 20,
+          "contains": "turn.completed",
+          "line_sha256": "50b7fdc32b8c52056d68e6b6a589b228e51160b455b8ebd0dfa9a6f38bb4fbff"
+        },
+        {
+          "line": 5,
+          "contains": "rebase undone",
+          "line_sha256": "22b62139210242bab09b1d50713798d52f155c8005a02fec479417d19286f703"
+        },
+        {
+          "line": 16,
+          "contains": "All three specified test files passed",
+          "line_sha256": "ec279beb3c675cf2293bc8bc3339270b8d609b7bce3187a037c94a3b56f8730e"
+        }
+      ]
+    },
+    "g-2743-a9": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2743/attempt-9.json",
+      "sha256": "23ff7124a9c813a4802da40e51e97b40f614b4df958cc8752777269149509230",
+      "anchors": [
+        {
+          "line": 9,
+          "contains": "turn.completed",
+          "line_sha256": "49e5f23a846b6df3abd555aced822f7631705fbe56a982a4bc11406c584bc5fc"
+        },
+        {
+          "line": 8,
+          "contains": "123 tests",
+          "line_sha256": "864743f1a200fe171f8fc9a8fcabaaeeb0f1a23503aa95dab4994fd4f08eff29"
+        }
+      ]
+    },
+    "g-2757-a1": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2757/attempt-1.json",
+      "sha256": "a98680813505d1f97d170e08e18e61bfc4e542d69cf7034a6e7d433a04a44141",
+      "anchors": [
+        {
+          "line": 332,
+          "contains": "turn.completed",
+          "line_sha256": "7769dbc7efa6309c4a1afbe8b78c740a09e4da697c005cc66d66c87e3b5754ab"
+        },
+        {
+          "line": 320,
+          "contains": "public Work navigation",
+          "line_sha256": "1fb4d0ec2d50b5c447e777e93d06f87e3d51df6d597997390498613aebdb5ae0"
+        }
+      ]
+    },
+    "g-2757-a2": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2757/attempt-2.json",
+      "sha256": "93d47edffa80f9d008c2677608b957dc4de35d854ab5078371b81a725b6ef8ba",
+      "anchors": [
+        {
+          "line": 91,
+          "contains": "turn.completed",
+          "line_sha256": "1dc763bd3da2f4ce7dfd60287fcaa46063f441824ef280512317541778c54d71"
+        },
+        {
+          "line": 13,
+          "contains": "TS2769",
+          "line_sha256": "eabbd1e41e16b87587bb59f54b69a1ddc5a2d805ab6d9851bcad19f710aba373"
+        },
+        {
+          "line": 40,
+          "contains": "dropped-continuation",
+          "line_sha256": "8b39927e3b9b483139b0bdfd6571d8925a3cf74b3986e1b1482a5eec73267835"
+        },
+        {
+          "line": 84,
+          "contains": "The editors",
+          "line_sha256": "55bb220c319a6fde1df1fec6b71109b0a0f23c3b390754d7c4bafa4f983ea11d"
+        }
+      ]
+    },
+    "g-2757-a3": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2757/attempt-3.json",
+      "sha256": "2d42321610bf4ca2b96c69d011d6d6299ce3f47521e32bb8a41fb9ffda8d5a88",
+      "anchors": [
+        {
+          "line": 166,
+          "contains": "turn.completed",
+          "line_sha256": "b5d4dc022b58dd944d97b0d518e4563f9dab6f2c961c57f729311b7574f4bf0e"
+        },
+        {
+          "line": 5,
+          "contains": "nextCursor",
+          "line_sha256": "08253b2c2e720a9c461518860ead0894e989659954c52c9991898f342ece4b44"
+        },
+        {
+          "line": 9,
+          "contains": "dropped-continuation",
+          "line_sha256": "e37d4ff00326cc29d4000d26468533c0e41e908ce5c98656194c39a2400fcbd2"
+        }
+      ]
+    },
+    "g-2757-a4": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2757/attempt-4.json",
+      "sha256": "21169f478f590e91547b2fdd9f8aa2a547d689ad021d055290430a4896322848",
+      "anchors": [
+        {
+          "line": 53,
+          "contains": "turn.completed",
+          "line_sha256": "8dad643e1ac61dfb5cb28e3bdc93d91d8fbc1518ed09a1fd6447782ad7f03c8b"
+        },
+        {
+          "line": 5,
+          "contains": "TS2322",
+          "line_sha256": "e4605044f7168d415a2db0351b0fb64136dd4fd191438349e92b87d2a7af3dae"
+        }
+      ]
+    },
+    "g-2757-a5": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2757/attempt-5.json",
+      "sha256": "1a1ba53874e5f0a240e11fe77a0ad549c1ada89a155828c6136e9b279e4ea93d",
+      "anchors": [
+        {
+          "line": 47,
+          "contains": "turn.completed",
+          "line_sha256": "63958e5c5cad7de1c34b31adca79c08faddae0e858bf37d0e51346e993b99db7"
+        }
+      ]
+    },
+    "g-2757-a6": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2757/attempt-6.json",
+      "sha256": "4544ff833567519bde39e60fce994db889a10ef2e83452d52e980ed1b7e73d0f",
+      "anchors": [
+        {
+          "line": 35,
+          "contains": "turn.completed",
+          "line_sha256": "6bc8a2ece03bf5bda195141e137830c32313fe7c9ec901b09eefd5d3ad35c824"
+        },
+        {
+          "line": 14,
+          "contains": "four edits to existing test assertions",
+          "line_sha256": "73be15dd46ba4e2f16c558fb3185cf928b8f7e94d69f31ee754e73dcaf51880a"
+        },
+        {
+          "line": 31,
+          "contains": "original test assertions are restored",
+          "line_sha256": "fee9eac5604f4e545e3b6f792ecb4bcd54d721fc85ecb9f1c234f96f49b593b4"
+        }
+      ]
+    },
+    "g-2757-a7": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2757/attempt-7.json",
+      "sha256": "d319e7a4f65e1094337925e0a081bf1e8046c0499b46c365a658cedb32693eb3",
+      "anchors": [
+        {
+          "line": 18,
+          "contains": "turn.completed",
+          "line_sha256": "d4787cd248308aa13bfa3c370de45a8e3ad2f01103be0a0989e5a733892df991"
+        },
+        {
+          "line": 3,
+          "contains": "push was rejected",
+          "line_sha256": "91df0143ad6fdc1c3e9793a9356a66c2c4b1afe06559b1506a1ef56fc2a0adbf"
+        }
+      ]
+    },
+    "g-2757-a8": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2757/attempt-8.json",
+      "sha256": "bbb785e753789824d22532589b7b0b6c4abde89fc1cfdc3a2600f0edf961b583",
+      "anchors": [
+        {
+          "line": 42,
+          "contains": "turn.completed",
+          "line_sha256": "fbc1f13a6d701a3b90f5956d8f0f5a7fc92b9b31b135f1a12d74baaeea825620"
+        },
+        {
+          "line": 41,
+          "contains": "107 passed",
+          "line_sha256": "211218a3d96a1d56eb68367443fbf91fccf23f29a05ff4d364b555918f61b19c"
+        },
+        {
+          "line": 41,
+          "contains": "before its outcome assertion",
+          "line_sha256": "211218a3d96a1d56eb68367443fbf91fccf23f29a05ff4d364b555918f61b19c"
+        }
+      ]
+    },
+    "g-2758-a1": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2758/attempt-1.json",
+      "sha256": "37d2447fe1229a06c3c595096659e46694bea9c0825d6de2bce2cf24f6806a88",
+      "anchors": [
+        {
+          "line": 338,
+          "contains": "turn.completed",
+          "line_sha256": "0757ef17e9a3d711a20e8076aeb388b0881946beac64f593e3b2dbc7e9e5af7d"
+        }
+      ]
+    },
+    "g-2758-a2": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2758/attempt-2.json",
+      "sha256": "cc10b9703b10fbd0869cf0c38a63dcd37146c448b6013ca93d1b375c7a934248",
+      "anchors": [
+        {
+          "line": 234,
+          "contains": "turn.completed",
+          "line_sha256": "303e57045c8edc5e3bbe03d6ecc2c63858a468789250e94212d705726cac9c66"
+        },
+        {
+          "line": 5,
+          "contains": "production web projection syntax",
+          "line_sha256": "d99cb926ca49afa8357bb2ee49ad82215d88608f81748fdefe312437ffedd4c8"
+        },
+        {
+          "line": 13,
+          "contains": "dropped-continuation",
+          "line_sha256": "3a5baa6223d533c766d8f13fe071bc94dcbc7b80594c5bf933326464753ebd8d"
+        }
+      ]
+    },
+    "g-2758-a3": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2758/attempt-3.json",
+      "sha256": "39f39811c9c3ce2f146143d4c765237d4ece3f395ff0469bd66009d608bf7148",
+      "anchors": [
+        {
+          "line": 127,
+          "contains": "turn.completed",
+          "line_sha256": "86f85371e49a5de6acaf993153601666fca8e2d0c6e228e5bd298505ceb5ed47"
+        },
+        {
+          "line": 7,
+          "contains": "TS2769",
+          "line_sha256": "305050f2557134f01ce9f59aa53476a89774392bcfad0bce14211a29dde247c3"
+        },
+        {
+          "line": 38,
+          "contains": "dropped-continuation",
+          "line_sha256": "34dc63df7c00a08117060d1433105e5eff826541021f8622e55eb2ec4ca4595e"
+        },
+        {
+          "line": 41,
+          "contains": "wrong inventory section",
+          "line_sha256": "939718b7602c7131c41813cec5071606963cb8d3def0ff0f9769b7b0816afc37"
+        },
+        {
+          "line": 100,
+          "contains": "same",
+          "line_sha256": "2c5d65b2e5a3f201c463b303c233c87e05842227e96c4e5797fbfc8e00c0e7be"
+        }
+      ]
+    },
+    "g-2758-a4": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2758/attempt-4.json",
+      "sha256": "e057f65bd3d126b7df3adba77e3b0180ac826c9cbf920956682a4cded05c5f9c",
+      "anchors": [
+        {
+          "line": 68,
+          "contains": "turn.completed",
+          "line_sha256": "fe8d961a9765d95e6bcac40f6a703848db6a8eea82c9caf8ad15180d2f79f463"
+        },
+        {
+          "line": 19,
+          "contains": "CONFLICT",
+          "line_sha256": "5ccec4bf163cd7ad4b9d11735390d5f77b9863443ff932aae3a3b7bf5ec2dcff"
+        },
+        {
+          "line": 32,
+          "contains": "only conflict",
+          "line_sha256": "446640a8237a853d2f457e26d665e79e2fc2850cda83704c2308afe75f7bc235"
+        }
+      ]
+    },
+    "g-2758-a5": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2758/attempt-5.json",
+      "sha256": "0c2fa3278ace2b55861e92674581921c5deacba0971f259a2deb77ed33069b75",
+      "anchors": [
+        {
+          "line": 41,
+          "contains": "turn.completed",
+          "line_sha256": "02c29ca19f47c0bceb40418b3c30587eb46b9b62d24be3b444494307b26a0897"
+        },
+        {
+          "line": 11,
+          "contains": "non-fast-forward",
+          "line_sha256": "fb051836b28eb9cdd0f4783be8415df8d195a8811afb501b6bb5abe09c737f1c"
+        },
+        {
+          "line": 39,
+          "contains": "push",
+          "line_sha256": "5d2f7db426d8ee5162a9fa0eabf79385efb13d2089891d095133148d7610a1c2"
+        }
+      ]
+    },
+    "g-2758-a6": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2758/attempt-6.json",
+      "sha256": "e2bef28973980cc9bc066b38059c3d32635c90bafefa229897104cfa571f9dcb",
+      "anchors": [
+        {
+          "line": 19,
+          "contains": "turn.completed",
+          "line_sha256": "d5fe27baf83dfbc49c84d0baf17826be874865ccb51a9f6960cef97a65cc0c58"
+        },
+        {
+          "line": 3,
+          "contains": "wave moved during the checks",
+          "line_sha256": "db4fd7e74850185d2cd1200ac80d1b4efc73c10fbd1fc187a396f3ac6855d872"
+        },
+        {
+          "line": 9,
+          "contains": "No type errors",
+          "line_sha256": "09288d254eddd7a6237499df21052ca651b2b20ed9c9a380921e121dd605d0e8"
+        }
+      ]
+    },
+    "g-2758-a7": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/runs/G-2758/attempt-7.json",
+      "sha256": "89646ea82c65e0afd3880f62f941ffbd958b89550b65094b5e888fd3a41eaf2f",
+      "anchors": [
+        {
+          "line": 25,
+          "contains": "turn.completed",
+          "line_sha256": "dfb7380897d8f7492a99af368fc0737c2e5edd30f790837616789008615fc70f"
+        },
+        {
+          "line": 24,
+          "contains": "21/21",
+          "line_sha256": "555a76b20918a4ad43806c6fb840027b32772b5a9e3b25baca16c1c5673d9039"
+        }
+      ]
+    },
+    "manager-event": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/manager-runs/b589fad1-517f-480b-b0dd-e760ca3bf981/output.jsonl",
+      "sha256": "57ef92d31e2f201f51bc3731d13122f73d5b9696554a6afa619f5482c4a822b6",
+      "anchors": [
+        {
+          "line": 27,
+          "contains": "database is locked",
+          "line_sha256": "99dfe66e5a40fdfb5c248480dd5add1ab917f4d71615aa358663ec56dd16f585"
+        },
+        {
+          "line": 28,
+          "contains": "database is locked",
+          "line_sha256": "ebf7fb461f6c647ec350e24e01385db4eaf777217cf160711c88bc59d6c107e0"
+        },
+        {
+          "line": 38,
+          "contains": "mail inbox",
+          "line_sha256": "a1832ea66fcb745ab47d2536b9aef9856b6787c6ed3f13b6f30470c30bd5cc47"
+        },
+        {
+          "line": 61,
+          "contains": "status",
+          "line_sha256": "b9d65d9883e58a84b4367b40b0d0da9a51ef05d11f5495694097446aec17746e"
+        },
+        {
+          "line": 90,
+          "contains": "efficiency --since",
+          "line_sha256": "e85542052d3533930c29b174b3f6bd9f92c825ae62771d7939cb5b2260be64b5"
+        },
+        {
+          "line": 98,
+          "contains": "efficiency-20261018T203608Z.json",
+          "line_sha256": "b4be849d1408a1de6413b5345b4f2cbe997b6c98158e718d80b25001e5fa9031"
+        },
+        {
+          "line": 114,
+          "contains": "reserved",
+          "line_sha256": "25d264ba58d0636cc0ce7865148d484579673f08e186c292ffbdfc748ffdcdc8"
+        },
+        {
+          "line": 124,
+          "contains": "product-delegation-disposition-94d9c6fe",
+          "line_sha256": "1291babf4a6a19d52aed527a1f2669a10e2a38385d6617fbe369af54526d9d18"
+        },
+        {
+          "line": 128,
+          "contains": "ENOENT",
+          "line_sha256": "e18795ded27464eb1dc4b44f026ed241e301f5c931b0174b56525289e5213f10"
+        },
+        {
+          "line": 132,
+          "contains": "mail ack",
+          "line_sha256": "08d32ef77b9f522a411a3b90c3fb5d7428d05320a7ded3fcbe64fef0e4a24c16"
+        },
+        {
+          "line": 149,
+          "contains": "landed",
+          "line_sha256": "79f33a83846a2d682be3ad7bc326ac33f720b425198bfedb62cd6e6e0acf3c0d"
+        },
+        {
+          "line": 150,
+          "contains": "queue",
+          "line_sha256": "d1d48b56ba4fa3f830566c3e121bedc4abed834515ea1eb06378f2932753263f"
+        },
+        {
+          "line": 152,
+          "contains": "starting",
+          "line_sha256": "10a1e391ced12b09e5cfb090b8a17bb70a3387d44471a2cf322079301ac035c4"
+        },
+        {
+          "line": 156,
+          "contains": "turn.completed",
+          "line_sha256": "51cd799ed4ee5e54f83f48b63146b757282eb8ab607ee484f2df29eaea88d8bd"
+        }
+      ]
+    },
+    "coordinator-events": {
+      "origin": "main-read-only",
+      "path": ".temp/goal-orchestration/coordinator.sqlite",
+      "retention": "Shared mutable history; only the cited lines or selected records establish this observation."
+    }
+  },
+  "selected_task_reconciliation": {
+    "snapshot_processed_input": 67227440,
+    "retained_worker_processed_input": 42589747,
+    "unreconciled_input": 24637693,
+    "snapshot_turns": 26,
+    "retained_worker_turns": 24,
+    "finding": "The entire difference is G-2743. Cause diagnoses use the 24 retained worker turns; no source is invented for the remaining snapshot input/two turns."
+  }
+}
