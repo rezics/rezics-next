@@ -61,6 +61,26 @@ values. `task rating:reconstruct -- --env <apps.env> --list` lists the targets t
 still need it (`--context` narrows it; `--after-context` with `--after-target`
 continue a page). Reads never repair inventory or take an exclusive observation gate.
 
+Standing MainVersion ratings use the same sealed additive-state rule, including
+Global ratings, Realm reads, search previews and named Realm/Global synthesis.
+Their sparse histogram retains the Context's exact decimal scale. The private
+effective-person ledger applies native precedence over merge selections, and
+merge, unmerge and source revisions subtract the recorded contribution before
+adding its replacement. Up to 100 heads retain full manifest verification; larger
+populations read the additive figures and verify the last sealed contribution's
+live head, receipt, digest and immutable manifest in the same single graph
+snapshot as the Context. The graph and manifest byte budgets and deadline are
+unchanged. A reader's own slot is an indexed selection, independent of population.
+The bounded private inventory still reads at most 101 heads, including its
+overflow sentinel; it is not the aggregate's population.
+
+For standing heads sealed before additive values existed, use
+`task rating:reconstruct -- --env <apps.env> --standing --list` and then
+`--standing --context <IRI> --target <MainVersion IRI>`. This uses the same bounded
+checkpoint procedure below and the aggregate owner's manifest verifier. A page
+of inherited slots records values at their original heads and refreshes retained
+merge contributions. No read silently calls an unvalued large population exact.
+
 `task rating:reconstruct -- --env <apps.env> --context <IRI> --target <IRI>`
 runs one bounded batch, retains an atomic checkpoint under
 `.temp/rating-reconstruction/`, and resumes on the next invocation. `--batch-size`

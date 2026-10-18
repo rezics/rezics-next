@@ -1,4 +1,6 @@
-import { standingRatingSlotIri } from './observation.ts';
+import { standingRatingDigest, standingRatingSlotIri } from './observation.ts';
+import { GLOBAL_RATING_POPULATION_OWNER, globalRatingDigest } from './global.ts';
+import { isRatingValue } from './scale.ts';
 import { targetRatingDigest, targetRatingSlotIri } from './target-digest.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
@@ -147,20 +149,40 @@ export async function recordRatingAggregateHead(client: PoolClient,
   }
   const values = [proof.context, proof.mainVersion, proof.slot, proof.work,
     proof.observation, proof.revision, admitted.principal_id, admitted.id, proof.release ?? null];
+  // Other cadences and release grains keep their own receipts and reducers.
+  const standing = proof.release === undefined
+    && proof.slot === standingRatingSlotIri(admitted.principal_id, proof.context!, proof.mainVersion!);
+  if (proof.realm === GLOBAL_RATING_POPULATION_OWNER && !standing) {
+    throw new RatingInventoryConflict('Global rating slot differs from its principal');
+  }
+  const value = standing ? sealedStandingValue(proof, admitted) : null;
   await lockRatingObservationTarget(client, proof.context!, proof.release ?? proof.mainVersion!);
   if (proof.predecessor === null) {
     await client.query(`INSERT INTO access.rating_aggregate_head
       (context, main_version, slot, work, observation, revision, principal_id, admission_id,
-       original_admission_id, target_release)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9)`, values);
+       original_admission_id, target_release, value, value_known)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9,$10,$11)`, [...values, value, standing]);
   } else {
     const changed = await client.query(`UPDATE access.rating_aggregate_head
-      SET revision = $6, admission_id = $8 WHERE context = $1 AND main_version = $2
+      SET revision = $6, admission_id = $8, value = $11, value_known = $12 WHERE context = $1 AND main_version = $2
         AND slot = $3 AND work = $4 AND observation = $5 AND principal_id = $7
         AND target_release IS NOT DISTINCT FROM $9 AND revision = $10`,
-    [...values, proof.predecessor]);
+    [...values, proof.predecessor, value, standing]);
     if (changed.rowCount !== 1) throw new RatingInventoryConflict('Rating predecessor seal is unavailable');
   }
+}
+
+function sealedStandingValue(proof: RatingProof, admitted: SealingRatingAdmission): number | null {
+  const value = proof.availability === 'available' ? proof.value
+    : proof.availability === 'withdrawn' && proof.value === null ? null : undefined;
+  if (value === undefined || value !== null && !isRatingValue(value)) {
+    throw new RatingInventoryConflict('Standing rating value is invalid');
+  }
+  const intent = { context: proof.context!, work: proof.work!, mainVersion: proof.mainVersion!, value,
+    expectedRevisionHead: proof.predecessor!, actingSubject: admitted.acting_subject };
+  const digest = proof.realm === GLOBAL_RATING_POPULATION_OWNER ? globalRatingDigest(intent) : standingRatingDigest(intent);
+  if (digest !== admitted.request_digest) throw new RatingInventoryConflict('Standing rating value differs from its admission');
+  return value;
 }
 
 /** The sealed value must be the one the admitted request carried: the digest
@@ -224,6 +246,12 @@ export interface RatingAggregateInventory {
   realm: string; contextRevision: string; policyRevision: string | null; recoveryGeneration: string;
   contextReceipt: string; contextDataEpoch: string; contextSequence: string;
   heads: RatingInventoryHead[];
+  /** Exact sealed additive state; pre-component heads remain explicitly unvalued. */
+  standing?: { slots: number; unvalued: number; histogram: Record<string, number>; witness: RatingInventoryHead | null };
+  /** A private, indexed reader-slot selection, rather than the whole population. */
+  selectedSlot?: string;
+  /** Operator reconstruction verifies this bounded page, never an aggregate. */
+  selectedHeads?: boolean;
 }
 
 /** The sealed private head prevents a rolled-back graph from relabeling a default. */
@@ -341,7 +369,7 @@ export async function readTargetRatingReconstructionBatch(
 /** Keyset page of targets with heads sealed before values were recorded, in
  * (Context, target) order; the partial index finds them without a table walk. */
 export async function listTargetsNeedingReconstruction(pool: Pool,
-  input: { context?: string; after?: { context: string; target: string }; limit?: number },
+  input: { context?: string; after?: { context: string; target: string }; limit?: number; standing?: boolean },
   signal = AbortSignal.timeout(10_000)) {
   const limit = input.limit ?? MAX_RATING_AGGREGATE_SLOTS;
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_RATING_AGGREGATE_SLOTS
@@ -350,10 +378,11 @@ export async function listTargetsNeedingReconstruction(pool: Pool,
   }
   return withInventoryClient(pool, signal, async client => {
     const rows = (await client.query(
-      `SELECT context, target, slots, unvalued FROM access.target_rating_component
+      `SELECT context, ${input.standing ? 'main_version AS target' : 'target'}, slots, unvalued
+       FROM access.${input.standing ? 'rating_standing_component' : 'target_rating_component'}
        WHERE unvalued > 0 AND ($1::text IS NULL OR context = $1)
-         AND ($2::text IS NULL OR (context, target) > ($2, $3))
-       ORDER BY context, target LIMIT $4`,
+         AND ($2::text IS NULL OR (context, ${input.standing ? 'main_version' : 'target'}) > ($2, $3))
+       ORDER BY context, ${input.standing ? 'main_version' : 'target'} LIMIT $4`,
       [input.context ?? null, input.after?.context ?? null, input.after?.target ?? null, limit + 1])).rows;
     const page = rows.slice(0, limit).map(row => ({ context: String(row.context), target: String(row.target),
       slots: Number(row.slots), unvalued: Number(row.unvalued) }));
@@ -363,8 +392,8 @@ export async function listTargetsNeedingReconstruction(pool: Pool,
 
 /** One bounded owner snapshot; raw counting identities stay within Access. */
 export async function readRatingAggregateInventory(pool: Pool, context: string,
-  mainVersion: string, signal = AbortSignal.timeout(10_000)): Promise<RatingAggregateInventory> {
-  return readInventory(pool, context, mainVersion, false, signal);
+  mainVersion: string, signal = AbortSignal.timeout(10_000), onlySlot?: string): Promise<RatingAggregateInventory> {
+  return readInventory(pool, context, mainVersion, false, signal, onlySlot);
 }
 
 export async function readReleaseRatingAggregateInventory(pool: Pool, context: string,
@@ -510,14 +539,105 @@ function inventoryHeads(rows: QueryResultRow[], release: boolean | 'target', con
   });
 }
 
-async function readInventory(pool: Pool, context: string, target: string,
-  release: boolean | 'target', signal: AbortSignal): Promise<RatingAggregateInventory> {
-  if (![context, target].every(value => nativeId.test(value))) throw new RatingInventoryConflict('invalid Rating target');
+const standingHeadColumns = `h.slot,h.work,h.main_version,h.target_release,h.observation,h.revision,h.principal_id,
+  a.registered_at AS submitted_at,a.acting_subject,a.request_digest,a.state,a.graph_outcome,
+  a.graph_receipt,a.graph_data_epoch,a.graph_sequence,original.registered_at AS evaluated_at,
+  (a.principal_id=h.principal_id AND original.principal_id=h.principal_id
+    AND a.action='rating.observation.set' AND original.action=a.action
+    AND a.scope_id='rating:observe:'||h.context AND original.scope_id=a.scope_id
+    AND original.state='sealed' AND original.graph_outcome='succeeded') AS identity_valid`;
+const standingAdmissions = `LEFT JOIN access.admission a ON a.id=h.admission_id
+  LEFT JOIN access.admission original ON original.id=h.original_admission_id`;
+const STANDING_WITNESS_SQL = `SELECT ${standingHeadColumns} FROM access.rating_aggregate_head h
+  ${standingAdmissions} WHERE h.admission_id=$1 LIMIT 2`;
+const STANDING_SLOT_SQL = `SELECT ${standingHeadColumns} FROM access.rating_standing_contribution k
+  LEFT JOIN access.rating_aggregate_head h ON (h.context,h.main_version,h.slot,h.principal_id)
+    =(k.context,k.origin_main_version,k.origin_slot,k.principal_id)
+  ${standingAdmissions} WHERE k.context=$1 AND k.main_version=$2 AND k.effective_slot=$3 LIMIT 2`;
+
+/** The same private effective slots as a normal read, in a bounded seek page.
+ * An inherited value is reconstructed at its original head; its delta refreshes
+ * every retained projection. Missing origins cannot turn into end of inventory. */
+export async function readStandingRatingReconstructionBatch(pool: Pool, context: string, mainVersion: string,
+  afterSlot: string, limit: number, signal = AbortSignal.timeout(10_000)): Promise<RatingAggregateInventory> {
+  if (![context, mainVersion].every(value => nativeId.test(value)) || !Number.isInteger(limit)
+    || limit < 1 || limit > MAX_RATING_AGGREGATE_SLOTS
+    || afterSlot !== '' && !/^urn:rezics:rating-slot:[0-9a-f]{64}$/.test(afterSlot)) {
+    throw new RatingInventoryConflict('invalid standing reconstruction page');
+  }
   return withInventoryClient(pool, signal, async client => { try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await client.query("SET LOCAL statement_timeout = '5s'");
-    const result = await client.query(release === 'target' ? TARGET_RATING_INVENTORY_SQL
-      : release ? RELEASE_RATING_INVENTORY_SQL : RATING_INVENTORY_SQL, [context, target]);
+    const first = (await client.query(COMPONENT_CONTEXT_SQL, [context])).rows[0];
+    if (!first || first.open !== true || first.context_state !== 'sealed' || first.context_outcome !== 'succeeded') {
+      throw new RatingInventoryConflict('Rating inventory is unavailable');
+    }
+    const rows = (await client.query(`SELECT ${standingHeadColumns},k.effective_slot
+      FROM (SELECT * FROM access.rating_standing_contribution WHERE context=$1 AND main_version=$2
+        AND NOT value_known AND effective_slot > $3 ORDER BY effective_slot LIMIT $4) k
+      LEFT JOIN access.rating_aggregate_head h ON (h.context,h.main_version,h.slot,h.principal_id)
+        =(k.context,k.origin_main_version,k.origin_slot,k.principal_id)
+      ${standingAdmissions} ORDER BY k.effective_slot`, [context, mainVersion, afterSlot, limit])).rows;
+    if (rows.some(row => !row.slot)) throw new RatingInventoryConflict('Standing reconstruction origin is unavailable');
+    const heads = inventoryHeads(rows, false, context, mainVersion).map((head, index) =>
+      ({ ...head, effectiveSlot: rows[index]!.effective_slot as string }));
+    await client.query('COMMIT');
+    return { realm: first.realm, contextRevision: first.context_revision, policyRevision: first.policy_revision ?? null,
+      contextReceipt: first.context_receipt, contextDataEpoch: first.context_epoch, contextSequence: first.context_sequence,
+      recoveryGeneration: first.generation, heads, selectedHeads: true };
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* preserve failure */ }
+    throw error;
+  } });
+}
+
+/** Explicit operator CAS, sharing the seal's recovery/authority/target gates.
+ * The database applies the same additive delta as a newly sealed revision. */
+export async function recordStandingRatingValues(pool: Pool, context: string, generation: string,
+  heads: readonly { mainVersion: string; slot: string; revision: string; value: number | null }[],
+  signal = AbortSignal.timeout(10_000)): Promise<number> {
+  if (!nativeId.test(context) || heads.length > MAX_RATING_AGGREGATE_SLOTS || heads.some(head =>
+    ![head.mainVersion, head.revision].every(value => nativeId.test(value))
+    || !/^urn:rezics:rating-slot:[0-9a-f]{64}$/.test(head.slot) || head.value !== null && !isRatingValue(head.value))) {
+    throw new RatingInventoryConflict('invalid standing reconstruction values');
+  }
+  return withInventoryClient(pool, signal, async client => { try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout = '2s'");
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    const fence = (await client.query('SELECT open,generation FROM access.recovery_fence WHERE id=true FOR SHARE')).rows[0];
+    if (fence?.open !== true || fence.generation !== generation) throw new RatingInventoryConflict('Recovery fence changed');
+    await client.query('SELECT 1 FROM access.scope_gate WHERE id=$1 FOR SHARE', [`rating:observe:${context}`]);
+    for (const target of [...new Set(heads.map(head => head.mainVersion))].sort()) {
+      await lockRatingObservationTarget(client, context, target);
+    }
+    let recorded = 0;
+    for (const head of heads) {
+      recorded += (await client.query(`UPDATE access.rating_aggregate_head SET value=$5,value_known=true
+        WHERE context=$1 AND main_version=$2 AND slot=$3 AND revision=$4 AND NOT value_known AND target_release IS NULL
+          AND slot=access.rating_standing_slot(principal_id,context,main_version)`,
+      [context, head.mainVersion, head.slot, head.revision, head.value])).rowCount ?? 0;
+    }
+    await client.query('COMMIT');
+    return recorded;
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* preserve failure */ }
+    throw error;
+  } });
+}
+
+async function readInventory(pool: Pool, context: string, target: string,
+  release: boolean | 'target', signal: AbortSignal, onlySlot?: string): Promise<RatingAggregateInventory> {
+  if (![context, target].every(value => nativeId.test(value))) throw new RatingInventoryConflict('invalid Rating target');
+  if (onlySlot !== undefined && (release !== false || !/^urn:rezics:rating-slot:[0-9a-f]{64}$/.test(onlySlot))) {
+    throw new RatingInventoryConflict('invalid Rating slot');
+  }
+  return withInventoryClient(pool, signal, async client => { try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    const result = onlySlot === undefined ? await client.query(release === 'target' ? TARGET_RATING_INVENTORY_SQL
+      : release ? RELEASE_RATING_INVENTORY_SQL : RATING_INVENTORY_SQL, [context, target])
+      : await client.query(COMPONENT_CONTEXT_SQL, [context]);
     const first = result.rows[0];
     if (!first || first.open !== true || first.context_state !== 'sealed' || first.context_outcome !== 'succeeded') {
       throw new RatingInventoryConflict('Rating inventory is unavailable');
@@ -525,12 +645,31 @@ async function readInventory(pool: Pool, context: string, target: string,
     if (result.rows.some(row => row.effective_work && !row.slot)) {
       throw new RatingInventoryConflict('Merged rating origin is unavailable');
     }
-    const heads = inventoryHeads(result.rows, release, context, target);
+    let heads = inventoryHeads(result.rows, release, context, target);
+    let standing: RatingAggregateInventory['standing'];
+    if (onlySlot !== undefined) {
+      const own = await client.query(STANDING_SLOT_SQL, [context, target, onlySlot]);
+      if (own.rows.length > 1 || own.rows.some(row => !row.slot)) {
+        throw new RatingInventoryConflict('Rating slot origin is unavailable');
+      }
+      heads = inventoryHeads(own.rows, false, context, target).map(head => ({ ...head, effectiveSlot: onlySlot }));
+    } else if (release === false) {
+      const component = (await client.query(`SELECT slots,unvalued,histogram,last_admission_id
+        FROM access.rating_standing_component WHERE context=$1 AND main_version=$2`, [context, target])).rows[0];
+      if (component) {
+        const witness = component.last_admission_id && component.unvalued === 0 && component.slots > MAX_RATING_AGGREGATE_SLOTS
+          ? inventoryHeads((await client.query(STANDING_WITNESS_SQL, [component.last_admission_id])).rows, false, context, target) : [];
+        if (witness.length > 1) throw new RatingInventoryConflict('Standing rating witness is ambiguous');
+        standing = { slots: component.slots, unvalued: component.unvalued, histogram: component.histogram,
+          witness: witness[0] ?? null };
+      }
+    }
     await client.query('COMMIT');
     return { realm: first.realm, contextRevision: first.context_revision,
       policyRevision: first.policy_revision ?? null,
       contextReceipt: first.context_receipt, contextDataEpoch: first.context_epoch,
-      contextSequence: first.context_sequence, recoveryGeneration: first.generation, heads };
+      contextSequence: first.context_sequence, recoveryGeneration: first.generation, heads,
+      ...(standing ? { standing } : {}), ...(onlySlot !== undefined ? { selectedSlot: onlySlot } : {}) };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve failure */ }
     throw error;

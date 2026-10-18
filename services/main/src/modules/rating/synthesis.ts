@@ -19,25 +19,34 @@ export interface RatingScale { min: number; max: number; step?: number }
 
 /** Latest effective values of one standing Context: one per slot, null when withdrawn. */
 export function reduceStandingComponent(values: readonly (number | null)[], scale: RatingScale) {
+  const counts = new Map<number, number>();
+  for (const value of values) if (value !== null) counts.set(value, (counts.get(value) ?? 0) + 1);
+  return reduceStandingCounts(values.length, counts, scale);
+}
+
+/** The same reduction over sealed additive figures. Cost depends on the Context's
+ * bounded scale (at most 1001 bins), never on its number of raters. */
+export function reduceStandingCounts(population: number, counts: ReadonlyMap<number, number>, scale: RatingScale) {
+  if (!Number.isSafeInteger(population) || population < 0) throw new RangeError('invalid rating population');
   const grid = judgmentScale({ ...scale, step: scale.step ?? 1 });
   const min = ratingUnits(grid.min), max = ratingUnits(grid.max), step = ratingUnits(grid.step);
   const histogram = Array.from({ length: Number((max - min) / step) + 1 }, () => 0);
   let exactSum = 0n, count = 0;
-  for (const value of values) {
-    if (value === null) continue;
-    if (!onJudgmentScale(value, grid)) {
+  for (const [value, frequency] of counts) {
+    if (!onJudgmentScale(value, grid) || !Number.isSafeInteger(frequency) || frequency < 0) {
       throw new RangeError('rating value lies outside its own scale');
     }
     const index = Number((ratingUnits(value) - min) / step);
-    histogram[index] = histogram[index]! + 1;
-    exactSum += ratingUnits(value); count++;
+    histogram[index] = histogram[index]! + frequency;
+    exactSum += ratingUnits(value) * BigInt(frequency); count += frequency;
   }
+  if (!Number.isSafeInteger(count) || count > population) throw new RangeError('rating counts exceed population');
   const mean = count ? fraction(exactSum, BigInt(count) * RATING_UNITS) : null;
   // (mean − min) / (max − min), computed on the exact sum.
   const unit = count ? fraction(exactSum - min * BigInt(count), BigInt(count) * (max - min)) : null;
   return {
     scale: grid,
-    population: values.length, count, withdrawnCount: values.length - count, histogram, sum: unitsNumber(exactSum),
+    population, count, withdrawnCount: population - count, histogram, sum: unitsNumber(exactSum),
     mean: mean ? Number(mean.n) / Number(mean.d) : null,
     precision: mean ? { kind: 'exact-rational' as const, ...encoded(mean) } : { kind: 'no-data' as const },
     unitMean: unit ? encoded(unit) : null,

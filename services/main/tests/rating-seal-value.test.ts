@@ -3,6 +3,8 @@ import type { PoolClient } from 'pg';
 import { RatingInventoryConflict, recordRatingAggregateHead } from '../src/modules/rating/aggregate-inventory.ts';
 import { targetRatingSlotIri } from '../src/modules/rating/target.ts';
 import { targetRatingDigest } from '../src/modules/rating/target-digest.ts';
+import { GLOBAL_RATING_POPULATION_OWNER, globalRatingDigest } from '../src/modules/rating/global.ts';
+import { standingRatingSlotIri, standingRatingDigest } from '../src/modules/rating/observation.ts';
 
 const id = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;
 const [context, realm, target, observation, contextRevision, revision, predecessor, actor] = [1, 2, 3, 4, 5, 6, 7, 8].map(id);
@@ -107,3 +109,31 @@ test('Access recomputes the target slot from principal, Context and target befor
     ).rejects.toBeInstanceOf(RatingInventoryConflict);
   expect(writes(statements)).toEqual([]);
 }});
+
+test('standing additive values are bound to the admitted digest, scale-independent exact value and private principal slot', async () => {
+  for (const owner of [realm, GLOBAL_RATING_POPULATION_OWNER]) {
+    for (const value of [0, 0.5, 5, null]) {
+      const statements: { sql: string; params: unknown[] }[] = [];
+      const client = { async query(sql: string, params: unknown[] = []) {
+        statements.push({ sql, params });
+        return { rowCount: 1, rows: sql.startsWith('SELECT realm') ? [{ realm: owner }] : [] };
+      } } as unknown as PoolClient;
+      const expected = value === null ? predecessor : null;
+      const intent = { context, work: target, mainVersion: target, value, expectedRevisionHead: expected, actingSubject: actor };
+      const digest = (owner === realm ? standingRatingDigest : globalRatingDigest)(intent);
+      const admission = { ...admissionFor(8, null), request_digest: digest };
+      const receipt = { ...proof(value, expected), realm: owner, target: undefined, work: target, mainVersion: target,
+        slot: standingRatingSlotIri(principal, context, target) };
+      await expect(recordRatingAggregateHead(client, admission, { ...receipt, value: value === 5 ? 4 : 5 }))
+        .rejects.toBeInstanceOf(RatingInventoryConflict);
+      expect(writes(statements)).toHaveLength(0);
+      await recordRatingAggregateHead(client, admission, receipt);
+      const mutation = writes(statements).find(statement => statement.sql.includes('access.rating_aggregate_head'))!;
+      expect(mutation.params.slice(-2)).toEqual([value, true]);
+      if (owner === GLOBAL_RATING_POPULATION_OWNER) {
+        await expect(recordRatingAggregateHead(client, admission, { ...receipt,
+          slot: standingRatingSlotIri(principal, context, id(99)) })).rejects.toBeInstanceOf(RatingInventoryConflict);
+      }
+    }
+  }
+});

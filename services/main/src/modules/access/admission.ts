@@ -612,8 +612,8 @@ export class AccessAdmissionRegistry {
     return issueTitleAdmission(this.pool, admission, command, this.titleAdmissionKey);
   }
 
-  readRatingAggregateInventory(context: string, mainVersion: string, signal?: AbortSignal) {
-    return readRatingAggregateInventory(this.pool, context, mainVersion, signal);
+  readRatingAggregateInventory(context: string, mainVersion: string, signal?: AbortSignal, onlySlot?: string) {
+    return readRatingAggregateInventory(this.pool, context, mainVersion, signal, onlySlot);
   }
 
   checkRatingAggregateFence(generation: string, signal?: AbortSignal) {

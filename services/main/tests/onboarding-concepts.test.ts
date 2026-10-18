@@ -72,3 +72,13 @@ test('G-431: each chosen Concept reaches a matching Zone or Realm before popular
   // No choices: popular only, and an official Zone is not a match merely for being official.
   expect(selectConceptSuggestions(candidates, [], 3).every(item => item.concept === null)).toBe(true);
 });
+
+test('suggestion ranking remains a bounded sample when the candidate directory continues', () => {
+  for (const size of [0, 8, 9, 10, 2048]) {
+    const ranked = selectConceptSuggestions(Array.from({ length: size }, (_, index) => ({
+      value: `Zone ${index}`, matches: [], languageMatches: 1, official: true, score: size - index, index,
+    })), [], 6);
+    expect(ranked).toHaveLength(Math.min(size, 6));
+    expect(ranked.map(item => item.value)).toEqual(Array.from({ length: Math.min(size, 6) }, (_, index) => `Zone ${index}`));
+  }
+});

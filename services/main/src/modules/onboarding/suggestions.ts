@@ -114,7 +114,8 @@ export async function readSuggestedFollows(session: WorkReadSession,
   const muted = new Set(personal?.exclusions.filter(item => item.kind === 'realm'
     && item.strength === 'mute').map(item => item.target) ?? []);
   const tagRules = personal?.exclusions.filter(item => item.kind === 'tag') ?? [];
-  if (official.next) throw new WorkReadUnavailable('Official Zone candidate bound exceeded');
+  // Recommendations rank a bounded candidate sample, not the whole directory.
+  // A continuation belongs to the Zone listing and does not invalidate this sample.
   const zoneByRealm = new Map(official.items.map(item => [item.realm, item.zone]));
   const candidateRealms: Pick<typeof directory.items[number], 'id' | 'name' | 'icon' | 'membership'>[] =
     directory.items.filter(realm => !zoneByRealm.has(realm.id)).slice(0, SUGGESTION_COST.nonOfficialRealms);

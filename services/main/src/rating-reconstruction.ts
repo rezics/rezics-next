@@ -28,6 +28,8 @@ const restart = args.includes('--restart');
 if (restart) args.splice(args.indexOf('--restart'), 1);
 const list = args.includes('--list');
 if (list) args.splice(args.indexOf('--list'), 1);
+const standing = args.includes('--standing');
+if (standing) args.splice(args.indexOf('--standing'), 1);
 const afterContext = take('--after-context'),
   afterTarget = take('--after-target');
 if (
@@ -43,8 +45,8 @@ if (
   batchSize > 100
 ) {
   throw new Error(
-    'Use --env <apps.env> --context <IRI> --target <IRI> [--batches 1..32] [--batch-size 1..100] [--restart]\n' +
-      'or --env <apps.env> --list [--context <IRI>] [--batch-size 1..100] [--after-context <IRI> --after-target <IRI>]',
+    'Use --env <apps.env> --context <IRI> --target <IRI> [--standing] [--batches 1..32] [--batch-size 1..100] [--restart]\n' +
+      'or --env <apps.env> --list [--standing] [--context <IRI>] [--batch-size 1..100] [--after-context <IRI> --after-target <IRI>]',
   );
 }
 const env = readEnv(resolve(envFile));
@@ -67,6 +69,7 @@ if (list) {
           ...(context ? { context } : {}),
           ...(afterContext && afterTarget ? { after: { context: afterContext, target: afterTarget } } : {}),
           limit: batchSize,
+          standing,
         }),
       ),
     );
@@ -76,7 +79,7 @@ if (list) {
   process.exit(0);
 }
 if (!context || !target) throw new Error('--context and --target are required');
-const identity = createHash('sha256').update(JSON.stringify({ context, target })).digest('hex');
+const identity = createHash('sha256').update(JSON.stringify({ context, target, ...(standing ? { family: 'standing' } : {}) })).digest('hex');
 const checkpoint = join(process.cwd(), '.temp/rating-reconstruction', `${identity}.json`);
 let saved: { cursor: LegacyRatingCursor | null; complete: boolean } | undefined;
 if (!restart) {
@@ -113,6 +116,7 @@ try {
       context,
       target,
       batchSize,
+      standing,
       ...(saved?.cursor ? { cursor: saved.cursor } : {}),
     });
     saved = { cursor: result.cursor, complete: result.complete };

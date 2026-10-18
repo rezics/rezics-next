@@ -1,0 +1,150 @@
+import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { Pool } from 'pg';
+import { canonicalCandidate } from '../../../services/main/src/modules/editorial-review/contract.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import {
+  listTargetsNeedingReconstruction,
+  readRatingAggregateInventory,
+  readStandingRatingReconstructionBatch,
+  recordStandingRatingValues,
+} from '../../../services/main/src/modules/rating/aggregate-inventory.ts';
+import { standingRatingSlotIri } from '../../../services/main/src/modules/rating/observation.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
+
+const id = () => `https://rezics.com/id/${randomUUID()}`;
+
+/** Exercises the real migrated Access owner and its additive state. Public
+ * graph/receipt/manifest composition is independently covered by the D5-006
+ * public assertions and rating-global-synthesis, rather than simulated here. */
+test('standing components retain exact effective slots through 100/101/large, merge changes and bounded legacy reconstruction', async () => {
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access'], 'owner');
+  const pool = new Pool({ connectionString: databases.urls.access });
+  const context = id(), work = id(), main = id(), originWork = id(), originMain = id(), legacyMain = id(), actor = id();
+  const people = Array.from({ length: 2048 }, () => randomUUID()).sort();
+  const scope = `rating:observe:${context}`;
+  const items = people.map(principal => ({ principal, admission: randomUUID(), observation: id(), revision: id(),
+    slot: standingRatingSlotIri(principal, context, originMain) }));
+  const contextAdmission = randomUUID(), proposal = randomUUID(), application = randomUUID(), task = `editorial:${proposal}:1`;
+  const plan = { operation: 'merge', source: { resource: originWork, revision: id() },
+    survivor: { resource: work, revision: id() }, evidence: [] };
+  const canonical = canonicalCandidate(plan);
+  const admissions = async (rows: { principal: string; admission: string }[]) => pool.query(`INSERT INTO access.admission
+    (id,principal_id,acting_subject,scope_id,action,idempotency_key,request_digest,authority_epoch,expires_at,
+      state,graph_receipt,graph_outcome,graph_data_epoch,graph_sequence,sealed_at)
+    SELECT x.admission::uuid,x.principal::uuid,$2,$3,'rating.observation.set',x.admission,$4,0,now()+interval '1 hour',
+      'sealed','urn:g2786:'||x.admission,'succeeded','g2786','1',now()
+    FROM jsonb_to_recordset($1::jsonb) x(principal text,admission text)`, [JSON.stringify(rows), actor, scope, '1'.repeat(64)]);
+  const heads = async (rows: typeof items, target: string, owner: string, known = true) => {
+    await admissions(rows);
+    await pool.query(`INSERT INTO access.rating_aggregate_head
+      (context,main_version,slot,work,observation,revision,principal_id,admission_id,original_admission_id,value,value_known)
+      SELECT $2,$3,x.slot,$4,x.observation,x.revision,x.principal::uuid,x.admission::uuid,x.admission::uuid,
+        CASE WHEN $5 THEN 5::numeric ELSE NULL END,$5
+      FROM jsonb_to_recordset($1::jsonb) x(principal text,admission text,slot text,observation text,revision text)`,
+    [JSON.stringify(rows), context, target, owner, known]);
+  };
+  const component = async (target: string) => (await pool.query(`SELECT slots,unvalued,histogram
+    FROM access.rating_standing_component WHERE context=$1 AND main_version=$2`, [context, target])).rows[0];
+  const expectExact = async (target: string) => {
+    const state = await component(target);
+    const recomputed = (await pool.query(`SELECT count(*)::int AS slots,
+      count(*) FILTER (WHERE NOT value_known)::int AS unvalued,
+      COALESCE((SELECT jsonb_object_agg(bin,n) FROM (SELECT trim_scale(value)::text AS bin,count(*)::int AS n
+        FROM access.rating_standing_contribution WHERE context=$1 AND main_version=$2 AND value_known AND value IS NOT NULL
+        GROUP BY value) bins),'{}'::jsonb) AS histogram
+      FROM access.rating_standing_contribution WHERE context=$1 AND main_version=$2`, [context, target])).rows[0];
+    expect(state).toEqual(recomputed);
+    return state;
+  };
+  try {
+    await pool.query(`INSERT INTO access.principal(id,account_issuer,account_subject)
+      SELECT x::uuid,'g2786-standing',x FROM jsonb_array_elements_text($1::jsonb) x`, [JSON.stringify(people)]);
+    await pool.query("INSERT INTO access.authority_subject(id,kind) VALUES ($1,'agent')", [actor]);
+    await grantFixtureAuthority(pool, { scope, requireDispatch: true,
+      representations: [{ principalId: people[0]!, actor, action: 'rating.observation.set', lifetime: '8 hours' }],
+      grant: { actor, action: 'rating.observation.set', lifetime: '8 hours' } });
+    await admissions([{ principal: people[0]!, admission: contextAdmission }]);
+    await pool.query(`INSERT INTO access.rating_aggregate_context(context,realm,revision,policy_revision,admission_id)
+      VALUES ($1,$2,$3,$3,$4)`, [context, id(), id(), contextAdmission]);
+    await pool.query(`INSERT INTO access.editorial_proposal
+      (id,kind,target,resource,context,work,proposer_principal,proposer_agent,proposer_key,proposer_controllers)
+      VALUES ($1,'merge',$2,$3,'urn:rezics:context:global',$3,$4,$5,$6,ARRAY[$4::uuid])`,
+    [proposal, plan.source, originWork, people[0], actor, '2'.repeat(64)]);
+    await pool.query(`INSERT INTO access.editorial_revision
+      (proposal,n,candidate,candidate_digest,before_state,base_heads,evidence,author_agent)
+      VALUES ($1,1,$2,$3,'null',$4,'[]',$5)`,
+    [proposal, JSON.stringify(canonical.candidate), canonical.digest, JSON.stringify([plan.source, plan.survivor]), actor]);
+    await pool.query(`INSERT INTO access.editorial_application
+      (id,proposal,revision,principal,actor,operation_key,command_key,command_digest,approve,required,message)
+      VALUES ($1::uuid,$2,1,$3,$4,$5,$1::text,$6,false,2,'G2786 standing owner fixture')`,
+    [application, proposal, people[0], actor, task, canonical.digest]);
+    await pool.query(`INSERT INTO access.identity_merge_task(task_key,application,candidate_digest,plan,data_epoch,handlers)
+      VALUES ($1,$2,$3,$4,'g2786','[{"owner":"rating","version":"effective-person-vote-v3"}]')`,
+    [task, application, canonical.digest, JSON.stringify(canonical.candidate)]);
+
+    // SQL and application slot identities must match, including escaped JSON.
+    expect((await pool.query('SELECT access.rating_standing_slot($1,$2,$3) AS slot',
+      [people[0], context, originMain])).rows[0].slot).toBe(items[0]!.slot);
+    let previous = 0;
+    for (const population of [100, 101, 512, 2048]) {
+      await heads(items.slice(previous, population), originMain, originWork);
+      previous = population;
+      expect(await expectExact(originMain)).toEqual({ slots: population, unvalued: 0, histogram: { '5': population } });
+      const inventory = await readRatingAggregateInventory(pool, context, originMain);
+      expect(inventory.heads).toHaveLength(Math.min(population, 101));
+      expect(inventory.standing).toMatchObject({ slots: population, unvalued: 0, histogram: { '5': population } });
+      expect(!!inventory.standing!.witness).toBe(population > 100);
+    }
+    await pool.query(`INSERT INTO access.rating_merge_selection
+      (context,work,main_version,principal_id,origin_main_version,origin_slot,task_key)
+      SELECT $2,$3,$4,x.principal::uuid,$5,x.slot,$6
+      FROM jsonb_to_recordset($1::jsonb) x(principal text,slot text)`,
+    [JSON.stringify(items), context, work, main, originMain, task]);
+    expect(await expectExact(main)).toEqual({ slots: 2048, unvalued: 0, histogram: { '5': 2048 } });
+    const native = { ...items[0]!, admission: randomUUID(), observation: id(), revision: id(),
+      slot: standingRatingSlotIri(people[0]!, context, main) };
+    await heads([native], main, work);
+    await pool.query('UPDATE access.rating_aggregate_head SET value=8.5 WHERE context=$1 AND main_version=$2 AND slot=$3',
+      [context, main, native.slot]);
+    expect(await expectExact(main)).toMatchObject({ slots: 2048, histogram: { '5': 2047, '8.5': 1 } });
+    await pool.query('UPDATE access.rating_aggregate_head SET value=NULL WHERE context=$1 AND main_version=$2 AND slot=ANY($3::text[])',
+      [context, originMain, items.slice(0, 2).map(item => item.slot)]);
+    expect(await expectExact(originMain)).toMatchObject({ slots: 2048, histogram: { '5': 2046 } });
+    expect(await expectExact(main)).toMatchObject({ slots: 2048, histogram: { '5': 2046, '8.5': 1 } });
+    await pool.query('DELETE FROM access.rating_merge_selection WHERE context=$1 AND main_version=$2', [context, main]);
+    expect(await expectExact(main)).toEqual({ slots: 1, unvalued: 0, histogram: { '8.5': 1 } });
+
+    const legacy = items.slice(0, 201).map(item => ({ ...item, admission: randomUUID(), observation: id(), revision: id(),
+      slot: standingRatingSlotIri(item.principal, context, legacyMain) }));
+    await heads(legacy, legacyMain, work, false);
+    expect(await component(legacyMain)).toEqual({ slots: 201, unvalued: 201, histogram: {} });
+    expect((await listTargetsNeedingReconstruction(pool, { context, standing: true })).targets)
+      .toContainEqual({ context, target: legacyMain, slots: 201, unvalued: 201 });
+    let after = '', generation = '', scanned = 0;
+    for (const size of [100, 100, 1, 0]) {
+      const page = await readStandingRatingReconstructionBatch(pool, context, legacyMain, after, 100);
+      expect(page.heads).toHaveLength(size);
+      generation = page.recoveryGeneration;
+      const verified = page.heads.map(head => ({ mainVersion: head.mainVersion!, slot: head.slot, revision: head.revision, value: 5 }));
+      expect(await recordStandingRatingValues(pool, context, generation, verified)).toBe(size);
+      expect(await recordStandingRatingValues(pool, context, generation, verified)).toBe(0);
+      after = page.heads.at(-1)?.effectiveSlot ?? after;
+      scanned += size;
+      await expectExact(legacyMain);
+    }
+    expect(scanned).toBe(201);
+    expect(await component(legacyMain)).toEqual({ slots: 201, unvalued: 0, histogram: { '5': 201 } });
+    expect((await listTargetsNeedingReconstruction(pool, { context, standing: true })).targets).toEqual([]);
+    const last = legacy[0]!;
+    expect(await recordStandingRatingValues(pool, context, generation,
+      [{ mainVersion: legacyMain, slot: last.slot, revision: id(), value: 9 }])).toBe(0);
+    await expect(recordStandingRatingValues(pool, context, 'stale-generation', [])).rejects.toThrow('Recovery fence changed');
+    const cancellation = new AbortController(); cancellation.abort();
+    await expect(readStandingRatingReconstructionBatch(pool, context, legacyMain, '', 100, cancellation.signal)).rejects.toThrow();
+    await expect(readStandingRatingReconstructionBatch(pool, context, legacyMain, '', 101)).rejects.toThrow('invalid standing reconstruction page');
+  } finally {
+    await pool.end();
+    await databases.close();
+  }
+}, 120_000);
