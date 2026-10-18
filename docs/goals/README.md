@@ -217,20 +217,6 @@ Converge at every step so archived task IDs do not become dangling references:
 
 Rename existing task-based files or restate citations when work touches them.
 
-### Discarding completed history
-
-Completed-program archives are disposable. Lasting decisions belong in their
-owner documents, and implementation history remains on `main`. The maintainer
-may delete `archive/goals` locally and remotely without a recovery snapshot.
-
-Before clearing a completed program's runtime state, confirm that all Goals and
-tasks are closed and the coordinator is stopped. Remove its old databases,
-manager registrations, events, mail, queues, locks, logs and temporary reports.
-Keep `scripts/goal/`, QA tools, skills, `.goalctl/` settings and host QA controls.
-The cleared ledger retains an empty `tasks` object and its `lastId` so the next
-program cannot reuse task IDs. Move reusable local diagnostic scripts outside
-the disposable Goal directories before removing those directories.
-
 ## Integration practices
 
 Build a migration fixture with the old command, rather than a hand-written
