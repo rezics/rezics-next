@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, st
 import { join } from 'node:path';
 import { inspectAllowance, allowanceCommand, type AllowanceTransport } from './allowance.ts';
 import { testAccountSettings } from './fixtures/accounts.ts';
+import { processAlive } from '../qa/process/identity.ts';
 
 const NOW = 1792344566;
 // Sanitized from the captured GetAccountRateLimitsResponse and codex-2 live read.
@@ -493,7 +494,14 @@ import { appendFileSync, existsSync, writeFileSync } from 'node:fs';
 const directory = ${JSON.stringify(f.directory)};
 const mode = ${JSON.stringify(mode)};
 appendFileSync(directory + '/launches.jsonl', JSON.stringify({ args: process.argv.slice(2), home: process.env.CODEX_HOME }) + '\\n');
-if (process.argv.includes('mcp')) { console.log(JSON.stringify([{ name: 'inherited', enabled: true }])); process.exit(0); }
+if (process.argv.includes('mcp')) {
+ if (mode === 'mcp-timeout') {
+  process.on('SIGINT', () => {}); process.on('SIGTERM', () => {});
+  writeFileSync(directory + '/mcp.pid', String(process.pid));
+  setInterval(() => {}, 1000); await new Promise(() => {});
+ }
+ console.log(JSON.stringify([{ name: 'inherited', enabled: true }])); process.exit(0);
+}
 writeFileSync(directory + '/server.pid', String(process.pid));
 if (mode === 'timeout') { process.on('SIGTERM', () => {}); setInterval(() => {}, 1000); }
 else {
@@ -512,10 +520,19 @@ else {
    if (request.method === 'account/rateLimits/read') {
     result = ${JSON.stringify(captured())};
     if (mode === 'concurrent') result.ordinaryUsageAllowed = existsSync(directory + '/restored');
-    if (mode === 'lost-response') result.ordinaryUsageAllowed = false;
+    if (mode === 'lost-response' || mode === 'pending-response') result.ordinaryUsageAllowed = false;
+    if (mode === 'pending-response' && existsSync(directory + '/redeeming')) {
+     result.rateLimitResetCredits.availableCount = 1;
+     result.rateLimitResetCredits.credits[1].status = 'redeeming';
+    }
    }
    if (request.method === 'account/rateLimitResetCredit/consume') {
     if (mode === 'lost-response') process.exit(0);
+    if (mode === 'pending-response') {
+     process.on('SIGTERM', () => {});
+     writeFileSync(directory + '/redeeming', 'yes');
+     setInterval(() => {}, 1000); await new Promise(() => {});
+    }
     await Bun.sleep(50); writeFileSync(directory + '/restored', 'yes'); result = { outcome: 'reset' };
    }
    console.log(JSON.stringify({ method: 'account/updated', params: { email: 'private@example.com' } }));
@@ -543,6 +560,88 @@ for (const mode of ['normal', 'timeout', 'error']) test(`real stdio transport di
     expect(JSON.stringify(result)).not.toMatch(/private|secret|@/);
     if (mode === 'normal') expect(existsSync(join(f.directory, 'requests.jsonl'))).toBe(true);
   } finally { f.cleanup(); }
+}, 5000);
+
+async function waitFor(condition: () => boolean, timeoutMs = 2000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition() && Date.now() < deadline) await Bun.sleep(10);
+  return condition();
+}
+
+function stopLauncher(pid: number): void {
+  try { process.kill(-pid, 'SIGKILL'); }
+  catch { try { process.kill(pid, 'SIGKILL'); } catch { /* Already exited. */ } }
+}
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) test(`interrupting MCP enumeration cleans up its child within a bound (${signal})`, async () => {
+  const f = fixture(['resetCards']);
+  let caller: Bun.Subprocess<'ignore', 'pipe', 'pipe'> | undefined;
+  let enumerator: number | undefined;
+  try {
+    launcher(f, 'mcp-timeout');
+    const source = `import { inspectAllowance } from ${JSON.stringify(join(import.meta.dir, 'allowance.ts'))};
+      const before = ['SIGINT', 'SIGTERM'].map(signal => process.listenerCount(signal));
+      const report = await inspectAllowance('sample-c', { continue: true, requestTimeoutMs: 10000,
+        settings: { directory: ${JSON.stringify(f.settings)} }, lockDirectory: ${JSON.stringify(f.options.lockDirectory)} });
+      console.log(JSON.stringify({ report, before, after: ['SIGINT', 'SIGTERM'].map(signal => process.listenerCount(signal)) }));`;
+    caller = Bun.spawn([process.execPath, '-e', source], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
+    expect(await waitFor(() => existsSync(join(f.directory, 'mcp.pid')))).toBe(true);
+    enumerator = Number(readFileSync(join(f.directory, 'mcp.pid'), 'utf8'));
+    expect(processAlive({ pid: enumerator })).toBe(true);
+    caller.kill(signal);
+    expect(await waitFor(() => caller!.exitCode !== null || caller!.signalCode !== null)).toBe(true);
+    expect(processAlive({ pid: enumerator })).toBe(false);
+    const [output, errors] = await Promise.all([new Response(caller.stdout).text(), new Response(caller.stderr).text()]);
+    expect({ code: await caller.exited, errors }).toEqual({ code: 0, errors: '' });
+    const result = JSON.parse(output);
+    expect(result.report).toMatchObject({ status: 'unavailable', canResume: false, error: 'transport', redemption: null });
+    expect(result.after).toEqual(result.before);
+    expect(existsSync(join(f.directory, 'server.pid'))).toBe(false);
+    expect(output).not.toMatch(/private|secret|@|creditId|accountId|idempotencyKey/);
+  } finally {
+    if (enumerator) stopLauncher(enumerator);
+    caller?.kill('SIGKILL');
+    await caller?.exited;
+    f.cleanup();
+  }
+}, 5000);
+
+test('caller death during an unresolved detached redemption cannot spend another card on fresh retries', async () => {
+  const f = fixture(['resetCards']);
+  const children: Bun.Subprocess<'ignore', 'pipe', 'pipe'>[] = [];
+  let unresolvedServer: number | undefined;
+  try {
+    launcher(f, 'pending-response');
+    const source = `import { inspectAllowance } from ${JSON.stringify(join(import.meta.dir, 'allowance.ts'))};
+      console.log(JSON.stringify(await inspectAllowance('sample-c', { continue: true,
+        settings: { directory: ${JSON.stringify(f.settings)} }, lockDirectory: ${JSON.stringify(f.options.lockDirectory)} })));`;
+    const first = Bun.spawn([process.execPath, '-e', source], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
+    children.push(first);
+    expect(await waitFor(() => existsSync(join(f.directory, 'redeeming')))).toBe(true);
+    unresolvedServer = Number(readFileSync(join(f.directory, 'server.pid'), 'utf8'));
+    first.kill('SIGKILL');
+    await first.exited;
+    expect(processAlive({ pid: unresolvedServer })).toBe(true);
+    expect(existsSync(join(f.home, '.rezics-allowance-reset.json'))).toBe(true);
+    for (let retry = 0; retry < 2; retry++) {
+      const child = Bun.spawn([process.execPath, '-e', source], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
+      children.push(child);
+      const [code, output, errors] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+      expect({ code, errors }).toEqual({ code: 0, errors: '' });
+      expect(JSON.parse(output)).toMatchObject({ status: 'exhausted', canResume: false, redemption: 'unconfirmed', error: null });
+      expect(output).not.toMatch(/private|secret|@|creditId|accountId|idempotencyKey/);
+    }
+    const requests = readFileSync(join(f.directory, 'requests.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    const spends = requests.filter(request => request.method === 'account/rateLimitResetCredit/consume');
+    expect(spends).toHaveLength(1);
+    expect(spends[0].params.creditId).toBe('private-card-earlier');
+    expect(processAlive({ pid: unresolvedServer })).toBe(true);
+  } finally {
+    if (unresolvedServer) stopLauncher(unresolvedServer);
+    for (const child of children) child.kill('SIGKILL');
+    await Promise.allSettled(children.map(child => child.exited));
+    f.cleanup();
+  }
 }, 5000);
 
 test('separate manager processes share the account lease and a concurrent retry consumes only one card', async () => {
