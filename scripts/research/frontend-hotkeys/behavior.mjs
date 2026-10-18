@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { candidates } from './policy.mjs';
 
@@ -72,7 +72,8 @@ for (const candidate of candidates) {
     const clear = async () => page.evaluate(() => { window.__fixture.clear(); window.__cancels = 0; });
     const state = async () => page.evaluate(() => ({ actions: window.__fixture.logs.map(row => row.id), cancels: window.__cancels,
       focus: document.activeElement?.id || document.activeElement?.getAttribute('aria-label') || document.activeElement?.tagName,
-      registrations: window.__adapter.count(), listeners: window.__keyListeners.map(row => ({ type: row.type, capture: row.capture,
+      registrations: window.__adapter.count(), globalListeners: window.__keyListeners.filter(row => row.target === window || row.target === document).length,
+      listeners: window.__keyListeners.map(row => ({ type: row.type, capture: row.capture,
         target: row.target === window ? 'window' : row.target === document ? 'document' : row.target.nodeName,
         connected: row.target === window || row.target === document || row.target.isConnected })) }));
     async function vector(id, target, init, expected = [], expectedCancels = expected.length ? 1 : 0) {
@@ -96,10 +97,13 @@ for (const candidate of candidates) {
     await vector('keys-priority/page-search', '#page-target', { key:'k', code:'KeyK', ctrlKey:true }, ['search']);
     await vector('keys-priority/consumed', '#consumed', { key:'k', code:'KeyK', ctrlKey:true }, [], 1);
     await vector('keys-priority/editor-bold', '.tiptap', { key:'b', code:'KeyB', ctrlKey:true }, [], 1);
+    // A caret-only toggle affects stored marks, not the existing document. Type
+    // through the browser to verify the actual editor outcome as well.
+    await page.keyboard.type('bold');
     entry.editorBold = await page.locator('#document-json').textContent();
     await vector('keys-priority/editor-link', '.tiptap', { key:'k', code:'KeyK', ctrlKey:true }, [], 1);
-    entry.editorLink = { linkFieldVisible: await page.getByPlaceholder('https://example.com').count(),
-      dialogCount: await page.getByRole('dialog').count() };
+    entry.editorLink = { urlFieldVisible: await page.getByRole('dialog').getByLabel('URL',{exact:true}).count(),
+      dialogCount: await page.getByRole('dialog').count(), text: await page.getByRole('dialog').textContent() };
     await page.keyboard.press('Escape');
     for (const init of [
       { key:'k', code:'KeyK', ctrlKey:true, isComposing:true },
@@ -139,9 +143,12 @@ for (const candidate of candidates) {
     entry.nested.focusContained = await page.evaluate(() => !!document.activeElement.closest('[role=dialog]'));
     await page.keyboard.press('Escape');
     entry.nested.parentSurvives = await page.locator('#modal-input').isVisible();
+    await page.screenshot({path:`${captures}/${candidate}-modal.png`,fullPage:true});
     await page.locator('#modal-input').dispatchEvent('keydown', { key:'Escape', code:'Escape', keyCode:229, isComposing:false });
     entry.imeDialog229 = { status: await page.locator('#modal-input').isVisible() ? 'pass' : 'fail' };
     if (await page.locator('#modal-input').isVisible()) await page.keyboard.press('Escape');
+    await page.locator('#modal-input').waitFor({state:'hidden'});
+    await page.waitForTimeout(100);
     entry.focusReturn = { focus: await page.evaluate(() => document.activeElement?.id), expected:'modal-trigger' };
     if (candidate !== 'native-as-is') {
       await page.getByLabel('Disable search and character shortcuts').check();
@@ -190,6 +197,8 @@ for (const candidate of candidates) {
     entry.lifecycle=[];
     for(let cycle=0;cycle<5;cycle++) {
       await page.getByRole('button',{name:'Unmount workload',exact:true}).click();
+      await clear();
+      await page.evaluate(()=>document.body.dispatchEvent(new KeyboardEvent('keydown',{key:'k',code:'KeyK',ctrlKey:true,bubbles:true,cancelable:true})));
       entry.lifecycle.push({cycle,unmounted:await state()});
       await page.getByRole('button',{name:'Mount workload',exact:true}).click();
       await page.waitForTimeout(50);
