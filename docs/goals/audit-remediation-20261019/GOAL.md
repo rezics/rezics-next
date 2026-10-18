@@ -30,3 +30,5 @@ Declare a finding proved only with the relevant API/interaction outcome and,
 for visible changes, reviewed Storybook and actual browser screenshots. Preserve
 existing imported identities and data; prepare reusable isolated fixtures within
 the documented budget. Do not replace substantive fixtures with placeholders.
+
+The [current state](state.md) records progress and the next executable action.
