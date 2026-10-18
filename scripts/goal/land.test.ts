@@ -538,9 +538,11 @@ writeFileSync(args[args.indexOf('--output-last-message') + 1], '{"findings":[]}'
     const file = join(process.env.GOAL_SETTINGS_DIRECTORY!, 'settings.user.json');
     writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), reviewScope: 'all' }));
     for (const kind of ['implementation', 'mechanism', 'outcome', 'surface', 'tooling', undefined]) {
-      for (const path of ['apps/web/page.tsx', 'scripts/goal/land.ts', '.goalctl/settings.schema.json', 'docs/design.md'])
+      for (const path of ['apps/web/page.tsx', 'scripts/goal/land.ts', '.goalctl/settings.schema.json', 'docs/design.md', ' ']) {
         expect(needsReview(kind, [path])).toBe(true);
-      expect(needsReview(kind, [])).toBe(false);
+        expect(needsReview(kind, ['', path, ''])).toBe(true);
+      }
+      for (const paths of [[], [''], ['', '']]) expect(needsReview(kind, paths)).toBe(false);
     }
     const prompt = reviewPrompt({ worktree: '/w', base: 'a', head: 'b', brief: 'brief', handoff: 'RESULT: done', directory: '/d' });
     expect(prompt).toContain('correctness defects in any changed code');
