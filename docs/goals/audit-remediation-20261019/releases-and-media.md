@@ -148,11 +148,16 @@ placeholder or Storybook mock cannot satisfy that obligation.
 
 ## Baseline status
 
-The staged audit names product revision
-`79be80d4d0e1cad1639b6a65e8f0795d6a95929a`; it is a **nominated** baseline, not
-an executed or validated baseline for this specification. No baseline run has
-started, no product assertion has been reached and no product failure is
-claimed. The staged files contain no media captures or two-source command corpus.
+The original audit product revision is
+`69eac3ceeaf885be70205a70248bc951e9d81cc9`; this is the corrected future pin.
+No baseline execution or validation is claimed for this specification. The later
+nomination cannot replace the original audit tree retained in state. Identify authored
+specification/test/support overlays independently, and record the fixed-wave
+revision, restored corpus generation and source snapshot separately. A fixture
+unable to run the original revision blocks proof rather than advancing the
+product baseline. No baseline run has started, no product assertion has been
+reached and no product failure is claimed. The staged files contain no media
+captures or two-source command corpus.
 The repository's older VNDB dump slice has release facts but lacks the required
 cover/portrait evidence and complete second-source/readable fixtures.
 

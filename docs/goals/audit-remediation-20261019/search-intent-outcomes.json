@@ -5,7 +5,8 @@
   "proof": "No persona is proved by declaration, schema compilation or an expected-failure test exit.",
   "decisionsSource": ".temp/ref/decisions.md#search-intent",
   "baseline": {
-    "productRevision": "79be80d4d0e1cad1639b6a65e8f0795d6a95929a",
+    "productRevision": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+    "pinPolicy": "The original audit tree retained in state is the product baseline; the later nomination cannot replace it. Identify authored specification/test/support overlays, the fixed-wave revision, restored corpus generation and source snapshot independently. A fixture unable to run this original product revision blocks proof rather than advancing the pin.",
     "status": "not-run",
     "qaRunId": null,
     "failingTestBodies": [],
@@ -13,7 +14,7 @@
     "preparationBudgetMs": 600000,
     "elapsedPreparationMs": null,
     "blocker": "No command-created search-intent retained source or consistent stopped all-owner backup is staged at .temp/search-intent/corpus-source.json. Without it, beforeAll cannot prove public Character/Concept/discussion/extra-type admission, actual private controls, original rights/publication and frozen revisions. No baseline API run or outcome assertion was attempted.",
-    "pinStatus": "Revision object resolved locally; no baseline execution checkout or product run is claimed."
+    "pinStatus": "Original audit revision object resolved locally; this corrected future pin has not been executed. No baseline execution checkout or product run is claimed."
   },
   "proposal": {
     "status": "pending-manager-review-before-implementation",

@@ -204,11 +204,16 @@ The producer must:
   value, then the operator retries that real source value with the pre-confirmation
   control basis: 409 `field_control_changed`, with human value and heads intact.
 
-The pristine baseline target from the accepted plan is
-`79be80d4d0e1cad1639b6a65e8f0795d6a95929a`. Baseline execution must pin that
-product code and overlay only the specification, with the command-created
+The original audit product baseline for future execution is
+`69eac3ceeaf885be70205a70248bc951e9d81cc9`. The later nomination cannot replace
+the original audit tree retained in state. This corrected pin has not been run.
+Baseline execution must pin that product code and overlay only the independently
+identified authored specification/test/support files, with the command-created
 corpus restored into an isolated QA environment. The baseline manifest records
 `phase: baseline`, that revision, `digest(matrix)` and measured preparation.
+Record the fixed-wave revision, restored corpus generation and source snapshot
+separately. A fixture unable to run the original product revision blocks proof;
+it does not authorize a later product baseline.
 Run each prove file serially against its own fresh restore. Pending cells use
 `outcomeTest(..., undefined, { pending: 'assert' })` to report genuine assertion
 failures without expected-failure inversion. A green runner exit is **not** proof.

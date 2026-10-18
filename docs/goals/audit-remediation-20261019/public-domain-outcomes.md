@@ -102,11 +102,18 @@ and operator. No new resource, endpoint or request parameter is proposed.
 The private fixture interface is
 `tests/qa/fixtures/catalogue-public-domain.ts`. Consumers expect
 `.temp/goal/public-domain-corpus.json`, built through public commands at pristine
-product baseline `79be80d4d0e1cad1639b6a65e8f0795d6a95929a`. It names one
+product baseline `69eac3ceeaf885be70205a70248bc951e9d81cc9`. It names one
 consistent stopped owner backup, the original 113 Work identities, retained
 persona identities/auth, exact import receipts, normalized reviewed source
 oracles and SHA-256-pinned local source quotes. Credentials remain in private
 `.temp` metadata; none belongs in this document or a recorded answer.
+
+This corrects the future pin to the original audit tree retained in state; the
+later nomination cannot replace it, and no execution of the corrected pin is
+claimed. Identify authored specification/test/support overlays independently.
+Record the fixed-wave revision, restored corpus generation and source snapshot
+separately. A fixture unable to run the original revision blocks proof rather
+than advancing the product baseline.
 
 The corpus needs a real rich recipe with repeated ingredient names in distinct
 occurrences, exact fractional amounts, linked instructions, positive servings

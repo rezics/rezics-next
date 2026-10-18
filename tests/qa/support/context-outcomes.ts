@@ -10,7 +10,7 @@ import { restorePersonaRealms, type PersonaName, type PersonaSession,
 // Proposed public contract types, deliberately outside production admission.
 // The owner document records which interface decisions still need approval.
 export const associationQuery = 'https://rezics.com/query/subject-associations';
-export const baselineProduct = '79be80d4d0e1cad1639b6a65e8f0795d6a95929a';
+export const baselineProduct = '69eac3ceeaf885be70205a70248bc951e9d81cc9';
 export type Context = 'global' | { realm: string };
 export interface SourcePosition { datasetId: 'product'; dataEpoch: string; sequence: string }
 export interface Snapshot { sourcePosition: SourcePosition; modelGeneration: string }

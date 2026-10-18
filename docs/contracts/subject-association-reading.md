@@ -238,9 +238,15 @@ Prove files (all six personas per file):
 
 The named baseline selection is `context-outcomes-baseline`: both files in one
 `bun scripts/goal/goalctl.ts test` call, after pinning pristine product revision
-`79be80d4d0e1cad1639b6a65e8f0795d6a95929a`. Only the authored test/declaration/support
-files may overlay that product checkout. Prepare a consistent stopped backup
-once; restore isolated writable copies, never the shared development stack.
+`69eac3ceeaf885be70205a70248bc951e9d81cc9`. Only the independently identified
+authored test/declaration/support files may overlay that product checkout. The
+later nominated revision advances the original audit tree and cannot replace
+the baseline retained in audit state. This corrected future pin has not been
+executed. Record the fixed-wave revision, restored corpus generation and source
+snapshot separately; none is a substitute product baseline. A fixture unable to
+run the original product revision blocks proof rather than advancing the pin.
+Prepare a consistent stopped backup once; restore isolated writable copies,
+never the shared development stack.
 Each build/restore, including startup, migrations, smoke and attestation, has a
 600-second ceiling. Baseline evidence must retain test body/title, actual
 response, assertion reached, pinned revision and measured preparation phases.

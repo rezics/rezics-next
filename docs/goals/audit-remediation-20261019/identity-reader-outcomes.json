@@ -202,6 +202,20 @@
   },
   "baseline": {
     "selection": "identity-reader-api-baseline",
+    "status": "not-run",
+    "productRevision": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+    "pinPolicy": "The original audit tree retained in state is the product baseline; the later nomination cannot replace it. Identify authored specification/test/support overlays, the fixed-wave revision, restored corpus generation and source snapshot independently. A fixture unable to run this original product revision blocks proof rather than advancing the pin.",
+    "pinStatus": "Corrected future pin and command; neither has been executed at this revision. historicalPreparation retains the later-revision attempts unchanged and is not original-baseline evidence.",
+    "pinProcedure": "Commit this complete specification; detach this worker worktree at the product revision and overlay only the authored declaration, tests, test fixture, test-registration helper and its unit coverage, and matrix. Verify the exact seven-path allowlist; production code and the QA runner remain pristine. Keep main and all other worktrees read-only.",
+    "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test tests/qa/integration/outcomes/realm/identity-discovery.test.ts tests/qa/integration/audit-public-reading.test.ts",
+    "expectedResult": "Ordinary assertions may fail. Report the actual failing test body, reached assertion and actual response; never count setup, transport failure, health or a test.failing wrapper as the requested product failure.",
+    "failingBodies": [],
+    "assertionsReached": false,
+    "preparation": { "budgetMs": 600000, "backupCreated": false, "restoreReached": false, "emptyAccountCreationReached": false },
+    "blocker": "No compatible command-created public Book cut, consistent stopped backup or isolated restoration has been established for the original audit product revision. The later-revision publication/setup failures retained below remain historical prerequisites, not outcome evidence for this corrected pin."
+  },
+  "historicalPreparation": {
+    "selection": "identity-reader-api-baseline",
     "status": "blocked-during-preparation",
     "productRevision": "79be80d4d0e1cad1639b6a65e8f0795d6a95929a",
     "pinProcedure": "Commit this complete specification; detach this worker worktree at the product revision and overlay only the authored declaration, tests, test fixture, test-registration helper and its unit coverage, and matrix. Verify the exact seven-path allowlist; production code and the QA runner remain pristine. Keep main and all other worktrees read-only.",
@@ -271,7 +285,7 @@
   },
   "remainingPrerequisites": [
     "G-2768 enrolls the pending identity row and the exact prove files without editing these declarations/assertions. Corpus-owning tests must receive the runner's appropriate isolation enrollment before wider prove campaigns.",
-    "The pristine baseline pin succeeded. Public Book work-structure publication must be established through supported commands; its current 404 contribution_unavailable blocks both beforeAll hooks. Empty-Account creation, the one consistent backup and isolated restoration remain unexercised. No failing outcome baseline has been claimed.",
+    "The historical later-revision pin succeeded; the corrected original-audit product pin has not been executed. Public Book work-structure publication must be established through supported commands; its historical 404 contribution_unavailable blocked both beforeAll hooks. Empty-Account creation, the one consistent backup and isolated restoration remain unexercised. No failing outcome baseline has been claimed.",
     "A saved Agent whose representation is later revoked requires a supported independent fixture authority transition; do not manufacture private rows or an eligible:false success response.",
     "Separate browser author proves rendered login return, menu/focus, and preserved independent sections. This API specification author has no browser execution authority."
   ]
