@@ -38,6 +38,28 @@ async function childSend(options: ReturnType<typeof fixture>['options'], key: st
 }
 
 describe('durable Goal mail', () => {
+  test('Program receives, acknowledges and replies without a registered product Goal', () => {
+    const f = fixture();
+    const file = join(f.dir, 'request.md');
+    writeFileSync(file, 'Please read the brief');
+    const options = { stateDir: f.options.stateDir, goals: ['launch'], callerGoal: 'launch' };
+    const program = { ...options, callerGoal: 'program' };
+    try {
+      const sent = JSON.parse(mailCommand(['send', 'program', '--file', file, '--key', 'program-reading'], options)[0]!);
+      expect(JSON.parse(mailCommand(['inbox'], program)[0]!)).toMatchObject({
+        id: sent.id, sender: 'launch', goal: 'program', acknowledged: false,
+      });
+      expect(JSON.parse(mailCommand(['ack', sent.id], program)[0]!)).toMatchObject({
+        id: sent.id, goal: 'program', acknowledged: true,
+      });
+      expect(mailCommand(['inbox'], program)).toEqual([]);
+      writeFileSync(file, 'Reading received');
+      const reply = JSON.parse(mailCommand(['send', 'launch', '--file', file, '--key', 'program-reply'], program)[0]!);
+      expect(JSON.parse(mailCommand(['inbox'], options)[0]!)).toMatchObject({ id: reply.id, sender: 'program' });
+      expect(() => mailCommand(['inbox', 'missing'], options)).toThrow('Unknown mail Goal');
+    } finally { f.cleanup(); }
+  });
+
   test('sender and deadline survive retries without extending the deadline or changing authorship', () => {
     const f = fixture();
     try {

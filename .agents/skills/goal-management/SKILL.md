@@ -137,6 +137,11 @@ each message after acting on it with `task goal -- mail ack <id>`. The old
 view. Keep the same reserve as any manager: if its account nears its limit,
 move workers to the other account first.
 
+The resident supermanager receives mail at the reserved `program` address,
+which needs no product Goal registration. Program reads and acknowledges it
+with `GOAL_ID=program task goal -- mail inbox program` and
+`GOAL_ID=program task goal -- mail ack <id>`; replies use the same sender context.
+
 Inbox entries and wake prompts show the sender and deadline. Mail has no
 deadline unless one was supplied. Once an unacknowledged delivery is past its
 deadline, the coordinator adds one deadline wake and sends the original sender
