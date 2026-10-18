@@ -191,6 +191,36 @@ test('lost redemption response is not retried or exposed; fresh permission deter
   } finally { f.cleanup(); }
 });
 
+test('retry does not redeem another card while a reset is pending', async () => {
+  const f = fixture(['resetCards']);
+  try {
+    const rates = captured(false);
+    rates.rateLimits.primary.usedPercent = 100;
+    f.rates(rates);
+    f.consume(() => {
+      rates.rateLimitResetCredits.availableCount = 1;
+      rates.rateLimitResetCredits.credits[1]!.status = 'redeeming';
+      f.rates(rates);
+      throw new Error('lost consume response');
+    });
+    const first = await inspectAllowance('sample-c', { ...f.options, continue: true });
+    expect(first.redemption).toBe('unconfirmed');
+    await inspectAllowance('sample-c', { ...f.options, continue: true });
+    const spends = f.calls.filter(call => call.method.endsWith('/consume'));
+    expect(spends.map(call => call.params.creditId)).toEqual(['private-card-earlier']);
+  } finally { f.cleanup(); }
+});
+
+test('credits-first policy preserves reset cards while credits are usable', async () => {
+  const f = fixture(['credits', 'resetCards']);
+  try {
+    f.rates(captured(false));
+    const result = await inspectAllowance('sample-c', { ...f.options, continue: true });
+    expect(f.calls.some(call => call.method.endsWith('/consume'))).toBe(false);
+    expect(result).toMatchObject({ status: 'credits-available', canResume: true, redemption: null });
+  } finally { f.cleanup(); }
+});
+
 test('a failed confirmation read cannot authorize resume or another redemption', async () => {
   const f = fixture();
   try {
