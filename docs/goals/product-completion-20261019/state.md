@@ -42,12 +42,25 @@ Audit's manager owns wave/audit-20261019, all61 closure and shared refresh.
 G-2759 is verified and G-2767 merged; neither landing is repeated. All 61
 canonical findings remain unproved, distinct from the shared registry's claims.
 G-2767's archival deletion landed in d852378475. Product completion retains
-the authorized refresh follow-up: its recorded attempt froze ecd9ed93f9f8
-and reached artifact preparation, pending the 4 GiB host memory admission gate
-before a backend switch. Audit was notified and a finite continuation retains
-ownership; healthy resources do not establish refresh completion or product proof.
+refresh recovery ownership. The ecd9ed93f9f8 attempt ended after generation
+without a retained completion or termination cause. The single normal retry
+froze 59e6959cceed and failed before writers stopped: the access database's
+logical dump/restore exceeded its 90-second rehearsal budget (exit 124;
+runner exit 201, staged refresh exit 1). Read-only diagnosis located the copy
+boundary before any migration SQL ran; the displayed migration path was only
+the first-pending-file label. Discarded child streams leave the failing
+subprocess and underlying cause unknown. The observed refresh checkpoint
+remains 75409ac3c379. Audit received the failed result and diagnosis.
+No supported lifecycle recovery is established: safe boundary-specific causal
+evidence must precede another product-owned clean-main normal lifecycle
+disposition. No unexplained retry, budget increase, rehearsal bypass, manual
+cleanup or backend switch is released. The archival receipt is settled and
+must not be resubmitted; healthy resources establish no refresh or product proof.
 G-2783's queued Discover surface uses supported path-based needs for G-2789's
 capacity module and command on main, after cross-Goal depends was rejected.
+Its brief decision in 06b4db7c6d requires agreement with the wave owner and
+other publishers on the final required-check/publication interval; the queue
+confirmed it remains queued. No scheduler or instrumentation owner was created.
 G-2783/G-2785 still require reviewed capacity support, fresh Claude admission
 and the about reserve under one shared quota policy.
 G-2753's brief adopted recent|created|title ordering, NFKC title matching and
@@ -110,17 +123,24 @@ remain required; native acceptance and page proof are open.
 The reserved Program mail route was repaired in 7274ee33a7; delivery no longer
 requires a product Goal registration. The G-2780 archive/COPY, variant,
 anonymous-publication receipt and independent legacy-row-support question was
-delivered. The joint G-2781/G-2769/G-2772 retained-evidence question reached
-Program as mail:8f269be0-048c-41aa-b12c-6c7bbb574c25; G-2801/G-2771's
+delivered, with the Source/Media referral confirmed as
+mail:6cc87bcf-857d-4b93-a11e-b72bfe61c4d6. The joint
+G-2781/G-2769/G-2772 retained-evidence question reached Program as
+mail:8f269be0-048c-41aa-b12c-6c7bbb574c25 and
+mail:1375e916-bd53-4d0b-bf64-d9538836c580; those verified deliveries supersede
+the routing failures and need no further copy. G-2799's Source/Structure
+question was delivered as mail:cb1d21db-9507-47a4-ad32-8b7bef2e5f63,
+G-2770's OA1–OA3 question as mail:18fd84a5-f0e7-4edb-89b6-a2c2bb2a8d4e,
+and G-2783's instrumentation question as
+mail:83eb0505-bae1-46a7-9542-e9cb346f3bbe. G-2801/G-2771's
 Source/Release/Realization question reached it as
 mail:376e88cd-7371-461a-a7e4-9a43e571bcd9. Delivery supplies no approval.
 Program disposition still gates those extensions, G-2770's OA1–OA3/G-2764
 model/write prerequisites, G-2773's interfaces, G-2799's Source/Structure
 contracts, G-2769's other proposals and G-2783's instrumentation ruling.
-The earlier OA1–OA3 forwarding attempt failed before the route was restored;
-its retained question still needs delivery. G-2808's pinned codex-1/xhigh
-review of 0eafea6bbb and 65a496efdf releases no backend implementation or proof;
-G-2778 retains importer integration ownership. All eleven mail deliveries
+G-2808's pinned codex-1/xhigh review of 0eafea6bbb and 65a496efdf releases no
+backend implementation or proof;
+G-2778 retains importer integration ownership. All nine handled mail deliveries
 covered by this checkpoint are acknowledged. Existing holds remain.
 
 G-2799/G-2800/G-2801 retain relation/credit/release mapping ownership, G-2778
@@ -156,13 +176,14 @@ G-2794's finite efficiency diagnosis is on main and closed verified; its landing
 mail required no reopening. Audit received early typed-response/continuation
 checks (five failed sequences across two surface builds), coordinated final
 publication (three rejected pushes), and prerequisite triage through existing
-G-2791 rather than another corpus. The existing wave owner was asked to record
-the final check/publication interval with G-2783's early component checks,
-including before/after wave SHA, check-to-push interval, waiting time, rejected
-publications and repeated passing checks. Compare the next two comparable
-builds against 2.5 failed type/continuation sequences and 1.5 rejected
-publications per build. These are proposed corrections with falsifying measures,
-not demonstrated savings;
+G-2791 rather than another corpus. G-2783's committed brief requires recording
+the agreed final check/publication interval with its early component checks,
+including before/after wave SHAs, the checked head, check-completion/push times,
+check-to-push interval, waiting time, rejected publications with causes and
+repeated passing checks. Compare the next two comparable builds against 2.5
+failed type/continuation sequences and 1.5 rejected publications per build,
+counting early failures and retries. These are proposed corrections with
+falsifying measures, not demonstrated savings;
 the two Zone failures still need module-owner versus corpus triage. Audit
 accepted shared scheduling ownership for hourly measurement and a full
 twelve-hour comparison at least every three hours through finite events. That
@@ -170,7 +191,8 @@ acknowledgement proves neither configured coverage nor another measurement.
 G-2794 has no recurring assignment; tooling changes need their existing path
 owner and a scoped brief, without broadening G-2789. G-2743 stays closed;
 disposition of its third attributed session, two extra turns and 24,637,693-input
-gap awaits the existing instrumentation owner and Program. Session/event IDs,
+gap awaits Program and a scoped instrumentation owner; scripts/goal/efficiency.ts
+remains unclaimed. Session/event IDs,
 roles, timestamps and cached/uncached/output deltas must join task kinds and
 landing receipts, including in-window work from older-started sessions. Neither
 the 15,634,384 mixed-turn input nor the proposed corrections establish savings.
@@ -186,7 +208,8 @@ There is one environment attempt. Twelve job wakes comprise five passes, three
 assertion failures and four harness failures. One retained refusal is
 classified as other and needs disposition; there are none in the outcome, gate
 or failing-test categories.
-The first recorded window, 2026-10-18T08:36:08Z–20:36:08Z, contains 552.47M
+The latest recorded window, re-read at this checkpoint, remains
+2026-10-18T08:36:08Z–20:36:08Z and contains 552.47M
 processed input (527.63M cached). Its 37% other-session share cannot establish
 manager-only share; older-started sessions are omitted. There is no prior audit
 or comparable before/after landing denominator. A later full-window comparison
@@ -196,9 +219,10 @@ Next: synthesize measurable API-first/visible slices from accepted research;
 G-2797/G-2789 remain closed and neither landing is repeated.
 Verify capacity refresh and useful Claude dispatch with fresh provider evidence;
 the checkpoint observation remains unknown and authorizes no admission.
-Obtain Program dispositions through the restored route, deliver the retained
-OA1–OA3 question and complete G-2764's owner dependencies before dependent work.
-The finite refresh continuation owns its completion report to audit.
+Obtain Program dispositions for the delivered questions and complete G-2764's
+owner dependencies before dependent work.
+Refresh recovery remains product-owned and needs safe causal evidence for the
+rehearsal copy timeout before another normal lifecycle disposition.
 Shared scheduling still owes verified
 coverage and the later full-window comparison. No watcher or landing wait
 belongs to these finite turns.
