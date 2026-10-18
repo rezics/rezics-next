@@ -168,6 +168,7 @@ Design documents do not claim that a capability or deployment is complete.
 - [Complexity verification](testing/complexity.md) — Complexity verification; read when selecting or implementing its verification.
 - [seed-build-command-cost](testing/seed-build-command-cost.md) — seed-build-command-cost; read when selecting or implementing its verification.
 - [Live source conversion and conformance](testing/source-conformance.md) — Live source conversion and conformance; read when selecting or implementing its verification.
+- [Shared audit corpus preparation](testing/audit-corpus.md) — Source pins, command stages, stopped backup and isolated manifest restore ownership for pending audit proofs.
 - [Executable test harness](testing/test-harness.md) — Executable test harness; read when selecting or implementing its verification.
 
 ## Operations

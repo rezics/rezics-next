@@ -158,6 +158,10 @@ async function emptyAccount(sessions: PersonaSessions): Promise<EmptyIdentity> {
   return { email, password, accountId: login.user.id };
 }
 
+// A shared producer may reuse the Account-only stage without invoking this
+// helper's separate catalogue preparation or creating another backup.
+export { emptyAccount as prepareEmptyIdentity };
+
 async function withEnvironment<T>(values: Record<string, string>, fn: () => Promise<T>): Promise<T> {
   const previous = Object.fromEntries(Object.keys(values).map(key => [key, Bun.env[key]]));
   try { Object.assign(Bun.env, values); return await fn(); }
