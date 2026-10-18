@@ -5,6 +5,7 @@ import { expect, test } from '@playwright/test';
 import { materializeData } from 'native-i18n';
 import { messages } from '../features/library/messages.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
+import { openLibraryTools } from './library-tools.ts';
 
 // The QA reader imports the committed Goodreads file, then a 200-row file whose rows Main matches
 // and reports a page at a time. Only the seed editor holds catalogue-import authority.
@@ -67,6 +68,7 @@ test('G428: a reader imports a Goodreads file, then a 200-row export, and Main r
     + `?actingSubject=${encodeURIComponent(seed.actingSubject)}`);
   expect(readerState.status()).toBe(200);
   expect(await readerState.json()).toMatchObject({ work: seed.works[0], status: { status: null } });
+  await openLibraryTools(page, t.libraryTools);
   await page.getByRole('heading', { name: t.importTitle }).click();
   const importFile = page.getByLabel(t.importFile, { exact: true });
   await expect(importFile).toBeEnabled();

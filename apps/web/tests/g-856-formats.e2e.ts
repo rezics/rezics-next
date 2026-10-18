@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import { materializeData } from 'native-i18n';
 import { messages } from '../features/library/messages.ts';
 import { clean, credentials, exportRows, signIn } from './g-855-library.ts';
+import { openLibraryTools } from './library-tools.ts';
 
 const t = materializeData(messages, { locale: 'en' });
 const formats = [
@@ -39,6 +40,7 @@ for (const viewport of [
       await page.reload();
       const summary = page.getByRole('heading', { name: t.importTitle }).first();
       await expect(async () => {
+        await openLibraryTools(page, t.libraryTools);
         await summary.click();
         await expect(summary.locator('xpath=ancestor::details[1]')).toHaveAttribute('open', '');
       }).toPass({ timeout: 30_000 });

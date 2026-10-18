@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { materializeData } from 'native-i18n';
 import { messages } from '../features/library/messages.ts';
+import { openLibraryTools } from './library-tools.ts';
 import {
   clean,
   credentials,
@@ -37,6 +38,7 @@ for (const viewport of [
     const summary = page.getByRole('heading', { name: t.importTitle });
     await page.reload();
     await expect(async () => {
+      await openLibraryTools(page, t.libraryTools);
       await summary.click();
       await expect(summary.locator('xpath=ancestor::details[1]')).toHaveAttribute('open', '');
     }).toPass({ timeout: 30_000 });

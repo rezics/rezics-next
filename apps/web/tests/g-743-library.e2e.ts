@@ -16,6 +16,7 @@ import {
 } from './g-743-matrix.ts';
 import { device, hubRecords, libraryRecords, uuid } from './g-743-stack.ts';
 import type { Hub } from './g-850-seed.ts';
+import { openLibraryTools } from './library-tools.ts';
 
 // Launch journey `library-import-progress-export`: a Goodreads file imported from the Library page, progress
 // recorded on one device and read on another, and the library downloaded (G-855's import and export, G-838's
@@ -64,7 +65,9 @@ const summaryOf = (page: Page, title: string) =>
     .filter({ has: page.getByRole('heading', { name: title }) })
     .first();
 /** Open a section once the page has hydrated; a press before hydration opens nothing. */
-async function openSection(page: Page, title: string, found?: Findings) {
+async function openSection(page: Page, title: string, toolsLabel: string, found?: Findings) {
+  await openLibraryTools(page, toolsLabel, found
+    ? summary => pressByKeyboard(page, summary, found, toolsLabel) : undefined);
   const summary = summaryOf(page, title);
   const details = summary.locator('xpath=ancestor::details[1]');
   await expect(async () => {
@@ -105,7 +108,7 @@ test('library-import-progress-export: import, progress on two devices and the do
     test.skip(true, 'The Library is closed on this stack');
 
   // Import: the file is chosen, the ambiguous row is decided, one row is kept private, and the rest is applied.
-  await openSection(a, t.importTitle, found);
+  await openSection(a, t.importTitle, t.libraryTools, found);
   await checkScreen(a, 'library-import-idle', found, info);
   await a.locator('#library-import-file').setInputFiles({
     name: 'goodreads_library_export.csv',
@@ -191,7 +194,7 @@ test('library-import-progress-export: import, progress on two devices and the do
 
   // Export: the download is started, finished and saved by keyboard.
   await a.goto(`/${locales.latin}/library`);
-  await openSection(a, t.backupTitle, found);
+  await openSection(a, t.backupTitle, t.libraryTools, found);
   await expect(a.getByText(t.backupContains)).toBeVisible();
   await checkScreen(a, 'library-export-idle', found, info);
   await pressByKeyboard(a, a.getByRole('button', { name: t.backupStart }), found, 'Start download');
@@ -221,10 +224,10 @@ test('library-import-progress-export: the Library page and its import and downlo
   await expect(page.locator('html')).toHaveAttribute('lang', locales.cjk);
   await expect(page.getByRole('heading', { level: 1, name: t.title })).toBeVisible();
   await checkScreen(page, 'library-ja', found, info);
-  await openSection(page, t.importTitle, found);
+  await openSection(page, t.importTitle, t.libraryTools, found);
   await expect(page.getByText(t.importAnilist)).toBeVisible();
   await checkScreen(page, 'library-import-ja', found, info);
-  await openSection(page, t.backupTitle, found);
+  await openSection(page, t.backupTitle, t.libraryTools, found);
   await expect(page.getByText(t.backupContains)).toBeVisible();
   await checkScreen(page, 'library-export-ja', found, info);
   await keyboardReach(

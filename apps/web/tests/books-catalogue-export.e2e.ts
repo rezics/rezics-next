@@ -12,6 +12,7 @@ import { signInAtAccounts } from './account-sign-in.ts';
 import { reloadJourney, visitJourney } from './journey-navigation.ts';
 import { expectClean, type Findings, keyboardReach, pressByKeyboard } from './g-743-matrix.ts';
 import { credentials, uuid, visitor } from './g-743-stack.ts';
+import { openLibraryTools } from './library-tools.ts';
 
 let seed: BooksCatalogue;
 test.use({ actionTimeout: 20_000 });
@@ -33,7 +34,8 @@ test.beforeAll(async () => {
     .toEqual(seed.books.map(book => book.work).sort());
 });
 
-async function openBackup(page: Page, title: string, found: Findings) {
+async function openBackup(page: Page, title: string, toolsLabel: string, found: Findings) {
+  await openLibraryTools(page, toolsLabel, summary => pressByKeyboard(page, summary, found, toolsLabel));
   const summary = page.locator('summary').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
   const details = summary.locator('..');
   await expect(async () => {
@@ -101,7 +103,7 @@ for (const locale of ['en', 'ja'] as const) {
       await reloadJourney(page);
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
       await expect(page.getByRole('heading', { level: 3, name: book.title, exact: true })).toBeVisible();
-      await openBackup(page, t.backupTitle, found);
+      await openBackup(page, t.backupTitle, t.libraryTools, found);
       await expect(page.getByText(t.backupContains)).toBeVisible();
       await pressByKeyboard(page, page.getByRole('button', { name: t.backupStart, exact: true }), found, t.backupStart);
       const save = page.getByRole('button', { name: t.backupSave, exact: true });
