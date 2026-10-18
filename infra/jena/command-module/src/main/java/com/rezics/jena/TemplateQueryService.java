@@ -142,6 +142,9 @@ final class TemplateQueryService {
         QueryWorkService.ReadBoundary.checkCurrent();
         Prepared prepared = PublicSearchPhaseEvidence.timed(PublicSearchPhaseEvidence.Phase.PARSE, () -> prepare(body));
         try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.QUERY)) {
+        // Templates read fixed model graphs, without a committed text capture.
+        // Preparation must not let a departed request start that transaction.
+        QueryWorkService.ReadBoundary.checkCurrent();
         dataset.begin(ReadWrite.READ);
         try {
             List<Binding> candidates=prepared.candidates().isEmpty()?List.of(org.apache.jena.sparql.engine.binding.BindingFactory.empty()):prepared.candidates();

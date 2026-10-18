@@ -94,9 +94,23 @@ final class SearchDeltaJournal {
                 "rebuildAttempts", recovery == null ? 0 : recovery.rebuilds);
         }
     }
-    /** Publication and capture reuse the qualification owner's monitor. Never
-     * acquire the whole-command dataset monitor from a read. */
-    static Object publicationMonitor() { return qualified; }
+    /** Qualification, publication and capture share one lock. A writer keeps
+     * commit/end/qualification atomic; a departing reader can leave the queue
+     * without waiting for that writer or acquiring the command monitor. */
+    private static final java.util.concurrent.locks.ReentrantLock publication =
+        new java.util.concurrent.locks.ReentrantLock();
+    static final class PublicationFence implements AutoCloseable {
+        private PublicationFence() {}
+        @Override public void close() { publication.unlock(); }
+    }
+    static PublicationFence publicationFence() {
+        publication.lock();
+        return new PublicationFence();
+    }
+    private static PublicationFence readPublicationFence() {
+        QueryWorkService.ReadBoundary.lockForRead(publication);
+        return new PublicationFence();
+    }
     private static final ThreadLocal<ReadCapture> captured = new ThreadLocal<>();
 
     static final class ReadCapture implements AutoCloseable {
@@ -115,13 +129,16 @@ final class SearchDeltaJournal {
             index = lucene(data);
             if (index == null || captured.get() != null || data.isInTransaction())
                 throw new IllegalStateException("consistent capture requires a fresh text read");
-            synchronized (qualified) {
-                begin.run();
+            try (var fence = readPublicationFence()) {
                 DirectoryReader opened = null;
                 try {
+                    QueryWorkService.ReadBoundary.checkCurrent();
+                    begin.run();
+                    QueryWorkService.ReadBoundary.checkCurrent();
                     try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.READER_OPEN)) {
                         opened = DirectoryReader.open(index.getDirectory());
                     }
+                    QueryWorkService.ReadBoundary.checkCurrent();
                     var position = CommandInvariant.readControl(data);
                     long generation = opened.getIndexCommit().getGeneration();
                     cut = position == null || position.held() || position.textGeneration() == null
@@ -163,11 +180,12 @@ final class SearchDeltaJournal {
                         capturedEvidence.put("reason", uncertain ? "text-index-uncertain"
                             : !Boolean.TRUE.equals(cut.get("available")) ? "cut-unavailable" : "generation-unqualified");
                     evidence = Map.copyOf(capturedEvidence);
+                    QueryWorkService.ReadBoundary.checkCurrent();
                     reader = opened;
                     captured.set(this);
                 } catch (IOException | RuntimeException failure) {
                     try { if (opened != null) opened.close(); }
-                    finally { if (ownsTransaction) data.end(); }
+                    finally { if (ownsTransaction && data.isInTransaction()) data.end(); }
                     throw failure;
                 }
             }
@@ -263,7 +281,7 @@ final class SearchDeltaJournal {
     }
     static void invalidate(DatasetGraph data, String reason, String caller) {
         record("journal invalidated: " + reason + " [" + caller + "]", true);
-        synchronized (qualified) { qualified.remove(data); }
+        try (var fence = publicationFence()) { qualified.remove(data); }
         if (lucene(data) == null) return;
         synchronized (recovering) {
             // Single flight per dataset, including while the audit is running.
@@ -272,6 +290,11 @@ final class SearchDeltaJournal {
             recovering.put(data, recovery);
             schedule(recovery);
         }
+    }
+    /** A failed read still belongs to its request while withdrawing proof. It
+     * must not turn an unavailable reader into an uninterruptible fence wait. */
+    static void invalidateRead(DatasetGraph data, String reason, String caller) {
+        try (var fence = readPublicationFence()) { invalidate(data, reason, caller); }
     }
     /** First frame outside this class, so inlining cannot shift the caller name. */
     private static String callerLabel() {
@@ -424,7 +447,7 @@ final class SearchDeltaJournal {
     /** Drop the in-memory journal baseline. A maintenance reset has deleted the
      * generation it named; recovery must not requalify the empty store. */
     static void dropQualification(DatasetGraph data) {
-        synchronized (qualified) { qualified.remove(data); }
+        try (var fence = publicationFence()) { qualified.remove(data); }
         stopRecovery(data);
     }
     static long deferredAdmissionNanos() { return deferredAdmissionNanos; }
@@ -474,7 +497,7 @@ final class SearchDeltaJournal {
      * mutation. Check the committed reader before the native writer changes it. */
     static void fenceBeforeWrite(DatasetGraph data) {
         Qualification baseline;
-        synchronized (qualified) { baseline = qualified.get(data); }
+        try (var fence = publicationFence()) { baseline = qualified.get(data); }
         if (baseline == null) return;
         try (var lease = openReader(lucene(data))) {
             DirectoryReader reader = lease.reader();
@@ -501,7 +524,7 @@ final class SearchDeltaJournal {
         }
     }
     private static AuditResult qualifyBody(DatasetGraph data) {
-        synchronized (qualified) { qualified.remove(data); }
+        try (var fence = publicationFence()) { qualified.remove(data); }
         TextIndexLucene index = lucene(data);
         AuditResult audit = auditGeneration(data, index);
         Qualification baseline = audit.baseline();
@@ -519,7 +542,7 @@ final class SearchDeltaJournal {
                 return audit;
             }
         }
-        synchronized (qualified) {
+        try (var fence = publicationFence()) {
             if (textIndexUncertain(data)) {
                 if (!exclusiveStartupProved(data)) {
                     invalidate(data, "crash fence requires exclusive startup", "qualify");
@@ -838,7 +861,7 @@ final class SearchDeltaJournal {
                 : unavailable(data, UnavailableReason.REPLAY_UNAVAILABLE);
         }
         Qualification baseline;
-        synchronized (qualified) { baseline = qualified.get(data); }
+        try (var fence = publicationFence()) { baseline = qualified.get(data); }
         if (baseline == null) return unavailable(data, textIndexUncertain(data)
             ? UnavailableReason.TEXT_INDEX_UNCERTAIN : UnavailableReason.GENERATION_UNQUALIFIED);
         Map<String, Object> replay = proof(data, baseline.ordinal(), writeEpoch);
@@ -867,7 +890,7 @@ final class SearchDeltaJournal {
         Qualification next = new Qualification(baseline.epoch(), baseline.generation(),
             Long.parseLong((String) replay.get("ordinal")), luceneGeneration, population,
             (String) replay.get("sequence"));
-        synchronized (qualified) {
+        try (var fence = publicationFence()) {
             // A slower read must not overwrite a later writer's qualification.
             if (qualified.get(data) == baseline) {
                 qualified.put(data, next);
