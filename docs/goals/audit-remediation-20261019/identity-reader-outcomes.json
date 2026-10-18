@@ -54,6 +54,11 @@
   ],
   "contractDecisions": [
     {
+      "id": "pending-assertions",
+      "decision": "Register every identity persona explicitly through the existing outcomeTest helper with its opt-in pending:'assert' mode. This mode uses ordinary test assertions without changing any declaration to proved. Existing callers retain expected-failure behavior. A stack-free subprocess test checks both passing and failing exit statuses and the unchanged pending declaration.",
+      "reason": "The loader requires explicit outcome registrations; an expected-failure wrapper would invert the baseline evidence this task needs. This is test-only helper behavior, not a product interface or registry change."
+    },
+    {
       "id": "identity-inventory",
       "decision": "Use existing /v1/me/agents, /v1/me/session-agent and /v1/me/main-agent-preference. No new identity endpoint or browser storage mechanism is proposed.",
       "reason": "Account authentication, current Agent representation, session choice and main preference have distinct existing owners."

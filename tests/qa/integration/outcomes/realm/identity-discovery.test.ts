@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import declaration from '../../../../../scripts/qa/cases/outcomes/realm/identity-discovery.ts';
-import { outcomeTitle } from '../../../../../scripts/qa/cases/outcome-cells.ts';
-import { personaNames, type PersonaName } from '../../../support/personas.ts';
+import { outcomeTest } from '../../../support/outcome-test.ts';
+import type { PersonaName } from '../../../support/personas.ts';
 import { identityReaderFixture, reached, short, type IdentityReaderFixture,
   type IdentityChoice, type SessionChoice } from '../../../support/identity-reader-fixture.ts';
 
@@ -38,9 +38,9 @@ async function accountUnchanged(id: string, client: Client) {
 }
 const nextFor = (name: PersonaName) => `/en/library?view=reading&from=${name}&next=%2Fen%2Fstudio`;
 
-// Pending declarations use ordinary tests deliberately. A setup failure cannot
-// satisfy test.failing, and an unexpected baseline pass is reported as a pass.
-test(outcomeTitle(declaration, 'visitor'), async () => {
+// Assertion mode leaves declarations pending while observing genuine failures.
+// A setup error cannot satisfy test.failing; baseline passes remain passes.
+outcomeTest(declaration, 'visitor', async () => {
   const id = 'D4-007/visitor';
   for (const path of paths) {
     const headers = path.endsWith('/session-agent') ? { 'x-session-key': randomUUID() } : {};
@@ -54,10 +54,9 @@ test(outcomeTitle(declaration, 'visitor'), async () => {
   await accountUnchanged(id, signedIn);
   expect(await answer(id, 'visitor sign-in returns to the requested reader without provisioning an Agent',
     signedIn.request('GET', paths[0]))).toEqual({ profile: 'agent-discovery-v1', complete: true, items: [] });
-});
+}, undefined, { pending: 'assert' });
 
-for (const name of personaNames.filter((name): name is Exclude<PersonaName, 'visitor'> => name !== 'visitor')) {
-  test(outcomeTitle(declaration, name), async () => {
+async function represented(name: Exclude<PersonaName, 'visitor'>) {
     const id = `D4-007/${name}`, client = await fixture.login(name, nextFor(name));
     callback(client);
     const actor = client.person.actingSubject!, alternative = fixture.corpus.alternatives[name];
@@ -123,8 +122,13 @@ for (const name of personaNames.filter((name): name is Exclude<PersonaName, 'vis
       returned.request('GET', paths[1]));
     expect(returningSession).toEqual({ profile: 'session-agent-v1', sessionAgent: emptyChoice,
       mainAgent: expected.mainAgent, initialActingSubject: alternative });
-  });
 }
+
+outcomeTest(declaration, 'stranger', () => represented('stranger'), undefined, { pending: 'assert' });
+outcomeTest(declaration, 'member', () => represented('member'), undefined, { pending: 'assert' });
+outcomeTest(declaration, 'owner', () => represented('owner'), undefined, { pending: 'assert' });
+outcomeTest(declaration, 'moderator', () => represented('moderator'), undefined, { pending: 'assert' });
+outcomeTest(declaration, 'operator', () => represented('operator'), undefined, { pending: 'assert' });
 
 test('D4-007 / authenticated empty Account: 200 empty is distinct from sign-out, denial and owner failure', async () => {
   const id = 'D4-007/authenticated-empty', client = await fixture.login('empty', '/en/studio?tab=works');
