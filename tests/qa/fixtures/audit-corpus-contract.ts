@@ -95,6 +95,9 @@ export interface AuditNativeBinding {
 }
 export interface AuditOriginals {
   format: 'audit-original-bindings-v1'; backup: AuditFilePin;
+  /** Sign in as the original retained operator; a copied catalogue is not a
+   * fresh platform and cannot designate another first administrator. */
+  personas: RetainedPersonaRealm;
   bindings: AuditNativeBinding[];
 }
 

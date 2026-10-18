@@ -13,7 +13,7 @@ import type { RetainedPersonaRealm } from '../../../tests/qa/support/personas.ts
 import { commandOnlyIntegrationFiles, isolatedIntegrationFileList } from '../isolated-integration-files.ts';
 import { retainedRequirementKinds, retainedRequirements } from '../retained-requirements.ts';
 import { sourceKey, type SourceContext } from '../retained-source.ts';
-import { assertAuditGenerationProvenance, assertAuditManifest, assertAuditNativeProvenance, assertAuditRecipe,
+import { assertAuditGenerationProvenance, assertAuditManifest, assertAuditNativeProvenance, assertAuditOriginals, assertAuditRecipe,
   AuditCorpusBlocked, auditBaselineBlockers, auditCorpusAdapter, auditLocalFile, auditPointer, AuditRecorder, auditRestorePlan,
   auditSelectionIsWholeSnapshot, projectAuditManifest, resolveAuditValue,
   type AuditInspection, type AuditRuntime, type AuditSession } from './audit-corpus.ts';
@@ -198,11 +198,44 @@ test('projection timing, backup custody and restore addresses cannot be supplied
 
 function inspection(): AuditInspection {
   const originals: AuditOriginals = { format: 'audit-original-bindings-v1', backup: { file: '.temp/original-backup.json', sha256: sha256('backup') },
+    personas: realm(),
     bindings: Array.from({ length: 113 }, (_, index) => ({ sourceKey: `retained:${index}`, resource: id(100 + index), mainVersion: id(300 + index), revision: id(500 + index),
       readPath: `/v1/works/${id(100 + index).slice(-36)}`, resourcePointer: '/work', mainVersionPointer: '/mainVersion', revisionPointer: '/revision' })) };
   return { recipe: recipe(), recipePin: { file: '.temp/private-recipe.json', sha256: sha256(randomUUID()) }, originals,
-    snapshots: new Map(), selections: new Map(), sourcePins: [], blockers: [] };
+    snapshots: new Map(), selections: new Map(), sourcePins: [], blockers: [], inspectionMs: 0 };
 }
+
+test('a retained catalogue requires its original operator and exact native ledger before preparation', () => {
+  const original = inspection().originals;
+  assertAuditOriginals(original);
+  const noOperator = structuredClone(original);
+  Reflect.deleteProperty(noOperator.personas.identities, 'operator');
+  expect(() => assertAuditOriginals(noOperator)).toThrow('identity is incomplete');
+  const duplicate = structuredClone(original);
+  duplicate.bindings[1]!.resource = duplicate.bindings[0]!.resource;
+  expect(() => assertAuditOriginals(duplicate)).toThrow('resource binding is duplicated');
+});
+
+test('earlier source inspection consumes the existing budget and cannot open owners after expiry', async () => {
+  let now = 0;
+  const budget = new FixtureWorkBudget(600_000, () => now);
+  budget.includeElapsedWork(100);
+  now = 150; budget.excludeAdmissionWait(50);
+  expect(budget.timing()).toEqual({ elapsedMs: 200, admissionWaitMs: 50 });
+  expect(budget.remaining()).toBe(599_800);
+  for (const invalid of [-1, Infinity, NaN]) expect(() => budget.includeElapsedWork(invalid)).toThrow('nonnegative finite');
+
+  const input = inspection(); input.inspectionMs = 600_000;
+  const runtime = { async open() { throw new Error('must never open'); } } as unknown as AuditRuntime;
+  const adapter = auditCorpusAdapter(root, input, runtime, join(directory(), 'sources'));
+  const context: SourceContext = { key: sourceKey(adapter.specification), directory: directory(), backup: directory(), budget: new FixtureWorkBudget(600_000) };
+  await expect(adapter.build(context)).rejects.toThrow('exceeded 600 seconds');
+  const attemptRoot = join(root, '.temp/audit-corpus/attempts');
+  const attempts = readdirSync(attemptRoot).filter(file => file.startsWith(`${context.key}-`));
+  expect(attempts.length).toBe(1);
+  const path = join(attemptRoot, attempts[0]!); temporary.push(path);
+  expect(events(path).at(-1)).toMatchObject({ event: 'preparation-failed', assertionsReached: false });
+});
 
 test('one stopped cut is round-tripped, and failed manifest validation retains evidence without publishing ready', async () => {
   const base = directory(), input = inspection(), calls: string[] = [];

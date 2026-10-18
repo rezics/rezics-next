@@ -4,11 +4,18 @@ import { withQaStackStartup, type StartupMemoryOptions, type QaMemoryService } f
 export class FixtureWorkBudget {
   private readonly started: number;
   private waitingMs = 0;
+  private earlierWorkMs = 0;
   constructor(private readonly duration: number, private readonly now = Date.now) {
     this.started = now();
   }
   readonly excludeAdmissionWait = (ms: number): void => { this.waitingMs += ms; };
-  elapsed(): number { return this.now() - this.started - this.waitingMs; }
+  /** Charge input inspection performed before a retained-source lifecycle
+   * created its budget. Admission waits remain separately excluded. */
+  includeElapsedWork(ms: number): void {
+    if (!Number.isFinite(ms) || ms < 0) throw new Error('Earlier fixture work must have a nonnegative finite duration');
+    this.earlierWorkMs += ms;
+  }
+  elapsed(): number { return this.now() - this.started - this.waitingMs + this.earlierWorkMs; }
   admissionWaitMs(): number { return this.waitingMs; }
   timing(): { elapsedMs: number; admissionWaitMs: number } {
     return { elapsedMs: this.elapsed(), admissionWaitMs: this.waitingMs };

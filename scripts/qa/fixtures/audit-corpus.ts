@@ -187,21 +187,47 @@ export interface AuditInspection {
   snapshots: Map<string, DatasetSnapshot>; selections: Map<string, DatasetSelectionResult>;
   sourcePins: Array<{ file: string; sha256: string }>;
   blockers: Array<{ owner: string; stage: string; detail: string }>;
+  inspectionMs: number;
+}
+
+function assertRetainedRealm(value: unknown): asserts value is RetainedPersonaRealm {
+  requireFact(object(value) && ['realm', 'space', 'zone'].every(key => typeof value[key] === 'string' && native.test(value[key]))
+    && ['public', 'private'].includes(String(value.visibility)) && object(value.identities) && object(value.auth),
+  'retained persona realm is missing its original identity/auth bindings');
+  const identities = value.identities, auth = value.auth;
+  for (const persona of ['stranger', 'member', 'owner', 'moderator', 'operator']) {
+    const person = identities[persona];
+    requireFact(object(person) && ['email', 'password', 'accountId'].every(key => typeof person[key] === 'string' && person[key].length > 0)
+      && typeof person.actingSubject === 'string' && native.test(person.actingSubject), 'retained persona identity is incomplete');
+  }
+  requireFact(['accountOrigin', 'clientId', 'scope', 'mainClientId', 'mainClientSecret'].every(key => typeof auth[key] === 'string' && auth[key].length > 0)
+    && Array.isArray(auth.redirectUris) && auth.redirectUris.length > 0
+    && auth.redirectUris.every(uri => typeof uri === 'string'), 'retained OAuth bindings are incomplete');
+}
+
+export function assertAuditOriginals(value: unknown): asserts value is AuditOriginals {
+  requireFact(object(value) && value.format === 'audit-original-bindings-v1' && Array.isArray(value.bindings) && value.bindings.length === 113,
+    'all 113 original native Work bindings are required');
+  assertRetainedRealm(value.personas);
+  requireFact(object(value.backup) && typeof value.backup.file === 'string' && hex.test(String(value.backup.sha256)), 'original stopped backup pin is missing');
+  const originals = value as unknown as AuditOriginals;
+  for (const key of ['sourceKey', 'resource', 'mainVersion'] as const)
+    requireFact(new Set(originals.bindings.map(binding => binding[key])).size === 113, `original ${key} binding is duplicated`);
+  for (const binding of originals.bindings) requireFact(binding.sourceKey && native.test(binding.resource) && native.test(binding.mainVersion)
+    && native.test(binding.revision) && typeof binding.readPath === 'string'
+    && [binding.resourcePointer, binding.mainVersionPointer, binding.revisionPointer].every(pointer => typeof pointer === 'string' && pointer.startsWith('/')),
+  'original native identity/revision is not exact');
 }
 
 /** Entirely offline. No fallback capture, refresh, latest pin or prefix selection. */
 export function inspectAuditRecipe(checkout: string, path: string, availableMappers?: readonly DatasetNativeMapper[]): AuditInspection {
+  const inspectionStarted = Date.now();
   const file = auditLocalFile(checkout, path), bytes = readFileSync(file), recipe: unknown = JSON.parse(bytes.toString());
   assertAuditRecipe(recipe);
   const mappers = availableMappers ?? [datasetMediaMapper(resolve(checkout, recipe.sourceRoot))];
-  const originals = JSON.parse(pinnedBytes(checkout, recipe.originals).toString()) as AuditOriginals;
-  requireFact(originals.format === 'audit-original-bindings-v1' && Array.isArray(originals.bindings) && originals.bindings.length === 113,
-    'all 113 original native Work bindings are required');
+  const originals: unknown = JSON.parse(pinnedBytes(checkout, recipe.originals).toString());
+  assertAuditOriginals(originals);
   pinnedBytes(checkout, originals.backup);
-  for (const key of ['sourceKey', 'resource', 'mainVersion'] as const)
-    requireFact(new Set(originals.bindings.map(binding => binding[key])).size === 113, `original ${key} binding is duplicated`);
-  for (const binding of originals.bindings) requireFact(binding.sourceKey && native.test(binding.resource) && native.test(binding.mainVersion)
-    && native.test(binding.revision) && typeof binding.readPath === 'string', 'original native identity/revision is not exact');
   const sourceRoot = auditLocalFile(checkout, recipe.sourceRoot);
   const sourcePins = [recipe.originals, originals.backup], snapshots = new Map<string, DatasetSnapshot>();
   for (const pin of matrix.sources) {
@@ -265,7 +291,8 @@ export function inspectAuditRecipe(checkout: string, path: string, availableMapp
     blockers.push({ owner: 'licensed-media-source', stage: 'qualification', detail: `no retained qualified real ${role} evidence` });
   if (!recipe.evidence.some(item => item.kind === 'text')) blockers.push({ owner: 'public-domain-source', stage: 'qualification',
     detail: 'no retained qualified Book/Recipe text; API answers and original author test prose cannot establish source facts' });
-  return { recipe, recipePin: { file, sha256: sha256(bytes) }, originals, snapshots, selections, sourcePins, blockers };
+  return { recipe, recipePin: { file, sha256: sha256(bytes) }, originals, snapshots, selections, sourcePins, blockers,
+    inspectionMs: Date.now() - inspectionStarted };
 }
 
 /** Native IDs in literal projections must have entered via an original binding
@@ -416,6 +443,7 @@ async function readiness(session: AuditSession, predicates: AuditReadPredicate[]
 export function auditSpecification(checkout: string, inspection: AuditInspection): SourceInputs {
   return { producer: 'audit-corpus', version: '1',
     files: sourceFileDigests(checkout, ['scripts/qa/fixtures/audit-corpus.ts', 'tests/qa/fixtures/audit-corpus-contract.ts',
+      'scripts/fixture/budget.ts', 'scripts/qa/retained-source.ts',
       'tests/qa/support/personas.ts', 'tests/qa/support/author-management-fixture.ts', 'tests/qa/support/identity-reader-fixture.ts',
       'tests/qa/fixtures/catalogue-information-contract.ts', 'tests/qa/fixtures/catalogue-information-matrix.ts',
       'tests/qa/fixtures/catalogue-public-domain.ts', 'tests/qa/support/context-outcomes.ts',
@@ -429,8 +457,15 @@ export function auditSpecification(checkout: string, inspection: AuditInspection
 }
 
 export function auditCorpusAdapter(checkout: string, inspection: AuditInspection, runtime: AuditRuntime,
-  directory = join(checkout, '.temp/audit-corpus/sources'), now = Date.now): RetainedSourceAdapter<RetainedJson, AuditSession> {
+  directory = join(checkout, '.temp/audit-corpus/sources'), now = Date.now,
+  earlierWorkMs = inspection.inspectionMs): RetainedSourceAdapter<RetainedJson, AuditSession> {
+  const adapterStarted = now();
   const specification = auditSpecification(checkout, inspection), key = sourceKey(specification), finalBackup = join(directory, key, 'backup/owners/backup.json');
+  const preparationOverheadMs = earlierWorkMs + now() - adapterStarted, charged = new WeakSet<FixtureWorkBudget>();
+  const chargeInspection = (context: SourceContext) => {
+    if (!charged.has(context.budget)) { context.budget.includeElapsedWork(preparationOverheadMs); charged.add(context.budget); }
+    context.budget.remaining();
+  };
   return {
     specification,
     async build(context) {
@@ -447,6 +482,7 @@ export function auditCorpusAdapter(checkout: string, inspection: AuditInspection
       recorder.bindings.set('controls', Object.fromEntries((inspection.recipe.unknownControls ?? [])
         .map(name => [name, `https://rezics.com/id/${randomUUID()}`])));
       try {
+        chargeInspection(context);
         session = await runtime.open(inspection, context.budget, event => recorder.event(event));
         recorder.bind('realms', json(session.realms));
         recorder.bind('identities', { empty: await session.emptyIdentity(inspection.recipe.emptyIdentityRealm) });
@@ -522,6 +558,7 @@ export function auditCorpusAdapter(checkout: string, inspection: AuditInspection
       } finally { try { await smoke?.stop(); } finally { await session?.stop(); } }
     },
     async verify(context, manifest) {
+      chargeInspection(context);
       const metadata = manifest.metadata as unknown as AuditPreparationMetadata;
       const reasons: string[] = [];
       if (metadata.format !== 'audit-corpus-preparation-v1' || metadata.recipe.sha256 !== inspection.recipePin.sha256)
@@ -533,6 +570,7 @@ export function auditCorpusAdapter(checkout: string, inspection: AuditInspection
       return [...reasons, ...await runtime.verify(context, manifest)];
     },
     async restore(context, manifest) {
+      chargeInspection(context);
       return runtime.restore(join(context.backup, 'owners/backup.json'), manifest.metadata as unknown as AuditPreparationMetadata, context.budget);
     },
     async dispose(candidate) { await candidate.stop(); },
@@ -567,6 +605,7 @@ export function assertAuditManifest<C extends AuditConsumer>(consumer: C, value:
     return at;
   };
   const realm = (at: unknown) => {
+    assertRetainedRealm(at);
     const entry = required(at, ['realm', 'space', 'zone', 'visibility', 'identities', 'auth'], 'retained persona realm');
     const people = required(entry.identities, ['stranger', 'member', 'owner', 'moderator', 'operator'], 'retained personas');
     for (const person of Object.values(people)) required(person, ['email', 'password', 'accountId', 'actingSubject'], 'retained persona identity');
@@ -747,7 +786,7 @@ export async function liveAuditRuntime(checkout = root, mappers: readonly Datase
     'tracked preparation/test overlays must be committed and identified separately before recording a pristine product revision');
   const open = async (backup: string, realms: AuditRecipe['realms'] | Record<string, RetainedPersonaRealm>,
     budget: FixtureWorkBudget, runId = `audit-${randomUUID().replaceAll('-', '').slice(0, 24)}`,
-    observe: (event: RetainedJson) => void = () => {}): Promise<AuditSession> => {
+    observe: (event: RetainedJson) => void = () => {}, originalPersonas?: RetainedPersonaRealm): Promise<AuditSession> => {
     const started = Date.now();
     const signal = AbortSignal.timeout(budget.remaining());
     const copy = await restoreCatalogueBackup(backup, runId, { signal, resourceClass: 'ordinary' });
@@ -761,7 +800,9 @@ export async function liveAuditRuntime(checkout = root, mappers: readonly Datase
       Object.assign(process.env, environment);
       const ids = Array.isArray(realms) ? realms.map(realm => realm.id) : Object.keys(realms);
       if (Array.isArray(realms)) {
+        assertRetainedRealm(originalPersonas);
         const options: NonNullable<Parameters<typeof personas.personaSessions>[1]> = {
+          retainedOperator: originalPersonas.identities.operator, retainedAuth: originalPersonas.auth,
           moderatorLifetimeMs: 7 * 86_400_000,
           observeMain: async event => observe(json({ event: 'persona-http', service: 'Main',
             caller: { accountId: event.caller.accountId, actingSubject: event.caller.actingSubject },
@@ -859,7 +900,8 @@ export async function liveAuditRuntime(checkout = root, mappers: readonly Datase
   return {
     revision, mappers,
     async open(inspection, budget, observe) {
-      const session = await open(auditLocalFile(checkout, inspection.originals.backup.file), inspection.recipe.realms, budget, undefined, observe);
+      const session = await open(auditLocalFile(checkout, inspection.originals.backup.file), inspection.recipe.realms, budget, undefined, observe,
+        inspection.originals.personas);
       inspectionSourceRoots.set(session.runId, inspection.recipe.sourceRoot);
       return session;
     },
@@ -910,15 +952,17 @@ export async function liveAuditRuntime(checkout = root, mappers: readonly Datase
   };
 }
 
-async function selectedAuditSource(checkout: string, recipePath: string) {
-  const inspection = inspectAuditRecipe(checkout, recipePath);
+async function selectedAuditSource(checkout: string, recipePath: string, inspected?: AuditInspection) {
+  const started = Date.now(), inspection = inspected ?? inspectAuditRecipe(checkout, recipePath);
   if (inspection.blockers.length) {
     const blocker = inspection.blockers[0]!;
     throw new AuditCorpusBlocked(blocker.owner, blocker.stage, blocker.detail);
   }
   const runtime = await liveAuditRuntime(checkout, [datasetMediaMapper(resolve(checkout, inspection.recipe.sourceRoot))]);
   const directory = join(checkout, '.temp/audit-corpus/sources');
-  return { inspection, runtime, store: new RetainedSources(directory), adapter: auditCorpusAdapter(checkout, inspection, runtime, directory) };
+  const earlierWorkMs = Date.now() - started + (inspected ? inspected.inspectionMs : 0);
+  return { inspection, runtime, store: new RetainedSources(directory),
+    adapter: auditCorpusAdapter(checkout, inspection, runtime, directory, Date.now, earlierWorkMs) };
 }
 
 export async function preflightAuditCorpus(checkout: string, recipePath = process.env.REZICS_AUDIT_CORPUS_RECIPE ?? '.temp/audit-corpus/recipe.json'): Promise<string> {
@@ -994,7 +1038,7 @@ export async function prepareAuditQaSelection(checkout: string, file: string, ru
       for (const value of recorder.observed) observed.add(value);
       await copy.quiesce();
       copy.preparation.readinessMs += Date.now() - smokeStarted;
-      copy.preparation.totalMs += Date.now() - smokeStarted;
+      copy.preparation.totalMs = retained.elapsedMs + Date.now() - smokeStarted;
       requireFact(copy.preparation.totalMs <= auditPreparationBudgetMs, 'restore/startup/migrations/smoke exceed 600 seconds');
       bindings.set('restore', json({ runId: copy.runId, owners: copy.owners, preparation: copy.preparation }));
     }
@@ -1023,7 +1067,7 @@ export async function prepareAuditCorpus(checkout: string, recipePath: string): 
     const blocker = inspection.blockers[0]!;
     throw new AuditCorpusBlocked(blocker.owner, blocker.stage, blocker.detail);
   }
-  const source = await selectedAuditSource(checkout, recipePath);
+  const source = await selectedAuditSource(checkout, recipePath, inspection);
   const result = await source.store.prepare(source.adapter);
   return { key: result.manifest.key, built: result.built, preparationMs: result.elapsedMs };
 }

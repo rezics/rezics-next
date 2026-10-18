@@ -29,6 +29,10 @@ input contract. It contains:
   Its backup pin names the existing consistent stopped catalogue backup; its
   113 unique bindings give source key, resource, mainVersion, revision and the
   exact supported read path/JSON pointers. No title search reconstructs them.
+  `personas` retains the original `RetainedPersonaRealm`, including its actual
+  operator and OAuth client bindings. Preparation signs in normally through
+  `retainedOperator`/`retainedAuth`; it cannot designate another first platform
+  administrator on a restored catalogue.
 - `imports`: deterministic root selections with explicit budgets and mapper
   IDs/revisions. A bounded selected view currently blocks on the importer
   owner seam; it must never become a fabricated snapshot or `maxRecords` prefix.
@@ -59,7 +63,11 @@ Projection values may be JSON or strict operators:
 `concat` joins string values; `tail` obtains a native IRI's short ID. Available
 bindings are `originals`, `source`, `realms`, `identities` (including `/empty`),
 `controls`, `authority`, `import:<snapshot>`, `command:<id>`, `preparation` and
-`restore`. Failed/unexecuted commands have no binding. `controls` contains
+`restore`, `read:<id>` and `read:<phase>:<id>`. Successful readiness checks bind
+their real response, including observed generation tokens; each restored copy
+replaces the current read binding after checking its identity. The receipt ledger
+retains the actual original-binding and readiness responses for every phase.
+Failed/unexecuted commands have no binding. `controls` contains
 fresh unknown IDs, admitted to provenance only after a genuine 404 read.
 Runtime addresses, product revisions, measured timings, backup digest and
 command-ledger custody are producer-owned projection fields.
@@ -98,12 +106,14 @@ RustFS and local object stores at the same stopped cut. It then calls
 `restoreCatalogueBackup` on that cut for migrations and an independent readiness
 round trip. There is no separate raw storage/SQL/RDF preparation command.
 
-The entire active preparation, including initial restore, API stages, stopped
+The entire active preparation, including source inspection, initial restore, API stages, stopped
 cut, round trip and source cleanup, must fit **600 seconds**. Only host admission
 wait is excluded. Each proof restore has its own existing 600-second preparation
 budget. No larger producer deadline is introduced. Measured build/round-trip and
 restore/startup/readiness times are retained; a build that exceeds budget cannot
 publish a ready source.
+`FixtureWorkBudget.includeElapsedWork` charges inspection and runtime setup to
+the retained-source lifecycle once per budget, including cached verification.
 
 RetainedSources owns source keys, compatibility, integrity, publication and read
 leases under `.temp/audit-corpus/sources/`. Failed-attempt JSONL evidence remains
@@ -135,11 +145,11 @@ are classified as environment failures before product assertions. The harness
 releases the copy and source/publication leases when the proof ends.
 
 The original baseline product is `69eac3ceeaf885be70205a70248bc951e9d81cc9`,
-as corrected by the wave's audit specifications. The import matrix, information
-matrix and public-domain fixture contract still pin the later `79be80d…` tree.
-`auditBaselineBlockers()` refuses those premises; this producer does not relabel
-their fixtures or alter independent assertions. Their owners must establish a
-compatible fixture/test overlay while retaining the original baseline. Product
+as corrected by the wave's audit specifications and consumer owners. The import,
+information and public-domain fixture pins now agree with it.
+`auditBaselineBlockers()` checks their actual pins and refuses an incompatible
+premise; this producer does not relabel fixtures or alter independent assertions.
+The manager must still establish a compatible fixture/test overlay. Product
 revision, test overlay, fixed wave, corpus generation and frozen source identity
 are separate facts.
 
@@ -162,6 +172,14 @@ The `auditOwnerPrerequisites` export is the executable handoff:
 - Source custodians must supply the original 113-binding backup, frozen source
   trees, qualified Book/chapter/Recipe nutrition/substitution quotes and licensed
   cover/portrait evidence. Missing facts remain unknown.
+
+The consumer authors' [import handoff](../goals/audit-remediation-20261019/import-corpus-handoff.md)
+and [information handoff](../goals/audit-remediation-20261019/information-outcomes.md)
+remain authoritative. In particular, the original baseline's storage owner must
+accept the retained backup: a current-wave backup with newer migrations, model
+or compose configuration cannot stand in for it. Unavailable refresh generation
+tokens and required native identities block preparation; proposed coverage,
+release or relation results are still tested independently in the proof bodies.
 
 Connect these interfaces in the single producer; do not add per-proof seeds,
 pretend owner receipts, same-name replacement records or synthetic media. A
