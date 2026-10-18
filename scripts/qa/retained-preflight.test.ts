@@ -249,8 +249,10 @@ for (const [source, producer] of Object.entries(repairProducers)) test(`printed 
     check: async () => (await f.store.preflight(f.adapter)).key }]);
   expect(refused.ok).toBe(false);
   const command = retainedPreflightSummary(refused).split('Build/repair: ')[1]!.trim();
+  // Repair routes simulate program authority in this synthetic checkout,
+  // independently of the worker or manager running the canary.
   const child = Bun.spawn(command.split(' '), { cwd: f.directory, stdout: 'pipe', stderr: 'pipe',
-    env: { ...process.env, GOAL_SETTINGS_DIRECTORY: join(f.directory, '.goalctl'),
+    env: { ...process.env, GOAL_ID: 'program', GOAL_SETTINGS_DIRECTORY: join(f.directory, '.goalctl'),
       GOAL_TURN_TOKEN: '', GOAL_TURN_STATE_DIR: '', GOAL_TASK_ID: '', GOAL_IN_SLOT: '1', GOAL_QA_HEAVY_RUN: '0' } });
   const [code, stdout, stderr] = await Promise.all([child.exited,
     new Response(child.stdout).text(), new Response(child.stderr).text()]);
