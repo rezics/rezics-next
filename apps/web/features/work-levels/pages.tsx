@@ -1,8 +1,9 @@
+import type { WorkAt } from '../work-page/route.ts';
 import { readAnimeRelationsConnections } from '../work-page/anime-relations-recorded-page.ts';
 import { AnimeRelationsSections } from '../work-page/anime-relations-recorded-page.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkPageMessages } from '../work-page/messages.ts';
-import { idOf, iriOf } from '../work-page/route.ts';
+import { idOf, iriOf, workRefOf } from '../work-page/route.ts';
 import { buttonVariants } from '@rezics/ui/button';
 import Link from '../shell/localized-link.tsx';
 import { EditEntry } from '../work-levels-edit/edit-entry.tsx';
@@ -33,13 +34,13 @@ const outline = buttonVariants({ variant: 'outline', size: 'sm' });
 export { FRANCHISE_PAGE } from '../work-page/anime-relations-recorded-page.ts';
 
 export async function ConnectionsPage({ workRef, id, query, locale, pageMessages }: {
-  workRef: string; id: string; query: ConnectionsQuery; locale: UiLocale; pageMessages: WorkPageMessages;
+  workRef: WorkAt; id: string; query: ConnectionsQuery; locale: UiLocale; pageMessages: WorkPageMessages;
 }) {
   const view = await readAnimeRelationsConnections({
     readParts, readWholes, readRelations, namesOf, readPeople, readCollectionMembers,
   }, id, query);
   return <div className="grid gap-10">
-    <EditEntry workRef={workRef} id={id} section="parts" locale={locale} />
+    <EditEntry workRef={workRefOf(workRef)} id={id} section="parts" locale={locale} />
     <AnimeRelationsSections view={view} workRef={workRef} id={id} query={query}
       locale={locale} pageMessages={pageMessages} />
   </div>;
@@ -74,7 +75,7 @@ export async function EditionsPage({
   pageMessages,
   edit = true,
 }: {
-  workRef: string;
+  workRef: WorkAt;
   id: string;
   query: EditionsQuery;
   locale: UiLocale;
@@ -103,7 +104,7 @@ export async function EditionsPage({
   ];
   return (
     <div className="grid gap-4">
-      {edit ? <EditEntry workRef={workRef} id={id} section="editions" locale={locale} /> : null}
+      {edit ? <EditEntry workRef={workRefOf(workRef)} id={id} section="editions" locale={locale} /> : null}
       <EditionsSection
         realizations={realizations}
         sources={sources}

@@ -13,6 +13,7 @@ import type { ReadStart } from './read.ts';
 import { globalWorkHref, idOf } from './route.ts';
 import type { Loaded } from './types.ts';
 import { ReadButton } from './work-frame.tsx';
+import { WorkTaskLink } from './work-nav.tsx';
 import type { WorkAt } from './route.ts';
 
 // The one action a Work's identity leads with. Main decides what is next (G-835's progress summary and the
@@ -69,7 +70,7 @@ export function NextActionView({ action, workRef, locale, messages }: {
     {choose ? t.chooseRelease : action.mode === 'continue' ? t.continueNext : t.startFirst}</>;
   return <div className="grid gap-1.5">
     {action.href.startsWith('#')
-      ? <a href={action.href} {...{ [ACTION_ATTRIBUTE]: '' }} className={button}>{link}</a>
+      ? <WorkTaskLink workRef={workRef} anchor={action.href.slice(1)} className={button}>{link}</WorkTaskLink>
       : <Link href={action.href} {...{ [ACTION_ATTRIBUTE]: '' }} className={button}>{link}</Link>}
     {action.part ? <p className="truncate text-center text-muted-foreground text-xs">{t.upNext({ part: action.part })}</p>
       : null}

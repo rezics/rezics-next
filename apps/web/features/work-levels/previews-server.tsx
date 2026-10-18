@@ -1,3 +1,4 @@
+import type { WorkAt } from '../work-page/route.ts';
 import { readAnimeRelationsPreview } from '../work-page/anime-relations-recorded-page.ts';
 import type { SuppliedClient } from '../work-page/read.ts';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -25,7 +26,7 @@ import {
 interface Embedded {
   id: string;
   client?: SuppliedClient;
-  workRef: string;
+  workRef: WorkAt;
   locale: UiLocale;
   pageMessages: WorkPageMessages;
 }

@@ -146,6 +146,12 @@ export function tabOf(pathname: string, at?: WorkAt): WorkTab {
   return workTabs.find(tab => tab === segment) ?? 'overview';
 }
 
+/** A task anchored in the overview must still work from every other Work view. */
+export function workTaskHref(at: WorkAt, pathname: string, params: URLSearchParams, anchor: string): string {
+  return tabOf(pathname, at) === 'overview' ? `#${anchor}`
+    : `${workHref(at, 'overview', scopeAt(at, Object.fromEntries(params)), workNavigationQuery(params))}#${anchor}`;
+}
+
 // Main's content-language tag (`readLanguage` in the Work read contract).
 const languageTag = /^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/;
 

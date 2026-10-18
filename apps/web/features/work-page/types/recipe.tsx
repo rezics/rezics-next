@@ -243,7 +243,9 @@ function CookMode({ page, messages: t, units, onClose, recordingFetch }: {
       document.removeEventListener('visibilitychange', visible);
       document.removeEventListener('keydown', escape);
       void sentinel?.release();
-      opener?.focus();
+      const returnTo = opener?.isConnected && opener !== document.body ? opener
+        : document.querySelector<HTMLElement>('#work-primary-action [data-next-action]');
+      returnTo?.focus();
     };
   }, [onClose]);
   return <div role="dialog" aria-modal="true" aria-label={t.cookMode}
@@ -348,13 +350,15 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
     setError(false);
     setContinueFailed(false);
     setChanged(false);
-    setCooking(false);
+    setCooking(window.location.hash === '#cook');
   }, [initial, href, actingSubject]);
   const read = readPage ?? ((query: { cursor?: string; servings?: number }) => recipePageReader({ main: browserMainApi(), actingSubject }, href)(query));
   useEffect(() => {
     const open = () => setCooking(true);
+    const followLink = () => { if (window.location.hash === '#cook') open(); };
     window.addEventListener('rezics-cook', open);
-    return () => window.removeEventListener('rezics-cook', open);
+    window.addEventListener('hashchange', followLink);
+    return () => { window.removeEventListener('rezics-cook', open); window.removeEventListener('hashchange', followLink); };
   }, []);
   const convertible = page?.ingredients.some(item => item.alternateLine) ?? false;
   const base = initial?.measures.find(item => item.kind === 'servings');
@@ -458,7 +462,12 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
         </div> : null}
       </div>
       {cooking ? <CookMode page={page} messages={t} units={units} recordingFetch={recordingFetch}
-        onClose={() => setCooking(false)} /> : null}
+        onClose={() => {
+          setCooking(false);
+          if (window.location.hash === '#cook') {
+            window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
+          }
+        }} /> : null}
     </> : <>
       {editorLink}
       <p className="text-muted-foreground text-sm">{t.recipeUnstructured}</p>

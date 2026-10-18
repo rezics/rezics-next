@@ -25,6 +25,10 @@ import { type WorkExperience, showsBookControls, workExperience } from '../entit
 import { shelfWords } from './shelf-words.ts';
 import { WorkSources } from './work-sources.tsx';
 import { workReportTargets } from './work-report-targets.ts';
+import type { Loaded } from './types.ts';
+import type { StatementPage } from '../entity-page/types.ts';
+import type { PredicateLabels } from '../entity-page/predicate-labels.ts';
+import type { DisplayObligations } from '../rights-mark/rights-mark.tsx';
 
 /**
  * The cover as a thumbnail or a rail: it fills its column, which is 6.5–8 rem beside the title on a phone and
@@ -46,7 +50,7 @@ export function WorkPageCover({ work, authors = [], avatarQuery }: {
  * main column. Tabs belong to wide screens; a phone gets "On this page".
  */
 export function WorkFrame({ workRef, work, experience = workExperience(null, work.types), credits, authors = [], cover,
-  domainFacts, ratingLine, showcase, readAction, status, shortcuts, sections = [], sources,
+  domainFacts, ratingLine, showcase, readAction, status, shortcuts, sections = [], sources, statementSources, sourceLabels, factObligations,
   signedIn = false, signInHref, actingSubject, relationships,
   readerSeed, ratingTarget, readerActions, avatarQuery, locale, messages, children }: {
   workRef: WorkAt; work: Header; credits: ReactNode; authors?: readonly CatalogueAuthor[];
@@ -64,6 +68,9 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
   sections?: readonly { id: string; label: string }[];
   /** Accepted facts and evidence, after every view's content. */
   sources?: ReactNode;
+  statementSources?: Loaded<StatementPage>;
+  sourceLabels?: PredicateLabels;
+  factObligations?: readonly DisplayObligations[];
   /** The rating summary under the title, streamed on its own. */
   ratingLine?: ReactNode;
   /** Known type-specific facts before the rating and primary action. */
@@ -112,7 +119,8 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
       {...{ reports: workReportTargets(work, workRef) }} />
     </div>
   </div>;
-  const evidence = <WorkSources work={work} locale={locale} messages={messages} avatarQuery={avatarQuery}>
+  const evidence = <WorkSources work={work} locale={locale} messages={messages} avatarQuery={avatarQuery}
+    statements={statementSources} labels={sourceLabels} factObligations={factObligations}>
     {sources}
   </WorkSources>;
   if (!showsBookControls(experience)) {

@@ -1,3 +1,4 @@
+import type { WorkAt } from '../work-page/route.ts';
 import { buttonVariants } from '@rezics/ui/button';
 import { LocalizedText } from '@rezics/ui/localized-text';
 import { ArrowRightIcon } from 'lucide-react';
@@ -60,7 +61,7 @@ export function PartsPreviewView({
   parts: Loaded<PartsPage>;
   wholes: Loaded<WholesPage> | null;
   names: Names;
-  workRef: string;
+  workRef: WorkAt;
   pageMessages: WorkPageMessages;
   t: Copy;
 }) {
@@ -68,7 +69,8 @@ export function PartsPreviewView({
   const hasWholes = wholes?.ok && wholes.data.wholes.length > 0;
   const failure = !parts.ok ? parts.failure : null;
   const wholeFailure = wholes && !wholes.ok;
-  if (!shown.length && !hasWholes && !failure && !wholeFailure) return null;
+  const continues = parts.ok && parts.data.next || wholes?.ok && wholes.data.next;
+  if (!shown.length && !hasWholes && !continues && !failure && !wholeFailure) return null;
   return (
     <Region id="parts-preview" title={t.parts}>
       <WholesLines wholes={wholes} names={names} t={t} messages={pageMessages} />
@@ -97,7 +99,7 @@ export function PartsPreviewView({
           ))}
         </ol>
       ) : null}
-      {shown.length || hasWholes ? (
+      {shown.length || hasWholes || continues ? (
         <ViewAll href={connectionsHref(workRef, {}, anchors.parts)} label={t.allParts} />
       ) : null}
     </Region>
@@ -115,7 +117,7 @@ export function ConnectionsPreviewView({
 }: {
   relations: Loaded<RelationsPage>;
   people?: People;
-  workRef: string;
+  workRef: WorkAt;
   locale: UiLocale;
   pageMessages: WorkPageMessages;
   t: Copy;
@@ -131,10 +133,9 @@ export function ConnectionsPreviewView({
       </Region>
     );
   }
-  const page = { entries: relations.data.items, nextCursor: relations.data.nextCursor };
-  const rows = relationRows(page.entries).slice(0, PREVIEW_COUNTS.relations);
-  const franchises = franchisesOf(page.entries);
-  if (!rows.length && !franchises.length && !page.nextCursor) return null;
+  const rows = relationRows(relations.data.items).slice(0, PREVIEW_COUNTS.relations);
+  const franchises = franchisesOf(relations.data.items);
+  if (!rows.length && !franchises.length && !relations.data.next) return null;
   return (
     <Region id="connections-preview" title={t.connections}>
       {franchises.length ? (
@@ -169,7 +170,7 @@ export function EditionsPreviewView({
 }: {
   realizations: Loaded<RealizationPage>;
   releases: Loaded<ReleasePage>;
-  workRef: string;
+  workRef: WorkAt;
   locale: UiLocale;
   pageMessages: WorkPageMessages;
   t: Copy;
