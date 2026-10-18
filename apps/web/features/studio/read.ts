@@ -5,6 +5,7 @@ import { browseTypeCondition, discoveryApi } from '../discover/api.ts';
 import { readTypes } from '../catalogue/types-read.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { chapterVariant } from './content-api.ts';
+import { countBookChapters, type BookChapters } from './counts.ts';
 import { editorValue } from '../document-editor/body.ts';
 import { chapterNoteEditors } from './chapter-draft.ts';
 import { type ChapterFacts, chapterFacts, type RawFact } from './outline.ts';
@@ -19,6 +20,7 @@ import {
   iri,
   type InventoryPage,
   type InventoryState,
+  type InventoryQuery,
   type InventoryWork,
   type Loaded,
   type MainClient,
@@ -115,12 +117,7 @@ const mySubmissions =
 export const validCursor = (cursor: unknown) =>
   typeof cursor === 'string' && cursor.length > 0 && cursor.length <= 2048 ? cursor : undefined;
 
-/** A Book's chapters as its card counts them: the first page of its contents. */
-export interface BookChapters {
-  count: number;
-  more: boolean;
-  published: number;
-}
+export type { BookChapters } from './counts.ts';
 
 export interface InventoryView {
   page: InventoryPage;
@@ -147,6 +144,8 @@ function contentsPage(
   book: string,
   cursor?: string,
   language?: string,
+  parent?: string,
+  version?: string,
 ) {
   return settle(() =>
     main.v1
@@ -157,6 +156,8 @@ function contentsPage(
           limit: 20,
           ...(language ? { language } : {}),
           ...(cursor ? { cursor } : {}),
+          ...(parent ? { parent } : {}),
+          ...(version ? { version } : {}),
         },
       }),
   );
@@ -183,12 +184,12 @@ async function bookContents(
 /**
  * One page of the Studio Agent's Works: those it wrote (its author credit
  * names it), in one state or all, or those it imported or curates. Main lists
- * a Book, never its chapters; each Book's chapters are counted from its
- * contents (one bounded read per Book on the page).
+ * a Book, never its chapters; each Book's count follows the contents owner's
+ * paginated levels and remains a lower bound when the traversal cannot finish.
  */
 export async function readInventory(
   actingSubject: string,
-  filter: { state?: InventoryState; view?: InventoryWork['relationship'] },
+  filter: { state?: InventoryState; view?: InventoryWork['relationship'] } & Partial<InventoryQuery>,
   cursor: string | undefined,
   client?: MainClient,
 ): Promise<Loaded<InventoryView>> {
@@ -201,6 +202,8 @@ export async function readInventory(
           limit: 20,
           view: filter.view ?? 'authored',
           ...(filter.state ? { state: filter.state } : {}),
+          ...(filter.q ? { q: filter.q } : {}),
+          ...(filter.sort ? { sort: filter.sort } : {}),
           ...(cursor ? { cursor } : {}),
         },
       }),
@@ -215,28 +218,22 @@ export async function readInventory(
   const books = items.filter((item) => workKind(item.types) === 'book');
   const contents = await Promise.all(
     books.map(
-      async (book) =>
-        [
+      async (book) => {
+        const first = await bookContents(
+          main,
+          actingSubject,
           book.id,
-          await bookContents(
-            main,
-            actingSubject,
-            book.id,
-            book.texts[0]?.language ?? ownLanguageOf(book),
-          ),
-        ] as const,
+          book.texts[0]?.language ?? ownLanguageOf(book),
+        );
+        const count = first.ok ? await countBookChapters(first.data, (parent, cursor) =>
+          contentsPage(main, actingSubject, book.id, cursor, first.data.language ?? undefined,
+            parent, first.data.version)) : undefined;
+        return [book.id, count] as const;
+      },
     ),
   );
   const view: InventoryView = { page: { ...page.data, items }, books: {} };
-  for (const [book, loaded] of contents) {
-    if (!loaded.ok) continue;
-    const chapters = loaded.data.items.filter((item) => item.role === 'chapter');
-    view.books[book] = {
-      count: chapters.length,
-      more: Boolean(loaded.data.nextCursor),
-      published: chapters.filter((item) => item.availability === 'available').length,
-    };
-  }
+  for (const [book, count] of contents) if (count) view.books[book] = count;
   return { ok: true, data: view };
 }
 
