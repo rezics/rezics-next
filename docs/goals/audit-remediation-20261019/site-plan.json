@@ -26,7 +26,7 @@
       ],
       "counting": "canonical class ID唯一计数；A14是I1-001的子项，A16是其目录别名；多个origin或重复页面不增加类别。旧目录P0按COMMON统一严重度重评，原级别保留在instances。"
     },
-    "mappingCheckout": "98dfb17a9d54ee2a849abacdd32c3e769ca261c5",
+    "mappingCheckout": "8dbda6947cb4548b70b1a72cefe8205b9b286f42",
     "mappingDate": "2026-10-19",
     "evidenceCheckout": "main checkout read-only; all paths in evidence manifest are relative to the repository root there",
     "sourceCheckout": "this worker worktree; source/test/declaration paths resolve relative to its root",
@@ -520,6 +520,13 @@
       "id": "shared-count-and-authority",
       "fact": "I1-001 absorbs A14 and alias A16; A08 absorbs D1-001/C2-001. Existing outcome declarations often say proved, but were not run here.",
       "effect": "Coordinate the two shared classes with catalogue and require new class-specific proof. Do not double-count them or treat existing declaration metadata as a remediation result."
+    },
+    {
+      "id": "existing-documentation-navigation-failure",
+      "fact": "Recorded task docs:check failed because docs/goals/audit-remediation-20261019/state.md is unreachable from docs/README.md. That Markdown file and its navigation entry points already exist at the initial 98dfb17a9d baseline; this task changed no Markdown. The checker scans authored Markdown, so the new JSON cannot change its navigation graph.",
+      "effect": "Manager must link the existing Goal state from the Goal documentation before a clean documentation gate. This unrelated baseline correction is outside the plan-file claim; do not silently rewrite manager-owned state.",
+      "recordedJobId": "job:581251aa-79f4-4cbf-ac08-70ac42318c20",
+      "evidence": ".temp/goal/jobs/581251aa-79f4-4cbf-ac08-70ac42318c20.1.log"
     }
   ],
   "priorities": {
@@ -20874,6 +20881,13 @@
     ],
     "productTestsRun": [],
     "briefTests": [],
+    "documentationCheck": {
+      "result": "failed",
+      "baselineFailure": true,
+      "command": "task docs:check",
+      "jobId": "job:581251aa-79f4-4cbf-ac08-70ac42318c20",
+      "reason": "Existing docs/goals/audit-remediation-20261019/state.md is unreachable from docs/README.md; no Markdown changed in this task. The ordered sequence stopped before task goal -- check."
+    },
     "revalidateRegistryCommand": [
       "python3",
       "-c",
