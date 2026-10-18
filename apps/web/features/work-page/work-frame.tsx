@@ -116,7 +116,7 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
     <div className="shrink-0 [&_button]:min-h-11 [&_button]:min-w-11 [&_a]:min-h-11">
       <RelationshipControl target={work.id} kind="work" name={work.title.value} locale={locale} compact
       signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref ?? '/auth/start'} api={relationships}
-      {...{ reports: workReportTargets(work, workRef) }} />
+      reports={workReportTargets(work, workRef)} />
     </div>
   </div>;
   const evidence = <WorkSources work={work} locale={locale} messages={messages} avatarQuery={avatarQuery}

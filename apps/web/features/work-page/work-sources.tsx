@@ -9,43 +9,22 @@ import { PublicationSource, publicationSource } from './publication-source.tsx';
 import { WorkRecord } from './record.tsx';
 import type { WorkHeader } from './types.ts';
 import type { Loaded } from './types.ts';
-import type { HrefFor, StatementGroup, StatementItem, StatementPage } from '../entity-page/types.ts';
+import type { HrefFor, StatementGroup, StatementPage } from '../entity-page/types.ts';
 import type { Names } from '../work-levels/types.ts';
 import type { PredicateLabels } from '../entity-page/predicate-labels.ts';
-import { presentStatements, withoutOwnName } from '../entity-page/statement-groups.ts';
+import { externalIdentity, presentStatements, splitStatementSources, withoutOwnName } from '../entity-page/statement-groups.ts';
+import { sourceHref, SubjectSources } from '../entity-page/sources.tsx';
 import { HoldsIn, Pages, StatementsView, Value } from '../entity-page/views.tsx';
 import type { Copy } from '../entity-page/messages.ts';
 import { Region } from './region.tsx';
 
 /** External identifiers are source records, rather than prose or domain facts. */
 export function workSourceGroups(groups: readonly StatementGroup[]) {
-  const facts: StatementGroup[] = [];
-  const sources: StatementItem[] = [];
-  for (const group of groups) {
-    const remaining: StatementItem[] = [];
-    for (const item of withoutOwnName(group)) {
-      if (group.predicate === 'https://schema.org/identifier' && externalIdentity(item)) sources.push(item);
-      else remaining.push(item);
-    }
-    if (remaining.length) facts.push({ ...group, items: remaining });
-  }
-  return { facts, sources };
+  const { facts, sources } = splitStatementSources(groups);
+  return { facts, sources: sources.flatMap(group => withoutOwnName(group)) };
 }
 
-function externalIdentity(item: StatementItem) {
-  if (item.kind !== 'component-property') return null;
-  const value = item.value as { kind?: unknown; provider?: unknown; namespace?: unknown; key?: unknown };
-  return value.kind === 'external' && typeof value.provider === 'string' && typeof value.namespace === 'string'
-    && typeof value.key === 'string' ? { provider: value.provider, namespace: value.namespace, key: value.key } : null;
-}
-
-export function sourceHref(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  try {
-    const url = new URL(value);
-    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : null;
-  } catch { return null; }
-}
+export { sourceHref };
 
 /** Keep the shared statement values, applicability and continuation without repeating footer attribution. */
 export function WorkFactsView({ page, labels = new Map(), ownName, names, hrefFor, locale, t, messages }: {
@@ -93,8 +72,7 @@ export function WorkSources({ work, locale, messages, avatarQuery, statements, l
   statements?: Loaded<StatementPage>; labels?: PredicateLabels; factObligations?: readonly DisplayObligations[];
 }) {
   const rights = workRights(work, messages, [...factObligations, ...statements?.ok ? [statements.data.factObligations] : []]);
-  return <section aria-labelledby="work-sources" data-work-sources className="grid min-w-0 gap-5 border-t border-border/70 pt-6">
-    <h2 id="work-sources" className="font-semibold text-lg">{messages.sourcesAndEvidence}</h2>
+  return <SubjectSources locale={locale}><div data-work-sources className="grid min-w-0 gap-5">
     <PublicationSource source={publicationSource(work)} messages={messages} />
     {rights.map(group => <div key={group.labels.join()} className="grid gap-1">
       <h3 className="font-medium text-sm">{group.labels.join(' · ')}</h3>
@@ -104,7 +82,7 @@ export function WorkSources({ work, locale, messages, avatarQuery, statements, l
       avatarQuery={avatarQuery} locale={locale} />
     {statements?.ok ? <WorkFieldEvidence page={statements.data} labels={labels} messages={messages} /> : null}
     {children ?? <WorkRecord work={work} locale={locale} messages={messages} />}
-  </section>;
+  </div></SubjectSources>;
 }
 
 const sourceLink = 'rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:ring-2 focus-visible:ring-ring';

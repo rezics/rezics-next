@@ -119,11 +119,11 @@ export async function Availability({ workRef, id, locale, messages, client }: Co
   }
   const [realizations, releases, parts] = await Promise.all([readRealizations(id), readReleasePage(id),
     readParts(id, { limit: 1 })]);
-  const none = (read: { ok: true; data: { items?: unknown[]; parts?: unknown[]; nextCursor?: string | null } }
+  const none = (read: { ok: true; data: { items?: unknown[]; parts?: unknown[]; nextCursor?: string | null; next?: string | null } }
     | { ok: false; failure: string }) => {
     if (!read.ok) return false;
     const page = { entries: read.data.items, nextCursor: read.data.nextCursor };
-    return !(page.entries ?? read.data.parts)?.length && !page.nextCursor;
+    return !(page.entries ?? read.data.parts)?.length && !page.nextCursor && !read.data.next;
   };
   if (none(realizations) && none(releases) && none(parts)) return null;
   const t = materializeData(messages, { locale });
