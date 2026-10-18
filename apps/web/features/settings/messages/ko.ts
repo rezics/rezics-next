@@ -1,6 +1,21 @@
 import type { SettingsMessages } from '../messages.ts';
 
 export default {
+  notificationSaving: '저장 중…',
+  notificationFailed: '저장하지 못했습니다. 다시 시도하세요.',
+  notificationConflict: '다른 곳에서 변경되었습니다. 최신 설정을 표시합니다. 확인한 후 다시 저장하세요.',
+  notificationRefreshing: '최신 설정을 불러오는 중…',
+  notificationRefreshFailed: '최신 설정을 불러오지 못했습니다. 다시 불러오면 계속할 수 있습니다.',
+  notificationEnable: '켜기',
+  notificationDisable: '끄기',
+  retrySave: '다시 저장',
+  reviewLatest: '최신 설정 불러오기',
+  personSaving: '환경설정을 저장 중입니다. 저장이 끝날 때까지 변경을 기다려 주세요.',
+  personRefreshing: '최신 환경설정을 불러오는 중입니다. 잠시 기다려 주세요.',
+  personFailed: '환경설정을 저장하지 못했습니다. 변경 내용은 그대로 있습니다. 다시 시도하세요.',
+  personConflict: '다른 곳에서 환경설정이 변경되었습니다. 저장하지 않은 변경 내용은 그대로 있습니다. 확인한 후 다시 저장하세요.',
+  personRefreshFailed: '최신 환경설정을 불러오지 못했습니다. 변경 내용은 그대로 있습니다. 최신 설정을 불러오면 계속할 수 있습니다.',
+  personUnsaved: '언어 변경 내용이 아직 저장되지 않았습니다.',
   title: '프로필 설정',
   description: '공개 프로필은 다른 사람들이 REZICS에서 나를 알아보는 방법입니다.',
   actingAs: '편집 중',

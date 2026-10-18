@@ -1,6 +1,21 @@
 import type { SettingsMessages } from '../messages.ts';
 
 export default {
+  notificationSaving: '正在保存…',
+  notificationFailed: '未能保存，请重试。',
+  notificationConflict: '此选项已在别处更改。当前显示最新设置，请确认后重新保存。',
+  notificationRefreshing: '正在加载最新设置…',
+  notificationRefreshFailed: '未能加载最新设置。请重新加载后继续。',
+  notificationEnable: '开启',
+  notificationDisable: '关闭',
+  retrySave: '重新保存',
+  reviewLatest: '加载最新设置',
+  personSaving: '正在保存偏好，请等待保存完成后再修改。',
+  personRefreshing: '正在加载最新偏好，请稍候。',
+  personFailed: '未能保存偏好。你的更改仍保留在此，请重试。',
+  personConflict: '偏好已在别处更改。你尚未保存的更改仍保留在此，请确认后重新保存。',
+  personRefreshFailed: '未能加载最新偏好。你的更改仍保留在此，请加载最新设置后继续。',
+  personUnsaved: '你的语言更改尚未保存。',
   title: '个人资料设置',
   description: '公开资料帮助其他人在 REZICS 上认出您。',
   pageTitle: '设置',

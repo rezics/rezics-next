@@ -1,6 +1,21 @@
 import type { SettingsMessages } from '../messages.ts';
 
 export default {
+  notificationSaving: '保存中…',
+  notificationFailed: '保存できませんでした。もう一度お試しください。',
+  notificationConflict: '別の場所で変更されました。最新の設定を表示しています。確認してから再度保存してください。',
+  notificationRefreshing: '最新の設定を読み込み中…',
+  notificationRefreshFailed: '最新の設定を読み込めませんでした。読み込み直すと操作を続けられます。',
+  notificationEnable: 'オンにする',
+  notificationDisable: 'オフにする',
+  retrySave: 'もう一度保存',
+  reviewLatest: '最新の設定を読み込む',
+  personSaving: '設定を保存中です。保存が終わるまで変更をお待ちください。',
+  personRefreshing: '最新の設定を読み込んでいます。しばらくお待ちください。',
+  personFailed: '設定を保存できませんでした。変更内容は残っています。もう一度お試しください。',
+  personConflict: '別の場所で設定が変更されました。未保存の変更内容は残っています。確認してから再度保存してください。',
+  personRefreshFailed: '最新の設定を読み込めませんでした。変更内容は残っています。最新の設定を読み込むと操作を続けられます。',
+  personUnsaved: '言語の変更はまだ保存されていません。',
   title: 'プロフィール設定',
   description: '公開プロフィールを通じて、REZICS の利用者にあなたを知ってもらえます。',
   actingAs: '編集中',

@@ -1,6 +1,21 @@
 import type { SettingsMessages } from '../messages.ts';
 
 export default {
+  notificationSaving: '正在儲存…',
+  notificationFailed: '無法儲存，請重試。',
+  notificationConflict: '此選項已在別處變更。目前顯示最新設定，請確認後重新儲存。',
+  notificationRefreshing: '正在載入最新設定…',
+  notificationRefreshFailed: '無法載入最新設定。請重新載入後繼續。',
+  notificationEnable: '開啟',
+  notificationDisable: '關閉',
+  retrySave: '重新儲存',
+  reviewLatest: '載入最新設定',
+  personSaving: '正在儲存偏好，請等待儲存完成後再修改。',
+  personRefreshing: '正在載入最新偏好，請稍候。',
+  personFailed: '無法儲存偏好。你的變更仍保留在此，請重試。',
+  personConflict: '偏好已在別處變更。你尚未儲存的變更仍保留在此，請確認後重新儲存。',
+  personRefreshFailed: '無法載入最新偏好。你的變更仍保留在此，請載入最新設定後繼續。',
+  personUnsaved: '你的語言變更尚未儲存。',
   title: '個人檔案設定',
   description: '您的公開個人檔案能讓其他人在 REZICS 認出您。',
   actingAs: '正在編輯',
