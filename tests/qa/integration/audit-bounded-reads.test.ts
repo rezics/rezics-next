@@ -252,7 +252,7 @@ async function build(): Promise<Corpus> {
       'GET', '/health/ready', undefined, [200, 503]), value => value.status === 'ready');
     await until('search owner readiness before the retained cut', () => command<Record<string, unknown>>(source.visitor,
       'GET', '/health/search-ready', undefined, [200, 503]), value => value.status === 'ready');
-    const result: Corpus = { format: 'bounded-public-reads-v1', baseline: '50e53025617238f9d9d8127be78179c3fa3bc12c',
+    const result: Corpus = { format: 'bounded-public-reads-v1', baseline: '7df2e285d3199c32b4e61c08c33ba9c25afaaa21',
       backup: '', records, book, privateWork: privateWork.work, chapter: chapter.post, phrase, privatePhrase,
       replies, context: context.context, zones, preparedMs: 0, startupMs };
     await source.close();

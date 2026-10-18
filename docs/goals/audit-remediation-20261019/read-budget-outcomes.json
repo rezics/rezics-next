@@ -3,13 +3,22 @@
   "goal": "audit-remediation-20261019",
   "purpose": "Desired public outcomes and measured baseline evidence. Root-cause suggestions are separate and are not implementation requirements.",
   "baseline": {
-    "revision": "50e53025617238f9d9d8127be78179c3fa3bc12c",
+    "revision": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
     "workingTree": "Outcome tests and minimal QA support only; production code unchanged.",
     "run": null,
     "recordedJob": null,
     "assertionReached": "pending",
     "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test tests/qa/integration/audit-bounded-reads.test.ts",
-    "expectedGate": "Intentionally failing baseline regression, never a passing done gate."
+    "expectedGate": "Intentionally failing baseline regression, never a passing done gate.",
+    "dispatchedRevision": "50e53025617238f9d9d8127be78179c3fa3bc12c",
+    "currency": "Required goal check refreshed this worker onto current main. The three intervening commits touch Goal allowance tooling and an archived brief only; no API owner changed.",
+    "staticChecks": {
+      "job": "0a42b5be-cbb1-4660-8491-9fa241899504",
+      "docs": "passed",
+      "types": "passed",
+      "lint": "passed",
+      "ast": "passed"
+    }
   },
   "fixture": {
     "composition": "Real Account HTTP and composeMain with lifecycle, relay, Content, Access, Fuseki and PostgreSQL; no owner mocks.",
