@@ -15,6 +15,7 @@ import { pumpQueue, type QueueLedger } from './queue.ts';
 import { scheduleConfirmation, type ScheduleConfirmationOptions } from './confirm.ts';
 import { parkedOnJob } from './job.ts';
 import { pumpManagerCommits } from './manager-commit.ts';
+import type { CapacityTask } from './claude-capacity.ts';
 
 type Settlement = NonNullable<Task['settlement']>;
 type SpawnSettlement = (task: Task, token: string) => Settlement['owner'];
@@ -99,7 +100,8 @@ export function spawnSettlement(task: Task, token: string,
 /** Whether the task's last attempt has ended with nobody settling it. A pass asks without the ledger lock, so
  * that it takes the lock only for a task that needs it; `claim` asks again under the lock. */
 export function settlementOwed(task: Task): boolean {
-  if (!task.attempts.length || task.waitingResume || ['verified', 'cancelled'].includes(task.state)) return false;
+  if (!task.attempts.length || task.waitingResume || (task as CapacityTask).claudeCapacity?.pause
+    || ['verified', 'cancelled'].includes(task.state)) return false;
   const attempt = lastAttempt(task);
   if (pidAlive(attempt.pid, programOf(engineOf(attempt)))) return false;
   if (parkedOnJob(task, attempt.n, readResult(attempt).text)) return false;
@@ -184,8 +186,9 @@ export async function runSettlement(id: string, attemptNumber: number, token: st
     else if (task.state === 'merged' || canVerifyReadOnly(task)) {
       await closeTasks([id], 'verified');
       reason = 'landed and verified';
-    } else if (task.land !== 'auto') {
-      reason = `${task.kind ?? 'implementation'} task needs a manager landing decision (land: auto is absent)`;
+    } else if ((task as CapacityTask).claudeCapacity || task.land !== 'auto') {
+      reason = (task as CapacityTask).claudeCapacity ? 'Claude capacity tasks need a manager landing decision'
+        : `${task.kind ?? 'implementation'} task needs a manager landing decision (land: auto is absent)`;
     } else {
       const record = readLanding(id, attemptNumber);
       if (record && landingStop(id, record)) throw new Error('landing stopped');

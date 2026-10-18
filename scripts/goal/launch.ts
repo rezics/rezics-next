@@ -4,10 +4,12 @@ import { join, resolve } from 'node:path';
 import { stateDir, root, pidAlive, readLedger, git, regenerationOnlyFiles } from './ledger.ts';
 import { existsSync, readFileSync, mkdirSync, openSync } from 'node:fs';
 import { currentUsage, codexAccounts, describeAccount } from './usage.ts';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { homedir } from 'node:os';
 import { type ChangedFile, isGeneratedOutput, outOfScope } from './briefs.ts';
 import { handoverPrompt, prepareHandover, type WorkerHandover } from './handover.ts';
 import { handoffResult } from './land.ts';
+import { assertClaudeCapacity, recordClaudeLaunch } from './claude-capacity.ts';
 
 // Workers run in bypass permission mode, as the manager does, and accept no inbound session
 // messages; the manager changes a worker's instructions only by stopping or resuming it.
@@ -43,6 +45,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
       : ['exec', ...common, '-C', options.worktree ?? '.', '--', prompt]];
   }
   return ['claude', ['-p', '--model', MODELS[engine], '--effort', effort, '--dangerously-skip-permissions',
+    '--settings', JSON.stringify({ forceLoginMethod: 'claudeai', fastMode: false }),
     '--disallowedTools', 'Agent',
     ...(resume ? ['--resume', session] : ['--session-id', session]), '-n', id.toLowerCase(),
     '--output-format', 'json', '--', prompt]];
@@ -147,6 +150,8 @@ export function memoryFloorRefusal(meminfo: string, floorGiB = 12): string | und
 
 /** Dispatch and resume consume the same host capacity and the selected engine's account. */
 export function launchGates(tasks: Task[], engine: Engine, forceUsage: boolean) {
+  // The local reserve and unknown-capacity refusal cannot be bypassed with --force-usage.
+  assertClaudeCapacity(engine);
   const live = tasks.filter(running).length;
   const limit = Number(process.env.GOAL_MAX_WORKERS ?? 25);
   if (live >= limit) throw new Error(`Concurrency limit reached: ${live}/${limit} live workers`);
@@ -155,10 +160,6 @@ export function launchGates(tasks: Task[], engine: Engine, forceUsage: boolean) 
   const usage = currentUsage();
   const account = codexAccounts().find(candidate => candidate.engines.includes(engine));
   if (!forceUsage) {
-    if (isClaudeCode(engine) && ['restricted', 'critical'].includes(usage.level)) {
-      throw new Error(`Claude usage is ${usage.level} (${usage.reason}); let running workers finish, `
-        + 'use another engine or pass --force-usage');
-    }
     if (account?.reached && !account.pastAllowance?.length) throw new Error(`${describeAccount(account)}; use another engine or pass --force-usage`);
   }
   return { live, limit, usage, account };
@@ -183,11 +184,20 @@ export function workerSessionEnvironment(parent: NodeJS.ProcessEnv): NodeJS.Proc
   // A new worker has its own native session; inherited manager IDs misidentify it and its tools as that session's owner.
   delete env.CODEX_SESSION_ID;
   delete env.CODEX_THREAD_ID;
+  delete env.CLAUDE_CODE_SESSION_ID;
   return env;
 }
 
 export function launch(task: Task, effort: string, session: string, prompt: string, resume: boolean,
   manager: string, engine: Engine = engineOf(task), round: NonNullable<Attempt['round']> = task.attempts.length ? 'fix' : 'initial'): Attempt {
+  assertClaudeCapacity(engine, task);
+  const env = { ...workerSessionEnvironment(isClaudeCode(engine) ? claudeSubscriptionEnvironment(process.env) : process.env),
+    ...engineEnv(engine), GOAL_TASK_ID: task.id, GOAL_WORKTREE: resolve(task.worktree), GOAL_MANAGER: manager,
+    GOAL_SETTINGS_DIRECTORY: settingsDirectory() };
+  if (isClaudeCode(engine)) {
+    assertClaudeSubscription(task.worktree, env);
+    assertClaudeCapacity(engine, task); // The bounded native check must not outlive our fresh usage sample.
+  }
   const n = task.attempts.length + 1;
   const runDir = join(stateDir, 'runs', task.id);
   mkdirSync(runDir, { recursive: true });
@@ -201,12 +211,38 @@ export function launch(task: Task, effort: string, session: string, prompt: stri
   const child = spawn(program, args, {
     cwd: task.worktree, detached: true,
     stdio: ['ignore', openSync(output, 'w'), openSync(join(runDir, `attempt-${n}.err`), 'w')],
-    env: { ...workerSessionEnvironment(process.env), ...engineEnv(engine), GOAL_TASK_ID: task.id,
-      GOAL_WORKTREE: resolve(task.worktree), GOAL_MANAGER: manager, GOAL_SETTINGS_DIRECTORY: settingsDirectory() },
+    env,
   });
   child.unref();
   if (!child.pid) throw new Error(`Could not start ${program}`);
-  return { n, effort, engine, round, pid: child.pid, session, output, lastMessage, startedAt: new Date().toISOString() };
+  const attempt = { n, effort, engine, round, pid: child.pid, session, output, lastMessage, startedAt: new Date().toISOString() };
+  try { recordClaudeLaunch(task, attempt); }
+  catch (error) { child.kill('SIGTERM'); throw error; }
+  return attempt;
+}
+
+/** A new Claude worker uses the same native OAuth store as the usage reader, with no API/cloud fallback. */
+export function claudeSubscriptionEnvironment(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env = Object.fromEntries(Object.entries(parent).filter(([key]) => !['ANTHROPIC_', 'CLAUDE_', 'CCR_', 'AGENT_PROXY_']
+    .some(prefix => key.startsWith(prefix)) || key === 'CLAUDE_CONFIG_DIR'));
+  if (env.CLAUDE_CONFIG_DIR) env.CLAUDE_CONFIG_DIR = resolve(env.CLAUDE_CONFIG_DIR);
+  return env;
+}
+
+function assertClaudeSubscription(cwd: string, env: NodeJS.ProcessEnv): void {
+  // Native status can contain identity fields. Capture it only in memory; never forward its output/errors.
+  // It is a bounded credential read, not a model request. Settings/env are identical to the actual launch.
+  const result = spawnSync('claude', ['--settings', '{"forceLoginMethod":"claudeai","fastMode":false}', 'auth', 'status'],
+    { cwd, env, encoding: 'utf8', timeout: 10_000, maxBuffer: 64 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
+  try {
+    const status = JSON.parse(result.stdout) as { loggedIn?: boolean; authMethod?: string; apiProvider?: string;
+      apiKeySource?: string | null; configDirectory?: string; forcedLoginMethod?: string };
+    if (result.status === 0 && status.loggedIn === true && status.authMethod === 'claude.ai'
+      && status.apiProvider === 'firstParty' && (!status.apiKeySource || status.apiKeySource === 'none')
+      && (!status.forcedLoginMethod || status.forcedLoginMethod === 'claudeai')
+      && status.configDirectory && resolve(status.configDirectory) === resolve(env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'))) return;
+  } catch { /* Reject missing, malformed or truncated status without exposing its contents. */ }
+  throw new Error('Claude usage is restricted (native subscription authentication required; no paid fallback)');
 }
 
 export function changedFiles(task: Task): { committed: string[]; dirty: string[]; ahead: number } {
