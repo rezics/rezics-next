@@ -7,17 +7,20 @@
     "workingTree": "Outcome tests and minimal QA support only; production code unchanged.",
     "run": null,
     "recordedJob": null,
-    "assertionReached": "pending corrected capability selection",
+    "assertionReached": "pending corrected fixture setup; prior runs reached no API outcome assertion",
     "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test tests/qa/integration/audit-bounded-reads.test.ts tests/qa/integration/notification-read-budget.test.ts tests/qa/integration/official-zone-read-budget.test.ts tests/qa/integration/rating-population-read-budget.test.ts",
     "expectedGate": "Intentionally failing baseline regression, never a passing done gate.",
     "dispatchedRevision": "50e53025617238f9d9d8127be78179c3fa3bc12c",
     "currency": "Required goal check refreshed this worker onto current main. The three intervening commits touch Goal allowance tooling and an archived brief only; no API owner changed.",
     "staticChecks": {
-      "job": "0a42b5be-cbb1-4660-8491-9fa241899504",
+      "job": "2f114ba2-b43d-4738-b30f-73ca3ac33a57",
       "docs": "passed",
       "types": "passed",
       "lint": "passed",
-      "ast": "passed"
+      "ast": "passed",
+      "guards": "failed: unrelated retained fixture-small repair canary inherited worker authority; two timed-out guards passed their automatic retries",
+      "evidence": ".temp/goal/check/run-eMhCAf/output.log",
+      "mainCorrection": "a34ba22336 fixes the canary authority in main; required currency check will adopt it. No API owner changed."
     },
     "attempts": [
       {
@@ -31,7 +34,60 @@
         "budgetMs": 480000,
         "evidence": ".artifacts/qa/20261018t190149-a02801/logs/integration-1.log",
         "diagnosis": "All capabilities shared one beforeAll; public reply construction was still running when Access connection timeouts appeared. No retained corpus or outcome evidence was produced. This is not proof of any reported API read defect.",
-        "correction": "Separate capability-named files using the unchanged catalogue-disk class and 480-second wall; real followed chapters exercise the reported Feed subject reader; independent rating Accounts avoid unrelated Realm creation. One diagnosed setup correction."
+        "correction": "Separate capability-named files using the unchanged catalogue-disk class and 480-second wall; real followed chapters exercise the reported Feed subject reader; independent rating Accounts avoid unrelated Realm creation."
+      },
+      {
+        "job": "57811362-e6e6-4362-a27c-708d6d10841d",
+        "run": "20261018t192818-8c2569",
+        "sourceRevision": "822f8e3208ce2700e5b6dbe3d8d61a6f2221e6db",
+        "command": "bun scripts/goal/goalctl.ts test tests/qa/integration/audit-bounded-reads.test.ts tests/qa/integration/notification-read-budget.test.ts tests/qa/integration/official-zone-read-budget.test.ts tests/qa/integration/rating-population-read-budget.test.ts",
+        "result": "setup-failure",
+        "assertionReached": false,
+        "projectBudgetMs": 480000,
+        "capabilities": [
+          {
+            "capability": "queries",
+            "project": 1,
+            "wallMs": 62300,
+            "sourceReadyMs": 37883,
+            "startupMs": 55144,
+            "diagnosis": "Public fixtures were created, but stopped backup refused the raw-update mode of an unclassified source stack. No outcome assertion.",
+            "evidence": ".artifacts/qa/20261018t192818-8c2569/logs/integration-1.log"
+          },
+          {
+            "capability": "notifications",
+            "project": 2,
+            "wallMs": 338300,
+            "sourceReadyMs": 279874,
+            "startupMs": 82293,
+            "publishedChapters": 24,
+            "diagnosis": "Real followed-chapter producer reached head >= 24; backup then refused source raw-update mode. No stream, unread or cancellation assertion.",
+            "evidence": ".artifacts/qa/20261018t192818-8c2569/logs/integration-2.log"
+          },
+          {
+            "capability": "zones",
+            "project": 3,
+            "wallMs": 59300,
+            "diagnosis": "Extra Zone creation returned authority_denied (403): fixture omitted the explicit space:create:root / space.create mandate. This is setup admission, not a suggestions defect.",
+            "evidence": ".artifacts/qa/20261018t192818-8c2569/logs/integration-3.log"
+          },
+          {
+            "capability": "ratings",
+            "project": 4,
+            "wallMs": 471400,
+            "sourceReadyMs": 395287,
+            "startupMs": 53970,
+            "receiptedRatings": 100,
+            "diagnosis": "All 100 real independent Account observations were acknowledged; clean PostgreSQL stop verification failed before backup, followed by raw-update-mode cleanup refusal. No aggregate assertion.",
+            "evidence": ".artifacts/qa/20261018t192818-8c2569/logs/integration-4.log"
+          }
+        ],
+        "correction": "Classify the four command-built corpora for the product assembler, grant only the missing fixture creation mandate, and bound independent Account signup / observation preparation concurrency at four / two. Public outcome assertions, 600-second preparation ceiling, 480-second project wall and all candidate limits stay unchanged.",
+        "cleanup": {
+          "job": "cd2198f0-2af9-4561-bc06-6deb78f474da",
+          "result": "passed",
+          "scope": "Only four disposable stacks 20261018t192818-8c2569-{1,2,3,4}, using task stack:reset -- --profile qa --run-id <id> --persistent --raw-update"
+        }
       }
     ]
   },
@@ -56,7 +112,8 @@
       ]
     },
     "preparationScope": "Each capability build and restore independently remains within the existing 600-second active preparation ceiling; each regression project retains its existing 480-second wall. No raised timeout, candidate or population verifier limit.",
-    "setupProgress": "Preparation emits phase/count/elapsed records with assertionReached false, so a setup failure cannot be reported as an outcome assertion."
+    "setupProgress": "Preparation emits phase/count/elapsed records with assertionReached false, so a setup failure cannot be reported as an outcome assertion.",
+    "productAssembler": "All four API-built corpus files are commandOnlyIntegrationFiles. This keeps source capture and restored product owners in the same closed raw-update mode."
   },
   "distinctions": {
     "null": "Absent optional subject/display/rating/diagnostic value; never fabricate a preview or zero count.",
@@ -713,5 +770,18 @@
       ],
       "status": "Await 100/101/102 public assertions."
     }
-  ]
+  ],
+  "qaSupportChanges": {
+    "outsideClaim": [
+      "scripts/qa/resource-classes.ts",
+      "scripts/qa/isolated-integration-files.ts",
+      "tests/qa/support/personas.ts",
+      "tests/qa/support/bounded-read-corpus.ts",
+      "tests/qa/integration/notification-read-budget.test.ts",
+      "tests/qa/integration/official-zone-read-budget.test.ts",
+      "tests/qa/integration/rating-population-read-budget.test.ts"
+    ],
+    "authority": "All checked unclaimed before editing; no production owner changes.",
+    "reason": "Capability isolation, command-only retained corpora, real Account reuse, caller signal / raw retry observation, and transparent graph work measurement."
+  }
 }

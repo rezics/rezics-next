@@ -219,30 +219,38 @@ async function build(capability: Capability): Promise<Corpus> {
         profile: 'global-rating-standing-context-v1', question: 'Bounded global quality', actingSubject: source.operator.actingSubject });
       ratingContext = context.context;
       const people = names.map(name => source[name]);
-      // Real independent Accounts, with two signups at a time and no extra Realms.
-      for (let index = people.length; index < 100; index += 2) {
-        const count = Math.min(2, 100 - index);
+      // Real independent Accounts, with four bounded signups at a time and
+      // no unrelated Realm commands. Admission and signup remain real.
+      for (let index = people.length; index < 100; index += 4) {
+        const count = Math.min(4, 100 - index);
         people.push(...await Promise.all(Array.from({ length: count }, (_, offset) =>
           personaAccount('rating-' + (index + offset)))));
         progress('independent rating Accounts', people.length);
       }
       const reserved = await personaSessions('public');
       records.push(retainPersonaRealm(reserved));
-      for (const [index, person] of people.entries()) {
-        await grantPersonaFixtureAuthority(person, [
-          { scope: 'rating:observe:' + ratingContext, action: 'rating.observation.set' },
-        ]);
-        await command(person, 'POST', '/v1/global-rating-observations', {
-          profile: 'global-rating-standing-observation-v1', context: ratingContext,
-          work: book.work, mainVersion: book.mainVersion, value: 5,
-          expectedRevisionHead: null, actingSubject: person.actingSubject });
-        if ((index + 1) % 10 === 0) progress('receipted ratings', index + 1);
+      for (let offset = 0; offset < people.length; offset += 2) {
+        // Different principals own different observation heads, so two commands
+        // may prepare independently without changing the owner's allocation.
+        await Promise.all(people.slice(offset, offset + 2).map(async person => {
+          await grantPersonaFixtureAuthority(person, [
+            { scope: 'rating:observe:' + ratingContext, action: 'rating.observation.set' },
+          ]);
+          await command(person, 'POST', '/v1/global-rating-observations', {
+            profile: 'global-rating-standing-observation-v1', context: ratingContext,
+            work: book.work, mainVersion: book.mainVersion, value: 5,
+            expectedRevisionHead: null, actingSubject: person.actingSubject });
+        }));
+        if ((offset + 2) % 10 === 0) progress('receipted ratings', offset + 2);
       }
       for (const person of [reserved.owner, reserved.member]) await grantPersonaFixtureAuthority(person, [
         { scope: 'rating:observe:' + ratingContext, action: 'rating.observation.set' },
       ]);
     }
     if (capability === 'zones') {
+      await grantPersonaFixtureAuthority(source.owner, [
+        { scope: 'space:create:root', action: 'space.create' },
+      ]);
       for (let index = 0; index < 10; index++) {
         const realm = await command<{ realm: string }>(source.owner, 'POST', '/v1/spaces', {
           profile: 'space-realm-v2', name: 'Bounded official Realm ' + index, language: 'en', capabilities: ['realm'],
