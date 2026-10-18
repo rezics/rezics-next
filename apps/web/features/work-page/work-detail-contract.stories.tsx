@@ -223,8 +223,11 @@ export const MixedReadFailures: Story = {
   render: () => <SparseBook failed />, globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getAllByRole('alert')).toHaveLength(3);
-    for (const alert of canvas.getAllByRole('alert')) await expect(within(alert).getByRole('button', { name: messages.en.retry })).toBeVisible();
+    await expect(canvas.getAllByRole('alert')).toHaveLength(2);
+    const missing = canvas.getByText(messages.en.regionMissing).closest<HTMLElement>('[role="status"]')!;
+    for (const failure of [...canvas.getAllByRole('alert'), missing]) {
+      await expect(within(failure).getByRole('button', { name: messages.en.retry })).toBeVisible();
+    }
     await expect(canvas.getByRole('link', { name: 'Join the discussion' })).toBeVisible();
     await expect(canvas.getByRole('heading', { level: 1 })).toBeVisible();
   },
