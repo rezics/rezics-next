@@ -267,6 +267,39 @@ export const SourcesAndEvidence: Story = {
 };
 export const MobileSourcesAndEvidence: Story = { ...SourcesAndEvidence, globals: { viewport: { value: 'phone' } } };
 
+export const WorkObjectMenu: Story = {
+  globals: { viewport: { value: 'phone' } },
+  parameters: { route: { pathname: workHref(zone), search: '' } },
+  render: () => {
+    const work = { ...fixture.work, cover: { kind: 'image' as const, selection: fixture.work.revision,
+      url: 'https://example.com/cover.jpg', width: 300, height: 450, mediaType: 'image/jpeg', crop: null,
+      coverCredit: null, basis: { policy: 'test', context: 'test' } } };
+    return <WorkFrame workRef={zone} work={work} credits={null} readAction={null} locale="en" messages={messages.en}
+      cover={<div role="img" aria-label={work.title.value} className="aspect-[2/3] w-full rounded-xl bg-muted" />}>
+      <WorkAbout work={work} messages={messages.en} />
+    </WorkFrame>;
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvasElement.querySelectorAll('[data-report-action]')).toHaveLength(0);
+    const more = canvas.getByRole('button', { name: `${relationshipMessages.en.options} · ${fixture.work.title.value}` });
+    await userEvent.click(more);
+    for (const [kind, component, revision] of [['work', null, null],
+      ['text', 'synopsis', fixture.work.metadataRevision], ['cover', 'cover', fixture.work.revision]] as const) {
+      const item = document.querySelector<HTMLAnchorElement>(`[role="menuitem"][data-report-action="${kind}"]`)!;
+      await expect(item).toBeVisible();
+      const url = new URL(item.href);
+      await expect(url.pathname).toBe('/en/report');
+      await expect(url.searchParams.get('target')).toBe(fixture.work.id);
+      await expect(url.searchParams.get('realm')).toBe(`https://rezics.com/id/${levels.current}`);
+      await expect(url.searchParams.get('component')).toBe(component);
+      await expect(url.searchParams.get('revision')).toBe(revision);
+    }
+    await userEvent.keyboard('{Escape}');
+    await expect(more).toHaveFocus();
+  },
+};
+
 function CrossViewTask({ kind }: { kind: 'recipe' | 'guide' }) {
   const t = messages.en;
   return <WorkFrame workRef={zone} work={fixture.work} credits={null} locale="en" messages={t}

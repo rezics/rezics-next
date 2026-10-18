@@ -185,6 +185,8 @@ test('one source section retains record identity, exact evidence, missing eviden
   const html = render(<WorkSources work={work} locale="en" messages={t}
     statements={{ ok: true, data: page }} labels={entity.predicateLabels} factObligations={[page.factObligations]} />);
   expect(html.match(/data-work-sources/g)).toHaveLength(1);
+  expect(html.match(/data-subject-sources/g)).toHaveLength(1);
+  expect(html).toContain('aria-labelledby="sources"');
   expect(html.match(/data-rights-mark/g)).toHaveLength(1);
   expect(html).toContain('Open Library · works · OL123W');
   expect(html).toContain('href="https://openlibrary.org/works/OL123W?revision=7"');
