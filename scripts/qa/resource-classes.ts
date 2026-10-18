@@ -101,6 +101,7 @@ export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = 
     'g-1035-catalogue-write',
     'g-1032-catalogue-preparation',
     'profile-corpus-restore',
+    'audit-bounded-reads',
     'realm-discussion-source',
     'library-growth',
     'recipe-page-growth',

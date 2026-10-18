@@ -1,0 +1,661 @@
+{
+  "schemaVersion": 1,
+  "goal": "audit-remediation-20261019",
+  "purpose": "Desired public outcomes and measured baseline evidence. Root-cause suggestions are separate and are not implementation requirements.",
+  "baseline": {
+    "revision": "50e53025617238f9d9d8127be78179c3fa3bc12c",
+    "workingTree": "Outcome tests and minimal QA support only; production code unchanged.",
+    "run": null,
+    "recordedJob": null,
+    "assertionReached": "pending",
+    "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test tests/qa/integration/audit-bounded-reads.test.ts",
+    "expectedGate": "Intentionally failing baseline regression, never a passing done gate."
+  },
+  "fixture": {
+    "composition": "Real Account HTTP and composeMain with lifecycle, relay, Content, Access, Fuseki and PostgreSQL; no owner mocks.",
+    "creation": "Public commands for Works, chapter Content, eligibility, watched replies, Realms/Zones and independent Account rating observations. grantPersonaFixtureAuthority only for narrow preparation authority.",
+    "reuse": "One stopped consistent owner backup under .temp/audit-bounded-reads/owners plus private mode-0600 corpus.json; each run restores isolated fresh owners, never reads shared development storage.",
+    "preparationBudgetMs": 600000,
+    "privacy": "Retained credentials never enter this document or Git.",
+    "instrumentation": "Transparent HTTP proxy records actual graph requests, bytes, timing and trace IDs; optional 20 ms latency exposes in-flight cancellation without replacing an owner. Real OTLP runtime propagates traces. SQL/engine bounds are unknown until separately instrumented, never inferred as zero.",
+    "populations": {
+      "notifications": "50 member-authored replies plus a moderator-authored non-self notice",
+      "officialZones": [
+        8,
+        9,
+        10
+      ],
+      "ratingAccounts": [
+        100,
+        101,
+        102
+      ]
+    }
+  },
+  "distinctions": {
+    "null": "Absent optional subject/display/rating/diagnostic value; never fabricate a preview or zero count.",
+    "unknown": "Membership count or unmeasured SQL/engine work stays unknown; do not turn it into exact zero.",
+    "incomplete": "A partial page carries an advancing continuation and at-least count, even when items is empty.",
+    "unavailable": "An unready/unavailable owner is an explicit 503; never return an exact empty page or null rating to hide it.",
+    "noData": "An exact zero-rating population has mean null and no-data precision; it differs from an unavailable aggregate."
+  },
+  "budgets": {
+    "resourceList": {
+      "source": "services/main/src/modules/query/budget.ts",
+      "deadlineMs": 10000,
+      "graphCalls": 195,
+      "explanation": "Existing resource-list 32 plus existing Realm-directory supplement 163 for mixed all scope.",
+      "graphBytes": 4194304,
+      "cursorCharacters": 2048,
+      "candidateWindows": 2,
+      "windowSize": 64,
+      "sqlStatements": 96,
+      "sqlMeasurement": "unknown; graph wire trace is measured"
+    },
+    "notificationRead": {
+      "startingSource": "services/main/src/modules/work/read-contract.ts:WORK_READ_COST",
+      "deadlineMs": 10000,
+      "graphCalls": 160,
+      "graphBytes": 4194304,
+      "scope": "One complete stream request or unread-count request, including all subject hydration and fences.",
+      "cancelGraceMs": 100,
+      "cancelObservationMs": 300,
+      "sqlEngineBudget": "Required shared allocation; concrete instrumentation/limits remain unproved here."
+    },
+    "chapterSearch": {
+      "startingSource": "services/main/src/modules/work/search-readiness.ts:MAX_SEARCH_REQUEST_MS",
+      "deadlineMs": 1500,
+      "foregroundPopulationAudits": 0,
+      "graphCalls": "Existing Main Work request allocation; unrelated Content population may not be charged to each reader.",
+      "notes": "No timeout or MAX_PUBLIC_UNITS increase is a repair."
+    },
+    "suggestions": {
+      "startingSource": "services/main/src/modules/onboarding/contract.ts:SUGGESTION_COST and Work read contract",
+      "deadlineMs": 10000,
+      "graphCalls": 160,
+      "graphBytes": 4194304,
+      "responseItems": 6,
+      "officialCandidateWindow": 8,
+      "workScan": 8,
+      "notes": "Existing bounded candidate window stays; total official population may grow."
+    },
+    "globalAggregate": {
+      "startingSource": "services/main/src/modules/rating/global-aggregate.ts:GLOBAL_AGGREGATE_BUDGET",
+      "deadlineMs": 10000,
+      "graphCalls": 1,
+      "graphBytes": 1048576,
+      "manifestBytes": 524288,
+      "notes": "One whole-request allocation; no raising 100-slot verifier ceiling to satisfy the population test."
+    },
+    "refreshDesired": {
+      "startingSource": "services/main/src/modules/discovery/refresh-store.ts:DISCOVERY_REFRESH_COST",
+      "graphCallsPerTick": 163,
+      "jobsPerTick": 1,
+      "retryMs": 30000,
+      "maximumRetryMs": 300000,
+      "contract": "Terminal permanent evidence is retained and isolated until basis/source changes; ordinary transient faults retain bounded retry. No fixed perpetual retry hides permanent invalidity.",
+      "status": "unproved stale trigger"
+    }
+  },
+  "tests": {
+    "discovery": {
+      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+      "line": 310,
+      "titleTemplate": "test(`D5-002 ${name}: legal default discovery returns a bounded page without private resources`, async () => {"
+    },
+    "cursor": {
+      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+      "line": 329,
+      "titleTemplate": "test(`AUD-001 ${name}: server cursors round-trip through a complete mixed-resource traversal`, async () => {"
+    },
+    "chapter": {
+      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+      "line": 362,
+      "titleTemplate": "test(`D5-003 ${name}: healthy chapter hits and exact no-match reads avoid foreground population qualification`, async () => {"
+    },
+    "notificationBudget": {
+      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+      "line": 383,
+      "titleTemplate": "test(`D5-001 ${name}: inbox and unread count share a complete request allocation`, async () => {"
+    },
+    "notificationAuthority": {
+      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+      "line": 409,
+      "titleTemplate": "test(`D5-001 ${name}: personal admission and missing notification controls preserve privacy`, async () => {"
+    },
+    "notificationCancel": {
+      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+      "line": 433,
+      "titleTemplate": "test(`D5-001 ${name}: leaving an inbox stops later subject reads and permits a fresh retry`, async () => {"
+    },
+    "zones": {
+      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+      "line": 469,
+      "titleTemplate": "test('D5-006: the ninth and tenth official Zones do not make six readers lose suggestions', async () => {"
+    },
+    "ratings": {
+      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+      "line": 496,
+      "titleTemplate": "test('D5-006: 100, 101 and 102 independently receipted ratings remain readable without revealing voters', async () => {"
+    },
+    "refreshControl": {
+      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+      "line": 524,
+      "titleTemplate": "test('D5-004 operator: quiescent refresh exposes deferred reasons without disclosing private scope identities', async () => {"
+    }
+  },
+  "personas": [
+    {
+      "persona": "visitor",
+      "authority": "No Account, bearer, Agent, Realm membership or administrative authority.",
+      "discovery": {
+        "case": "D5-002",
+        "test": "discovery",
+        "authority": "Public read; no actingSubject required.",
+        "disclosure": "Published public resources only; unpublished Work and unrelated private Realm absent.",
+        "cancellationRetry": "One raw request; do not retry a 422/503 into apparent success.",
+        "budget": "resourceList",
+        "traversal": "cursor"
+      },
+      "cursor": {
+        "case": "AUD-001",
+        "test": "cursor",
+        "authority": "Same public disclosure as discovery on every page.",
+        "disclosure": "No duplicate IDs or unpublished Work; known public Book and Realm present at completion.",
+        "cancellationRetry": "Submit each issued cursor unchanged in the next request. Empty incomplete pages must advance. No retry masking.",
+        "budget": "resourceList; existing cursor schema admission (2048 characters), not a larger limit.",
+        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs."
+      },
+      "chapter": {
+        "case": "D5-003",
+        "test": "chapter",
+        "authority": "Public phrase-page profile, independent of local or platform role.",
+        "disclosure": "Published chapter phrase resolves to public parent Book; absent phrase and private draft phrase yield exact zero matches.",
+        "cancellationRetry": "Cold first restored-composition read, warm hit/miss, and hit after an unrelated public command advances graph position; observe each answer once.",
+        "budget": "chapterSearch",
+        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace."
+      },
+      "notifications": {
+        "case": "D5-001",
+        "tests": [
+          "notificationBudget",
+          "notificationAuthority"
+        ],
+        "authority": "Stream, unread count and item mutation require bearer; all 401.",
+        "disclosure": "Denied response exposes no inbox items.",
+        "cancellationRetry": "In-flight inbox cancellation is irrelevant: admission refuses before personal storage work. Retry without authority remains denied.",
+        "budget": "Admission denial before personal data",
+        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap."
+      },
+      "officialZones": {
+        "case": "D5-006-zones",
+        "test": "zones",
+        "authority": "Public suggestions; local/admin role gives no extra public candidates.",
+        "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
+        "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
+        "budget": "suggestions",
+        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit."
+      },
+      "ratingPopulation": {
+        "case": "D5-006-ratings",
+        "test": "ratings",
+        "authority": "Public aggregate; 100 independent real Account principals created observations through public commands.",
+        "disclosure": "Exact complete aggregates for 100, 101 and 102 value-5 votes; count N, mean 5, withdrawnCount 0; no principal IDs or rating slots.",
+        "cancellationRetry": "Single raw aggregate read per population; no timeout or candidate-cap increases.",
+        "budget": "globalAggregate",
+        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation."
+      },
+      "refresh": {
+        "case": "D5-004",
+        "test": null,
+        "authority": "Persona-specific authority irrelevant to the background refresh scheduler; public read effects covered above.",
+        "disclosure": "Health sample uses opaque scope hashes; no private Realm or owner identity. Null refresh means diagnostic unavailable, not an empty healthy sample.",
+        "cancellationRetry": "Desired: permanent source failure ceases automatic retries until its evidence/basis changes; transient failure retains bounded backoff and recovery. Original invalid-media trigger is stale at baseline and is not asserted by the diagnostic control.",
+        "budget": "refreshDesired; no proven persistent-fault budget assertion.",
+        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete."
+      },
+      "irrelevant": [
+        "Authenticated inbox cancellation: visitor has no admitted inbox read.",
+        "Per-person refresh scheduling: one real lifecycle worker serves the isolated composition; roles do not alter its retry state."
+      ]
+    },
+    {
+      "persona": "stranger",
+      "authority": "Ordinary signed-in Account and Agent; no membership in the public fixture Realm. Explicitly watches its public thread.",
+      "discovery": {
+        "case": "D5-002",
+        "test": "discovery",
+        "authority": "Public read; no actingSubject required.",
+        "disclosure": "Published public resources only; unpublished Work and unrelated private Realm absent.",
+        "cancellationRetry": "One raw request; do not retry a 422/503 into apparent success.",
+        "budget": "resourceList",
+        "traversal": "cursor"
+      },
+      "cursor": {
+        "case": "AUD-001",
+        "test": "cursor",
+        "authority": "Same public disclosure as discovery on every page.",
+        "disclosure": "No duplicate IDs or unpublished Work; known public Book and Realm present at completion.",
+        "cancellationRetry": "Submit each issued cursor unchanged in the next request. Empty incomplete pages must advance. No retry masking.",
+        "budget": "resourceList; existing cursor schema admission (2048 characters), not a larger limit.",
+        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs."
+      },
+      "chapter": {
+        "case": "D5-003",
+        "test": "chapter",
+        "authority": "Public phrase-page profile, independent of local or platform role.",
+        "disclosure": "Published chapter phrase resolves to public parent Book; absent phrase and private draft phrase yield exact zero matches.",
+        "cancellationRetry": "Cold first restored-composition read, warm hit/miss, and hit after an unrelated public command advances graph position; observe each answer once.",
+        "budget": "chapterSearch",
+        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace."
+      },
+      "notifications": {
+        "case": "D5-001",
+        "tests": [
+          "notificationBudget",
+          "notificationAuthority",
+          "notificationCancel"
+        ],
+        "authority": "Own Account inbox only; alien item and random missing item both 404.",
+        "disclosure": "Nonempty public reply subjects; no cross-account item ownership disclosure. Nullable subject/display retains its meaning.",
+        "cancellationRetry": "Abort while real graph calls are in flight; 100 ms grace, observe 300 ms with no new graph call or active graph exchange; fresh limit=1 retry returns one item.",
+        "budget": "notificationRead",
+        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap."
+      },
+      "officialZones": {
+        "case": "D5-006-zones",
+        "test": "zones",
+        "authority": "Public suggestions; local/admin role gives no extra public candidates.",
+        "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
+        "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
+        "budget": "suggestions",
+        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit."
+      },
+      "ratingPopulation": {
+        "case": "D5-006-ratings",
+        "test": "ratings",
+        "authority": "Public aggregate; 100 independent real Account principals created observations through public commands.",
+        "disclosure": "Exact complete aggregates for 100, 101 and 102 value-5 votes; count N, mean 5, withdrawnCount 0; no principal IDs or rating slots.",
+        "cancellationRetry": "Single raw aggregate read per population; no timeout or candidate-cap increases.",
+        "budget": "globalAggregate",
+        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation."
+      },
+      "refresh": {
+        "case": "D5-004",
+        "test": null,
+        "authority": "Persona-specific authority irrelevant to the background refresh scheduler; public read effects covered above.",
+        "disclosure": "Health sample uses opaque scope hashes; no private Realm or owner identity. Null refresh means diagnostic unavailable, not an empty healthy sample.",
+        "cancellationRetry": "Desired: permanent source failure ceases automatic retries until its evidence/basis changes; transient failure retains bounded backoff and recovery. Original invalid-media trigger is stale at baseline and is not asserted by the diagnostic control.",
+        "budget": "refreshDesired; no proven persistent-fault budget assertion.",
+        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete."
+      },
+      "irrelevant": [
+        "Per-person refresh scheduling: one real lifecycle worker serves the isolated composition; roles do not alter its retry state."
+      ]
+    },
+    {
+      "persona": "member",
+      "authority": "Ordinary Account and Agent; member of the public fixture Realm and author of the watched original. Self-authored notices are excluded; a moderator-authored reply is the nonempty control.",
+      "discovery": {
+        "case": "D5-002",
+        "test": "discovery",
+        "authority": "Public read; no actingSubject required.",
+        "disclosure": "Published public resources only; unpublished Work and unrelated private Realm absent.",
+        "cancellationRetry": "One raw request; do not retry a 422/503 into apparent success.",
+        "budget": "resourceList",
+        "traversal": "cursor"
+      },
+      "cursor": {
+        "case": "AUD-001",
+        "test": "cursor",
+        "authority": "Same public disclosure as discovery on every page.",
+        "disclosure": "No duplicate IDs or unpublished Work; known public Book and Realm present at completion.",
+        "cancellationRetry": "Submit each issued cursor unchanged in the next request. Empty incomplete pages must advance. No retry masking.",
+        "budget": "resourceList; existing cursor schema admission (2048 characters), not a larger limit.",
+        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs."
+      },
+      "chapter": {
+        "case": "D5-003",
+        "test": "chapter",
+        "authority": "Public phrase-page profile, independent of local or platform role.",
+        "disclosure": "Published chapter phrase resolves to public parent Book; absent phrase and private draft phrase yield exact zero matches.",
+        "cancellationRetry": "Cold first restored-composition read, warm hit/miss, and hit after an unrelated public command advances graph position; observe each answer once.",
+        "budget": "chapterSearch",
+        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace."
+      },
+      "notifications": {
+        "case": "D5-001",
+        "tests": [
+          "notificationBudget",
+          "notificationAuthority",
+          "notificationCancel"
+        ],
+        "authority": "Own Account inbox only; alien item and random missing item both 404.",
+        "disclosure": "Nonempty public reply subjects; no cross-account item ownership disclosure. Nullable subject/display retains its meaning.",
+        "cancellationRetry": "Abort while real graph calls are in flight; 100 ms grace, observe 300 ms with no new graph call or active graph exchange; fresh limit=1 retry returns one item.",
+        "budget": "notificationRead",
+        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap."
+      },
+      "officialZones": {
+        "case": "D5-006-zones",
+        "test": "zones",
+        "authority": "Public suggestions; local/admin role gives no extra public candidates.",
+        "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
+        "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
+        "budget": "suggestions",
+        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit."
+      },
+      "ratingPopulation": {
+        "case": "D5-006-ratings",
+        "test": "ratings",
+        "authority": "Public aggregate; 100 independent real Account principals created observations through public commands.",
+        "disclosure": "Exact complete aggregates for 100, 101 and 102 value-5 votes; count N, mean 5, withdrawnCount 0; no principal IDs or rating slots.",
+        "cancellationRetry": "Single raw aggregate read per population; no timeout or candidate-cap increases.",
+        "budget": "globalAggregate",
+        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation."
+      },
+      "refresh": {
+        "case": "D5-004",
+        "test": null,
+        "authority": "Persona-specific authority irrelevant to the background refresh scheduler; public read effects covered above.",
+        "disclosure": "Health sample uses opaque scope hashes; no private Realm or owner identity. Null refresh means diagnostic unavailable, not an empty healthy sample.",
+        "cancellationRetry": "Desired: permanent source failure ceases automatic retries until its evidence/basis changes; transient failure retains bounded backoff and recovery. Original invalid-media trigger is stale at baseline and is not asserted by the diagnostic control.",
+        "budget": "refreshDesired; no proven persistent-fault budget assertion.",
+        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete."
+      },
+      "irrelevant": [
+        "Per-person refresh scheduling: one real lifecycle worker serves the isolated composition; roles do not alter its retry state."
+      ]
+    },
+    {
+      "persona": "owner",
+      "authority": "Ordinary Account and Agent; owns the public fixture Realm and public Book. Ownership does not widen global public disclosure or another Account inbox.",
+      "discovery": {
+        "case": "D5-002",
+        "test": "discovery",
+        "authority": "Public read; no actingSubject required.",
+        "disclosure": "Published public resources only; unpublished Work and unrelated private Realm absent.",
+        "cancellationRetry": "One raw request; do not retry a 422/503 into apparent success.",
+        "budget": "resourceList",
+        "traversal": "cursor"
+      },
+      "cursor": {
+        "case": "AUD-001",
+        "test": "cursor",
+        "authority": "Same public disclosure as discovery on every page.",
+        "disclosure": "No duplicate IDs or unpublished Work; known public Book and Realm present at completion.",
+        "cancellationRetry": "Submit each issued cursor unchanged in the next request. Empty incomplete pages must advance. No retry masking.",
+        "budget": "resourceList; existing cursor schema admission (2048 characters), not a larger limit.",
+        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs."
+      },
+      "chapter": {
+        "case": "D5-003",
+        "test": "chapter",
+        "authority": "Public phrase-page profile, independent of local or platform role.",
+        "disclosure": "Published chapter phrase resolves to public parent Book; absent phrase and private draft phrase yield exact zero matches.",
+        "cancellationRetry": "Cold first restored-composition read, warm hit/miss, and hit after an unrelated public command advances graph position; observe each answer once.",
+        "budget": "chapterSearch",
+        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace."
+      },
+      "notifications": {
+        "case": "D5-001",
+        "tests": [
+          "notificationBudget",
+          "notificationAuthority",
+          "notificationCancel"
+        ],
+        "authority": "Own Account inbox only; alien item and random missing item both 404.",
+        "disclosure": "Nonempty public reply subjects; no cross-account item ownership disclosure. Nullable subject/display retains its meaning.",
+        "cancellationRetry": "Abort while real graph calls are in flight; 100 ms grace, observe 300 ms with no new graph call or active graph exchange; fresh limit=1 retry returns one item.",
+        "budget": "notificationRead",
+        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap."
+      },
+      "officialZones": {
+        "case": "D5-006-zones",
+        "test": "zones",
+        "authority": "Public suggestions; local/admin role gives no extra public candidates.",
+        "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
+        "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
+        "budget": "suggestions",
+        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit."
+      },
+      "ratingPopulation": {
+        "case": "D5-006-ratings",
+        "test": "ratings",
+        "authority": "Public aggregate; 100 independent real Account principals created observations through public commands.",
+        "disclosure": "Exact complete aggregates for 100, 101 and 102 value-5 votes; count N, mean 5, withdrawnCount 0; no principal IDs or rating slots.",
+        "cancellationRetry": "Single raw aggregate read per population; no timeout or candidate-cap increases.",
+        "budget": "globalAggregate",
+        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation."
+      },
+      "refresh": {
+        "case": "D5-004",
+        "test": null,
+        "authority": "Persona-specific authority irrelevant to the background refresh scheduler; public read effects covered above.",
+        "disclosure": "Health sample uses opaque scope hashes; no private Realm or owner identity. Null refresh means diagnostic unavailable, not an empty healthy sample.",
+        "cancellationRetry": "Desired: permanent source failure ceases automatic retries until its evidence/basis changes; transient failure retains bounded backoff and recovery. Original invalid-media trigger is stale at baseline and is not asserted by the diagnostic control.",
+        "budget": "refreshDesired; no proven persistent-fault budget assertion.",
+        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete."
+      },
+      "irrelevant": [
+        "Per-person refresh scheduling: one real lifecycle worker serves the isolated composition; roles do not alter its retry state."
+      ]
+    },
+    {
+      "persona": "moderator",
+      "authority": "Ordinary Account and Agent; public Realm moderator with explicit review.decide and publication.adopt role permissions. These permissions do not widen global public disclosure or personal inbox access.",
+      "discovery": {
+        "case": "D5-002",
+        "test": "discovery",
+        "authority": "Public read; no actingSubject required.",
+        "disclosure": "Published public resources only; unpublished Work and unrelated private Realm absent.",
+        "cancellationRetry": "One raw request; do not retry a 422/503 into apparent success.",
+        "budget": "resourceList",
+        "traversal": "cursor"
+      },
+      "cursor": {
+        "case": "AUD-001",
+        "test": "cursor",
+        "authority": "Same public disclosure as discovery on every page.",
+        "disclosure": "No duplicate IDs or unpublished Work; known public Book and Realm present at completion.",
+        "cancellationRetry": "Submit each issued cursor unchanged in the next request. Empty incomplete pages must advance. No retry masking.",
+        "budget": "resourceList; existing cursor schema admission (2048 characters), not a larger limit.",
+        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs."
+      },
+      "chapter": {
+        "case": "D5-003",
+        "test": "chapter",
+        "authority": "Public phrase-page profile, independent of local or platform role.",
+        "disclosure": "Published chapter phrase resolves to public parent Book; absent phrase and private draft phrase yield exact zero matches.",
+        "cancellationRetry": "Cold first restored-composition read, warm hit/miss, and hit after an unrelated public command advances graph position; observe each answer once.",
+        "budget": "chapterSearch",
+        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace."
+      },
+      "notifications": {
+        "case": "D5-001",
+        "tests": [
+          "notificationBudget",
+          "notificationAuthority",
+          "notificationCancel"
+        ],
+        "authority": "Own Account inbox only; alien item and random missing item both 404.",
+        "disclosure": "Nonempty public reply subjects; no cross-account item ownership disclosure. Nullable subject/display retains its meaning.",
+        "cancellationRetry": "Abort while real graph calls are in flight; 100 ms grace, observe 300 ms with no new graph call or active graph exchange; fresh limit=1 retry returns one item.",
+        "budget": "notificationRead",
+        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap."
+      },
+      "officialZones": {
+        "case": "D5-006-zones",
+        "test": "zones",
+        "authority": "Public suggestions; local/admin role gives no extra public candidates.",
+        "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
+        "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
+        "budget": "suggestions",
+        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit."
+      },
+      "ratingPopulation": {
+        "case": "D5-006-ratings",
+        "test": "ratings",
+        "authority": "Public aggregate; 100 independent real Account principals created observations through public commands.",
+        "disclosure": "Exact complete aggregates for 100, 101 and 102 value-5 votes; count N, mean 5, withdrawnCount 0; no principal IDs or rating slots.",
+        "cancellationRetry": "Single raw aggregate read per population; no timeout or candidate-cap increases.",
+        "budget": "globalAggregate",
+        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation."
+      },
+      "refresh": {
+        "case": "D5-004",
+        "test": null,
+        "authority": "Persona-specific authority irrelevant to the background refresh scheduler; public read effects covered above.",
+        "disclosure": "Health sample uses opaque scope hashes; no private Realm or owner identity. Null refresh means diagnostic unavailable, not an empty healthy sample.",
+        "cancellationRetry": "Desired: permanent source failure ceases automatic retries until its evidence/basis changes; transient failure retains bounded backoff and recovery. Original invalid-media trigger is stale at baseline and is not asserted by the diagnostic control.",
+        "budget": "refreshDesired; no proven persistent-fault budget assertion.",
+        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete."
+      },
+      "irrelevant": [
+        "Per-person refresh scheduling: one real lifecycle worker serves the isolated composition; roles do not alter its retry state."
+      ]
+    },
+    {
+      "persona": "operator",
+      "authority": "First platform administrator on this isolated stack, using a real Account bearer and Agent. Administrative authority does not widen global public reads or another Account inbox.",
+      "discovery": {
+        "case": "D5-002",
+        "test": "discovery",
+        "authority": "Public read; no actingSubject required.",
+        "disclosure": "Published public resources only; unpublished Work and unrelated private Realm absent.",
+        "cancellationRetry": "One raw request; do not retry a 422/503 into apparent success.",
+        "budget": "resourceList",
+        "traversal": "cursor"
+      },
+      "cursor": {
+        "case": "AUD-001",
+        "test": "cursor",
+        "authority": "Same public disclosure as discovery on every page.",
+        "disclosure": "No duplicate IDs or unpublished Work; known public Book and Realm present at completion.",
+        "cancellationRetry": "Submit each issued cursor unchanged in the next request. Empty incomplete pages must advance. No retry masking.",
+        "budget": "resourceList; existing cursor schema admission (2048 characters), not a larger limit.",
+        "traversal": "At most 256 pages for this finite corpus; nextCursor null iff complete; incomplete count at-least; terminal count exact and equal to unique IDs."
+      },
+      "chapter": {
+        "case": "D5-003",
+        "test": "chapter",
+        "authority": "Public phrase-page profile, independent of local or platform role.",
+        "disclosure": "Published chapter phrase resolves to public parent Book; absent phrase and private draft phrase yield exact zero matches.",
+        "cancellationRetry": "Cold first restored-composition read, warm hit/miss, and hit after an unrelated public command advances graph position; observe each answer once.",
+        "budget": "chapterSearch",
+        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace."
+      },
+      "notifications": {
+        "case": "D5-001",
+        "tests": [
+          "notificationBudget",
+          "notificationAuthority",
+          "notificationCancel"
+        ],
+        "authority": "Own Account inbox only; alien item and random missing item both 404.",
+        "disclosure": "Nonempty public reply subjects; no cross-account item ownership disclosure. Nullable subject/display retains its meaning.",
+        "cancellationRetry": "Abort while real graph calls are in flight; 100 ms grace, observe 300 ms with no new graph call or active graph exchange; fresh limit=1 retry returns one item.",
+        "budget": "notificationRead",
+        "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap."
+      },
+      "officialZones": {
+        "case": "D5-006-zones",
+        "test": "zones",
+        "authority": "Public suggestions; local/admin role gives no extra public candidates.",
+        "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
+        "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
+        "budget": "suggestions",
+        "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit."
+      },
+      "ratingPopulation": {
+        "case": "D5-006-ratings",
+        "test": "ratings",
+        "authority": "Public aggregate; 100 independent real Account principals created observations through public commands.",
+        "disclosure": "Exact complete aggregates for 100, 101 and 102 value-5 votes; count N, mean 5, withdrawnCount 0; no principal IDs or rating slots.",
+        "cancellationRetry": "Single raw aggregate read per population; no timeout or candidate-cap increases.",
+        "budget": "globalAggregate",
+        "traversal": "Bounded verified aggregate or a future explicit complete continuation contract. Current profile has no continuation; 101 must not become arbitrary 422 or silent truncation."
+      },
+      "refresh": {
+        "case": "D5-004",
+        "test": "refreshControl",
+        "authority": "Operator is the diagnostic observer; health endpoint itself is public.",
+        "disclosure": "Health sample uses opaque scope hashes; no private Realm or owner identity. Null refresh means diagnostic unavailable, not an empty healthy sample.",
+        "cancellationRetry": "Desired: permanent source failure ceases automatic retries until its evidence/basis changes; transient failure retains bounded backoff and recovery. Original invalid-media trigger is stale at baseline and is not asserted by the diagnostic control.",
+        "budget": "refreshDesired; no proven persistent-fault budget assertion.",
+        "traversal": "Health is a bounded sample (20), not a census; truncated true does not mean complete."
+      },
+      "irrelevant": [
+        "Per-person refresh scheduling: operator observes one common lifecycle worker, not a second scheduler."
+      ]
+    }
+  ],
+  "baselineExceptions": [
+    {
+      "case": "D5-004",
+      "status": "stale-trigger-unconfirmed",
+      "assertionReached": false,
+      "source": "services/main/src/modules/discovery/source.ts:projectDiscoveryBatch",
+      "reason": "Baseline explicitly projects identities and source evidence, never title/media/metadata. The audit invalid-media foreground-hydration producer cannot be used to assert persistent refresh failure here.",
+      "remainingEvidence": "refresh.ts still maps arbitrary failures to retry with bounded exponential delay but no terminal classification. This code observation alone does not prove the public failure.",
+      "managerAction": "Do not dispatch an API repair based on the passing diagnostic control. Require an admitted public persistent-fault producer or a separately owned owner/fault proof."
+    }
+  ],
+  "rootCauseHypotheses": [
+    {
+      "case": "D5-001",
+      "hypothesis": "Per-notification subject hydration starts nested Work read sessions without one request-wide allocation or caller signal.",
+      "ownerScopes": [
+        "services/main/src/routes/notifications.ts",
+        "services/main/src/modules/notification-producers/feed-subjects.ts",
+        "packages/notification/src/store.ts"
+      ],
+      "status": "Await baseline trace; desired behavior does not prescribe batching/cache mechanism."
+    },
+    {
+      "case": "D5-002",
+      "hypothesis": "Default all scans/hydrates source kinds before returning a bounded mixed page and can exhaust its request allocation.",
+      "ownerScopes": [
+        "services/main/src/modules/query/resources.ts",
+        "services/main/src/modules/query/budget.ts"
+      ],
+      "status": "Await baseline assertion."
+    },
+    {
+      "case": "AUD-001",
+      "hypothesis": "Serialized continuation state can exceed its own admitted cursor schema, or cannot advance within the mixed-source allocation.",
+      "ownerScopes": [
+        "services/main/src/modules/query/resources.ts",
+        "services/main/src/api-list.ts"
+      ],
+      "status": "A first-page 422 does not prove cursor round-trip; record actual assertion location."
+    },
+    {
+      "case": "D5-003",
+      "hypothesis": "Request-time qualifyContent caches only by joint source/graph position and performs full eligibility inventory audits on cold/advanced reads.",
+      "ownerScopes": [
+        "services/main/src/modules/content-publication/search.ts",
+        "services/main/src/modules/content-publication/eligibility-state.ts"
+      ],
+      "status": "Await trace; no requirement to weaken eligibility or privacy."
+    },
+    {
+      "case": "D5-006-zones",
+      "hypothesis": "An internal 8-candidate Zone page rejects a next cursor instead of bounded selection/traversal.",
+      "ownerScopes": [
+        "services/main/src/modules/onboarding/suggestions.ts",
+        "services/main/src/modules/zone/publication.ts"
+      ],
+      "status": "Await 8/9/10 public assertions."
+    },
+    {
+      "case": "D5-006-ratings",
+      "hypothesis": "An internal 100-slot verifier ceiling has become a public total population cap.",
+      "ownerScopes": [
+        "services/main/src/modules/rating/global-aggregate.ts",
+        "services/main/src/modules/rating/aggregate-inventory.ts"
+      ],
+      "status": "Await 100/101/102 public assertions."
+    }
+  ]
+}

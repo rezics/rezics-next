@@ -33,6 +33,10 @@ export const personaNames = [
 export type PersonaName = (typeof personaNames)[number];
 type Call = (method: string, path: string, body?: unknown, key?: string,
   options?: { headers?: Record<string, string>; bytes?: Uint8Array;
+    /** Observe one raw API answer, including unavailable, without the preparation retry policy. */
+    retry?: boolean;
+    /** The caller may leave while the real server is still doing work. */
+    signal?: AbortSignal;
     /** Inspect the first preparation answer when deliberately preparing pending work. */
     settle?: boolean }) => Promise<Response>;
 export interface PersonaSession {
@@ -127,7 +131,7 @@ export function personaSession(
           try {
             response = await fetch(url, {
             method, headers, redirect: 'manual',
-            signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+            signal: AbortSignal.any([signal, AbortSignal.timeout(30_000), ...(options?.signal ? [options.signal] : [])]),
             ...(options?.bytes ? { body: new Blob([new Uint8Array(options.bytes)]) }
               : body === undefined ? {} : { body: JSON.stringify(body) }),
             });
@@ -166,7 +170,7 @@ export function personaSession(
           await response.body?.cancel();
         }
       };
-      const send = () => base === main
+      const send = () => base === main && options?.retry !== false
         ? outcomeResponse(request, read ? 45_000 : 30_000,
           { method, path: url.pathname + url.search, idempotencyKey: commandKey })
         : request(AbortSignal.timeout(read ? 45_000 : 30_000));
@@ -523,7 +527,7 @@ export function retainPersonaRealm(sessions: PersonaSessions): RetainedPersonaRe
 /** Starts an independent application lifetime against the caller's isolated restored
  * environment. No Realm, membership, role or author is created during restoration. */
 export async function restorePersonaRealms(records: readonly RetainedPersonaRealm[],
-  options: Pick<PersonaOptions, 'rankingAt'> = {}): Promise<PersonaSessions[]> {
+  options: Pick<PersonaOptions, 'rankingAt' | 'graphEndpoint' | 'observeMain'> = {}): Promise<PersonaSessions[]> {
   if (!records.length) throw new Error('Restored persona Realms are missing');
   const operator = records[0]!.identities.operator;
   if (records.some(record => record.identities.operator.accountId !== operator.accountId))
