@@ -1,0 +1,1128 @@
+{
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2782",
+  "reviewer": {
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "independent": true,
+    "nestedAgents": false
+  },
+  "completedAt": "2026-10-18T20:12:38.312904+00:00",
+  "outcome": {
+    "review": "complete",
+    "acceptance": "changes_requested",
+    "contrast": "passed_for_measured_states",
+    "keyboard": "invalid_input_and_input_group_need_distinct_focus_indicator",
+    "settings": "unverified_auth_configuration_block",
+    "automaticLanding": false
+  },
+  "source": {
+    "branch": "goal/g-2782",
+    "initiallyClean": true,
+    "initialSha": "952b35d77b4e09e1774d18d94e5e832a2a6e876d",
+    "pinnedRef": "wave/audit-20261019",
+    "sha": "8f07c6b4e834dea67898513f00032b29c5fe05d9",
+    "pinCommand": "git reset --hard 8f07c6b4e834dea67898513f00032b29c5fe05d9",
+    "heldUnchangedDuringAllChecks": true,
+    "buildCommits": [
+      "535fbcdaf1",
+      "65ceedab66"
+    ],
+    "note": "Pinned the initially clean isolated branch before any checks. Later wave advances were not adopted. Only the requested review JSON is a tracked change."
+  },
+  "method": {
+    "skills": [
+      ".agents/skills/goal-worker/SKILL.md",
+      ".agents/skills/storybook-ui-review/SKILL.md",
+      ".agents/skills/local-development/SKILL.md",
+      ".agents/skills/product-audit/SKILL.md"
+    ],
+    "browserFallback": "Browser/MCP servers are disabled for Goal workers. Used the repository official Storybook/Vitest Playwright browser provider, existing Playwright Chromium for bounded app probes, and scripts/qa/story-screenshots.ts captureStoryScreenshot. No browser framework installed.",
+    "harness": "goalctl test dispatches the exact three files through Task storybook:test. Temporary review-only config extends apps/web/vitest.config.ts; no component, story, existing test helper or assertion changed.",
+    "screenshotReview": "Viewed the actual PNG files listed in imagesActuallyViewed using tools.view_image. File creation/counts alone were not acceptance.",
+    "viewports": {
+      "desktop": {
+        "width": 1440,
+        "height": 1000
+      },
+      "phone": {
+        "width": 390,
+        "height": 844
+      },
+      "nativeDefault": {
+        "width": 1200,
+        "height": 900
+      }
+    },
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "statePreparation": "Existing story plays run first; review afterEach waits for fonts/two animation frames, disables transitions/animations, sets viewport and root theme, blurs, moves the native pointer, then uses storybook/test userEvent.tab. Rest, native hover and keyboard focus are separately recorded for selected stories.",
+    "compositing": "Independent browser canvas paints each ancestor background then field fill then boundary color; thumb is composited on its track. Uses sRGB relative luminance and (Lmax+0.05)/(Lmin+0.05). Computed enabled-control measurements are separated from actual PNG samples. Computed disabled colors omit group opacity and are not used for acceptance.",
+    "pngMeasurement": "Pillow reads actual generated PNG pixels at floored recorded CSS-pixel coordinates; no image transformations. Contrast uses sRGB relative luminance. Samples use straight boundary midpoints and solid interiors, away from rounded corners; fractional placement and inset shadows can affect sampled pixels. These are point samples, not an exhaustive edge scan. Disabled samples include rendered group opacity; the 3:1 enabled-control criterion excludes disabled controls.",
+    "measurementLimit": "Point samples of straight edges/interiors, not exhaustive per-pixel edge minima, all browsers, OS rendering, zoom or device scales. Invalid-state contrast measured through computed compositing; PNG pixel sampling concentrates on empty/rest, sizes, disabled and actual Accounts name/email fields."
+  },
+  "recordedJobLauncher": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+  "checks": [
+    {
+      "job": "96a932d2-acc2-489f-a693-5ea31c28ece6",
+      "command": "bun scripts/goal/goalctl.ts test packages/ui/src/components/input.stories.tsx packages/ui/src/components/input-group.stories.tsx packages/ui/src/components/switch.stories.tsx",
+      "exitStatus": 0,
+      "status": "passed",
+      "resultClass": "passed",
+      "log": ".temp/goal/jobs/96a932d2-acc2-489f-a693-5ea31c28ece6.log",
+      "qaRun": "20261018t195308-c568fd",
+      "filesPassed": 3,
+      "storiesPassed": 30,
+      "durationSeconds": 22.71,
+      "assertions": "Unmodified story interactions, control contrast/position assertions and configured a11y checks."
+    },
+    {
+      "job": "3e8ac1e6-b2bc-4e59-a3b6-e87a6adf46f1",
+      "command": "bun scripts/goal/goalctl.ts test packages/ui/src/components/input.stories.tsx packages/ui/src/components/input-group.stories.tsx packages/ui/src/components/switch.stories.tsx --config ../../.temp/control-review/vitest.config.mts",
+      "exitStatus": 0,
+      "status": "passed",
+      "resultClass": "passed",
+      "log": ".temp/goal/jobs/3e8ac1e6-b2bc-4e59-a3b6-e87a6adf46f1.log",
+      "qaRun": "20261018t195624-2bc3b5",
+      "filesPassed": 3,
+      "storiesPassed": 30,
+      "durationSeconds": 36.65,
+      "purpose": "Same three story files with temporary afterEach measurements, native pointer hover, keyboard traversal and native screenshot capture; original assertions unchanged.",
+      "measurements": 104,
+      "additionalPngs": 103,
+      "captureWarning": "InputGroup EmptyFields_dark_desktop_rest native capture timed out at 5000 ms. Measurement exists; that PNG does not. Other dark phone rest, native 1200x900 dark rest and dark desktop focus PNGs were viewed. This is a missing capture, not a failing contrast assertion."
+    },
+    {
+      "job": "81f00b87-ff0b-4953-a3b8-030a49319897",
+      "command": "bun scripts/goal/goalctl.ts test .temp/control-review/apps.test.ts",
+      "exitStatus": 1,
+      "status": "failed",
+      "resultClass": "setup",
+      "log": ".temp/goal/jobs/81f00b87-ff0b-4953-a3b8-030a49319897.log",
+      "outcomeAssertionReached": false,
+      "reason": "Bun treated the hidden-directory argument as a filter and found no files. Corrected only invocation to ./.temp/control-review/apps.test.ts."
+    },
+    {
+      "job": "1be69ac3-742a-4420-8794-af6e2766e502",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/control-review/apps.test.ts",
+      "exitStatus": 0,
+      "status": "passed",
+      "resultClass": "passed",
+      "log": ".temp/goal/jobs/1be69ac3-742a-4420-8794-af6e2766e502.log",
+      "testsPassed": 1,
+      "durationSeconds": 199.19,
+      "interpretation": "Read-only artifact collection probe completed. It records route/setup blocks and has no app acceptance assertions; its exit 0 does not prove Settings or registration acceptance."
+    },
+    {
+      "job": "e1faab4e-3071-4e25-9b77-15074bf98b82",
+      "step": 1,
+      "command": "env REVIEW_APPS_RETRY=1 bun scripts/goal/goalctl.ts test ./.temp/control-review/apps.test.ts",
+      "status": "passed",
+      "resultClass": "passed",
+      "exitStatus": 0,
+      "testsPassed": 1,
+      "durationSeconds": 33.96,
+      "log": ".temp/goal/jobs/e1faab4e-3071-4e25-9b77-15074bf98b82.1.log",
+      "purpose": "Targeted Accounts light-desktop retry after initial dynamic-module setup error; no repeat of Settings or successful other contexts."
+    },
+    {
+      "job": "e1faab4e-3071-4e25-9b77-15074bf98b82",
+      "step": 2,
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/control-review/invalid-focus.test.ts",
+      "executorCommand": "/bin/sh -c bun scripts/goal/goalctl.ts test ./.temp/control-review/invalid-focus.test.ts",
+      "status": "failed",
+      "resultClass": "assertion",
+      "exitStatus": 1,
+      "testsFailed": 8,
+      "expectCalls": 24,
+      "outcomeAssertionReached": true,
+      "assertionLocation": ".temp/control-review/invalid-focus.test.ts:13",
+      "log": ".temp/goal/jobs/e1faab4e-3071-4e25-9b77-15074bf98b82.2.log",
+      "reason": "Both controls, both themes, both viewports receive focus but have identical boundary and ring before/after keyboard focus.",
+      "limitation": "Diagnostic asserts previously collected live-browser observations in measurements.ndjson. It does not launch a browser or respond to a subsequent source fix by itself; regenerate observations with the temporary Vitest config before using it for a fix review."
+    }
+  ],
+  "coverage": {
+    "storyFiles": [
+      "packages/ui/src/components/input.stories.tsx",
+      "packages/ui/src/components/input-group.stories.tsx",
+      "packages/ui/src/components/switch.stories.tsx"
+    ],
+    "nativeStoriesPassed": 30,
+    "measuredRecords": 104,
+    "generatedReviewPngs": 103,
+    "generatedNativePngsPerRun": 30,
+    "viewedImages": 48,
+    "stories": [
+      {
+        "story": "rezics-ui-input--disabled",
+        "export": "Disabled",
+        "themes": [
+          "dark",
+          "light"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ],
+        "states": [
+          "rest"
+        ],
+        "records": 4
+      },
+      {
+        "story": "rezics-ui-input--empty-fields",
+        "export": "EmptyFields",
+        "themes": [
+          "dark",
+          "light"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ],
+        "states": [
+          "hover",
+          "keyboard_focus",
+          "rest"
+        ],
+        "records": 12
+      },
+      {
+        "story": "rezics-ui-input--invalid",
+        "export": "Invalid",
+        "themes": [
+          "dark",
+          "light"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ],
+        "states": [
+          "hover",
+          "keyboard_focus",
+          "rest"
+        ],
+        "records": 12
+      },
+      {
+        "story": "rezics-ui-input--sizes",
+        "export": "Sizes",
+        "themes": [
+          "dark",
+          "light"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ],
+        "states": [
+          "rest"
+        ],
+        "records": 4
+      },
+      {
+        "story": "rezics-ui-input-group--disabled",
+        "export": "Disabled",
+        "themes": [
+          "dark",
+          "light"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ],
+        "states": [
+          "rest"
+        ],
+        "records": 4
+      },
+      {
+        "story": "rezics-ui-input-group--empty-fields",
+        "export": "EmptyFields",
+        "themes": [
+          "dark",
+          "light"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ],
+        "states": [
+          "hover",
+          "keyboard_focus",
+          "rest"
+        ],
+        "records": 12
+      },
+      {
+        "story": "rezics-ui-input-group--invalid",
+        "export": "Invalid",
+        "themes": [
+          "dark",
+          "light"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ],
+        "states": [
+          "hover",
+          "keyboard_focus",
+          "rest"
+        ],
+        "records": 12
+      },
+      {
+        "story": "rezics-ui-input-group--long-content",
+        "export": "LongContent",
+        "themes": [
+          "dark",
+          "light"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ],
+        "states": [
+          "rest"
+        ],
+        "records": 4
+      },
+      {
+        "story": "rezics-ui-input-group--sizes",
+        "export": "Sizes",
+        "themes": [
+          "dark",
+          "light"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ],
+        "states": [
+          "rest"
+        ],
+        "records": 4
+      },
+      {
+        "story": "rezics-ui-switch--disabled",
+        "export": "Disabled",
+        "themes": [
+          "dark",
+          "light"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ],
+        "states": [
+          "rest"
+        ],
+        "records": 4
+      },
+      {
+        "story": "rezics-ui-switch--invalid",
+        "export": "Invalid",
+        "themes": [
+          "dark",
+          "light"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ],
+        "states": [
+          "hover",
+          "keyboard_focus",
+          "rest"
+        ],
+        "records": 12
+      },
+      {
+        "story": "rezics-ui-switch--on-and-off",
+        "export": "OnAndOff",
+        "themes": [
+          "dark",
+          "light"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ],
+        "states": [
+          "hover",
+          "keyboard_focus",
+          "rest"
+        ],
+        "records": 12
+      },
+      {
+        "story": "rezics-ui-switch--sizes",
+        "export": "Sizes",
+        "themes": [
+          "dark",
+          "light"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ],
+        "states": [
+          "rest"
+        ],
+        "records": 4
+      },
+      {
+        "story": "rezics-ui-switch--with-description",
+        "export": "WithDescription",
+        "themes": [
+          "dark",
+          "light"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ],
+        "states": [
+          "rest"
+        ],
+        "records": 4
+      }
+    ],
+    "parentContexts": [
+      "background/card/muted story surfaces",
+      "Field labels, errors and disabled groups",
+      "InputGroup prefix, textarea, trailing action and long-content constraint",
+      "Switch label and description wrapping",
+      "Actual Accounts sign-up card and responsive page frame"
+    ],
+    "horizontalOverflowRecords": 0,
+    "visualObservations": [
+      "Enabled empty controls remain identifiable without entered text.",
+      "Disabled controls are visibly dimmed and remain disabled in story interactions; disabled controls are excluded from the 3:1 enabled-control threshold.",
+      "On/off switch thumbs remain inside tracks with distinct left/right positions for sm/md/lg in both themes and viewports. Existing OnAndOff and OnAndOffDark story plays pass Tab, Space on, Space off, contrast and position assertions.",
+      "Enabled noninvalid field and switch keyboard focus changes boundary/ring; invalid switch focus adds offset/gap.",
+      "No clipping, overlap or horizontal overflow found in viewed layouts. Long InputGroup content stays within its field and trailing action remains intact.",
+      "Invalid Input and InputGroup retain an error ring at rest and on keyboard focus; details in findings."
+    ]
+  },
+  "measurements": {
+    "contrast": [
+      {
+        "theme": "light",
+        "requiredRatio": 3,
+        "compositedComputedMinima": {
+          "boundaryAgainstOutside": 3.4677091053337943,
+          "boundaryAgainstFill": 3.2351133160277277,
+          "trackAgainstOutside": 3.4677091053337943,
+          "thumbAgainstTrack": 3.792680616432581
+        },
+        "pngSampleMinima": {
+          "boundaryAgainstOutside": 3.247640390401708,
+          "boundaryAgainstFill": 3.029805659447528,
+          "trackAgainstOutside": 3.516150312663801,
+          "thumbAgainstTrack": 3.79268061643258
+        },
+        "accountsPngSampleMinima": {
+          "boundaryAgainstOutside": 3.541332460024322,
+          "boundaryAgainstFill": 3.2883351379068837
+        },
+        "result": "All sampled enabled boundaries/tracks/thumbs meet 3:1. This does not resolve the invalid-field focus-indicator issue."
+      },
+      {
+        "theme": "dark",
+        "requiredRatio": 3,
+        "compositedComputedMinima": {
+          "boundaryAgainstOutside": 3.646707311404599,
+          "boundaryAgainstFill": 3.352678675784677,
+          "trackAgainstOutside": 3.646707311404599,
+          "thumbAgainstTrack": 3.1420292841175526
+        },
+        "pngSampleMinima": {
+          "boundaryAgainstOutside": 3.4501165535079465,
+          "boundaryAgainstFill": 3.1719387409412123,
+          "trackAgainstOutside": 3.596818334082641,
+          "thumbAgainstTrack": 3.1420292841175526
+        },
+        "accountsPngSampleMinima": {
+          "boundaryAgainstOutside": 4.061805643391861,
+          "boundaryAgainstFill": 3.760507686087824
+        },
+        "result": "All sampled enabled boundaries/tracks/thumbs meet 3:1. This does not resolve the invalid-field focus-indicator issue."
+      }
+    ],
+    "switchSurfaceContrasts": [
+      {
+        "theme": "light",
+        "surface": "background",
+        "checked": false,
+        "trackAgainstOutside": 3.792680616432581,
+        "thumbAgainstTrack": 3.792680616432581,
+        "offset": -10
+      },
+      {
+        "theme": "light",
+        "surface": "background",
+        "checked": true,
+        "trackAgainstOutside": 5.554930349600407,
+        "thumbAgainstTrack": 5.554930349600407,
+        "offset": 10
+      },
+      {
+        "theme": "light",
+        "surface": "card",
+        "checked": false,
+        "trackAgainstOutside": 3.989942298407384,
+        "thumbAgainstTrack": 3.792680616432581,
+        "offset": -10
+      },
+      {
+        "theme": "light",
+        "surface": "card",
+        "checked": true,
+        "trackAgainstOutside": 5.843848667496036,
+        "thumbAgainstTrack": 5.554930349600407,
+        "offset": 10
+      },
+      {
+        "theme": "light",
+        "surface": "muted",
+        "checked": false,
+        "trackAgainstOutside": 3.4677091053337943,
+        "thumbAgainstTrack": 3.792680616432581,
+        "offset": -10
+      },
+      {
+        "theme": "light",
+        "surface": "muted",
+        "checked": true,
+        "trackAgainstOutside": 5.078962480875376,
+        "thumbAgainstTrack": 5.554930349600407,
+        "offset": 10
+      },
+      {
+        "theme": "dark",
+        "surface": "background",
+        "checked": false,
+        "trackAgainstOutside": 4.719358405245393,
+        "thumbAgainstTrack": 3.1420292841175526,
+        "offset": -10
+      },
+      {
+        "theme": "dark",
+        "surface": "background",
+        "checked": true,
+        "trackAgainstOutside": 8.267476789288835,
+        "thumbAgainstTrack": 7.980531649378945,
+        "offset": 10
+      },
+      {
+        "theme": "dark",
+        "surface": "card",
+        "checked": false,
+        "trackAgainstOutside": 4.353717608779681,
+        "thumbAgainstTrack": 3.1420292841175526,
+        "offset": -10
+      },
+      {
+        "theme": "dark",
+        "surface": "card",
+        "checked": true,
+        "trackAgainstOutside": 7.626939127508902,
+        "thumbAgainstTrack": 7.980531649378945,
+        "offset": 10
+      },
+      {
+        "theme": "dark",
+        "surface": "muted",
+        "checked": false,
+        "trackAgainstOutside": 3.646707311404599,
+        "thumbAgainstTrack": 3.1420292841175526,
+        "offset": -10
+      },
+      {
+        "theme": "dark",
+        "surface": "muted",
+        "checked": true,
+        "trackAgainstOutside": 6.388382798148544,
+        "thumbAgainstTrack": 7.980531649378945,
+        "offset": 10
+      }
+    ],
+    "switchPosition": [
+      {
+        "size": "sm",
+        "trackWidth": 36,
+        "trackHeight": 20,
+        "thumbWidth": 12,
+        "thumbHeight": 12,
+        "offCenterOffset": [
+          -8
+        ],
+        "onCenterOffset": [
+          8
+        ],
+        "travel": 16,
+        "themes": [
+          "light",
+          "dark"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ]
+      },
+      {
+        "size": "md",
+        "trackWidth": 48,
+        "trackHeight": 28,
+        "thumbWidth": 20,
+        "thumbHeight": 20,
+        "offCenterOffset": [
+          -10
+        ],
+        "onCenterOffset": [
+          10
+        ],
+        "travel": 20,
+        "themes": [
+          "light",
+          "dark"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ]
+      },
+      {
+        "size": "lg",
+        "trackWidth": 56,
+        "trackHeight": 32,
+        "thumbWidth": 24,
+        "thumbHeight": 24,
+        "offCenterOffset": [
+          -12
+        ],
+        "onCenterOffset": [
+          12
+        ],
+        "travel": 24,
+        "themes": [
+          "light",
+          "dark"
+        ],
+        "viewports": [
+          "desktop",
+          "phone"
+        ]
+      }
+    ],
+    "narrowDarkOffThumb": {
+      "capture": ".temp/control-review/rendered/packages-ui-src-components-switch.stories.tsx/Sizes_dark_desktop_rest.png",
+      "kind": "switch",
+      "theme": "dark",
+      "viewport": "desktop",
+      "story": "Sizes",
+      "index": 4,
+      "size": "lg",
+      "checked": false,
+      "disabled": false,
+      "offset": -12,
+      "points": {
+        "track": [
+          74,
+          120.0
+        ],
+        "thumb": [
+          40.0,
+          120.0
+        ],
+        "outside": [
+          86,
+          120.0
+        ]
+      },
+      "track": [
+        122,
+        128,
+        136
+      ],
+      "thumb": [
+        231,
+        228,
+        223
+      ],
+      "outside": [
+        13,
+        18,
+        24
+      ],
+      "trackRatio": 4.719358405245393,
+      "thumbRatio": 3.1420292841175526
+    },
+    "narrowLightBoundaryAgainstFill": {
+      "capture": ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/EmptyFields_light_desktop_rest.png",
+      "kind": "input-group",
+      "theme": "light",
+      "viewport": "desktop",
+      "story": "EmptyFields",
+      "index": 4,
+      "disabled": false,
+      "points": {
+        "boundary": [
+          41,
+          595.25
+        ],
+        "outside": [
+          35,
+          595.25
+        ],
+        "inside": [
+          330.79999999999995,
+          595.25
+        ]
+      },
+      "boundary": [
+        134,
+        130,
+        122
+      ],
+      "outside": [
+        239,
+        236,
+        231
+      ],
+      "inside": [
+        228,
+        229,
+        228
+      ],
+      "outsideRatio": 3.247640390401708,
+      "insideRatio": 3.029805659447528
+    },
+    "invalidFocus": [
+      {
+        "component": "input",
+        "theme": "light",
+        "viewport": "desktop",
+        "restFocused": false,
+        "keyboardFocused": true,
+        "sameBoundary": true,
+        "sameRing": true,
+        "boundary": "rgb(196, 40, 64)",
+        "ring": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.538317 0.179847 0.0612445 / 0.24) 0px 0px 0px 3px, rgba(0, 0, 0, 0.04) 0px 1px 2px 0px inset",
+        "restImage": ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Invalid_light_desktop_rest.png",
+        "focusImage": ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Invalid_light_desktop_keyboard_focus.png"
+      },
+      {
+        "component": "input",
+        "theme": "light",
+        "viewport": "phone",
+        "restFocused": false,
+        "keyboardFocused": true,
+        "sameBoundary": true,
+        "sameRing": true,
+        "boundary": "rgb(196, 40, 64)",
+        "ring": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.538317 0.179847 0.0612445 / 0.24) 0px 0px 0px 3px, rgba(0, 0, 0, 0.04) 0px 1px 2px 0px inset",
+        "restImage": ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Invalid_light_phone_rest.png",
+        "focusImage": ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Invalid_light_phone_keyboard_focus.png"
+      },
+      {
+        "component": "input",
+        "theme": "dark",
+        "viewport": "desktop",
+        "restFocused": false,
+        "keyboardFocused": true,
+        "sameBoundary": true,
+        "sameRing": true,
+        "boundary": "rgb(240, 97, 122)",
+        "ring": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.680189 0.172386 0.0381266 / 0.4) 0px 0px 0px 3px, rgba(0, 0, 0, 0.04) 0px 1px 2px 0px inset",
+        "restImage": ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Invalid_dark_desktop_rest.png",
+        "focusImage": ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Invalid_dark_desktop_keyboard_focus.png"
+      },
+      {
+        "component": "input",
+        "theme": "dark",
+        "viewport": "phone",
+        "restFocused": false,
+        "keyboardFocused": true,
+        "sameBoundary": true,
+        "sameRing": true,
+        "boundary": "rgb(240, 97, 122)",
+        "ring": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.680189 0.172386 0.0381266 / 0.4) 0px 0px 0px 3px, rgba(0, 0, 0, 0.04) 0px 1px 2px 0px inset",
+        "restImage": ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Invalid_dark_phone_rest.png",
+        "focusImage": ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Invalid_dark_phone_keyboard_focus.png"
+      },
+      {
+        "component": "input-group",
+        "theme": "light",
+        "viewport": "desktop",
+        "restFocused": false,
+        "keyboardFocused": true,
+        "sameBoundary": true,
+        "sameRing": true,
+        "boundary": "rgb(196, 40, 64)",
+        "ring": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.538317 0.179847 0.0612445 / 0.24) 0px 0px 0px 3px, rgba(0, 0, 0, 0.04) 0px 1px 2px 0px inset",
+        "restImage": ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Invalid_light_desktop_rest.png",
+        "focusImage": ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Invalid_light_desktop_keyboard_focus.png"
+      },
+      {
+        "component": "input-group",
+        "theme": "light",
+        "viewport": "phone",
+        "restFocused": false,
+        "keyboardFocused": true,
+        "sameBoundary": true,
+        "sameRing": true,
+        "boundary": "rgb(196, 40, 64)",
+        "ring": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.538317 0.179847 0.0612445 / 0.24) 0px 0px 0px 3px, rgba(0, 0, 0, 0.04) 0px 1px 2px 0px inset",
+        "restImage": ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Invalid_light_phone_rest.png",
+        "focusImage": ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Invalid_light_phone_keyboard_focus.png"
+      },
+      {
+        "component": "input-group",
+        "theme": "dark",
+        "viewport": "desktop",
+        "restFocused": false,
+        "keyboardFocused": true,
+        "sameBoundary": true,
+        "sameRing": true,
+        "boundary": "rgb(240, 97, 122)",
+        "ring": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.680189 0.172386 0.0381266 / 0.4) 0px 0px 0px 3px, rgba(0, 0, 0, 0.04) 0px 1px 2px 0px inset",
+        "restImage": ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Invalid_dark_desktop_rest.png",
+        "focusImage": ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Invalid_dark_desktop_keyboard_focus.png"
+      },
+      {
+        "component": "input-group",
+        "theme": "dark",
+        "viewport": "phone",
+        "restFocused": false,
+        "keyboardFocused": true,
+        "sameBoundary": true,
+        "sameRing": true,
+        "boundary": "rgb(240, 97, 122)",
+        "ring": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.680189 0.172386 0.0381266 / 0.4) 0px 0px 0px 3px, rgba(0, 0, 0, 0.04) 0px 1px 2px 0px inset",
+        "restImage": ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Invalid_dark_phone_rest.png",
+        "focusImage": ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Invalid_dark_phone_keyboard_focus.png"
+      }
+    ],
+    "invalidPngDifferences": [
+      {
+        "component": "input",
+        "theme": "light",
+        "viewport": "desktop",
+        "differenceBoundingBox": null
+      },
+      {
+        "component": "input",
+        "theme": "light",
+        "viewport": "phone",
+        "differenceBoundingBox": null
+      },
+      {
+        "component": "input",
+        "theme": "dark",
+        "viewport": "desktop",
+        "differenceBoundingBox": null
+      },
+      {
+        "component": "input",
+        "theme": "dark",
+        "viewport": "phone",
+        "differenceBoundingBox": null
+      },
+      {
+        "component": "input-group",
+        "theme": "light",
+        "viewport": "desktop",
+        "differenceBoundingBox": [
+          132,
+          60,
+          165,
+          79
+        ]
+      },
+      {
+        "component": "input-group",
+        "theme": "light",
+        "viewport": "phone",
+        "differenceBoundingBox": [
+          132,
+          58,
+          171,
+          80
+        ]
+      },
+      {
+        "component": "input-group",
+        "theme": "dark",
+        "viewport": "desktop",
+        "differenceBoundingBox": [
+          132,
+          60,
+          165,
+          79
+        ]
+      },
+      {
+        "component": "input-group",
+        "theme": "dark",
+        "viewport": "phone",
+        "differenceBoundingBox": [
+          132,
+          58,
+          171,
+          80
+        ]
+      },
+      {
+        "component": "switch",
+        "theme": "light",
+        "viewport": "desktop",
+        "differenceBoundingBox": [
+          19,
+          21,
+          77,
+          59
+        ]
+      },
+      {
+        "component": "switch",
+        "theme": "light",
+        "viewport": "phone",
+        "differenceBoundingBox": [
+          19,
+          21,
+          77,
+          59
+        ]
+      },
+      {
+        "component": "switch",
+        "theme": "dark",
+        "viewport": "desktop",
+        "differenceBoundingBox": [
+          19,
+          21,
+          77,
+          59
+        ]
+      },
+      {
+        "component": "switch",
+        "theme": "dark",
+        "viewport": "phone",
+        "differenceBoundingBox": [
+          19,
+          21,
+          77,
+          59
+        ]
+      }
+    ],
+    "rawMeasurements": ".temp/control-review/rendered/measurements.ndjson",
+    "rawPixelEvidence": ".temp/control-review/pixel-evidence.json"
+  },
+  "findings": [
+    {
+      "id": "D4-001-invalid-keyboard-focus",
+      "status": "confirmed",
+      "severity": "medium",
+      "classOfDefect": "Invalid-state styling overrides the visible keyboard focus indicator.",
+      "outcome": "A keyboard user arriving at an invalid empty Input receives DOM focus without a changed control boundary/ring. The invalid InputGroup likewise has no changed boundary/ring; its populated story shows only native text selection.",
+      "observedComponents": [
+        "Input Invalid (empty)",
+        "InputGroup Invalid (populated prefix field)"
+      ],
+      "themes": [
+        "light",
+        "dark"
+      ],
+      "viewports": [
+        "desktop",
+        "phone"
+      ],
+      "evidence": {
+        "assertionFile": ".temp/control-review/invalid-focus.test.ts:13",
+        "failedCases": 8,
+        "outcomeAssertionReached": true,
+        "log": ".temp/goal/jobs/e1faab4e-3071-4e25-9b77-15074bf98b82.2.log",
+        "measurements": "measurements.invalidFocus",
+        "screenshots": "Rest/focus pairs are named per case in measurements.invalidFocus; imagesActuallyViewed lists the subset actually opened by the reviewer.",
+        "pngComparison": "All four empty Input rest/focus PNG pairs have no pixel differences. InputGroup differences are confined to the text-selection rectangle (desktop [132,60,165,79], phone [132,58,171,80]); surrounding boundary/ring stays identical. Screenshot caret behavior is not used as a distinct control focus indicator."
+      },
+      "causeLocations": [
+        {
+          "path": "packages/ui/src/components/input.tsx",
+          "line": 19,
+          "detail": "focus-visible styles are overridden by aria-invalid/data-invalid border and ring rules at lines 20-23."
+        },
+        {
+          "path": "packages/ui/src/components/input-group.tsx",
+          "line": 32,
+          "detail": "has focus-visible border/ring styles are overridden by invalid descendant rules at lines 33-34; inner input/textarea suppress their own ring at lines 206-207 and 227-228."
+        }
+      ],
+      "assertionGap": "Existing Invalid story focus/boundary assertions pass because DOM focus and a contrast-compliant error border are present; they do not require a distinct visible focus cue.",
+      "inferenceBoundary": "The observed InputGroup story is populated. Empty invalid group input/textarea share the overriding rules, but those empty invalid combinations were not separately rendered.",
+      "fixOwner": "codex-2/max",
+      "requestedFix": "Preserve a visibly distinct keyboard-focus indicator when controls are invalid, across Input and InputGroup inputs/textareas, both themes. Keep invalid styling and regenerate rendered evidence before acceptance."
+    }
+  ],
+  "actualApps": {
+    "accounts": {
+      "path": "/sign-up",
+      "origins": [
+        "http://127.0.0.1:38497",
+        "http://127.0.0.1:32915"
+      ],
+      "result": "Rendered four empty enabled sign-up fields and consent checkbox; both themes at desktop and phone were inspected. No form submission or checkbox/preference change.",
+      "initialSetupFailure": "First light-desktop probe showed HTTP 200 error boundary: This page couldn\u2019t load. Accounts server log records TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:38497/app/client-providers.tsx.",
+      "retry": "Only the failed light-desktop context was retried; actual Create your REZICS Account form rendered and was viewed. Retry explicitly blurred autofocus for a true resting empty-field capture.",
+      "restCaveat": "Initial successful phone/dark rest captures have name autofocus; other fields are resting. Name/email nonfocused boundary pixels and light-desktop blurred retry are the basis of Accounts contrast samples.",
+      "unverified": "Security check unavailable in this environment (ACCOUNT_TURNSTILE_SITE_KEY absent); registration success is unverified and was not attempted.",
+      "evidence": [
+        ".temp/control-review/apps/results.json",
+        ".temp/control-review/apps/accounts.server.log",
+        ".temp/control-review/apps-retry/results.json",
+        ".temp/control-review/apps-retry/accounts.server.log"
+      ]
+    },
+    "settings": {
+      "path": "/en/settings",
+      "origin": "http://127.0.0.1:43361",
+      "result": "unverified",
+      "requestedThemes": [
+        "light",
+        "dark"
+      ],
+      "viewports": [
+        "desktop",
+        "phone"
+      ],
+      "redirectChain": [
+        {
+          "path": "/en/settings",
+          "status": 307
+        },
+        {
+          "path": "/auth/start?next=%2Fen%2Fsettings",
+          "status": 200
+        },
+        {
+          "path": "/auth/authorize?next=%2Fen%2Fsettings",
+          "status": 503
+        }
+      ],
+      "finalMessage": "Web OAuth client is not configured",
+      "controlsObserved": 0,
+      "responseCaveat": "Initial page.goto response was 200 for the auth/start document; captured document-response events and web server log identify the final auth/authorize 503. Blocked error page has no applied app theme; requested dark mode does not establish a dark Settings render.",
+      "reason": "No existing authorized signed-in fixture was available in the worktree, and the configured frontend OAuth path failed before Settings. No bypass, fixture authority grant or another audit account was used.",
+      "followUp": "Repeat actual signed-in Settings on/off and empty-control proof in both themes/viewports once authorized fixture and Web OAuth configuration are available.",
+      "evidence": [
+        ".temp/control-review/apps/results.json",
+        ".temp/control-review/apps/web.server.log"
+      ]
+    },
+    "lifecycle": {
+      "oneFrontendAtATime": true,
+      "boundSecondsPerServer": 180,
+      "allStartedServersStopped": true,
+      "sharedBackendRefreshResetImport": false,
+      "registrationSubmitted": false,
+      "preferencesChanged": false,
+      "authorityGranted": false,
+      "anotherAuditAccountUsed": false
+    }
+  },
+  "unverifiedConditions": [
+    "Authenticated Settings layout/control contrast, focus and responsive behavior: final auth/authorize 503, Web OAuth client is not configured.",
+    "Registration completion/security challenge: intentionally not submitted; security widget unavailable in current configuration.",
+    "One additional InputGroup dark-desktop resting PNG timed out; other dark rest contexts and desktop focused context inspected.",
+    "Empty invalid InputGroup input/textarea combinations: shared-style impact inferred from CSS, not separately rendered.",
+    "No new full suite, full app browser journey, persistent screenshot baseline or product changes were authorized or performed."
+  ],
+  "imagesActuallyViewed": [
+    ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Sizes_light_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Sizes_dark_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Sizes_light_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Sizes_dark_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-switch.stories.tsx/Sizes_light_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-switch.stories.tsx/Sizes_dark_phone_rest.png",
+    ".temp/control-review/apps-retry/.temp-control-review-accounts/accounts_light_desktop_rest.png",
+    ".temp/control-review/apps/.temp-control-review-accounts/accounts_light_phone_keyboard_focus.png",
+    ".temp/control-review/apps/.temp-control-review-accounts/accounts_dark_desktop_rest.png",
+    ".temp/control-review/apps/.temp-control-review-accounts/accounts_dark_phone_rest.png",
+    ".temp/control-review/apps/.temp-control-review-web/web_light_desktop_rest.png",
+    ".temp/control-review/apps/.temp-control-review-web/web_dark_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/EmptyFields_light_desktop_keyboard_focus.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Invalid_dark_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/EmptyFields_dark_desktop_keyboard_focus.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Invalid_dark_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_dark_desktop_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-switch.stories.tsx/Sizes_light_desktop_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/EmptyFields_light_phone_hover.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/EmptyFields_dark_phone_hover.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/LongContent_dark_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/LongContent_light_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-switch.stories.tsx/WithDescription_light_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-switch.stories.tsx/WithDescription_dark_desktop_rest.png",
+    ".artifacts/qa/20261018t195308-c568fd/story-screenshots/packages-ui-src-components-input.stories.tsx/EmptyFields.png",
+    ".artifacts/qa/20261018t195308-c568fd/story-screenshots/packages-ui-src-components-input.stories.tsx/EmptyFieldsDark.png",
+    ".artifacts/qa/20261018t195308-c568fd/story-screenshots/packages-ui-src-components-input-group.stories.tsx/EmptyFields.png",
+    ".artifacts/qa/20261018t195308-c568fd/story-screenshots/packages-ui-src-components-input-group.stories.tsx/EmptyFieldsDark.png",
+    ".artifacts/qa/20261018t195308-c568fd/story-screenshots/packages-ui-src-components-switch.stories.tsx/OnAndOff.png",
+    ".artifacts/qa/20261018t195308-c568fd/story-screenshots/packages-ui-src-components-switch.stories.tsx/OnAndOffDark.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/EmptyFields_light_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/EmptyFields_dark_phone_keyboard_focus.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/EmptyFields_light_phone_keyboard_focus.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/EmptyFields_dark_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_light_phone_keyboard_focus.png",
+    ".temp/control-review/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_dark_phone_keyboard_focus.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Invalid_light_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Invalid_dark_phone_keyboard_focus.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Invalid_light_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Invalid_dark_phone_keyboard_focus.png",
+    ".temp/control-review/rendered/packages-ui-src-components-switch.stories.tsx/Invalid_light_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-switch.stories.tsx/Invalid_dark_phone_keyboard_focus.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Disabled_light_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input.stories.tsx/Disabled_dark_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Disabled_light_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-input-group.stories.tsx/Disabled_dark_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-switch.stories.tsx/Disabled_light_phone_rest.png",
+    ".temp/control-review/rendered/packages-ui-src-components-switch.stories.tsx/Disabled_dark_phone_rest.png"
+  ],
+  "artifactRetention": {
+    "requiredBeforeWorkerClose": true,
+    "manager": "audit-remediation-manager",
+    "roots": [
+      ".temp/control-review",
+      ".artifacts/qa/20261018t195308-c568fd",
+      ".artifacts/qa/20261018t195624-2bc3b5"
+    ],
+    "jobLogs": [
+      ".temp/goal/jobs/96a932d2-acc2-489f-a693-5ea31c28ece6.log",
+      ".temp/goal/jobs/3e8ac1e6-b2bc-4e59-a3b6-e87a6adf46f1.log",
+      ".temp/goal/jobs/81f00b87-ff0b-4953-a3b8-030a49319897.log",
+      ".temp/goal/jobs/1be69ac3-742a-4420-8794-af6e2766e502.log",
+      ".temp/goal/jobs/e1faab4e-3071-4e25-9b77-15074bf98b82.1.log",
+      ".temp/goal/jobs/e1faab4e-3071-4e25-9b77-15074bf98b82.2.log"
+    ],
+    "hashManifest": ".temp/control-review/proof-sha256.json",
+    "instruction": "Retain this JSON plus temporary measurement/capture code, measurement and pixel JSON, actual viewed PNGs, original QA artifacts and logs before worktree removal. Generated screenshots and credentials are not committed."
+  },
+  "delivery": {
+    "trackedFiles": [
+      "docs/goals/audit-remediation-20261019/control-review.json"
+    ],
+    "productChanges": false,
+    "originalAssertionsChanged": false,
+    "pushed": false,
+    "automaticLanding": false
+  }
+}
