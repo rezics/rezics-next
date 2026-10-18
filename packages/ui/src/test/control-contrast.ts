@@ -71,7 +71,7 @@ export async function expectInvalidFieldKeyboardFocus(control: HTMLElement, fram
   await settled(frame);
   const resting = getComputedStyle(frame);
   const border = resting.borderTopColor;
-  const outlineWidth = Number.parseFloat(resting.outlineWidth);
+  const outlineWidth = resting.outlineStyle === 'none' ? 0 : Number.parseFloat(resting.outlineWidth);
   const text = getComputedStyle(control).color;
   const value = (control as HTMLInputElement | HTMLTextAreaElement).value;
   await expectControlBoundary(frame);
