@@ -576,7 +576,8 @@ function factMatches(
           view.coverage.some((value) => {
             const entry = object(value);
             return (
-              entry?.realization === item.id &&
+              entry !== undefined &&
+              entry.realization === item.id &&
               entry.revision === item.revision &&
               entry.work === item.work &&
               entry.completeness === row.normalized
