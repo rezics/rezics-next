@@ -12,7 +12,8 @@ import { discloseNotifications } from '../disclosure/notifications.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import { PersonPreferencesStore } from '../preferences/store.ts';
 import type { Viewer } from '../suitability/policy.ts';
-import { notificationRecipientAllowed } from './recipient-policy.ts';
+import { notificationRecipientsAllowed } from './recipient-policy.ts';
+import { notificationGraphRead, notificationRead, notificationReadStep } from './request-budget.ts';
 import { relationshipRecipientPage, type RelationshipRecipients, type RecipientFrontier } from '../follows/recipients.ts';
 import { decodeReadCursor, encodeReadCursor } from '../work/read-session.ts';
 
@@ -263,14 +264,21 @@ export class NotificationStore {
     return (await this.resolveDigestSubjects([input]))[0]!;
   }
   async resolveDigestSubjects(inputs: readonly Parameters<NotificationSubjectReader['resolve']>[0][]) {
-    const subjects = await Promise.all(inputs.map(async input => {
-      const resolver = this.readSubjects.get(input.disclosureBasis) ?? this.defaultReadSubject;
-      const allowed = !input.actorAgent && !input.realm || await notificationRecipientAllowed(this.pool,input.principalId,
-        input.actorAgent ?? null,input.realm ?? null,input.relatedResource ?? null);
-      return { input, result: !allowed ? { status: 'undisclosed' as const }
-        : resolver ? await resolver.resolve(input) : { status: 'unavailable' as const } };
+    return notificationRead(undefined, () => notificationGraphRead(disclosurePoolReader(this.pool)?.environment,
+      async () => {
+        const recipients = inputs.map(input => ({ principal: input.principalId, actor: input.actorAgent,
+          realm: input.realm, resource: input.relatedResource }));
+        const allowed = await notificationRecipientsAllowed(this.pool, recipients);
+        const subjects: { input: Parameters<NotificationSubjectReader['resolve']>[0]; result: SubjectResolution }[] = [];
+        for (const [index, input] of inputs.entries()) {
+          const resolver = this.readSubjects.get(input.disclosureBasis) ?? this.defaultReadSubject;
+          subjects.push({ input, result: !allowed[index] ? { status: 'undisclosed' as const }
+            : resolver ? await notificationReadStep(() => resolver.resolve(input)) : { status: 'unavailable' as const } });
+        }
+        const disclosed = await notificationReadStep(() => discloseNotifications(this.pool, subjects, 'digest'));
+        const current = await notificationRecipientsAllowed(this.pool, recipients);
+        return disclosed.map((result, index) => current[index] ? result : { status: 'undisclosed' as const });
     }));
-    return discloseNotifications(this.pool, subjects, 'digest');
   }
   constructor(private readonly pool: Pool) {}
 
@@ -625,6 +633,14 @@ export class NotificationStore {
     selection: { view?: 'inbox' | 'saved' | 'done'; reason?: ProposalSubscriptionReason } = {},
     before?: string,
   ): Promise<StreamPage> {
+    return notificationRead(undefined, () => notificationGraphRead(disclosurePoolReader(this.pool)?.environment,
+      () => this.readStreamPage(principal, after, limit, selection, before)));
+  }
+
+  private async readStreamPage(principal: VerifiedPrincipal, after: { generation: string; sequence: string } | null,
+    limit: number, selection: { view?: 'inbox' | 'saved' | 'done'; reason?: ProposalSubscriptionReason },
+    before?: string,
+  ): Promise<StreamPage> {
     if (!Number.isInteger(limit) || limit < 1 || limit > NOTIFICATION_LIMITS.streamPage
       || (after && (!/^[1-9][0-9]{0,18}$/.test(after.generation) || !/^(0|[1-9][0-9]{0,18})$/.test(after.sequence))) ||
       (selection.view !== undefined && !['inbox', 'saved', 'done'].includes(selection.view)) ||
@@ -737,17 +753,21 @@ export class NotificationStore {
     const items: StreamItem[] = [];
     const resolutions: SubjectResolution[] = [];
     const pendingActors: { display: NonNullable<StreamItem['display']>; agent: string }[] = [];
-    for (const item of result.items) {
+    const recipients = result.items.map(({ raw }) => ({ principal: principalId!, actor: raw.actor_agent,
+      realm: raw.realm, resource: raw.group_key }));
+    const allowed = await notificationRecipientsAllowed(this.pool, recipients);
+    for (const [index, item] of result.items.entries()) {
       const { raw, ...base } = item;
       const resolver = this.readSubjects.get(raw.disclosure_basis) ?? this.defaultReadSubject;
-      if (!principalId || raw.state !== 'active' || !resolver || (raw.actor_agent || raw.realm)
-        && !await notificationRecipientAllowed(this.pool,principalId,raw.actor_agent,raw.realm,raw.group_key)) {
+      if (!principalId || raw.state !== 'active' || !resolver || !allowed[index]) {
         resolutions.push({ status: 'undisclosed' });
         items.push(base); continue; }
-      const resolved = await resolver.resolve({ principalId, owner: raw.subject_owner,
+      const resolved = await notificationReadStep(() => resolver.resolve({ principalId, owner: raw.subject_owner,
         ref: raw.subject_ref, revision: raw.subject_revision, disclosureBasis: raw.disclosure_basis,
-        realm: raw.realm, recipientReason: raw.reason, topic: raw.topic })
+        realm: raw.realm, recipientReason: raw.reason, topic: raw.topic,
+        actorAgent: raw.actor_agent, relatedResource: raw.group_key }))
         .catch(() => { throw new NotificationUnavailable('subject owner is unavailable'); });
+      if (resolved.status === 'unavailable') throw new NotificationUnavailable('subject owner is unavailable');
       resolutions.push(resolved);
       if (resolved.status !== 'available') { items.push(base); continue; }
       const fields = resolved.subject.fields;
@@ -758,10 +778,12 @@ export class NotificationStore {
         resources, context: DEFAULT_MEDIA_CONTEXT, language: null, channel: 'inbox',
       })).summaries).catch(() => { throw new NotificationUnavailable('notification display owner is unavailable'); }) : null;
       if (newWork) {
-        const current = await resolver.resolve({ principalId, owner: raw.subject_owner,
+        const current = await notificationReadStep(() => resolver.resolve({ principalId, owner: raw.subject_owner,
           ref: raw.subject_ref, revision: raw.subject_revision, disclosureBasis: raw.disclosure_basis,
-          realm: raw.realm, recipientReason: raw.reason, topic: raw.topic })
+          realm: raw.realm, recipientReason: raw.reason, topic: raw.topic,
+          actorAgent: raw.actor_agent, relatedResource: raw.group_key }))
           .catch(() => { throw new NotificationUnavailable('subject owner is unavailable'); });
+        if (current.status === 'unavailable') throw new NotificationUnavailable('subject owner is unavailable');
         if (current.status !== 'available' || current.subject.fields.linkTarget !== fields.linkTarget) {
           resolutions[resolutions.length - 1] = { status: 'undisclosed' };
           items.push(base); continue;
@@ -796,13 +818,17 @@ export class NotificationStore {
       });
       for (const item of pendingActors) item.display.actor = actors.get(item.agent) ?? null;
     }
-    const checked = await discloseNotifications(this.pool, items.map((item, index) => ({
+    const checked = await notificationReadStep(() => discloseNotifications(this.pool, items.map((item, index) => ({
       input: { principalId: principalId!, owner: result.items[index]!.raw.subject_owner,
         ref: result.items[index]!.raw.subject_ref, revision: result.items[index]!.raw.subject_revision,
         disclosureBasis: result.items[index]!.raw.disclosure_basis, realm: result.items[index]!.raw.realm },
       result: resolutions[index]!,
-      })), 'inbox', disclosureViewer(principal));
-    const disclosed = items.map((item, index) => checked[index]?.status === 'available'
+      })), 'inbox', disclosureViewer(principal)));
+    const currentRecipients = await notificationRecipientsAllowed(this.pool, recipients);
+    if (principalId && await this.transaction(client => this.reader(client, principal)) !== principalId) {
+      throw new NotificationDenied('recipient is inactive');
+    }
+    const disclosed = items.map((item, index) => currentRecipients[index] && checked[index]?.status === 'available'
       ? item : { ...item,
             state:
               item.state === 'active' && result.items[index]!.raw.proposal
@@ -817,6 +843,11 @@ export class NotificationStore {
 
   /** Exact visible count through 99; an unusually hidden-heavy inbox fails closed after 256 reads. */
   async unreadCount(principal: VerifiedPrincipal): Promise<{ generation: string; count: number; overflow: boolean }> {
+    return notificationRead(undefined, () => notificationGraphRead(disclosurePoolReader(this.pool)?.environment,
+      () => this.readUnreadCount(principal)));
+  }
+
+  private async readUnreadCount(principal: VerifiedPrincipal): Promise<{ generation: string; count: number; overflow: boolean }> {
     const { principalId, rows, generation } = await this.transaction(async client => {
       const principalId = await this.reader(client, principal);
       if (!principalId) return { principalId, rows: [], generation: '1' };
@@ -841,20 +872,38 @@ export class NotificationStore {
         ORDER BY i.sequence DESC LIMIT $2`, [principalId, NOTIFICATION_LIMITS.unreadScan + 1, generation])).rows;
       return { principalId, rows, generation };
     });
-    const subjects = [];
-    for (const row of rows.slice(0, NOTIFICATION_LIMITS.unreadScan)) {
+    const subjects: { ordinal: number; input: Parameters<NotificationSubjectReader['resolve']>[0]; result: SubjectResolution }[] = [];
+    const selected = rows.slice(0, NOTIFICATION_LIMITS.unreadScan);
+    const recipients = selected.map(row => ({ principal: principalId!, actor: row.actor_agent,
+      realm: row.realm, resource: row.group_key }));
+    const allowed = await notificationRecipientsAllowed(this.pool, recipients);
+    let candidates = 0, nextFence: number = NOTIFICATION_LIMITS.unreadCap, count = 0;
+    for (const [index, row] of selected.entries()) {
       const resolver = this.readSubjects.get(row.disclosure_basis) ?? this.defaultReadSubject;
-      if (!resolver) continue;
-      const resolved = await resolver.resolve({ principalId: principalId!, owner: row.subject_owner,
-        ref: row.subject_ref, revision: row.subject_revision, disclosureBasis: row.disclosure_basis,
-        realm: row.realm, recipientReason: row.reason, topic: row.topic, actorAgent: row.actor_agent, relatedResource: row.group_key })
-        .catch(() => { throw new NotificationUnavailable('subject owner is unavailable'); });
-      subjects.push({ input: { principalId: principalId!, owner: row.subject_owner, ref: row.subject_ref,
-        revision: row.subject_revision, disclosureBasis: row.disclosure_basis, realm: row.realm }, result: resolved });
+      if (resolver && allowed[index]) {
+        const resolved = await notificationReadStep(() => resolver.resolve({ principalId: principalId!, owner: row.subject_owner,
+          ref: row.subject_ref, revision: row.subject_revision, disclosureBasis: row.disclosure_basis,
+          realm: row.realm, recipientReason: row.reason, topic: row.topic, actorAgent: row.actor_agent, relatedResource: row.group_key }))
+          .catch(() => { throw new NotificationUnavailable('subject owner is unavailable'); });
+        if (resolved.status === 'unavailable') throw new NotificationUnavailable('subject owner is unavailable');
+        subjects.push({ ordinal: index, input: { principalId: principalId!, owner: row.subject_owner, ref: row.subject_ref,
+          revision: row.subject_revision, disclosureBasis: row.disclosure_basis, realm: row.realm }, result: resolved });
+        if (resolved.status === 'available') candidates++;
+      }
+      if (index < selected.length - 1 && candidates < nextFence) continue;
+      // Overflow needs 100 current disclosures, not all 256 possible reads.
+      // If a final recipient or disclosure fence hides a candidate, resolve
+      // more and recheck the whole accumulated set before reporting a count.
+      const visible = await notificationReadStep(() => discloseNotifications(this.pool, subjects, 'inbox', disclosureViewer(principal)));
+      const currentRecipients = await notificationRecipientsAllowed(this.pool, recipients);
+      if (principalId && await this.transaction(client => this.reader(client, principal)) !== principalId) {
+        throw new NotificationDenied('recipient is inactive');
+      }
+      count = visible.filter((subject, ordinal) => currentRecipients[subjects[ordinal]!.ordinal]
+        && subject.status === 'available').length;
+      if (count >= NOTIFICATION_LIMITS.unreadCap) return { generation, count: 99, overflow: true };
+      nextFence = candidates + NOTIFICATION_LIMITS.unreadCap - count;
     }
-    const visible = await discloseNotifications(this.pool, subjects, 'inbox', disclosureViewer(principal));
-    const count = visible.filter(subject => subject.status === 'available').length;
-    if (count >= NOTIFICATION_LIMITS.unreadCap) return { generation, count: 99, overflow: true };
     if (rows.length > NOTIFICATION_LIMITS.unreadScan) {
       throw new NotificationUnavailable('unread count exceeds the disclosure scan bound');
     }

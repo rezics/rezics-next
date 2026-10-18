@@ -144,7 +144,7 @@ test('The inbox reads every actor name once for the recipient and keeps an id wh
     created_at: new Date('2026-10-07T00:00:00.000Z'), individually_read: false,
   });
   const rows = [item('1', id(1)), item('2', id(2))];
-  const query = async (sql: string) => {
+  const query = async (sql: string, args?: unknown[]) => {
     if (sql === 'BEGIN' || sql === 'COMMIT' || sql.startsWith('SET LOCAL')) return { rows: [] };
     if (sql.includes('recovery_fence')) return { rows: [{ open: true }] };
     if (sql.includes('SELECT id, active FROM access.principal')) return { rows: [{ id: principalId, active: true }] };
@@ -152,7 +152,8 @@ test('The inbox reads every actor name once for the recipient and keeps an id wh
     if (sql.includes('FROM access.notification_item')) return { rows };
     if (sql.includes('notification_read_watermark')) return { rows: [{ read_through: '0' }] };
     if (sql.includes('notification_delivery')) return { rows: [] };
-    if (sql.includes('person_block')) return { rows: [{}], rowCount: 1 };
+    if (sql.includes('person_block')) return { rows: (args![0] as string[])
+      .map((_, index) => ({ ordinal: String(index + 1), allowed: true })) };
     return { rows: [], rowCount: 0 };
   };
   const client = { query, release() {} };
