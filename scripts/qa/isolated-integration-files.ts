@@ -223,6 +223,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/review/source-publication-authority.test.ts',
   // Restores a bootstrapped Access baseline between destructive designation controls.
   'tests/qa/integration/review/governance-designation-revocation.test.ts',
+  // Mixed-owner traversal and Realm scope need this file's complete Discovery generations.
+  'services/main/tests/resource-query-catalogue.integration.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
