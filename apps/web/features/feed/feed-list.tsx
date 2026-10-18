@@ -265,7 +265,7 @@ function FeedGeneration({ initial, query, empty, allHref, headInterval }: {
     try {
       // Read directly: a slow or interrupted RSC refresh cannot strand the
       // list, and the URL and all of its filters stay with the reader.
-      read = await api().page({ ...query, cursor: undefined });
+      read = await api().page(query);
     } catch (error) {
       read = { ok: false, failure: isOfflineError(error) ? 'offline' : 'unavailable' };
     }
@@ -312,6 +312,7 @@ function FeedPages({
 }) {
   const { t, api } = useFeed();
   const [state, setState] = useState(() => initialState(page));
+  const { posts, cursor } = { posts: state.items, cursor: state.cursor };
   const list = useRef<HTMLDivElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
   // IntersectionObserver and polling can fire before React renders loading.
@@ -340,7 +341,7 @@ function FeedPages({
     ).find((element) => element.dataset.feedItem === anchor.id);
     if (row)
       window.scrollBy({ top: row.getBoundingClientRect().top - anchor.top, behavior: 'instant' });
-  }, [state.items]);
+  }, [posts]);
 
   // The head probe does not report target-index readiness. Ask the page, even
   // when it is empty or has a Saved Filter, and retry while its owner is building.
@@ -457,8 +458,7 @@ function FeedPages({
     restart();
   }
 
-  const { items } = state;
-  const finished = !state.cursor && !state.loading && !restarting;
+  const finished = !cursor && !state.loading && !restarting;
   const catchingUp = state.recovering;
   return (
     <div ref={list} className="relative">
@@ -477,14 +477,14 @@ function FeedPages({
           </Button>
         </div>
       ) : null}
-      {items.length ? (
+      {posts.length ? (
         <div role="feed" aria-label={t.posts} aria-busy={state.loading || restarting}>
-          {items.map((item, index) => (
+          {posts.map((item, index) => (
             <div key={item.id} data-feed-item={item.id}>
               <FeedCard
                 item={item}
                 position={index + 1}
-                total={state.cursor || catchingUp ? undefined : items.length}
+                total={cursor || catchingUp ? undefined : posts.length}
               />
             </div>
           ))}
@@ -502,11 +502,11 @@ function FeedPages({
         </>
       ) : null}
       <div ref={sentinel} aria-hidden="true" />
-      {feedContinuation(restarting ? null : state.failure, state.cursor, state.loading || restarting) === 'error' ? (
+      {feedContinuation(restarting ? null : state.failure, cursor, state.loading || restarting) === 'error' ? (
         <FeedFailure failure={state.failure!} reference={state.reference} status={state.status}
           retry={state.failure === 'moved' ? restart
             : () => void (catchingUp ? retryProjection.current?.() : loadMore())} />
-      ) : feedContinuation(state.failure, state.cursor, state.loading || restarting) === 'more' ? (
+      ) : feedContinuation(state.failure, cursor, state.loading || restarting) === 'more' ? (
         <div className="flex justify-center px-4 py-6">
           <Button variant="outline" onClick={() => void loadMore()}>
             {t.loadMore}
@@ -515,7 +515,7 @@ function FeedPages({
       ) : null}
       {catchingUp && !state.failure && !restarting ? (
         <FeedEnd caughtUp={state.caughtUp} catchingUp allHref={allHref} />
-      ) : finished && items.length && !state.failure ? (
+      ) : finished && posts.length && !state.failure ? (
         <FeedEnd caughtUp={state.caughtUp} allHref={allHref} />
       ) : null}
     </div>

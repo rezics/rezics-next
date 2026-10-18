@@ -73,7 +73,9 @@ export function mainFeedApi(main?: MainClient, anonymous?: MainClient): FeedApi 
     hideContinue: (work, hidden, actingSubject, key) => settle(() => authenticated().v1.me.continue({ work: uuidOf(work) })
       .hidden.put({ actingSubject, hidden }, headers(key))),
 
-    head: input => settleFeedRead(() => reader(input.actingSubject).v1.feed.head.get({ query: input })),
+    head: input => settleFeedRead(() => reader(input.actingSubject).v1.feed.head.get({
+      query: { ...input, actingSubject: input.actingSubject },
+    })),
 
     watermark: (scope, input, key) => settle(() => authenticated().v1.me['feed-watermarks']({ scope }).put({ ...input, scope },
       headers(key))),

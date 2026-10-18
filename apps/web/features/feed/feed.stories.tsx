@@ -85,7 +85,7 @@ function Feed({
           <section aria-label="Posts">
             <FeedList
               initial={initial}
-              query={query}
+              query={{ ...query, ...(actingSubject ? { actingSubject } : {}) }}
               allHref="/en?tab=all"
               headInterval={headInterval}
               empty={<p>Nothing here</p>}
@@ -754,6 +754,7 @@ async function recoverOnce(canvasElement: HTMLElement, api: RecoveryFeed, chines
 }
 
 export const RecoverChangedReviewsAtSameSequence: Story = {
+  globals: { viewport: { value: 'desktop1440' } },
   args: {
     initial: { ok: true, data: page([post(1)], { nextCursor: 'old' }) },
     query: { scope: 'following', sort: 'best', contentLanguages: ['en'] },
@@ -764,6 +765,7 @@ export const RecoverChangedReviewsAtSameSequence: Story = {
 };
 
 export const RecoverChangedPersonalConditionsAtSameSequence: Story = {
+  globals: RecoverChangedReviewsAtSameSequence.globals,
   args: { ...RecoverChangedReviewsAtSameSequence.args, api: recoveryFeed('personal') },
   parameters: RecoverChangedReviewsAtSameSequence.parameters,
   async play({ canvasElement, args }) { await recoverOnce(canvasElement, args.api as RecoveryFeed); },
@@ -853,6 +855,7 @@ const previewSamples = [
 ];
 
 export const UsefulWorkPreviews: Story = {
+  globals: { viewport: { value: 'desktop1440' } },
   args: { initial: { ok: true, data: page(previewSamples, { scope: 'all' }) },
     query: { scope: 'all', sort: 'best' }, signedIn: false, tab: 'all' },
   async play({ canvasElement }) {

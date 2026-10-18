@@ -17,6 +17,8 @@ for (const reader of ['no-selected-agent', 'ineligible-agent', 'acting-context-u
       if (path.searchParams.has('actingSubject') !== (init?.credentials === 'same-origin'))
         return Response.json({ code: 'invalid_home_command' }, { status: 400 });
       if (path.pathname.endsWith('/head')) return Response.json({ scope: query.scope, newPosts: { value: 0, kind: 'exact' } });
+      if (path.pathname.endsWith('/suggested-follows')) return Response.json({ profile: 'home-suggested-follows-v2',
+        items: [], sourcePosition: { dataEpoch: 'story', sequence: '40' } });
       if (init?.method === 'POST') return Response.json({ value: 1, score: 13, revision: storyId(900) });
       if (path.searchParams.has('cursor')) {
         if (!interrupted) {
@@ -44,6 +46,8 @@ for (const reader of ['no-selected-agent', 'ineligible-agent', 'acting-context-u
     expect(next.data.nextCursor).toBeNull();
     expect(await api.head({ scope: query.scope!, after: '40', afterReview: '7', ...(actor ? { actingSubject: actor } : {}) }))
       .toMatchObject({ ok: true });
+    expect(await api.suggestions({ concepts: [], languages: ['en'], locale: 'en', ...(actor ? { actingSubject: actor } : {}) }))
+      .toEqual({ ok: true, data: [] });
     for (const call of calls) {
       expect(call.credentials).toBe(actor ? 'same-origin' : 'omit');
       expect(call.path.searchParams.get('actingSubject')).toBe(actor ?? null);

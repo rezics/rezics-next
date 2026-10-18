@@ -36,7 +36,7 @@ const meta = {
   title: 'Feed/Reader identity (transport specimens)',
   component: ReaderIdentity,
   args: { signedIn: true, actingSubject: null, locale: 'en', failure: 'unavailable', calls: [] },
-  globals: { viewport: { value: 'desktop' } },
+  globals: { viewport: { value: 'desktop1440' } },
   beforeEach({ args }) {
     args.calls.length = 0;
     let refused = false;
