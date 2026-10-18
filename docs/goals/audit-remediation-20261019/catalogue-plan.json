@@ -4,7 +4,7 @@
   "goal": "audit-remediation-20261019",
   "worker": "G-2744",
   "createdDate": "2026-10-19",
-  "sourceRevision": "98dfb17a9d54ee2a849abacdd32c3e769ca261c5",
+  "sourceRevision": "57aa3d093b89f8cfa11669df73f0d8dbf258b235",
   "scope": {
     "onlyTrackedOutput": "docs/goals/audit-remediation-20261019/catalogue-plan.json",
     "productEdited": false,
@@ -24,7 +24,7 @@
   "evidenceRoots": {
     "repository": {
       "path": ".",
-      "revision": "98dfb17a9d54ee2a849abacdd32c3e769ca261c5",
+      "revision": "57aa3d093b89f8cfa11669df73f0d8dbf258b235",
       "role": "current static source and authored outcome inventory"
     },
     "retainedCatalogue": {
@@ -1622,6 +1622,7 @@
         "U-WORK-DETAIL",
         "U-SUPPORTING-DETAIL",
         "U-PROFILE-REALM-THREAD",
+        "U-FEED-REPORT",
         "P-REAL-CATALOGUE"
       ],
       "originalObservationRefs": [
@@ -1839,6 +1840,7 @@
         "U-WORK-DETAIL",
         "U-SUPPORTING-DETAIL",
         "U-PROFILE-REALM-THREAD",
+        "U-FEED-REPORT",
         "P-REAL-CATALOGUE"
       ],
       "originalObservationRefs": [
@@ -3645,6 +3647,7 @@
         "U-REPORT",
         "U-WORK-DETAIL",
         "U-PROFILE-REALM-THREAD",
+        "U-FEED-REPORT",
         "P-REAL-CATALOGUE"
       ],
       "qualification": "not run by this planning worker",
@@ -3899,6 +3902,7 @@
         "U-WORK-DETAIL",
         "U-SUPPORTING-DETAIL",
         "U-PROFILE-REALM-THREAD",
+        "U-FEED-REPORT",
         "P-REAL-CATALOGUE"
       ],
       "qualification": "not run by this planning worker",
@@ -5843,6 +5847,7 @@
         "U-WORK-DETAIL",
         "U-SUPPORTING-DETAIL",
         "U-PROFILE-REALM-THREAD",
+        "U-FEED-REPORT",
         "P-REAL-CATALOGUE"
       ],
       "currentRuntimeRetested": false,
@@ -5922,6 +5927,7 @@
         "U-WORK-DETAIL",
         "U-SUPPORTING-DETAIL",
         "U-PROFILE-REALM-THREAD",
+        "U-FEED-REPORT",
         "P-REAL-CATALOGUE"
       ],
       "currentRuntimeRetested": false,
@@ -6948,6 +6954,7 @@
         "U-WORK-DETAIL",
         "U-SUPPORTING-DETAIL",
         "U-PROFILE-REALM-THREAD",
+        "U-FEED-REPORT",
         "P-REAL-CATALOGUE"
       ],
       "currentRuntimeRetested": false,
@@ -7220,6 +7227,7 @@
         "U-WORK-DETAIL",
         "U-SUPPORTING-DETAIL",
         "U-PROFILE-REALM-THREAD",
+        "U-FEED-REPORT",
         "P-REAL-CATALOGUE"
       ],
       "currentRuntimeRetested": false,
@@ -7303,6 +7311,7 @@
         "U-WORK-DETAIL",
         "U-SUPPORTING-DETAIL",
         "U-PROFILE-REALM-THREAD",
+        "U-FEED-REPORT",
         "P-REAL-CATALOGUE"
       ],
       "currentRuntimeRetested": false,
@@ -7386,6 +7395,7 @@
         "U-WORK-DETAIL",
         "U-SUPPORTING-DETAIL",
         "U-PROFILE-REALM-THREAD",
+        "U-FEED-REPORT",
         "P-REAL-CATALOGUE"
       ],
       "currentRuntimeRetested": false,
@@ -7469,6 +7479,7 @@
         "U-WORK-DETAIL",
         "U-SUPPORTING-DETAIL",
         "U-PROFILE-REALM-THREAD",
+        "U-FEED-REPORT",
         "P-REAL-CATALOGUE"
       ],
       "currentRuntimeRetested": false,
@@ -8496,6 +8507,7 @@
         "U-WORK-DETAIL",
         "U-SUPPORTING-DETAIL",
         "U-PROFILE-REALM-THREAD",
+        "U-FEED-REPORT",
         "U-READ-RECOVERY",
         "U-RECIPE",
         "P-REAL-CATALOGUE"
@@ -9403,6 +9415,7 @@
         "U-WORK-DETAIL",
         "U-SUPPORTING-DETAIL",
         "U-PROFILE-REALM-THREAD",
+        "U-FEED-REPORT",
         "P-REAL-CATALOGUE"
       ],
       "currentRuntimeRetested": false,
@@ -16169,16 +16182,6 @@
           "existsAtInspectedRevision": true
         },
         {
-          "path": "apps/web/features/feed/post-row.tsx",
-          "action": "modify",
-          "existsAtInspectedRevision": true
-        },
-        {
-          "path": "apps/web/features/feed/reply-tree.tsx",
-          "action": "modify",
-          "existsAtInspectedRevision": true
-        },
-        {
           "path": "apps/web/features/profile/profile-page.stories.tsx",
           "action": "modify",
           "existsAtInspectedRevision": true
@@ -16223,6 +16226,76 @@
       "implementationCondition": "Satisfy the owned outcome without changing its assertions.",
       "executionBoundary": "One worker owns these exact files; referenced existing regressions are read-only unless listed here. No live capture/import/write is authorized by this plan.",
       "maximumClaimedFiles": 8,
+      "findingRefs": [
+        "A13",
+        "A16"
+      ],
+      "operationRefs": [
+        "getV1ResourcesByResourcePage",
+        "getV1WorksById",
+        "postV1Reports"
+      ],
+      "existingOutcomeRowRefs": []
+    },
+    {
+      "id": "U-FEED-REPORT",
+      "title": "Preserve exact post and reply report targets after the current feed owner releases its claim",
+      "phase": "surface",
+      "proposedExclusivePaths": [
+        {
+          "path": "apps/web/features/feed/post-row.tsx",
+          "action": "modify",
+          "existsAtInspectedRevision": true
+        },
+        {
+          "path": "apps/web/features/feed/reply-tree.tsx",
+          "action": "modify",
+          "existsAtInspectedRevision": true
+        },
+        {
+          "path": "apps/web/features/feed/post-row.stories.tsx",
+          "action": "modify",
+          "existsAtInspectedRevision": true
+        }
+      ],
+      "acceptanceScenarioRefs": [
+        "C22",
+        "C26"
+      ],
+      "dependsOn": [
+        "O-SURFACE",
+        "U-SUBJECT-PRIMITIVES",
+        "U-REPORT"
+      ],
+      "externalDependencyRefs": [
+        "feed-report-owner",
+        "browser-auth-fixture"
+      ],
+      "deliverables": [
+        "Keep every post/reply Report action in its owning object menu, carrying the selected object/component/revision/locator through login and cancel.",
+        "Retain G-2749’s feed identity, generation recovery and useful preview behavior; perform no parallel edits while its feed/** claim remains live.",
+        "Manager must re-enroll these paths after G-2749 releases its claim, or assign this acceptance to that owner. Review actual keyboard/touch and 1440/390 screenshots."
+      ],
+      "checks": [
+        "bun scripts/goal/goalctl.ts test apps/web/features/feed/post-row.stories.tsx apps/web/tests/catalogue-report-selection.e2e.ts"
+      ],
+      "sourceEvidenceRefs": [
+        "src.posts",
+        "src.replies",
+        "src.report-link",
+        "owner.G-2749"
+      ],
+      "personaMatrixRefs": [
+        "report-and-selection"
+      ],
+      "readiness": "waiting-for-live-claim-release",
+      "implementationCondition": "Satisfy the owned outcome without changing its assertions.",
+      "executionBoundary": "One worker owns these exact files; referenced existing regressions are read-only unless listed here. No live capture/import/write is authorized by this plan.",
+      "maximumClaimedFiles": 8,
+      "blockedByLiveTaskRefs": [
+        "G-2749"
+      ],
+      "proposedPathReservation": "deferred proposal only; not available for concurrent dispatch",
       "findingRefs": [
         "A13",
         "A16"
@@ -16609,6 +16682,7 @@
         "U-WORK-DETAIL",
         "U-SUPPORTING-DETAIL",
         "U-PROFILE-REALM-THREAD",
+        "U-FEED-REPORT",
         "U-CATALOGUE-PAGES",
         "U-COLLECTION-ROLES",
         "U-RECIPE"
@@ -16815,6 +16889,7 @@
     {
       "order": 9,
       "groupRefs": [
+        "U-FEED-REPORT",
         "U-PROFILE-REALM-THREAD",
         "U-SUPPORTING-DETAIL",
         "U-WORK-DETAIL"
@@ -16833,7 +16908,75 @@
     "O-REGISTRY",
     "O-SURFACE"
   ],
+  "authoritativeDocumentationRefresh": {
+    "reason": "Recorded check preflight rebased the worker onto five newer main commits. Read the changed Goal, state, coverage and three dispatched briefs; retain their authority without editing them.",
+    "previousInspectionRevision": "98dfb17a9d54ee2a849abacdd32c3e769ca261c5",
+    "refreshedInspectionRevision": "57aa3d093b89f8cfa11669df73f0d8dbf258b235",
+    "evidenceRefs": [
+      "owner.goal",
+      "owner.state",
+      "owner.coverage",
+      "owner.G-2747",
+      "owner.G-2748",
+      "owner.G-2749"
+    ],
+    "catalogueSourceImpact": "No catalogue product owner, operation, outcome test or retained snapshot changed in the intervening commits. Canonical confidence/owner rows remain unchanged; refresh evidence hashes and preserve the new independent wave dispatches.",
+    "concurrentClaims": [
+      {
+        "taskId": "G-2747",
+        "evidenceRef": "owner.G-2747",
+        "paths": [
+          "apps/web/features/proposals/**",
+          "apps/web/app/[locale]/proposals/**",
+          "apps/web/features/shell/**",
+          "apps/web/tests/server-client-boundary.test.ts"
+        ],
+        "relationship": "Existing authoritative wave slice; any overlapping future catalogue proposal explicitly waits for this owner to release its claim or for manager re-enrollment. Recheck live reservations before dispatch."
+      },
+      {
+        "taskId": "G-2748",
+        "evidenceRef": "owner.G-2748",
+        "paths": [
+          "apps/web/features/post-composer/**",
+          "apps/web/features/document-editor/**",
+          "packages/ui/src/components/rich-text-editor*"
+        ],
+        "relationship": "Existing authoritative wave slice; any overlapping future catalogue proposal explicitly waits for this owner to release its claim or for manager re-enrollment. Recheck live reservations before dispatch."
+      },
+      {
+        "taskId": "G-2749",
+        "evidenceRef": "owner.G-2749",
+        "paths": [
+          "apps/web/features/feed/**",
+          "apps/web/features/home/server.ts",
+          "apps/web/features/api/browser.ts",
+          "apps/web/app/api/main/[...path]/route.ts"
+        ],
+        "relationship": "Existing authoritative wave slice; any overlapping future catalogue proposal explicitly waits for this owner to release its claim or for manager re-enrollment. Recheck live reservations before dispatch."
+      }
+    ]
+  },
   "externalDependencies": [
+    {
+      "id": "feed-report-owner",
+      "kind": "live-path-owner",
+      "goalFindingRefs": [
+        "I1-001"
+      ],
+      "status": "G-2749 owns feed/**; U-FEED-REPORT is explicitly deferred",
+      "currentOwnerFiles": [
+        "apps/web/features/feed/post-row.tsx",
+        "apps/web/features/feed/reply-tree.tsx",
+        "apps/web/features/feed/post-row.stories.tsx"
+      ],
+      "evidenceRefs": [
+        "owner.G-2749",
+        "owner.state",
+        "src.posts",
+        "src.replies"
+      ],
+      "requiredResolution": "Manager releases/re-enrolls these paths after G-2749 lands, or gives its owner the precise-report acceptance. No concurrent feed edits are authorized by this proposal."
+    },
     {
       "id": "fixture-authority",
       "kind": "test-premise",
@@ -22033,7 +22176,37 @@
       "id": "owner.coverage",
       "root": "repository",
       "path": "docs/goals/audit-remediation-20261019/coverage.json",
-      "sha256": "4ab43c058a66b2f72acb6632066dd5041201f6815dbbb9fab66a3a76d3db902b"
+      "sha256": "8e0d593009b37cda9c1865b24d7af290ea943df2c2f475377af33b937305e453"
+    },
+    {
+      "id": "owner.goal",
+      "root": "repository",
+      "path": "docs/goals/audit-remediation-20261019/GOAL.md",
+      "sha256": "1aecc5c973ecba487314cd3787a17fac86851e10a4576d75c32e58db7acee506"
+    },
+    {
+      "id": "owner.state",
+      "root": "repository",
+      "path": "docs/goals/audit-remediation-20261019/state.md",
+      "sha256": "a93ce87ca7f5829b49606f47617d088ed345c9739cfafaddc28ae8028a9ede7e"
+    },
+    {
+      "id": "owner.G-2747",
+      "root": "repository",
+      "path": "docs/goals/audit-remediation-20261019/tasks/G-2747.md",
+      "sha256": "c5080befe9ac9df062c8d15918474802204f5b8038c1b7b4d84d4214fceeeb09"
+    },
+    {
+      "id": "owner.G-2748",
+      "root": "repository",
+      "path": "docs/goals/audit-remediation-20261019/tasks/G-2748.md",
+      "sha256": "4339bc5ea8a8e07dfd5971f2b3e455d110383fcf1f577a3c8b54726882ad5b0e"
+    },
+    {
+      "id": "owner.G-2749",
+      "root": "repository",
+      "path": "docs/goals/audit-remediation-20261019/tasks/G-2749.md",
+      "sha256": "97ed4c1dfc7366bf17293a8ee9f2d5d549c75d2b4ba66ad96dde29d3be5f58dc"
     },
     {
       "id": "src.import",
@@ -23301,13 +23474,13 @@
     "workerCheck": "The required recorded task goal -- check is run before done; its job result is recorded in the worker handoff, not preclaimed here.",
     "integrityResult": {
       "status": "passed",
-      "checks": 7589,
+      "checks": 9081,
       "canonicalIds": 18,
       "acceptanceIds": 31,
       "originalObservations": 54,
-      "implementationGroups": 33,
-      "exclusivePaths": 130,
-      "evidenceReferences": 104,
+      "implementationGroups": 34,
+      "exclusivePaths": 131,
+      "evidenceReferences": 109,
       "fieldRows": 2493,
       "latestImportedIdentities": 113,
       "historicalImportedIdentities": 113,
