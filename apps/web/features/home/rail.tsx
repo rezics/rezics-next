@@ -60,7 +60,9 @@ export function Rail({ data, signedIn, locale, messages, avatarQuery = '' }: {
 }) {
   const t = materializeData(messages, { locale });
   const open = data.moderated.reduce((total, item) => total + item.open, 0);
-  return <div className="grid gap-4">
+  // Ranking help alone belongs below the feed, without reserving a content column.
+  const hasContent = data.moderated.length > 0 || data.trending.items.length > 0 || data.suggestions.length > 0;
+  return <div data-home-rail-content={hasContent ? '' : undefined} className="grid gap-4">
     {data.moderated.length ? <Module title={t.queueTitle}>
       <ul className="grid gap-1.5">
         {data.moderated.map(item => <li key={item.realm} className="flex items-center gap-2 text-sm">
@@ -75,8 +77,8 @@ export function Rail({ data, signedIn, locale, messages, avatarQuery = '' }: {
         underline-offset-4 hover:underline">{t.openManage}{open ? ` · ${t.queueWaiting({ count: String(open) })}` : ''}
       </LocalizedLink>
     </Module> : null}
-    <Module title={data.trending.scope === 'followed' ? t.trendingFollowed : t.trendingGlobal}>
-      {data.trending.items.length ? <ol className="grid gap-3">
+    {data.trending.items.length ? <Module title={data.trending.scope === 'followed' ? t.trendingFollowed : t.trendingGlobal}>
+      <ol className="grid gap-3">
         {data.trending.items.map(({ item, realm }, index) => <li key={item.work}
           className="group/trend relative grid grid-cols-[1.25rem_2.5rem_minmax(0,1fr)] items-center gap-3">
           <span className="text-center font-semibold text-muted-foreground text-sm tabular-nums">{index + 1}</span>
@@ -93,8 +95,8 @@ export function Rail({ data, signedIn, locale, messages, avatarQuery = '' }: {
             kind: coverKindOf(item.types), authors: [] }} avatarQuery={avatarQuery} locale={locale}
             className="relative z-10 col-span-2 col-start-2" />
         </li>)}
-      </ol> : <p className="text-muted-foreground text-sm">{t.trendingEmpty}</p>}
-    </Module>
+      </ol>
+    </Module> : null}
     {data.suggestions.length ? <Module title={signedIn ? t.realmsToFollow : t.popularRealms}>
       <ul className="grid gap-3">
         {data.suggestions.slice(0, 3).map(item => {

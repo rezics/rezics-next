@@ -201,14 +201,11 @@ export function HomePage(props: HomePageProps) {
     actingSubject={actingSubject} signInHref={props.signInHref} avatarQuery={props.avatarQuery} tab={state.tab}
     followedRealms={props.followed?.complete ? followedRealmIds(props.followed) : null} api={props.api}
     realmSegments={segmentsOf(props.official)}>
-    <div className="mx-auto grid w-full max-w-[72rem] items-start gap-6 py-4 sm:px-6 sm:py-6 lg:px-8
-      xl:grid-cols-[minmax(0,46rem)_20rem] xl:justify-center">
+    <div className="mx-auto grid w-full max-w-[50rem] items-start gap-6 py-4 sm:px-6 sm:py-6 lg:px-8
+      xl:has-[[data-home-rail-content]]:max-w-[72rem]
+      xl:has-[[data-home-rail-content]]:grid-cols-[minmax(0,46rem)_20rem] xl:justify-center">
       <div className="grid min-w-0 gap-5">
         <h1 className="sr-only">{t.title}</h1>
-        {!signedIn ? <WelcomeCard locale={locale} messages={messages.home} signInHref={props.signInHref}
-          signUpHref={props.signUpHref} dismissed={props.welcomeDismissed} /> : null}
-        {props.newPerson && actingSubject ? <SetupInvite locale={locale} messages={messages.home}
-          href={props.setupHref} later={props.setupLater} /> : null}
         {props.continueItems?.length ? <ContinueStrip items={props.continueItems} locale={locale}
           messages={messages.home} /> : null}
         <section aria-labelledby="home-posts" className="min-w-0">
@@ -218,8 +215,13 @@ export function HomePage(props: HomePageProps) {
             orderFixed={topicOpen} />
           {props.posts}
         </section>
+        {!signedIn ? <WelcomeCard locale={locale} messages={messages.home} signInHref={props.signInHref}
+          signUpHref={props.signUpHref} dismissed={props.welcomeDismissed} /> : null}
+        {props.newPerson && actingSubject ? <SetupInvite locale={locale} messages={messages.home}
+          href={props.setupHref} later={props.setupLater} /> : null}
       </div>
-      {props.rail ? <aside aria-label={t.sidebar} className="sticky top-20 hidden xl:block">{props.rail}</aside> : null}
+      {props.rail ? <aside aria-label={t.sidebar} className="hidden min-w-0 xl:block
+        xl:has-[[data-home-rail-content]]:sticky xl:has-[[data-home-rail-content]]:top-20">{props.rail}</aside> : null}
     </div>
   </FeedProvider>;
 }

@@ -4,6 +4,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 // under `messages/` overrides what it translates.
 export const messages = {
   title: 'Library',
+  libraryTools: 'Goals, stats, import and export',
   description: 'Your shelves, what you are reading, the copies you own and the loans you record.',
   workCount: plural({ one: insert('{{count}} work'), other: insert('{{count}} works') },
     { count: asValue(number()) }),

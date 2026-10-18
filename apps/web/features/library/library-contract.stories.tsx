@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { LibraryContractPage } from './library-contract-page.tsx';
+import { messages } from './messages.ts';
 
 const meta = {
   title: 'Library/Contract states', component: LibraryContractPage,
@@ -167,6 +168,7 @@ export const ImportPending: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', { level: 1, name: 'Library' });
+    await userEvent.click(canvas.getByText(messages.libraryTools, { selector: 'summary' }));
     await userEvent.click(canvas.getByRole('heading', { name: 'Import your books' }));
     await userEvent.click(await canvas.findByRole('button', { name: /^Continue/ }));
     await userEvent.click(await canvas.findByRole('button', { name: 'Add to my library' }));
@@ -182,6 +184,7 @@ export const ExportResume: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', { level: 1, name: 'Library' });
+    await userEvent.click(canvas.getByText(messages.libraryTools, { selector: 'summary' }));
     await userEvent.click(canvas.getByRole('heading', { name: 'Download your library' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Download library' }));
     await userEvent.click(await canvas.findByRole('button', { name: 'Resume download' }));
@@ -195,6 +198,7 @@ export const ExportChangedBasis: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', { level: 1, name: 'Library' });
+    await userEvent.click(canvas.getByText(messages.libraryTools, { selector: 'summary' }));
     await userEvent.click(canvas.getByRole('heading', { name: 'Download your library' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Download library' }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent('Your library changed');

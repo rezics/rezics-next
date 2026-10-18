@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import collectionRecord from '../../../../tests/qa/fixtures/outcomes/visual-novels/collection-tracking-and-progress.json';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { workHref } from '../work-page/route.ts';
 import { BooksLibraryRecorded } from './books-library-recorded-page.tsx';
+import { messages } from './messages.ts';
 import { parseLibraryState } from './state.ts';
 
 const collection = collectionRecord as AnswerRecord;
@@ -92,8 +93,11 @@ async function expectShelfCounts(canvasElement: HTMLElement, label: string) {
   await expect(shelves.getByRole('link', { name: `Want to read ${want}` })).toBeVisible();
   await expect(shelves.getByRole('link', { name: `Read ${read}` })).toBeVisible();
   await expect(canvas.getByRole('button', { name: 'Who can see your reading shelves: Only you' })).toBeVisible();
+  const tools = canvas.getByText(messages.libraryTools, { selector: 'summary' });
+  await userEvent.click(tools);
   await expect(canvas.getByRole('heading', { level: 2, name: `Reading in ${year}` })).toBeVisible();
   await expect(canvas.getByText('0 chapters completed')).toBeVisible();
+  await userEvent.click(tools);
 }
 
 /** Member’s recorded shelves before any visual novel is saved. */
@@ -104,12 +108,16 @@ export const MemberEmpty: Story = {
     await expect(await canvas.findByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
     await expect(canvas.getByText(works(counts('library-empty-overview').total))).toBeVisible();
     await expect(canvas.getByRole('heading', { level: 2, name: 'Your library starts here' })).toBeVisible();
+    const tools = canvas.getByText(messages.libraryTools, { selector: 'summary' });
+    await userEvent.click(tools);
     await expect(canvas.getByText('Set a goal for books finished this year')).toBeVisible();
     await expect(canvas.getByRole('heading', { level: 2, name: `Reading in ${year}` })).toBeVisible();
     await expect(canvas.getByText('0 chapters completed')).toBeVisible();
     await expect(canvas.getByText('0 books finished')).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Who can see your reading shelves: Only you' })).toBeVisible();
     await expect(canvas.queryByRole('navigation', { name: 'Shelves' })).toBeNull();
+    await userEvent.click(tools);
+    window.scrollTo(0, 0);
   },
 };
 export const MemberEmptyPhone: Story = { ...MemberEmpty, ...phone };
