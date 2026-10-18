@@ -291,26 +291,31 @@ async function build(capability: Capability): Promise<Corpus> {
       // operator prepares population fixtures using its existing authority.
       const creator = source.operator;
       for (let index = 0; index < 10; index++) {
-        const realm = await command<{ realm: string }>(creator, 'POST', '/v1/spaces', {
+        const realm = await command<{ realm: string; space: string }>(creator, 'POST', '/v1/spaces', {
           profile: 'space-realm-v2', name: 'Bounded official Realm ' + index, language: 'en', capabilities: ['realm'],
           actingSubject: creator.actingSubject, initialSettings: { visibility: 'public', reviewRequired: false,
             reviewMode: 'open', whoMaySubmit: 'members', selfJoin: true, rules: [] } });
-        const zone = await command<{ zone: string; zoneRevision: string }>(creator, 'POST', '/v1/spaces', {
-          profile: 'space-zone-v1', name: 'Bounded official Zone ' + index, language: 'en', capabilities: ['zone'],
-          actingSubject: creator.actingSubject });
+        // Official Zones require the default Realm to belong to their own Space.
+        const zone = 'https://rezics.com/id/' + randomUUID();
         await grantPersonaFixtureAuthority(creator, [
-          { scope: 'zone:official:' + zone.zone, action: 'zone.official' },
+          { scope: 'zone:edit:' + zone, action: 'zone.edit' },
+          { scope: 'zone:official:' + zone, action: 'zone.official' },
           { scope: 'publication:adopt:' + realm.realm, action: 'publication.adopt' },
         ]);
+        await command(creator, 'POST', '/v1/zones', { zone, space: realm.space,
+          disclosure: 'public', name: 'Bounded official Zone ' + index, language: 'en',
+          actingSubject: creator.actingSubject });
+        const head = await command<{ revision: string }>(creator, 'GET',
+          '/v1/zones/' + short(zone) + '/configuration?actingSubject=' + encodeURIComponent(creator.actingSubject!));
         const configured = await command<{ revision: string }>(creator, 'PUT',
-          '/v1/zones/' + short(zone.zone) + '/configuration', {
-            expectedHead: zone.zoneRevision, defaultRealm: realm.realm, ...(index < 8 ? { official: {} } : {}),
+          '/v1/zones/' + short(zone) + '/configuration', {
+            expectedHead: head.revision, defaultRealm: realm.realm, ...(index < 8 ? { official: {} } : {}),
             actingSubject: creator.actingSubject });
         await command(creator, 'POST', '/v1/publication-selections', { profile: 'realm-local-selection-v1',
           context: { kind: 'realm-local', id: realm.realm }, work: book.work, mainVersion: book.mainVersion,
           contribution: book.contribution, publicationDecision: book.publicationDecision, expectedSelectionHead: null,
           selectionBasis: 'realm-manager-review', actingSubject: creator.actingSubject });
-        zones.push({ ...zone, realm: realm.realm, revision: configured.revision });
+        zones.push({ zone, realm: realm.realm, revision: configured.revision });
         progress('official Zone candidates', index + 1);
       }
     }

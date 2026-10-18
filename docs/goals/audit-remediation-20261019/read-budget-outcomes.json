@@ -5,21 +5,21 @@
   "baseline": {
     "revision": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
     "workingTree": "Outcome tests and minimal QA support only; production code unchanged.",
-    "run": "20261018t204708-fb68cb",
-    "recordedJob": "dc6d069b-83ff-4cf7-88b8-b05bb7c021db",
-    "assertionReached": "D5-003 six body assertions fail on foreground population qualification; D5-006-ratings six body assertions fail on 101 votes; D5-002 stranger body fails raw 503/deadline and other five pass; AUD-001 all six pass; D5-001 and Zones stop in setup; D5-004 persistent fault unconfirmed.",
-    "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test tests/qa/integration/audit-bounded-reads.test.ts tests/qa/integration/notification-read-budget.test.ts tests/qa/integration/official-zone-read-budget.test.ts tests/qa/integration/rating-population-read-budget.test.ts",
+    "run": "20261018t212935-ae08d6",
+    "recordedJob": "3684d36e-5f07-4b5c-8c29-8aa5331ed245",
+    "assertionReached": "D5-001 cancellation fails in five signed-in bodies; all six notification budget/admission controls pass. Latest Zone run stops in setup. Query/rating proof remains run 20261018t204708-fb68cb: six chapter qualification failures, six 101-vote failures, stranger default-discovery failure; all six cursor traversals pass. D5-004 persistent fault unconfirmed.",
+    "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check --only types,lint' --then 'bun scripts/goal/goalctl.ts test tests/qa/integration/notification-read-budget.test.ts tests/qa/integration/official-zone-read-budget.test.ts' -- task docs:check",
     "expectedGate": "Intentionally failing baseline regression, never a passing done gate.",
     "dispatchedRevision": "50e53025617238f9d9d8127be78179c3fa3bc12c",
-    "currency": "Required check refreshed the worker to main 83f052aca5; git diff 7df2e285d3..83f052aca5 -- services/main/src is empty. Exact tested head is sourceRevision; revision identifies unchanged API production code.",
+    "currency": "Required check refreshed the worker to main fb4b5ea16ec1a45fc228b51630e03847000ac947; git diff 7df2e285d3..fb4b5ea16e -- services/main/src is empty. Each attempt/persona records its exact tested source; revision identifies unchanged API production code.",
     "staticChecks": {
-      "job": "dc6d069b-83ff-4cf7-88b8-b05bb7c021db",
+      "job": "3684d36e-5f07-4b5c-8c29-8aa5331ed245",
       "docs": "passed",
       "types": "passed",
       "lint": "passed",
       "ast": "passed",
       "guards": "passed in preceding job 952ad34f-5eba-4250-9cd5-37c617521094; not repeated after test premise edits",
-      "evidence": ".temp/goal/check/run-WHEixW/output.log",
+      "evidence": ".temp/goal/check/run-EQr2O2/output.log",
       "targetedHarness": "raw-update-scan and integration-shards passed in preceding run 20261018t200309-394b25"
     },
     "attempts": [
@@ -176,10 +176,40 @@
           }
         ],
         "nextCheck": "Only corrected notification and Zone fixtures need another isolated run; retain current query/rating proof. No product timeout, candidate window or preparation/project budget is raised."
+      },
+      {
+        "job": "3684d36e-5f07-4b5c-8c29-8aa5331ed245",
+        "run": "20261018t212935-ae08d6",
+        "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
+        "harnessBase": "fb4b5ea16ec1a45fc228b51630e03847000ac947",
+        "result": "five cancellation outcome failures and one setup failure; neither project exceeded 480 seconds",
+        "projectBudgetMs": 480000,
+        "command": "bun scripts/goal/goalctl.ts test tests/qa/integration/notification-read-budget.test.ts tests/qa/integration/official-zone-read-budget.test.ts",
+        "capabilities": [
+          {
+            "capability": "notifications-governance",
+            "project": 1,
+            "wallMs": 398500,
+            "assertionReached": true,
+            "diagnosis": "All six stream/unread budget cases and six admission/missing/alien controls pass. All five signed-in cancellation bodies fail: 10-11 new graph calls and one active exchange after 100 ms grace during a 300 ms observation. All five fresh one-item retries return 200. Source preparation 281716 ms plus startup 46058 ms, restored fresh copy 50846 ms plus 2379 ms admission; consistent reusable corpus retained.",
+            "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-1.log",
+            "wireEvidence": ".temp/audit-bounded-reads/notifications-governance/bounded-bbcac2c38dbc48b2-evidence.json"
+          },
+          {
+            "capability": "zones",
+            "project": 2,
+            "wallMs": 31900,
+            "assertionReached": false,
+            "diagnosis": "OAuth owner:operate premise corrected. First official configuration returns 400 invalid_zone_configuration, default Realm is unavailable: baseline configuration.ts:646 forbids an official Zone referencing a Realm in a different Space. Public fixture correction creates the Zone capability in the Realm Space through POST /v1/zones; then reads the real configuration head before saving. This admission refusal is not suggestions proof.",
+            "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-2.log",
+            "wireEvidence": ".temp/audit-bounded-reads/zones/20261018t212935-ae08d6-2-evidence.json"
+          }
+        ],
+        "nextCheck": "Only the corrected same-Space Zone corpus needs another isolated run. Keep the notification/query/rating evidence and existing budgets; no broad rerun."
       }
     ],
-    "harnessBase": "83f052aca5",
-    "sourceRevision": "7733d472f70d901ad327464f25085ed63f624443"
+    "harnessBase": "fb4b5ea16ec1a45fc228b51630e03847000ac947",
+    "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359"
   },
   "fixture": {
     "composition": "Real Account HTTP and composeMain with lifecycle, relay, Content, Access, Fuseki and PostgreSQL; no owner mocks.",
@@ -200,14 +230,14 @@
         101,
         102
       ],
-      "zones": "Ten operator-created public Realm/Zone pairs prepared through public commands; the first eight official at the retained cut, then the ninth and tenth configured official in the test. Each adopts the same public original through its own Realm-local selection."
+      "zones": "Ten operator-created public Realm Spaces, each with its Zone capability added through POST /v1/zones in that same Space; official configuration requires its default Realm there. First eight official at the retained cut, ninth and tenth configured in the test. Each adopts the same public original through a public Realm-local selection."
     },
     "preparationScope": "Each capability build and restore independently remains within the existing 600-second active preparation ceiling; each regression project retains its existing 480-second wall. No raised timeout, candidate or population verifier limit.",
     "setupProgress": "Preparation emits phase/count/elapsed records with assertionReached false, so a setup failure cannot be reported as an outcome assertion.",
     "productAssembler": "All four API-built corpus files are commandOnlyIntegrationFiles. This keeps source capture and restored product owners in the same closed raw-update mode.",
     "corpusLifetime": "New primary moderator and auxiliary notice assignments last 24 hours to support reusable cuts. Earlier query/rating cuts retain their original one-hour primary moderator validity; exact run timestamps determine that persona premise. Account sessions are freshly authenticated after each restore.",
     "preparationReadiness": "Cheap durable notification hints confirm progress without repeatedly hydrating the growing inbox. Each fixed readiness interval remains 45000 ms; outer active preparation remains 600000 ms and catalogue-disk project wall remains 480000 ms.",
-    "officialAuthority": "Zone population is prepared by the real platform administrator, with Account OAuth owner:operate consent in addition to zone:edit. Other measured personas still have no Access platform designation; public read disclosure is unchanged."
+    "officialAuthority": "Zone population is prepared by the real platform administrator, with Account OAuth owner:operate consent in addition to zone:edit. Other measured personas still have no Access platform designation; public read disclosure is unchanged. Official and default-Realm authority also requires the Realm and Zone to share a Space; configuration heads are read through the public editor endpoint."
   },
   "distinctions": {
     "null": "Absent optional subject/display/rating/diagnostic value; never fabricate a preview or zero count.",
@@ -455,10 +485,36 @@
         "budget": "Authentication denial; hydration/cancellation allocation is irrelevant because there is no personal inbox.",
         "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap.",
         "observed": {
-          "run": "20261018t204708-fb68cb",
-          "evidence": ".artifacts/qa/20261018t204708-fb68cb/logs/integration-2.log",
-          "assertionReached": false,
-          "status": "setup failed before retained cut: eight governance notices delivered within readiness interval; next fixture uses receipt hints. Prior six admission controls remain passed evidence in 20261018t200319-27bb3a"
+          "run": "20261018t212935-ae08d6",
+          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
+          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/notifications-governance/bounded-bbcac2c38dbc48b2-evidence.json",
+          "assertionReached": true,
+          "budget": {
+            "status": "passed on this corpus; request-wide allocation exhaustion unconfirmed",
+            "stream": {
+              "status": 401,
+              "elapsedMs": 13.883994999981951,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "05892032254060e6b388ecffe4815895"
+            },
+            "unread": {
+              "status": 401,
+              "elapsedMs": 3.678741000010632,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "63198db33f07a278eb50273f9b05b58c"
+            }
+          },
+          "admission": {
+            "assertionReached": true,
+            "denied": true
+          },
+          "cancellation": {
+            "applicable": false,
+            "reason": "Anonymous admission is 401; no authorized inbox hydration to cancel."
+          }
         }
       },
       "officialZones": {
@@ -470,10 +526,11 @@
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t204708-fb68cb",
-          "evidence": ".artifacts/qa/20261018t204708-fb68cb/logs/integration-3.log",
+          "run": "20261018t212935-ae08d6",
+          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
+          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-2.log",
           "assertionReached": false,
-          "status": "setup failed: OAuth owner:operate omitted; operator configuration 401 is proper admission, not suggestions proof"
+          "status": "setup rejected official cross-Space default Realm with 400; next preparation creates Zone capability in the Realm Space. No suggestions outcome inferred."
         }
       },
       "ratingPopulation": {
@@ -647,10 +704,46 @@
         "budget": "notificationRead",
         "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap.",
         "observed": {
-          "run": "20261018t204708-fb68cb",
-          "evidence": ".artifacts/qa/20261018t204708-fb68cb/logs/integration-2.log",
-          "assertionReached": false,
-          "status": "setup failed before retained cut: eight governance notices delivered within readiness interval; next fixture uses receipt hints. Prior six admission controls remain passed evidence in 20261018t200319-27bb3a"
+          "run": "20261018t212935-ae08d6",
+          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
+          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/notifications-governance/bounded-bbcac2c38dbc48b2-evidence.json",
+          "assertionReached": true,
+          "budget": {
+            "status": "passed on this corpus; request-wide allocation exhaustion unconfirmed",
+            "stream": {
+              "status": 200,
+              "elapsedMs": 923.496901000035,
+              "graphCalls": 55,
+              "graphBytes": 9716,
+              "trace": "1ae53bec660970ab6d03111102849e6f"
+            },
+            "unread": {
+              "status": 200,
+              "elapsedMs": 638.4750810000114,
+              "graphCalls": 52,
+              "graphBytes": 9421,
+              "trace": "c5271106094ed4725dd89fbc327e8fa0"
+            }
+          },
+          "admission": {
+            "assertionReached": true,
+            "missingStatus": 404,
+            "alienStatus": 404
+          },
+          "visibleGovernanceItems": 25,
+          "cancellation": {
+            "status": "failed",
+            "assertionReached": true,
+            "graceMs": 100,
+            "observedMs": 300,
+            "lateCalls": 11,
+            "activeCalls": 1
+          },
+          "freshRetry": {
+            "status": 200,
+            "items": 1
+          }
         }
       },
       "officialZones": {
@@ -662,10 +755,11 @@
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t204708-fb68cb",
-          "evidence": ".artifacts/qa/20261018t204708-fb68cb/logs/integration-3.log",
+          "run": "20261018t212935-ae08d6",
+          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
+          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-2.log",
           "assertionReached": false,
-          "status": "setup failed: OAuth owner:operate omitted; operator configuration 401 is proper admission, not suggestions proof"
+          "status": "setup rejected official cross-Space default Realm with 400; next preparation creates Zone capability in the Realm Space. No suggestions outcome inferred."
         }
       },
       "ratingPopulation": {
@@ -838,10 +932,46 @@
         "budget": "notificationRead",
         "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap.",
         "observed": {
-          "run": "20261018t204708-fb68cb",
-          "evidence": ".artifacts/qa/20261018t204708-fb68cb/logs/integration-2.log",
-          "assertionReached": false,
-          "status": "setup failed before retained cut: eight governance notices delivered within readiness interval; next fixture uses receipt hints. Prior six admission controls remain passed evidence in 20261018t200319-27bb3a"
+          "run": "20261018t212935-ae08d6",
+          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
+          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/notifications-governance/bounded-bbcac2c38dbc48b2-evidence.json",
+          "assertionReached": true,
+          "budget": {
+            "status": "passed on this corpus; request-wide allocation exhaustion unconfirmed",
+            "stream": {
+              "status": 200,
+              "elapsedMs": 662.5027349999873,
+              "graphCalls": 55,
+              "graphBytes": 9716,
+              "trace": "a2ebac360b84d127be28640e3f9de60e"
+            },
+            "unread": {
+              "status": 200,
+              "elapsedMs": 537.9758869999787,
+              "graphCalls": 52,
+              "graphBytes": 9421,
+              "trace": "8d2c90ebd07b650df100eed2f9d4767b"
+            }
+          },
+          "admission": {
+            "assertionReached": true,
+            "missingStatus": 404,
+            "alienStatus": 404
+          },
+          "visibleGovernanceItems": 25,
+          "cancellation": {
+            "status": "failed",
+            "assertionReached": true,
+            "graceMs": 100,
+            "observedMs": 300,
+            "lateCalls": 10,
+            "activeCalls": 1
+          },
+          "freshRetry": {
+            "status": 200,
+            "items": 1
+          }
         }
       },
       "officialZones": {
@@ -853,10 +983,11 @@
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t204708-fb68cb",
-          "evidence": ".artifacts/qa/20261018t204708-fb68cb/logs/integration-3.log",
+          "run": "20261018t212935-ae08d6",
+          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
+          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-2.log",
           "assertionReached": false,
-          "status": "setup failed: OAuth owner:operate omitted; operator configuration 401 is proper admission, not suggestions proof"
+          "status": "setup rejected official cross-Space default Realm with 400; next preparation creates Zone capability in the Realm Space. No suggestions outcome inferred."
         }
       },
       "ratingPopulation": {
@@ -1029,10 +1160,46 @@
         "budget": "notificationRead",
         "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap.",
         "observed": {
-          "run": "20261018t204708-fb68cb",
-          "evidence": ".artifacts/qa/20261018t204708-fb68cb/logs/integration-2.log",
-          "assertionReached": false,
-          "status": "setup failed before retained cut: eight governance notices delivered within readiness interval; next fixture uses receipt hints. Prior six admission controls remain passed evidence in 20261018t200319-27bb3a"
+          "run": "20261018t212935-ae08d6",
+          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
+          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/notifications-governance/bounded-bbcac2c38dbc48b2-evidence.json",
+          "assertionReached": true,
+          "budget": {
+            "status": "passed on this corpus; request-wide allocation exhaustion unconfirmed",
+            "stream": {
+              "status": 200,
+              "elapsedMs": 738.3300809999928,
+              "graphCalls": 55,
+              "graphBytes": 9716,
+              "trace": "e9342478a71d6e348c1ff9996525624b"
+            },
+            "unread": {
+              "status": 200,
+              "elapsedMs": 489.69464300002437,
+              "graphCalls": 52,
+              "graphBytes": 9421,
+              "trace": "7c533d5821329005fe3bb6194a9c7d7b"
+            }
+          },
+          "admission": {
+            "assertionReached": true,
+            "missingStatus": 404,
+            "alienStatus": 404
+          },
+          "visibleGovernanceItems": 25,
+          "cancellation": {
+            "status": "failed",
+            "assertionReached": true,
+            "graceMs": 100,
+            "observedMs": 300,
+            "lateCalls": 11,
+            "activeCalls": 1
+          },
+          "freshRetry": {
+            "status": 200,
+            "items": 1
+          }
         }
       },
       "officialZones": {
@@ -1044,10 +1211,11 @@
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t204708-fb68cb",
-          "evidence": ".artifacts/qa/20261018t204708-fb68cb/logs/integration-3.log",
+          "run": "20261018t212935-ae08d6",
+          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
+          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-2.log",
           "assertionReached": false,
-          "status": "setup failed: OAuth owner:operate omitted; operator configuration 401 is proper admission, not suggestions proof"
+          "status": "setup rejected official cross-Space default Realm with 400; next preparation creates Zone capability in the Realm Space. No suggestions outcome inferred."
         }
       },
       "ratingPopulation": {
@@ -1220,10 +1388,46 @@
         "budget": "notificationRead",
         "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap.",
         "observed": {
-          "run": "20261018t204708-fb68cb",
-          "evidence": ".artifacts/qa/20261018t204708-fb68cb/logs/integration-2.log",
-          "assertionReached": false,
-          "status": "setup failed before retained cut: eight governance notices delivered within readiness interval; next fixture uses receipt hints. Prior six admission controls remain passed evidence in 20261018t200319-27bb3a"
+          "run": "20261018t212935-ae08d6",
+          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
+          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/notifications-governance/bounded-bbcac2c38dbc48b2-evidence.json",
+          "assertionReached": true,
+          "budget": {
+            "status": "passed on this corpus; request-wide allocation exhaustion unconfirmed",
+            "stream": {
+              "status": 200,
+              "elapsedMs": 697.7825179999927,
+              "graphCalls": 60,
+              "graphBytes": 10826,
+              "trace": "5a3e022afd34861a57ab143f9cf916ea"
+            },
+            "unread": {
+              "status": 200,
+              "elapsedMs": 701.1199650000199,
+              "graphCalls": 54,
+              "graphBytes": 10236,
+              "trace": "56078981d2cc05df7e1733e76f8e8e12"
+            }
+          },
+          "admission": {
+            "assertionReached": true,
+            "missingStatus": 404,
+            "alienStatus": 404
+          },
+          "visibleGovernanceItems": 26,
+          "cancellation": {
+            "status": "failed",
+            "assertionReached": true,
+            "graceMs": 100,
+            "observedMs": 300,
+            "lateCalls": 11,
+            "activeCalls": 1
+          },
+          "freshRetry": {
+            "status": 200,
+            "items": 1
+          }
         }
       },
       "officialZones": {
@@ -1235,10 +1439,11 @@
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t204708-fb68cb",
-          "evidence": ".artifacts/qa/20261018t204708-fb68cb/logs/integration-3.log",
+          "run": "20261018t212935-ae08d6",
+          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
+          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-2.log",
           "assertionReached": false,
-          "status": "setup failed: OAuth owner:operate omitted; operator configuration 401 is proper admission, not suggestions proof"
+          "status": "setup rejected official cross-Space default Realm with 400; next preparation creates Zone capability in the Realm Space. No suggestions outcome inferred."
         }
       },
       "ratingPopulation": {
@@ -1411,10 +1616,46 @@
         "budget": "notificationRead",
         "traversal": "Existing stream limit 50; unread scan 256 remains a bound, not an inventory maximum. Notification cursor traversal beyond the shared resource query is outside AUD-001 overlap.",
         "observed": {
-          "run": "20261018t204708-fb68cb",
-          "evidence": ".artifacts/qa/20261018t204708-fb68cb/logs/integration-2.log",
-          "assertionReached": false,
-          "status": "setup failed before retained cut: eight governance notices delivered within readiness interval; next fixture uses receipt hints. Prior six admission controls remain passed evidence in 20261018t200319-27bb3a"
+          "run": "20261018t212935-ae08d6",
+          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
+          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/notifications-governance/bounded-bbcac2c38dbc48b2-evidence.json",
+          "assertionReached": true,
+          "budget": {
+            "status": "passed on this corpus; request-wide allocation exhaustion unconfirmed",
+            "stream": {
+              "status": 200,
+              "elapsedMs": 746.5887920000241,
+              "graphCalls": 55,
+              "graphBytes": 9716,
+              "trace": "fcaa934fae59c0c3b6de79193fe8a902"
+            },
+            "unread": {
+              "status": 200,
+              "elapsedMs": 673.1275519999908,
+              "graphCalls": 52,
+              "graphBytes": 9421,
+              "trace": "1ad8e1b991b9ca1a68fb0ca8332c2bd3"
+            }
+          },
+          "admission": {
+            "assertionReached": true,
+            "missingStatus": 404,
+            "alienStatus": 404
+          },
+          "visibleGovernanceItems": 25,
+          "cancellation": {
+            "status": "failed",
+            "assertionReached": true,
+            "graceMs": 100,
+            "observedMs": 300,
+            "lateCalls": 11,
+            "activeCalls": 1
+          },
+          "freshRetry": {
+            "status": 200,
+            "items": 1
+          }
         }
       },
       "officialZones": {
@@ -1426,10 +1667,11 @@
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t204708-fb68cb",
-          "evidence": ".artifacts/qa/20261018t204708-fb68cb/logs/integration-3.log",
+          "run": "20261018t212935-ae08d6",
+          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
+          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-2.log",
           "assertionReached": false,
-          "status": "setup failed: OAuth owner:operate omitted; operator configuration 401 is proper admission, not suggestions proof"
+          "status": "setup rejected official cross-Space default Realm with 400; next preparation creates Zone capability in the Realm Space. No suggestions outcome inferred."
         }
       },
       "ratingPopulation": {
@@ -1487,7 +1729,7 @@
     },
     {
       "case": "D5-001 Feed-specific hot path",
-      "status": "stale-identity-premise; public budget/cancel contract rerun via governance producer",
+      "status": "stale Feed identity premise; cancellation separately proved, allocation exhaustion unconfirmed",
       "assertionReached": false,
       "source": [
         "services/main/src/modules/content-publication/eligibility.ts:contentSearchEligibilityDecisionIri",
@@ -1495,19 +1737,20 @@
         "services/main/src/modules/notification-producers/feed-subjects.ts:resolve"
       ],
       "reason": "Real published chapter eligibility activities use urn:rezics:content-search-eligibility:<digest>; the Feed subject reader rejects a non-native ref before graph I/O. Null subject/display is actual undisclosure, not a cheap successful hydration proof. No storage identifiers are forged to reach the audited path.",
-      "managerAction": "Treat the original Feed graph-budget premise as unconfirmed; separately consider producer/reader identity compatibility. Use the current governance case for the public notification request contract if its assertions reach the body."
+      "managerAction": "Governance cancellation is implementation-ready for all signed-in readers. The same corpus passes the request budget; do not claim budget exhaustion or dispatch Feed identity changes from that passing control. Evaluate producer/reader compatibility separately."
     }
   ],
   "rootCauseHypotheses": [
     {
       "case": "D5-001",
-      "hypothesis": "Per-notification subject hydration starts nested Work read sessions without one request-wide allocation or caller signal.",
+      "hypothesis": "The notification read path does not propagate the incoming caller signal through all subject hydration. Per-subject allocation may also reset, but exhaustion needs its own admitted corpus.",
       "ownerScopes": [
         "services/main/src/routes/notifications.ts",
-        "services/main/src/modules/notification-producers/feed-subjects.ts",
-        "services/main/src/modules/notification/store.ts"
+        "services/main/src/modules/notification/store.ts",
+        "services/main/src/modules/notification-producers/subjects.ts",
+        "services/main/src/modules/notification-producers/feed-subjects.ts"
       ],
-      "status": "Original Feed hot path unconfirmed due identity mismatch. Governance corpus commands acknowledged but readiness polling stopped in setup; fixed preparation uses cheap per-receipt hints. No notification repair may be dispatched from that setup failure."
+      "status": "Cancellation proved for all five signed-in personas via real governance subjects: 10-11 late graph calls plus one active exchange. Fresh retries, six admission controls and six budget cases pass. The 24-governance corpus does not exhaust the shared 160-call starting allocation; original Feed budget premise remains unconfirmed due subject identity mismatch."
     },
     {
       "case": "D5-002",
@@ -1543,7 +1786,7 @@
         "services/main/src/modules/onboarding/suggestions.ts",
         "services/main/src/modules/zone/publication.ts"
       ],
-      "status": "Space quota corrected with real operator. Missing owner:operate OAuth scope diagnosed once; public suggestions body remains unreached pending scoped preparation."
+      "status": "Body still unreached. Real operator and OAuth scope corrected; official cross-Space Realm was properly refused. Next fixture creates the Zone capability within the Realm Space before measuring 8/9/10 official population."
     },
     {
       "case": "D5-006-ratings",
