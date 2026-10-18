@@ -500,6 +500,9 @@ if (process.argv.includes('mcp')) {
   writeFileSync(directory + '/mcp.pid', String(process.pid));
   setInterval(() => {}, 1000); await new Promise(() => {});
  }
+ writeFileSync(directory + '/mcp.pid', String(process.pid));
+ if (mode === 'mcp-error') process.exit(1);
+ if (mode === 'mcp-overflow') { console.log('x'.repeat(1024 * 1024 + 1)); process.exit(0); }
  console.log(JSON.stringify([{ name: 'inherited', enabled: true }])); process.exit(0);
 }
 writeFileSync(directory + '/server.pid', String(process.pid));
@@ -572,6 +575,27 @@ function stopLauncher(pid: number): void {
   try { process.kill(-pid, 'SIGKILL'); }
   catch { try { process.kill(pid, 'SIGKILL'); } catch { /* Already exited. */ } }
 }
+
+for (const mode of ['mcp-timeout', 'mcp-error', 'mcp-overflow', 'missing']) test(`failed MCP enumeration cleans up without starting an app-server (${mode})`, async () => {
+  const f = fixture(['resetCards']);
+  const before = ['SIGINT', 'SIGTERM'].map(signal => process.listenerCount(signal));
+  try {
+    if (mode !== 'missing') launcher(f, mode);
+    const result = await inspectAllowance('sample-c', { settings: f.options.settings,
+      lockDirectory: f.options.lockDirectory, requestTimeoutMs: 100 });
+    expect(result).toMatchObject({ status: 'unavailable', error: 'transport', canResume: false, redemption: null });
+    if (mode !== 'missing') {
+      const pid = Number(readFileSync(join(f.directory, 'mcp.pid'), 'utf8'));
+      expect(processAlive({ pid })).toBe(false);
+    }
+    expect(['SIGINT', 'SIGTERM'].map(signal => process.listenerCount(signal))).toEqual(before);
+    expect(existsSync(join(f.directory, 'server.pid'))).toBe(false);
+  } finally {
+    const pidPath = join(f.directory, 'mcp.pid');
+    if (existsSync(pidPath)) stopLauncher(Number(readFileSync(pidPath, 'utf8')));
+    f.cleanup();
+  }
+}, 5000);
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) test(`interrupting MCP enumeration cleans up its child within a bound (${signal})`, async () => {
   const f = fixture(['resetCards']);
