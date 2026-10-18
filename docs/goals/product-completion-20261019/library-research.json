@@ -1,0 +1,1628 @@
+{
+  "schema_version": 1,
+  "goal": "product-completion-20261019",
+  "worker": "G-2788",
+  "title": "Problem-driven frontend library research and Hotkeys decision",
+  "researched_on": "2026-10-19",
+  "baseline_commit": "95945af96abf9635773ebc6c26c43f24548efd76",
+  "executive_decision": {
+    "recommendation": "Do not add a runtime library from this research alone. Run one bounded keyboard comparison, beginning with the already pinned Ark utility and retaining TanStack Hotkeys as the scope-management challenger.",
+    "tanstack_hotkeys": "trial",
+    "production_adoption": "defer until the keyboard acceptance matrix and route-specific cost measurements pass",
+    "reasons": [
+      "Shortcut ownership differs across shell, editor, reader, moderation and Accounts; one library cannot arbitrate unconverted listeners automatically.",
+      "Ark already ships a hotkeys engine in this lockfile. TanStack is explicitly beta; its nested/exclusive scope API was added on October 18, one day before this review.",
+      "The other observed needs mostly call for reuse of existing owners, semantic layouts and API recovery rather than another runtime."
+    ],
+    "shortlist": [
+      "keyboard-policy",
+      "focus-and-command-access",
+      "write-feedback",
+      "dense-discovery"
+    ],
+    "confidence": "High in dependency/source facts and avoiding duplicate owners; medium in proposed fit; runtime, usability, accessibility and cost remain unmeasured."
+  },
+  "evidence_policy": {
+    "labels": {
+      "source_observation": "A manifest, lockfile, registry, release or source file was read; this establishes only the stated artifact fact.",
+      "documented_promise": "A maintainer or standard describes behavior; REZICS composition has not been demonstrated.",
+      "hypothesis": "An integration risk or expected benefit inferred from the sources; it needs the named falsifying check.",
+      "measured": "Reserved for an executed experiment or direct observation; no rendered, bundle, latency, IME, screen-reader or user measurement was performed in this task."
+    },
+    "performed": [
+      "Read product/Goal constraints, G-2787 brief, relevant owners, installed manifests/lockfile and audit claims.",
+      "Fetched current public primary documentation, live publisher metadata, release history and exact-version source artifacts for static inspection.",
+      "Compared alternatives and specified falsifying checks; no downloaded package code was executed."
+    ],
+    "not_performed": [
+      "Dependency installation or lockfile changes",
+      "Product changes, stack startup, shared data/service changes or product QA",
+      "Production builds, byte/latency profiling, hydration execution, rendered review, real IME, assistive-technology or participant testing"
+    ],
+    "source_freshness": "Live registry dist-tags and immutable release source override stale search snippets. Registry publish times and GitHub release times are different events. Floating docs must be rechecked against the exact version before a trial.",
+    "licenses": "Candidate registry metadata declares MIT. This is license inventory, not a legal review; preserve notices and check the actual resolved dependency closure at any later install."
+  },
+  "constraints": [
+    {
+      "rule": "Main/API authority, explicit actor/target/community/scale and bounded complete traversal remain the source of product meaning.",
+      "evidence_refs": [
+        "product-goal",
+        "sync-contract",
+        "cache-command-owner"
+      ]
+    },
+    {
+      "rule": "Optimize ordinary flows and visible controls first; shortcuts accelerate actions available to keyboard, touch and assistive-technology users.",
+      "evidence_refs": [
+        "product-goal",
+        "command-owner",
+        "wcag-character-shortcuts",
+        "aria-shortcuts"
+      ]
+    },
+    {
+      "rule": "A package peer range accepting React 19 is eligibility, not proof of Vinext RSC/SSR, hydration, Cloudflare runtime or lifecycle compatibility.",
+      "evidence_refs": [
+        "dependency-baseline",
+        "tanstack-adapter",
+        "nuqs-adapters"
+      ]
+    },
+    {
+      "rule": "No novelty-driven replacements of installed focus, editor, query, URL, animation or localization owners.",
+      "evidence_refs": [
+        "dependency-baseline",
+        "focus-owner",
+        "cache-command-owner",
+        "url-usage",
+        "motion-owner",
+        "locale-owner"
+      ]
+    }
+  ],
+  "coordination": {
+    "journey_research": {
+      "owner": "G-2787",
+      "relationship": "Independent companion research; no output read or edited and no wait required.",
+      "shared_cases": [
+        "1, 3 and 10 subscribed rating communities",
+        "Own rating absent, partial or complete; differing scales and distributions",
+        "Community provenance, aggregate choice, context switching and edit authority",
+        "Pending/error recovery, mobile, keyboard and all supported locales"
+      ],
+      "boundary": "Use those scenarios to select real workloads and labels. Neither shortcut scopes nor virtualization decides which community aggregate is truthful."
+    },
+    "audit_owners": {
+      "snapshot_on": "2026-10-19",
+      "status_is_not_proof": true,
+      "ownership": [
+        "G-2747 shell SSR/mobile navigation; G-2748 composer recovery; G-2749 feed identity/generation.",
+        "G-2751 concurrent settings saves and mobile/localized feedback; G-2753 Studio inventory.",
+        "G-2754 dense catalogue/discovery/cover layout; G-2756 shared-control contrast.",
+        "G-2764 discovery queries; G-2766 bounded recovery; G-2777 search intent and CJK semantics.",
+        "G-2784 cancellation/deadline propagation and lawful recovery; G-2786 bounded recommendations/ratings aggregation."
+      ],
+      "boundary": "Treat running and exited/unlanded claims as integration constraints. This report proposes no edits to their paths. Recheck owners and landed code before a follow-up; do not build a second fuzzy-search, rating, retry or cancellation engine.",
+      "evidence_refs": [
+        "audit-snapshot",
+        "audit-coordination"
+      ]
+    },
+    "new_slice_boundary": "A future keyboard comparison starts in a new research harness under scripts/research/frontend-hotkeys/ and imports existing wrappers read-only. Production edits and any dependency trial require a separately assigned slice after owner recheck; this session authorizes neither."
+  },
+  "installed_baseline": {
+    "runtime": {
+      "react": "19.3.1",
+      "react_dom": "19.3.1",
+      "react_server_dom_webpack": "19.3.1",
+      "vinext": "1.0.0-beta.13",
+      "vite": "8.3.4",
+      "next_compatibility_package": "16.4.1"
+    },
+    "owners": [
+      "packages/ui: Ark dialog/menu/combobox/command and Tiptap editor",
+      "apps/web: Query provider, command/recovery helpers, server-owned browse/search state",
+      "apps/accounts: its existing page-key helpers and permission-filtered command palette",
+      "native-i18n/Intl messages and CSS/tw-animate reduced motion"
+    ],
+    "caveat": "Manifest/lockfile inspection only. A pinned transitive engine can still add route bytes when first imported; no incremental bundle cost was measured.",
+    "evidence_refs": [
+      "dependency-baseline",
+      "command-owner",
+      "cache-command-owner",
+      "url-usage",
+      "motion-owner",
+      "locale-owner"
+    ]
+  },
+  "package_inventory": [
+    {
+      "name": "@tanstack/react-hotkeys",
+      "locked_version": null,
+      "latest_version": "0.15.0",
+      "latest_published_at": "2026-10-18T01:43:07.540Z",
+      "license": "MIT",
+      "declared_react_peer": ">=16.8",
+      "evidence_refs": [
+        "package-tanstack-react-hotkeys"
+      ]
+    },
+    {
+      "name": "@tanstack/hotkeys",
+      "locked_version": null,
+      "latest_version": "0.16.0",
+      "latest_published_at": "2026-10-18T01:39:24.328Z",
+      "license": "MIT",
+      "declared_react_peer": null,
+      "evidence_refs": [
+        "package-tanstack-hotkeys"
+      ]
+    },
+    {
+      "name": "@ark-ui/react",
+      "locked_version": "5.39.3",
+      "latest_version": "5.39.3",
+      "latest_published_at": "2026-10-05T23:11:28.524Z",
+      "license": "MIT",
+      "declared_react_peer": ">=18.0.0",
+      "evidence_refs": [
+        "package-ark-ui-react"
+      ]
+    },
+    {
+      "name": "@zag-js/hotkeys",
+      "locked_version": "1.45.0",
+      "latest_version": "1.46.0",
+      "latest_published_at": "2026-10-11T18:40:33.905Z",
+      "license": "MIT",
+      "declared_react_peer": null,
+      "evidence_refs": [
+        "package-zag-js-hotkeys"
+      ]
+    },
+    {
+      "name": "react-hotkeys-hook",
+      "locked_version": null,
+      "latest_version": "5.3.3",
+      "latest_published_at": "2026-06-26T14:23:15.600Z",
+      "license": "MIT",
+      "declared_react_peer": ">=16.8.0",
+      "evidence_refs": [
+        "package-react-hotkeys-hook"
+      ]
+    },
+    {
+      "name": "@tanstack/react-virtual",
+      "locked_version": null,
+      "latest_version": "3.14.21",
+      "latest_published_at": "2026-10-16T11:19:18.479Z",
+      "license": "MIT",
+      "declared_react_peer": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0",
+      "evidence_refs": [
+        "package-tanstack-react-virtual"
+      ]
+    },
+    {
+      "name": "nuqs",
+      "locked_version": "2.10.2",
+      "latest_version": "2.10.2",
+      "latest_published_at": "2026-10-08T12:20:23.186Z",
+      "license": "MIT",
+      "declared_react_peer": ">=18.2.0 || ^19.0.0-0",
+      "evidence_refs": [
+        "package-nuqs"
+      ]
+    },
+    {
+      "name": "@tanstack/react-query",
+      "locked_version": "5.104.3",
+      "latest_version": "5.104.4",
+      "latest_published_at": "2026-10-17T17:55:14.077Z",
+      "license": "MIT",
+      "declared_react_peer": "^18 || ^19",
+      "evidence_refs": [
+        "package-tanstack-react-query"
+      ]
+    },
+    {
+      "name": "react-hook-form",
+      "locked_version": null,
+      "latest_version": "7.90.0",
+      "latest_published_at": "2026-10-11T12:13:46.090Z",
+      "license": "MIT",
+      "declared_react_peer": "^16.8.0 || ^17 || ^18 || ^19",
+      "evidence_refs": [
+        "package-react-hook-form"
+      ]
+    },
+    {
+      "name": "motion",
+      "locked_version": null,
+      "latest_version": "14.3.0",
+      "latest_published_at": "2026-10-15T14:27:25.734Z",
+      "license": "MIT",
+      "declared_react_peer": "^18.0.0 || ^19.0.0",
+      "evidence_refs": [
+        "package-motion"
+      ]
+    },
+    {
+      "name": "native-i18n",
+      "locked_version": "0.2.0",
+      "latest_version": "0.2.0",
+      "latest_published_at": "2026-07-23T04:23:28.265Z",
+      "license": "MIT",
+      "declared_react_peer": ">=19",
+      "evidence_refs": [
+        "package-native-i18n"
+      ]
+    },
+    {
+      "name": "tw-animate-css",
+      "locked_version": "1.4.0",
+      "latest_version": "1.4.0",
+      "latest_published_at": "2025-09-24T05:25:53.055Z",
+      "license": "MIT",
+      "declared_react_peer": null,
+      "evidence_refs": [
+        "package-tw-animate-css"
+      ]
+    },
+    {
+      "name": "@tiptap/react",
+      "locked_version": "3.32.0",
+      "latest_version": "3.32.0",
+      "latest_published_at": "2026-10-13T12:07:36.770Z",
+      "license": "MIT",
+      "declared_react_peer": "^17.0.0 || ^18.0.0 || ^19.0.0",
+      "evidence_refs": [
+        "package-tiptap-react"
+      ]
+    }
+  ],
+  "prioritized_shortlist": [
+    {
+      "id": "keyboard-policy",
+      "priority": 1,
+      "problem": "Search, editor, sidebar, reader and moderation keys have different priority/composition guards; a shared ownership policy could prevent competing actions and shortcut-help drift.",
+      "owner": "Shared UI keyboard policy with Web shell/reader/moderation and Accounts action owners; business permission checks stay with current owners.",
+      "evidence_refs": [
+        "shell-search",
+        "accounts-keys",
+        "reader-queue",
+        "sidebar-editor",
+        "ime-tests"
+      ],
+      "recommendation": "trial",
+      "candidates": [
+        "existing hooks/browser KeyboardEvent",
+        "@ark-ui/react/hotkeys at 5.39.3 with locked @zag-js/hotkeys 1.45.0",
+        "@tanstack/react-hotkeys 0.15.0 with core 0.16.0"
+      ],
+      "uncertainty": "Source-inferred collisions have not been reproduced. Neither library has demonstrated REZICS IME, editor, modal or Vinext behavior.",
+      "minimal_slice": "One isolated harness compares the same action IDs and precedence rules across native baseline, Ark and TanStack; migrate no live global shortcut during the comparison.",
+      "acceptance_refs": [
+        "keys-priority",
+        "keys-ime",
+        "keys-inputs",
+        "keys-customization",
+        "keys-access",
+        "keys-platform",
+        "keys-lifecycle",
+        "keys-cost"
+      ],
+      "cross_domain_reuse": [
+        "Web search and catalogue",
+        "Reader navigation",
+        "Editor tool access",
+        "Moderation and Accounts administration"
+      ],
+      "follow_up_trigger": "Proceed when the manager assigns the bounded spike; choose the simplest candidate passing all mandatory gates. If native hooks pass with less policy code, keep them."
+    },
+    {
+      "id": "focus-and-command-access",
+      "priority": 2,
+      "problem": "Consistent modal focus, pending-state dismissal and discoverable commands must survive when shortcuts and menus share a journey.",
+      "owner": "packages/ui wrappers and existing Accounts command/action registry; each domain owns authorized actions.",
+      "evidence_refs": [
+        "focus-owner",
+        "command-owner",
+        "accounts-keys",
+        "ark-dialog",
+        "apg-dialog"
+      ],
+      "recommendation": "adopt",
+      "mode": "reuse existing dependencies",
+      "alternatives": [
+        "Existing Ark wrappers plus action metadata",
+        "Another dialog/focus/command-palette runtime"
+      ],
+      "tradeoff": "Reusing Ark preserves one focus/dismissal owner; a second stack increases portal, Escape, focus-restoration and localization coordination without an observed missing primitive.",
+      "minimal_slice": "After ownership settles, derive one existing palette entry and its help row from the same translated action metadata, retaining its current authorization/confirmation path. Repair a wrapper only when a concrete focus case fails.",
+      "uncertainty": "No current focus failure or command-help drift was rendered or measured.",
+      "acceptance_refs": [
+        "keys-priority",
+        "keys-access",
+        "focus-return"
+      ],
+      "cross_domain_reuse": [
+        "Search/typeahead/entity pickers",
+        "Dialogs and confirmation flows",
+        "Editor toolbar/link dialog",
+        "Accounts and moderation actions"
+      ],
+      "follow_up_trigger": "Reopen primitive choice only for a reproducible capability missing from Ark that cannot be repaired in its wrapper."
+    },
+    {
+      "id": "write-feedback",
+      "priority": 3,
+      "problem": "Fast settings, ratings or draft actions must show the latest admitted intent, uncertainty and conflict without stale optimistic rollback or duplicated retries.",
+      "owner": "Existing command/recovery helpers and Main contracts; screen owners choose pending/error presentation.",
+      "evidence_refs": [
+        "cache-command-owner",
+        "form-owner",
+        "sync-contract",
+        "audit-snapshot",
+        "query-optimistic",
+        "query-mutations"
+      ],
+      "recommendation": "adopt",
+      "mode": "reuse installed Query and command owners; no new form or offline runtime",
+      "alternatives": [
+        "Native forms/hooks with command helpers",
+        "Existing Query for cache display/invalidation",
+        "react-hook-form for demonstrated repeated form-state needs"
+      ],
+      "tradeoff": "Query can coordinate display and invalidation but cannot supply authorization, expected-head concurrency or server idempotency. Form libraries can reduce field plumbing while adding another state boundary.",
+      "minimal_slice": "After G-2751/G-2748 land, inspect one still-failing pending/retry journey. Reuse operation identity and newest-intent semantics; add Query mutation orchestration only if it removes duplication without changing those semantics.",
+      "uncertainty": "No new remaining failure was reproduced; the synchronization document is prospective, not evidence of an existing offline queue.",
+      "acceptance_refs": [
+        "writes-races"
+      ],
+      "cross_domain_reuse": [
+        "Ratings and library actions",
+        "Settings",
+        "Composer drafts",
+        "Administrative writes"
+      ],
+      "follow_up_trigger": "A reproducible stale/lost-response case after the active repairs, or repeated nested/dynamic field-state duplication, can justify a separate implementation or form trial."
+    },
+    {
+      "id": "dense-discovery",
+      "priority": 4,
+      "problem": "A person comparing multi-community ratings or traversing a dense catalogue needs readable provenance, stable focus, honest continuation and shareable query state.",
+      "owner": "Catalogue/discovery/rating owners; G-2787 journey semantics, G-2754 layout and G-2786 aggregate completeness remain independent owners.",
+      "evidence_refs": [
+        "rating-owner",
+        "list-owner",
+        "url-usage",
+        "audit-coordination",
+        "virtual-api",
+        "nuqs-adapters"
+      ],
+      "recommendation": "defer",
+      "mode": "no new library until a concrete rendering or state-synchronization limit is observed",
+      "alternatives": [
+        "Semantic compact rows/cards with bounded pagination and native URL codecs",
+        "Reuse installed nuqs for one proven URL synchronization problem",
+        "Trial TanStack Virtual only after profiling identifies excessive mounted work"
+      ],
+      "tradeoff": "Virtualization can reduce mounted work but complicates focus, screen-reader traversal, browser find/print and SSR geometry; it cannot repair scale/provenance semantics or missing results. nuqs can reduce synchronized state plumbing but must not weaken existing codecs.",
+      "minimal_slice": "First carry the 1/3/10-community cases into an existing rating/list view design and profile a populated bounded page after layout repairs. Trial only the mechanism corresponding to a measured failure.",
+      "uncertainty": "No DOM-size, scroll, interaction or URL synchronization failure was measured here.",
+      "acceptance_refs": [
+        "lists-and-ratings",
+        "url-state"
+      ],
+      "cross_domain_reuse": [
+        "Catalogue and discovery",
+        "Personal library",
+        "Studio inventory",
+        "Administrative tables"
+      ],
+      "follow_up_trigger": "Reopen virtualization for a measured list-rendering bottleneck after bounded pagination; reopen nuqs for duplicated live controls that demonstrably drift from canonical URL state."
+    }
+  ],
+  "hotkeys_decision": {
+    "release_assessment": {
+      "fact": "Live npm latest is React adapter 0.15.0 and core 0.16.0, both MIT and published October 18, 2026. The React package first appeared February 10, 2026. The tagged README still says beta.",
+      "qualification": "GitHub marks this release prerelease=false; that flag and a plain semver version do not override the explicit beta statement. The October 18 release changed chord/sequence APIs and introduced the scope feature central to this decision.",
+      "recommendation": "trial",
+      "production_rollout": "defer",
+      "evidence_refs": [
+        "package-tanstack-react-hotkeys",
+        "package-tanstack-hotkeys",
+        "tanstack-beta",
+        "tanstack-release"
+      ]
+    },
+    "alternatives": [
+      {
+        "candidate": "existing hooks and browser primitives",
+        "recommendation": "adopt",
+        "scope": "Keep as baseline and viable final choice for a small shortcut set.",
+        "benefit": "No added package and direct control of composed events, IME, pending state and domain authority.",
+        "cost": "Must share guard/priority policy, action metadata, cleanup and tests instead of copying handlers.",
+        "evidence_refs": [
+          "shell-search",
+          "accounts-keys",
+          "reader-queue",
+          "sidebar-editor",
+          "dom-events"
+        ]
+      },
+      {
+        "candidate": "Ark Hotkeys",
+        "recommendation": "trial",
+        "version": "@ark-ui/react 5.39.3; transitive @zag-js/hotkeys 1.45.0",
+        "license": "MIT",
+        "benefit": "Public hotkeys export already in the pinned dependency graph; documented sequences, scopes, formatting, recording and registered metadata could serve the existing palette.",
+        "cost": "Utility is preview. Its capture-phase default and flat active scopes require explicit coordination with editor/React handlers and modal priority; presence in the lockfile does not mean zero route bytes.",
+        "engine_latest": "1.46.0; do not override the pinned transitive version for this comparison",
+        "evidence_refs": [
+          "ark-hotkeys",
+          "ark-hook",
+          "ark-artifact",
+          "zag-artifact",
+          "package-zag-pinned",
+          "package-zag-js-hotkeys"
+        ]
+      },
+      {
+        "candidate": "TanStack Hotkeys",
+        "recommendation": "trial",
+        "version": "@tanstack/react-hotkeys 0.15.0; @tanstack/hotkeys 0.16.0",
+        "license": "MIT",
+        "benefit": "Nested and exclusive scopes directly address foreground modal/editor versus background page ownership; action metadata and formatting can reduce manual help drift.",
+        "cost": "Beta APIs changed yesterday; new React Store/Store dependency edges, behavior adapters, maintenance and route costs need measurement. Its registry scope cannot suspend unrelated native, Ark or Tiptap handlers.",
+        "dependencies": [
+          "@tanstack/hotkeys 0.16.0",
+          "@tanstack/react-store ^0.11.2",
+          "@tanstack/store ^0.11.2 through the core"
+        ],
+        "evidence_refs": [
+          "tanstack-release",
+          "tanstack-customization",
+          "package-tanstack-react-hotkeys",
+          "package-tanstack-hotkeys"
+        ]
+      },
+      {
+        "candidate": "react-hotkeys-hook",
+        "recommendation": "defer",
+        "version": "5.3.3",
+        "license": "MIT",
+        "benefit": "Established package history, documented ref/provider scopes and ignoreEventWhen can express guards; registry declares no runtime dependencies.",
+        "cost": "Adds another package while Ark is already present; no declared dependencies does not prove smaller route cost or correct nested ownership. Keep only as fallback if the first comparison exposes an unsolved requirement.",
+        "evidence_refs": [
+          "react-hotkeys-api",
+          "package-react-hotkeys-hook"
+        ]
+      }
+    ],
+    "compatibility_matrix": [
+      {
+        "axis": "React 19, Vinext, SSR and hydration",
+        "source_observation": "TanStack peers accept React/React DOM >=16.8; Ark accepts >=18. React hooks register after render and source contains browser/target guards. Ark platform hook uses a Windows server snapshot before browser detection.",
+        "documented_promise": "React adapters and platform formatting are supported by their maintainers.",
+        "hypothesis": "Both are plausible client-boundary candidates; neither has been run on the pinned Vinext RSC/Cloudflare path. A provider mounted only in the browser still needs deterministic server-rendered labels and no cross-request singleton state.",
+        "policy": "Use an explicit client boundary and neutral/deterministic server display until hydration. Test production SSR and client navigation, not only a component harness.",
+        "evidence_refs": [
+          "dependency-baseline",
+          "package-tanstack-react-hotkeys",
+          "package-ark-ui-react",
+          "tanstack-react-hook",
+          "tanstack-adapter",
+          "ark-artifact"
+        ],
+        "acceptance_refs": [
+          "keys-platform",
+          "keys-lifecycle"
+        ]
+      },
+      {
+        "axis": "Scopes, modal/editor priority and event propagation",
+        "source_observation": "TanStack nested/latest activation ranks conflicts; exclusive scopes can suspend its own global registrations. TanStack defaults consume matched events before callbacks; inspected manager does not exclude already-prevented events. Zag defaults to capture=true, preventDefault=true, stopPropagation=false and wildcard scope remains active.",
+        "documented_promise": "Both libraries expose scope and target options; TanStack exposes exclusive provider scopes.",
+        "hypothesis": "Default capture/consumption can run before React/Tiptap handlers or turn an ignored callback into a canceled browser action. Existing listeners remain outside either registry, and same-target propagation is not arbitration.",
+        "policy": "Foreground widget/editor then top modal then page then global is a trial policy, with widget-specific overrides and pending guards. No second modal Escape owner. Compare candidates with capture=false and automatic preventDefault/stopPropagation=false where supported; check defaultPrevented, composition and owner eligibility before deliberate consumption. Test sequence intermediate steps too. If that cannot preserve foreground handling, reject that candidate.",
+        "warning": "A TanStack callback that simply returns when event.defaultPrevented is true will also return after the library default has prevented its own event. Guarding in a callback is not sufficient unless consumption is configured explicitly.",
+        "evidence_refs": [
+          "tanstack-manager",
+          "tanstack-release",
+          "tanstack-options",
+          "zag-artifact",
+          "dom-events",
+          "sidebar-editor",
+          "focus-owner"
+        ],
+        "acceptance_refs": [
+          "keys-priority",
+          "focus-return"
+        ]
+      },
+      {
+        "axis": "Chinese/Japanese IME, editable controls and keyboard layouts",
+        "source_observation": "TanStack normalization recognizes isComposing/Process/Unidentified; its matcher excludes composing printable or physical bindings, not all named keys, and the inspected normalizer has no 229 check. Zag inspected dispatch has no general composing/defaultPrevented check. REZICS search already maintains composition and 229 defenses.",
+        "documented_promise": "Input filtering and logical/physical binding support reduce accidental matches; they are not a promise of complete CJK input safety.",
+        "hypothesis": "Enter, Escape, arrows, candidate selection and Safari composition-ending sequences may need application guards for either candidate. Modifier shortcuts must still respect focused editor/widget ownership.",
+        "policy": "Retain existing composition lifecycle tracking and nativeEvent.isComposing/keyCode 229 checks where needed. Bare shortcuts stay out of text fields/contentEditable and widget-owned keys. Prefer logical action bindings; choose physical codes only for an explicit layout-independent requirement.",
+        "evidence_refs": [
+          "tanstack-match",
+          "tanstack-normalize",
+          "tanstack-inputs",
+          "zag-artifact",
+          "ime-tests",
+          "ui-events"
+        ],
+        "acceptance_refs": [
+          "keys-ime",
+          "keys-inputs"
+        ]
+      },
+      {
+        "axis": "Platform Mod and display labels",
+        "source_observation": "Existing Accounts label detection waits until mount. Both candidates expose platform-aware formatting; Ark has a server snapshot.",
+        "documented_promise": "Mod resolves to the platform primary modifier and formatters produce platform-oriented labels.",
+        "hypothesis": "OS, locale, layout and SSR can still make displayed bindings inconsistent with the actual match or ARIA syntax.",
+        "policy": "Keep stable action IDs, localized action names and a single binding representation. Format visible glyphs separately from aria-keyshortcuts using resolved Control/Meta names; do not use the string Mod as ARIA syntax. Browser/OS/assistive-technology reserved combinations are excluded.",
+        "evidence_refs": [
+          "accounts-keys",
+          "ark-artifact",
+          "ark-hotkeys",
+          "tanstack-display",
+          "aria-shortcuts"
+        ],
+        "acceptance_refs": [
+          "keys-platform",
+          "keys-customization"
+        ]
+      },
+      {
+        "axis": "Customization, discovery and equitable access",
+        "source_observation": "Accounts already exposes a palette and a separate help table. Global /, page g sequences and moderation letters are character shortcuts.",
+        "documented_promise": "Library metadata/recording helpers can support customization and generated shortcut help.",
+        "hypothesis": "A shared manifest can reduce drift, but shortcut recording does not choose safe defaults, persist settings, validate collisions or translate action names.",
+        "policy": "Make all actions reachable through visible controls; offer character-shortcut disable/remap or focus-only activation, including sequences. Record/remap only in an explicit mode, reject conflicts/reserved keys and let users reset. Generate palette/help from current authorized actions and announce outcomes, not just a key glyph.",
+        "evidence_refs": [
+          "accounts-keys",
+          "command-owner",
+          "tanstack-customization",
+          "ark-hotkeys",
+          "wcag-character-shortcuts",
+          "aria-shortcuts"
+        ],
+        "acceptance_refs": [
+          "keys-customization",
+          "keys-access"
+        ]
+      },
+      {
+        "axis": "Lifecycle, testability and maintenance",
+        "source_observation": "Current native handlers generally remove their listeners. TanStack and Ark React hooks unregister bindings on cleanup and retain current callbacks. Ark default store initialization is shared; its initialization effect does not itself destroy the store.",
+        "documented_promise": "Hooks support declarative enablement and registration cleanup.",
+        "hypothesis": "Repeated mounts, Strict Mode, route replacement, iframe/Storybook environment changes and HMR can expose duplicate or stale registrations; no leak or correct cleanup was demonstrated by reading source.",
+        "policy": "Use one explicit registry owner per document/environment if a registry is chosen; verify teardown/reinitialization and no stale actions. Pin the trial and isolate API changes behind a small application policy interface only if it reduces complexity over native hooks.",
+        "evidence_refs": [
+          "tanstack-react-hook",
+          "tanstack-react-provider",
+          "tanstack-listeners",
+          "ark-hook",
+          "ark-artifact",
+          "accounts-keys"
+        ],
+        "acceptance_refs": [
+          "keys-lifecycle",
+          "keys-cost"
+        ]
+      },
+      {
+        "axis": "Dependency, bundle and accessibility cost",
+        "source_observation": "TanStack adds Store dependency edges not found in the current lockfile. Ark engine is already resolved but its hotkeys entry point is not shown as used. react-hotkeys-hook declares no runtime dependencies.",
+        "documented_promise": "Libraries offer convenient APIs; no vendor bundle-size slogan is used as a REZICS measurement.",
+        "hypothesis": "Tree shaking, route splitting, imports, generated action metadata and policy wrappers could dominate incremental cost. Accessible behavior depends on the composed journey, not package branding.",
+        "policy": "Measure identical production route builds, compressed chunks, registration cleanup and key-to-action latency. Prefer the least total policy/maintenance complexity among candidates passing behavioral and access gates; keep native hooks if the library brings no demonstrated benefit.",
+        "evidence_refs": [
+          "dependency-baseline",
+          "package-tanstack-react-hotkeys",
+          "package-tanstack-hotkeys",
+          "package-react-hotkeys-hook",
+          "wcag-character-shortcuts",
+          "apg-dialog"
+        ],
+        "acceptance_refs": [
+          "keys-cost",
+          "keys-access"
+        ]
+      }
+    ],
+    "bounded_spike": {
+      "status": "proposed; not executed or installed",
+      "timebox": "One engineer-day is a planning estimate for the first comparison, not a delivery or performance measurement.",
+      "environment": "New isolated research harness; exact current pins, React 19.3.1 and Vinext 1.0.0-beta.13; then production SSR/Cloudflare-compatible route verification if component behavior passes.",
+      "contents": [
+        "Use the same five actions: search, editor link, editor bold, sidebar toggle and a page navigation/help action. Render visible equivalents.",
+        "Include the existing Ark dialog/menu/combobox and Tiptap editor, nested dialog, pending-close state and an independent native listener to expose interoperability failures.",
+        "Compare native baseline, pinned Ark and exact TanStack versions behind the same fixture/action definitions. No simultaneous competing live global registries.",
+        "Exercise one character sequence and editable input; test native-event versus React-handler ordering before deciding abstraction boundaries.",
+        "Use new harness paths only; recheck active owners before any production follow-up. Future dependency experiments use Yarn in that authorized slice, not this research session."
+      ],
+      "decision_gate": "Reject a candidate for any mandatory priority, composition, focus, hydration, cleanup or action-equivalence failure that requires maintaining a parallel competing registry or editing third-party internals. Among passing candidates, adopt only if measured cost fits the agreed route budget and the same cases require less application policy/maintenance than native hooks.",
+      "exit": "Publish exact versions, fixture/code, failing/passing cases, build settings and raw results. If the timebox cannot resolve correctness or cost, retain current hooks and defer adoption; do not claim an integration from a demo."
+    }
+  },
+  "other_library_decisions": [
+    {
+      "id": "focus-and-palette-runtime",
+      "recommendation": "reject",
+      "candidate": "Additional dialog/focus/menu/command-palette runtime",
+      "problem": "Consistency is an ownership/composition concern; no missing primitive was established.",
+      "owner": "Existing Ark wrappers and command owners",
+      "evidence_refs": [
+        "focus-owner",
+        "command-owner",
+        "ark-dialog"
+      ],
+      "alternatives_and_tradeoffs": "Reuse Ark and native focus APIs through current wrappers. A second focus trap or palette duplicates event, portal, localization and permission work.",
+      "minimal_slice": "Repair one observed composition failure or share action metadata, not replace the stack.",
+      "acceptance_refs": [
+        "focus-return",
+        "keys-access"
+      ],
+      "cross_domain_reuse": [
+        "Dialogs",
+        "Menus",
+        "Entity pickers",
+        "Administrative commands"
+      ],
+      "follow_up_trigger": "A reproducible required interaction unavailable in the installed primitives, with wrapper fixes evaluated first."
+    },
+    {
+      "id": "url-filters",
+      "recommendation": "defer",
+      "candidate": "Reuse nuqs 2.10.2 (MIT); no new package",
+      "problem": "Shareable filters and Back/Forward need one canonical meaning; no cross-control drift was observed.",
+      "owner": "Discovery/search/library URL codecs and router",
+      "evidence_refs": [
+        "list-owner",
+        "url-usage",
+        "package-nuqs",
+        "nuqs-adapters",
+        "nuqs-options",
+        "nuqs-testing"
+      ],
+      "alternatives_and_tradeoffs": "Keep URLSearchParams and existing codecs now. A future nuqs adapter could reduce reactive synchronization, but default shallow updates must not bypass server reads; use existing schema parsing, explicit history and cursor-reset semantics. Next peer acceptance does not prove Vinext adapter compatibility.",
+      "minimal_slice": "Only if drift is reproduced, connect one existing filter group using the pinned dependency and current codecs, preserving non-JS links/forms and server-owned state.",
+      "acceptance_refs": [
+        "url-state"
+      ],
+      "cross_domain_reuse": [
+        "Discovery",
+        "Library filters",
+        "Studio inventory"
+      ],
+      "follow_up_trigger": "Two live controls demonstrably drift from URL state or repeat substantial parsing/synchronization logic; require production Vinext SSR/Back/Forward proof before broader use."
+    },
+    {
+      "id": "virtualized-lists",
+      "recommendation": "defer",
+      "candidate": "@tanstack/react-virtual 3.14.21 (MIT)",
+      "problem": "Large mounted lists could be costly, but density and multi-community rating semantics do not themselves imply excessive mounted work.",
+      "owner": "List surface owners; API continuation and rating meaning stay with current owners",
+      "evidence_refs": [
+        "list-owner",
+        "rating-owner",
+        "package-tanstack-react-virtual",
+        "virtual-api",
+        "audit-coordination"
+      ],
+      "alternatives_and_tradeoffs": "Use semantic compact rows/cards, bounded pages and explicit continuation first. Virtualization offers dynamic measurement and stable keys at the cost of offscreen DOM absence, focus retention, screen-reader traversal, initial geometry, browser find/print and variable-height behavior. Do not add a table/grid engine without actual spreadsheet interaction needs.",
+      "minimal_slice": "After a profile demonstrates a rendering bottleneck, virtualize one result body while keeping the header/filter/continuation semantics and an accessible paged fallback.",
+      "acceptance_refs": [
+        "lists-and-ratings"
+      ],
+      "cross_domain_reuse": [
+        "Library",
+        "Discovery",
+        "Studio",
+        "Accounts inventory"
+      ],
+      "follow_up_trigger": "Measured long-task/interaction or mounted-DOM cost after layout and bounded-pagination fixes; retain pagination if virtualizing cannot preserve access."
+    },
+    {
+      "id": "forms-and-retries",
+      "recommendation": "defer",
+      "candidate": "react-hook-form 7.90.0 (MIT)",
+      "problem": "Field state/validation plumbing may become repetitive; currently observed concurrent-save and retry concerns belong to command/recovery owners.",
+      "owner": "Existing form/domain owners, Main contracts and command helpers",
+      "evidence_refs": [
+        "package-react-hook-form",
+        "rhf-readme",
+        "form-owner",
+        "cache-command-owner",
+        "sync-contract",
+        "query-optimistic",
+        "query-mutations"
+      ],
+      "alternatives_and_tradeoffs": "Native forms and current hooks remain simplest for small forms. Query 5.104.3 already supports cache coordination (public latest is 5.104.4; this report does not request an upgrade). Form-state libraries do not solve expected-head conflicts, revoked authority, accepted operations or lost-response retries. Reject a new offline persistence/automatic retry layer without its own contract and qualification.",
+      "minimal_slice": "Only after repeated dynamic/nested field-state duplication is shown, compare one representative form with accessible native validation and current command submission unchanged.",
+      "acceptance_refs": [
+        "writes-races"
+      ],
+      "cross_domain_reuse": [
+        "Settings",
+        "Composer metadata",
+        "Administrative forms"
+      ],
+      "follow_up_trigger": "At least two concrete forms share complex dynamic/dirty/error-state work that the current approach handles inconsistently; demonstrate reduced complexity and retained error focus."
+    },
+    {
+      "id": "motion",
+      "recommendation": "reject",
+      "candidate": "Immediate addition of Motion 14.3.0 (MIT)",
+      "problem": "No missing motion interaction was observed; reduced-motion CSS and transitions already exist.",
+      "owner": "Shared UI CSS and component owners",
+      "evidence_refs": [
+        "motion-owner",
+        "package-motion",
+        "package-tw-animate-css",
+        "reduced-motion",
+        "motion-accessibility"
+      ],
+      "alternatives_and_tradeoffs": "Keep CSS/tw-animate-css 1.4.0 and platform matchMedia. Motion may help complex interrupted/gesture/layout choreography, but it adds a runtime and does not fix keyboard or reduced-motion design by itself.",
+      "minimal_slice": "Review an observed transition with reduced motion enabled and repair existing CSS first.",
+      "acceptance_refs": [
+        "motion-and-locales"
+      ],
+      "cross_domain_reuse": [
+        "Dialogs",
+        "Menus",
+        "Carousels",
+        "Pending feedback"
+      ],
+      "follow_up_trigger": "A specific required gesture or interruptible layout animation is hard to express reliably in the current owner, with keyboard/touch alternatives and measured benefit."
+    },
+    {
+      "id": "localization",
+      "recommendation": "adopt",
+      "candidate": "Reuse native-i18n 0.2.0 (MIT), Intl and logical CSS; no second translation runtime",
+      "problem": "Translated action names, rating units, counts and OS shortcut labels must remain understandable across eight UI locales.",
+      "owner": "Current message definitions and domain formatting owners",
+      "evidence_refs": [
+        "locale-owner",
+        "package-native-i18n",
+        "intl-standard",
+        "aria-shortcuts"
+      ],
+      "alternatives_and_tradeoffs": "Keep message typing and Intl formatting; use shortcut formatting only for key labels. Another translation runtime would duplicate locale state, catalogs and hydration boundaries without an observed user benefit.",
+      "minimal_slice": "Any future action manifest stores stable IDs, message references and typed binding data; locale output is derived by existing owners.",
+      "acceptance_refs": [
+        "motion-and-locales",
+        "keys-platform",
+        "keys-access"
+      ],
+      "cross_domain_reuse": [
+        "Command help",
+        "Rating summaries",
+        "Filters",
+        "Pending/error recovery"
+      ],
+      "follow_up_trigger": "A concrete unsupported linguistic requirement or failed locale/hydration case should drive an owner fix; do not reopen solely because a new package is popular."
+    }
+  ],
+  "falsifying_acceptance_tests": [
+    {
+      "id": "keys-priority",
+      "status": "not run",
+      "workload": "Same document with editor, native listener, sidebar, search, page keys, menu, nested modal and pending-write modal.",
+      "pass_condition": "Editor Mod+K opens only its link action and Mod+B formats only the editor; background search/sidebar do not act. Consumed events cause zero extra actions and zero extra default cancellation. Top modal/widget owns its keys; background registries and legacy native listeners are explicitly disabled. Disabled/out-of-scope commands do not consume events; sequence prefixes have the intended browser behavior.",
+      "falsifies": "Any duplicate action, background action, suppressed valid widget/browser action or callback guard defeated by library pre-consumption.",
+      "evidence_refs": [
+        "sidebar-editor",
+        "reader-queue",
+        "focus-owner",
+        "dom-events",
+        "tanstack-manager",
+        "zag-artifact"
+      ]
+    },
+    {
+      "id": "keys-ime",
+      "status": "not run",
+      "workload": "Real Chinese Pinyin and Japanese IMEs in Chromium, Firefox and Safari on available target OSs; text input, typeahead and Tiptap. Also deterministic isComposing/Process/Unidentified and isComposing=false+keyCode229 vectors.",
+      "pass_condition": "Candidate-selection Enter/Escape/arrows never submit, navigate, dismiss or trigger commands; the committed text and caret remain correct. A subsequent intentional key works once after composition ends. Synthetic tests are reported separately from real OS observations.",
+      "falsifies": "Any accidental action, lost composition, blocked candidate selection or false claim of real IME coverage from synthetic events.",
+      "evidence_refs": [
+        "ime-tests",
+        "tanstack-match",
+        "tanstack-normalize",
+        "zag-artifact",
+        "ui-events"
+      ]
+    },
+    {
+      "id": "keys-inputs",
+      "status": "not run",
+      "workload": "Input, textarea, select, contentEditable/Tiptap, button/link, combobox/listbox/menu, target within a portal/shadow boundary, JIS and AltGr/dead-key input.",
+      "pass_condition": "Typing and widget-owned keys retain native semantics; character bindings do not fire in editable controls. Modifier exceptions are explicit and respect the focused editor/widget. Logical binding and label describe the actual activated key; RTL reader navigation remains correct outside widgets.",
+      "falsifies": "Typed text triggers navigation, arrows escape an active widget, AltGr creates a shortcut or physical fallback contradicts displayed behavior.",
+      "evidence_refs": [
+        "tanstack-inputs",
+        "tanstack-normalize",
+        "reader-queue",
+        "wcag-character-shortcuts"
+      ]
+    },
+    {
+      "id": "keys-customization",
+      "status": "not run",
+      "workload": "Global /, moderation letters, a g sequence and Mod bindings, with user disable/remap/reset and conflicting/invalid persisted input.",
+      "pass_condition": "Character shortcuts can be disabled or remapped to a modifier/focus-only policy; help/palette update from the active binding source. Invalid, duplicate and reserved bindings are rejected with visible localized recovery; recording cannot execute unrelated actions.",
+      "falsifies": "A character-only command cannot be disabled/remapped, help disagrees with execution, or an invalid stored binding breaks navigation.",
+      "evidence_refs": [
+        "accounts-keys",
+        "wcag-character-shortcuts",
+        "tanstack-customization",
+        "ark-hotkeys"
+      ]
+    },
+    {
+      "id": "keys-access",
+      "status": "not run",
+      "workload": "Complete the same search, navigation, rating and administrative action using keyboard only, screen reader, touch and narrow mobile without shortcuts.",
+      "pass_condition": "Every shortcut action has an authorized visible control, clear name, focus indication and outcome feedback. Focus order matches reading order; no trap outside an intended modal. aria-keyshortcuts reflects the active implemented chord with standard key names and is not the only instruction. Permission denial/pending state remains truthful.",
+      "falsifies": "Any shortcut-only capability, inaccessible palette result, silent error, misleading key metadata or lost focus.",
+      "evidence_refs": [
+        "command-owner",
+        "shell-search",
+        "apg-dialog",
+        "aria-shortcuts",
+        "wcag-character-shortcuts"
+      ]
+    },
+    {
+      "id": "keys-platform",
+      "status": "not run",
+      "workload": "Mac, Windows and Linux labels; server render, hydrate and client navigation on pinned React/Vinext, including an OS different from the server snapshot.",
+      "pass_condition": "No hydration mismatch, server browser-global access or initial label claiming a different active binding; neutral labels may become platform-specific after hydration. Browser/OS/assistive-technology reserved combinations are left intact. Visible glyphs and ARIA key names are both correct.",
+      "falsifies": "Hydration warnings, mislabeled execution, reserved-key capture or assumptions that React peer ranges prove Cloudflare/Vinext compatibility.",
+      "evidence_refs": [
+        "dependency-baseline",
+        "accounts-keys",
+        "ark-artifact",
+        "tanstack-adapter",
+        "aria-shortcuts"
+      ]
+    },
+    {
+      "id": "keys-lifecycle",
+      "status": "not run",
+      "workload": "Repeated mount/unmount, React Strict Mode, route changes, conditional scopes, HMR and document/environment replacement; change callbacks and permission state while mounted.",
+      "pass_condition": "Exactly one current eligible action runs per key; removed targets/scopes leave no live registrations. Teardown/reinitialization targets the current document and SSR creates no browser listener or cross-request user state.",
+      "falsifies": "Duplicate/stale callbacks, stuck exclusive scope, leaked targets or a store that cannot reinitialize correctly.",
+      "evidence_refs": [
+        "tanstack-react-hook",
+        "tanstack-react-provider",
+        "tanstack-listeners",
+        "ark-hook",
+        "ark-artifact"
+      ]
+    },
+    {
+      "id": "keys-cost",
+      "status": "not measured",
+      "workload": "Identical production builds and fixtures for native, Ark and TanStack on one representative Web route and one Accounts route; 5 then 50 active actions, mount/unmount cycles.",
+      "pass_condition": "Record exact lockfile/build environment, loaded route chunks raw/gzip/Brotli including transitive dependencies, mount/registration/listener counts and key-to-action p50/p95 on the same device/workload. Choose a route byte and latency budget before comparing results; report deltas with raw data. Adopt only if within that agreed budget and policy code/maintenance is lower for the same accepted behavior.",
+      "falsifies": "No repeatable benefit, hidden transitive cost, excessive work, extra long tasks or a claimed size/latency result inferred from package tarball/unpacked size. Numeric budgets remain an unresolved measurement setup decision, not an invented measured result.",
+      "evidence_refs": [
+        "dependency-baseline",
+        "package-tanstack-react-hotkeys",
+        "package-tanstack-hotkeys",
+        "package-react-hotkeys-hook"
+      ]
+    },
+    {
+      "id": "focus-return",
+      "status": "not run",
+      "workload": "Nested dialog from menu or editor, pending save, keyboard/touch close and removal of the original trigger.",
+      "pass_condition": "Focus starts in the intended control, remains in the top modal, pending state follows the existing close policy and focus returns to the invoker or a logical surviving successor. Escape during composition does not close a dialog.",
+      "falsifies": "Background interaction, double dismissal, focus loss or an extra focus library overriding wrapper policy.",
+      "evidence_refs": [
+        "focus-owner",
+        "apg-dialog",
+        "ark-dialog"
+      ]
+    },
+    {
+      "id": "writes-races",
+      "status": "not run",
+      "workload": "Rapid successive edits, response loss after admission, out-of-order completion, expected-head conflict, actor switch, revoked permission and retry after refresh.",
+      "pass_condition": "Latest intent remains visible; uncertain retry uses the same operation identity; rejected/stale writes do not overwrite admitted state or a newer edit. Cache/display keys remain actor/language/generation specific. Conflicts preserve local and server context; pending/accepted is not falsely shown as committed and no unqualified offline queue is added.",
+      "falsifies": "A generic rollback clobbers newer intent, retry duplicates an admitted command, revoked authority permits a write or a form library is claimed to solve these semantics.",
+      "evidence_refs": [
+        "cache-command-owner",
+        "sync-contract",
+        "query-optimistic",
+        "query-mutations"
+      ]
+    },
+    {
+      "id": "url-state",
+      "status": "not run",
+      "workload": "Existing scope, language, include/exclude, query, cursor and personalization combinations; invalid/duplicate query values; direct SSR link, Back/Forward, reload and rapid filter changes.",
+      "pass_condition": "Canonical codecs keep their validation and identity semantics. Changing query meaning resets continuation; server results and controls agree without flash or shallow-only stale results. History choice is explicit; native links/GET form fallback still work. Adapter tests supplement real production Vinext hydration/router proof.",
+      "falsifies": "Widened scope, lost filters, reused cursor for a new query, state drift or a testing adapter offered as router proof.",
+      "evidence_refs": [
+        "list-owner",
+        "nuqs-adapters",
+        "nuqs-options",
+        "nuqs-testing"
+      ]
+    },
+    {
+      "id": "lists-and-ratings",
+      "status": "not run",
+      "workload": "G-2787 1/3/10-community rating cases and empty/partial/full own ratings, varied scales/counts/withheld means; populated bounded lists, with 100/1000-item fixtures only when the real continuation contract permits them.",
+      "pass_condition": "Community/source, aggregate choice, own edit authority and units remain explicit; incomplete totals never claim exactness. DOM/focus/reading order is stable at narrow width and zoom. If virtualization is tried, focused/active rows remain available, dynamic heights do not jump, SSR first page is stable and an accessible paged path supports traversal/find/print needs. Profile before and after on the same fixture.",
+      "falsifies": "Density hides provenance, a virtualizer masks missing aggregates/results, offscreen rows become unreachable or performance is claimed without a baseline.",
+      "evidence_refs": [
+        "rating-owner",
+        "list-owner",
+        "virtual-api",
+        "audit-coordination"
+      ]
+    },
+    {
+      "id": "motion-and-locales",
+      "status": "not run",
+      "workload": "en, zh-Hant, zh-Hans, ja, ko, de, fr and es; 390px viewport, text zoom, long labels and reduced-motion preference before mount and while open.",
+      "pass_condition": "Actions, units, counts, key descriptions and recovery messages remain understandable; no clipped critical label or motion-only feedback. Reduced motion removes unnecessary movement without hiding state or controls; existing locale/Intl owners remain the only message/formatting source.",
+      "falsifies": "A new runtime is required only to reproduce existing behavior, preference changes are ignored or translated labels no longer fit/identify their action.",
+      "evidence_refs": [
+        "locale-owner",
+        "motion-owner",
+        "intl-standard",
+        "reduced-motion"
+      ]
+    }
+  ],
+  "unresolved_measurements": [
+    {
+      "question": "Can either candidate preserve all foreground/editor/IME behavior with a smaller policy surface than native hooks?",
+      "next": "Run the bounded keyboard harness; real IME observations remain mandatory before rollout.",
+      "affects": [
+        "keyboard-policy"
+      ]
+    },
+    {
+      "question": "What are the actual route chunk, hydration, listener and key-to-action costs on the pinned Vinext/Cloudflare path?",
+      "next": "Agree workload and byte/latency budgets, then build/profile exact candidates without mixing upgrades.",
+      "affects": [
+        "keyboard-policy"
+      ]
+    },
+    {
+      "question": "Do repaired dense lists need virtualization, and is any live URL state synchronization actually duplicated?",
+      "next": "Reinspect landed G-2754/G-2764 work, profile a populated bounded page and reproduce state drift before selecting a mechanism.",
+      "affects": [
+        "dense-discovery",
+        "virtualized-lists",
+        "url-filters"
+      ]
+    },
+    {
+      "question": "Which write/recovery and focus problems remain after current audit owners land?",
+      "next": "Rebase the evidence review conceptually on the landed code; retain existing authority and command contracts.",
+      "affects": [
+        "write-feedback",
+        "focus-and-command-access",
+        "forms-and-retries"
+      ]
+    }
+  ],
+  "research_refresh_policy": {
+    "owner": "Product-completion manager assigns follow-ups to current domain owners; this report is not a new long-lived runtime or process owner.",
+    "triggers": [
+      "Before any install or rollout, refresh live versions/licenses and inspect release diffs from the exact compared versions.",
+      "Repeat the keyboard comparison after a relevant React/Vinext/Ark/Tiptap change, a new hotkeys scope/event API or a real priority/IME/accessibility failure.",
+      "Reopen list/URL/form/motion candidates only when a concrete workload or interaction falsifies the no-new-library choice.",
+      "Use G-2787 journey results and actual user/assistive-technology observation to refine workloads; preserve the distinction between hypotheses and observed proof."
+    ],
+    "stop_rule": "Do not wait for parallel research or investigate every frontend library. This first deliverable is complete when decisions, cited evidence and falsifying next steps are internally consistent; runtime proof belongs to separately authorized slices."
+  },
+  "validation_scope": {
+    "results": {
+      "validated_on": "2026-10-19",
+      "recorded_job": "job:5a6bf03c-5f19-463e-9136-614112a6c7e1",
+      "json_and_consistency": "Passed: unique IDs, evidence/acceptance/decision references, required decision fields, local paths, package versions/licenses and explicit unexecuted proof status.",
+      "citations": "Passed: 50 public primary-source URLs fetched successfully; exact Ark and Zag artifact hashes matched. URL reachability is separate from the manual source-to-claim review.",
+      "documentation": "task docs:check passed: 13 documentation-tool tests and 208 Markdown files. It does not check external URLs, JSON semantics or runtime behavior; the report-specific checks cover JSON and citation consistency.",
+      "runtime_proof": "None; all proposed acceptance cases remain not run or not measured."
+    },
+    "required": [
+      "Parse JSON; check unique IDs, evidence/acceptance/decision references, dates, package versions/licenses and recommendation consistency.",
+      "Verify cited primary URLs and review that each supports its associated claim; distinguish live docs from immutable artifact facts.",
+      "Run task docs:check; review the final diff and commit only this report."
+    ],
+    "product_qa": "Not run: the brief explicitly requires research-only validation and prohibits product QA, installs and product changes. The broad goal check can prepare dependencies and run product-wide checks; it is outside this brief. No rendered or user-tested proof is claimed.",
+    "temporary_artifacts": "Ignored .temp/library-research/ holds inert public source excerpts and local validation scripts; it is not part of the committed result."
+  },
+  "local_evidence": [
+    {
+      "id": "product-goal",
+      "paths": [
+        "docs/product/goal.md",
+        "docs/product/design-principles.md",
+        "docs/product/decisions.md",
+        "docs/plan/frontend.md",
+        "docs/goals/method.md"
+      ],
+      "finding": "API outcomes and Main authority precede presentation; identity, language, units, complete traversal and usable basic paths survive library choices."
+    },
+    {
+      "id": "completion-coordination",
+      "paths": [
+        "docs/goals/product-completion-20261019/GOAL.md",
+        "docs/goals/product-completion-20261019/tasks/G-2787.md"
+      ],
+      "origin": "read-only manager checkout; these two documents were absent from the worker baseline",
+      "finding": "Completion is additional to the fixed 61-claim audit. G-2787 owns journey research, including 1/3/10-community rating scenarios; this report supplies mechanism choices without changing or waiting for that output."
+    },
+    {
+      "id": "dependency-baseline",
+      "paths": [
+        "package.json",
+        "apps/web/package.json",
+        "apps/accounts/package.json",
+        "packages/ui/package.json",
+        "yarn.lock",
+        "apps/web/vite.config.ts"
+      ],
+      "finding": "React 19.3.1 and Vinext 1.0.0-beta.13 with Vite/RSC/SSR and Cloudflare plugins; Ark, Tiptap, Query, nuqs, native-i18n and CSS animation already pinned. Query/nuqs are web dependencies, not direct Accounts dependencies."
+    },
+    {
+      "id": "shell-search",
+      "paths": [
+        "apps/web/features/shell/search-field.tsx:11",
+        "apps/web/features/shell/search-field.tsx:24"
+      ],
+      "finding": "Window listener skips already-prevented or composing events; / ignores editable controls; Mod+K focuses search. The GET form and submit control are existing non-shortcut access."
+    },
+    {
+      "id": "accounts-keys",
+      "paths": [
+        "apps/accounts/features/admin/shell/keys.ts:13",
+        "apps/accounts/features/admin/shell/admin-shell.tsx:67",
+        "apps/accounts/features/admin/shell/shortcuts-dialog.tsx"
+      ],
+      "finding": "Existing page-key guard checks open dialogs, composition, editable targets and consumed events. Separate Mod+K handler lacks a defaultPrevented guard. Page prefixes and shortcut help are maintained locally; platform label changes after mount."
+    },
+    {
+      "id": "command-owner",
+      "paths": [
+        "apps/accounts/features/admin/shell/command-palette.tsx",
+        "packages/ui/src/components/command.tsx"
+      ],
+      "finding": "Accounts already has permission-filtered commands, groups, search and actions using shared Ark Dialog/Combobox wrappers."
+    },
+    {
+      "id": "reader-queue",
+      "paths": [
+        "apps/web/features/work-page/reader-client.tsx:300",
+        "apps/web/features/manage/queue-view.tsx:290"
+      ],
+      "finding": "Reader arrows respect RTL, composition, modifiers and editable fields but do not explicitly suppress modal/widget contexts. Moderation keys additionally check dialogs/menus. Both clean up listeners."
+    },
+    {
+      "id": "sidebar-editor",
+      "paths": [
+        "packages/ui/src/components/sidebar.tsx:23",
+        "packages/ui/src/components/sidebar.tsx:91",
+        "packages/ui/src/components/rich-text-editor.tsx:338",
+        "packages/ui/src/components/action-bar.tsx:122"
+      ],
+      "finding": "Sidebar globally handles Mod+B without editable/composition/defaultPrevented checks; editor owns formatting, Mod+K and Mod+S with guards; action bar handles unconsumed Escape. Competing handling is a source-inferred risk, not an observed browser failure."
+    },
+    {
+      "id": "ime-tests",
+      "paths": [
+        "apps/web/features/search/search-form.tsx",
+        "apps/web/features/search/typeahead.tsx",
+        "apps/web/tests/public-search.e2e.ts",
+        "apps/web/tests/g-743-matrix.ts",
+        "packages/ui/src/components/entity-picker.stories.tsx"
+      ],
+      "finding": "Existing search code and synthetic cases preserve composition and keyCode 229 defenses. Cases were read, not executed, and cannot establish real OS IME behavior."
+    },
+    {
+      "id": "focus-owner",
+      "paths": [
+        "packages/ui/src/components/dialog.tsx",
+        "packages/ui/src/hooks/use-dialog-behavior.ts",
+        "packages/ui/src/components/menu.tsx",
+        "packages/ui/src/components/combobox.tsx"
+      ],
+      "finding": "Ark-backed wrappers own modal focus and dismissal, lazy content, initial focus and pending-write close prevention. A second focus/dismissal stack would compete."
+    },
+    {
+      "id": "rating-owner",
+      "paths": [
+        "apps/web/features/catalogue/rating.tsx",
+        "apps/web/features/library/row-parts.tsx",
+        "apps/web/features/work-page/ratings.tsx"
+      ],
+      "finding": "Existing rating presentation exposes mean/max/count/own value and withheld means; authority, scale and community provenance are product/API concerns, not virtualizer output."
+    },
+    {
+      "id": "list-owner",
+      "paths": [
+        "apps/web/features/discover/resource-list.tsx",
+        "apps/web/features/discover/browse-state.ts",
+        "apps/web/features/discover/scope.ts",
+        "apps/web/features/search/state.ts",
+        "apps/web/features/library/state.ts"
+      ],
+      "finding": "Semantic mapped lists and bounded continuation exist; pure URL codecs preserve scope and clear traversal on meaning changes. No rendering bottleneck was measured."
+    },
+    {
+      "id": "url-usage",
+      "paths": [
+        "apps/web",
+        "apps/accounts",
+        "packages/ui",
+        "yarn.lock"
+      ],
+      "finding": "Source search found no nuqs imports in these trees despite its lockfile entry. Dependency presence does not establish an adapter or integrated URL-state owner."
+    },
+    {
+      "id": "cache-command-owner",
+      "paths": [
+        "apps/web/features/api/command.ts",
+        "apps/web/features/shell/providers.tsx",
+        "apps/web/features/search/query.ts"
+      ],
+      "finding": "CommandInstance/WriteRound/writeNewest own stable operation identity, latest intent and uncertain-result recovery; Query keys include language, actor, authentication and generation. Existing Query defaults are not a write-authorization policy."
+    },
+    {
+      "id": "form-owner",
+      "paths": [
+        "apps/web/features/settings/profile-edit-form.tsx:25",
+        "apps/web/features/settings/listing-control.tsx:10",
+        "apps/accounts/features/admin/actions/action-dialog.tsx:64"
+      ],
+      "finding": "Profile editing combines a native multipart POST form, required/maxLength constraints, FormData, local busy/error state, expectedHead and an operation key. Listing settings keep a caller-owned intent key and distinguish stale/denied reads. Accounts action forms use shared Field errors, local validation, stable command IDs, reauthentication and pending dismissal guards. These are concrete existing form patterns; a new field-state package must preserve their submission and authority boundaries. No outcome was executed."
+    },
+    {
+      "id": "sync-contract",
+      "paths": [
+        "docs/contracts/client-synchronization.md"
+      ],
+      "finding": "Prospective contract requires expected-head concurrency, operation identity, explicit conflict/recovery and current authority; no qualified offline/reconnect queue is claimed."
+    },
+    {
+      "id": "motion-owner",
+      "paths": [
+        "packages/ui/src/styles.css:464",
+        "packages/ui/src/components/dialog.tsx",
+        "packages/ui/src/components/carousel.tsx"
+      ],
+      "finding": "Reduced-motion CSS/classes and preference-aware carousel behavior already exist. Their presence does not prove every journey is comfortable or accessible."
+    },
+    {
+      "id": "locale-owner",
+      "paths": [
+        "apps/web/i18n/define.ts",
+        "apps/web/i18n",
+        "apps/accounts/i18n",
+        "apps/web/features/catalogue/rating.tsx"
+      ],
+      "finding": "Eight UI locales use native-i18n and existing Intl formatting. English action IDs must be separate from translated display strings."
+    },
+    {
+      "id": "audit-snapshot",
+      "paths": [
+        "docs/goals/audit-remediation-20261019/GOAL.md",
+        "docs/goals/audit-remediation-20261019/state.md",
+        "docs/goals/audit-remediation-20261019/coverage.json"
+      ],
+      "finding": "Baseline audit coverage is unproved; task goal -- status was inspected on 2026-10-19 for active/unlanded ownership. Neither status nor this research closes an audit claim."
+    },
+    {
+      "id": "audit-coordination",
+      "paths": [
+        "docs/goals/audit-remediation-20261019/tasks/G-2784.md",
+        "docs/goals/audit-remediation-20261019/tasks/G-2786.md"
+      ],
+      "origin": "read-only manager checkout; newer briefs absent from worker baseline",
+      "finding": "G-2784 owns request cancellation/deadline and lawful recovery. G-2786 owns suggested-follow 8/9 and rating-head 100/101 completeness, with public outcome proof deferred to the later prove phase."
+    }
+  ],
+  "primary_sources": [
+    {
+      "id": "tanstack-entry",
+      "url": "https://tanstack.com/hotkeys/latest",
+      "accessed_on": "2026-10-19",
+      "kind": "maintainer_documentation",
+      "supports": "Requested starting point; links to APIs and framework guides. Floating documentation is not the version authority."
+    },
+    {
+      "id": "tanstack-beta",
+      "url": "https://raw.githubusercontent.com/TanStack/hotkeys/ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a/README.md",
+      "accessed_on": "2026-10-19",
+      "kind": "versioned_source",
+      "supports": "The release-tag source explicitly calls TanStack Hotkeys beta.",
+      "revision": "ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a"
+    },
+    {
+      "id": "tanstack-release",
+      "url": "https://api.github.com/repos/TanStack/hotkeys/releases/tags/%40tanstack%2Freact-hotkeys%400.15.0",
+      "accessed_on": "2026-10-19",
+      "kind": "release_history",
+      "supports": "October 18 release adds nested/exclusive scopes and changes public chord/sequence types and sequence event consumption.",
+      "published_at": "2026-10-18T01:37:53Z",
+      "revision": "ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a"
+    },
+    {
+      "id": "tanstack-match",
+      "url": "https://raw.githubusercontent.com/TanStack/hotkeys/ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a/packages/hotkeys/src/_match.ts",
+      "accessed_on": "2026-10-19",
+      "kind": "versioned_source",
+      "supports": "Composition rejection is conditional on printable logical keys or physical-code bindings; nonprintable keys need separate policy.",
+      "revision": "ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a"
+    },
+    {
+      "id": "tanstack-normalize",
+      "url": "https://raw.githubusercontent.com/TanStack/hotkeys/ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a/packages/hotkeys/src/_keyboard-event.ts",
+      "accessed_on": "2026-10-19",
+      "kind": "versioned_source",
+      "supports": "Normalization recognizes isComposing, Process, Unidentified and AltGraph; the inspected normalizer has no keyCode 229 check.",
+      "revision": "ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a"
+    },
+    {
+      "id": "tanstack-manager",
+      "url": "https://raw.githubusercontent.com/TanStack/hotkeys/ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a/packages/hotkeys/src/hotkey-manager.ts",
+      "accessed_on": "2026-10-19",
+      "kind": "versioned_source",
+      "supports": "Scope arbitration and event consumption occur in the manager; inspected dispatch has no defaultPrevented exclusion.",
+      "revision": "ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a"
+    },
+    {
+      "id": "tanstack-react-hook",
+      "url": "https://raw.githubusercontent.com/TanStack/hotkeys/ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a/packages/react-hotkeys/src/useHotkeys.ts",
+      "accessed_on": "2026-10-19",
+      "kind": "versioned_source",
+      "supports": "Effect registration, current callback references and binding destruction on cleanup.",
+      "revision": "ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a"
+    },
+    {
+      "id": "tanstack-react-provider",
+      "url": "https://raw.githubusercontent.com/TanStack/hotkeys/ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a/packages/react-hotkeys/src/HotkeysProvider.tsx",
+      "accessed_on": "2026-10-19",
+      "kind": "versioned_source",
+      "supports": "React provider activates its scope through an effect and returns scope cleanup.",
+      "revision": "ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a"
+    },
+    {
+      "id": "tanstack-adapter",
+      "url": "https://raw.githubusercontent.com/TanStack/hotkeys/ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a/packages/hotkeys/src/adapter.ts",
+      "accessed_on": "2026-10-19",
+      "kind": "versioned_source",
+      "supports": "Target/browser guards and removal of obsolete bindings; this is source evidence, not a Vinext integration run.",
+      "revision": "ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a"
+    },
+    {
+      "id": "tanstack-listeners",
+      "url": "https://raw.githubusercontent.com/TanStack/hotkeys/ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a/packages/hotkeys/src/_target-listeners.ts",
+      "accessed_on": "2026-10-19",
+      "kind": "versioned_source",
+      "supports": "Per-target/per-phase listener grouping and removal when registrations disappear.",
+      "revision": "ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a"
+    },
+    {
+      "id": "tanstack-inputs",
+      "url": "https://raw.githubusercontent.com/TanStack/hotkeys/ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a/packages/hotkeys/src/_event-target.ts",
+      "accessed_on": "2026-10-19",
+      "kind": "versioned_source",
+      "supports": "Editable and widget-owned key filtering uses event paths and focused elements.",
+      "revision": "ad56a4b0dbf3c34d8552eca2cc88c5c7000d520a"
+    },
+    {
+      "id": "tanstack-options",
+      "url": "https://tanstack.com/hotkeys/latest/docs/framework/react/guides/hotkeys",
+      "accessed_on": "2026-10-19",
+      "kind": "maintainer_documentation",
+      "supports": "Defaults and public React options, including automatic input filtering, event phase and conflict policy; source pin takes precedence if docs drift."
+    },
+    {
+      "id": "tanstack-display",
+      "url": "https://tanstack.com/hotkeys/latest/docs/framework/react/guides/formatting-display",
+      "accessed_on": "2026-10-19",
+      "kind": "maintainer_documentation",
+      "supports": "Platform-specific shortcut formatting, separate from localized action descriptions."
+    },
+    {
+      "id": "tanstack-customization",
+      "url": "https://tanstack.com/hotkeys/latest/docs/framework/react/guides/app-hotkeys",
+      "accessed_on": "2026-10-19",
+      "kind": "maintainer_documentation",
+      "supports": "App action metadata, controlled binding customization and discoverability helpers; product persistence and conflict policy remain application work."
+    },
+    {
+      "id": "ark-hotkeys",
+      "url": "https://ark-ui.com/docs/utilities/hotkeys",
+      "accessed_on": "2026-10-19",
+      "kind": "maintainer_documentation",
+      "supports": "Hotkeys is marked preview; scopes, sequences, platform formatting and command metadata are documented."
+    },
+    {
+      "id": "ark-hook",
+      "url": "https://raw.githubusercontent.com/chakra-ui/ark/90eb2125a9ac6a8225b2e4053484da08cbb68a54/packages/react/src/providers/hotkeys/use-hotkeys.ts",
+      "accessed_on": "2026-10-19",
+      "kind": "versioned_source",
+      "supports": "The pinned React wrapper registers in an effect, dereferences current actions and unregisters on cleanup.",
+      "revision": "90eb2125a9ac6a8225b2e4053484da08cbb68a54"
+    },
+    {
+      "id": "ark-artifact",
+      "url": "https://registry.npmjs.org/@ark-ui/react/-/react-5.39.3.tgz",
+      "accessed_on": "2026-10-19",
+      "kind": "published_source_artifact",
+      "supports": "Exact pinned public hotkeys export, client directives, platform server snapshot and default-store initialization.",
+      "members": [
+        "package/package.json",
+        "package/dist/providers/hotkeys/use-hotkey-store.js",
+        "package/dist/providers/hotkeys/use-platform.js"
+      ],
+      "sha256": "317ef0c3781207270a4a686d8dec591a28bc6e49dc2c54002fcd47a51cf87428"
+    },
+    {
+      "id": "zag-artifact",
+      "url": "https://registry.npmjs.org/@zag-js/hotkeys/-/hotkeys-1.45.0.tgz",
+      "accessed_on": "2026-10-19",
+      "kind": "published_source_artifact",
+      "supports": "Exact installed engine defaults and dispatch behavior, including capture phase, wildcard scopes and lack of composition/defaultPrevented guards in inspected dispatch.",
+      "members": [
+        "package/dist/store.mjs",
+        "package/dist/utils.mjs"
+      ],
+      "sha256": "adc1d8360f1efffcadab08f5d4ba4a0b1adcb424fdfbb04da2da3f641df803b5"
+    },
+    {
+      "id": "zag-changelog",
+      "url": "https://raw.githubusercontent.com/chakra-ui/zag/main/packages/utilities/hotkeys/CHANGELOG.md",
+      "accessed_on": "2026-10-19",
+      "kind": "release_history",
+      "supports": "Recent target-priority and invalid-key fixes; 1.46.0 updates its dom-query dependency. Floating history, not a recommendation to change the lockfile."
+    },
+    {
+      "id": "react-hotkeys-api",
+      "url": "https://react-hotkeys-hook.vercel.app/docs/api/use-hotkeys",
+      "accessed_on": "2026-10-19",
+      "kind": "maintainer_documentation",
+      "supports": "Provider/ref scopes, explicit editable policies and ignoreEventWhen offer a third comparison; integration remains untested."
+    },
+    {
+      "id": "ark-dialog",
+      "url": "https://ark-ui.com/docs/components/dialog",
+      "accessed_on": "2026-10-19",
+      "kind": "maintainer_documentation",
+      "supports": "Existing library supports modal focus containment, initial/final focus and nested dialogs; composition must still be observed."
+    },
+    {
+      "id": "wcag-character-shortcuts",
+      "url": "https://www.w3.org/WAI/WCAG22/Understanding/character-key-shortcuts.html",
+      "accessed_on": "2026-10-19",
+      "kind": "accessibility_standard_explanation",
+      "supports": "Character-only shortcuts need a disable, remap-to-modifier or focus-only mechanism under WCAG 2.1.4."
+    },
+    {
+      "id": "apg-dialog",
+      "url": "https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/",
+      "accessed_on": "2026-10-19",
+      "kind": "accessibility_pattern",
+      "supports": "Modal keyboard behavior, focus containment and return to the invoking control."
+    },
+    {
+      "id": "aria-shortcuts",
+      "url": "https://www.w3.org/TR/wai-aria-1.2/#aria-keyshortcuts",
+      "accessed_on": "2026-10-19",
+      "kind": "accessibility_standard",
+      "supports": "aria-keyshortcuts describes implemented bindings using standard key names; it does not implement a shortcut or replace visible controls."
+    },
+    {
+      "id": "dom-events",
+      "url": "https://dom.spec.whatwg.org/#dom-event-stoppropagation",
+      "accessed_on": "2026-10-19",
+      "kind": "web_standard",
+      "supports": "Propagation, default cancellation and immediate propagation are distinct; stopPropagation does not prevent other listeners on the same target."
+    },
+    {
+      "id": "ui-events",
+      "url": "https://w3c.github.io/uievents/#dom-keyboardevent-iscomposing",
+      "accessed_on": "2026-10-19",
+      "kind": "web_standard",
+      "supports": "Composition is an event lifecycle; legacy keyCode 229 is a local compatibility safeguard, not the modern normative API."
+    },
+    {
+      "id": "virtual-api",
+      "url": "https://tanstack.com/virtual/latest/docs/api/virtualizer",
+      "accessed_on": "2026-10-19",
+      "kind": "maintainer_documentation",
+      "supports": "Estimates, measurement, stable keys, range extraction and initial geometry are available; none proves accessible REZICS lists or performance."
+    },
+    {
+      "id": "nuqs-adapters",
+      "url": "https://nuqs.dev/docs/adapters",
+      "accessed_on": "2026-10-19",
+      "kind": "maintainer_documentation",
+      "supports": "Router-specific providers are required; Next App Router support does not establish Vinext support."
+    },
+    {
+      "id": "nuqs-options",
+      "url": "https://nuqs.dev/docs/options",
+      "accessed_on": "2026-10-19",
+      "kind": "maintainer_documentation",
+      "supports": "Shallow defaults, history and update scheduling must be selected explicitly for server-owned query state."
+    },
+    {
+      "id": "nuqs-testing",
+      "url": "https://nuqs.dev/docs/testing",
+      "accessed_on": "2026-10-19",
+      "kind": "maintainer_documentation",
+      "supports": "Testing adapter can validate serialization and updates; a mocked router cannot prove production hydration or Back/Forward."
+    },
+    {
+      "id": "query-optimistic",
+      "url": "https://tanstack.com/query/latest/docs/framework/react/guides/optimistic-updates",
+      "accessed_on": "2026-10-19",
+      "kind": "maintainer_documentation",
+      "supports": "Optimistic display and snapshot/rollback/invalidation patterns are possible; safe application of them depends on command and actor identity."
+    },
+    {
+      "id": "query-mutations",
+      "url": "https://tanstack.com/query/latest/docs/framework/react/guides/mutations",
+      "accessed_on": "2026-10-19",
+      "kind": "maintainer_documentation",
+      "supports": "Mutation retries are opt-in by default and offline resumption is a separate facility; neither supplies server idempotency or authority."
+    },
+    {
+      "id": "rhf-readme",
+      "url": "https://raw.githubusercontent.com/react-hook-form/react-hook-form/v7.90.0/README.md",
+      "accessed_on": "2026-10-19",
+      "kind": "versioned_source",
+      "supports": "Form state and native validation integration are the proposed benefit, not stale-write or lost-response semantics."
+    },
+    {
+      "id": "reduced-motion",
+      "url": "https://www.w3.org/TR/mediaqueries-5/#prefers-reduced-motion",
+      "accessed_on": "2026-10-19",
+      "kind": "web_standard",
+      "supports": "The platform exposes the reduced-motion preference used by existing CSS."
+    },
+    {
+      "id": "motion-accessibility",
+      "url": "https://motion.dev/docs/react-accessibility",
+      "accessed_on": "2026-10-19",
+      "kind": "maintainer_documentation",
+      "supports": "Motion offers preference-aware helpers, but these alone do not justify replacing existing transitions."
+    },
+    {
+      "id": "intl-standard",
+      "url": "https://tc39.es/ecma402/",
+      "accessed_on": "2026-10-19",
+      "kind": "web_standard",
+      "supports": "Intl supplies language-sensitive number, date and plural formatting alongside the existing message system."
+    },
+    {
+      "id": "package-tanstack-react-hotkeys",
+      "url": "https://registry.npmjs.org/@tanstack%2freact-hotkeys",
+      "accessed_on": "2026-10-19",
+      "kind": "publisher_registry_metadata",
+      "supports": "Live dist-tags, exact-version metadata, publish times, license and declared compatibility; not a runtime or bundle measurement.",
+      "version_url": "https://registry.npmjs.org/@tanstack%2freact-hotkeys/0.15.0"
+    },
+    {
+      "id": "package-tanstack-hotkeys",
+      "url": "https://registry.npmjs.org/@tanstack%2fhotkeys",
+      "accessed_on": "2026-10-19",
+      "kind": "publisher_registry_metadata",
+      "supports": "Live dist-tags, exact-version metadata, publish times, license and declared compatibility; not a runtime or bundle measurement.",
+      "version_url": "https://registry.npmjs.org/@tanstack%2fhotkeys/0.16.0"
+    },
+    {
+      "id": "package-ark-ui-react",
+      "url": "https://registry.npmjs.org/@ark-ui%2freact",
+      "accessed_on": "2026-10-19",
+      "kind": "publisher_registry_metadata",
+      "supports": "Live dist-tags, exact-version metadata, publish times, license and declared compatibility; not a runtime or bundle measurement.",
+      "version_url": "https://registry.npmjs.org/@ark-ui%2freact/5.39.3"
+    },
+    {
+      "id": "package-zag-js-hotkeys",
+      "url": "https://registry.npmjs.org/@zag-js%2fhotkeys",
+      "accessed_on": "2026-10-19",
+      "kind": "publisher_registry_metadata",
+      "supports": "Live dist-tags, exact-version metadata, publish times, license and declared compatibility; not a runtime or bundle measurement.",
+      "version_url": "https://registry.npmjs.org/@zag-js%2fhotkeys/1.46.0"
+    },
+    {
+      "id": "package-react-hotkeys-hook",
+      "url": "https://registry.npmjs.org/react-hotkeys-hook",
+      "accessed_on": "2026-10-19",
+      "kind": "publisher_registry_metadata",
+      "supports": "Live dist-tags, exact-version metadata, publish times, license and declared compatibility; not a runtime or bundle measurement.",
+      "version_url": "https://registry.npmjs.org/react-hotkeys-hook/5.3.3"
+    },
+    {
+      "id": "package-tanstack-react-virtual",
+      "url": "https://registry.npmjs.org/@tanstack%2freact-virtual",
+      "accessed_on": "2026-10-19",
+      "kind": "publisher_registry_metadata",
+      "supports": "Live dist-tags, exact-version metadata, publish times, license and declared compatibility; not a runtime or bundle measurement.",
+      "version_url": "https://registry.npmjs.org/@tanstack%2freact-virtual/3.14.21"
+    },
+    {
+      "id": "package-nuqs",
+      "url": "https://registry.npmjs.org/nuqs",
+      "accessed_on": "2026-10-19",
+      "kind": "publisher_registry_metadata",
+      "supports": "Live dist-tags, exact-version metadata, publish times, license and declared compatibility; not a runtime or bundle measurement.",
+      "version_url": "https://registry.npmjs.org/nuqs/2.10.2"
+    },
+    {
+      "id": "package-tanstack-react-query",
+      "url": "https://registry.npmjs.org/@tanstack%2freact-query",
+      "accessed_on": "2026-10-19",
+      "kind": "publisher_registry_metadata",
+      "supports": "Live dist-tags, exact-version metadata, publish times, license and declared compatibility; not a runtime or bundle measurement.",
+      "version_url": "https://registry.npmjs.org/@tanstack%2freact-query/5.104.4"
+    },
+    {
+      "id": "package-react-hook-form",
+      "url": "https://registry.npmjs.org/react-hook-form",
+      "accessed_on": "2026-10-19",
+      "kind": "publisher_registry_metadata",
+      "supports": "Live dist-tags, exact-version metadata, publish times, license and declared compatibility; not a runtime or bundle measurement.",
+      "version_url": "https://registry.npmjs.org/react-hook-form/7.90.0"
+    },
+    {
+      "id": "package-motion",
+      "url": "https://registry.npmjs.org/motion",
+      "accessed_on": "2026-10-19",
+      "kind": "publisher_registry_metadata",
+      "supports": "Live dist-tags, exact-version metadata, publish times, license and declared compatibility; not a runtime or bundle measurement.",
+      "version_url": "https://registry.npmjs.org/motion/14.3.0"
+    },
+    {
+      "id": "package-native-i18n",
+      "url": "https://registry.npmjs.org/native-i18n",
+      "accessed_on": "2026-10-19",
+      "kind": "publisher_registry_metadata",
+      "supports": "Live dist-tags, exact-version metadata, publish times, license and declared compatibility; not a runtime or bundle measurement.",
+      "version_url": "https://registry.npmjs.org/native-i18n/0.2.0"
+    },
+    {
+      "id": "package-tw-animate-css",
+      "url": "https://registry.npmjs.org/tw-animate-css",
+      "accessed_on": "2026-10-19",
+      "kind": "publisher_registry_metadata",
+      "supports": "Live dist-tags, exact-version metadata, publish times, license and declared compatibility; not a runtime or bundle measurement.",
+      "version_url": "https://registry.npmjs.org/tw-animate-css/1.4.0"
+    },
+    {
+      "id": "package-tiptap-react",
+      "url": "https://registry.npmjs.org/@tiptap%2freact",
+      "accessed_on": "2026-10-19",
+      "kind": "publisher_registry_metadata",
+      "supports": "Live dist-tags, exact-version metadata, publish times, license and declared compatibility; not a runtime or bundle measurement.",
+      "version_url": "https://registry.npmjs.org/@tiptap%2freact/3.32.0"
+    },
+    {
+      "id": "package-zag-pinned",
+      "url": "https://registry.npmjs.org/@zag-js%2fhotkeys/1.45.0",
+      "accessed_on": "2026-10-19",
+      "kind": "publisher_registry_metadata",
+      "supports": "Pinned transitive engine is MIT at 1.45.0, distinct from current public 1.46.0."
+    }
+  ]
+}
