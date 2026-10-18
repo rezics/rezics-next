@@ -68,14 +68,14 @@ for (const candidate of candidates) {
     page.on('pageerror', error => entry.errors.push(String(error)));
     page.on('console', message => { if (['error','warning'].includes(message.type())) entry.console.push(message.text()); });
     await page.goto(origin);
-    await page.waitForFunction(() => window.__fixture && window.__adapter, { timeout: 30000 });
+    await page.waitForFunction(() => window.__fixture && window.__adapter, undefined, { timeout: 60000 });
     const clear = async () => page.evaluate(() => { window.__fixture.clear(); window.__cancels = 0; });
     const state = async () => page.evaluate(() => ({ actions: window.__fixture.logs.map(row => row.id), cancels: window.__cancels,
       focus: document.activeElement?.id || document.activeElement?.getAttribute('aria-label') || document.activeElement?.tagName,
       registrations: window.__adapter.count(), listeners: window.__keyListeners.map(row => ({ type: row.type, capture: row.capture,
         target: row.target === window ? 'window' : row.target === document ? 'document' : row.target.nodeName,
         connected: row.target === window || row.target === document || row.target.isConnected })) }));
-    async function vector(id, target, init, expected = []) {
+    async function vector(id, target, init, expected = [], expectedCancels = expected.length ? 1 : 0) {
       await clear();
       const before = await state();
       const event = await page.locator(target).evaluate((node, value) => {
@@ -88,16 +88,16 @@ for (const candidate of candidates) {
       const after = await state();
       const actions = after.actions;
       entry.cases.push({ id, target, init, expected, actions, cancels: after.cancels,
-        status: JSON.stringify(actions) === JSON.stringify(expected) && (expected.length > 0 || after.cancels === 0) ? 'pass' : 'fail',
+        expectedCancels, status: JSON.stringify(actions) === JSON.stringify(expected) && after.cancels === expectedCancels ? 'pass' : 'fail',
         event, focus: after.focus, registrations: before.registrations });
       return after;
     }
     const search = candidate === 'native-as-is' ? 'input[type=search]' : '#fixture-search';
     await vector('keys-priority/page-search', '#page-target', { key:'k', code:'KeyK', ctrlKey:true }, ['search']);
-    await vector('keys-priority/consumed', '#consumed', { key:'k', code:'KeyK', ctrlKey:true });
-    await vector('keys-priority/editor-bold', '.tiptap', { key:'b', code:'KeyB', ctrlKey:true });
+    await vector('keys-priority/consumed', '#consumed', { key:'k', code:'KeyK', ctrlKey:true }, [], 1);
+    await vector('keys-priority/editor-bold', '.tiptap', { key:'b', code:'KeyB', ctrlKey:true }, [], 1);
     entry.editorBold = await page.locator('#document-json').textContent();
-    await vector('keys-priority/editor-link', '.tiptap', { key:'k', code:'KeyK', ctrlKey:true });
+    await vector('keys-priority/editor-link', '.tiptap', { key:'k', code:'KeyK', ctrlKey:true }, [], 1);
     entry.editorLink = { linkFieldVisible: await page.getByPlaceholder('https://example.com').count(),
       dialogCount: await page.getByRole('dialog').count() };
     await page.keyboard.press('Escape');
@@ -117,12 +117,12 @@ for (const candidate of candidates) {
     await vector('keys-priority/repeat', '#page-target', { key:'b', code:'KeyB', ctrlKey:true, repeat:true });
     await page.getByRole('button', { name:'Open action menu', exact:true }).click();
     await page.getByRole('menuitem', { name:'Menu help' }).focus();
-    await vector('keys-inputs/menu', '[role=menuitem]:first-child', { key:'?', code:'Slash', shiftKey:true });
+    await vector('keys-inputs/menu', '[role=menuitem]:first-child', { key:'?', code:'Slash', shiftKey:true }, [], 1);
     await page.keyboard.press('Escape');
     await page.getByRole('combobox', { name:'Choose manuscript' }).click();
     await vector('keys-inputs/combobox', '[role=combobox]', { key:'?', code:'Slash', shiftKey:true });
     await page.keyboard.press('ArrowDown');
-    entry.combobox = { highlighted: await page.getByRole('combobox').getAttribute('aria-activedescendant') };
+    entry.combobox = { highlighted: await page.getByRole('combobox', { name:'Choose manuscript' }).getAttribute('aria-activedescendant') };
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name:'Open trial modal', exact:true }).click();
     await page.locator('#modal-input').waitFor();
@@ -214,7 +214,7 @@ for (const candidate of candidates) {
       await other.addInitScript(value=>Object.defineProperty(navigator,'platform',{get:()=>value}),platform);
       const view=await other.newPage();
       const errors=[];view.on('console',msg=>{if(msg.type()==='error')errors.push(msg.text())});
-      await view.goto(origin);await view.waitForFunction(()=>window.__fixture&&window.__adapter);
+      await view.goto(origin);await view.waitForFunction(()=>window.__fixture&&window.__adapter,undefined,{timeout:60000});
       entry.platforms.push({platform,aria:await view.locator(search).getAttribute('aria-keyshortcuts'),errors});
       await other.close();
     }

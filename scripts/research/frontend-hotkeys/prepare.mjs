@@ -38,6 +38,7 @@ import tailwindcss from '@tailwindcss/vite';
 const candidate = process.env.HOTKEY_CANDIDATE ?? 'native';
 export default defineConfig({
  plugins: [vinext({}), tailwindcss()],
+ optimizeDeps: { include: ['@ark-ui/react/dialog','@ark-ui/react/menu','@ark-ui/react/combobox','@ark-ui/react/hotkeys','@tanstack/react-hotkeys','react','react-dom','@tiptap/react'] },
  resolve: { dedupe: ['react','react-dom'], alias: {
   'virtual:hotkey-adapter': '${source}/adapter-' + candidate + '.tsx',
   'virtual:native-owners': '${source}/native-' + (candidate === 'native-as-is' ? 'owners' : 'empty') + '.tsx',

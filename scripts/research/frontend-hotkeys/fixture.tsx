@@ -2,7 +2,7 @@
 import { StrictMode, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
-import { fromPlainText } from '@rezics/document';
+import { normalizeDocument } from '@rezics/document';
 import { useListCollection } from '@ark-ui/react/combobox';
 import { RichTextEditor } from '../../../packages/ui/src/components/rich-text-editor.tsx';
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogBody, DialogClose } from '../../../packages/ui/src/components/dialog.tsx';
@@ -17,7 +17,11 @@ const candidate = __CANDIDATE__;
 const labels = ['Search', 'Editor link', 'Editor bold', 'Toggle sidebar', 'Navigation / help'];
 
 function Workload({ count, epoch }: { count: number; epoch: number }) {
-  const [documentValue, setDocumentValue] = useState(() => fromPlainText('A mixed 漢字 manuscript.', 'blocks'));
+  const [documentValue, setDocumentValue] = useState(() => normalizeDocument({
+    version: 'rezics-document-v1', profile: 'blocks', doc: { type: 'doc', content: [
+      { type: 'paragraph', attrs: { id: 'keyboard-trial-paragraph' }, content: [{ type: 'text', text: 'A mixed 漢字 manuscript.' }] },
+    ] },
+  }));
   const [disabled, setDisabled] = useState(false);
   const [searchKey, setSearchKey] = useState('Mod+K');
   const [proposal, setProposal] = useState('Mod+K');
@@ -42,7 +46,7 @@ function Workload({ count, epoch }: { count: number; epoch: number }) {
     const legacy = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== 'k' || !(event.ctrlKey || event.metaKey)) return;
       // Independent owner: cooperation is explicit, counted shared policy.
-      if (candidate !== 'native-as-is' && (blocked(event, 'search')
+      if (candidate !== 'native-as-is' && (event.altKey || blocked(event, 'search')
         || !rows.some((row: any) => row.id === 'search' && row.enabled && row.key === 'Mod+K'))) return;
       act('legacy');
     };

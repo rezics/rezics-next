@@ -18,4 +18,4 @@ test('actual adapters receive the common Vinext/browser workload and retain raw 
     expect(candidate.scales.map((scale: { count: number }) => scale.count)).toEqual([5, 50]);
     expect(candidate.ssr.status).toBe('pass');
   }
-}, 300_000);
+}, 600_000);
