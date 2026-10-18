@@ -38,6 +38,7 @@ import { NextRequest } from 'next/server';
 import { proxy } from '../proxy.ts';
 import { mainBodyRead } from '../features/api/main-read-operation.ts';
 import { isOfflineError } from '../features/feed/types.ts';
+import { serverRead, serverSignal, withServerRequest } from '../features/api/server-read.ts';
 
 const nativeFetch = globalThis.fetch;
 const mainOrigin = process.env.MAIN_ORIGIN;
@@ -46,6 +47,208 @@ afterEach(() => {
   if (mainOrigin === undefined) delete process.env.MAIN_ORIGIN;
   else process.env.MAIN_ORIGIN = mainOrigin;
   forgetServedTypes();
+});
+
+test('request cancellation reaches sequential server reads and stops later work under one absolute deadline', async () => {
+  const controller = new AbortController();
+  const hops: { signal: AbortSignal; deadline: string | null }[] = [];
+  globalThis.fetch = (async (_input, init) => {
+    hops.push({ signal: init!.signal!, deadline: new Headers(init?.headers).get(SERVER_DEADLINE_HEADER) });
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  const request = new Request('https://web.test/en/discover', { signal: controller.signal });
+  await withServerRequest(request, async () => {
+    await serverRead('https://main.test/v1/me/session-agent', {}, { timeoutMs: 4_000 });
+    await serverRead('https://main.test/v1/query', {}, { timeoutMs: 8_000 });
+    controller.abort();
+    await expect(serverRead('https://main.test/v1/feed')).rejects.toMatchObject({ reason: 'cancelled', attempts: 0 });
+  });
+  expect(hops).toHaveLength(2);
+  expect(hops[0]!.deadline).toBe(hops[1]!.deadline);
+  expect(Number(hops[0]!.deadline)).toBeGreaterThan(Date.now() + 10_000);
+});
+
+test('BFF cancellation survives Request reconstruction, stops each pre-read and never schedules the requested operation', async () => {
+  for (const heldPhase of ['session-agent', 'person-preferences']) {
+    const controller = new AbortController();
+    const paths: string[] = [];
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    let pendingSignal: AbortSignal | null | undefined;
+    const send = (async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      paths.push(path);
+      if (path.endsWith(heldPhase)) {
+        pendingSignal = init?.signal;
+        entered();
+        return new Promise<Response>(() => {});
+      }
+      return Response.json({ sessionAgent: { eligible: true, actingSubject: 'https://rezics.com/id/0199a0fe-0b21-7000-8000-123456789abc' } });
+    }) as typeof fetch;
+    const workerRequest = new Request('https://web.test/api/main/v1/works', { signal: controller.signal });
+    const routeRequest = new Request(workerRequest.url);
+    const result = withServerRequest(workerRequest, () => forwardToMain(routeRequest,
+      ['v1', 'works'], { mainOrigin: 'https://main.test', accessToken: `cancel-${heldPhase}`, fetch: send,
+        signal: serverSignal() }));
+    await started;
+    controller.abort();
+    const response = await result;
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: 'web_cancelled', phase: heldPhase,
+      transportPhase: 'connect', attempts: 1, retry: 'none', receipt: 'not-applicable' });
+    expect(pendingSignal?.aborted).toBe(true);
+    expect(routeRequest.signal.aborted).toBe(false);
+    expect(paths).toEqual(heldPhase === 'session-agent' ? ['/v1/me/session-agent']
+      : ['/v1/me/session-agent', '/v1/me/person-preferences']);
+  }
+});
+
+test('BFF language pre-reads and the Main operation forward one unchanged absolute deadline', async () => {
+  const deadlineAt = Date.now() + 2_000;
+  const deadlines: string[] = [];
+  const send = (async (input, init) => {
+    deadlines.push(new Headers(init?.headers).get(SERVER_DEADLINE_HEADER)!);
+    const path = new URL(String(input)).pathname;
+    return Response.json(path.endsWith('session-agent')
+      ? { sessionAgent: { eligible: true, actingSubject: 'reader' } }
+      : path.endsWith('person-preferences') ? { contentLanguages: ['ja'] } : { items: [] });
+  }) as typeof fetch;
+  const response = await forwardToMain(new Request('https://web.test/api/main/v1/works'), ['v1', 'works'],
+    { mainOrigin: 'https://main.test', accessToken: 'deadline-chain', deadlineAt, fetch: send });
+  expect(response.status).toBe(200);
+  expect(deadlines).toEqual(Array(3).fill(String(deadlineAt)));
+});
+
+test('BFF pre-read deadline aborts its transport and retains the failed phase', async () => {
+  let calls = 0;
+  let signal: AbortSignal | null | undefined;
+  const response = await forwardToMain(new Request('https://web.test/api/main/v1/works'), ['v1', 'works'], {
+    mainOrigin: 'https://main.test', accessToken: 'deadline-preread', deadlineAt: Date.now() + 40,
+    fetch: ((_input, init) => { calls++; signal = init?.signal; return new Promise<Response>(() => {}); }) as typeof fetch,
+  });
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ phase: 'session-agent', transportPhase: 'connect',
+    code: 'web_deadline', retry: 'safe', receipt: 'not-applicable' });
+  expect(signal?.aborted).toBe(true);
+  expect(calls).toBe(1);
+});
+
+test('BFF refuses temporary pre-read failures with their phase and owner problem instead of silently continuing', async () => {
+  let calls = 0;
+  const response = await forwardToMain(new Request('https://web.test/api/main/v1/works'), ['v1', 'works'], {
+    mainOrigin: 'https://main.test', accessToken: 'refused-preread', fetch: (async () => {
+      calls++;
+      return Response.json({ code: 'owner_busy', receipt: 'not-sent' }, { status: 503, headers: { 'retry-after': '7' } });
+    }) as unknown as typeof fetch,
+  });
+  expect(response.status).toBe(503);
+  expect(response.headers.get('retry-after')).toBe('7');
+  expect(await response.json()).toMatchObject({ phase: 'session-agent', code: 'web_unavailable',
+    upstream: { status: 503, problem: { code: 'owner_busy', receipt: 'not-sent' } } });
+  expect(calls).toBe(1);
+});
+
+test('BFF cancels a stalled inbound Query body before any upstream operation', async () => {
+  const controller = new AbortController();
+  let cancelled = false, calls = 0;
+  const body = neverClosing(() => { cancelled = true; }).body;
+  const request = new Request('https://web.test/api/main/v1/query', {
+    method: 'POST', body, signal: controller.signal, duplex: 'half',
+  } as RequestInit);
+  const pending = forwardToMain(request, ['v1', 'query'], { mainOrigin: 'https://main.test', accessToken: undefined,
+    fetch: (async () => { calls++; return Response.json({}); }) as unknown as typeof fetch });
+  await Promise.resolve();
+  controller.abort();
+  const response = await pending;
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ phase: 'request-body', code: 'web_cancelled', retry: 'none' });
+  expect(cancelled).toBe(true);
+  expect(calls).toBe(0);
+});
+
+test('BFF interrupted writes retain an unknown receipt and never replay without explicit recovery', async () => {
+  for (const keyed of [true, false]) {
+    let calls = 0;
+    const response = await forwardToMain(new Request('https://web.test/api/main/v1/commands/work.create', {
+      method: 'POST', headers: keyed ? { 'idempotency-key': 'same-operation' } : {}, body: '{}',
+    }), ['v1', 'commands', 'work.create'], { mainOrigin: 'https://main.test', accessToken: undefined,
+      fetch: (async () => { calls++; throw new Error('Network connection lost.'); }) as unknown as typeof fetch });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ phase: 'main', code: 'web_connection', attempts: 1,
+      receipt: 'unknown', retry: keyed ? 'same-idempotency-key' : 'check-receipt' });
+    expect(calls).toBe(1);
+  }
+});
+
+test('BFF preserves the owner refusal, receipt and tracing headers unchanged', async () => {
+  const problem = { code: 'owner_unavailable', phase: 'transaction', retry: 'same-idempotency-key', receipt: 'unknown' };
+  const response = await forwardToMain(new Request('https://web.test/api/main/v1/commands/work.create', {
+    method: 'POST', body: '{}',
+  }), ['v1', 'commands', 'work.create'], { mainOrigin: 'https://main.test', accessToken: undefined,
+    fetch: (async () => Response.json(problem, { status: 503,
+      headers: { 'retry-after': '12', 'x-request-id': 'operation-receipt' } })) as unknown as typeof fetch });
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual(problem);
+  expect(response.headers.get('retry-after')).toBe('12');
+  expect(response.headers.get('x-request-id')).toBe('operation-receipt');
+});
+
+test('a cancelled refresh waiter releases promptly without aborting the shared token rotation', async () => {
+  let finish!: (response: Response) => void, entered!: () => void;
+  let signal: AbortSignal | null | undefined;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const client = { accountOrigin: 'https://account.test', clientId: 'web', resource: 'main',
+    fetch: ((_input, init) => {
+      signal = init?.signal; entered();
+      return new Promise<Response>(resolve => { finish = resolve; });
+    }) as typeof fetch };
+  const controller = new AbortController();
+  const first = withServerRequest(new Request('https://web.test/en/discover', { signal: controller.signal }),
+    () => refreshTokens(client, 'cancel-one-waiter'));
+  await started;
+  const second = refreshTokens(client, 'cancel-one-waiter');
+  controller.abort();
+  expect(await first).toEqual({ status: 'unavailable' });
+  expect(signal?.aborted).toBe(false);
+  finish(Response.json({ access_token: 'issued-once' }));
+  expect(await second).toMatchObject({ status: 'issued' });
+});
+
+test('a cancelled registry waiter releases its request while the shared owner completes for another reader', async () => {
+  const controller = new AbortController();
+  let finish!: (response: Response) => void, entered!: () => void;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  let ownerSignal: AbortSignal | null | undefined;
+  const fetcher = ((_input, init) => {
+    ownerSignal = init?.signal; entered();
+    return new Promise<Response>(resolve => { finish = resolve; });
+  }) as typeof fetch;
+  const first = withServerRequest(new Request('https://web.test/en/discover', { signal: controller.signal }),
+    () => readTypes(fetcher));
+  await started;
+  const second = readTypes(fetcher);
+  controller.abort();
+  expect(await first).toBeNull();
+  expect(ownerSignal?.aborted).toBe(false);
+  finish(Response.json(servedTypes));
+  expect(await second).toEqual(servedTypes);
+});
+
+test('the last cancelled registry waiter stops the upstream read and a new request can recover immediately', async () => {
+  const controller = new AbortController();
+  let entered!: () => void, ownerSignal: AbortSignal | null | undefined;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const first = withServerRequest(new Request('https://web.test/en/discover', { signal: controller.signal }),
+    () => readTypes(((_input, init) => {
+      ownerSignal = init?.signal;
+      entered();
+      return new Promise<Response>(() => {});
+    }) as typeof fetch));
+  await started;
+  controller.abort();
+  expect(await first).toBeNull();
+  expect(ownerSignal?.aborted).toBe(true);
+  expect(await readTypes((async () => Response.json(servedTypes)) as unknown as typeof fetch)).toEqual(servedTypes);
 });
 
 async function pageRequest<T>(run: () => Promise<T>, budget = 150, signedIn = false): Promise<T> {
