@@ -14,8 +14,11 @@ The retained local evidence is in `.temp/site-audit-2026-10-18/` (especially
 scenarios). These reports are evidence, not proof that current code is fixed.
 
 Work follows the [method](../method.md) and [wave protocol](../wave.md), with
-the maintainer's current directions taking precedence: all implementation and
-research workers use codex-2, GPT-6.1 Sol at max; reviews use codex-1, the same
+the maintainer's current directions taking precedence: backend implementation
+and initial research use codex-2, GPT-6.1 Sol at max. Once fresh capacity is
+available, Claude owns frontend implementation, refinement and further research,
+coordinating its shared allowance with the separate about project. Existing
+Codex frontend repairs may finish while Claude is unavailable. Reviews use codex-1, the same
 model at xhigh, retaining that account on retries. There is no worker count cap;
 host memory and QA admission still protect the shared development environment.
 Machine account and allowance policy stays in ignored local settings.
@@ -30,6 +33,10 @@ Declare a finding proved only with the relevant API/interaction outcome and,
 for visible changes, reviewed Storybook and actual browser screenshots. Preserve
 existing imported identities and data; prepare reusable isolated fixtures within
 the documented budget. Do not replace substantive fixtures with placeholders.
+
+The additional [product completeness Goal](../product-completion-20261019/GOAL.md)
+sets the domain-leader comparison and broader UX research; it does not replace
+this fixed audit scope.
 
 The [current state](state.md) records progress and the next executable action.
 The [outcome decisions](decisions.md) settle the remaining search, inventory,
