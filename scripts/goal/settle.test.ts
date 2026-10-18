@@ -68,7 +68,7 @@ test('pump confirmation requires a newer non-document commit, the interval, and 
   }
 });
 
-function fixture(result = 'done', kind: Task['kind'] = 'tooling') {
+function fixture(result = 'done', kind: Task['kind'] = 'tooling', automatic = true) {
   mkdirSync(scratch, { recursive: true });
   const directory = mkdtempSync(join(scratch, 'case-'));
   const scope = fixtureProcessScope();
@@ -93,12 +93,12 @@ function fixture(result = 'done', kind: Task['kind'] = 'tooling') {
   const worktree = join(directory, '.temp/tree');
   git('worktree', 'add', '-qb', 'goal/fixture', worktree);
   const brief = join(directory, '.temp/brief.md');
-  writeFileSync(brief, `---\nid: G-001\nkind: ${kind}\ntitle: Deliver a file\neffort: high\npaths: [delivered.txt]\n---\n\n## Mechanisms\n\nnone\n`);
+  writeFileSync(brief, `---\nid: G-001\nkind: ${kind}\ntitle: Deliver a file\neffort: high\npaths: [delivered.txt]\n${automatic ? 'land: auto\n' : ''}---\n\n## Mechanisms\n\nnone\n`);
   mkdirSync(join(worktree, '.temp/goal'), { recursive: true });
   copyFileSync(brief, join(worktree, '.temp/goal/brief.md'));
   const output = join(run, 'attempt.json');
   writeFileSync(output, JSON.stringify({ result: `RESULT: ${result}\nNEXT: Inspect the remaining work`, is_error: false }));
-  const task: Task = { id: 'G-001', title: 'Deliver a file', kind, effort: 'high', cases: [], paths: ['delivered.txt'],
+  const task: Task = { id: 'G-001', title: 'Deliver a file', kind, land: automatic ? 'auto' : undefined, effort: 'high', cases: [], paths: ['delivered.txt'],
     migrations: [], shared: [], depends: [], brief, worktree, branch: 'goal/fixture', base, state: 'running', goal: 'program',
     attempts: [{ n: 1, engine: 'claude', effort: 'high', pid: 2147483647, session: 'fixture', output,
       startedAt: new Date().toISOString() }] };
@@ -411,7 +411,7 @@ test('failure messages stay within sixty lines and omit inherited failures and l
   expect(refusal.message).not.toContain('inherited');
 });
 
-test('one pass lands and closes a done tooling task, without a waiter or an enrolled manager', async () => {
+test('one pass lands and closes an auto tooling task, without a waiter or an enrolled manager', async () => {
   const f = fixture(); f.commit(); writeFileSync(f.release, 'release');
   await f.execute(['settle']);
   await until(() => !!f.ledger().tasks[f.task.id]!.settlement?.settledAt);
@@ -501,8 +501,8 @@ test('wait can settle an unclaimed exit and a later pass leaves its claim alone'
   expect(f.ledger().tasks[f.task.id]!.settlement).toEqual(settlement);
 });
 
-test('settlement verifies a review without commits and retains its output with its archived handoff', async () => {
-  const f = fixture();
+test.each(['outcome', 'implementation', 'surface', 'mechanism', 'tooling'] as const)('settlement verifies a read-only %s without auto landing and archives its handoff', async kind => {
+  const f = fixture('done', kind, false);
   const ledger = f.ledger(); ledger.tasks[f.task.id]!.paths = []; f.save(ledger);
   const review = '# Review\n\nTwo verified findings.\n';
   writeFileSync(join(f.task.worktree, '.temp/goal/review.md'), review);
@@ -511,6 +511,8 @@ test('settlement verifies a review without commits and retains its output with i
   await f.execute(['settle']);
   await until(() => !!f.ledger().tasks[f.task.id]!.settlement?.settledAt);
   expect(f.ledger().tasks[f.task.id]!.state, f.ledger().tasks[f.task.id]!.settlement?.reason).toBe('verified');
+  expect(f.git('rev-parse', 'main')).toBe(f.task.base);
+  expect(existsSync(join(f.state, 'merges.jsonl'))).toBe(false);
   expect(existsSync(f.task.worktree)).toBe(false);
   expect(readFileSync(join(f.run, 'outputs/review.md'), 'utf8')).toBe(review);
   const archive = `program-${f.task.attempts[0]!.startedAt.slice(0, 10)}`;
@@ -520,7 +522,7 @@ test('settlement verifies a review without commits and retains its output with i
 });
 
 test('a read-only final step after a merged step closes verified despite its path claims', async () => {
-  const f = fixture(); f.commit();
+  const f = fixture('done', 'implementation', false); f.commit();
   f.git('merge', '--ff-only', 'goal/fixture');
   const ledger = f.ledger(); ledger.tasks[f.task.id]!.mergedCommit = f.git('rev-parse', 'HEAD'); f.save(ledger);
   await f.execute(['settle']);
@@ -563,13 +565,21 @@ test('a partial merged step stays open until its final done handoff', async () =
   try { expect(managerEvents(f.state, 'program', mail)[0]?.body).toContain('RESULT: partial'); } finally { mail.close(); }
 });
 
-test('an implementation opted into auto landing closes without a manager call', async () => {
-  const f = fixture('done', 'implementation'); f.commit(); writeFileSync(f.release, 'release');
-  const ledger = f.ledger(); ledger.tasks[f.task.id]!.land = 'auto'; f.save(ledger);
+test.each(['outcome', 'implementation', 'mechanism', 'tooling'] as const)('a %s opted into auto landing closes without a manager call', async kind => {
+  const f = fixture('done', kind); f.commit(); writeFileSync(f.release, 'release');
   await f.execute(['settle']);
   await until(() => !!f.ledger().tasks[f.task.id]!.settlement?.settledAt);
   expect(f.ledger().tasks[f.task.id]!.state, f.ledger().tasks[f.task.id]!.settlement?.reason).toBe('verified');
 }, 45_000);
+
+test('a surface opted into auto landing reaches its required proof gate', async () => {
+  const f = fixture('done', 'surface'); f.commit(); writeFileSync(f.release, 'release');
+  await f.execute(['settle']);
+  await until(() => !!f.ledger().tasks[f.task.id]!.settlement?.settledAt);
+  expect(f.ledger().tasks[f.task.id]!.state).toBe('conflict');
+  expect(f.ledger().tasks[f.task.id]!.settlement?.reason).toContain('surface requires rows:');
+  expect(existsSync(join(f.run, 'settle-1.json'))).toBe(true);
+});
 
 test('a transport drop continues in a fresh session and preserves dirty work', async () => {
   const f = fixture();
@@ -589,15 +599,70 @@ test('a transport drop continues in a fresh session and preserves dirty work', a
   try { process.kill(task.attempts[1]!.pid, 'SIGKILL'); } catch { /* exited */ }
 });
 
-for (const kind of ['implementation', 'mechanism'] as const) {
+for (const kind of ['outcome', 'implementation', 'surface', 'mechanism', 'tooling'] as const) {
   test(`${kind} needs an explicit auto landing decision`, async () => {
-    const f = fixture('done', kind);
+    const f = fixture('done', kind, false); f.commit(); writeFileSync(f.release, 'release');
     await f.execute(['settle']);
     await until(() => !!f.ledger().tasks[f.task.id]!.settlement?.settledAt);
     expect(f.ledger().tasks[f.task.id]!.state).toBe('exited');
     expect(f.ledger().tasks[f.task.id]!.settlement?.reason).toContain('land: auto is absent');
+    expect(f.git('rev-parse', 'main')).toBe(f.task.base);
+    expect(f.git('rev-list', '--count', 'main..goal/fixture')).toBe('1');
+    expect(existsSync(f.task.worktree)).toBe(true);
+    expect(existsSync(f.gate)).toBe(false);
+    const settlement = f.ledger().tasks[f.task.id]!.settlement;
+    await f.execute(['settle']);
+    expect(f.ledger().tasks[f.task.id]!.settlement).toEqual(settlement);
   });
 }
+
+for (const automatic of [false, true]) {
+  for (const changing of [false, true]) test(`a wave build stays exited for program disposition with auto=${automatic}, changing=${changing}`, async () => {
+    const f = fixture('done', 'tooling', automatic);
+    if (changing) f.commit();
+    else { const ledger = f.ledger(); ledger.tasks[f.task.id]!.paths = []; f.save(ledger); }
+    // Only the recorded brief selects wave work; the title and worker's cached brief do not.
+    writeFileSync(f.task.brief, readFileSync(f.task.brief, 'utf8') + '\n## Wave\n\nBuild on wave/1.\n');
+    writeFileSync(f.release, 'release');
+    await f.execute(['settle']);
+    await until(() => !!f.ledger().tasks[f.task.id]!.settlement?.settledAt);
+    const task = f.ledger().tasks[f.task.id]!;
+    expect(task.state, task.settlement?.reason).toBe('exited');
+    expect(task.settlement?.reason).toContain('wave build');
+    expect(f.git('rev-parse', 'main')).toBe(f.task.base);
+    expect(f.git('rev-list', '--count', 'main..goal/fixture')).toBe(changing ? '1' : '0');
+    expect(existsSync(f.task.worktree)).toBe(true);
+    expect(existsSync(f.gate)).toBe(false);
+    await f.execute(['settle']);
+    expect(f.ledger().tasks[f.task.id]!.settlement).toEqual(task.settlement);
+  });
+}
+
+for (const wave of [false, true]) test(`a ${wave ? 'wave build' : 'manual task'} does not resume a recorded automatic landing refusal`, async () => {
+  const f = fixture('done', 'tooling', wave); f.commit();
+  if (wave) writeFileSync(f.task.brief, readFileSync(f.task.brief, 'utf8') + '\n## Wave\n\nBuild on wave/1.\n');
+  stoppedLanding(f, `${f.task.id} introduced unit failures; not merging:\n  value.test.ts\n    (fail) delivery`);
+  const ledger = f.ledger(); ledger.tasks[f.task.id]!.state = 'exited'; f.save(ledger);
+  await f.execute(['settle']);
+  await until(() => !!f.ledger().tasks[f.task.id]!.settlement?.settledAt || existsSync(f.launches));
+  expect(f.ledger().tasks[f.task.id]!.state).toBe('exited');
+  expect(f.ledger().tasks[f.task.id]!.attempts).toHaveLength(1);
+  expect(f.ledger().tasks[f.task.id]!.settlement?.reason).toContain(wave ? 'wave build' : 'land: auto is absent');
+  expect(existsSync(f.launches)).toBe(false);
+});
+
+test('a parked auto handoff stays unsettled across repeated passes', async () => {
+  const f = fixture('parked'); f.commit(); writeFileSync(f.release, 'release');
+  await f.execute(['settle']);
+  await f.execute(['settle']);
+  const task = f.ledger().tasks[f.task.id]!;
+  expect(task.state).toBe('running');
+  expect(task.settlement).toBeUndefined();
+  expect(task.attempts).toHaveLength(1);
+  expect(f.git('rev-parse', 'main')).toBe(f.task.base);
+  expect(existsSync(f.task.worktree)).toBe(true);
+  expect(existsSync(f.gate)).toBe(false);
+});
 
 // The service ended these turns before any work, with the session intact (16 Sol tasks from 08:25 to
 // 08:52 UTC on 2026-10-14 ended on the routing message).
