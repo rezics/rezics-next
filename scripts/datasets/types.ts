@@ -84,11 +84,18 @@ export interface DatasetNativeRecord {
   kind: string;
   receipt: Record<string, unknown>;
   urls: string[];
+  sourceIdentity?: string;
   /** Exact values written by this producer, never inferred from a reused identity. */
   projection?: { recordDigest: string; fields: Record<string, unknown> };
 }
 
 export type DatasetMapperId = 'fields' | 'relations' | 'credits' | 'releases' | 'media';
+
+export interface DatasetIntakeReference {
+  record: string;
+  observation: string;
+  byteDigest: string;
+}
 
 export interface DatasetSourceReference {
   key: string;
@@ -100,6 +107,7 @@ export interface DatasetSourceReference {
   recordDigest: string;
   /** Ordered retained intake parts. Multiple parts are not one convertible observation. */
   observations: readonly string[];
+  intakes: readonly DatasetIntakeReference[];
 }
 
 export interface DatasetMappingReceipt {

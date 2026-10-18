@@ -12,8 +12,13 @@ import { checkedComponentState } from '../../services/main/src/modules/semantic/
 import { importedRightsAssessments } from '../../services/main/src/modules/rights/import-policy.ts';
 import { acquireDatasetImportLock } from './lock.ts';
 import { verifyCoverSourceCapture } from './snapshot.ts';
-import type { DatasetEdge, DatasetRecord, DatasetSnapshot } from './types.ts';
+import type {
+  DatasetEdge, DatasetIntakeReference, DatasetMappingContext, DatasetMapperId, DatasetNativeMapper,
+  DatasetNativeRecord, DatasetRecord, DatasetSnapshot,
+} from './types.ts';
 import { BANGUMI_USER_POST_FIELDS } from './bangumi.ts';
+import { datasetRecordDigest, datasetSourceIdentity, datasetSourceReference } from './native/context.ts';
+import { DATASET_NATIVE_MAPPERS, datasetCoverage, datasetCoverageId, type DatasetCoverageReport } from './native/coverage.ts';
 
 const SCHEMA = 'https://schema.org/';
 const RV = 'https://rezics.com/vocab/';
@@ -191,12 +196,7 @@ interface Journal {
   limitations: string[];
   completed: boolean;
 }
-interface NativeRecord {
-  id: string;
-  kind: string;
-  receipt: Record<string, unknown>;
-  urls: string[];
-}
+type NativeRecord = DatasetNativeRecord;
 export interface DatasetImportOptions extends Partial<DatasetSession> {
   native?: boolean;
   nativeBatchItems?: number;
@@ -205,6 +205,8 @@ export interface DatasetImportOptions extends Partial<DatasetSession> {
   maxRecords?: number;
   /** Project elected Work-to-Work graph evidence; every relationship is retained separately. */
   relationships?: boolean;
+  /** Complete native phases, using the existing journal and public owner operations. */
+  nativeMappers?: readonly DatasetNativeMapper[];
 }
 export interface DatasetImportResult {
   snapshot: string;
@@ -219,6 +221,8 @@ export interface DatasetImportResult {
   nativeRelationships: number;
   /** Bounded outcomes for each elected cover; record is a stable hash, not a source URL. */
   coverResults: DatasetCoverImportResult[];
+  coverageFile: string;
+  coverage: Omit<DatasetCoverageReport, 'entries'>;
 }
 
 export type DatasetCoverImportStep =
@@ -376,11 +380,133 @@ function sourceEvidence(record: DatasetRecord) {
 }
 function nativeId(result: Record<string, unknown>, field: string): string {
   const value = result[field];
-  if (typeof value !== 'string' || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(value)) {
+  if (typeof value !== 'string' || !value.startsWith('https://rezics.com/id/') || !UUID.test(value.slice('https://rezics.com/id/'.length))) {
     throw new Error(`Public API returned no valid ${field} identity`);
   }
   return value;
 }
+
+function workProjection(input: Record<string, unknown>): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  if (typeof input.title === 'string') fields['/title'] = input.title;
+  if (typeof input.language === 'string') fields['/language'] = input.language;
+  if (Array.isArray(input.semanticTypes)) {
+    fields['/semanticTypes'] = input.semanticTypes;
+    input.semanticTypes.forEach((value, index) => { fields[`/semanticTypes/${index}`] = value; });
+  }
+  const description = input.description as { value?: unknown } | undefined;
+  if (typeof description?.value === 'string') fields['/data/summary'] = description.value;
+  return fields;
+}
+
+function resourceProjection(input: Record<string, unknown>): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  for (const property of (input.properties ?? []) as { predicate: string; value: Record<string, unknown> }[]) {
+    if (property.predicate === `${SCHEMA}name`) {
+      fields['/title'] = property.value.lexical;
+      if (property.value.language) fields['/language'] = property.value.language;
+    } else if (property.predicate === `${SCHEMA}identifier`) fields['/externalId'] = property.value.key;
+    else if (property.predicate === `${SCHEMA}url`) fields['/sourceUrl'] = property.value.lexical;
+  }
+  return fields;
+}
+
+/** Read existing owner journals, including receipts committed just before a client crash.
+ * Never rewrite a historical request or choose between conflicting identities. */
+function reuseNativeIdentities(root: string, context: string, journal: Journal,
+  records: ReadonlyMap<string, DatasetRecord>, selected: ReadonlySet<string>): void {
+  const directory = join(root, 'imports');
+  if (!existsSync(directory)) return;
+  for (const filename of readdirSync(directory).sort()) {
+    if (!filename.endsWith('.json') || filename === `${context}.json`) continue;
+    const previous = JSON.parse(readFileSync(join(directory, filename), 'utf8')) as Journal;
+    if (previous.format !== 'rezics-dataset-import-v1' || previous.mainOrigin !== journal.mainOrigin
+      || previous.actingSubject !== journal.actingSubject || previous.dataEpoch !== journal.dataEpoch) continue;
+    const entries = { ...previous.entries };
+    const requests = join(directory, filename.slice(0, -5), 'requests');
+    if (existsSync(requests)) for (const name of readdirSync(requests)) {
+      if (!name.endsWith('.json')) continue;
+      const saved = JSON.parse(readFileSync(join(requests, name), 'utf8')) as { label: string; entry: JournalEntry };
+      entries[saved.label] = saved.entry;
+    }
+    const sourceParts = new Map<string, { index: number; bytes: Buffer }[]>();
+    for (const [label, entry] of Object.entries(entries)) {
+      if (!label.startsWith('record:')) continue;
+      const boundary = label.lastIndexOf(':part:'), key = label.slice('record:'.length, boundary);
+      if (boundary < 0 || !selected.has(key)) continue;
+      const record = records.get(key);
+      if (!record || previous.native[key]?.sourceIdentity
+        || key === `${record.provider}:${record.kind}:${record.externalId}`) continue;
+      const body = entry.body as { rawBytesBase64?: string } | null;
+      if (typeof body?.rawBytesBase64 !== 'string') continue;
+      const parts = sourceParts.get(key) ?? [];
+      parts.push({ index: Number(label.slice(boundary + ':part:'.length)), bytes: Buffer.from(body.rawBytesBase64, 'base64') });
+      sourceParts.set(key, parts);
+    }
+    const add = (key: string, mapped: NativeRecord) => {
+      const record = records.get(key);
+      if (!record || !selected.has(key)) return;
+      const identity = datasetSourceIdentity(record);
+      // Old official keys already spell the provider/namespace/external identity.
+      // New journals bind that tuple explicitly, including for caller-supplied keys.
+      let retainedIdentity = mapped.sourceIdentity ?? previous.native[key]?.sourceIdentity;
+      if (!retainedIdentity && key !== `${record.provider}:${record.kind}:${record.externalId}`) {
+        const parts = sourceParts.get(key)?.sort((left, right) => left.index - right.index);
+        if (parts?.length) {
+          const envelope = reconstructIntake(parts.map(part => part.bytes)) as { record?: DatasetRecord };
+          if (envelope.record) retainedIdentity = datasetSourceIdentity(envelope.record);
+        }
+      }
+      if (retainedIdentity ? retainedIdentity !== identity
+        : key !== `${record.provider}:${record.kind}:${record.externalId}`)
+        throw new Error(`Retained native identity has no matching source identity: ${key}`);
+      nativeId({ id: mapped.id }, 'id');
+      if ((record.native === 'work') !== (mapped.kind === 'work'))
+        throw new Error(`Retained source/native grain changed: ${key}; review the existing identity`);
+      const current = journal.native[key];
+      if (current && (current.id !== mapped.id || current.kind !== mapped.kind))
+        throw new Error(`Conflicting retained native identities: ${key}; no identity was replaced`);
+      if (!current) journal.native[key] = structuredClone(mapped);
+    };
+    for (const [key, mapped] of Object.entries(previous.native)) add(key, mapped);
+    const recovered = (label: string, result: Record<string, unknown>) => {
+      if (!label.startsWith('native:')) return;
+      const key = label.slice('native:'.length);
+      if (!selected.has(key)) return;
+      const field = typeof result.work === 'string' ? 'work' : 'component';
+      add(key, { id: nativeId(result, field), kind: field === 'work' ? 'work' : 'resource',
+        receipt: result, urls: [] });
+    };
+    for (const [label, entry] of Object.entries(entries)) {
+      const pending = entry.result?.status === 'pending' || entry.result?.status === 'reconciling';
+      if (entry.result && !pending && label.startsWith('native:')) recovered(label, entry.result);
+      if (entry.result && !pending && (label.startsWith('native-bulk:') || label.startsWith('catalogue-bulk:'))) {
+        const items = entry.result.items as Record<string, unknown>[] | undefined;
+        if (!items || !entry.itemKeys || items.length !== entry.itemKeys.length)
+          throw new Error('Retained native bulk receipt has incomplete identities');
+        for (const [index, key] of entry.itemKeys.entries()) {
+          const item = items[index]!;
+          if (label.startsWith('catalogue-bulk:')) {
+            if (item.status === 'succeeded' && item.receipt)
+              recovered(key, item.receipt as Record<string, unknown>);
+          } else recovered(key, { ...item, receipt: entry.result.receipt,
+            sourcePosition: entry.result.sourcePosition });
+        }
+      }
+    }
+    for (const [label, entry] of Object.entries(entries)) {
+      if (entry.supersededBy || entry.receiptOnly) continue;
+      const labels = label.startsWith('native:') ? [label]
+        : label.startsWith('native-bulk:') || label.startsWith('catalogue-bulk:') ? entry.itemKeys ?? [] : [];
+      for (const item of labels) {
+        const key = item.slice('native:'.length);
+        if (selected.has(key) && !journal.native[key])
+          throw new Error(`Resume retained snapshot ${previous.snapshot} before creating native identity ${key}`);
+      }
+    }
+  }
+}
+
 function nativeUrls(
   record: NativeRecord,
   main: string,
@@ -536,8 +662,24 @@ export async function importDataset(
   const locale = options.locale ?? 'zh-Hant';
   const records = snapshot.sources.flatMap((source) => source.records);
   assertNoImportedUserPosts(records);
+  if (options.maxRecords !== undefined && (!Number.isSafeInteger(options.maxRecords) || options.maxRecords < 0))
+    throw new Error('Dataset record limit must be a nonnegative integer');
+  if (options.nativeBatchItems !== undefined) nativeBatchSize(String(options.nativeBatchItems));
   const allEdges = snapshot.sources.flatMap((source) => source.edges);
   const byKey = new Map(records.map((record) => [record.key, record]));
+  const selected = options.maxRecords === undefined ? records : records.slice(0, options.maxRecords);
+  const selectedKeys = new Set(selected.map(record => record.key));
+  if (byKey.size !== records.length
+    || new Set(records.map(datasetSourceIdentity)).size !== records.length)
+    throw new Error('Dataset has duplicate source identities; native grain must be unambiguous');
+  const mapperIds = new Set<string>();
+  for (const mapper of options.nativeMappers ?? []) {
+    if (!DATASET_NATIVE_MAPPERS.includes(mapper.id) || mapperIds.has(mapper.id)
+      || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(mapper.revision))
+      throw new Error('Dataset mapper identities and revisions must be unique and stable');
+    mapperIds.add(mapper.id);
+  }
+  const coverage = datasetCoverage(snapshot, selectedKeys);
   const imagesByRecord = new Map<string, DatasetSnapshot['images']>();
   for (const image of snapshot.images) {
     const listed = imagesByRecord.get(image.record) ?? [];
@@ -569,8 +711,13 @@ export async function importDataset(
   const context = sha256(
     canonical([mainOrigin, actingSubject, epoch, snapshot.id, snapshot.digest]),
   );
-  const releaseLock = acquireDatasetImportLock(context);
+  // Different snapshots share native source identities in one product/Account.
+  // Keep the legacy exact-context lease as well for an older client's retry.
+  const identityContext = sha256(canonical([mainOrigin, actingSubject, epoch]));
+  const releaseIdentityLock = acquireDatasetImportLock(identityContext);
+  let releaseLock: (() => void) | undefined;
   try {
+    releaseLock = acquireDatasetImportLock(context);
     const receiptFile = join(root, 'imports', `${context}.json`);
     let journal: Journal = existsSync(receiptFile)
       ? (JSON.parse(readFileSync(receiptFile, 'utf8')) as Journal)
@@ -587,7 +734,7 @@ export async function importDataset(
           completed: false,
         };
     if (
-      journal.digest !== snapshot.digest ||
+      journal.snapshot !== snapshot.id || journal.digest !== snapshot.digest ||
       journal.dataEpoch !== epoch ||
       journal.mainOrigin !== mainOrigin ||
       journal.actingSubject !== actingSubject
@@ -613,6 +760,7 @@ export async function importDataset(
       }
       journal.entries[saved.label] = saved.entry;
     }
+    if (options.native !== false) reuseNativeIdentities(root, context, journal, byKey, selectedKeys);
     // Each exact request has its own durable checkpoint. Rewriting a growing
     // full-payload journal after every one of tens of thousands of writes would
     // make routine preparation quadratic in bytes written.
@@ -701,9 +849,12 @@ export async function importDataset(
       save(true);
       return response;
     };
+    const retainedLabels = new Set<string>();
+    const sourceObservations = new Map<string, DatasetIntakeReference[]>();
     const retained = async (label: string, record: DatasetRecord, value: unknown) => {
       const parts = intakeChunks(value),
         ids: string[] = [];
+      const intakes: DatasetIntakeReference[] = [];
       for (let index = 0; index < parts.length; index++) {
         const part = parts[index]!;
         const response = await command(`${label}:part:${index}`, 'POST', '/v1/sources/intakes', {
@@ -726,7 +877,15 @@ export async function importDataset(
           rightsEvidence: sourceEvidence(record),
         });
         const observation = response.observation as Record<string, unknown>;
-        ids.push(nativeId(observation, 'observation'));
+        const observationId = nativeId(observation, 'observation'), recordId = nativeId(observation, 'record');
+        if (observation.byteDigest !== sha256(part)) throw new Error('Retained source receipt digest differs from frozen bytes');
+        ids.push(observationId);
+        intakes.push({ observation: observationId, record: recordId, byteDigest: observation.byteDigest });
+      }
+      retainedLabels.add(label);
+      if (label.startsWith('record:')) {
+        coverage.retain(record.key);
+        sourceObservations.set(record.key, intakes);
       }
       return ids;
     };
@@ -736,8 +895,17 @@ export async function importDataset(
       result: Record<string, unknown>,
       field: string,
       urls: string[] = [],
+      fields?: Record<string, unknown>,
     ) => {
-      const mapped = { id: nativeId(result, field), kind, receipt: result, urls };
+      const id = nativeId(result, field);
+      const existing = journal.native[record.key];
+      if (existing && (existing.id !== id || existing.kind !== kind))
+        throw new Error(`Native receipt conflicts with the retained identity: ${record.key}`);
+      const mapped: NativeRecord = { id, kind, receipt: result, urls,
+        sourceIdentity: datasetSourceIdentity(record),
+        ...(fields ? { projection: { recordDigest: datasetRecordDigest(record), fields } }
+          : existing?.projection ? { projection: existing.projection } : {}),
+      };
       journal.native[record.key] = mapped;
       save();
       return mapped;
@@ -768,7 +936,9 @@ export async function importDataset(
         saveEntry(key, journal.entries[key]!);
         if (key.startsWith('native:')) {
           const original = byKey.get(key.slice('native:'.length));
-          if (original) nativeRecord(original, 'resource', result, 'component');
+          const input = (entry.body as { items?: Record<string, unknown>[] } | null)?.items?.[index];
+          if (original) nativeRecord(original, 'resource', result, 'component', [],
+            input ? resourceProjection(input) : undefined);
         }
       }
     };
@@ -878,10 +1048,11 @@ export async function importDataset(
         );
       }
     };
-    const selected =
-      options.maxRecords === undefined ? records : records.slice(0, options.maxRecords);
     const urlsFile = join(root, 'urls.md');
     const coverResults = new Map<string, DatasetCoverImportResult>();
+    const coverageFile = join(root, `coverage-${context}.json`);
+    const completedMappers = new Set<DatasetMapperId>();
+    let coverageReport = coverage.report(false, completedMappers);
     try {
       options.progress?.(
         `Retaining ${selected.length} source records and their complete outgoing relationships through the public intake API`,
@@ -941,11 +1112,13 @@ export async function importDataset(
             throw new Error('Catalogue bulk result has incomplete ordered items');
           for (const [index, label] of entry.itemKeys.entries()) {
             const row = rows[index]!;
-            if (row.key !== `dataset:${sha256(`${context}:${label}`)}`) throw new Error('Catalogue result item key differs from request');
+            const expected = (entry.body as { items: { key: string }[] }).items[index]?.key;
+            if (typeof expected !== 'string' || row.key !== expected) throw new Error('Catalogue result item key differs from request');
             if (row.status !== 'succeeded' || !row.receipt) continue;
             const record = byKey.get(label.slice('native:'.length));
             if (!record) throw new Error('Catalogue result has no frozen source record');
-            nativeRecord(record, 'work', row.receipt, 'work');
+            const input = (entry.body as { items?: { input: Record<string, unknown> }[] })?.items?.[index]?.input;
+            nativeRecord(record, 'work', row.receipt, 'work', [], input ? workProjection(input) : undefined);
           }
           if (rows.some(row => row.status === 'pending')) {
             entry.result = undefined;
@@ -974,7 +1147,7 @@ export async function importDataset(
           const itemKeys = valid.map(record => `native:${record.key}`);
           const label = `catalogue-bulk:${sha256(canonical(itemKeys))}`;
           const items = valid.map(record => ({
-            key: `dataset:${sha256(`${context}:native:${record.key}`)}`,
+            key: `dataset:${sha256(`${identityContext}:native:${datasetSourceIdentity(record)}`)}`,
             input: { profile: 'work-catalogue-import-v1', expectedWorkHead: null,
               title: clean(record.title), language: projectionLanguage(record.language),
               ...(record.provider === 'bangumi' && typeof record.data.summary === 'string'
@@ -1028,7 +1201,7 @@ export async function importDataset(
             };
           }
           const result = await command(label, 'POST', '/v1/works', body);
-          nativeRecord(record, 'work', result, 'work');
+          nativeRecord(record, 'work', result, 'work', [], workProjection(body as Record<string, unknown>));
           mappedWorks++;
           if (mappedWorks % 25 === 0 || mappedWorks === workRecords.length)
             options.progress?.(`Mapped ${mappedWorks}/${workRecords.length} native Works`);
@@ -1039,8 +1212,8 @@ export async function importDataset(
           const mapped = journal.native[record.key];
           if (!mapped || (record.provider !== 'bangumi' && record.provider !== 'vndb')) continue;
           const assessments = importedRightsAssessments({ provider: record.provider, url: record.sourceUrl },
-            mapped.id, record.provider === 'bangumi' && typeof record.data.summary === 'string'
-              && Boolean(clean(record.data.summary)) && clean(record.data.summary).length <= 4000);
+            mapped.id, typeof record.data.summary === 'string'
+              && mapped.projection?.fields['/data/summary'] === clean(record.data.summary));
           for (const [index, assessment] of assessments.entries()) {
             const label = `rights:${record.key}:${index}`;
             await command(label, 'POST', '/v1/rights/use-assessments', {
@@ -1229,8 +1402,8 @@ export async function importDataset(
           'Elected Work-to-Work relationships are labelled evidence resources, preserving direction, source identity and qualifiers. Accepted classifications, cross-provider merges, native episode compositions and exact realizations require their existing review/owner flows. Every remaining relationship is retained as complete source evidence; it is not expanded into artificial native graph records.',
         );
       }
-      const selectedKeys = new Set(selected.map(record => record.key));
-      for (const image of snapshot.images) {
+      for (const [imageIndex, image] of snapshot.images.entries()) {
+        if (options.native === false) continue;
         if (image.captureRole !== 'cover') continue;
         const record = byKey.get(image.record);
         if (!record || !selectedKeys.has(image.record)) continue;
@@ -1238,7 +1411,9 @@ export async function importDataset(
         const pending = (reason: string, step: DatasetCoverImportStep,
           reasonCode: DatasetCoverImportReasonCode, response?: ApiResponse) => {
           const details = refusalDetails(response);
-          coverResults.set(record.key, { record: recordDigest, status: 'pending', step, reasonCode, ...details });
+          coverResults.set(`image:${imageIndex}`, { record: recordDigest, status: 'pending', step, reasonCode, ...details });
+          coverage.disposition({ record: record.key, kind: 'image', path: `/images/${imageIndex}` },
+            { status: 'unmapped', reason: reasonCode });
           const log = `Imported cover ${recordDigest.slice(0, 16)} pending step=${step} reason=${reasonCode}`
             + (details.httpStatus ? ` HTTP ${details.httpStatus}` : '')
             + (details.problemType ? ` problem=${details.problemType}` : '');
@@ -1461,7 +1636,11 @@ export async function importDataset(
             let expectedSelection: string | null;
             if (avatar?.kind === 'fallback') expectedSelection = null;
             else if (avatar?.kind === 'image' && typeof avatar.selection === 'string'
-              && UUID.test(avatar.selection)) expectedSelection = avatar.selection;
+              && UUID.test(avatar.selection)) {
+              pending('an existing editor or independent source selection requires reviewed replacement',
+                'selection-read', 'fence-refused');
+              continue;
+            }
             else {
               pending('current Work cover selection is unavailable', 'selection-read', 'selection-read-failed');
               continue;
@@ -1480,20 +1659,72 @@ export async function importDataset(
             pending('stale selection; the current editor cover was preserved', 'selection', 'fence-refused', selectedCover);
             continue;
           }
-          if (selectedCover.status >= 300 || typeof selectedCover.body.selection !== 'string') {
+          if (![200, 201].includes(selectedCover.status) || typeof selectedCover.body.selection !== 'string'
+            || !UUID.test(selectedCover.body.selection) || selectedCover.body.target !== mapped.id) {
             pending(selectedCover.status >= 300 ? responseReason(selectedCover) : 'Main returned no selection receipt',
               'selection', selectedCover.status >= 300 ? 'selection-refused' : 'selection-receipt-invalid',
               selectedCover.status >= 300 ? selectedCover : undefined);
           } else {
-            coverResults.set(record.key, { record: recordDigest, status: 'imported' });
+            coverResults.set(`image:${imageIndex}`, { record: recordDigest, status: 'imported' });
+            coverage.disposition({ record: record.key, kind: 'image', path: `/images/${imageIndex}` }, {
+              status: 'mapped', reason: 'acknowledged-cover-selection', mapping: { target: mapped.id,
+                readPath: `/v1/resources/${short(mapped.id)}`, receipt: selectedCover.body },
+            });
           }
         } catch {
           pending('cover API unavailable', activeStep, 'cover-api-unavailable');
         }
       }
+      if (options.native !== false) {
+        for (const record of selected) {
+          const mapped = journal.native[record.key];
+          if (!mapped) continue;
+          for (const [path, value] of Object.entries(mapped.projection?.fields ?? {})) {
+            const raw = path.split('/').slice(1).reduce<unknown>((parent, part) =>
+              parent && typeof parent === 'object'
+                ? (parent as Record<string, unknown>)[part.replaceAll('~1', '/').replaceAll('~0', '~')]
+                : undefined, record);
+            const expected = typeof raw === 'string' && ['/title', '/data/summary'].includes(path)
+              ? clean(raw) : path === '/language' && typeof raw === 'string' ? projectionLanguage(raw) : raw;
+            if (expected === undefined || canonical(expected) !== canonical(value)) continue;
+            if (coverage.entries.get(datasetCoverageId({ record: record.key, kind: 'field', path }))?.observation === 'empty') continue;
+            coverage.disposition({ record: record.key, kind: 'field', path }, {
+              status: 'mapped', reason: 'acknowledged-native-value', mapping: { target: mapped.id,
+                readPath: mapped.kind === 'work' ? `/v1/works/${short(mapped.id)}/metadata`
+                  : `/v1/resources/${short(mapped.id)}/page`, receipt: mapped.receipt },
+            });
+          }
+        }
+        const mappingContext: Omit<DatasetMappingContext, 'command'> = {
+          snapshot, actingSubject, selected: selectedKeys, records: byKey,
+          native: new Map(Object.entries(journal.native)),
+          source(key) {
+            const record = byKey.get(key);
+            if (!record) throw new Error(`No frozen source record: ${key}`);
+            const intakes = sourceObservations.get(key) ?? [];
+            return datasetSourceReference(snapshot, record, intakes.map(intake => intake.observation), intakes);
+          },
+          read: path => request(api, 'GET', path), disposition: coverage.disposition,
+        };
+        for (const mapper of options.nativeMappers ?? []) {
+          await mapper.map({ ...mappingContext, command: (label, method, path, body) =>
+            command(`mapping:${mapper.id}:${mapper.revision}:${label}`, method, path, body) });
+          completedMappers.add(mapper.id);
+        }
+      }
       journal.completed = selected.length === records.length;
       save(true);
     } finally {
+      for (const entry of coverage.entries.values()) {
+        if (!selectedKeys.has(entry.record) || entry.disposition.status !== 'unmapped') continue;
+        if (!retainedLabels.has(`record:${entry.record}`)) entry.disposition.reason = 'source-intake-incomplete';
+        else if (options.native === false) entry.disposition.reason = 'native-mapping-disabled';
+      }
+      coverageReport = coverage.report(selected.length === records.length
+        && selected.every(record => retainedLabels.has(`record:${record.key}`))
+        && snapshot.sources.every(source => !source.records.length
+          || retainedLabels.has(`scope:${source.provider}:snapshot-manifest-v1`)), completedMappers);
+      atomicJson(coverageFile, coverageReport);
       save(true);
       writeUrlIndex(root, snapshot, selected, journal, session, locale, context);
     }
@@ -1512,10 +1743,13 @@ export async function importDataset(
       limitations: journal.limitations,
       completed: journal.completed,
       coverResults: [...coverResults.values()],
+      coverageFile,
+      coverage: (({ entries: _entries, ...summary }) => summary)(coverageReport),
     };
     atomicJson(join(root, 'import-latest.json'), result);
     return result;
   } finally {
-    releaseLock();
+    releaseLock?.();
+    releaseIdentityLock();
   }
 }

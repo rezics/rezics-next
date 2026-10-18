@@ -15,6 +15,8 @@ import { putBlob, repository, sha256 } from '../../../scripts/datasets/store.ts'
 import { datasetStackMarker } from '../../../scripts/datasets/bootstrap.ts';
 import { acquireDatasetImportLock, datasetImportLockPath } from '../../../scripts/datasets/lock.ts';
 import type { DatasetCoverEvidence, DatasetRecord, DatasetSnapshot, StoredImage } from '../../../scripts/datasets/types.ts';
+import type { DatasetNativeMapper, DatasetNativeRecord } from '../../../scripts/datasets/types.ts';
+import { testDatasetImportCoverage } from '../../../scripts/datasets/conformance.ts';
 
 const roots: string[] = [];
 const root = () => {
@@ -282,6 +284,215 @@ const options = (api: DatasetApi) => ({
 });
 
 describe('independent public-API dataset import', () => {
+  test('duplicate provider-qualified source identities are refused before API writes', async () => {
+    const fixture = apiFixture();
+    const first = { ...record('one', 'work'), externalId: 'same-provider-identity' };
+    const second = { ...first, key: 'another-local-key' };
+    await expect(importDataset(root(), snapshot([first, second]), options(fixture.api))).rejects.toThrow('duplicate source identities');
+    expect(fixture.requests).toHaveLength(0);
+  });
+
+  test('a failed source intake writes a complete occurrence inventory with incomplete transport', async () => {
+    const fixture = apiFixture(), directory = root(), source = snapshot([record('allowed'), record('denied')]);
+    const api: DatasetApi = { ...fixture.api, async request(method, path, body, key) {
+      if (path === '/v1/sources/intakes' && (body as { externalId: string }).externalId === 'denied')
+        return { status: 403, body: { code: 'authority_denied' } };
+      return fixture.api.request(method, path, body, key);
+    } };
+    await expect(importDataset(directory, source, options(api))).rejects.toThrow('HTTP 403');
+    const file = readdirSync(directory).find(name => name.startsWith('coverage-'))!;
+    const coverage = JSON.parse(readFileSync(join(directory, file), 'utf8'));
+    expect(coverage.transportCompleted).toBe(false);
+    expect(coverage.catalogueReady).toBe(false);
+    expect(new Set(coverage.entries.map((entry: { record: string }) => entry.record))).toEqual(new Set(['allowed', 'denied']));
+    testDatasetImportCoverage(source, coverage);
+  });
+
+  test('a source receipt with another digest never qualifies transport or native adoption', async () => {
+    const fixture = apiFixture(), directory = root(), source = snapshot([record('bad-intake-receipt', 'work')]);
+    const api: DatasetApi = { ...fixture.api, async request(method, path, body, key) {
+      const result = await fixture.api.request(method, path, body, key);
+      if (path === '/v1/sources/intakes') (result.body.observation as Record<string, unknown>).byteDigest = '0'.repeat(64);
+      return result;
+    } };
+    await expect(importDataset(directory, source, options(api))).rejects.toThrow('receipt digest');
+    expect(fixture.nativeWorks).toHaveLength(0);
+    const file = readdirSync(directory).find(name => name.startsWith('coverage-'))!;
+    expect(JSON.parse(readFileSync(join(directory, file), 'utf8')).transportCompleted).toBe(false);
+  });
+
+  test('reports native user facts separately from completed transport and pending mapper integration', async () => {
+    const fixture = apiFixture(), directory = root();
+    const source = snapshot([record('known', 'work')]);
+    const result = await importDataset(directory, source, options(fixture.api));
+    expect(result.completed).toBe(true);
+    expect(result.coverage.transportCompleted).toBe(true);
+    expect(result.coverage.catalogueReady).toBe(false);
+    expect(result.coverage.pendingMappers).toEqual(['fields', 'relations', 'credits', 'releases', 'media']);
+    const coverage = JSON.parse(readFileSync(result.coverageFile, 'utf8'));
+    expect(coverage.entries.find((entry: { path: string }) => entry.path === '/title').disposition.status).toBe('mapped');
+    expect(coverage.entries.find((entry: { path: string }) => entry.path === '/data/flags/0').disposition.status).toBe('unmapped');
+    expect(coverage.entries.find((entry: { path: string }) => entry.path === '/data/nested/empty').disposition.status).toBe('absent');
+    testDatasetImportCoverage(source, coverage);
+  });
+
+  test('a later snapshot reuses owner identities and never reports a changed source title as adopted', async () => {
+    const fixture = apiFixture(), directory = root(), work = record('vndb:vn:v11', 'work');
+    work.externalId = 'v11';
+    const first = snapshot([work]), frozen = structuredClone(first);
+    const imported = await importDataset(directory, first, options(fixture.api));
+    const originalReceipt = readFileSync(imported.receiptFile, 'utf8');
+    const native = JSON.parse(originalReceipt).native;
+    const changed = structuredClone(first);
+    changed.id = 'later-snapshot'; changed.digest = 'b'.repeat(64);
+    changed.sources[0]!.records[0]!.title = 'A different source title';
+    const result = await importDataset(directory, changed, options(fixture.api));
+    expect(JSON.parse(readFileSync(result.receiptFile, 'utf8')).native).toEqual(native);
+    expect(readFileSync(imported.receiptFile, 'utf8')).toBe(originalReceipt);
+    expect(first).toEqual(frozen);
+    expect(fixture.nativeWorks).toHaveLength(1);
+    const coverage = JSON.parse(readFileSync(result.coverageFile, 'utf8'));
+    expect(coverage.entries.find((entry: { path: string }) => entry.path === '/title').disposition.status).toBe('unmapped');
+    testDatasetImportCoverage(changed, coverage);
+  });
+
+  test('recovers native identities from another snapshot’s durable bulk receipts after a client crash', async () => {
+    const fixture = apiFixture(), directory = root();
+    const work = { ...record('vndb:vn:v11', 'work'), externalId: 'v11' };
+    const child = { ...record('vndb:character:c22', 'character'), kind: 'character', externalId: 'c22' };
+    const source = snapshot([work, child]);
+    const first = await importDataset(directory, source, options(fixture.api));
+    const checkpoint = JSON.parse(readFileSync(first.receiptFile, 'utf8'));
+    const expected = checkpoint.native;
+    checkpoint.native = {};
+    writeFileSync(first.receiptFile, JSON.stringify(checkpoint));
+    source.id = 'after-crash'; source.digest = 'c'.repeat(64);
+    const result = await importDataset(directory, source, options(fixture.api));
+    const recovered = JSON.parse(readFileSync(result.receiptFile, 'utf8')).native;
+    expect(Object.keys(recovered)).toHaveLength(2);
+    for (const [key, value] of Object.entries(expected) as [string, DatasetNativeRecord][])
+      expect(recovered[key].id).toBe(value.id);
+    expect(fixture.nativeWorks).toHaveLength(1);
+    expect(fixture.requests.filter(call => call.path === '/v1/semantic/changes/bulk')).toHaveLength(1);
+  });
+
+  test('an unresolved older native request blocks another snapshot before new writes', async () => {
+    const fixture = apiFixture(), directory = root();
+    const source = snapshot([{ ...record('vndb:vn:v11', 'work'), externalId: 'v11' }]);
+    const first = await importDataset(directory, source, options(fixture.api));
+    const checkpoint = JSON.parse(readFileSync(first.receiptFile, 'utf8'));
+    checkpoint.native = {};
+    writeFileSync(first.receiptFile, JSON.stringify(checkpoint));
+    const requests = join(directory, 'imports', basename(first.receiptFile, '.json'), 'requests');
+    for (const file of readdirSync(requests)) {
+      if (!file.endsWith('.json')) continue;
+      const path = join(requests, file), saved = JSON.parse(readFileSync(path, 'utf8'));
+      if (saved.label.startsWith('catalogue-bulk:')) {
+        delete saved.entry.result;
+        writeFileSync(path, JSON.stringify(saved));
+      }
+    }
+    const previousRequests = fixture.requests.length;
+    source.id = 'must-resume-original'; source.digest = 'd'.repeat(64);
+    await expect(importDataset(directory, source, options(fixture.api))).rejects.toThrow('Resume retained snapshot');
+    expect(fixture.requests.slice(previousRequests).every(call => call.path === '/v1/catalogue/candidates')).toBe(true);
+    expect(fixture.nativeWorks).toHaveLength(1);
+  });
+
+  test('mapper revisions append journaled public commands, retain source parts and use fresh CAS reads', async () => {
+    const fixture = apiFixture(), directory = root();
+    const work = record('mapper-work', 'work');
+    work.data = { ...work.data, capturedText: 'x'.repeat(110_000) };
+    const source = snapshot([work]);
+    const supportRequests: { key: string; body: unknown }[] = [];
+    let reads = 0, revision = 'map-v1';
+    const api: DatasetApi = { ...fixture.api, async request(method, path, body, key) {
+      if (method === 'GET' && path.endsWith('/metadata')) {
+        reads++;
+        return { status: 200, body: { head: iri(8800 + reads) } };
+      }
+      if (path === '/v1/sources/field-supports') {
+        expect(key).toBeDefined(); supportRequests.push({ key: key!, body });
+        return { status: 201, body: { support: { profile: 'source-field-support-v1',
+          support: iri(9900 + supportRequests.length), state: 'recorded' }, replayed: false } };
+      }
+      return fixture.api.request(method, path, body, key);
+    } };
+    const mapper = (): DatasetNativeMapper => ({ id: 'fields', revision, async map(context) {
+      const native = context.native.get(work.key)!, evidence = context.source(work.key);
+      expect(evidence.intakes.length).toBeGreaterThan(1);
+      expect(evidence.intakes.map(part => part.observation)).toEqual(evidence.observations);
+      expect(new Set(evidence.intakes.map(part => part.record)).size).toBe(evidence.intakes.length);
+      const path = `/v1/works/${native.id.slice(-36)}/metadata`;
+      const head = await context.read(path);
+      // A mapper normally obtains a conversion from its admitted complete capture.
+      // This transport fixture exercises the journal adapter, not conversion/adoption proof.
+      const receipt = await context.command('qualified-title', 'POST', '/v1/sources/field-supports', {
+        profile: 'source-field-support-attachment-v1', target: native.id,
+        slot: 'work-metadata-v1#title:ja', occurrence: null, context: 'default',
+        sourceRecord: evidence.intakes[0]!.record, conversion: iri(9800), grain: 'vn', sourceField: 'title',
+        sourceOccurrence: null, sourcePointer: '/title', expectedHead: head.head, actingSubject: context.actingSubject,
+      });
+      context.disposition({ record: work.key, kind: 'field', path: '/title' }, {
+        status: 'mapped', reason: 'qualified-source-support', mapping: { target: native.id, readPath: path, receipt },
+      });
+    } });
+    const first = await importDataset(directory, source, { ...options(api), nativeMappers: [mapper()] });
+    const firstJournal = readFileSync(first.receiptFile, 'utf8');
+    await importDataset(directory, source, { ...options(api), nativeMappers: [mapper()] });
+    expect(supportRequests).toHaveLength(1);
+    expect(reads).toBe(2);
+    revision = 'map-v2';
+    const second = await importDataset(directory, source, { ...options(api), nativeMappers: [mapper()] });
+    expect(supportRequests).toHaveLength(2);
+    expect(supportRequests[1]!.key).not.toBe(supportRequests[0]!.key);
+    const requests = join(directory, 'imports', basename(second.receiptFile, '.json'), 'requests');
+    const supports = readdirSync(requests).filter(file => file.endsWith('.json'))
+      .map(file => JSON.parse(readFileSync(join(requests, file), 'utf8')))
+      .filter(saved => saved.label.startsWith('mapping:fields:'));
+    expect(supports).toHaveLength(2);
+    expect(supports.find(saved => saved.label.includes('map-v1')).entry.body).toEqual(supportRequests[0]!.body);
+    expect(JSON.parse(firstJournal).native).toEqual(JSON.parse(readFileSync(second.receiptFile, 'utf8')).native);
+    expect(second.coverage.pendingMappers).toEqual(['relations', 'credits', 'releases', 'media']);
+    expect(second.coverage.catalogueReady).toBe(false);
+  });
+
+  test('a new snapshot preserves an existing editor or independent source cover selection', async () => {
+    const fixture = apiFixture(), directory = root(), work = record('cover-across-snapshots', 'work');
+    const source = coverSnapshot(directory, work).snapshot;
+    await importDataset(directory, source, options(fixture.api));
+    const target = fixture.nativeWorks[0]!;
+    fixture.currentSelections.set(target, uuid(7998));
+    source.id = 'new-cover-snapshot'; source.digest = 'e'.repeat(64);
+    const selections = fixture.requests.filter(call => call.path.endsWith('/avatar')).length;
+    const result = await importDataset(directory, source, options(fixture.api));
+    expect(fixture.nativeWorks).toHaveLength(1);
+    expect(fixture.currentSelections.get(target)).toBe(uuid(7998));
+    expect(fixture.requests.filter(call => call.path.endsWith('/avatar'))).toHaveLength(selections);
+    expect(result.coverResults[0]).toMatchObject({ status: 'pending', reasonCode: 'fence-refused' });
+  });
+
+  test('conflicting retained identities are refused without changing either source journal', async () => {
+    const fixture = apiFixture(), directory = root();
+    const work = { ...record('vndb:vn:v11', 'work'), externalId: 'v11' };
+    const source = snapshot([work]);
+    const first = await importDataset(directory, source, options(fixture.api));
+    const saved = readFileSync(first.receiptFile, 'utf8');
+    const conflict = JSON.parse(saved);
+    conflict.native[work.key].id = iri(9876);
+    conflict.native[work.key].receipt.work = iri(9876);
+    const conflictFile = join(directory, 'imports', sha256('conflicting-prior-receipt') + '.json');
+    const other = JSON.stringify(conflict);
+    writeFileSync(conflictFile, other);
+    const before = fixture.requests.length;
+    source.id = 'conflict-refused'; source.digest = 'b'.repeat(64);
+    await expect(importDataset(directory, source, options(fixture.api))).rejects.toThrow('Conflicting retained native identities');
+    expect(readFileSync(first.receiptFile, 'utf8')).toBe(saved);
+    expect(readFileSync(conflictFile, 'utf8')).toBe(other);
+    expect(fixture.requests.slice(before).every(call => call.path === '/v1/catalogue/candidates')).toBe(true);
+    expect(fixture.nativeWorks).toHaveLength(1);
+  });
+
   test('lossless JSON parts respect intake byte bounds and detect missing/corrupt/reordered parts', () => {
     const source = {
       title: '命運'.repeat(50_000),
@@ -1199,5 +1410,622 @@ test('development auth registers and installs a public client, consents and exch
   } finally {
     globalThis.fetch = prior;
     rmSync(clientPath, { force: true });
+  }
+});
+
+// Frozen audit associations are receipt identities, not a public census or adoption proof.
+// Columns: source key, preparation identity, original historical identity.
+const frozenNativeIdentities = [
+  [
+    "vndb:vn:v11",
+    "https://rezics.com/id/01a0fd3b-dfbe-70a8-897f-7a8f19cc103f",
+    "https://rezics.com/id/01d9b05e-afc0-d869-c745-fad7fcb9db10"
+  ],
+  [
+    "vndb:vn:v11890",
+    "https://rezics.com/id/01a0fd3b-f082-7374-b4e3-e74296f4c187",
+    "https://rezics.com/id/d36b142b-9288-c1ff-dfe4-135c39323e4d"
+  ],
+  [
+    "vndb:vn:v12243",
+    "https://rezics.com/id/01a0fd3b-f338-76a5-a706-a6096165cf9f",
+    "https://rezics.com/id/081e0a29-df60-0809-f56d-53edec11312c"
+  ],
+  [
+    "vndb:vn:v12369",
+    "https://rezics.com/id/01a0fd3b-f606-7068-8e36-2363b039727f",
+    "https://rezics.com/id/4350fb9c-b332-7015-c0c8-07ab08962f21"
+  ],
+  [
+    "vndb:vn:v12463",
+    "https://rezics.com/id/01a0fd3b-fbaa-7719-a6f1-a89cd1cd215f",
+    "https://rezics.com/id/dec0043f-a0f0-67d2-e6a0-cfdaed83f60e"
+  ],
+  [
+    "vndb:vn:v12706",
+    "https://rezics.com/id/01a0fd3b-ff76-74de-9d14-4b3969a96dc0",
+    "https://rezics.com/id/59e4d8c8-6239-20b3-c6e6-59ad55b5369b"
+  ],
+  [
+    "vndb:vn:v12779",
+    "https://rezics.com/id/01a0fd3c-01dc-7198-ae7c-c2a8675f8bf2",
+    "https://rezics.com/id/60389c1d-488b-5518-2a92-de9b10e6f2fc"
+  ],
+  [
+    "vndb:vn:v13288",
+    "https://rezics.com/id/01a0fd3c-0487-72a8-aa96-f1d6b12182cb",
+    "https://rezics.com/id/7af1c09a-2374-2d71-98e7-bfb0ee6f591f"
+  ],
+  [
+    "vndb:vn:v14408",
+    "https://rezics.com/id/01a0fd3c-0f86-758d-95d3-d098bbf5759a",
+    "https://rezics.com/id/83c7205d-5a51-77e5-e23b-48847b7f4096"
+  ],
+  [
+    "vndb:vn:v14554",
+    "https://rezics.com/id/01a0fd3c-1219-74f8-ac13-c9a49607dda4",
+    "https://rezics.com/id/45cd46ab-2522-06cd-72eb-46a5f83ddf2c"
+  ],
+  [
+    "vndb:vn:v14957",
+    "https://rezics.com/id/01a0fd3c-14d7-7018-b251-5129198492fc",
+    "https://rezics.com/id/6087fc59-1a50-e894-95d9-3781ede87624"
+  ],
+  [
+    "vndb:vn:v15808",
+    "https://rezics.com/id/01a0fd3c-1a66-77db-bb23-a7e7dfa25499",
+    "https://rezics.com/id/d2a269af-db7e-70a1-1686-dfbd71574cab"
+  ],
+  [
+    "vndb:vn:v16202",
+    "https://rezics.com/id/01a0fd3c-1d1b-729e-955f-7f45c6504ff9",
+    "https://rezics.com/id/4e1888de-181a-94aa-5a5f-a7108d94990b"
+  ],
+  [
+    "vndb:vn:v18204",
+    "https://rezics.com/id/01a0fd3c-2ca4-7649-809e-9a449feb1a22",
+    "https://rezics.com/id/ec73caf9-a9ff-2605-39b7-1324f4125017"
+  ],
+  [
+    "vndb:vn:v19119",
+    "https://rezics.com/id/01a0fd3c-4146-71fa-aea0-2aea16f4eb5d",
+    "https://rezics.com/id/78ba94e6-a1d8-cf37-9207-c55897a58761"
+  ],
+  [
+    "vndb:vn:v21725",
+    "https://rezics.com/id/01a0fd3c-43b2-71ee-bd16-49dcab882e4e",
+    "https://rezics.com/id/9a6a9efd-35b8-a79b-bcc8-22fc2eb92629"
+  ],
+  [
+    "vndb:vn:v21739",
+    "https://rezics.com/id/01a0fd3c-465c-7284-a2e4-00cb742cccb3",
+    "https://rezics.com/id/68fef1f0-9c98-2e8b-eae4-d341770a0c73"
+  ],
+  [
+    "vndb:vn:v23380",
+    "https://rezics.com/id/01a0fd3c-48f7-70c3-8d57-667def8756ff",
+    "https://rezics.com/id/184ac1d3-fc83-2ea7-b993-7a0d684f838a"
+  ],
+  [
+    "vndb:vn:v25235",
+    "https://rezics.com/id/01a0fd3c-4e53-7071-a0ac-89575a6b6d1c",
+    "https://rezics.com/id/16707a49-b1df-17d6-e64d-7ec318336472"
+  ],
+  [
+    "vndb:vn:v28840",
+    "https://rezics.com/id/01a0fd3c-5652-77ca-8d71-8deb496726de",
+    "https://rezics.com/id/3953129d-e84c-a9d3-ed39-a5bdfe03e97c"
+  ],
+  [
+    "vndb:vn:v29977",
+    "https://rezics.com/id/01a0fd3c-64cb-73e7-8813-1205fe7040d2",
+    "https://rezics.com/id/d091c0ad-ba03-9e6d-1ce4-ea0a6dca8275"
+  ],
+  [
+    "vndb:vn:v30132",
+    "https://rezics.com/id/01a0fd3c-67dc-7089-8149-d22f57450807",
+    "https://rezics.com/id/f5438948-d41f-9403-59ce-7e5dff2faa59"
+  ],
+  [
+    "vndb:vn:v40698",
+    "https://rezics.com/id/01a0fd3c-716d-75fb-9d30-59b20a280dc7",
+    "https://rezics.com/id/468125d1-dd1e-c239-a852-dd803583a22e"
+  ],
+  [
+    "vndb:vn:v45083",
+    "https://rezics.com/id/01a0fd3c-7537-7761-a32d-fc4245c46126",
+    "https://rezics.com/id/a6d246fe-4d87-2966-f0ec-ab824496738c"
+  ],
+  [
+    "vndb:vn:v50",
+    "https://rezics.com/id/01a0fd3c-91d2-7244-9a4c-f9c900155ac9",
+    "https://rezics.com/id/9975a3d3-8d12-2c3d-a2aa-26026baf9681"
+  ],
+  [
+    "vndb:vn:v53550",
+    "https://rezics.com/id/01a0fd3c-a342-7391-b81c-b0eee7a30e4c",
+    "https://rezics.com/id/cdef2ca8-78a8-ab29-ef28-9aab237c3928"
+  ],
+  [
+    "vndb:vn:v58467",
+    "https://rezics.com/id/01a0fd3c-b787-771a-8018-18d342d4394f",
+    "https://rezics.com/id/6f2fcf6a-f5f7-d97f-652b-67f86759ed58"
+  ],
+  [
+    "vndb:vn:v64299",
+    "https://rezics.com/id/01a0fd3c-dd98-7136-b9c0-308c5b49c956",
+    "https://rezics.com/id/b391bfb6-a48a-83d8-6410-67f763cae719"
+  ],
+  [
+    "vndb:vn:v64458",
+    "https://rezics.com/id/01a0fd3c-e039-758f-bdf7-cacc0d9d6cae",
+    "https://rezics.com/id/90f870bd-4b09-f3c6-7a5e-5c1bef659de9"
+  ],
+  [
+    "vndb:vn:v7555",
+    "https://rezics.com/id/01a0fd3d-13d2-71c2-a964-ebcb06e2304c",
+    "https://rezics.com/id/adcb6ac3-e9bf-7d2a-040e-ac9b97db3902"
+  ],
+  [
+    "vndb:vn:v7602",
+    "https://rezics.com/id/01a0fd3d-16e5-77bd-81d5-9ca579c88458",
+    "https://rezics.com/id/36583a03-dc1b-cc6f-730e-50fb4ea1c517"
+  ],
+  [
+    "musicbrainz:recording:00aa1157-b6c8-4dfd-a256-035de7832f45",
+    "https://rezics.com/id/01a0fd6a-cf52-73eb-8fe5-39368da274c7",
+    "https://rezics.com/id/c4d116ed-9387-67b1-8670-bbb4ec97bc76"
+  ],
+  [
+    "musicbrainz:recording:00e07b56-c0ea-4660-b05d-2a7a8b632cc7",
+    "https://rezics.com/id/01a0fd6a-d8d7-7140-8749-655564ff74ba",
+    "https://rezics.com/id/435c2945-30cf-3285-bcd2-7a00a80efa41"
+  ],
+  [
+    "musicbrainz:recording:01ac6750-0c55-4f3e-9cc1-8c439dd55f65",
+    "https://rezics.com/id/01a0fd6a-df55-74d3-89fd-b095046b5fb5",
+    "https://rezics.com/id/8e1e0cbd-c2c3-e0d9-95fd-c4d88bbd98a1"
+  ],
+  [
+    "musicbrainz:recording:020997e6-d39c-4419-8377-bfb9d859f60e",
+    "https://rezics.com/id/01a0fd6a-e4f6-77d0-8d64-78737c42db82",
+    "https://rezics.com/id/1be62202-7485-1d05-a5a5-307f7a463995"
+  ],
+  [
+    "musicbrainz:recording:0435f4f0-e507-42db-9f17-90578e357062",
+    "https://rezics.com/id/01a0fd6a-eb20-749d-b995-51462f4d9e5e",
+    "https://rezics.com/id/e506b57b-ac62-5d13-3262-b100b0b34e53"
+  ],
+  [
+    "musicbrainz:recording:0467383c-a704-47d4-9e59-150455f85bcf",
+    "https://rezics.com/id/01a0fd6a-f09e-741b-b1fb-8a914dafe3bb",
+    "https://rezics.com/id/6b96f7d5-007a-3ea7-2d76-091e38c8c9b4"
+  ],
+  [
+    "musicbrainz:recording:050d70dd-5c5e-4c8e-b42e-58154b1a7b86",
+    "https://rezics.com/id/01a0fd6a-f527-742f-9b08-fe6ae9424430",
+    "https://rezics.com/id/9bd99c89-c0ef-63e5-85fa-c87216b27d3a"
+  ],
+  [
+    "musicbrainz:recording:053d552a-1718-42d0-82e8-2fdcc2d5b30e",
+    "https://rezics.com/id/01a0fd6a-f907-74b7-b362-b4724b1539a6",
+    "https://rezics.com/id/cc62f002-dd91-a8e1-cc1f-5755db61b781"
+  ],
+  [
+    "musicbrainz:recording:05833d73-e1e0-4d69-a00b-a586f8ffb3b6",
+    "https://rezics.com/id/01a0fd6a-fccf-7019-a0ed-e94c28618a5b",
+    "https://rezics.com/id/740b40ed-389d-fc91-cdaa-c5891fd2815b"
+  ],
+  [
+    "musicbrainz:recording:061b67f4-4bda-43d0-9377-da36c5a34d5b",
+    "https://rezics.com/id/01a0fd6b-01bc-717b-9351-79730d21d340",
+    "https://rezics.com/id/2e94ce18-1d92-4406-673e-1e23c3f4f7f7"
+  ],
+  [
+    "musicbrainz:recording:079ef961-0dea-41ee-9d77-0c3a92d7c5d9",
+    "https://rezics.com/id/01a0fd6b-063c-7051-a21d-a0e10478ef87",
+    "https://rezics.com/id/fd0b7950-daed-e5c0-ddbe-f7d3d7e3217b"
+  ],
+  [
+    "musicbrainz:recording:07c9f1a8-c11f-460e-b8ae-99081f6f6094",
+    "https://rezics.com/id/01a0fd6b-0af2-7075-a1a0-f1f7bd8fee17",
+    "https://rezics.com/id/8cd65da2-5f3c-17ca-0df0-7347249b2d24"
+  ],
+  [
+    "musicbrainz:recording:0806803d-6514-4b1b-bdb0-e52f743ee225",
+    "https://rezics.com/id/01a0fd6b-1053-7455-b285-e94222ec2264",
+    "https://rezics.com/id/d5ade6e4-1eb5-e746-de90-f4268fc261e4"
+  ],
+  [
+    "musicbrainz:recording:091b7064-fdcc-4fb1-9f25-d2c83971cf57",
+    "https://rezics.com/id/01a0fd6b-150c-7351-8afe-8d1879b9dafd",
+    "https://rezics.com/id/14dd36e6-9fcf-7588-6fb3-fee91673f2c6"
+  ],
+  [
+    "musicbrainz:recording:0997cbfc-c6a3-4bb4-8d36-bf2d9307bb87",
+    "https://rezics.com/id/01a0fd6b-195f-767f-8595-e0842e8889d5",
+    "https://rezics.com/id/abb82ba4-96a3-57ee-2f2c-bee29a497ef4"
+  ],
+  [
+    "musicbrainz:recording:0a7131ea-428f-4426-a3c2-4150ea630ada",
+    "https://rezics.com/id/01a0fd6b-1f60-741b-8116-b15be69a7c07",
+    "https://rezics.com/id/6b11a1df-5e06-c45f-a55a-a9d9a087d6af"
+  ],
+  [
+    "musicbrainz:recording:0ad0a979-8283-4012-a6ac-3b0e7870e154",
+    "https://rezics.com/id/01a0fd6b-2445-715b-a0bf-116ea46d6fa2",
+    "https://rezics.com/id/5f074e11-6936-a954-1d16-1c5d27665f88"
+  ],
+  [
+    "musicbrainz:recording:0b485349-c6fc-481f-920e-d6b79f715180",
+    "https://rezics.com/id/01a0fd6b-2c0b-7351-8a45-f0cddfb3b210",
+    "https://rezics.com/id/85c6ec97-4c17-4035-a09b-4aadbd31b92b"
+  ],
+  [
+    "musicbrainz:recording:0b4f2998-c58a-49a0-b4e0-abd8d1736221",
+    "https://rezics.com/id/01a0fd6b-32f6-77a6-b10e-201722563c81",
+    "https://rezics.com/id/7900d020-d5e5-7b87-27b4-8e7a5b96a9f9"
+  ],
+  [
+    "musicbrainz:recording:0bc688b5-7fda-4df3-a763-63340bfedc57",
+    "https://rezics.com/id/01a0fd6b-3aae-7352-acb7-01f9f70594ce",
+    "https://rezics.com/id/b24504f0-1ff5-eb8b-6434-070d39e983ab"
+  ],
+  [
+    "musicbrainz:recording:0d398c47-19f4-4284-843b-de029dff4a49",
+    "https://rezics.com/id/01a0fd6b-3e96-7086-aa49-463a5c9ebba6",
+    "https://rezics.com/id/23644428-f59e-1803-ef01-4c41d67099a0"
+  ],
+  [
+    "musicbrainz:recording:0df811ab-6785-4e56-83d7-bca35a5023de",
+    "https://rezics.com/id/01a0fd6b-4436-7596-8090-a8e146c3f28e",
+    "https://rezics.com/id/e15931f8-a87c-4d6b-d37b-f3ad3b1cf0c4"
+  ],
+  [
+    "musicbrainz:recording:0e4c4d14-31ac-41ab-ae93-322e15cc14c7",
+    "https://rezics.com/id/01a0fd6b-4b45-7014-9211-f775090c4ee4",
+    "https://rezics.com/id/2f83ff9f-4f7b-eaac-f3f2-57030e3bfff7"
+  ],
+  [
+    "musicbrainz:recording:0e5d3279-7925-40de-a30d-b64622203451",
+    "https://rezics.com/id/01a0fd6b-50f8-74ec-812b-3e1f2f192b03",
+    "https://rezics.com/id/537db7aa-256c-b94c-f400-5937262f74a4"
+  ],
+  [
+    "musicbrainz:recording:0ecdebff-6bc0-4b31-9b17-ca7efa5aa39e",
+    "https://rezics.com/id/01a0fd6b-55fc-758f-9356-3e981d52993a",
+    "https://rezics.com/id/fdf99059-c0fc-27d6-0c6b-e48c6eba497c"
+  ],
+  [
+    "musicbrainz:recording:0eeab2d1-0c57-4853-b249-068f9f6eca93",
+    "https://rezics.com/id/01a0fd6b-5a27-7489-99ed-b4c5c37f3ec2",
+    "https://rezics.com/id/15f2e51f-33a3-375f-11a1-f965f846dd72"
+  ],
+  [
+    "musicbrainz:recording:0faedb9a-892a-4e62-80f0-c378c0d53b77",
+    "https://rezics.com/id/01a0fd6b-5e5e-7205-8d56-c7be56592627",
+    "https://rezics.com/id/da056bd4-fb03-dae7-4333-04db1a6862bd"
+  ],
+  [
+    "musicbrainz:recording:0fcbd5fa-c6da-4b69-b9f1-f08747e86c22",
+    "https://rezics.com/id/01a0fd6b-61f1-75a1-b8dc-05cfc93f6b25",
+    "https://rezics.com/id/17fc6907-ed13-6670-20db-c7cd97945e1a"
+  ],
+  [
+    "musicbrainz:recording:10acbb87-d5f1-432e-bdb4-db0d93d223b0",
+    "https://rezics.com/id/01a0fd6b-65b6-73e9-a647-4fe3a4aedcf2",
+    "https://rezics.com/id/99e3f604-f89c-d304-689d-c007226e52e9"
+  ],
+  [
+    "musicbrainz:recording:10edf542-c338-4411-bfc2-de13c3284dde",
+    "https://rezics.com/id/01a0fd6b-68e6-751c-a32a-1eeb441af930",
+    "https://rezics.com/id/1a39bc86-b854-d2c9-5d89-4861e2c173ec"
+  ],
+  [
+    "musicbrainz:release-group:055be730-dcad-31bf-b550-45ba9c202aa3",
+    "https://rezics.com/id/01a0fdb1-2d73-748d-b0f3-45840365cad2",
+    "https://rezics.com/id/77913548-8fa2-1088-d511-4179c3da65fb"
+  ],
+  [
+    "musicbrainz:release-group:7c8f2d45-d764-347a-9ab9-0aa771a3447d",
+    "https://rezics.com/id/01a0fdb1-30e7-7222-b23f-5f4e4055cad9",
+    "https://rezics.com/id/42861943-ef5f-b443-ef87-04824c013b84"
+  ],
+  [
+    "musicbrainz:release-group:f2026101-945b-3d05-9ef4-aa718fc3feef",
+    "https://rezics.com/id/01a0fdb1-3469-7059-a50d-58c773cbbce3",
+    "https://rezics.com/id/77aa1a6b-0e53-5b04-4055-94c5bc5a1d77"
+  ],
+  [
+    "musicbrainz:work:008868d1-3ef6-3503-b652-c8cc5e86455c",
+    "https://rezics.com/id/01a0fdb1-3819-74b9-a2b1-f2d0e648ab2c",
+    "https://rezics.com/id/4d8c65fd-3c54-fea5-5fbf-2529cb29ed74"
+  ],
+  [
+    "musicbrainz:work:009f3ce8-feea-4f65-bb2b-7e024000d521",
+    "https://rezics.com/id/01a0fdb1-3c4d-74ef-a7bf-d04a9a02dfbc",
+    "https://rezics.com/id/0d29dd3b-ba3e-9ee5-7d08-fad4aca36fec"
+  ],
+  [
+    "musicbrainz:work:01160050-85a9-4fdd-a9d9-be3142a14bed",
+    "https://rezics.com/id/01a0fdb1-439e-758f-a0bf-2a292f201b47",
+    "https://rezics.com/id/2aed4850-8428-a016-50c0-e36a9459bffb"
+  ],
+  [
+    "musicbrainz:work:02546b89-84ca-4a48-8fce-226a5792e1bd",
+    "https://rezics.com/id/01a0fdb1-4b43-7647-afb1-4abd246a327f",
+    "https://rezics.com/id/51d52663-4dd8-15dc-b762-2833e327368c"
+  ],
+  [
+    "musicbrainz:work:0288f511-e191-3f26-9b86-8a82acd01b0c",
+    "https://rezics.com/id/01a0fdb1-5174-7524-bfea-4aa69801226b",
+    "https://rezics.com/id/41e254ca-8f10-f70e-9b1c-2ec734316e12"
+  ],
+  [
+    "musicbrainz:work:032c5a23-cfde-33e9-b501-0321feb88f63",
+    "https://rezics.com/id/01a0fdb1-5845-75c1-ba3c-5a47600626af",
+    "https://rezics.com/id/001a8fac-8f6d-710a-4c1d-a4d09df7969d"
+  ],
+  [
+    "musicbrainz:work:03508155-616a-4e53-affd-ea78b0f97cdd",
+    "https://rezics.com/id/01a0fdb1-5b4d-720c-8a04-7675711667c2",
+    "https://rezics.com/id/53fda7dc-4222-d7a2-a6ce-cd39d8d9d121"
+  ],
+  [
+    "musicbrainz:work:03b53d70-274c-473d-aef4-b8b7468b16e5",
+    "https://rezics.com/id/01a0fdb1-5e6e-73ac-8968-5bb2fd16effe",
+    "https://rezics.com/id/e5d01672-3c45-15ba-6784-4b92ea5736f4"
+  ],
+  [
+    "musicbrainz:work:045ba111-5273-4fc0-9063-5cf8f81406bb",
+    "https://rezics.com/id/01a0fdb1-6109-72f9-bb46-2a3376c4b584",
+    "https://rezics.com/id/3907124f-069a-45fd-447b-158d651d7b27"
+  ],
+  [
+    "musicbrainz:work:049d64a7-3675-4b15-acd9-25c8e3a9ac79",
+    "https://rezics.com/id/01a0fdb1-63b2-776d-8687-7ee5c6530cbc",
+    "https://rezics.com/id/2a8ed247-f148-8931-ed0c-891c57910bc6"
+  ],
+  [
+    "musicbrainz:work:04ceae91-fa94-4af0-9ad4-406c4c59a906",
+    "https://rezics.com/id/01a0fdb1-665d-7509-8dd8-e8d5f09f3888",
+    "https://rezics.com/id/b0cbeecd-0170-d9eb-4061-455e75e3dd91"
+  ],
+  [
+    "musicbrainz:work:056b839a-70ae-3a65-a805-c70e2dd4b3de",
+    "https://rezics.com/id/01a0fdb1-69b2-7717-a425-9615fbe6a7bf",
+    "https://rezics.com/id/db954aee-a16d-3729-28ca-d5091b20eb85"
+  ],
+  [
+    "musicbrainz:work:062fe63b-b692-49f8-ab11-ede0c37883aa",
+    "https://rezics.com/id/01a0fdb1-6c5f-7049-97cb-e339c4352d8c",
+    "https://rezics.com/id/d305473b-89ef-fd6d-8184-ad45682f6af7"
+  ],
+  [
+    "musicbrainz:work:067c395d-0053-43e3-bb24-2742da76486e",
+    "https://rezics.com/id/01a0fdb1-6ed2-74a9-a181-4ad8cf71dcc7",
+    "https://rezics.com/id/51b1ccbd-013d-c379-76ed-5d2e7b41cc0c"
+  ],
+  [
+    "musicbrainz:work:06d7de06-ebd5-4442-91bc-b152df84a8fc",
+    "https://rezics.com/id/01a0fdb1-71a9-7531-9bd0-5c0a28a64fad",
+    "https://rezics.com/id/206f19ce-8bc4-6d3b-0dde-dd4c56dd97c9"
+  ],
+  [
+    "musicbrainz:work:0719a844-7338-3428-b286-b18f4e156ada",
+    "https://rezics.com/id/01a0fdb1-74dc-7128-bf0b-f433a9580183",
+    "https://rezics.com/id/95577125-9f80-46ec-cb96-d62dadc0c600"
+  ],
+  [
+    "bangumi:subject:1014",
+    "https://rezics.com/id/01a0fd4b-b3e3-71e2-8aab-1f0f8697d97a",
+    "https://rezics.com/id/ffb7d8bd-0e5c-05bb-66a8-ba90b8ac4b51"
+  ],
+  [
+    "bangumi:subject:101992",
+    "https://rezics.com/id/01a0fd4b-c30c-76e9-9b66-0d534517e188",
+    "https://rezics.com/id/67789507-c14b-157a-40ee-71e06ba34380"
+  ],
+  [
+    "bangumi:subject:103169",
+    "https://rezics.com/id/01a0fd4b-d131-717c-9a57-ba29e5e98615",
+    "https://rezics.com/id/8c39bfde-19d8-c383-624b-a349b150adb5"
+  ],
+  [
+    "bangumi:subject:103796",
+    "https://rezics.com/id/01a0fd4b-d70d-75de-b986-9aad626c35c8",
+    "https://rezics.com/id/5a616b77-638b-26ef-9e6d-bf662866e1ad"
+  ],
+  [
+    "bangumi:subject:103820",
+    "https://rezics.com/id/01a0fd4b-dc9f-7550-a3de-352d61bafe84",
+    "https://rezics.com/id/c42de6af-1f62-3ffb-9dbf-2d770a47d5b1"
+  ],
+  [
+    "bangumi:subject:104185",
+    "https://rezics.com/id/01a0fd4b-e225-75f0-82c8-9771e9e8b008",
+    "https://rezics.com/id/d3b056cb-5c59-f3c2-9567-fedf307b1d8e"
+  ],
+  [
+    "bangumi:subject:105404",
+    "https://rezics.com/id/01a0fd4b-e8fa-700e-8d81-e92e7a894703",
+    "https://rezics.com/id/542d4532-da83-aa3f-b139-a0f419ad92a7"
+  ],
+  [
+    "bangumi:subject:10716",
+    "https://rezics.com/id/01a0fd4b-f46d-767c-8d49-0d265afa4c87",
+    "https://rezics.com/id/c974691a-1b27-d973-59d4-15d69ca814e7"
+  ],
+  [
+    "bangumi:subject:10717",
+    "https://rezics.com/id/01a0fd4b-fa50-7220-a063-e9bc1c0a7dc4",
+    "https://rezics.com/id/d4b025a2-3a01-4d76-f1bb-f48d7086bd1c"
+  ],
+  [
+    "bangumi:subject:109104",
+    "https://rezics.com/id/01a0fd4c-01c4-700e-aad6-eec0aa82d14e",
+    "https://rezics.com/id/c7985e03-33b1-6701-36b6-9c75d429ee4a"
+  ],
+  [
+    "bangumi:subject:109276",
+    "https://rezics.com/id/01a0fd4c-08ff-7433-a458-07c26bca4391",
+    "https://rezics.com/id/39f4f200-0071-87e4-d5c5-9ee89760251f"
+  ],
+  [
+    "bangumi:subject:109277",
+    "https://rezics.com/id/01a0fd4c-107e-72ec-aa74-f6c0520a2728",
+    "https://rezics.com/id/f3cc113f-5010-616d-70c7-9c1ac52fb70a"
+  ],
+  [
+    "bangumi:subject:110526",
+    "https://rezics.com/id/01a0fd4c-1f65-70d4-a38d-fe017f64a199",
+    "https://rezics.com/id/456aa6ee-f845-50c3-bc23-cffaf0cbcc2b"
+  ],
+  [
+    "bangumi:subject:112155",
+    "https://rezics.com/id/01a0fd4c-354c-731e-af5e-cc1967726f25",
+    "https://rezics.com/id/c7579ba9-81b5-1244-3bc1-14886db4694d"
+  ],
+  [
+    "bangumi:subject:11220",
+    "https://rezics.com/id/01a0fd4c-3cd6-7130-854f-3cfeac891be7",
+    "https://rezics.com/id/ee4f2557-6880-fd70-d4c1-d583c935a9ba"
+  ],
+  [
+    "bangumi:subject:11232",
+    "https://rezics.com/id/01a0fd4c-441f-77d4-9091-89a292ef26f0",
+    "https://rezics.com/id/d406de5d-e5da-ad3e-8602-ae0e033e7018"
+  ],
+  [
+    "bangumi:subject:112553",
+    "https://rezics.com/id/01a0fd4c-50e6-70fd-a046-1a9dd0de8101",
+    "https://rezics.com/id/97630b89-3ab3-2ca6-41f5-6f2f4b7891dc"
+  ],
+  [
+    "bangumi:subject:11528",
+    "https://rezics.com/id/01a0fd4c-58d2-7405-97d2-c7fbc01a2422",
+    "https://rezics.com/id/8cc87bf4-7398-32dd-2b6d-ff5f968c26a7"
+  ],
+  [
+    "bangumi:subject:115589",
+    "https://rezics.com/id/01a0fd4c-604c-75c5-bdf5-841ca4b4c02e",
+    "https://rezics.com/id/be93ad9a-a6a0-833c-ade7-137e85406b2d"
+  ],
+  [
+    "bangumi:subject:11648",
+    "https://rezics.com/id/01a0fd4c-6801-70e3-8f71-ac4d0edda12f",
+    "https://rezics.com/id/a1e96387-916c-0362-1e00-14759e31c15e"
+  ],
+  [
+    "bangumi:subject:119186",
+    "https://rezics.com/id/01a0fd4c-6f97-7016-9a14-57c685490021",
+    "https://rezics.com/id/3894a02f-4013-55d4-db0d-8a61efb023db"
+  ],
+  [
+    "bangumi:subject:119526",
+    "https://rezics.com/id/01a0fd4c-827e-75a5-aab5-c1c58c532120",
+    "https://rezics.com/id/62017cd3-2dbd-c7c9-680d-ab3658014f8c"
+  ],
+  [
+    "bangumi:subject:121178",
+    "https://rezics.com/id/01a0fd4c-8bc9-7561-9cd2-9c4cedbcbe9f",
+    "https://rezics.com/id/35736cc5-e9e2-9e46-1573-58926f5f9ea3"
+  ],
+  [
+    "bangumi:subject:121179",
+    "https://rezics.com/id/01a0fd4c-92ba-7459-8195-c552a89f5ea8",
+    "https://rezics.com/id/c70a1104-a669-d481-0eb5-093c0f3ca810"
+  ],
+  [
+    "bangumi:subject:121181",
+    "https://rezics.com/id/01a0fd4c-9d64-721b-925e-350163f3ffb2",
+    "https://rezics.com/id/45b9d331-c44d-8e03-ce0f-73bfeb64012f"
+  ],
+  [
+    "bangumi:subject:123866",
+    "https://rezics.com/id/01a0fd4f-ede9-735e-acf3-49e137aa94a4",
+    "https://rezics.com/id/d2b66518-da0c-e405-4e8f-405e5d34e29c"
+  ],
+  [
+    "bangumi:subject:123868",
+    "https://rezics.com/id/01a0fd4f-fcec-70c0-ad08-19b1de5e1094",
+    "https://rezics.com/id/21866520-40f3-f590-8d23-92cf86de476d"
+  ],
+  [
+    "bangumi:subject:123869",
+    "https://rezics.com/id/01a0fd50-1378-768d-a693-d1f7d04bdf06",
+    "https://rezics.com/id/925e3128-a989-6ce7-04be-f9f9d03dac4d"
+  ],
+  [
+    "bangumi:subject:123976",
+    "https://rezics.com/id/01a0fd50-9f00-70bf-a3b8-c98d270a4c03",
+    "https://rezics.com/id/cfdd9091-f08a-f3c9-c5a0-b0e57aaa3495"
+  ],
+  [
+    "bangumi:subject:123977",
+    "https://rezics.com/id/01a0fd50-b109-7345-9475-89b553d9a248",
+    "https://rezics.com/id/887fd02e-44c4-f1f9-9333-a804b090d827"
+  ],
+  [
+    "bangumi:subject:123978",
+    "https://rezics.com/id/01a0fd50-c968-7356-a3ce-d4f82f36509b",
+    "https://rezics.com/id/f268dd76-efa2-ad40-308a-e8148dc2b496"
+  ],
+  [
+    "bangumi:subject:123979",
+    "https://rezics.com/id/01a0fd68-6445-748d-bf4e-709488cfe945",
+    "https://rezics.com/id/0065ba5d-aab8-1e67-5fcf-dc1ab056215d"
+  ],
+  [
+    "bangumi:subject:975",
+    "https://rezics.com/id/01a0fd8e-6241-75a2-abde-8c9e76edb7b6",
+    "https://rezics.com/id/3a247546-9e73-0c44-1580-0d8b3b3fe511"
+  ]
+] as const;
+
+test('preserves all 113 frozen source/native identities at each retained epoch without reimport or native creation', async () => {
+  for (const era of [1, 2] as const) {
+    const fixture = apiFixture(), directory = root(), session = options(fixture.api);
+    const records: DatasetRecord[] = frozenNativeIdentities.map(([key]) => {
+      const [provider, kind, externalId] = key.split(':');
+      return { ...record(key, 'work'), provider: provider as DatasetRecord['provider'], kind: kind!, externalId: externalId!,
+        title: 'Later observed title ' + key, data: { observed: true, count: 0 } };
+    });
+    const source = snapshot(records);
+    source.id = 'later-frozen-shape'; source.digest = 'f'.repeat(64);
+    source.sources = (['vndb', 'bangumi', 'musicbrainz'] as const).flatMap(provider => {
+      const members = records.filter(record => record.provider === provider);
+      return members.length ? [{ provider, roots: members.map(record => record.key), records: members,
+        edges: [], images: [], scope: { complete: true } }] : [];
+    });
+    const frozenSource = structuredClone(source);
+    mkdirSync(join(directory, 'imports'));
+    const previous: string[] = [];
+    for (const column of [1, 2] as const) {
+      const filename = join(directory, 'imports', sha256('retained-epoch-' + column) + '.json');
+      const native = Object.fromEntries(frozenNativeIdentities.map(row => [row[0], {
+        id: row[column], kind: 'work', receipt: { work: row[column], evidence: 'retained-receipt-only' }, urls: [],
+      }]));
+      const journal = { format: 'rezics-dataset-import-v1', snapshot: 'retained-epoch-' + column,
+        digest: String(column).repeat(64), mainOrigin: session.mainOrigin, actingSubject: session.actingSubject,
+        dataEpoch: column === era ? 'epoch-1' : 'a-different-retained-epoch', entries: {}, native,
+        limitations: [], completed: true };
+      const bytes = JSON.stringify(journal); previous.push(bytes); writeFileSync(filename, bytes);
+    }
+    const result = await importDataset(directory, source, session);
+    const actual = JSON.parse(readFileSync(result.receiptFile, 'utf8')).native;
+    expect(Object.keys(actual)).toHaveLength(113);
+    for (const row of frozenNativeIdentities) {
+      expect(actual[row[0]].id).toBe(row[era]);
+      expect(actual[row[0]].receipt).toEqual({ work: row[era], evidence: 'retained-receipt-only' });
+    }
+    for (const column of [1, 2] as const) {
+      const filename = join(directory, 'imports', sha256('retained-epoch-' + column) + '.json');
+      expect(readFileSync(filename, 'utf8')).toBe(previous[column - 1]!);
+    }
+    expect(fixture.requests.some(call => ['/v1/works', '/v1/work-imports/bulk', '/v1/semantic/changes/bulk'].includes(call.path))).toBe(false);
+    expect(source).toEqual(frozenSource);
+    expect(result.coverage.catalogueReady).toBe(false);
+    expect(result.coverage.counts.mapped).toBe(0);
   }
 });
