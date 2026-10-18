@@ -182,3 +182,155 @@ Only stack-free contract/unit/static checks are authorized here. The
 [shared consumer handoff](import-corpus-handoff.md) retains the original baseline,
 one stopped-owner backup, isolated serial restores, 600-second preparation
 budget, exact prove/persona mapping and deferred execution authorization.
+
+## Source reconciliation with the published information consumer
+
+Reading under the manager's 2026-10-18T23:54:02Z scope cut compares Source's
+`e7db8bc4d7` proposal with G-2772's `20bab85f0d`
+[information note](information-outcomes.md) and
+[consumer types](../../../tests/qa/fixtures/catalogue-information-contract.ts).
+The consumer imports all six shared types: `NativeFieldBasis`,
+`RetainedRecordBinding`, `RetainedFieldCoordinate`, `RetainedConversionRequest`,
+`RetainedSupportRequest` and `RetainedSupportAdmission`. Its acknowledged basis
+extends that proposal; it is not another conversion or attachment operation.
+This Source-side reading records compatibility and unresolved requirements,
+not reciprocal agreement, current public behavior or Program approval. The
+accepted information **read** contract remains accepted.
+
+The shared boundary remains `source-field-support-attachment-v2` and
+`source-field-support-admission-v1`. Source verifies the entire normalized
+record and its original identity against ordered actual retained bytes through
+the registered mapping/normalization rule. Full-record field coordinates and
+resolved payload pointers remain separately checked; raw-part, reconstructed
+payload, record, selected-value and typed-native digests are not interchangeable.
+Native acknowledgements cannot substitute for that conversion admission.
+
+### Native acknowledgement and owner-head questions
+
+`AcknowledgedNativeBasis` adds these proposed requirements to the shared exact
+target/value/revision basis:
+
+- **Semantic:** `owner: semantic`, `component` and `receipt`. The current
+  `POST /v1/semantic/changes` returns a component, revision and command receipt;
+  `GET /v1/semantic/resources/{id}` supplies the independent current property
+  read. Source must verify the actual acknowledgement with that owner, then
+  the requested property at its current revision. A nonempty receipt or matching
+  digest alone establishes neither. The admitted component/target relationship
+  and receipt-resolution contract remain with Semantic and Source; the current
+  Work scalar/type adapter cannot supply them.
+- **Statement:** `owner: statement`, `receipt` and `relationDefinition`, while
+  retaining the shared `statement`, predicate, context, exact value, qualifiers
+  and acceptance. The consumer's read-side `NativeValueBinding.component`
+  denotes that actual Statement. `POST /v1/statements` currently exposes its
+  component/revision/expected head/source position, but its public response
+  omits the internal `ContextCommandReceipt.receipt`. Statement/Context must
+  identify the admitted acknowledgement reference and how Source verifies it;
+  neither the Statement ID nor revision can simply be relabeled a receipt.
+  `GET /v1/statements/{id}` checks the relation definition and native fact;
+  recording alone is not context acceptance. See the actual response in
+  [contexts.ts](../../../services/main/src/routes/contexts.ts).
+- **Editorial:** `owner: work-editorial`, `component`, `receipt`,
+  `field: synopsis` and exact `SuppliedLanguage`. The existing synopsis control
+  command returns a terminal receipt and content/control identities, whereas
+  its CAS basis separately names Work, content, control, epoch and protection
+  heads. Work/editorial and Source must resolve which identity `component`
+  denotes and which verified owner revision supplies `native.revision` and
+  `expectedHead`; these heads cannot be interchanged. The proposed language
+  addition is absent from the current command/read. Consumer language states
+  correspond to shared evidence language by presence: `omitted` leaves the
+  member absent, `null` supplies null, and `value` supplies the exact string.
+  That correspondence grants no current native language support or permission
+  to truncate oversized text. See
+  [field-control-native.ts](../../../services/main/src/modules/source/field-control-native.ts).
+
+For each admitted owner, the consumer requires the verified acknowledgement to
+satisfy `request.native.receipt = support.graphReceipt =
+support.attachment.nativeReceipt`. Its `admission.native` retains the exact
+acknowledged basis, and `admission.headGuarantee` equals the outer support's
+actual `headGuarantee`. Current v1 attachment instead writes null
+`graph_receipt` and `verified-before-commit` in
+[support-attach.ts](../../../services/main/src/modules/source/support-attach.ts).
+An earlier successful native command is not proof that its revision remains
+current. Source and the native owner must define their verification boundary;
+`verified-before-commit` cannot claim cross-owner transaction protection.
+No receipt is synthesized from a source conversion, projection or support ID.
+
+### Attachment certificate and readable evidence additions
+
+The consumer adds `attachment: {profile:
+source-field-attachment-certificate-v1, receipt, requestDigest, nativeReceipt}`
+to the private support result. Current attachment already stores an **internal**
+certificate with that profile and only `sourcePointer`/`valueDigest`; the
+[current support response schema](../../../services/main/src/routes/source-supports.ts)
+does not expose it. Current `FieldSupportResult.graphReceipt` is nullable.
+Consequently the consumer's acknowledged certificate and required receipt
+equality are pending additions, not an existing certificate read contract.
+
+Source's `POST /v1/sources/field-supports` and matching private GET own the
+certificate's issuance, identity, persistence and replay. Source must dispose
+the existing profile's compatibility, the meaning/resolution of `receipt`,
+and the exact `requestDigest` codec and inputs, including admitted evidence and
+native acknowledgement. Today's internal digest uses principal, v1 input,
+checked value digest and mapping; the consumer only checks a 64-hex result.
+Neither establishes a v2 digest rule. Whether acknowledgements become required
+for every v2 basis or only the consumer's admitted cases also remains unresolved:
+the shared base types do not require `owner`, `component` or `receipt`.
+Both owners' executable proposals remain intact pending that disposition.
+
+`publicEvidence` is the consumer's readable evidence without local `file`:
+`id`, `sourceWork`, `representationSha256`, `locator: {pointer}`, `rightsBasis`,
+`quoteWithheld`, `attribution: {sourceName, sourceUrl, licence}` and
+`language: SuppliedLanguage`; `licence` remains nullable. It is a rights-filtered
+public projection, not the private admission/certificate or an authorization
+token. Source, the existing Access/rights owners and the public fact-read owner
+must resolve its evidence identity, representation/locator correspondence and
+disclosure evaluation. Private binding, conversion, record digest and intake
+details do not become public attribution.
+
+The consumer requires non-null public evidence in its authorized positive
+cases, identical private POST/GET/replay results, and surviving public evidence
+after one support is withdrawn. Source's shared receipt does not yet define
+that projection. Its availability for private-only attachments, withheld quotes
+and later rights changes therefore remains an explicit ownership question.
+Stable private certificates cannot authorize replaying stale disclosure into
+public reads. Equality assertions under the fixture's unchanged rights do not
+settle revocation behavior. No nullable fallback or weakened positive assertion
+is introduced here.
+
+### Refusal alignment and remaining disposition
+
+Both proposals keep reversed intake at **conversion**: 409
+`source_conversion_changed`, `basis: part-order`, preserving the admitted
+binding and native content. Both require 422 `source_mapping_unverified` for
+an unadmitted native verifier; missing bytes are not that condition. The
+consumer additionally requires 409 `source_support_changed` for property,
+qualifier, native-receipt and resolved-evidence mismatches, 503
+`source_support_unavailable` for missing/incomplete evidence, indistinguishable
+404 for another principal's evidence, and 403 `rights_denied` for scoped reuse
+denial. These are consumer requirements, not new claims about v1 responses.
+
+Source's explicit 422 `source_coordinate_invalid` cases must remain distinct
+from the consumer's 409 resolved `evidence-binding` mismatch. Source's conversion
+and attachment owners must classify the actual fixture coordinates before
+implementation: the consumer's pointer mutation alone does not establish that
+it resolves to otherwise valid admitted evidence. The additional property,
+qualifier and native-receipt conflicts also lack a jointly disposed exact
+`basis` mapping; retain Source's existing required bases without inventing new
+ones or dropping the consumer's controls. Refusals return no success receipt
+and preserve independently checked native/support state. Real record-scoped
+supports, replay, withdrawal and surviving human/other support stay required;
+multiple records still do not establish independent providers.
+
+Program received this concrete joint question as
+`mail:01c8825e-a80b-4b62-9cf3-905f23dcfed2`; this later delivery does not change
+the historical rejected mail above and supplies no ruling. Program disposition
+must resolve the owner/receipt/head, certificate/digest, public-evidence and
+refusal questions before separate implementation or adapter/wiring consumption.
+G-2781 remains producer adapter, G-2778 sole importer wiring owner and G-2791
+sole corpus producer, consuming only admitted contracts backed by real receipts.
+This continuation changes this note alone; shared types and both independent
+assertion sets remain unchanged. All twelve import cells and the 113-identity
+obligations remain unproved. The original baseline
+`69eac3ceeaf885be70205a70248bc951e9d81cc9`, compatible stopped-backup and isolated
+restore prerequisites, and 600-second budget remain unchanged. No preparation,
+stack or outcome execution is authorized by this reconciliation.
