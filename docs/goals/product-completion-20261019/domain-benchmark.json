@@ -8,7 +8,8 @@
     "local_source_revision": "89c9523d9dcfba60da1c717adf43835511bf8bcd",
     "report_path": "docs/goals/product-completion-20261019/domain-benchmark.json",
     "consumer": "G-2787 initial broad journey researcher; supporting evidence only, not the final roadmap",
-    "research_status": "First complete research benchmark; implementation and comparative task criteria are not run"
+    "research_status": "First complete research benchmark; implementation and comparative task criteria are not run",
+    "coordination_refresh_revision": "778b4ec1eeb8b2bbcc82dc538056ce0120e95a05"
   },
   "conclusion": {
     "completeness": "No present superiority or complete parity claim is supported. VNDB/Bangumi native specialist semantics, mature community maintenance, personal fidelity and domain-specific runtime tasks all require receipts. Unsupported leader strengths remain explicit.",
@@ -28,7 +29,8 @@
       "Read this Goal, product positioning, scope, relevant contracts, audit coverage/decisions and retained source evidence before extending research.",
       "Read current official public help/product text/API schemas/source without account actions.",
       "Read-only public retrieval of pinned Bangumi OpenAPI source; local file/source inspection.",
-      "Constructed a benchmark and performed report-only structural/reference/coverage validation."
+      "Constructed a benchmark and performed report-only structural/reference/coverage validation.",
+      "Reviewed authoritative manager documentation changed by the worker-check rebase and recorded the update separately without replacing historical source evidence."
     ],
     "not_performed": [
       "No user testing, interviews, timed comparison or statistical effectiveness study.",
@@ -1424,6 +1426,40 @@
       "limitations": [
         "No retained screenshot was viewed this session; assertions are attributed to the original reports. Current branch resolution requires new receipts. Retained upstream counts are dated, not current product maxima."
       ]
+    },
+    {
+      "id": "L-COORDINATION-REFRESH",
+      "title": "Authoritative manager coordination updates incorporated after the worker check rebase",
+      "evidence_kind": "local_contract_intent",
+      "accessed_on": "2026-10-19",
+      "files": [
+        {
+          "path": "docs/goals/audit-remediation-20261019/GOAL.md",
+          "revision": "778b4ec1eeb8b2bbcc82dc538056ce0120e95a05",
+          "sha256": "7af76e7a103bcc1a3dd9e66550ad7d0dfd0940232838b9cce6c3b12a2a3e86cd"
+        },
+        {
+          "path": "docs/goals/audit-remediation-20261019/state.md",
+          "revision": "778b4ec1eeb8b2bbcc82dc538056ce0120e95a05",
+          "sha256": "c038659ae20db766cca8f43f306cb083b91d2050ec77c6a2dd1d9693ec5a2db2"
+        },
+        {
+          "path": "docs/goals/product-completion-20261019/state.md",
+          "revision": "778b4ec1eeb8b2bbcc82dc538056ce0120e95a05",
+          "sha256": "f77a4c020bdb74c492c497cb6a3a8693224e4c0a3fa5297d375728ee4cbc63cc"
+        }
+      ],
+      "facts": [
+        "The fixed audit union remains 61 canonical findings with 0/61 proved; the historical product baseline remains 69eac3ceea. Product-completion research complements that audit and cannot replace its baseline, outcome identities or proof obligations.",
+        "Existing audit workers own importer fidelity, native/media source work, field fidelity, web transport/public reads, bounded recommendations/aggregates and exact identity reader closure. G-2791 owns one command-created faithful corpus/manifest/backup producer; benchmark proposals should reuse it instead of starting a parallel producer.",
+        "G-2770’s proposed SA1–SA6 query/credit-profile contract still needs Program reading. Neither its contract nor a separate implementation mechanism is approved by these state documents or this benchmark.",
+        "G-2787 owns broad journey synthesis. G-2783/G-2785 frontend briefs remain reserved pending the capacity gate; research evidence does not dispatch them. Current build ownership does not establish acceptance or rendered proof.",
+        "The current manager state records no authorization for a new full baseline/fixed prove campaign while build work needs heavy admission. This report proposes acceptance criteria and follow-up evidence; it does not authorize those runs."
+      ],
+      "limitations": [
+        "Coordination and acceptance requirements only, not product behavior. This refresh preserves all prior observations at their original dates and revisions; no live service, browser interaction, screenshot or product test was added.",
+        "Worker identifiers are current routing hints at this revision, not assignments created by this report. Managers must refresh ownership before selecting implementation slices."
+      ]
     }
   ],
   "owner_registry": [
@@ -1747,7 +1783,7 @@
   "audit_coordination": {
     "source_ref": "L-AUDIT-STATE",
     "baseline": "69eac3ceea",
-    "status": "Unproved in the inspected snapshot; do not equate running/landed implementation with completed outcomes.",
+    "status": "0/61 canonical audit findings proved in the refreshed manager state; implementation handoffs remain unproved until their required receipts exist.",
     "routing_hints": {
       "G-2762/G-2763": "D5-001 notification budget/cancellation",
       "G-2762/G-2764": "D5-002 discovery request budget",
@@ -1776,7 +1812,20 @@
       "D6-004",
       "AUD-003"
     ],
-    "instruction": "Module owner_refs name capabilities, not new worker assignments. G-2787/manager must refresh task ownership and prove current integration behavior; reuse existing repair tasks and avoid duplicate mechanisms."
+    "instruction": "Module owner_refs name capabilities, not new worker assignments. G-2787/manager must use refreshed coordination, reuse existing repair tasks and corpus, and prove current integration behavior within the existing admission rules.",
+    "source_refs": [
+      "L-AUDIT-STATE",
+      "L-COORDINATION-REFRESH"
+    ],
+    "routing_hints_scope": "The routing_hints and unresolved_in_snapshot arrays preserve the initial inspection snapshot. Use the refreshed coordination source and manager state for current assignments and acceptance; do not reopen or duplicate a repair from this historical list.",
+    "coordination_refresh": {
+      "source_ref": "L-COORDINATION-REFRESH",
+      "revision": "778b4ec1eeb8b2bbcc82dc538056ce0120e95a05",
+      "historical_evidence_policy": "Keep local_source_revision 89c9523d9dcfba60da1c717adf43835511bf8bcd, original source hashes/dates and audit baseline 69eac3ceea unchanged. The worker check rebased onto newer coordination documents; it did not establish new product proof.",
+      "reuse": "Use existing audit owners and G-2791’s single faithful corpus/manifest/backup producer. Proposals below are inputs for G-2787 and Program acceptance, not approved work assignments.",
+      "pending_contract": "SA1–SA6 requires Program reading; NEXT-02 and contextual association candidates do not approve that contract or a separate mechanism.",
+      "proof_boundary": "No new full prove campaign or frontend dispatch is authorized by this research report. Preserve the audit admission/capacity gates and independent outcome tests."
+    }
   },
   "mature_data_scenarios": [
     {
@@ -4532,7 +4581,8 @@
         "OWN-QRY"
       ],
       "prerequisites": [
-        "Refresh audit A01/A05/A06/A07 resolution receipts on the integration revision; reuse an existing repair if proved."
+        "Refresh audit A01/A05/A06/A07 resolution receipts on the integration revision; reuse an existing repair if proved.",
+        "Reuse G-2791’s command-created faithful corpus/manifest/backup producer and the existing importer/source/identity owners; do not create a parallel corpus producer or duplicate a repair."
       ],
       "bounded_deliverable": "One frozen v11-to-native disposition/identity/release/credit manifest plus one Book edition/translation identity table, both exercised through public reads and one end-to-end selection path.",
       "acceptance": "All applicable job criteria pass, including split-release negatives, stable source identities and complete continuation; elected unsupported data stays explicit.",
@@ -4560,7 +4610,8 @@
         "OWN-QRY"
       ],
       "prerequisites": [
-        "A populated native fixture from NEXT-01 or an equivalent already-proved source."
+        "A populated native fixture from NEXT-01 or an equivalent already-proved source.",
+        "Program must accept the required contextual association/credit semantics before implementation selection; this proposal does not approve the pending SA1–SA6 contract or a separate mechanism."
       ],
       "bounded_deliverable": "One repeated-character/role/trait fixture with two incompatible appearances, two independent supports and pre/post-position answer sets, plus one moved/pinned wiki history trace.",
       "acceptance": "Zero manufactured same-participant matches or disclosure leaks; exact correction/withdrawal/stale retry retains surviving support and historical attribution across read/search/inverse/evidence/export.",
@@ -4642,7 +4693,8 @@
         "OWN-UI"
       ],
       "prerequisites": [
-        "Use a rights-cleared local recipe once; reuse importer and bounded copies rather than repeated bulk preparation."
+        "Use a rights-cleared local recipe once; reuse importer and bounded copies rather than repeated bulk preparation.",
+        "Coordinate the positive Recipe fixture with G-2791’s corpus/manifest/backup producer and existing source owners; preserve independent outcome assertions."
       ],
       "bounded_deliverable": "One 125-occurrence Recipe through author/import, scale, CookMode, interruption, native export and a declared-loss Schema.org export; no new planning or nutrition database rollout.",
       "acceptance": "Exact quantities/source text/order/provenance survive, unknown coverage is visible, Cook action actually works with accessible focus and page recovery, and every export loss has a valid pointer.",
@@ -4906,13 +4958,18 @@
       "json_parse": true,
       "unique_ids": true,
       "all_typed_references_resolve": true,
-      "all_local_evidence_hashes_match": true,
+      "all_local_evidence_hashes_match_recorded_revisions": true,
+      "current_coordination_refresh_covers_authoritative_changes": true,
+      "refreshed_authoritative_paths": [
+        "docs/goals/audit-remediation-20261019/state.md",
+        "docs/goals/product-completion-20261019/state.md"
+      ],
       "owner_paths_exist": true,
       "audit_dependency_ids_resolve": true,
       "named_requirements": 26,
       "named_jobs": 31,
       "criteria": 91,
-      "sources": 63,
+      "sources": 64,
       "scenarios": 12,
       "next_batch_items": 6,
       "product_or_external_behavior_tested": false
