@@ -151,6 +151,12 @@ missing-fixture skip. The producer has not been implemented here. A missing
 `REZICS_IMPORT_OUTCOME_FIXTURE` fails the preparation hook and reaches **no
 product assertion**.
 
+G-2791 owns the single shared producer. Its exact import consumer, public-command
+receipts and baseline compatibility requirements are in the
+[import corpus handoff](import-corpus-handoff.md). Baseline and outcome execution
+remain deferred until that producer and a compatible retained backup are ready
+and the manager explicitly authorizes execution.
+
 The prerequisite is a mode-0600 manifest matching `ImportCorpus` in the
 [test support module](../../../tests/qa/support/import-outcomes.ts), under this
 worktree's `.temp`. It must reference real retained input bytes, actual command
