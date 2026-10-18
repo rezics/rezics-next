@@ -370,6 +370,8 @@ describe('offline selection and published producer helpers', () => {
       field.role === 'aliases' && field.disposition === 'candidate')).toBe(true);
     const report = JSON.parse(readFileSync(result.coverageFile, 'utf8'));
     expect(report.entries.find((entry: { path: string }) => entry.path === '/data/alias').disposition)
+      .toMatchObject({ status: 'unmapped', reason: expect.stringContaining('guessed language') });
+    expect(report.entries.find((entry: { path: string }) => entry.path === '/data/aliases/0/name').disposition)
       .toMatchObject({ status: 'unmapped', reason: expect.stringContaining('without-adoption') });
     expect(report.entries.find((entry: { path: string }) => entry.path === '/data/rating').disposition.status).toBe('source-only');
     expect(report.entries.find((entry: { path: string }) => entry.path === '/data/unknown').observation).toBe('present');

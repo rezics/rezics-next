@@ -105,9 +105,10 @@ describe('observed dataset adoption coverage', () => {
     expect(report.pendingAcquisitions).toEqual([candidate]);
     expect(report.catalogueReady).toBe(false);
     expect(report.entries.filter(entry => entry.kind === 'image')).toEqual([]);
-    expect(report.entries.find(entry => entry.kind === 'source-image')).toMatchObject({
-      observation: 'present', acquisition: 'not-acquired', valueDigest: expect.any(String),
-    });
+    const sourceImage = report.entries.find(entry => entry.kind === 'source-image')!;
+    expect(sourceImage.observation).toBe('present');
+    expect(sourceImage.acquisition).toBe('not-acquired');
+    expect(sourceImage.valueDigest).toMatch(/^[a-f0-9]{64}$/);
     testDatasetImportCoverage(available, report);
     const changed = structuredClone(report);
     changed.entries.find(entry => entry.kind === 'source-image')!.acquisition = 'captured';
