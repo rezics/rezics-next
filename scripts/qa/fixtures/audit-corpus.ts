@@ -20,7 +20,7 @@ import { informationMatrix } from '../../../tests/qa/fixtures/catalogue-informat
 import { publicDomainBaseline } from '../../../tests/qa/fixtures/catalogue-public-domain.ts';
 import { auditBaseline, auditConsumerForFile, auditConsumers, auditOwnerPrerequisites,
   auditPreparationBudgetMs, type AuditCommand, type AuditCommandReceipt, type AuditConsumer,
-  type AuditGrantReceipt, type AuditManifests, type AuditOriginals, type AuditPreparationMetadata,
+  type AuditFilePin, type AuditGrantReceipt, type AuditManifests, type AuditOriginals, type AuditPreparationMetadata,
   type AuditReadPredicate, type AuditRecipe, type AuditValue } from '../../../tests/qa/fixtures/audit-corpus-contract.ts';
 import type { PersonaName, RetainedPersonaRealm } from '../../../tests/qa/support/personas.ts';
 import { tryAcquireDirectoryLease } from '../process/lease.ts';
@@ -352,6 +352,7 @@ function supportedPath(path: RetainedJson, method: string): asserts path is stri
 export class AuditRecorder {
   readonly bindings = new Map<string, RetainedJson>();
   readonly observed = new Set<string>();
+  readonly receiptPins: AuditFilePin[] = [];
   constructor(readonly file: string, private readonly now = Date.now) {
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
     writeFileSync(file, '', { mode: 0o600, flag: 'wx' });
@@ -396,6 +397,16 @@ export class AuditRecorder {
       this.event(json({ event: 'command-finished', ...receipt }));
       if (answer.status !== input.status) throw new AuditCorpusBlocked('public-api', phase,
         `${input.id}: ${input.method} ${path} expected ${input.status}, observed ${answer.status}; no replay attempted`);
+      // Search's existing parser consumes one JSON command per evidence file,
+      // rather than the multi-command JSONL ledger. Retain the same actual answer
+      // outside disposable publication trees, and bind it only after success.
+      const bytes = JSON.stringify(receipt) + '\n';
+      const pin = { file: `${this.file}.${sha256(input.id)}.json`, sha256: sha256(bytes) };
+      writeFileSync(pin.file, bytes, { mode: 0o600, flag: 'wx' });
+      this.receiptPins.push(pin);
+      const evidence = { path: pin.file, sha256: pin.sha256 };
+      this.event(json({ event: 'command-evidence-retained', id: input.id, phase, ...evidence }));
+      this.bind(`receipt:${input.id}`, evidence);
       this.bind(`command:${input.id}`, json(receipt));
     } catch (error) {
       if (receipt.status === null) {
@@ -515,7 +526,8 @@ export function auditCorpusAdapter(checkout: string, inspection: AuditInspection
           sourceRunId: session.runId, originals: inspection.originals.bindings, realms: session.realms, grants,
           manifests: inspection.recipe.manifests,
           receipts: { file: join(directory, key, 'backup/commands.jsonl'), sha256: sha256(readFileSync(receiptsPath)) },
-          sourcePins: inspection.sourcePins, sourceOwners: session.owners, buildMs: context.budget.elapsed(), roundTripMs: 0 };
+          sourcePins: [...inspection.sourcePins, ...recorder.receiptPins], sourceOwners: session.owners,
+          buildMs: context.budget.elapsed(), roundTripMs: 0 };
         // A successful physical copy alone is not read-ready. Round-trip the same
         // cut and use independent source expectations, never query result snapshots.
         const restoreStarted = now();
@@ -583,7 +595,7 @@ export function auditCorpusAdapter(checkout: string, inspection: AuditInspection
 export function assertAuditManifest<C extends AuditConsumer>(consumer: C, value: unknown, originalWorks: readonly string[]): asserts value is AuditManifests[C] {
   requireFact(object(value), `${consumer} projection is not an object`);
   const signatures: Record<AuditConsumer, readonly [string, string, readonly string[]]> = {
-    imports: ['profile', 'import-outcomes-corpus-v1', ['targets', 'relations', 'sources', 'selections', 'hidden', 'music', 'refresh', 'authority', 'realm', 'backup', 'preparation']],
+    imports: ['profile', 'import-outcomes-corpus-v1', ['phase', 'productRevision', 'selectionDigest', 'runId', 'fixtureRoot', 'sourceRoot', 'targets', 'relations', 'sources', 'selections', 'hidden', 'music', 'refresh', 'authority', 'realm', 'backup', 'preparation']],
     context: ['format', 'restored-context-outcomes-v1', ['runId', 'corpus', 'preparation']],
     releases: ['format', 'catalogue-release-media-v1', ['selection', 'preparation', 'personas', 'catalogues', 'images', 'mediaDispositions', 'hidden', 'reading']],
     information: ['profile', 'catalogue-information-corpus-v1', ['productBaseline', 'preparation', 'realm', 'records', 'inverse', 'orders', 'collections', 'controls']],
@@ -617,6 +629,7 @@ export function assertAuditManifest<C extends AuditConsumer>(consumer: C, value:
   };
   if (consumer === 'imports') {
     realm(value.realm);
+    requireFact(typeof value.sourceRoot === 'string' && value.sourceRoot.length > 0, 'import frozen sourceRoot is missing');
     for (const target of Object.values(required(value.targets, [], 'import targets')))
       required(target, ['resource', 'revision', 'kind'], 'native import target');
     for (const source of Object.values(required(value.sources, [], 'import source receipts')))
@@ -723,9 +736,15 @@ export function projectAuditManifest(consumer: AuditConsumer, fragment: Retained
     preparation: { elapsedMs: metadata.buildMs, stopped: true, backup, backupSha256,
       owners: ['access', 'account', 'content', 'graph', 'objects'],
       receipts: [{ file: metadata.receipts.file, sha256: metadata.receipts.sha256 }] } });
-  else if (consumer === 'publicDomain') Object.assign(base, { profile: 'catalogue-public-domain-corpus-v1',
-    productRevision: auditBaseline, backup, preparationMs: metadata.buildMs,
-    preparationQaRun: metadata.sourceRunId, importedWorks: metadata.originals.map(binding => binding.resource) });
+  else if (consumer === 'publicDomain') {
+    // loadPublicDomainCorpus requires checkout-relative paths, including backup.
+    // The retained source still owns its absolute physical backup locator.
+    const localBackup = relative(checkout, backup);
+    requireFact(localBackup.startsWith(`.temp${sep}`), 'public-domain backup must stay inside this worktree .temp');
+    Object.assign(base, { profile: 'catalogue-public-domain-corpus-v1',
+      productRevision: auditBaseline, backup: localBackup, preparationMs: metadata.buildMs,
+      preparationQaRun: metadata.sourceRunId, importedWorks: metadata.originals.map(binding => binding.resource) });
+  }
   else if (consumer === 'identity') Object.assign(base, { format: 'identity-reader-corpus-v1',
     recipe: sha256(readFileSync(join(checkout, 'tests/qa/support/identity-reader-fixture.ts'))),
     productRevision: source.provenance.producerRevision, compatibility: loadCompatibility(checkout), backup, buildMs: metadata.buildMs });

@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { isAbsolute, join, resolve } from 'node:path';
 import { FixtureWorkBudget } from '../../fixture/budget.ts';
 import { sha256 } from '../../fixture/corpus.ts';
 import type { RetainedJson } from '../../fixture/manifest.ts';
@@ -82,7 +82,7 @@ test('successful commands retain the exact caller, request key, response and bin
   const owner = session({ async request(...args) { seen.push(args); return { status: 201, answer: { work: id(100), revision: id(101), sourcePosition: { dataEpoch: 'actual-epoch', sequence: '17' } } }; } });
   await recorder.command(owner, command, 'source-intake');
   expect(seen).toEqual([['catalogue', 'operator', 'POST', '/v1/works', command.body, command.key]]);
-  const finished = events(recorder.file).at(-1)!;
+  const finished = events(recorder.file).find(event => event.event === 'command-finished')!;
   expect(finished).toMatchObject({ event: 'command-finished', status: 201, key: command.key,
     caller: { accountId: 'account-4', actingSubject: id(14) }, answer: { work: id(100) } });
   expect(resolveAuditValue({ $audit: 'ref', from: 'command:create', pointer: '/answer/revision' }, recorder.bindings)).toBe(id(101));
@@ -90,6 +90,27 @@ test('successful commands retain the exact caller, request key, response and bin
   assertAuditGenerationProvenance({ sourcePosition: { dataEpoch: 'actual-epoch', sequence: '17' } }, recorder.observed);
   expect(() => assertAuditNativeProvenance({ work: id(999) }, recorder.observed)).toThrow('no observed');
   expect(() => assertAuditGenerationProvenance({ modelGeneration: 'invented-generation' }, recorder.observed)).toThrow('no observed');
+});
+
+test('search evidence projects independently checksummed single-command JSON from successful receipts', async () => {
+  const recorder = new AuditRecorder(join(directory(), 'commands.jsonl'));
+  const answer = { work: id(100), revision: id(101) };
+  const owner = session({ async request() { return { status: 201, answer }; } });
+  await recorder.command(owner, command, 'search-records');
+  const evidence = resolveAuditValue({ $audit: 'ref', from: 'receipt:create', pointer: '' }, recorder.bindings) as { path: string; sha256: string };
+  const bytes = readFileSync(evidence.path);
+  expect(sha256(bytes)).toBe(evidence.sha256);
+  expect(statSync(evidence.path).mode & 0o077).toBe(0);
+  expect(JSON.parse(bytes.toString())).toEqual(recorder.bindings.get('command:create'));
+  expect(JSON.parse(bytes.toString())).toMatchObject({ method: 'POST', path: '/v1/works', status: 201,
+    key: command.key, answer, caller: { accountId: 'account-4', actingSubject: id(14) } });
+  expect(recorder.receiptPins).toEqual([{ file: evidence.path, sha256: evidence.sha256 }]);
+  expect(events(recorder.file).at(-1)).toMatchObject({ event: 'command-evidence-retained', id: command.id, ...evidence });
+  await recorder.command(owner, { ...command, id: 'second', key: 'second-retained-key' }, 'search-records');
+  expect(readFileSync(evidence.path)).toEqual(bytes);
+  expect(new Set(recorder.receiptPins.map(pin => pin.file)).size).toBe(2);
+  for (const pin of recorder.receiptPins) expect(JSON.parse(readFileSync(pin.file, 'utf8')).status).toBe(201);
+  expect(() => resolveAuditValue({ $audit: 'ref', from: 'receipt:unexecuted', pointer: '' }, recorder.bindings)).toThrow('unobserved binding');
 });
 
 test('read receipts preserve concealed responses and transport failures with their actual callers', async () => {
@@ -111,6 +132,9 @@ for (const failure of ['403', 'transport'] as const) test(`${failure} preserves 
   const owner = session({ async request() { calls++; if (failure === 'transport') throw new Error('lost connection'); return { status: 403, answer: { code: 'forbidden' } }; } });
   await expect(recorder.command(owner, command, 'source-intake')).rejects.toThrow(failure === '403' ? 'observed 403' : 'lost connection');
   expect(calls).toBe(1); expect(recorder.bindings.has('command:create')).toBe(false);
+  expect(recorder.bindings.has('receipt:create')).toBe(false);
+  expect(recorder.receiptPins).toEqual([]);
+  expect(readdirSync(resolve(recorder.file, '..'))).toEqual(['receipts.jsonl']);
   const answer = events(recorder.file).at(-1)!;
   expect(answer.status).toBe(failure === '403' ? 403 : null);
   expect(answer.answer).toEqual(failure === '403' ? { code: 'forbidden' } : null);
@@ -196,6 +220,34 @@ test('projection timing, backup custody and restore addresses cannot be supplied
   expect(() => assertAuditManifest('imports', projected, [])).toThrow('consumer contract');
 });
 
+test('the import consumer cannot receive a manifest without its frozen source root', () => {
+  const corpus = { profile: 'import-outcomes-corpus-v1', phase: 'candidate', productRevision: 'fixed-head',
+    selectionDigest: sha256('independent-matrix'), runId: 'isolated-import', fixtureRoot: '.temp/fixture',
+    realm: realm(), backup: {}, preparation: {}, authority: {}, targets: {}, relations: {}, sources: {},
+    selections: [{ name: 'fate-goldberg-v1', commands: [] }], hidden: {}, music: {},
+    refresh: { sourceKey: 'vndb:vn:v11', baseConversion: id(100), candidateConversion: id(101), command: {},
+      oldGeneration: 'observed-old', newGeneration: 'observed-new' } };
+  expect(() => assertAuditManifest('imports', corpus, [])).toThrow('consumer contract');
+  for (const sourceRoot of ['', null]) expect(() => assertAuditManifest('imports', { ...corpus, sourceRoot }, [])).toThrow('sourceRoot');
+  expect(() => assertAuditManifest('imports', { ...corpus, sourceRoot: '.temp/frozen-sources' }, [])).not.toThrow();
+});
+
+test('public-domain backup projections retain the same cut using the relative path required by its parser', () => {
+  const base = directory(), backupDirectory = join(base, 'backup'), backup = join(backupDirectory, 'owners/backup.json');
+  mkdirSync(join(backupDirectory, 'owners'), { recursive: true });
+  writeFileSync(backup, '{"format":"command-catalogue-backup-v1"}');
+  const originals = inspection().originals.bindings.map(binding => ({ ...binding }));
+  const source = { key: 'rs-audit-corpus-actual', metadata: { buildMs: 455, sourceRunId: 'audit-source', originals },
+    provenance: { producerRevision: auditBaseline, elapsedMs: 455, backupPath: backupDirectory } };
+  const projected = projectAuditManifest('publicDomain', { backup: '/another-checkout/backup.json' }, source, undefined, root, auditBaseline) as { backup: string; importedWorks: string[] };
+  expect(isAbsolute(projected.backup)).toBe(false);
+  expect(projected.backup).toStartWith('.temp/');
+  expect(auditLocalFile(root, projected.backup)).toBe(backup);
+  expect(projected.importedWorks).toEqual(originals.map(binding => binding.resource));
+  const outside = { ...source, readBackup: backup, provenance: { ...source.provenance, backupPath: '/tmp/outside-audit' } };
+  expect(() => projectAuditManifest('publicDomain', {}, outside, undefined, root, auditBaseline)).toThrow('inside this worktree .temp');
+});
+
 function inspection(): AuditInspection {
   const originals: AuditOriginals = { format: 'audit-original-bindings-v1', backup: { file: '.temp/original-backup.json', sha256: sha256('backup') },
     personas: realm(),
@@ -239,7 +291,9 @@ test('earlier source inspection consumes the existing budget and cannot open own
 
 test('one stopped cut is round-tripped, and failed manifest validation retains evidence without publishing ready', async () => {
   const base = directory(), input = inspection(), calls: string[] = [];
-  const request: AuditSession['request'] = async (_realm, _persona, _method, path): Promise<{ status: number; answer: RetainedJson }> => {
+  input.recipe.stages = [{ id: 'search-records', requires: [], commands: [command] }];
+  const request: AuditSession['request'] = async (_realm, _persona, method, path): Promise<{ status: number; answer: RetainedJson }> => {
+    if (method === 'POST') return { status: 201, answer: { work: id(100), revision: id(500) } };
     const original = input.originals.bindings.find(binding => binding.readPath === path);
     return original ? { status: 200, answer: { work: original.resource, mainVersion: original.mainVersion, revision: original.revision } }
       : { status: 404, answer: { code: 'not_found' } };
@@ -251,7 +305,16 @@ test('one stopped cut is round-tripped, and failed manifest validation retains e
     async cut(context) { expect(calls.at(-1)).toBe('source-quiesced'); calls.push('cut');
       const backup = join(context.backup, 'owners/backup.json'); mkdirSync(join(context.backup, 'owners')); writeFileSync(backup, '{}');
       return { backup, rdfDigest: sha256('rdf'), ownerState: {} }; },
-    async restore() { calls.push('round-trip'); return smoke; }, async verify() { return []; }, async remove() {} };
+    async restore(_backup, metadata) {
+      calls.push('round-trip');
+      expect(metadata.sourcePins).toHaveLength(1);
+      for (const pin of metadata.sourcePins) {
+        temporary.push(pin.file);
+        expect(sha256(readFileSync(pin.file))).toBe(pin.sha256);
+        expect(JSON.parse(readFileSync(pin.file, 'utf8')).status).toBe(201);
+      }
+      return smoke;
+    }, async verify() { return []; }, async remove() {} };
   const adapter = auditCorpusAdapter(root, input, runtime, join(base, 'sources'));
   const key = sourceKey(adapter.specification), backup = join(base, 'pending/backup'); mkdirSync(backup, { recursive: true });
   const context: SourceContext = { key, directory: join(base, 'pending'), backup, budget: new FixtureWorkBudget(600_000) };
@@ -259,7 +322,7 @@ test('one stopped cut is round-tripped, and failed manifest validation retains e
   expect(calls).toEqual(['open', 'source-quiesced', 'cut', 'round-trip', 'smoke-stopped', 'source-stopped']);
   expect(existsSync(join(base, 'sources', key, 'manifest.json'))).toBe(false);
   const attemptRoot = join(root, '.temp/audit-corpus/attempts');
-  const attempts = readdirSync(attemptRoot).filter(file => file.startsWith(`${key}-`));
+  const attempts = readdirSync(attemptRoot).filter(file => file.startsWith(`${key}-`) && file.endsWith('.jsonl'));
   expect(attempts.length).toBe(1);
   for (const file of attempts) { const path = join(attemptRoot, file); temporary.push(path);
     expect(events(path).at(-1)).toMatchObject({ event: 'preparation-failed', assertionsReached: false }); }
