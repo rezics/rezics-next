@@ -1,6 +1,7 @@
 import { CompositionCorrupt, CompositionUnavailable, compositionForMainVersion,
   readCompositionHeader, type CompositionHeader } from '../structure/graph.ts';
-import { readCompositionPage, readCompositionSnapshot, type CompositionPage, type CompositionSnapshot } from '../structure/read.ts';
+import { publishedCompositionRevision, readCompositionPage, readCompositionSnapshot,
+  type CompositionPage, type CompositionSnapshot } from '../structure/read.ts';
 import { orderTree, recordTree, structureObjects } from '../structure/change.ts';
 import { seekChapter } from '../structure/reading-order.ts';
 import { ReadingOrderIndex } from '../reading-position/immutable-order.ts';
@@ -9,7 +10,8 @@ import { isCatalogTarget, isContainerRole, structureProfileFor } from '../struct
 import { compositionTargetBatchReader } from '../composition/disclosure-read.ts';
 import { orderTreeKey } from '../structure/graph.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../structure/tree.ts';
-import { ObjectIntegrityError, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
+import { ObjectIntegrityError, ObjectNotFound, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
+import { isOwnerTransientFailure } from '../../infrastructure/owner-failure.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { readWorkBasis, fenceWorkBasis } from '../work/read-header.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadExpired, WorkReadInvalid,
@@ -18,6 +20,7 @@ import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadExpired, WorkRe
 import { WORK_CONTENTS_COST } from './read-contract.ts';
 
 const contentPrefix = 'urn:rezics:content:revision:';
+const contentRevision = /^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const missing = () => new WorkReadMissing('Chapter is unavailable');
 const localizedLabel = (labels: readonly { value: string; language: string }[], language: string) =>
   labels.find(label => label.language.toLowerCase() === language.toLowerCase())
@@ -55,13 +58,18 @@ async function legacyChapterLabels(session: WorkReadSession,
     const batch = unique.slice(offset, offset + WORK_CONTENTS_COST.legacyTitleBatch);
     const revisions = batch.map(item => item.revision.slice(contentPrefix.length));
     const exacts = await content.readExactBatch(revisions, async ids => new Set(ids))
-      .catch(() => { throw new WorkReadUnavailable('Content owner is unavailable'); });
+      .catch((cause: unknown) => { throw new WorkReadUnavailable('Content owner is unavailable', { cause }); });
+    if (exacts.length !== batch.length) throw new WorkReadUnavailable('Content owner result is incomplete');
     for (const [index, exact] of exacts.entries()) {
       const item = batch[index]!;
-      if (exact?.status === 'denied') continue;
+      if (exact?.status === 'denied' || exact?.status === 'erased') continue;
+      if (exact?.status === 'corrupt') throw new WorkReadUnavailable('Chapter integrity mismatch');
+      if (exact?.status === 'unavailable') throw new WorkReadUnavailable('Chapter dependency unavailable');
+      if (exact?.status === 'missing') throw new WorkReadUnavailable('Published chapter object missing');
       if (exact?.status !== 'available' || exact.reference.resourceId !== item.target
         || exact.reference.variantId !== item.variant || exact.reference.language.kind !== 'tag'
-        || exact.reference.language.tag.toLowerCase() !== item.language) {
+        || exact.reference.language.tag.toLowerCase() !== item.language
+        || exact.revisionId !== revisions[index] || exact.reference.revisionId !== revisions[index]) {
         throw new WorkReadUnavailable('Chapter publication differs from its Content');
       }
       const value = firstChapterHeading(exact.body);
@@ -71,11 +79,33 @@ async function legacyChapterLabels(session: WorkReadSession,
   return labels;
 }
 
+function causedBy(error: unknown, type: typeof ObjectUnavailable | typeof ObjectIntegrityError): boolean {
+  const seen = new Set<unknown>();
+  while (error instanceof Error && !seen.has(error)) {
+    if (error instanceof type) return true;
+    seen.add(error);
+    error = error.cause;
+  }
+  return false;
+}
+
 function structureError(error: unknown): never {
-  if (error instanceof CompositionUnavailable) throw missing();
-  if (error instanceof CompositionCorrupt || error instanceof StructureObjectCorrupt
-    || error instanceof StructureObjectUnavailable || error instanceof ObjectIntegrityError
-    || error instanceof ObjectUnavailable) throw new WorkReadUnavailable('Composition is unavailable');
+  if (causedBy(error, ObjectNotFound)) {
+    throw new WorkReadUnavailable('Composition object missing', { cause: error });
+  }
+  if (causedBy(error, ObjectIntegrityError)) {
+    throw new WorkReadUnavailable('Composition integrity mismatch', { cause: error });
+  }
+  if (error instanceof CompositionCorrupt || error instanceof StructureObjectCorrupt) {
+    throw new WorkReadUnavailable('Composition is corrupt', { cause: error });
+  }
+  if (error instanceof StructureObjectUnavailable || causedBy(error, ObjectUnavailable)) {
+    throw new WorkReadUnavailable('Composition dependency unavailable', { cause: error });
+  }
+  if (error instanceof CompositionUnavailable) throw new WorkReadMissing('Chapter is unavailable', { cause: error });
+  if (!(error instanceof WorkReadUnavailable) && isOwnerTransientFailure(error)) {
+    throw new WorkReadUnavailable('Composition graph unavailable', { cause: error });
+  }
   throw error;
 }
 
@@ -121,7 +151,11 @@ async function selectedContent(session: WorkReadSession, target: string, languag
   } LIMIT 2`, 2);
   if (rows.length > 1) throw new WorkReadUnavailable('Chapter language has ambiguous publications');
   const row = rows[0];
-  return row?.revision && row.variant ? { revision: row.revision.value, variant: row.variant.value } : null;
+  if (!row) return null;
+  if (!contentRevision.test(row.revision?.value ?? '') || !row.variant?.value) {
+    throw new WorkReadUnavailable('Chapter publication is corrupt');
+  }
+  return { revision: row.revision!.value, variant: row.variant.value };
 }
 
 async function composition(session: WorkReadSession, work: string, version?: string) {
@@ -132,7 +166,11 @@ async function composition(session: WorkReadSession, work: string, version?: str
   if (!selected) throw missing();
   const header = await readCompositionHeader(session.deps.environment, selected).catch(structureError);
   assertContentsCompositionMapping(header, work, basis.card.mainVersion);
-  return { basis, header };
+  // Catalogue visibility does not grant access to an unpublished or withheld
+  // Structure. Only explicit preview authority may select its moving head.
+  const revision = structureProfileFor(header.profile).workPublication && !await session.canPreviewWork(work)
+    ? publishedCompositionRevision(header, basis.structuredPublication) : header.head;
+  return { basis, header, revision };
 }
 
 /** Profile compatibility must never replace the independent identity checks. */
@@ -151,13 +189,18 @@ const recordDivision = (record: Pick<OccurrenceRecord, 'role' | 'qualifier'>): D
 const position = (segment: string, key: string) => `${segment}\u0001${key}`;
 
 /** One selected root, with request-local immutable page custody and a local head fence. */
-async function neighbourhood(session: WorkReadSession, header: CompositionHeader) {
+async function neighbourhood(session: WorkReadSession, header: CompositionHeader, revision = header.head) {
   session.checkDeadline();
   session.observeDependency(`composition:${header.structure}`, header,
     () => readCompositionHeader(session.deps.environment, header.structure));
   const cache = new ReadingOrderIndex(session, structureObjects(session.deps.environment));
   const snapshot = await readCompositionSnapshot(session.deps.environment, {
-    structure: header.structure, header, objects: cache.objects });
+    structure: header.structure, header, revision, objects: cache.objects }).catch((cause: unknown) => {
+    if (cause instanceof CompositionUnavailable) {
+      throw new CompositionCorrupt('Selected composition revision is missing', { cause });
+    }
+    throw cause;
+  });
   if (snapshot.sourcePosition.dataEpoch !== session.position.dataEpoch) {
     throw new WorkReadMoved('Composition belongs to another data epoch');
   }
@@ -191,7 +234,7 @@ async function topGroups(session: WorkReadSession, header: CompositionHeader, se
     }
     try { checkOccurrenceRecord(record, snapshot.manifest.profile); }
     catch (error) {
-      if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+      if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message, { cause: error });
       throw error;
     }
     const chapters = await tree.countBefore(snapshot.manifest.order, `${record.occurrence}\u0002`, snapshot.cost)
@@ -252,20 +295,20 @@ export async function readContents(session: WorkReadSession, work: string,
   options: { version?: string; language?: string; parent?: string }) {
   try {
     session.options.localBasis = true;
-    const { basis, header } = await composition(session, work, options.version);
+    const { basis, header, revision } = await composition(session, work, options.version);
     const profile = structureProfileFor(header.profile);
     const chapters = profile.roles.includes('chapter');
     const partTargets = !chapters ? compositionTargetBatchReader(session, profile) : null;
-    const snapshot = await neighbourhood(session, header);
+    const snapshot = await neighbourhood(session, header, revision);
     const cursorPosition = { ...session.position, dependencyToken: readDependencyToken([
-      basis.dependencyToken, header.head, header.generation, header.manifest]) };
+      basis.dependencyToken, revision, snapshot.manifest.generation]) };
     const language = options.language ? contentLanguage(options.language, null)
       : basis.selectedLanguage?.toLowerCase() ?? null;
     const parent = options.parent ?? header.structure;
     const binding = ['contents', work, header.component, parent, language, session.cursorIdentity,
       session.options.actingSubject ?? null];
     const cursor = decodeReadCursor(session.options.cursor, binding, cursorPosition);
-    if (cursor && cursor.order !== header.head) throw new WorkReadMoved('Composition changed');
+    if (cursor && cursor.order !== revision) throw new WorkReadMoved('Composition changed');
     const page = await readCompositionPage(session.deps.environment, {
       structure: header.structure, header, snapshot, parent, limit: session.options.limit ?? WORK_CONTENTS_COST.pageSize,
       ...(cursor ? { after: cursor.after } : {}), outline: true,
@@ -273,7 +316,7 @@ export async function readContents(session: WorkReadSession, work: string,
         ? partTargets([target]).then(readable => readable.has(target)) : canReadChapterTarget(session, target),
       ...(partTargets ? { canReadTargets: partTargets } : {}),
     });
-    if (page.revision !== header.head) throw new WorkReadMoved('Composition changed');
+    if (page.revision !== revision) throw new WorkReadMoved('Composition changed');
     const groups = chapters ? await topGroups(session, header, snapshot) : null;
     const group = parent === header.structure ? null : groups?.find(item => item.occurrence === parent);
     const numbered = new Map<string, number | null>();
@@ -321,7 +364,7 @@ export async function readContents(session: WorkReadSession, work: string,
     const textItems = chapters ? items.filter(item => item.role !== 'part') : [];
     const decisions = await session.disclosure(textItems.map(item => ({ owner: 'graph',
       resource: item.target ?? item.occurrence, component: 'name',
-      work, ...(item.role === 'group' ? { revision: header.head } : {}) })), 'read');
+      work, ...(item.role === 'group' ? { revision } : {}) })), 'read');
     const bodyDecisions = await session.disclosure(textItems.map(item => ({ owner: 'content',
       resource: item.target ?? item.occurrence, component: 'body',
       revision: item.selectedRevision, work })), 'read');
@@ -330,9 +373,9 @@ export async function readContents(session: WorkReadSession, work: string,
     const visibleItems = items.filter(item => !textItems.includes(item) || visibleText.has(item.occurrence));
     await fenceWorkBasis(session, basis);
     return { profile: 'work-contents-v1' as const, work, version: header.component,
-      composition: header.structure, compositionRevision: header.head, language,
+      composition: header.structure, compositionRevision: revision, language,
       ...pageResult(session, visibleItems, page.next
-        ? encodeReadCursor(binding, cursorPosition, page.next, header.head) : null) };
+        ? encodeReadCursor(binding, cursorPosition, page.next, revision) : null) };
   } catch (error) { structureError(error); }
 }
 
@@ -441,12 +484,14 @@ export async function readChapter(session: WorkReadSession, occurrence: string,
     const revisionId = selected.revision.slice(contentPrefix.length);
     const [exact] = await session.deps.content.readExactBatch([revisionId], async ids =>
       new Set(ids.filter(id => id === revisionId)))
-      .catch(() => { throw new WorkReadUnavailable('Content owner is unavailable'); });
-    if (exact?.status === 'corrupt' || exact?.status === 'unavailable') {
-      throw new WorkReadUnavailable('Chapter bytes are unavailable');
-    }
+      .catch((cause: unknown) => { throw new WorkReadUnavailable('Content owner is unavailable', { cause }); });
+    if (exact?.status === 'corrupt') throw new WorkReadUnavailable('Chapter integrity mismatch');
+    if (exact?.status === 'unavailable') throw new WorkReadUnavailable('Chapter dependency unavailable');
+    if (exact?.status === 'missing') throw new WorkReadUnavailable('Published chapter object missing');
+    if (!exact) throw new WorkReadUnavailable('Content owner result is incomplete');
     if (exact?.status !== 'available') throw missing();
-    if (exact.reference.resourceId !== record.target || exact.reference.variantId !== selected.variant
+    if (exact.revisionId !== revisionId || exact.reference.revisionId !== revisionId
+      || exact.reference.resourceId !== record.target || exact.reference.variantId !== selected.variant
       || exact.reference.language.kind !== 'tag'
       || exact.reference.language.tag.toLowerCase() !== language) {
       throw new WorkReadUnavailable('Content and publication disagree');

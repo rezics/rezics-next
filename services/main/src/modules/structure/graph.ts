@@ -121,23 +121,27 @@ export async function readCompositionHeader(env: WorkActivationEnvironment,
   if (!NATIVE_ID.test(structure)) return null;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?component ?profile ?head ?generation ?count ?manifest WHERE {
-      GRAPH ${iri(GRAPHS.current)} {
-        ${iri(structure)} a rv:Structure ; rv:structureProfile ?profile ;
+      GRAPH ${iri(GRAPHS.current)} { ${iri(structure)} a rv:Structure . }
+      OPTIONAL {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(structure)} rv:structureProfile ?profile ;
           rv:structureOf ?component ; rv:structureHead ?head ; rv:selectedGeneration ?generation .
         ?generation rv:structure ${iri(structure)} ; rv:generationState rv:Active ;
-          rv:placementCount ?count .
+          rv:placementCount ?count . }
+        GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:StructureRevision ;
+          rv:component ${iri(structure)} ; rv:generation ?generation ; rv:manifest ?manifest . }
       }
-      GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:StructureRevision ;
-        rv:component ${iri(structure)} ; rv:generation ?generation ; rv:manifest ?manifest . }
     } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (!rows.length) return null;
   const row = rows[0]!;
   if (rows.length !== 1 || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(value(row, 'manifest') ?? '')
-    || !/^[0-9]+$/.test(value(row, 'count') ?? '')) {
+    || !/^[0-9]+$/.test(value(row, 'count') ?? '') || !Number.isSafeInteger(Number(value(row, 'count')))
+    || ['component', 'head', 'generation'].some(key => !NATIVE_ID.test(value(row, key) ?? ''))) {
     throw new CompositionCorrupt('Composition header is ambiguous');
   }
-  const profile = structureProfileForGraph(value(row, 'profile')!);
+  let profile: ReturnType<typeof structureProfileForGraph>;
+  try { profile = structureProfileForGraph(value(row, 'profile')!); }
+  catch (cause) { throw new CompositionCorrupt('Composition profile is invalid', { cause }); }
   const component = value(row, 'component')!;
   const owner = profile.componentPredicate
     ? await env.fuseki.query(`SELECT ?owner WHERE { GRAPH ${iri(GRAPHS.current)} {

@@ -157,7 +157,7 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
   dependencyToken: readDependencyToken([readRowsToken(rows), languageToken, profiles, summary, source]),
   selectedLanguage: selected?.language ?? null,
   disclosure: isPublic ? 'public' : 'restricted',
-  publicationState: source ? 'published' : 'unpublished', structuredPublication: source,
+  publicationState: source || heads.length ? 'published' : 'unpublished', structuredPublication: source,
   structuredPublicationCandidate, structurePublicationHead: row.publicationHead?.value ?? null,
   ...(row.provenance ? { fieldProvenance: JSON.parse(row.provenance.value) as Static<typeof workHeader>['fieldProvenance'] } : {}) };
 }
