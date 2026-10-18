@@ -11,7 +11,6 @@ import { type ChapterFacts, chapterFacts, type RawFact } from './outline.ts';
 import {
   canonicalLanguage,
   type ClassificationPage,
-  type ContentsPage,
   directionOf,
   failureOf,
   type ChapterPage,
@@ -27,7 +26,6 @@ import {
   type NativeVariants,
   type RealmChoice,
   type ReviewMode,
-  workKind,
   type Submission,
   type TextDraft,
   type TextHead,
@@ -127,54 +125,6 @@ export interface InventoryView {
  */
 const ownLanguageOf = (work: { title: { language: string } }) =>
   canonicalLanguage(work.title.language);
-
-/**
- * One page of a Book's contents as the Studio Agent reads them. Without a
- * language Main reads them in the Main Version's language, which is the
- * language the Book's text is published in; `language` names another.
- */
-function contentsPage(
-  main: MainClient,
-  actingSubject: string,
-  book: string,
-  cursor?: string,
-  language?: string,
-  parent?: string,
-  version?: string,
-) {
-  return settle(() =>
-    main.v1
-      .works({ id: idOf(book) })
-      .contents.get({
-        query: {
-          actingSubject,
-          limit: 20,
-          ...(language ? { language } : {}),
-          ...(cursor ? { cursor } : {}),
-          ...(parent ? { parent } : {}),
-          ...(version ? { version } : {}),
-        },
-      }),
-  );
-}
-
-/**
- * A Book's first contents page in the language its chapters are written in:
- * the Main Version's, or `fallback` (the Book's own language) while none of
- * the Book's text is published, since chapters can be published before the
- * Book's introduction is.
- */
-async function bookContents(
-  main: MainClient,
-  actingSubject: string,
-  book: string,
-  fallback: string,
-): Promise<Loaded<ContentsPage>> {
-  const first = await contentsPage(main, actingSubject, book);
-  return first.ok && first.data.language === null
-    ? contentsPage(main, actingSubject, book, undefined, fallback)
-    : first;
-}
 
 /**
  * One page of the Studio Agent's Works: those it wrote (its author credit
