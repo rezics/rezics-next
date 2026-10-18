@@ -26,4 +26,8 @@ tasks:
   validate:
     dir: '{{.USER_WORKING_DIR}}'
     cmds:
-      - node scripts/research/frontend-hotkeys/validate.mjs
+      - node scripts/research/frontend-hotkeys/validate.mjs {{.CLI_ARGS}}
+  evidence:
+    dir: '{{.USER_WORKING_DIR}}'
+    cmds:
+      - node scripts/research/frontend-hotkeys/evidence.mjs
