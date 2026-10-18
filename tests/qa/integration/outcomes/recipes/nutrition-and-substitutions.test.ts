@@ -38,8 +38,10 @@ async function qualifiedRead(call: Call, name: PersonaName, recipe: PublicRecipe
     for (const value of nutrients) {
       expect(value.unit).toBeString();
       expect(value.nutrient).toBeString();
-      expect(value).toEqual(expected.find(item => item.kind === 'nutrient'
-        && item.nutrient === value.nutrient && item.unit === value.unit && item.basis === value.basis));
+      const source = expected.find(item => item.kind === 'nutrient'
+        && item.nutrient === value.nutrient && item.unit === value.unit && item.basis === value.basis);
+      expect(source).toBeDefined();
+      expect(value).toEqual(source!);
     }
   }
   const occurrences = pages.flatMap(page => page.occurrences);
