@@ -5,7 +5,7 @@ import { browseTypeCondition, discoveryApi } from '../discover/api.ts';
 import { readTypes } from '../catalogue/types-read.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { chapterVariant } from './content-api.ts';
-import { countBookChapters, type BookChapters } from './counts.ts';
+import { countBookChapters, type BookChapters } from './inventory-counts.ts';
 import { editorValue } from '../document-editor/body.ts';
 import { chapterNoteEditors } from './chapter-draft.ts';
 import { type ChapterFacts, chapterFacts, type RawFact } from './outline.ts';
@@ -117,7 +117,7 @@ const mySubmissions =
 export const validCursor = (cursor: unknown) =>
   typeof cursor === 'string' && cursor.length > 0 && cursor.length <= 2048 ? cursor : undefined;
 
-export type { BookChapters } from './counts.ts';
+export type { BookChapters } from './inventory-counts.ts';
 
 export interface InventoryView {
   page: InventoryPage;
