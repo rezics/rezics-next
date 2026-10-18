@@ -510,6 +510,12 @@ async function applications(options: PersonaOptions) {
 
 let active: Promise<Awaited<ReturnType<typeof applications>>> | undefined;
 
+/** A real independent Account/Agent without an unrelated Realm and role setup. */
+export async function personaAccount(name: string): Promise<PersonaSession> {
+  if (!active) throw new Error('Create a persona Realm before adding an independent Account');
+  return (await active).signup(name);
+}
+
 export type RetainedPersonaRealm = {
   realm: string; space: string; zone: string; visibility: 'public' | 'private';
   identities: Record<Exclude<PersonaName, 'visitor'>, RetainedPersonaIdentity>;

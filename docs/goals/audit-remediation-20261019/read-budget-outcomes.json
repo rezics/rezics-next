@@ -7,8 +7,8 @@
     "workingTree": "Outcome tests and minimal QA support only; production code unchanged.",
     "run": null,
     "recordedJob": null,
-    "assertionReached": "pending",
-    "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test tests/qa/integration/audit-bounded-reads.test.ts",
+    "assertionReached": "pending corrected capability selection",
+    "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test tests/qa/integration/audit-bounded-reads.test.ts tests/qa/integration/notification-read-budget.test.ts tests/qa/integration/official-zone-read-budget.test.ts tests/qa/integration/rating-population-read-budget.test.ts",
     "expectedGate": "Intentionally failing baseline regression, never a passing done gate.",
     "dispatchedRevision": "50e53025617238f9d9d8127be78179c3fa3bc12c",
     "currency": "Required goal check refreshed this worker onto current main. The three intervening commits touch Goal allowance tooling and an archived brief only; no API owner changed.",
@@ -18,17 +18,32 @@
       "types": "passed",
       "lint": "passed",
       "ast": "passed"
-    }
+    },
+    "attempts": [
+      {
+        "job": "b6065b61-ebf8-4c6f-9be3-d0331f9a61d1",
+        "run": "20261018t190149-a02801",
+        "sourceRevision": "a02f6637597ef0e2494853e3f676954d44cfa71d",
+        "command": "bun scripts/goal/goalctl.ts test tests/qa/integration/audit-bounded-reads.test.ts",
+        "result": "setup-timeout",
+        "assertionReached": false,
+        "wallMs": 481300,
+        "budgetMs": 480000,
+        "evidence": ".artifacts/qa/20261018t190149-a02801/logs/integration-1.log",
+        "diagnosis": "All capabilities shared one beforeAll; public reply construction was still running when Access connection timeouts appeared. No retained corpus or outcome evidence was produced. This is not proof of any reported API read defect.",
+        "correction": "Separate capability-named files using the unchanged catalogue-disk class and 480-second wall; real followed chapters exercise the reported Feed subject reader; independent rating Accounts avoid unrelated Realm creation. One diagnosed setup correction."
+      }
+    ]
   },
   "fixture": {
     "composition": "Real Account HTTP and composeMain with lifecycle, relay, Content, Access, Fuseki and PostgreSQL; no owner mocks.",
-    "creation": "Public commands for Works, chapter Content, eligibility, watched replies, Realms/Zones and independent Account rating observations. grantPersonaFixtureAuthority only for narrow preparation authority.",
-    "reuse": "One stopped consistent owner backup under .temp/audit-bounded-reads/owners plus private mode-0600 corpus.json; each run restores isolated fresh owners, never reads shared development storage.",
+    "creation": "Public commands for Works, chapter Content and eligibility, real follows and followed-chapter notifications, Realms/Zones, and independent Account rating observations. grantPersonaFixtureAuthority only for narrow preparation authority.",
+    "reuse": "Capability-specific consistent stopped owner backups under .temp/audit-bounded-reads/{queries,notifications,zones,ratings}/owners and mode-0600 corpus.json; all runs restore isolated fresh owners, never shared development storage.",
     "preparationBudgetMs": 600000,
     "privacy": "Retained credentials never enter this document or Git.",
     "instrumentation": "Transparent HTTP proxy records actual graph requests, bytes, timing and trace IDs; optional 20 ms latency exposes in-flight cancellation without replacing an owner. Real OTLP runtime propagates traces. SQL/engine bounds are unknown until separately instrumented, never inferred as zero.",
     "populations": {
-      "notifications": "50 member-authored replies plus a moderator-authored non-self notice",
+      "notifications": "24 public, independently published chapters by a separate Account; all five signed-in readers follow the public Book before publication. Stream limit 50 and unread scan 256 are unchanged. This is a smaller counterexample, not proof of the full 50/256 populations.",
       "officialZones": [
         8,
         9,
@@ -39,7 +54,9 @@
         101,
         102
       ]
-    }
+    },
+    "preparationScope": "Each capability build and restore independently remains within the existing 600-second active preparation ceiling; each regression project retains its existing 480-second wall. No raised timeout, candidate or population verifier limit.",
+    "setupProgress": "Preparation emits phase/count/elapsed records with assertionReached false, so a setup failure cannot be reported as an outcome assertion."
   },
   "distinctions": {
     "null": "Absent optional subject/display/rating/diagnostic value; never fabricate a preview or zero count.",
@@ -75,8 +92,9 @@
       "startingSource": "services/main/src/modules/work/search-readiness.ts:MAX_SEARCH_REQUEST_MS",
       "deadlineMs": 1500,
       "foregroundPopulationAudits": 0,
-      "graphCalls": "Existing Main Work request allocation; unrelated Content population may not be charged to each reader.",
-      "notes": "No timeout or MAX_PUBLIC_UNITS increase is a repair."
+      "graphCalls": 72,
+      "notes": "No timeout or MAX_PUBLIC_UNITS increase is a repair.",
+      "graphBytes": 8388608
     },
     "suggestions": {
       "startingSource": "services/main/src/modules/onboarding/contract.ts:SUGGESTION_COST and Work read contract",
@@ -109,48 +127,53 @@
   "tests": {
     "discovery": {
       "file": "tests/qa/integration/audit-bounded-reads.test.ts",
-      "line": 310,
+      "line": 12,
       "titleTemplate": "test(`D5-002 ${name}: legal default discovery returns a bounded page without private resources`, async () => {"
     },
     "cursor": {
       "file": "tests/qa/integration/audit-bounded-reads.test.ts",
-      "line": 329,
+      "line": 31,
       "titleTemplate": "test(`AUD-001 ${name}: server cursors round-trip through a complete mixed-resource traversal`, async () => {"
     },
     "chapter": {
       "file": "tests/qa/integration/audit-bounded-reads.test.ts",
-      "line": 362,
+      "line": 64,
       "titleTemplate": "test(`D5-003 ${name}: healthy chapter hits and exact no-match reads avoid foreground population qualification`, async () => {"
     },
     "notificationBudget": {
-      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
-      "line": 383,
+      "file": "tests/qa/integration/notification-read-budget.test.ts",
+      "line": 12,
       "titleTemplate": "test(`D5-001 ${name}: inbox and unread count share a complete request allocation`, async () => {"
     },
     "notificationAuthority": {
-      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
-      "line": 409,
+      "file": "tests/qa/integration/notification-read-budget.test.ts",
+      "line": 39,
       "titleTemplate": "test(`D5-001 ${name}: personal admission and missing notification controls preserve privacy`, async () => {"
     },
     "notificationCancel": {
-      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
-      "line": 433,
+      "file": "tests/qa/integration/notification-read-budget.test.ts",
+      "line": 63,
       "titleTemplate": "test(`D5-001 ${name}: leaving an inbox stops later subject reads and permits a fresh retry`, async () => {"
     },
     "zones": {
-      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
-      "line": 469,
+      "file": "tests/qa/integration/official-zone-read-budget.test.ts",
+      "line": 9,
       "titleTemplate": "test('D5-006: the ninth and tenth official Zones do not make six readers lose suggestions', async () => {"
     },
     "ratings": {
-      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
-      "line": 496,
+      "file": "tests/qa/integration/rating-population-read-budget.test.ts",
+      "line": 8,
       "titleTemplate": "test('D5-006: 100, 101 and 102 independently receipted ratings remain readable without revealing voters', async () => {"
     },
     "refreshControl": {
       "file": "tests/qa/integration/audit-bounded-reads.test.ts",
-      "line": 524,
+      "line": 103,
       "titleTemplate": "test('D5-004 operator: quiescent refresh exposes deferred reasons without disclosing private scope identities', async () => {"
+    },
+    "chapterDisclosure": {
+      "file": "tests/qa/integration/audit-bounded-reads.test.ts",
+      "titleTemplate": "test('D5-003 ' + name + ': absent and unpublished chapter phrases remain exact private controls', async () => {",
+      "line": 91
     }
   },
   "personas": [
@@ -182,7 +205,11 @@
         "disclosure": "Published chapter phrase resolves to public parent Book; absent phrase and private draft phrase yield exact zero matches.",
         "cancellationRetry": "Cold first restored-composition read, warm hit/miss, and hit after an unrelated public command advances graph position; observe each answer once.",
         "budget": "chapterSearch",
-        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace."
+        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace.",
+        "tests": [
+          "chapter",
+          "chapterDisclosure"
+        ]
       },
       "notifications": {
         "case": "D5-001",
@@ -256,7 +283,11 @@
         "disclosure": "Published chapter phrase resolves to public parent Book; absent phrase and private draft phrase yield exact zero matches.",
         "cancellationRetry": "Cold first restored-composition read, warm hit/miss, and hit after an unrelated public command advances graph position; observe each answer once.",
         "budget": "chapterSearch",
-        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace."
+        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace.",
+        "tests": [
+          "chapter",
+          "chapterDisclosure"
+        ]
       },
       "notifications": {
         "case": "D5-001",
@@ -330,7 +361,11 @@
         "disclosure": "Published chapter phrase resolves to public parent Book; absent phrase and private draft phrase yield exact zero matches.",
         "cancellationRetry": "Cold first restored-composition read, warm hit/miss, and hit after an unrelated public command advances graph position; observe each answer once.",
         "budget": "chapterSearch",
-        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace."
+        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace.",
+        "tests": [
+          "chapter",
+          "chapterDisclosure"
+        ]
       },
       "notifications": {
         "case": "D5-001",
@@ -404,7 +439,11 @@
         "disclosure": "Published chapter phrase resolves to public parent Book; absent phrase and private draft phrase yield exact zero matches.",
         "cancellationRetry": "Cold first restored-composition read, warm hit/miss, and hit after an unrelated public command advances graph position; observe each answer once.",
         "budget": "chapterSearch",
-        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace."
+        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace.",
+        "tests": [
+          "chapter",
+          "chapterDisclosure"
+        ]
       },
       "notifications": {
         "case": "D5-001",
@@ -478,7 +517,11 @@
         "disclosure": "Published chapter phrase resolves to public parent Book; absent phrase and private draft phrase yield exact zero matches.",
         "cancellationRetry": "Cold first restored-composition read, warm hit/miss, and hit after an unrelated public command advances graph position; observe each answer once.",
         "budget": "chapterSearch",
-        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace."
+        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace.",
+        "tests": [
+          "chapter",
+          "chapterDisclosure"
+        ]
       },
       "notifications": {
         "case": "D5-001",
@@ -552,7 +595,11 @@
         "disclosure": "Published chapter phrase resolves to public parent Book; absent phrase and private draft phrase yield exact zero matches.",
         "cancellationRetry": "Cold first restored-composition read, warm hit/miss, and hit after an unrelated public command advances graph position; observe each answer once.",
         "budget": "chapterSearch",
-        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace."
+        "traversal": "Small exact page; relationComplete true for no matches. No population qualification on a reader trace.",
+        "tests": [
+          "chapter",
+          "chapterDisclosure"
+        ]
       },
       "notifications": {
         "case": "D5-001",
@@ -617,7 +664,7 @@
       "ownerScopes": [
         "services/main/src/routes/notifications.ts",
         "services/main/src/modules/notification-producers/feed-subjects.ts",
-        "packages/notification/src/store.ts"
+        "services/main/src/modules/notification/store.ts"
       ],
       "status": "Await baseline trace; desired behavior does not prescribe batching/cache mechanism."
     },
