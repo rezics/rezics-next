@@ -26,8 +26,10 @@
       ],
       "counting": "canonical class ID唯一计数；A14是I1-001的子项，A16是其目录别名；多个origin或重复页面不增加类别。旧目录P0按COMMON统一严重度重评，原级别保留在instances。"
     },
-    "mappingCheckout": "8dbda6947cb4548b70b1a72cefe8205b9b286f42",
+    "mappingCheckout": "98b8c4d8ff94f9b7caf02313fd7896321ea20045",
     "mappingDate": "2026-10-19",
+    "synchronizedMain": "7df2e285d3",
+    "workerCheckPreparation": "task goal -- check automatically rebased the worktree from d5ab653ed to 98b8c4d8ff onto five newer main commits. No manual rebase was run. All 150 product source fingerprints and relevant tests remained unchanged; updated Goal documents were reread as authoritative.",
     "evidenceCheckout": "main checkout read-only; all paths in evidence manifest are relative to the repository root there",
     "sourceCheckout": "this worker worktree; source/test/declaration paths resolve relative to its root",
     "method": "Read the all-round union and class-linked reports/evidence, inspect current owners, preserve observation confidence, map concrete regression assertions and existing contracts without running the product.",
@@ -523,9 +525,10 @@
     },
     {
       "id": "existing-documentation-navigation-failure",
-      "fact": "Recorded task docs:check failed because docs/goals/audit-remediation-20261019/state.md is unreachable from docs/README.md. That Markdown file and its navigation entry points already exist at the initial 98dfb17a9d baseline; this task changed no Markdown. The checker scans authored Markdown, so the new JSON cannot change its navigation graph.",
-      "effect": "Manager must link the existing Goal state from the Goal documentation before a clean documentation gate. This unrelated baseline correction is outside the plan-file claim; do not silently rewrite manager-owned state.",
+      "fact": "Initial recorded task docs:check failed because the pre-existing Goal state.md was unreachable at 98dfb17a9d. Main commit 71d2839508 added the link; the worker check automatically synchronized that fix into this worktree.",
+      "effect": "Resolved by the authoritative main update without editing manager-owned Markdown. Recorded docs:check rerun passed: 180 Markdown files and 13 documentation unit tests.",
       "recordedJobId": "job:581251aa-79f4-4cbf-ac08-70ac42318c20",
+      "resolutionJobId": "job:db4fa75c-22d2-4f2d-a487-424b38d7859b",
       "evidence": ".temp/goal/jobs/581251aa-79f4-4cbf-ac08-70ac42318c20.1.log"
     }
   ],
@@ -543,33 +546,90 @@
     ],
     "reason": "D5 controls capacity/default discovery/search/readiness; D4 identity and reader are independent core-task blockers and must not wait for a blanket capacity explanation.",
     "frontendReadyNow": [
-      "identity-web",
       "reader-web",
-      "address-pages",
-      "notification-client",
-      "feed-state",
-      "proposal-list",
-      "composer-draft",
       "work-identity",
       "work-headers",
       "entity-headers",
       "work-navigation",
-      "discovery-layout",
-      "browse-query",
       "chapter-search",
-      "card-layout",
       "studio-home",
       "library-layout",
       "settings-general",
       "settings-notification",
       "control-contrast",
-      "shell-navigation",
-      "home-layout",
-      "feed-preview",
-      "runtime-boundary"
+      "home-layout"
     ],
-    "readyMeans": "Can build independently in the exact listed scopes using existing contracts/fixtures. proofDependsOn is a separate integration gate; ready does not mean the backend or actual route is already proved."
+    "readyMeans": "Can dispatch independently in the exact listed scopes using existing contracts/fixtures, without duplicating the current G-2747/G-2748/G-2749 assignments. proofDependsOn is a separate integration gate; ready does not mean the backend or actual route is already proved."
   },
+  "alreadyDispatchedTasks": [
+    {
+      "taskId": "G-2747",
+      "briefFile": "docs/goals/audit-remediation-20261019/tasks/G-2747.md",
+      "sha256": "c5080befe9ac9df062c8d15918474802204f5b8038c1b7b4d84d4214fceeeb09",
+      "claimedPaths": [
+        "apps/web/features/proposals/**",
+        "apps/web/app/[locale]/proposals/**",
+        "apps/web/features/shell/**",
+        "apps/web/tests/server-client-boundary.test.ts"
+      ],
+      "classIds": [
+        "AUD-006",
+        "D3-002",
+        "AUD-012",
+        "D4-002"
+      ],
+      "wave": "wave/audit-20261019",
+      "proofStatus": "Build dispatched; no class regression proof yet."
+    },
+    {
+      "taskId": "G-2748",
+      "briefFile": "docs/goals/audit-remediation-20261019/tasks/G-2748.md",
+      "sha256": "4339bc5ea8a8e07dfd5971f2b3e455d110383fcf1f577a3c8b54726882ad5b0e",
+      "claimedPaths": [
+        "apps/web/features/post-composer/**",
+        "apps/web/features/document-editor/**",
+        "packages/ui/src/components/rich-text-editor*"
+      ],
+      "classIds": [
+        "D2-003",
+        "D2-002"
+      ],
+      "wave": "wave/audit-20261019",
+      "proofStatus": "Build dispatched; no class regression proof yet."
+    },
+    {
+      "taskId": "G-2749",
+      "briefFile": "docs/goals/audit-remediation-20261019/tasks/G-2749.md",
+      "sha256": "97ed4c1dfc7366bf17293a8ee9f2d5d549c75d2b4ba66ad96dde29d3be5f58dc",
+      "claimedPaths": [
+        "apps/web/features/feed/**",
+        "apps/web/features/home/server.ts",
+        "apps/web/features/api/browser.ts",
+        "apps/web/app/api/main/[...path]/route.ts"
+      ],
+      "classIds": [
+        "AUD-005",
+        "D3-001",
+        "D4-016"
+      ],
+      "wave": "wave/audit-20261019",
+      "proofStatus": "Build dispatched; no class regression proof yet."
+    }
+  ],
+  "currentGoalDocumentation": [
+    {
+      "file": "docs/goals/audit-remediation-20261019/GOAL.md",
+      "sha256": "1aecc5c973ecba487314cd3787a17fac86851e10a4576d75c32e58db7acee506"
+    },
+    {
+      "file": "docs/goals/audit-remediation-20261019/state.md",
+      "sha256": "a93ce87ca7f5829b49606f47617d088ed345c9739cfafaddc28ae8028a9ede7e"
+    },
+    {
+      "file": "docs/goals/audit-remediation-20261019/coverage.json",
+      "sha256": "8e0d593009b37cda9c1865b24d7af290ea943df2c2f475377af33b937305e453"
+    }
+  ],
   "contractAndPersonaMatrix": {
     "registryFile": "scripts/qa/cases/launch-coverage.ts",
     "loaderFile": "scripts/qa/cases/outcomes.ts",
@@ -1699,7 +1759,9 @@
       "ownedExistingTestFiles": [],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "notification-read",
@@ -1748,7 +1810,9 @@
         "scripts/qa/cases/outcomes/realm/closure-notifications.ts"
       ],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": false
     },
     {
       "id": "web-read-transport",
@@ -1772,7 +1836,7 @@
       ],
       "readyToBuildNow": true,
       "readyForInvestigationNow": true,
-      "readiness": "Ready for implementation",
+      "readiness": "Coordinate with the listed existing wave task; do not redispatch its class or overlap its claimed files.",
       "requiredDecision": null,
       "classIds": [
         "D5-001",
@@ -1784,7 +1848,19 @@
       "ownedExistingTestFiles": [],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [
+        {
+          "taskId": "G-2749",
+          "files": [
+            "apps/web/app/api/main/[...path]/route.ts"
+          ],
+          "classIds": [
+            "D3-001"
+          ]
+        }
+      ],
+      "readyToDispatchNow": false
     },
     {
       "id": "discovery-query",
@@ -1839,7 +1915,9 @@
         "scripts/qa/cases/outcomes/recipes/catalogue-pagination-in-its-zone.ts"
       ],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "refresh-worker",
@@ -1867,7 +1945,9 @@
       "ownedExistingTestFiles": [],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "text-readiness",
@@ -1906,7 +1986,9 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "identity-main",
@@ -1942,7 +2024,9 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "identity-web",
@@ -1967,7 +2051,7 @@
       ],
       "readyToBuildNow": true,
       "readyForInvestigationNow": true,
-      "readiness": "Ready for implementation",
+      "readiness": "Coordinate with the listed existing wave task; do not redispatch its class or overlap its claimed files.",
       "requiredDecision": null,
       "classIds": [
         "D5-001",
@@ -1978,7 +2062,24 @@
       "ownedExistingTestFiles": [],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [
+        {
+          "taskId": "G-2747",
+          "files": [
+            "apps/web/features/shell/communities-read.ts"
+          ],
+          "classIds": []
+        },
+        {
+          "taskId": "G-2749",
+          "files": [],
+          "classIds": [
+            "D3-001"
+          ]
+        }
+      ],
+      "readyToDispatchNow": false
     },
     {
       "id": "reader-main",
@@ -2027,7 +2128,9 @@
         "scripts/qa/cases/outcomes/recipes/read-a-recipe.ts"
       ],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "reader-web",
@@ -2061,7 +2164,9 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "address-pages",
@@ -2085,7 +2190,7 @@
       ],
       "readyToBuildNow": true,
       "readyForInvestigationNow": true,
-      "readiness": "Ready for implementation",
+      "readiness": "Coordinate with the listed existing wave task; do not redispatch its class or overlap its claimed files.",
       "requiredDecision": null,
       "classIds": [
         "D5-001",
@@ -2106,7 +2211,17 @@
         "scripts/qa/cases/outcomes/zone/site-pages.ts"
       ],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [
+        {
+          "taskId": "G-2747",
+          "files": [
+            "apps/web/features/shell/route-states.stories.tsx"
+          ],
+          "classIds": []
+        }
+      ],
+      "readyToDispatchNow": false
     },
     {
       "id": "notification-client",
@@ -2131,7 +2246,7 @@
       ],
       "readyToBuildNow": true,
       "readyForInvestigationNow": true,
-      "readiness": "Ready for implementation",
+      "readiness": "Coordinate with the listed existing wave task; do not redispatch its class or overlap its claimed files.",
       "requiredDecision": null,
       "classIds": [
         "D5-001",
@@ -2146,7 +2261,24 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [
+        {
+          "taskId": "G-2747",
+          "files": [
+            "apps/web/features/shell/unread.ts",
+            "apps/web/features/shell/notifications/window.ts",
+            "apps/web/features/shell/notifications/notifications-view.tsx",
+            "apps/web/features/shell/notifications/window.test.ts",
+            "apps/web/features/shell/unread.test.ts",
+            "apps/web/features/shell/notifications/closure-notifications.stories.tsx",
+            "apps/web/features/shell/notifications/notification-traversal.stories.tsx",
+            "apps/web/features/shell/notifications/notifications.stories.tsx"
+          ],
+          "classIds": []
+        }
+      ],
+      "readyToDispatchNow": false
     },
     {
       "id": "feed-state",
@@ -2176,7 +2308,7 @@
       ],
       "readyToBuildNow": true,
       "readyForInvestigationNow": true,
-      "readiness": "Ready for implementation",
+      "readiness": "Coordinate with the listed existing wave task; do not redispatch its class or overlap its claimed files.",
       "requiredDecision": null,
       "classIds": [
         "AUD-005",
@@ -2194,7 +2326,30 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [
+        {
+          "taskId": "G-2749",
+          "files": [
+            "apps/web/features/feed/feed-list.tsx",
+            "apps/web/features/feed/feed.stories.tsx",
+            "apps/web/features/feed/feed-context.tsx",
+            "apps/web/features/feed/api.ts",
+            "apps/web/features/feed/types.ts",
+            "apps/web/features/home/server.ts",
+            "apps/web/features/api/browser.ts",
+            "apps/web/features/feed/closure-feed.stories.tsx",
+            "apps/web/features/feed/g-1047-projection.stories.tsx",
+            "apps/web/features/feed/read.test.ts",
+            "apps/web/features/feed/refusal-read.test.ts"
+          ],
+          "classIds": [
+            "AUD-005",
+            "D3-001"
+          ]
+        }
+      ],
+      "readyToDispatchNow": false
     },
     {
       "id": "proposal-list",
@@ -2214,7 +2369,7 @@
       ],
       "readyToBuildNow": true,
       "readyForInvestigationNow": true,
-      "readiness": "Ready for implementation",
+      "readiness": "Coordinate with the listed existing wave task; do not redispatch its class or overlap its claimed files.",
       "requiredDecision": null,
       "classIds": [
         "D3-002"
@@ -2226,7 +2381,22 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [
+        {
+          "taskId": "G-2747",
+          "files": [
+            "apps/web/app/[locale]/proposals/page.tsx",
+            "apps/web/features/proposals/proposal-list.tsx",
+            "apps/web/features/proposals/list-query.ts",
+            "apps/web/features/proposals/list.stories.tsx"
+          ],
+          "classIds": [
+            "D3-002"
+          ]
+        }
+      ],
+      "readyToDispatchNow": false
     },
     {
       "id": "composer-draft",
@@ -2249,7 +2419,7 @@
       ],
       "readyToBuildNow": true,
       "readyForInvestigationNow": true,
-      "readiness": "Ready for implementation",
+      "readiness": "Coordinate with the listed existing wave task; do not redispatch its class or overlap its claimed files.",
       "requiredDecision": null,
       "classIds": [
         "D2-003",
@@ -2263,7 +2433,32 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [
+        {
+          "taskId": "G-2748",
+          "files": [
+            "apps/web/features/post-composer/composer.tsx",
+            "apps/web/features/post-composer/api.ts",
+            "apps/web/features/document-editor/body-editor.tsx",
+            "packages/ui/src/components/rich-text-editor.tsx",
+            "apps/web/features/post-composer/body-editor.stories.tsx",
+            "apps/web/features/post-composer/composer.stories.tsx"
+          ],
+          "classIds": [
+            "D2-003",
+            "D2-002"
+          ]
+        },
+        {
+          "taskId": "G-2749",
+          "files": [
+            "apps/web/features/feed/reply-composer.tsx"
+          ],
+          "classIds": []
+        }
+      ],
+      "readyToDispatchNow": false
     },
     {
       "id": "author-lifecycle",
@@ -2293,7 +2488,7 @@
       ],
       "readyToBuildNow": false,
       "readyForInvestigationNow": true,
-      "readiness": "Contract decision first",
+      "readiness": "Coordinate with the listed existing wave task; do not redispatch its class or overlap its claimed files.",
       "requiredDecision": "Specify correction, public qualification withdrawal, structure withdrawal and post/reply lifecycle outcomes separately using existing contracts; do not infer that Work withdrawal is absent.",
       "classIds": [
         "D2-004",
@@ -2311,7 +2506,23 @@
         "scripts/qa/cases/outcomes/recipes/author-a-recipe.ts"
       ],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [
+        {
+          "taskId": "G-2749",
+          "files": [
+            "apps/web/features/feed/post-row.tsx",
+            "apps/web/features/feed/discussion-card.tsx",
+            "apps/web/features/feed/reply-tree.tsx",
+            "apps/web/features/feed/thread-api.ts",
+            "apps/web/features/feed/post-row.stories.tsx"
+          ],
+          "classIds": [
+            "D4-016"
+          ]
+        }
+      ],
+      "readyToDispatchNow": false
     },
     {
       "id": "work-identity",
@@ -2372,7 +2583,9 @@
         "scripts/qa/cases/outcomes/visual-novels/work-hub-and-edition-choice.ts"
       ],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "work-headers",
@@ -2414,7 +2627,9 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "entity-headers",
@@ -2453,7 +2668,9 @@
       "ownedExistingTestFiles": [],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "work-navigation",
@@ -2492,7 +2709,9 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "discovery-layout",
@@ -2517,7 +2736,7 @@
       ],
       "readyToBuildNow": true,
       "readyForInvestigationNow": true,
-      "readiness": "Ready for implementation",
+      "readiness": "Coordinate with the listed existing wave task; do not redispatch its class or overlap its claimed files.",
       "requiredDecision": null,
       "classIds": [
         "D5-001",
@@ -2540,7 +2759,17 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [
+        {
+          "taskId": "G-2747",
+          "files": [],
+          "classIds": [
+            "D4-002"
+          ]
+        }
+      ],
+      "readyToDispatchNow": false
     },
     {
       "id": "browse-query",
@@ -2564,7 +2793,7 @@
       ],
       "readyToBuildNow": true,
       "readyForInvestigationNow": true,
-      "readiness": "Ready for implementation",
+      "readiness": "Coordinate with the listed existing wave task; do not redispatch its class or overlap its claimed files.",
       "requiredDecision": null,
       "classIds": [
         "D6-002",
@@ -2579,7 +2808,20 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [
+        {
+          "taskId": "G-2747",
+          "files": [
+            "apps/web/features/shell/search-field.tsx",
+            "apps/web/features/shell/search-field.stories.tsx"
+          ],
+          "classIds": [
+            "D4-002"
+          ]
+        }
+      ],
+      "readyToDispatchNow": false
     },
     {
       "id": "chapter-search",
@@ -2627,7 +2869,9 @@
         "scripts/qa/cases/outcomes/books/choose-among-mixed-formats-mixed-formats.ts"
       ],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "card-layout",
@@ -2653,7 +2897,7 @@
       ],
       "readyToBuildNow": true,
       "readyForInvestigationNow": true,
-      "readiness": "Ready for implementation",
+      "readiness": "Coordinate with the listed existing wave task; do not redispatch its class or overlap its claimed files.",
       "requiredDecision": null,
       "classIds": [
         "D6-005",
@@ -2670,7 +2914,19 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [
+        {
+          "taskId": "G-2747",
+          "files": [
+            "apps/web/features/shell/app-shell.tsx",
+            "apps/web/features/shell/page.tsx",
+            "apps/web/features/shell/app-shell.stories.tsx"
+          ],
+          "classIds": []
+        }
+      ],
+      "readyToDispatchNow": false
     },
     {
       "id": "showcase-cards",
@@ -2712,7 +2968,9 @@
         "scripts/qa/cases/outcomes/zone/home-rendering.ts"
       ],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "studio-home",
@@ -2750,7 +3008,9 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "studio-query",
@@ -2783,7 +3043,9 @@
       "ownedExistingTestFiles": [],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": false
     },
     {
       "id": "library-layout",
@@ -2821,7 +3083,9 @@
         "scripts/qa/cases/outcomes/books/continue-progress-across-devices-two-device-progress.ts"
       ],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "settings-general",
@@ -2851,7 +3115,9 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "settings-notification",
@@ -2882,7 +3148,9 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "control-contrast",
@@ -2920,7 +3188,9 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "shell-navigation",
@@ -2939,7 +3209,7 @@
       ],
       "readyToBuildNow": true,
       "readyForInvestigationNow": true,
-      "readiness": "Ready for implementation",
+      "readiness": "Coordinate with the listed existing wave task; do not redispatch its class or overlap its claimed files.",
       "requiredDecision": null,
       "classIds": [
         "AUD-012"
@@ -2949,7 +3219,21 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [
+        {
+          "taskId": "G-2747",
+          "files": [
+            "apps/web/features/shell/bottom-nav.tsx",
+            "apps/web/features/shell/navigation.ts",
+            "apps/web/features/shell/shell-config.test.ts"
+          ],
+          "classIds": [
+            "AUD-012"
+          ]
+        }
+      ],
+      "readyToDispatchNow": false
     },
     {
       "id": "home-layout",
@@ -2977,7 +3261,9 @@
       "ownedExistingTestFiles": [],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     },
     {
       "id": "feed-preview",
@@ -2997,7 +3283,7 @@
       ],
       "readyToBuildNow": true,
       "readyForInvestigationNow": true,
-      "readiness": "Ready for implementation",
+      "readiness": "Coordinate with the listed existing wave task; do not redispatch its class or overlap its claimed files.",
       "requiredDecision": null,
       "classIds": [
         "D2-004",
@@ -3006,7 +3292,19 @@
       "ownedExistingTestFiles": [],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [
+        {
+          "taskId": "G-2749",
+          "files": [
+            "apps/web/features/feed/card.tsx"
+          ],
+          "classIds": [
+            "D4-016"
+          ]
+        }
+      ],
+      "readyToDispatchNow": false
     },
     {
       "id": "search-native",
@@ -3051,7 +3349,9 @@
         "scripts/qa/cases/outcomes/realm/closure-search.ts"
       ],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": false
     },
     {
       "id": "runtime-boundary",
@@ -3070,7 +3370,7 @@
       ],
       "readyToBuildNow": true,
       "readyForInvestigationNow": true,
-      "readiness": "Ready for implementation",
+      "readiness": "Coordinate with the listed existing wave task; do not redispatch its class or overlap its claimed files.",
       "requiredDecision": null,
       "classIds": [
         "AUD-006"
@@ -3078,7 +3378,19 @@
       "ownedExistingTestFiles": [],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [
+        {
+          "taskId": "G-2747",
+          "files": [
+            "apps/web/features/shell/providers.tsx"
+          ],
+          "classIds": [
+            "AUD-006"
+          ]
+        }
+      ],
+      "readyToDispatchNow": false
     },
     {
       "id": "bounded-aggregates",
@@ -3113,7 +3425,9 @@
       ],
       "ownedOutcomeDeclarationFiles": [],
       "scopePolicy": "Only these exact candidate source files, owned test files and owned outcome declarations; no recursive directory claims. Other groups may read them. Shared-file work stays serial in this owner group; generated files follow their authored owner.",
-      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes."
+      "completion": "Implement the linked class assertions; run affected API/persona checks and actual-page/Storybook visual proof where applicable. Group completion does not alone close cross-group classes.",
+      "alreadyDispatchedOverlaps": [],
+      "readyToDispatchNow": true
     }
   ],
   "dependencyEdges": [
@@ -3376,6 +3690,10 @@
     {
       "risk": "Catalogue-only classes edit site owner files",
       "mitigation": "A07 also cites entity-page/header.tsx; A13 cites entity-page/entity-page.tsx, work-page/work-views.tsx and work-page/hub-sections.tsx. Serialize these exact cross-plan overlaps or give them one joint owner before dispatch."
+    },
+    {
+      "risk": "Existing wave task claims are broader than these proposed exact groups",
+      "mitigation": "G-2747 claims shell/** and Proposals; G-2748 claims composer/editor; G-2749 claims feed/** and the browser/BFF route. alreadyDispatchedOverlaps blocks duplicate dispatch. G-2747 owns D4-002 but its brief omits discover/**, where the primary captured defect lives: coordinate that owner change. Split or narrow any unrelated candidate files before new work, and preserve the existing task briefs."
     },
     {
       "risk": "Contract/generated drift",
@@ -3739,6 +4057,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -3868,6 +4192,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -4073,6 +4403,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -4250,6 +4586,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -4429,6 +4771,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -4528,6 +4876,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Background scheduler retry/disposition is a workload contract, not a public persona journey; extend worker integration tests and idle attribution checks."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -4666,6 +5020,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -4791,6 +5151,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -4864,6 +5230,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Existing component stories do not exercise the server/client runtime navigation boundary. Add a development/production route smoke regression after diagnosis."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "build-dispatched",
+        "ownerTaskId": "G-2747",
+        "proof": []
       }
     },
     {
@@ -4973,6 +5345,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Media API lifecycle tests do not prove editor snapshot persistence; add a current-document receipt and reload regression in the editor/composer harness."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "build-dispatched",
+        "ownerTaskId": "G-2748",
+        "proof": []
       }
     },
     {
@@ -5136,6 +5514,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -5337,6 +5721,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -5463,6 +5853,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -5578,6 +5974,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -5680,6 +6082,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "build-dispatched",
+        "ownerTaskId": "G-2749",
+        "proof": []
       }
     },
     {
@@ -5787,6 +6195,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Add explicit no-write versus partial-write draft state outcomes; a generic write retry test does not prove editable preflight failure."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "build-dispatched",
+        "ownerTaskId": "G-2748",
+        "proof": []
       }
     },
     {
@@ -5932,6 +6346,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "build-dispatched",
+        "ownerTaskId": "G-2749",
+        "proof": []
       }
     },
     {
@@ -6032,6 +6452,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Existing list stories do not execute the server import boundary; add route rendering or production route smoke coverage."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "build-dispatched",
+        "ownerTaskId": "G-2747",
+        "proof": []
       }
     },
     {
@@ -6168,6 +6594,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -6598,6 +7030,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -6736,6 +7174,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -6835,6 +7279,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Reuse existing g-924 100/101 inventory fixtures and add the public aggregate outcome; add 8/9 suggested-follow boundaries. The audit itself had no 101-head live reproduction."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -7008,6 +7458,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -7118,6 +7574,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Add mixed-ratio layout/keyboard stories with actual screenshots; select any new dependency through the repository design/toolchain workflow."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -7217,6 +7679,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -7337,6 +7805,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -7443,6 +7917,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -7531,6 +8011,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "build-dispatched",
+        "ownerTaskId": "G-2747",
+        "proof": []
       }
     },
     {
@@ -7680,6 +8166,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -7814,6 +8306,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -7903,6 +8401,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -8042,6 +8546,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -8142,6 +8652,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -8230,6 +8746,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Add delayed cross-domain accepted-intent coverage; the presence of individual successful save tests does not prove concurrent input handling."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -8353,6 +8875,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -8450,6 +8978,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "build-dispatched",
+        "ownerTaskId": "G-2747",
+        "proof": []
       }
     },
     {
@@ -8565,6 +9099,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -8655,6 +9195,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -8748,6 +9294,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -8856,6 +9408,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -8970,6 +9528,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -9090,6 +9654,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -9195,6 +9765,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "build-dispatched",
+        "ownerTaskId": "G-2749",
+        "proof": []
       }
     },
     {
@@ -9318,6 +9894,12 @@
           "operator"
         ],
         "reasonIfNoExistingRow": null
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     },
     {
@@ -9428,6 +10010,12 @@
         "existingRowRefs": [],
         "requiredPersonas": [],
         "reasonIfNoExistingRow": "Component/state/transport regression has no dedicated existing launch outcome row; assert at its owning boundary and preserve six-persona API authority wherever the change crosses it."
+      },
+      "currentDisposition": {
+        "source": "docs/goals/audit-remediation-20261019/coverage.json",
+        "status": "pending",
+        "ownerTaskId": null,
+        "proof": []
       }
     }
   ],
@@ -20882,11 +21470,26 @@
     "productTestsRun": [],
     "briefTests": [],
     "documentationCheck": {
-      "result": "failed",
-      "baselineFailure": true,
+      "result": "passed",
       "command": "task docs:check",
-      "jobId": "job:581251aa-79f4-4cbf-ac08-70ac42318c20",
-      "reason": "Existing docs/goals/audit-remediation-20261019/state.md is unreachable from docs/README.md; no Markdown changed in this task. The ordered sequence stopped before task goal -- check."
+      "jobId": "job:db4fa75c-22d2-4f2d-a487-424b38d7859b",
+      "markdownFiles": 180,
+      "documentationUnitTests": 13,
+      "initialBaselineFailure": "job:581251aa-79f4-4cbf-ac08-70ac42318c20 failed on existing state.md navigation; fixed upstream by 71d2839508 and synchronized by the worker check."
+    },
+    "workerCheck": {
+      "result": "passed",
+      "command": "task goal -- check",
+      "jobId": "job:bf899fb7-b083-48c2-a027-372caf5137bb",
+      "runId": "run-SEQdze",
+      "checks": {
+        "types": "skipped: no TypeScript workspace changed",
+        "tests": "skipped: no test files in brief",
+        "lint": "skipped: no source changed",
+        "ast": "passed",
+        "guards": "passed: 1 selected file, 2 tests"
+      },
+      "log": ".temp/goal/check/run-SEQdze/output.log"
     },
     "revalidateRegistryCommand": [
       "python3",
@@ -20912,6 +21515,7 @@
       "personaCells": 144,
       "existingTests": 148,
       "evidenceFiles": 548,
+      "alreadyDispatchedSiteClasses": 9,
       "dependencyGraph": "acyclic",
       "stagedCanonical": "byte-identical"
     }
