@@ -4,7 +4,7 @@ import { startMediaStack, type MediaStack } from './media-support.ts';
 
 /** Production composeMain, PostgreSQL and native Jena; the proxy only observes
  * and slows the real transport so cancellation intersects nested hydration. */
-test('composeMain closes nested public resource reads after cancellation and admits a fresh retry', async () => {
+test('composeMain rejects expired deadlines, closes cancelled nested public reads and admits a fresh retry', async () => {
   const original = Bun.env.FUSEKI_URL;
   if (!original) throw new Error('Run through the isolated QA integration tier');
   const upstream = new URL(original);
@@ -47,12 +47,22 @@ test('composeMain closes nested public resource reads after cancellation and adm
     expect((await stack.call('GET', path(hidden.work))).status).toBe(404);
 
     observing = true;
+    const expired = await stack.main.handle(new Request(`http://main.local${path(visible.work)}`, {
+      headers: { 'x-rezics-server-deadline': String(Date.now() - 1) },
+    }));
+    expect(expired.status).toBe(503);
+    expect(started).toHaveLength(0);
+    expect(active).toBe(0);
+    const forwardedDeadline = Date.now() + 1500;
+    let completed = false;
     const pending = stack.main.handle(new Request(`http://main.local${path(visible.work)}`,
-      { signal: controller.signal }));
-    const settled = pending.catch(error => error);
+      { signal: controller.signal, headers: { 'x-rezics-server-deadline': String(forwardedDeadline) } }));
+    const settled = pending.finally(() => { completed = true; }).catch(error => error);
     const admissionDeadline = performance.now() + 5000;
     while (started.length < 3 && performance.now() < admissionDeadline) await delay(5);
     expect(started.length).toBeGreaterThanOrEqual(3);
+    expect(completed).toBe(false);
+    expect(Date.now()).toBeLessThan(forwardedDeadline);
     const cancelledAt = performance.now();
     controller.abort();
     await Promise.race([settled, delay(1000).then(() => { throw new Error('Main cancellation did not settle'); })]);
@@ -63,7 +73,7 @@ test('composeMain closes nested public resource reads after cancellation and adm
     expect(started).toHaveLength(atGrace);
     expect(started.filter(time => time > cancelledAt + 100)).toEqual([]);
     expect(active).toBe(0);
-    expect(allocations.every(ms => ms > 0 && ms <= 10_000)).toBe(true);
+    expect(allocations.every(ms => ms > 0 && ms <= 1500)).toBe(true);
     observing = false;
     const retry = await stack.call('GET', path(visible.work));
     expect(retry.status).toBe(200);
