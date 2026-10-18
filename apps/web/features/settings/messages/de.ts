@@ -1,6 +1,21 @@
 import type { SettingsMessages } from '../messages.ts';
 
 export default {
+  notificationSaving: 'Wird gespeichert…',
+  notificationFailed: 'Speichern fehlgeschlagen. Versuche es erneut.',
+  notificationConflict: 'Andernorts geändert. Die aktuelle Auswahl wird angezeigt. Prüfe sie vor dem erneuten Speichern.',
+  notificationRefreshing: 'Aktuelle Auswahl wird geladen…',
+  notificationRefreshFailed: 'Die aktuelle Auswahl konnte nicht geladen werden. Lade sie, um fortzufahren.',
+  notificationEnable: 'Einschalten',
+  notificationDisable: 'Ausschalten',
+  retrySave: 'Erneut speichern',
+  reviewLatest: 'Aktuelle Auswahl laden',
+  personSaving: 'Einstellungen werden gespeichert. Warte bitte, bevor du diese Auswahl änderst.',
+  personRefreshing: 'Die aktuellen Einstellungen werden geladen. Bitte warte.',
+  personFailed: 'Deine Einstellungen konnten nicht gespeichert werden. Deine Änderungen sind noch da. Versuche es erneut.',
+  personConflict: 'Deine Einstellungen wurden andernorts geändert. Deine ungespeicherten Änderungen sind noch da. Prüfe sie und speichere erneut.',
+  personRefreshFailed: 'Die aktuellen Einstellungen konnten nicht geladen werden. Deine Änderungen sind noch da. Lade die aktuelle Auswahl, um fortzufahren.',
+  personUnsaved: 'Deine Sprachänderungen sind noch nicht gespeichert.',
   title: 'Profileinstellungen',
   description: 'An deinem öffentlichen Profil erkennen andere dich auf REZICS.',
   actingAs: 'Wird bearbeitet',

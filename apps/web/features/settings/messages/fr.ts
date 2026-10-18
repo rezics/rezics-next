@@ -1,6 +1,21 @@
 import type { SettingsMessages } from '../messages.ts';
 
 export default {
+  notificationSaving: 'Enregistrement…',
+  notificationFailed: 'Échec de l’enregistrement. Réessayez.',
+  notificationConflict: 'Ce choix a été modifié ailleurs. Le choix actuel est affiché. Vérifiez-le avant de réessayer.',
+  notificationRefreshing: 'Chargement du choix actuel…',
+  notificationRefreshFailed: 'Impossible de charger le choix actuel. Chargez-le pour continuer.',
+  notificationEnable: 'Activer',
+  notificationDisable: 'Désactiver',
+  retrySave: 'Réessayer d’enregistrer',
+  reviewLatest: 'Charger les choix actuels',
+  personSaving: 'Enregistrement des préférences. Patientez avant de modifier ces choix.',
+  personRefreshing: 'Chargement des préférences actuelles. Veuillez patienter.',
+  personFailed: 'Impossible d’enregistrer vos préférences. Vos modifications sont toujours là. Réessayez.',
+  personConflict: 'Vos préférences ont été modifiées ailleurs. Vos modifications non enregistrées sont toujours là. Vérifiez-les, puis enregistrez à nouveau.',
+  personRefreshFailed: 'Impossible de charger les préférences actuelles. Vos modifications sont toujours là. Chargez les choix actuels pour continuer.',
+  personUnsaved: 'Vos changements de langues ne sont pas encore enregistrés.',
   title: 'Paramètres du profil',
   description: 'Votre profil public permet aux autres de vous reconnaître sur REZICS.',
   actingAs: 'Modification de',

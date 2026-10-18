@@ -1,8 +1,10 @@
 'use client';
 
 import { Card, CardContent } from '@rezics/ui/card';
+import { Button } from '@rezics/ui/button';
+import { Field, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Switch } from '@rezics/ui/switch';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { SettingsMessages } from './messages.ts';
 
 export const notificationChannels = ['inbox', 'push', 'email'] as const;
@@ -14,6 +16,8 @@ type NotificationChoice = {
   state: 'enabled' | 'disabled';
   revision: string | null;
 };
+type ChoiceFeedback = { state: 'saving' | 'saved' | 'failed' | 'conflict' | 'refreshing' | 'refresh-failed';
+  checked: boolean };
 
 /** Topics with an active producer, in the preferences API's order. A label is required for each. */
 export const settingsNotificationTopics = [
@@ -87,10 +91,12 @@ function labelFor(topic: string, t: SettingsMessages): string {
     ? t[notificationTopicLabel[topic as SettingsNotificationTopic]]
     : topic;
 }
-async function read<T>(): Promise<T> {
+async function readChoices(): Promise<NotificationChoice[]> {
   const response = await fetch('/api/main/v1/me/notification-preferences', { cache: 'no-store' });
   if (!response.ok) throw new Error(String(response.status));
-  return response.json() as Promise<T>;
+  // This endpoint returns the complete topic/channel matrix, without pagination.
+  const preferences = await response.json() as { items: NotificationChoice[] };
+  return preferences.items;
 }
 async function write<T>(body: Record<string, unknown>, bodyKey = false): Promise<T> {
   const key = crypto.randomUUID();
@@ -125,12 +131,19 @@ export function NotificationSettings({
   );
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState('');
+  const inFlight = useRef(false);
+  const feedbackId = useId();
+  const [feedback, setFeedback] = useState<Record<string, ChoiceFeedback>>({});
+  const forgetSavedReceipts = () => {
+    // A refresh may replace an earlier saved value; its receipt no longer describes the displayed version.
+    setFeedback(current => Object.fromEntries(Object.entries(current).filter(([, result]) => result.state !== 'saved')));
+  };
   useEffect(() => {
     if (preview) return;
     let active = true;
-    void read<{ items: NotificationChoice[] }>()
+    void readChoices()
       .then((value) => {
-        if (active) setChoices(value.items);
+        if (active) setChoices(value);
       })
       .catch(() => {
         if (active) setStatus(t.notificationUnavailable);
@@ -140,9 +153,12 @@ export function NotificationSettings({
     };
   }, [preview, t]);
   const save = async (choice: NotificationChoice, checked: boolean) => {
+    if (inFlight.current || preview) return;
+    inFlight.current = true;
     const key = `${choice.topic}:${choice.channel}`;
+    const report = (state: ChoiceFeedback['state']) => setFeedback(current => ({ ...current, [key]: { state, checked } }));
     setSaving(key);
-    setStatus('');
+    report('saving');
     try {
       const result = await write<{ state: NotificationChoice['state']; revision: string }>(
         {
@@ -163,12 +179,36 @@ export function NotificationSettings({
               : item,
           ) ?? null,
       );
-      setStatus(t.notificationSaved);
+      report('saved');
     } catch (error) {
-      setStatus(String(error).includes('409') ? t.sectionStale : t.sectionFailed);
+      if (String(error).includes('409')) {
+        report('refreshing');
+        try {
+          setChoices(await readChoices());
+          forgetSavedReceipts();
+          report('conflict');
+        } catch { report('refresh-failed'); }
+      } else report('failed');
+    } finally {
+      inFlight.current = false;
+      setSaving('');
     }
-    setSaving('');
   };
+  const reviewLatest = async (choice: NotificationChoice, checked: boolean) => {
+    if (inFlight.current || preview) return;
+    inFlight.current = true;
+    const key = `${choice.topic}:${choice.channel}`;
+    const report = (state: ChoiceFeedback['state']) => setFeedback(current => ({ ...current, [key]: { state, checked } }));
+    setSaving(key); report('refreshing');
+    try {
+      setChoices(await readChoices()); forgetSavedReceipts(); report('conflict');
+    } catch { report('refresh-failed'); }
+    finally { inFlight.current = false; setSaving(''); }
+  };
+  const feedbackText = (state: ChoiceFeedback['state']) => ({
+    saving: t.notificationSaving, saved: t.notificationSaved, failed: t.notificationFailed,
+    conflict: t.notificationConflict, refreshing: t.notificationRefreshing, 'refresh-failed': t.notificationRefreshFailed,
+  })[state];
   return (
     <Card id="notifications">
       <CardContent className="grid gap-5 p-5 sm:p-6">
@@ -179,8 +219,8 @@ export function NotificationSettings({
         {choices ? (
           <div className="grid gap-0">
             <div
-              className="grid grid-cols-3 gap-2 border-b pb-2 text-muted-foreground text-xs
-        sm:grid-cols-[minmax(0,1fr)_4rem_4rem_6rem]"
+              className="hidden gap-2 border-b pb-2 text-muted-foreground text-xs
+        sm:grid sm:grid-cols-[minmax(0,1fr)_6rem_6rem_7rem]"
             >
               <span className="hidden sm:block">{t.notificationType}</span>
               <span className="text-center">{t.notificationInbox}</span>
@@ -193,25 +233,52 @@ export function NotificationSettings({
                 <div
                   key={topic}
                   className="grid min-h-12 grid-cols-3 items-center gap-2 border-b border-border/50 py-2
-            text-sm last:border-0 sm:grid-cols-[minmax(0,1fr)_4rem_4rem_6rem]"
+            text-sm last:border-0 sm:grid-cols-[minmax(0,1fr)_6rem_6rem_7rem]"
                 >
                   <span className="col-span-3 min-w-0 break-words sm:col-span-1">{label}</span>
                   {notificationChannels.map((channel) => {
                     const choice = choices.find(
                       (item) => item.topic === topic && item.channel === channel,
                     );
+                    const key = `${topic}:${channel}`;
+                    const result = feedback[key];
+                    const channelLabel = channel === 'inbox' ? t.notificationInbox
+                      : channel === 'push' ? t.notificationPush : t.notificationEmailDigest;
+                    const statusId = `${feedbackId}-${key}`;
+                    const retryLabel = result?.state === 'refresh-failed' ? t.reviewLatest
+                      : result?.checked ? t.notificationEnable : t.notificationDisable;
                     return (
-                      <span key={channel} className="flex justify-center">
+                      <Field key={channel} ids={{ helperText: statusId }}
+                        className="grid min-w-0 content-start justify-items-center gap-2 self-start">
+                        <FieldLabel className="sr-only">{`${label} · ${channelLabel}`}</FieldLabel>
+                        <span aria-hidden="true" className="break-words text-center text-muted-foreground text-xs sm:hidden">
+                          {channelLabel}</span>
+                        <div className="flex justify-center">
                         <Switch
                           size="sm"
-                          aria-label={`${label} · ${channel === 'inbox' ? t.notificationInbox : channel === 'push' ? t.notificationPush : t.notificationEmailDigest}`}
+                          aria-label={`${label} · ${channelLabel}`}
+                          aria-describedby={statusId}
                           checked={choice?.state === 'enabled'}
                           disabled={!choice || !!saving || preview}
                           onCheckedChange={(details) => {
                             if (choice) void save(choice, details.checked);
                           }}
                         />
-                      </span>
+                        </div>
+                        <FieldHelper id={statusId} role={result ? 'status' : undefined} aria-live="polite"
+                          aria-atomic="true" className="min-w-0 max-w-full break-words text-center text-xs">
+                          {result ? feedbackText(result.state) : ''}
+                        </FieldHelper>
+                        {choice && result && ['failed', 'conflict', 'refresh-failed'].includes(result.state) ?
+                          <Button type="button" variant="soft" size="sm"
+                            className="h-auto min-h-9 max-w-full whitespace-normal px-2 py-1 text-center"
+                            disabled={!!saving || preview}
+                            aria-label={`${retryLabel} · ${label} · ${channelLabel}`}
+                            onClick={() => void (result.state === 'refresh-failed'
+                              ? reviewLatest(choice, result.checked) : save(choice, result.checked))}>
+                            {retryLabel}
+                          </Button> : null}
+                      </Field>
                     );
                   })}
                 </div>
@@ -223,11 +290,6 @@ export function NotificationSettings({
             {status || '…'}
           </p>
         )}
-        {choices && status ? (
-          <p role="status" className="text-sm">
-            {status}
-          </p>
-        ) : null}
       </CardContent>
     </Card>
   );
