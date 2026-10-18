@@ -7,6 +7,19 @@ import { processIdentity } from '../qa/process/identity.ts';
 
 const reviewCount = (log: string) => readFileSync(log, 'utf8').trim().split('\n').length;
 
+test('all scope skips a branch with no net changes', () => {
+  const r = repo();
+  try {
+    const file = join(r.settingsDirectory, 'settings.user.json');
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), reviewScope: 'all' }));
+    r.git(r.worktree, 'revert', '--no-edit', 'HEAD');
+    expect(r.git(r.worktree, 'diff', '--name-only', `${r.base}..HEAD`)).toBe('');
+    const result = r.run();
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    expect(existsSync(r.log)).toBe(false);
+  } finally { r.cleanup(); }
+});
+
 test('an all-scope tooling review keeps its explicit effort when landing resumes', () => {
   const r = repo();
   try {

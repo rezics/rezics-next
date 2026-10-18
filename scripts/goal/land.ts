@@ -272,7 +272,7 @@ export const SENSITIVE_REVIEW_PATHS = [
 ] as const;
 
 export function needsReview(kind: string | undefined, files: readonly string[]): boolean {
-  if (loadSettings().settings.reviewScope === 'all') return files.length > 0;
+  if (loadSettings().settings.reviewScope === 'all') return files.some(file => file.length > 0);
   return (kind === 'implementation' || kind === 'mechanism')
     && files.some(file => SENSITIVE_REVIEW_PATHS.some(path => path.endsWith('/') ? file.startsWith(path) : file === path)
       || /^services\/(main|content)\/(src\/.*|migrations\/.*)(?:authority|disclosure|rights|erasure|account-deletion)[^/]*\.(?:ts|sql)$/.test(file));
