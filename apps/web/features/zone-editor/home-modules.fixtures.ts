@@ -1,5 +1,6 @@
 import { targetKey } from '../address/path.ts';
-import type { WorkSummary } from '../api/showcase.ts';
+import { servedTypes } from '../catalogue/type-fixtures.ts';
+import type { ShowcaseWork, WorkSummary } from '../api/showcase.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { zoneWork } from '../realm/adapt.ts';
 import { siteHref } from '../realm/route.ts';
@@ -17,6 +18,22 @@ export const previewSummary = {
   address: { prefix: '/w/', key: targetKey(previewWork), suffixSource: title.value },
   avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: previewWork, resourceType: 'work' },
 } as WorkSummary;
+
+export const previewShowcaseWork: ShowcaseWork = {
+  profile: 'work-read-v1', id: previewWork, revision, mainVersion: revision,
+  title: previewSummary.name, cover: previewSummary.avatar,
+  address: { prefix: '/w/', key: targetKey(previewWork), suffixSource: title.value },
+  types: [servedTypes.types.find(type => type.presentation === 'book')!.type], tagline: null, completionStatus: null,
+  chapterCount: null, wordCount: null, lastUpdatedAt: null,
+  disclosure: 'public', publicationState: 'unpublished', originalTitle: null,
+  metadataRevision: null, description: null, descriptionObligations: { status: 'unassessed' },
+  mainVersionRevision: revision, mainVersionLabel: null, selectedLanguage: 'en',
+  sourcePosition: { dataEpoch: revision, sequence: '0' },
+  primaryCredits: [{ id: revision, role: 'author', participantKind: 'external-reference',
+    displayName: 'Jane Austen', agent: null, handle: null, provider: 'open-library',
+    key: '/authors/OL21594A', ordinal: 0 }],
+  links: { versions: '', classifications: '', adoptions: '', ratings: '', history: '', credits: '', metadata: '', editions: '' },
+};
 
 export function collectionPreview(state = 'complete'): ZoneAuthoringPreview {
   return {
@@ -39,11 +56,8 @@ export function collectionPreview(state = 'complete'): ZoneAuthoringPreview {
 export function previewReaders(): PreviewModuleReaders {
   return {
     async publicModules() { throw new Error('An unpublished saved source must not use a public module route'); },
-    async summaries(targets) { return new Map(targets.filter(target => target === previewWork).map(target => [target, previewSummary])); },
-    work(item, context, mount) {
-      return zoneWork({ ...item, cover: item.cover ?? previewSummary.avatar, types: [], tagline: null,
-        completionStatus: null, chapterCount: null, wordCount: null, lastUpdatedAt: null }, context, null, mount);
-    },
+    async summaries(targets) { return new Map(targets.filter(target => target === previewWork).map(target => [target, previewShowcaseWork])); },
+    work: zoneWork,
     context: context => context.realm,
     more(module, context) {
       const mount = module.source.kind === 'collection' ? context.mounts?.get(module.source.collection) : null;

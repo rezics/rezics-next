@@ -1,4 +1,4 @@
-import { readShowcaseHeaders, readShowcaseImages, readShowcaseWorks, readWorkShowcase } from '../api/showcase.ts';
+import { readShowcaseImages, readShowcaseWorks, readWorkShowcase } from '../api/showcase.ts';
 import { slideImageUrls } from '../showcase/stage.ts';
 import { readRankingModuleAnswer } from './ranking-read.ts';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -88,25 +88,10 @@ export function summaryWork(
   },
   context: AdaptContext,
   mount: string | null = null,
-): ZoneWork {
-  return zoneWork(
-    {
-      id: item.id,
-      title: item.title,
-      address: item.address,
-      cover: item.cover ?? { kind: 'fallback', policy: 'zone', key: item.id, resourceType: 'work' },
-      types: [],
-      tagline: null,
-      completionStatus: null,
-      chapterCount: null,
-      wordCount: null,
-      lastUpdatedAt: null,
-      inZone: item.inZone,
-    },
-    context,
-    null,
-    mount,
-  );
+): Pick<ZoneWork, 'id' | 'href' | 'title'> {
+  // A named reference can link to a Work; it has no semantic kind or cover to render as a card.
+  return { id: item.id, title: zoneText(item.title),
+    href: workLink(context, item.id, mount, undefined, item.inZone, item.address) };
 }
 
 /** Where a quote or discussion about a Work leads: its discussion in the Zone, or on the canonical page if not in it. */
@@ -140,10 +125,13 @@ export function withRealmCard(work: ZoneWork, known: ZoneWork | undefined): Zone
     kind: known.kind,
     author: work.author ?? known.author,
     authorHref: work.author ? work.authorHref : known.authorHref,
+    authors: work.authors ?? known.authors,
     tagline: work.tagline ?? known.tagline,
     factObligations: work.factObligations ?? known.factObligations,
     status: work.status ?? known.status,
     chapters: work.chapters ?? known.chapters,
+    words: work.words ?? known.words,
+    updatedAt: work.updatedAt ?? known.updatedAt,
     cover: work.cover ?? known.cover,
     decision: work.decision ?? known.decision,
     hub: work.hub ?? known.hub ?? null,
@@ -206,29 +194,41 @@ export async function loadFeedWorks(feed: RealmFeed, context: AdaptContext,
 }
 
 export const showcaseContext = (context: AdaptContext) =>
-  context.realm.startsWith('https://rezics.com/id/') ? context.realm : 'https://rezics.com/id/' + context.realm;
+  !context.realm || context.realm.startsWith('https://rezics.com/id/') ? context.realm : 'https://rezics.com/id/' + context.realm;
+
+/** A thin reference only becomes a card after a complete authorized read, even outside the Realm. */
+async function completeModuleCards(context: AdaptContext, targets: readonly string[],
+  known: ReadonlyMap<string, ZoneWork>, read = readShowcaseWorks): Promise<ReadonlyMap<string, ZoneWork> | null> {
+  const missing = [...new Set(targets)].filter(target => !known.has(target));
+  const cards = new Map(known);
+  for (let offset = 0; offset < missing.length; offset += 64) {
+    const works = await read(missing.slice(offset, offset + 64), showcaseContext(context));
+    for (const [target, work] of works) cards.set(target, zoneWork(work, context, null));
+  }
+  return targets.every(target => cards.has(target)) ? cards : null;
+}
 
 export async function loadHeroModule(
   module: PresentationModule, presentation: ZonePresentation, context: AdaptContext,
   slideMedia: ZonePresentationRead['slideMedia'],
   read = loadFeedWorks,
+  cards = realmCards,
+  readWorks = readShowcaseWorks,
 ): Promise<ModuleState<'hero-carousel'>> {
   const scheduled = liveSlides(presentation.slides, Date.now()).slice(0, 5);
   if (scheduled.length) {
     const targets = scheduled.flatMap(slide => 'work' in slide ? [slide.work] : []);
     const [summaries, known] = await Promise.all([
-      readShowcaseWorks(targets, showcaseContext(context)),
-      realmCards(context, targets),
+      readWorks(targets, showcaseContext(context)),
+      cards(context, targets),
     ]);
-    const headers = await readShowcaseHeaders(targets.filter(target => summaries.has(target) && !known.has(target)));
+    if (targets.some(target => !summaries.has(target) && !known.has(target))) return failed;
     const slides: ZoneShowcaseSlide[] = scheduled.flatMap(slide => {
       const summary = 'work' in slide ? summaries.get(slide.work) : null;
-      if ('work' in slide && !summary) return [];
-      const header = summary && headers.get(summary.reference);
-      const named = summary ? (header ? zoneWork(header, context, null) : summaryWork({ id: summary.reference,
-        title: summary.name, cover: summary.avatar, address: summary.address as CanonicalAddress }, context)) : null;
-      const work = named && summary ? withRealmCard({ ...named,
-        href: known.get(summary.reference)?.href ?? resourceHref('/w/', summary.address as CanonicalAddress) }, known.get(summary.reference)) : null;
+      const realmCard = 'work' in slide ? known.get(slide.work) : undefined;
+      const complete = summary ? zoneWork(summary, context, null) : null;
+      const work = complete && summary ? { ...withRealmCard(complete, realmCard), kind: complete.kind,
+        href: realmCard?.href ?? resourceHref('/w/', summary.address) } : realmCard ?? null;
       const adapted = presentationSlide(slide, work, context, slideMedia);
       return adapted ? [adapted] : [];
     });
@@ -448,6 +448,7 @@ export async function loadQuoteModule(
   module: PresentationModule,
   context: AdaptContext,
   read = { quotes: readZoneQuotes, cards: realmCards },
+  works = readShowcaseWorks,
 ): Promise<ModuleState<'quote-stream'>> {
   if (module.source.kind !== 'query-block' || module.source.block !== 'reader-quotes')
     return unsupported;
@@ -456,12 +457,13 @@ export async function loadQuoteModule(
   const limit = module.options?.limit ?? 6;
   if (underfilled(page.data, page.data.items.length, limit)) return failed;
   const visible = page.data.items.slice(0, limit);
-  const cards = await read.cards(context, visible.map(item => item.work.id));
+  const cards = await completeModuleCards(context, visible.map(item => item.work.id), await read.cards(context, visible.map(item => item.work.id)), works);
+  if (!cards) return failed;
   const items = visible.map((item) => ({
     id: item.id,
     body: zoneContentText(item.excerpt),
     reader: item.authorName,
-    work: withRealmCard(summaryWork(item.work, context), cards.get(item.work.id)),
+    work: { ...cards.get(item.work.id)!, href: summaryWork(item.work, context).href },
     href: replyHref(context, item.work),
   }));
   return items.length ? { state: 'ready', data: { quotes: items } } : empty;
@@ -471,6 +473,7 @@ export async function loadDiscussionModule(
   module: PresentationModule,
   context: AdaptContext,
   read = { discussions: readZoneDiscussions, cards: realmCards },
+  works = readShowcaseWorks,
 ): Promise<ModuleState<'discussion-list'>> {
   if (module.source.kind !== 'query-block' || module.source.block !== 'discussions')
     return unsupported;
@@ -479,32 +482,37 @@ export async function loadDiscussionModule(
   const limit = module.options?.limit ?? 8;
   if (underfilled(page.data, page.data.items.length, limit)) return failed;
   const visible = page.data.items.slice(0, limit);
-  const cards = await read.cards(context, visible.map(item => item.work.id));
+  const cards = await completeModuleCards(context, visible.map(item => item.work.id), await read.cards(context, visible.map(item => item.work.id)), works);
+  if (!cards) return failed;
   const items = visible.map((item) => ({
     id: item.id,
     title: zoneContentText(item.excerpt),
     href: replyHref(context, item.work),
     replies: null,
-    work: withRealmCard(summaryWork(item.work, context), cards.get(item.work.id)),
+    work: { ...cards.get(item.work.id)!, href: summaryWork(item.work, context).href },
   }));
   return items.length ? { state: 'ready', data: { items } } : empty;
 }
 
-async function editorLists(
+export async function loadEditorListsModule(
   module: PresentationModule,
   context: AdaptContext,
+  read = { lists: readZoneEditorLists, cards: realmCards, works: readShowcaseWorks },
 ): Promise<ModuleState<'editorial-list'>> {
   const collections = [module.source, ...(module.tabs ?? []).map((tab) => tab.source)].flatMap(
     (source) => (source.kind === 'collection' ? [source.collection] : []),
   );
   if (!collections.length) return unsupported;
-  const read = await readZoneEditorLists(context.realm, context.locale);
-  if (!read.ok) return failed;
+  const page = await read.lists(context.realm, context.locale);
+  if (!page.ok) return failed;
+  if (page.data.lists.some(list => collections.includes(list.collection) && list.state !== 'complete')) return failed;
   // A list whose Works are all private has nothing to show yet, like an empty module.
-  const visible = read.data.lists
+  const visible = page.data.lists
     .filter((list) => collections.includes(list.collection) && list.items.length)
     .slice(0, module.options?.limit ?? 2);
-  const cards = await realmCards(context, visible.flatMap(list => list.items.map(item => item.id)));
+  const targets = visible.flatMap(list => list.items.map(item => item.id));
+  const cards = await completeModuleCards(context, targets, await read.cards(context, targets), read.works);
+  if (!cards) return failed;
   const lists = visible.map((list) => {
     // A Collection the Zone mounts opens as its own page, and its members open under that mount.
     const mount = context.mounts?.get(list.collection) ?? null;
@@ -514,7 +522,7 @@ async function editorLists(
       blurb: null,
       href: mount && !context.unrouted ? spaceHref(context.ref, 'site', [mount]) : null,
       items: list.items.map((item) =>
-        withRealmCard(summaryWork(item, context, mount), cards.get(item.id)),
+        ({ ...cards.get(item.id)!, href: summaryWork(item, context, mount).href }),
       ),
     };
   });
@@ -562,7 +570,7 @@ async function load(
     case 'discussion-list':
       return loadDiscussionModule(module, context);
     case 'editorial-list':
-      return editorLists(module, context);
+      return loadEditorListsModule(module, context);
     case 'chip-nav':
       return loadGenreModule(module, context);
     case 'ranking':
@@ -611,7 +619,7 @@ export async function loadHomeModules(
   slideMedia: ZonePresentationRead['slideMedia'] = [],
 ) {
   if (context.publishedHome) return loadPublishedHomeModules(context.publishedHome, presentation, context, {
-    publicModules: loadModules, summaries: readShowcaseWorks, work: summaryWork, context: showcaseContext,
+    publicModules: loadModules, summaries: readShowcaseWorks, work: zoneWork, context: showcaseContext,
     more: moduleMoreHref, enrich: enrichShowcaseModules, images: readHeroImages,
   });
   const modules = await loadModules(presentation, context, slideMedia);

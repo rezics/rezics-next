@@ -16,7 +16,8 @@ import { parseTheme } from '../shell/preferences.ts';
 import type { ZoneHomePage } from '../zone-editor/home-document.tsx';
 import { loadDocumentHomeModules, localizedHomePresentation, type HomeSourceSelection } from '../zone-editor/home-modules.ts';
 import { zoneLookEnabled } from './execution.ts';
-import { enrichShowcaseModules, loadModules, moduleMoreHref, readHeroImages, showcaseContext, summaryWork } from '../realm/modules.ts';
+import { enrichShowcaseModules, loadModules, moduleMoreHref, readHeroImages, showcaseContext } from '../realm/modules.ts';
+import { zoneWork } from '../realm/adapt.ts';
 import type { SiteLink } from './site-navigation.tsx';
 import { savedSiteCuts } from './site-cuts.ts';
 import { ZoneDocumentHome } from './site-pages.tsx';
@@ -219,7 +220,7 @@ export function zoneHomeFrameModel(loaded: ZoneHomeFrameLoad, locale: UiLocale, 
 export function loadZoneHomeModules(page: ZoneHomePage | null, presentation: Parameters<typeof localizedHomePresentation>[0],
   selection: HomeSourceSelection, context: AdaptContext, defaultTitle: string) {
   return loadDocumentHomeModules(page, selection, localizedHomePresentation(presentation, context.locale), context, {
-    publicModules: loadModules, summaries: readShowcaseWorks, work: summaryWork, context: showcaseContext,
+    publicModules: loadModules, summaries: readShowcaseWorks, work: zoneWork, context: showcaseContext,
     more: moduleMoreHref, enrich: enrichShowcaseModules, images: readHeroImages,
   }, defaultTitle);
 }
