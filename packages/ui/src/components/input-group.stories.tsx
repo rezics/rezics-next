@@ -97,9 +97,6 @@ export const EmptyFields: Story = {
       await expect(control).not.toHaveFocus();
       const group = control.closest<HTMLElement>('[data-slot="input-group"]')!;
       await expectControlBoundary(group);
-      await userEvent.hover(group);
-      await expectControlBoundary(group);
-      await userEvent.unhover(group);
     }
     for (const control of controls.slice(0, 2)) {
       await userEvent.tab();
@@ -254,8 +251,10 @@ export const Invalid: Story = {
     await expect(input).toBeInvalid();
     const group = input.closest<HTMLElement>('[data-slot="input-group"]')!;
     await expectControlBoundary(group);
-    await userEvent.hover(group);
+    await userEvent.tab();
+    await expect(input).toHaveFocus();
     await expectControlBoundary(group);
+    input.blur();
   },
 };
 

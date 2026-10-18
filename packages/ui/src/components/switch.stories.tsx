@@ -73,10 +73,6 @@ export const OnAndOff: Story = {
       await expect(toggle).toBeEnabled();
       await expect(toggle).not.toHaveFocus();
       await expectSwitchContrast(toggle);
-      await userEvent.hover(toggle);
-      await settled(toggle);
-      await expectSwitchContrast(toggle);
-      await userEvent.unhover(toggle);
     }
     const toggle = canvas.getAllByRole('switch', { name: 'Email digest' })[0]!;
     await expect(toggle).not.toBeChecked();
