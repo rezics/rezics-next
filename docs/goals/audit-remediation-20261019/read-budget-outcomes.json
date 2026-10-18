@@ -5,21 +5,21 @@
   "baseline": {
     "revision": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
     "workingTree": "Outcome tests and minimal QA support only; production code unchanged.",
-    "run": "20261018t212935-ae08d6",
-    "recordedJob": "3684d36e-5f07-4b5c-8c29-8aa5331ed245",
-    "assertionReached": "D5-001 cancellation fails in five signed-in bodies; all six notification budget/admission controls pass. Latest Zone run stops in setup. Query/rating proof remains run 20261018t204708-fb68cb: six chapter qualification failures, six 101-vote failures, stranger default-discovery failure; all six cursor traversals pass. D5-004 persistent fault unconfirmed.",
-    "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check --only types,lint' --then 'bun scripts/goal/goalctl.ts test tests/qa/integration/notification-read-budget.test.ts tests/qa/integration/official-zone-read-budget.test.ts' -- task docs:check",
+    "run": "20261018t214255-42a748",
+    "recordedJob": "ad51ec21-4e8b-43d5-9268-f06e9f0bff1d",
+    "assertionReached": "Zone visitor body proves 8 succeeds and 9/10 fail; signed-in Zone body failures are a missing actingSubject test premise, corrected for next retained-corpus run. Earlier runs prove five notification cancellation bodies, six chapter qualification bodies and six 101-vote bodies fail; stranger default discovery fails. All six cursor traversals pass. D5-004 persistent fault and notification allocation exhaustion remain unconfirmed.",
+    "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check --only types,lint' --then 'bun scripts/goal/goalctl.ts test tests/qa/integration/official-zone-read-budget.test.ts' -- task docs:check",
     "expectedGate": "Intentionally failing baseline regression, never a passing done gate.",
     "dispatchedRevision": "50e53025617238f9d9d8127be78179c3fa3bc12c",
-    "currency": "Required check refreshed the worker to main fb4b5ea16ec1a45fc228b51630e03847000ac947; git diff 7df2e285d3..fb4b5ea16e -- services/main/src is empty. Each attempt/persona records its exact tested source; revision identifies unchanged API production code.",
+    "currency": "Required check refreshed worker to main 9f5a8ad20c4bacddda4be2b1583f4987f6d478a3; git diff 7df2e285d3..9f5a8ad20c -- services/main/src is empty. Exact tested heads are recorded per attempt; API code stays production-equivalent to revision.",
     "staticChecks": {
-      "job": "3684d36e-5f07-4b5c-8c29-8aa5331ed245",
+      "job": "ad51ec21-4e8b-43d5-9268-f06e9f0bff1d",
       "docs": "passed",
       "types": "passed",
       "lint": "passed",
       "ast": "passed",
       "guards": "passed in preceding job 952ad34f-5eba-4250-9cd5-37c617521094; not repeated after test premise edits",
-      "evidence": ".temp/goal/check/run-EQr2O2/output.log",
+      "evidence": ".temp/goal/check/run-Zkvgln/output.log",
       "targetedHarness": "raw-update-scan and integration-shards passed in preceding run 20261018t200309-394b25"
     },
     "attempts": [
@@ -206,10 +206,37 @@
           }
         ],
         "nextCheck": "Only the corrected same-Space Zone corpus needs another isolated run. Keep the notification/query/rating evidence and existing budgets; no broad rerun."
+      },
+      {
+        "job": "ad51ec21-4e8b-43d5-9268-f06e9f0bff1d",
+        "run": "20261018t214255-42a748",
+        "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
+        "harnessBase": "9f5a8ad20c4bacddda4be2b1583f4987f6d478a3",
+        "projectBudgetMs": 480000,
+        "result": "visitor Zone population failure confirmed; five signed-in body failures were malformed requests, not defect evidence",
+        "capabilities": [
+          {
+            "capability": "zones",
+            "project": 1,
+            "wallMs": 333800,
+            "assertionReached": true,
+            "diagnosis": "Same-Space preparation succeeds and a consistent reusable cut is retained. Visitor 8-Zone response is 200 with three items, 67 graph calls, 89107 bytes, 2232 ms; 9 and 10 return raw 503 work_read_unavailable with 16 graph calls. Other five readers return 400 invalid_home_command at every population because authentication requires actingSubject; these body failures are fixture premise errors, not population proof. Next requests include each signed-in reader own Agent and preserve the omitted-pair refusal as an admission control.",
+            "evidence": ".artifacts/qa/20261018t214255-42a748/logs/integration-1.log",
+            "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-c3b4c64624d84807-evidence.json"
+          }
+        ],
+        "preparation": {
+          "sourceBuildMs": 231959,
+          "runnerStartupMs": 58017,
+          "restoreMs": 34980,
+          "restoreAdmissionMs": 2201,
+          "reuse": "retained .temp/audit-bounded-reads/zones/owners/backup.json"
+        },
+        "nextCheck": "Rerun only the corrected Zone persona queries and admission controls on the retained cut; no corpus rebuild or raised budget."
       }
     ],
-    "harnessBase": "fb4b5ea16ec1a45fc228b51630e03847000ac947",
-    "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359"
+    "harnessBase": "9f5a8ad20c4bacddda4be2b1583f4987f6d478a3",
+    "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36"
   },
   "fixture": {
     "composition": "Real Account HTTP and composeMain with lifecycle, relay, Content, Access, Fuseki and PostgreSQL; no owner mocks.",
@@ -338,7 +365,7 @@
     },
     "zones": {
       "file": "tests/qa/integration/official-zone-read-budget.test.ts",
-      "line": 28,
+      "line": 30,
       "titleTemplate": "for (const name of personaNames) test(`D5-006 ${name}: ninth and tenth official Zones preserve bounded suggestions`, async () => {"
     },
     "ratings": {
@@ -355,6 +382,11 @@
       "file": "tests/qa/integration/audit-bounded-reads.test.ts",
       "titleTemplate": "test('D5-003 ' + name + ': absent and unpublished chapter phrases remain exact private controls', async () => {",
       "line": 91
+    },
+    "zonesAdmission": {
+      "file": "tests/qa/integration/official-zone-read-budget.test.ts",
+      "line": 46,
+      "titleTemplate": "for (const name of personaNames) test(`D5-006 ${name}: suggestions require authentication and the acting Agent together`, async () => {"
     }
   },
   "personas": [
@@ -520,18 +552,53 @@
       "officialZones": {
         "case": "D5-006-zones",
         "test": "zones",
-        "authority": "Public suggestions; local/admin role gives no extra public candidates.",
+        "authority": "Anonymous public suggestions without actingSubject.",
         "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
         "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t212935-ae08d6",
-          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
-          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-2.log",
-          "assertionReached": false,
-          "status": "setup rejected official cross-Space default Realm with 400; next preparation creates Zone capability in the Realm Space. No suggestions outcome inferred."
-        }
+          "run": "20261018t214255-42a748",
+          "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
+          "evidence": ".artifacts/qa/20261018t214255-42a748/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-c3b4c64624d84807-evidence.json",
+          "assertionReached": true,
+          "defectAssertionConfirmed": true,
+          "answers": [
+            {
+              "population": 8,
+              "status": 200,
+              "elapsedMs": 2232.4259590000147,
+              "graphCalls": 67,
+              "graphBytes": 89107,
+              "trace": "ae538c17a87871f18f17bfe8908ee16e",
+              "code": null,
+              "items": 3
+            },
+            {
+              "population": 9,
+              "status": 503,
+              "elapsedMs": 229.01771400001599,
+              "graphCalls": 16,
+              "graphBytes": 34668,
+              "trace": "50449a21ddd35cb28afca67e2864ff89",
+              "code": "work_read_unavailable",
+              "items": null
+            },
+            {
+              "population": 10,
+              "status": 503,
+              "elapsedMs": 228.34149899997283,
+              "graphCalls": 16,
+              "graphBytes": 34668,
+              "trace": "4c00b720006c30bba2c080a15c88f5c6",
+              "code": "work_read_unavailable",
+              "items": null
+            }
+          ],
+          "status": "8 succeeds, 9/10 fail raw 503 at population assertion."
+        },
+        "admissionTest": "zonesAdmission"
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -749,18 +816,53 @@
       "officialZones": {
         "case": "D5-006-zones",
         "test": "zones",
-        "authority": "Public suggestions; local/admin role gives no extra public candidates.",
+        "authority": "Own Account paired with own acting Agent; public candidates obey personal follows and exclusions. Local/admin role gives no extra public candidates.",
         "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
         "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t212935-ae08d6",
-          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
-          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-2.log",
-          "assertionReached": false,
-          "status": "setup rejected official cross-Space default Realm with 400; next preparation creates Zone capability in the Realm Space. No suggestions outcome inferred."
-        }
+          "run": "20261018t214255-42a748",
+          "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
+          "evidence": ".artifacts/qa/20261018t214255-42a748/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-c3b4c64624d84807-evidence.json",
+          "assertionReached": true,
+          "defectAssertionConfirmed": false,
+          "answers": [
+            {
+              "population": 8,
+              "status": 400,
+              "elapsedMs": 14.396852999983821,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "505c0b9f220a88e1cd8ee55f52128fab",
+              "code": "invalid_home_command",
+              "items": null
+            },
+            {
+              "population": 9,
+              "status": 400,
+              "elapsedMs": 10.386117000016384,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "36a7442ac95a61601b5a367e4a901400",
+              "code": "invalid_home_command",
+              "items": null
+            },
+            {
+              "population": 10,
+              "status": 400,
+              "elapsedMs": 8.392875000019558,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "119103cf9fa4caece62bf1d9864996c7",
+              "code": "invalid_home_command",
+              "items": null
+            }
+          ],
+          "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
+        },
+        "admissionTest": "zonesAdmission"
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -977,18 +1079,53 @@
       "officialZones": {
         "case": "D5-006-zones",
         "test": "zones",
-        "authority": "Public suggestions; local/admin role gives no extra public candidates.",
+        "authority": "Own Account paired with own acting Agent; public candidates obey personal follows and exclusions. Local/admin role gives no extra public candidates.",
         "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
         "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t212935-ae08d6",
-          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
-          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-2.log",
-          "assertionReached": false,
-          "status": "setup rejected official cross-Space default Realm with 400; next preparation creates Zone capability in the Realm Space. No suggestions outcome inferred."
-        }
+          "run": "20261018t214255-42a748",
+          "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
+          "evidence": ".artifacts/qa/20261018t214255-42a748/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-c3b4c64624d84807-evidence.json",
+          "assertionReached": true,
+          "defectAssertionConfirmed": false,
+          "answers": [
+            {
+              "population": 8,
+              "status": 400,
+              "elapsedMs": 10.172514000034425,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "148bac38996e471dd4cacd223f767d6f",
+              "code": "invalid_home_command",
+              "items": null
+            },
+            {
+              "population": 9,
+              "status": 400,
+              "elapsedMs": 8.987396000011358,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "d063f36cd51c415473d451c824e896fa",
+              "code": "invalid_home_command",
+              "items": null
+            },
+            {
+              "population": 10,
+              "status": 400,
+              "elapsedMs": 6.426264000008814,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "6d0fb42b2ad0c151fe92016d43c48bdd",
+              "code": "invalid_home_command",
+              "items": null
+            }
+          ],
+          "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
+        },
+        "admissionTest": "zonesAdmission"
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -1205,18 +1342,53 @@
       "officialZones": {
         "case": "D5-006-zones",
         "test": "zones",
-        "authority": "Public suggestions; local/admin role gives no extra public candidates.",
+        "authority": "Own Account paired with own acting Agent; public candidates obey personal follows and exclusions. Local/admin role gives no extra public candidates.",
         "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
         "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t212935-ae08d6",
-          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
-          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-2.log",
-          "assertionReached": false,
-          "status": "setup rejected official cross-Space default Realm with 400; next preparation creates Zone capability in the Realm Space. No suggestions outcome inferred."
-        }
+          "run": "20261018t214255-42a748",
+          "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
+          "evidence": ".artifacts/qa/20261018t214255-42a748/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-c3b4c64624d84807-evidence.json",
+          "assertionReached": true,
+          "defectAssertionConfirmed": false,
+          "answers": [
+            {
+              "population": 8,
+              "status": 400,
+              "elapsedMs": 11.383027000003494,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "be4f895f07f0ec4c56c2304bf738d895",
+              "code": "invalid_home_command",
+              "items": null
+            },
+            {
+              "population": 9,
+              "status": 400,
+              "elapsedMs": 9.187284000043292,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "9fabfc441ecb36f837e5316a95d01429",
+              "code": "invalid_home_command",
+              "items": null
+            },
+            {
+              "population": 10,
+              "status": 400,
+              "elapsedMs": 7.027538999973331,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "7842bd9db70458ef056d7d9fe3ed5ae9",
+              "code": "invalid_home_command",
+              "items": null
+            }
+          ],
+          "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
+        },
+        "admissionTest": "zonesAdmission"
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -1433,18 +1605,53 @@
       "officialZones": {
         "case": "D5-006-zones",
         "test": "zones",
-        "authority": "Public suggestions; local/admin role gives no extra public candidates.",
+        "authority": "Own Account paired with own acting Agent; public candidates obey personal follows and exclusions. Local/admin role gives no extra public candidates.",
         "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
         "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t212935-ae08d6",
-          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
-          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-2.log",
-          "assertionReached": false,
-          "status": "setup rejected official cross-Space default Realm with 400; next preparation creates Zone capability in the Realm Space. No suggestions outcome inferred."
-        }
+          "run": "20261018t214255-42a748",
+          "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
+          "evidence": ".artifacts/qa/20261018t214255-42a748/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-c3b4c64624d84807-evidence.json",
+          "assertionReached": true,
+          "defectAssertionConfirmed": false,
+          "answers": [
+            {
+              "population": 8,
+              "status": 400,
+              "elapsedMs": 11.12943799997447,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "7f74d9f88c091aa3de3da5bbd4451aa3",
+              "code": "invalid_home_command",
+              "items": null
+            },
+            {
+              "population": 9,
+              "status": 400,
+              "elapsedMs": 7.288120999990497,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "235787004af56b8a129cb2c4d96a5e97",
+              "code": "invalid_home_command",
+              "items": null
+            },
+            {
+              "population": 10,
+              "status": 400,
+              "elapsedMs": 7.722379999991972,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "6cce26dc78354141a0a76676163d60d3",
+              "code": "invalid_home_command",
+              "items": null
+            }
+          ],
+          "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
+        },
+        "admissionTest": "zonesAdmission"
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -1661,18 +1868,53 @@
       "officialZones": {
         "case": "D5-006-zones",
         "test": "zones",
-        "authority": "Public suggestions; local/admin role gives no extra public candidates.",
+        "authority": "Own Account paired with own acting Agent; public candidates obey personal follows and exclusions. Local/admin role gives no extra public candidates.",
         "disclosure": "Nonempty bounded suggestions at 8, 9 and 10 official Zones; private Realm absent.",
         "cancellationRetry": "Each answer is a single raw read; no retry masking or larger candidate window.",
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t212935-ae08d6",
-          "sourceRevision": "080f543f28e9841cb9d34600bfe1b26ac6bce359",
-          "evidence": ".artifacts/qa/20261018t212935-ae08d6/logs/integration-2.log",
-          "assertionReached": false,
-          "status": "setup rejected official cross-Space default Realm with 400; next preparation creates Zone capability in the Realm Space. No suggestions outcome inferred."
-        }
+          "run": "20261018t214255-42a748",
+          "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
+          "evidence": ".artifacts/qa/20261018t214255-42a748/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-c3b4c64624d84807-evidence.json",
+          "assertionReached": true,
+          "defectAssertionConfirmed": false,
+          "answers": [
+            {
+              "population": 8,
+              "status": 400,
+              "elapsedMs": 11.593012999976054,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "fbd856b501b438fd5e7f3e6b5397613d",
+              "code": "invalid_home_command",
+              "items": null
+            },
+            {
+              "population": 9,
+              "status": 400,
+              "elapsedMs": 9.618849000020418,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "4ab13e53367ff2dd623a43bd641cae2f",
+              "code": "invalid_home_command",
+              "items": null
+            },
+            {
+              "population": 10,
+              "status": 400,
+              "elapsedMs": 8.84881499997573,
+              "graphCalls": 0,
+              "graphBytes": 0,
+              "trace": "b8530c614529b4f0b835c0ff12488736",
+              "code": "invalid_home_command",
+              "items": null
+            }
+          ],
+          "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
+        },
+        "admissionTest": "zonesAdmission"
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -1786,7 +2028,7 @@
         "services/main/src/modules/onboarding/suggestions.ts",
         "services/main/src/modules/zone/publication.ts"
       ],
-      "status": "Body still unreached. Real operator and OAuth scope corrected; official cross-Space Realm was properly refused. Next fixture creates the Zone capability within the Realm Space before measuring 8/9/10 official population."
+      "status": "Visitor outcome proves 8 official Zones readable and 9/10 raw 503. Five signed-in requests omitted actingSubject and their 400 is not population evidence; corrected own-Agent requests need the final retained-corpus run."
     },
     {
       "case": "D5-006-ratings",

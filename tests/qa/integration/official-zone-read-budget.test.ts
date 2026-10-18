@@ -18,8 +18,10 @@ async function sample() {
         expectedHead: zone.revision, official: {}, actingSubject: sessions.operator.actingSubject });
     }
     for (const name of personaNames) {
+      const query = new URLSearchParams({ languages: 'en',
+        ...(name === 'visitor' ? {} : { actingSubject: sessions[name].actingSubject! }) });
       answers.push({ population, persona: name, result: await measured(sessions[name], 'GET',
-        '/v1/onboarding/suggested-follows?languages=en') });
+        '/v1/onboarding/suggested-follows?' + query) });
     }
   }
   return answers;
@@ -40,4 +42,14 @@ for (const name of personaNames) test(`D5-006 ${name}: ninth and tenth official 
     expect(JSON.stringify(result.body)).not.toContain(privateRealm.realm);
   }
 }, 120_000);
+
+for (const name of personaNames) test(`D5-006 ${name}: suggestions require authentication and the acting Agent together`, async () => {
+  const query = name === 'visitor' ? '?actingSubject=' + encodeURIComponent(sessions.owner.actingSubject!) : '';
+  const result = await measured(sessions[name], 'GET', '/v1/onboarding/suggested-follows' + query);
+  record({ case: 'D5-006-zones-admission', persona: name, assertionReached: true, status: result.status });
+  expect(result.status).toBe(400);
+  expect(result.body).toMatchObject({ code: 'invalid_home_command' });
+  expect(result.body).not.toHaveProperty('items');
+  expect(result.graphCalls).toBe(0);
+}, 10_000);
 
