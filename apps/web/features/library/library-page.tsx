@@ -379,13 +379,6 @@ export function LibraryPage({ state, overview, view, reading, authors, goal, sta
         </div>
         <VisibilityControl initial={data.visibility} locale={locale} messages={messages} />
       </header>
-      {loansView ? null : <>
-        {goal ? <ReadingGoal agent={data.agent} initial={goal} locale={locale} messages={messages} save={saveGoal} /> : null}
-        {stats ? <ReadingStats stats={stats} locale={locale} messages={messages} /> : null}
-        <LibraryImport agent={data.agent} context={data.ratingContext} locale={locale} messages={messages}
-          api={importApi} shelf={importShelf} />
-        <LibraryExport agent={data.agent} locale={locale} messages={messages} api={exportApi} store={exportStore} />
-      </>}
       {!loansView && firstUse ? <>
         <FirstUse locale={locale} messages={messages} />
         {authors ? <FollowedAuthorsSection authors={authors} avatarQuery={avatarQuery} locale={locale}
@@ -406,6 +399,17 @@ export function LibraryPage({ state, overview, view, reading, authors, goal, sta
             </>}
           </div>
         </div>}
+      {!loansView ? <details className="min-w-0 rounded-2xl border border-border/60 p-4 sm:p-6">
+        <summary className="min-h-8 cursor-pointer rounded-sm font-medium text-muted-foreground outline-none
+          focus-visible:ring-2 focus-visible:ring-ring">{t.libraryTools}</summary>
+        <div className="mt-5 grid min-w-0 gap-6">
+          {goal ? <ReadingGoal agent={data.agent} initial={goal} locale={locale} messages={messages} save={saveGoal} /> : null}
+          {stats ? <ReadingStats stats={stats} locale={locale} messages={messages} /> : null}
+          <LibraryImport agent={data.agent} context={data.ratingContext} locale={locale} messages={messages}
+            api={importApi} shelf={importShelf} />
+          <LibraryExport agent={data.agent} locale={locale} messages={messages} api={exportApi} store={exportStore} />
+        </div>
+      </details> : null}
     </PageContainer>
     </CopiesApiProvider>
   </LibraryProvider>;

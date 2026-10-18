@@ -2,6 +2,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { LibraryMessages } from '../messages.ts';
 
 export default {
+  libraryTools: '목표, 통계, 가져오기 및 내보내기',
   title: '서재',
   description: '책장, 읽고 있는 작품, 가지고 있는 책, 기록한 대출을 한곳에서 관리하세요.',
   workCount: plural({ one: insert('작품 {{count}}개'), other: insert('작품 {{count}}개') }, { count: asValue(number()) }),
