@@ -2,6 +2,8 @@ import type { RichTextEditorLabels } from '@rezics/ui/rich-text-editor';
 import { defineMessages } from '../../i18n/define.ts';
 
 type DocumentEditorMessages = RichTextEditorLabels & {
+  retrySave: string;
+  removeImages: string;
   importFile: string;
   exportDocument: string;
   exportText: string;
@@ -10,6 +12,9 @@ type DocumentEditorMessages = RichTextEditorLabels & {
 
 export const messages = defineMessages<DocumentEditorMessages>({
   en: {
+    retrySave: "Retry",
+    removeImages: "Remove images",
+
     formatting: 'Format text',
     moreFormatting: 'More formatting',
     advancedMode: 'Advanced tools',
@@ -102,6 +107,9 @@ export const messages = defineMessages<DocumentEditorMessages>({
     invalidDocument: 'This file is not a supported document.',
   },
   'zh-Hant': {
+    retrySave: "重試",
+    removeImages: "移除圖片",
+
     formatting: '文字格式',
     moreFormatting: '更多格式',
     advancedMode: '進階工具',
@@ -194,6 +202,9 @@ export const messages = defineMessages<DocumentEditorMessages>({
     invalidDocument: '不支援這個文件檔案。',
   },
   'zh-Hans': {
+    retrySave: "重试",
+    removeImages: "移除图片",
+
     formatting: '文字格式',
     moreFormatting: '更多格式',
     advancedMode: '高级工具',
@@ -286,6 +297,9 @@ export const messages = defineMessages<DocumentEditorMessages>({
     invalidDocument: '不支持这个文档文件。',
   },
   ja: {
+    retrySave: "再試行",
+    removeImages: "画像を削除",
+
     formatting: '文字の書式',
     moreFormatting: 'その他の書式',
     advancedMode: '詳細ツール',
@@ -378,6 +392,9 @@ export const messages = defineMessages<DocumentEditorMessages>({
     invalidDocument: 'この文書ファイルには対応していません。',
   },
   ko: {
+    retrySave: "다시 시도",
+    removeImages: "이미지 제거",
+
     formatting: '텍스트 서식',
     moreFormatting: '추가 서식',
     advancedMode: '고급 도구',
@@ -470,6 +487,9 @@ export const messages = defineMessages<DocumentEditorMessages>({
     invalidDocument: '지원하지 않는 문서 파일입니다.',
   },
   de: {
+    retrySave: "Erneut versuchen",
+    removeImages: "Bilder entfernen",
+
     formatting: 'Text formatieren',
     moreFormatting: 'Weitere Formatierung',
     advancedMode: 'Erweiterte Werkzeuge',
@@ -563,6 +583,9 @@ export const messages = defineMessages<DocumentEditorMessages>({
     invalidDocument: 'Diese Dokumentdatei wird nicht unterstützt.',
   },
   fr: {
+    retrySave: "Réessayer",
+    removeImages: "Retirer les images",
+
     formatting: 'Mettre en forme',
     moreFormatting: 'Autres formats',
     advancedMode: 'Outils avancés',
@@ -656,6 +679,9 @@ export const messages = defineMessages<DocumentEditorMessages>({
     invalidDocument: 'Ce fichier de document n’est pas pris en charge.',
   },
   es: {
+    retrySave: "Reintentar",
+    removeImages: "Eliminar imágenes",
+
     formatting: 'Formato de texto',
     moreFormatting: 'Más formatos',
     advancedMode: 'Herramientas avanzadas',

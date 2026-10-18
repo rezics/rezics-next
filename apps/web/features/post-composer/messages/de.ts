@@ -1,6 +1,17 @@
 import type { PostMessages } from '../messages.ts';
 
 export default {
+  unwritten: "Auf dem Server wurde nichts geändert. Du kannst den Entwurf bearbeiten, das Ziel ändern oder diesen Versuch abbrechen.",
+  writeUnknown: "Das Ergebnis des letzten Schreibvorgangs ist unbestätigt. Setze denselben Versuch fort, um es sicher zu prüfen.",
+  writeAcknowledged: "Ein Teil dieses Beitrags ist auf dem Server gespeichert. Setze denselben Versuch fort, um doppelte Beiträge zu vermeiden.",
+  cancelAttempt: "Versuch abbrechen",
+  retryPost: "Beitrag erneut senden",
+  exportDraft: "Entwurf exportieren",
+  retrySave: "Speichern wiederholen",
+  draftIncomplete: "Aktuelle Änderungen sind nicht gespeichert. Beim erneuten Öffnen wird die zuletzt gespeicherte Version wiederhergestellt. Versuche es erneut oder exportiere vor dem Verlassen.",
+  draftSaveFailed: "Auf diesem Gerät konnte nicht gespeichert werden. Lass die Seite offen oder exportiere deinen Entwurf.",
+  draftSaving: "Entwurf wird gespeichert…",
+
   banned: 'Du bist aus dieser Community ausgeschlossen und kannst nicht posten. Dein Entwurf ist noch hier.',
   title: 'Beitrag erstellen',
   intro: 'Starte ein Gespräch in einer Community.',

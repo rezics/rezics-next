@@ -1,6 +1,17 @@
 import type { PostMessages } from '../messages.ts';
 
 export default {
+  unwritten: "No se hicieron cambios en el servidor. Puedes editar el borrador, cambiar su destino o cancelar este intento.",
+  writeUnknown: "No se ha confirmado la última escritura. Continúa con el mismo intento para comprobar el resultado con seguridad.",
+  writeAcknowledged: "Parte de esta publicación está guardada en el servidor. Continúa con el mismo intento para evitar duplicados.",
+  cancelAttempt: "Cancelar intento",
+  retryPost: "Reintentar publicación",
+  exportDraft: "Exportar borrador",
+  retrySave: "Reintentar guardado",
+  draftIncomplete: "Los cambios actuales no están guardados. Al volver a abrir se restaura la última versión guardada. Reintenta o exporta antes de salir.",
+  draftSaveFailed: "No se pudo guardar en este dispositivo. Mantén la página abierta o exporta el borrador.",
+  draftSaving: "Guardando borrador…",
+
   banned: 'Estás baneado de esta comunidad y no puedes publicar. Tu borrador sigue aquí.',
   title: 'Crear una publicación',
   intro: 'Empieza una conversación en una comunidad.',

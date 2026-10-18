@@ -1,6 +1,17 @@
 import type { PostMessages } from '../messages.ts';
 
 export default {
+  unwritten: "Aucune modification sur le serveur. Vous pouvez modifier le brouillon, changer sa destination ou annuler cette tentative.",
+  writeUnknown: "Le résultat de la dernière écriture est inconnu. Poursuivez la même tentative pour le vérifier sans risque de doublon.",
+  writeAcknowledged: "Une partie de cette publication est enregistrée sur le serveur. Poursuivez la même tentative pour éviter un doublon.",
+  cancelAttempt: "Annuler la tentative",
+  retryPost: "Réessayer de publier",
+  exportDraft: "Exporter le brouillon",
+  retrySave: "Réessayer de sauvegarder",
+  draftIncomplete: "Les modifications actuelles ne sont pas sauvegardées. La réouverture restaure la dernière version enregistrée. Réessayez ou exportez avant de partir.",
+  draftSaveFailed: "Impossible de sauvegarder sur cet appareil. Gardez cette page ouverte ou exportez votre brouillon.",
+  draftSaving: "Sauvegarde du brouillon…",
+
   banned: 'Vous êtes banni·e de cette communauté et ne pouvez pas publier. Votre brouillon est toujours là.',
   title: 'Créer une publication',
   intro: 'Lancez une conversation dans une communauté.',

@@ -1,6 +1,17 @@
 import type { PostMessages } from '../messages.ts';
 
 export default {
+  unwritten: "尚未在服务器上写入任何内容。你可以编辑草稿、更换目标或取消本次尝试。",
+  writeUnknown: "上次写入结果尚未确认。请继续同一次尝试，安全地确认结果。",
+  writeAcknowledged: "部分帖子内容已保存在服务器上。请继续同一次尝试，避免重复发帖。",
+  cancelAttempt: "取消本次尝试",
+  retryPost: "重试发布",
+  exportDraft: "导出草稿",
+  retrySave: "重试保存",
+  draftIncomplete: "当前更改尚未保存。重新打开会恢复上次保存的版本。离开前请重试或导出。",
+  draftSaveFailed: "无法保存到此设备。请保持页面打开或导出草稿。",
+  draftSaving: "正在保存草稿…",
+
   banned: '你已被这个社区封禁，无法发布帖子。草稿仍在这里。',
   title: '发布帖子',
   intro: '在社区里发起讨论。',

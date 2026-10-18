@@ -1,6 +1,17 @@
 import type { PostMessages } from '../messages.ts';
 
 export default {
+  unwritten: "서버에 변경 사항이 기록되지 않았습니다. 초안을 편집하거나 대상을 바꾸거나 이번 시도를 취소할 수 있습니다.",
+  writeUnknown: "마지막 쓰기 결과가 확인되지 않았습니다. 같은 시도를 계속하여 안전하게 확인하세요.",
+  writeAcknowledged: "게시물의 일부가 서버에 저장되었습니다. 중복 게시를 막으려면 같은 시도를 계속하세요.",
+  cancelAttempt: "시도 취소",
+  retryPost: "게시 재시도",
+  exportDraft: "초안 내보내기",
+  retrySave: "저장 재시도",
+  draftIncomplete: "현재 변경 사항은 저장되지 않았습니다. 다시 열면 마지막으로 저장한 버전이 복원됩니다. 나가기 전에 다시 시도하거나 내보내세요.",
+  draftSaveFailed: "이 기기에 저장할 수 없습니다. 페이지를 열어 두거나 초안을 내보내세요.",
+  draftSaving: "초안 저장 중…",
+
   banned: '이 커뮤니티에서 차단되어 게시할 수 없습니다. 초안은 그대로 남아 있습니다.',
   title: '게시글 작성', intro: '커뮤니티에서 대화를 시작하세요.', community: '커뮤니티',
   communitySearch: '커뮤니티 찾기', communityChange: '커뮤니티 변경', work: '작품',

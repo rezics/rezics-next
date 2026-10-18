@@ -19,7 +19,7 @@ export function imageUseReconciler(initial: DocumentSnapshot, actingSubject: str
     if (typeof node.attrs?.representationId === 'string' && typeof node.attrs.mediaUseId === 'string')
       known.set(`${node.attrs.id}:${node.attrs.representationId}`, node.attrs.mediaUseId);
   }
-  return async (document: DocumentSnapshot, imported = false): Promise<DocumentSnapshot> => {
+  const reconcile = async (document: DocumentSnapshot, imported = false): Promise<DocumentSnapshot> => {
     const changes = new Map<DocumentNode, DocumentNode>();
     const nodes = images(document);
     for (let offset = 0; offset < nodes.length; offset += 4) {
@@ -66,4 +66,11 @@ export function imageUseReconciler(initial: DocumentSnapshot, actingSubject: str
     };
     return { ...document, doc: copy(document.doc) };
   };
+  return Object.assign(reconcile, {
+    rememberUpload(occurrence: string, reference: { representationId?: string; mediaUseId?: string }) {
+      // Upload already obtained this occurrence's owner receipt; preview metadata is unrelated.
+      if (reference.representationId && reference.mediaUseId)
+        known.set(`${occurrence}:${reference.representationId}`, reference.mediaUseId);
+    },
+  });
 }

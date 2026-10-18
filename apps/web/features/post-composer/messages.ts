@@ -8,6 +8,17 @@ import zhHans from './messages/zh-Hans.ts';
 import zhHant from './messages/zh-Hant.ts';
 
 const en = {
+  unwritten: "No server changes were made. You can edit the draft, change its destination or cancel this attempt.",
+  writeUnknown: "The last write is unconfirmed. Continue with this draft to check the same attempt safely.",
+  writeAcknowledged: "Part of this post is saved on the server. Continue the same attempt to avoid posting twice.",
+  cancelAttempt: "Cancel attempt",
+  retryPost: "Retry post",
+  exportDraft: "Export draft",
+  retrySave: "Retry saving",
+  draftIncomplete: "Current changes are not saved. Reopening restores the last saved version. Retry or export before leaving.",
+  draftSaveFailed: "Could not save on this device. Keep this page open or export your draft.",
+  draftSaving: "Saving draft…",
+
   title: 'Create a post',
   intro: 'Start a conversation in a community.',
   community: 'Community',
