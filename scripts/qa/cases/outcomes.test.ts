@@ -22,6 +22,20 @@ const root = resolve(import.meta.dir, '../../..');
 const moduleFile = join(import.meta.dir, 'outcomes.ts');
 const cellsModuleFile = join(import.meta.dir, 'outcome-cells.ts');
 const helperFile = join(root, 'tests/qa/support/outcome-test.ts');
+const pendingOutcomeIds = [
+  'catalogue/import-fidelity',
+  'catalogue/source-coverage',
+  'catalogue/contextual-associations',
+  'catalogue/credits-and-inverse',
+  'catalogue/releases-and-media',
+  'catalogue/supporting-information',
+  'catalogue/ordered-domain-read',
+  'recipes/nutrition-and-substitutions',
+  'realm/identity-discovery',
+  'realm/studio-inventory',
+  'realm/published-author-lifecycle',
+  'catalogue/search-intent',
+] as const;
 const directories: string[] = [];
 afterEach(() => {
   for (const directory of directories.splice(0))
@@ -67,10 +81,33 @@ test('row IDs include the capability slug and hard case and are unique in the sc
   ).rejects.toThrow('Duplicate scope row ID');
   const progress = await scopeProgress({ root: data.directory, registry: launchCoverage });
   expect(progress).toEqual({
-    rowsInScope: 68,
+    rowsInScope: 80,
     rowsProved: 0,
-    cells: { proved: 0, pending: 0, notApplicable: 0, missing: 408 },
+    cells: { proved: 0, pending: 0, notApplicable: 0, missing: 480 },
   });
+});
+
+test('the expanded registry binds exactly twelve new rows to pending six-persona contracts', async () => {
+  const outcomes = await loadOutcomes();
+  const pendingIds = new Set<string>(pendingOutcomeIds);
+  const rows = launchCoverage.filter(row => pendingIds.has(rowId(row)));
+  expect(rows.map(rowId).sort()).toEqual([...pendingOutcomeIds].sort());
+  expect(launchCoverage.filter(row => row.kind === 'catalogue').map(rowId).sort()).toEqual(
+    pendingOutcomeIds.filter(id => id.startsWith('catalogue/')).sort(),
+  );
+  expect(launchCoverage.filter(row => !pendingIds.has(rowId(row)))).toHaveLength(68);
+  expect(pendingOutcomeIds.filter(id => !outcomes.has(id)), 'Outcome owners must supply every new declaration').toEqual([]);
+  for (const row of rows) {
+    const id = rowId(row);
+    const declaration = outcomes.get(id)!;
+    const file = `tests/qa/integration/outcomes/${id}.test.ts`;
+    expect(Object.keys(declaration.cells).sort(), id).toEqual([...personas].sort());
+    for (const persona of personas) {
+      expect(declaration.cells[persona], `${id} / ${persona}`).toMatchObject({ state: 'pending', file });
+    }
+    expect(row.api, id).toEqual({ missing: 'gap', reason: expect.stringContaining(file) });
+    expect(row.browser, id).toMatchObject({ missing: 'gap', reason: expect.any(String) });
+  }
 });
 
 test('declarations preserve rights, distinguish missing cells and default the test file', () => {
