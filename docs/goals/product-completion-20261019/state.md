@@ -1,40 +1,68 @@
 # Product completeness state
 
-The maintainer added this scope alongside audit remediation on 2026-10-19.
-Nothing in this Goal is yet declared proved or superior to another product.
-The explicit targets are domain-leading completeness beyond VNDB/Bangumi,
-Steam for games and Reddit/Fandom for community spaces, extending to all
-supported domains without silently excluding specialist jobs.
+The maintainer delegated domain-leading product completeness alongside audit
+remediation on 2026-10-19: beyond VNDB/Bangumi, Steam for games and Reddit/Fandom
+for community spaces, across supported domains without excluding specialist
+jobs. API outcomes remain first; complete frontend journeys need actual
+rendered and interaction proof. No additional completeness row or superiority
+is proved by this Goal's research or tooling.
 
-G-2787 codex-2/Sol max researches complete populated journeys, domain depth,
-multi-community ratings and falsifiable acceptance; G-2788 independently
-researches useful libraries, starting with TanStack Hotkeys; G-2792 supplies
-primary-source job-level domain benchmarks and counterexamples. These are
-research-only branches with separate outputs, no product or audit wave edits.
-Synthesize their actual reports into finite, nonconflicting API-first slices.
-Claude should later challenge the research and implement frontend work with
-actual rendered/interaction proof. Formal review stays codex-1/xhigh.
+G-2787 researches populated journeys, domain depth and multi-community ratings;
+G-2792 supplies primary-source job benchmarks and counterexamples. Assess their
+actual handoffs into finite slices that respect audit claims. G-2788's accepted
+library-research.json is retained on main. G-2797 was committed and started on
+codex-2/Sol max for an isolated native/Ark/TanStack keyboard comparison with
+SSR/hydration, editor/modal priority, IME, accessibility, lifecycle and route-cost
+evidence. It cannot adopt a production dependency or listener. Research reopens
+for concrete workload failures or changed evidence, not repetitive shortlists.
+Claude may later challenge the results and implement admitted frontend slices;
+formal review remains codex-1/Sol xhigh, with strict account retry and no fallback.
 
-G-2789 codex-2/max implements minimal fresh Claude observation/admission and
-reserved scheduling support. It needs independent codex-1/xhigh review before
-enabling its loop. Live observations/policy remain ignored. Do not use stale
-seven-day-only cache as session capacity or force past exhausted/unknown data.
-Keep about's allocation until completion is explicitly verified; idle processes
-or a clean checkout are not sufficient. No paid Claude fallback is authorized.
-Useful completion, not empty token consumption, is the purpose of the allowance.
+G-2789's attempt-3 handoff was accepted and its background landing submitted
+for independent review and gates. The Claude capacity loop remains disabled;
+its landing-result mail must receive disposition before enablement and actual
+refresh/dispatch verification. Fresh provider observation still closed admission
+at the handled delegation turn. Stale seven-day-only, exhausted or unknown
+five-hour data cannot authorize work. Keep at least one third of each five-hour
+allowance for about, including in-flight headroom, until completion is explicitly
+verified; idle processes and a clean checkout do not release it. Live policy and
+observations stay ignored. No paid Claude usage is authorized.
 
-The root attempted Browser plugin observation: in-app browser is unavailable,
-and inventory returned no apps or browsers. This is an actual capability block,
-not a current rendered audit. Existing retained images can be viewed with their
-original revision; authorized repository QA provides later rendered proof.
+Audit's manager owns wave/audit-20261019 and all61 closure, including G-2759's
+submitted landing and later shared refresh. G-2767 is acknowledged merged.
+G-2783/G-2785 await reviewed capacity support under one shared quota policy.
+G-2753's brief adopted recent|created|title ordering, NFKC title matching and
+required API item.chapterCount in commit 95641cf35f; reconciliation is required
+before review. Ownership prevented this Goal's direct resume, so the audit
+manager received the decision and exact resume command. G-2773's separate
+implementation remains on hold for Program reading of its domain contracts;
+mail to program was rejected as unregistered, and audit was asked for a valid
+route. Unsupported cases remain pending. All listed incoming mail and deadline
+notices are acknowledged; no notice changed scope or ownership.
 
-Audit build wave remains wave/audit-20261019, owned by its manager. G-2783 and
-G-2785 there are reserved Claude frontend briefs awaiting the new capacity gate.
-This Goal initially owns only its research outputs and capacity tooling; respect
-all active audit claims. When research is ready, select visible improvements
-that can proceed alongside remaining audit API work and record dependencies.
+Browser plugin observation remains blocked: in-app browser was unavailable and
+inventory empty. This supplies no current rendered audit. Authorized repository
+QA must retain viewed images and exact revisions for later frontend proof.
 
-Next: retain and assess research, approve explicit measurable next slices,
-review/enable capacity support, start useful Claude frontend work after fresh
-provider reset evidence, and arrange recurring decision-driven library research.
-Do not claim global superiority from a generic architecture or feature list.
+G-2794's finite efficiency diagnosis was accepted and submitted for background
+landing; result-mail disposition remains due. Its ranked findings were mailed
+to audit: early typed-response/continuation checks (five failed sequences across
+two surface builds), coordinated final publication (three rejected pushes), and
+prerequisite triage through existing G-2791 rather than another corpus. These
+are proposed corrections with falsifying measures, not demonstrated savings;
+the two Zone failures still need module-owner versus corpus triage.
+
+Checkpoint measures: the shared registry reports 68/68 declared rows and 408
+proved cells, distinct from this Goal's new completeness targets. Goal measures
+report 6/6 first attempts, median/max one attempt per landed task, 29M input and
+340.1k output, no tokens/proved-row denominator, and no retained review refusals.
+The first recorded window, 2026-10-18T08:36:08Z–20:36:08Z, contains 552.47M
+processed input (527.63M cached). Its 37% other-session share cannot establish
+manager-only share; older-started sessions are omitted. There is no prior audit
+or comparable before/after landing denominator. A later full-window comparison
+and better attribution remain due; processed input does not measure spending.
+
+Next: decide research handoffs, synthesize measurable API-first/visible slices,
+handle landing-result mail, then verify capacity refresh and useful Claude
+dispatch after fresh reset evidence. Resolve the Program-reading route through
+durable Goal mail. No watcher or landing wait belongs to these finite turns.
