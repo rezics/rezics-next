@@ -369,10 +369,12 @@ describe('offline selection and published producer helpers', () => {
     expect(plans.plans[0].fields.some((field: { role: string; disposition: string }) =>
       field.role === 'aliases' && field.disposition === 'candidate')).toBe(true);
     const report = JSON.parse(readFileSync(result.coverageFile, 'utf8'));
-    expect(report.entries.find((entry: { path: string }) => entry.path === '/data/alias').disposition)
-      .toMatchObject({ status: 'unmapped', reason: expect.stringContaining('guessed language') });
-    expect(report.entries.find((entry: { path: string }) => entry.path === '/data/aliases/0/name').disposition)
-      .toMatchObject({ status: 'unmapped', reason: expect.stringContaining('without-adoption') });
+    const unqualifiedAlias = report.entries.find((entry: { path: string }) => entry.path === '/data/alias');
+    const qualifiedAlias = report.entries.find((entry: { path: string }) => entry.path === '/data/aliases/0/name');
+    expect(unqualifiedAlias.disposition.status).toBe('unmapped');
+    expect(unqualifiedAlias.disposition.reason).toContain('guessed language');
+    expect(qualifiedAlias.disposition.status).toBe('unmapped');
+    expect(qualifiedAlias.disposition.reason).toContain('without-adoption');
     expect(report.entries.find((entry: { path: string }) => entry.path === '/data/rating').disposition.status).toBe('source-only');
     expect(report.entries.find((entry: { path: string }) => entry.path === '/data/unknown').observation).toBe('present');
     expect(report.entries.find((entry: { path: string }) => entry.path === '/title').disposition.status).toBe('mapped');
@@ -466,7 +468,7 @@ describe('offline selection and published producer helpers', () => {
       .find(saved => saved.entry.phase === 'cover-selection').entry;
     expect(selection.body.expectedSelection).toBeNull();
     expect(selection.result).toEqual({ code: 'stale_head' });
-    expect(selection.responses).toContainEqual({ status: 201, body: expect.objectContaining({ selection: originalSelection }) });
+    expect(selection.responses.find((reply: { status: number }) => reply.status === 201).body.selection).toBe(originalSelection);
     expect(selection.responses).toContainEqual({ status: 409, body: { code: 'stale_head' } });
     expect(JSON.parse(readFileSync(first.receiptFile, 'utf8')).native[work.key].id).toBe(native);
   });
