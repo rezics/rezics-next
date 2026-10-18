@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
-import { countBookChapters } from '../features/studio/counts.ts';
+import { countBookChapters } from '../features/studio/inventory-counts.ts';
 import { agents, ids, inventory, position } from '../features/studio/fixtures.ts';
 import { readInventory } from '../features/studio/read.ts';
 import { inventoryAddress, inventoryQuery, type ContentsItem, type ContentsPage, type MainClient }
