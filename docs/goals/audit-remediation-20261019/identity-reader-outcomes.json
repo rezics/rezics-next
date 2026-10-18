@@ -202,14 +202,33 @@
   },
   "baseline": {
     "selection": "identity-reader-api-baseline",
-    "status": "not-run",
+    "status": "setup-failed; correction prepared for the same selection",
     "productRevision": "79be80d4d0e1cad1639b6a65e8f0795d6a95929a",
-    "pinProcedure": "Commit this complete specification; detach this worker worktree at the product revision and overlay only the authored declaration, tests, test fixture and matrix. Verify the product/harness diff before running. Keep main and all other worktrees read-only.",
+    "pinProcedure": "Commit this complete specification; detach this worker worktree at the product revision and overlay only the authored declaration, tests, test fixture, test-registration helper and its unit coverage, and matrix. Verify the exact seven-path allowlist; production code and the QA runner remain pristine. Keep main and all other worktrees read-only.",
     "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test tests/qa/integration/outcomes/realm/identity-discovery.test.ts tests/qa/integration/audit-public-reading.test.ts",
     "expectedResult": "Ordinary assertions may fail. Report the actual failing test body, reached assertion and actual response; never count setup, transport failure, health or a test.failing wrapper as the requested product failure.",
     "failingBodies": [],
-    "assertionsReached": null,
-    "preparation": null
+    "assertionsReached": false,
+    "preparation": { "budgetMs": 600000, "backupCreated": false, "restoreReached": false },
+    "attempts": [
+      {
+        "job": "6b07d19a-f509-4c96-9b37-e584b3d38be7",
+        "run": "20261018t195139-618183",
+        "productRevision": "79be80d4d0e1cad1639b6a65e8f0795d6a95929a",
+        "specificationRevision": "8f07c6b4e834dea67898513f00032b29c5fe05d9",
+        "sourceStable": true,
+        "productAndRunnerChanges": [],
+        "result": "SETUP; the runner classified the nonzero hook result as assertion, but no outcome body ran",
+        "failingHooks": ["audit-public-reading.test.ts beforeAll", "outcomes/realm/identity-discovery.test.ts beforeAll"],
+        "failure": "POST /v1/compositions returned 400 invalid_request instead of setup's required 201. createBook spread the entire real Work response into the strict composition command.",
+        "correction": "Supply only the existing audited profile, work, mainVersion and actingSubject fields; no product changes or outcome assertion changes.",
+        "assertionsReached": false,
+        "failingBodies": [],
+        "hookElapsedMs": { "combinedReader": 10317.20, "combinedIdentity": 11449.01, "automaticIsolatedReader": 10414.76, "automaticIsolatedIdentity": 17367.16 },
+        "preparation": "Budget 600000ms. No backup or manifest was created; restore was not reached. These hook durations exclude the runner's source startup and are not complete preparation measurements.",
+        "evidence": [".artifacts/qa/20261018t195139-618183/summary.md", ".artifacts/qa/20261018t195139-618183/logs/integration-1.log", ".artifacts/qa/20261018t195139-618183/logs/integration-r1.log", ".artifacts/qa/20261018t195139-618183/logs/integration-r2.log", ".temp/identity-reader/baseline-pin.json"]
+      }
+    ]
   },
   "remainingPrerequisites": [
     "G-2768 enrolls the pending identity row and the exact prove files without editing these declarations/assertions. Corpus-owning tests must receive the runner's appropriate isolation enrollment before wider prove campaigns.",

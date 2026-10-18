@@ -64,7 +64,7 @@ async function createBook(owner: PersonaSession, title: string, count: number, p
     authoring: 'own-work', actingSubject,
   }), 201);
   const composition = await fixtureCommand<{ structure: string; revision: string }>(owner.main('POST', '/v1/compositions', {
-    profile: 'book-composition', ...work, actingSubject,
+    profile: 'book-composition', work: work.work, mainVersion: work.mainVersion, actingSubject,
   }), 201);
   const result: BookFixture = { ...work, title, structure: composition.structure,
     compositionRevision: composition.revision, chapters: [] };
@@ -182,6 +182,7 @@ export async function identityReaderFixture() {
   let proxy: ReturnType<typeof ownerProxy> | undefined;
   let source: PersonaSessions | undefined, sessions: PersonaSessions | undefined;
   let mainOrigin = '', accountService = '';
+  let phase = 'load-corpus';
   let corpus: Corpus;
   const target = `identity-reader-${randomUUID()}`;
   const backups = createCorpusBackupDriver({ sourceRunId, directory: join(directory, 'backups'),
@@ -204,8 +205,10 @@ export async function identityReaderFixture() {
         || !compatibleLoadStorage(corpus.compatibility, loadCompatibility(process.cwd())) || !existsSync(corpus.backup))
         throw new Error('SETUP: retained identity reader corpus is incompatible; preserve it and explicitly select a new corpus directory');
     } else {
+      phase = 'create-personas';
       proxy = ownerProxy(Bun.env.FUSEKI_URL!);
       source = await personaSessions('public', { graphEndpoint: proxy.url, moderatorLifetimeMs: 7 * 86_400_000 });
+      phase = 'create-alternative-agents';
       const alternatives = {} as Corpus['alternatives'];
       for (const name of personaNames.filter((name): name is Exclude<PersonaName, 'visitor'> => name !== 'visitor')) {
         const person = source[name], key = randomUUID();
@@ -220,32 +223,40 @@ export async function identityReaderFixture() {
         }
       }
       const phrase = `Rivergarden${randomUUID().replaceAll('-', '')}`;
+      phase = 'create-public-book';
       const publicBook = await createBook(source.owner, `${phrase} public Book`, 2, true, phrase);
+      phase = 'create-empty-book';
       const emptyBook = await createBook(source.owner, `${phrase} empty Book`, 0, true, phrase);
+      phase = 'create-private-book';
       const privateBook = await createBook(source.owner, `${phrase} private notebook`, 1, false, phrase);
+      phase = 'create-unpublished-book';
       const unpublishedBook = await createBook(source.owner, `${phrase} unpublished Book`, 1, false, phrase, true);
+      phase = 'create-unpublished-successor';
       const first = publicBook.chapters[0]!;
       const successor = await fixtureCommand<{ revisionId: string }>(source.owner.main('POST', '/v1/content-drafts', {
         profile: 'content-text-v1', resourceId: first.post, variantId: first.variantId,
         expectedHead: first.revisionId, language: { kind: 'tag', tag: 'en', originalTag: 'en' },
         direction: 'ltr', body: 'PRIVATE unpublished correction beside the river.', actingSubject: source.owner.actingSubject,
       }), 201);
+      phase = 'create-empty-account';
       corpus = { format: 'identity-reader-corpus-v1', recipe,
         productRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
         compatibility: loadCompatibility(process.cwd()), backup: '', realm: retainPersonaRealm(source),
         emptyIdentity: await emptyAccount(source), alternatives, publicBook, emptyBook, privateBook, unpublishedBook,
         unpublishedRevision: successor.revisionId, phrase, buildMs: 0 };
+      phase = 'backup-corpus';
       corpus.backup = await backups.backup(`identity-reader-${recipe.slice(0, 20)}`, signal);
       corpus.buildMs = Date.now() - started;
       remaining();
       // Private credentials and original identities travel with this one stopped cut.
       writeFileSync(manifestPath, JSON.stringify(corpus, null, 2) + '\n', { mode: 0o600 });
     }
+    phase = 'restore-corpus';
     await backups.restore(corpus.backup, target, signal);
     remaining();
     const live = sessions!;
     const fault = proxy!;
-    const preparation = { sourceRevision: corpus.productRevision, backup: corpus.backup,
+    const preparation = { status: 'ready', sourceRevision: corpus.productRevision, backup: corpus.backup,
       buildMs: corpus.buildMs, restore: backups.preparation(target), totalMs: Date.now() - started, budgetMs: 600_000 };
     console.info('IDENTITY_READER_PREPARATION', JSON.stringify(preparation));
     writeFileSync(join(directory, `preparation-${sourceRunId}-${target}.json`), JSON.stringify(preparation, null, 2) + '\n');
@@ -296,6 +307,11 @@ export async function identityReaderFixture() {
       async close() { fault.fail(false); await backups.stop(target); },
     };
   } catch (error) {
+    const preparation = { status: 'setup-failed', phase,
+      sourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+      totalMs: Date.now() - started, budgetMs: 600_000, assertionsReached: false };
+    console.info('IDENTITY_READER_PREPARATION', JSON.stringify(preparation));
+    writeFileSync(join(directory, `preparation-${sourceRunId}-${target}.json`), JSON.stringify(preparation, null, 2) + '\n');
     await source?.close(); await sessions?.close(); proxy?.close();
     await backups.stop(target);
     throw error;
