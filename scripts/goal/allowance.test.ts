@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { inspectAllowance, allowanceCommand, type AllowanceTransport } from './allowance.ts';
 import { testAccountSettings } from './fixtures/accounts.ts';
@@ -221,6 +221,195 @@ test('credits-first policy preserves reset cards while credits are usable', asyn
   } finally { f.cleanup(); }
 });
 
+test('credits-first falls through to reset cards when existing credits are unavailable', async () => {
+  const f = fixture(['credits', 'resetCards']);
+  try {
+    const rates = captured(false);
+    rates.rateLimits.credits.hasCredits = false;
+    f.rates(rates);
+    expect(await inspectAllowance('sample-c', { ...f.options, continue: true })).toMatchObject({
+      status: 'included', canResume: true, redemption: 'reset',
+    });
+    expect(f.calls.filter(call => call.method.endsWith('/consume'))).toHaveLength(1);
+  } finally { f.cleanup(); }
+});
+
+test('an unresolved intent is private and durable before submitting a consume request', async () => {
+  const f = fixture(['resetCards']);
+  try {
+    f.rates(captured(false));
+    let durable = false;
+    f.consume(() => {
+      const path = join(f.home, '.rezics-allowance-reset.json');
+      const body = readFileSync(path, 'utf8');
+      const request = f.calls.at(-1)!.params;
+      durable = statSync(path).mode % 0o1000 === 0o600 && body.length <= 4096
+        && !body.includes('private-account-id')
+        && JSON.parse(body).creditId === request.creditId && JSON.parse(body).idempotencyKey === request.idempotencyKey;
+      throw new Error('lost consume response');
+    });
+    expect((await inspectAllowance('sample-c', { ...f.options, continue: true })).redemption).toBe('unconfirmed');
+    expect(durable).toBe(true);
+  } finally { f.cleanup(); }
+});
+
+for (const details of ['missing', 'empty', 'other-card', 'redeemed']) test(`unresolved intent survives ${details} details and replays only its original key`, async () => {
+  const f = fixture(['resetCards']);
+  try {
+    f.rates(captured(false));
+    f.consume(() => { throw new Error('private-card-earlier private@example.com secret-token'); });
+    expect(await inspectAllowance('sample-c', { ...f.options, continue: true })).toMatchObject({
+      redemption: 'unconfirmed', error: 'transport', canResume: false,
+    });
+    const rates = captured(false);
+    if (details === 'missing') rates.rateLimitResetCredits.credits = null as unknown as Rates['rateLimitResetCredits']['credits'];
+    if (details === 'empty') { rates.rateLimitResetCredits.credits = []; rates.rateLimitResetCredits.availableCount = 0; }
+    if (details === 'other-card') rates.rateLimitResetCredits.credits.pop();
+    if (details === 'redeemed') rates.rateLimitResetCredits.credits[1]!.status = 'redeemed';
+    f.rates(rates);
+    for (let retry = 0; retry < 2; retry++) {
+      const result = await inspectAllowance('sample-c', { ...f.options, continue: true });
+      expect(result).toMatchObject({ redemption: 'unconfirmed', canResume: false, error: 'transport' });
+      expect(JSON.stringify(result)).not.toMatch(/private|secret|@|creditId|accountId|idempotencyKey/);
+    }
+    const spends = f.calls.filter(call => call.method.endsWith('/consume'));
+    expect(spends).toHaveLength(3);
+    expect(spends.map(call => call.params)).toEqual(Array(3).fill(spends[0]!.params));
+  } finally { f.cleanup(); }
+});
+
+test('an unknown consume outcome retains its uncertainty and protocol diagnostic', async () => {
+  const f = fixture(['resetCards']);
+  try {
+    f.rates(captured(false));
+    f.consume(() => ({ outcome: 'private-unknown', email: 'private@example.com' }));
+    for (let retry = 0; retry < 2; retry++) expect(await inspectAllowance('sample-c', { ...f.options, continue: true })).toMatchObject({
+      redemption: 'unconfirmed', canResume: false, error: 'protocol',
+    });
+    const spends = f.calls.filter(call => call.method.endsWith('/consume'));
+    expect(spends.map(call => call.params)).toEqual(Array(2).fill(spends[0]!.params));
+  } finally { f.cleanup(); }
+});
+
+test('revoking reset authorization preserves the unresolved intent without replaying it', async () => {
+  const f = fixture(['resetCards']);
+  try {
+    f.rates(captured(false));
+    f.consume(() => { throw new Error('lost response'); });
+    await inspectAllowance('sample-c', { ...f.options, continue: true });
+    testAccountSettings(f.directory, [{ engine: 'sample-c', launcher: join(f.directory, 'launcher'), home: f.home, pastAllowance: [] }]);
+    expect(await inspectAllowance('sample-c', { ...f.options, continue: true })).toMatchObject({
+      redemption: 'unconfirmed', canResume: false, resetCards: { authorized: false },
+    });
+    expect(f.calls.filter(call => call.method.endsWith('/consume'))).toHaveLength(1);
+    testAccountSettings(f.directory, [{ engine: 'sample-c', launcher: join(f.directory, 'launcher'), home: f.home, pastAllowance: ['resetCards'] }]);
+    await inspectAllowance('sample-c', { ...f.options, continue: true });
+    const spends = f.calls.filter(call => call.method.endsWith('/consume'));
+    expect(spends.map(call => call.params)).toEqual(Array(2).fill(spends[0]!.params));
+  } finally { f.cleanup(); }
+});
+
+test('a credits-first policy also defers replay of an unresolved reset', async () => {
+  const f = fixture(['resetCards', 'credits']);
+  try {
+    f.rates(captured(false));
+    f.consume(() => { throw new Error('lost response'); });
+    await inspectAllowance('sample-c', { ...f.options, continue: true });
+    testAccountSettings(f.directory, [{ engine: 'sample-c', launcher: join(f.directory, 'launcher'), home: f.home,
+      pastAllowance: ['credits', 'resetCards'] }]);
+    expect(await inspectAllowance('sample-c', { ...f.options, continue: true })).toMatchObject({
+      status: 'credits-available', canResume: true, redemption: 'unconfirmed',
+    });
+    expect(f.calls.filter(call => call.method.endsWith('/consume'))).toHaveLength(1);
+    testAccountSettings(f.directory, [{ engine: 'sample-c', launcher: join(f.directory, 'launcher'), home: f.home,
+      pastAllowance: ['resetCards', 'credits'] }]);
+    await inspectAllowance('sample-c', { ...f.options, continue: true });
+    const spends = f.calls.filter(call => call.method.endsWith('/consume'));
+    expect(spends.map(call => call.params)).toEqual(Array(2).fill(spends[0]!.params));
+  } finally { f.cleanup(); }
+});
+
+for (const policy of [[], ['credits', 'resetCards']]) test(`authority is revalidated after a status request (${JSON.stringify(policy)})`, async () => {
+  const f = fixture(['resetCards', 'credits']);
+  try {
+    f.rates(captured(false));
+    const original = f.transport.request;
+    f.transport.request = async (method, params) => {
+      const value = await original(method, params);
+      if (method === 'account/rateLimits/read') testAccountSettings(f.directory, [{ engine: 'sample-c',
+        launcher: join(f.directory, 'launcher'), home: f.home, pastAllowance: policy }]);
+      return value;
+    };
+    expect(await inspectAllowance('sample-c', { ...f.options, continue: true })).toMatchObject({
+      canResume: policy.length > 0, redemption: null,
+    });
+    expect(f.calls.some(call => call.method.endsWith('/consume'))).toBe(false);
+  } finally { f.cleanup(); }
+});
+
+for (const included of [false, true]) test(`changing the signed-in account cannot replay or clear an unresolved intent (included=${included})`, async () => {
+  const f = fixture(['resetCards']);
+  try {
+    f.rates(captured(false));
+    f.consume(() => { throw new Error('lost response'); });
+    await inspectAllowance('sample-c', { ...f.options, continue: true });
+    const other = captured(included);
+    other.accountId = 'private-other-account';
+    f.rates(other);
+    expect(await inspectAllowance('sample-c', { ...f.options, continue: true })).toMatchObject({
+      status: 'unavailable', error: 'account-changed', canResume: false, redemption: 'unconfirmed',
+    });
+    expect(f.calls.filter(call => call.method.endsWith('/consume'))).toHaveLength(1);
+    f.rates(captured(false));
+    await inspectAllowance('sample-c', { ...f.options, continue: true });
+    const spends = f.calls.filter(call => call.method.endsWith('/consume'));
+    expect(spends.map(call => call.params)).toEqual(Array(2).fill(spends[0]!.params));
+  } finally { f.cleanup(); }
+});
+
+test('a reset cannot be submitted without an authoritative account identity', async () => {
+  const f = fixture(['resetCards']);
+  try {
+    const rates = captured(false);
+    delete (rates as Partial<Rates>).accountId;
+    f.rates(rates);
+    expect(await inspectAllowance('sample-c', { ...f.options, continue: true })).toMatchObject({ status: 'unavailable', error: 'protocol', canResume: false });
+    expect(f.calls.some(call => call.method.endsWith('/consume'))).toBe(false);
+  } finally { f.cleanup(); }
+});
+
+test('included usage for the original account resolves a pending intent even without card details', async () => {
+  const f = fixture(['resetCards']);
+  try {
+    f.rates(captured(false));
+    f.consume(() => { throw new Error('lost response'); });
+    await inspectAllowance('sample-c', { ...f.options, continue: true });
+    const restored = captured(true);
+    restored.rateLimitResetCredits.credits = null as unknown as Rates['rateLimitResetCredits']['credits'];
+    f.rates(restored);
+    expect(await inspectAllowance('sample-c', { ...f.options, continue: true })).toMatchObject({
+      status: 'included', canResume: true, redemption: 'unconfirmed',
+    });
+    expect(f.calls.filter(call => call.method.endsWith('/consume'))).toHaveLength(1);
+    f.rates(captured(false));
+    f.consume(() => { f.rates(captured(true)); return { outcome: 'reset' }; });
+    expect((await inspectAllowance('sample-c', { ...f.options, continue: true })).redemption).toBe('reset');
+    const spends = f.calls.filter(call => call.method.endsWith('/consume'));
+    expect(spends).toHaveLength(2);
+    expect(spends[1]!.params.idempotencyKey).not.toBe(spends[0]!.params.idempotencyKey);
+  } finally { f.cleanup(); }
+});
+
+for (const body of ['{', 'x'.repeat(4097)]) test(`invalid or oversized durable intent fails closed (${body.length} bytes)`, async () => {
+  const f = fixture(['resetCards']);
+  try {
+    writeFileSync(join(f.home, '.rezics-allowance-reset.json'), body);
+    f.rates(captured(false));
+    expect(await inspectAllowance('sample-c', { ...f.options, continue: true })).toMatchObject({ status: 'unavailable', canResume: false, error: 'intent' });
+    expect(f.calls.some(call => call.method.endsWith('/consume'))).toBe(false);
+  } finally { f.cleanup(); }
+});
+
 test('a failed confirmation read cannot authorize resume or another redemption', async () => {
   const f = fixture();
   try {
@@ -323,8 +512,10 @@ else {
    if (request.method === 'account/rateLimits/read') {
     result = ${JSON.stringify(captured())};
     if (mode === 'concurrent') result.ordinaryUsageAllowed = existsSync(directory + '/restored');
+    if (mode === 'lost-response') result.ordinaryUsageAllowed = false;
    }
    if (request.method === 'account/rateLimitResetCredit/consume') {
+    if (mode === 'lost-response') process.exit(0);
     await Bun.sleep(50); writeFileSync(directory + '/restored', 'yes'); result = { outcome: 'reset' };
    }
    console.log(JSON.stringify({ method: 'account/updated', params: { email: 'private@example.com' } }));
@@ -373,6 +564,35 @@ test('separate manager processes share the account lease and a concurrent retry 
     expect(requests.filter(request => request.method === 'account/rateLimitResetCredit/consume')).toHaveLength(1);
     expect(requests.filter(request => request.method === 'account/rateLimits/read')).toHaveLength(3);
     expect(JSON.stringify(results)).not.toMatch(/private|secret|@|creditId/);
+  } finally {
+    for (const child of children) child.kill();
+    await Promise.allSettled(children.map(child => child.exited));
+    f.cleanup();
+  }
+}, 5000);
+
+test('two fresh process retries preserve the original consume key after lost stdio responses', async () => {
+  const f = fixture(['resetCards']);
+  const children: Bun.Subprocess<'ignore', 'pipe', 'pipe'>[] = [];
+  try {
+    launcher(f, 'lost-response');
+    const source = `import { inspectAllowance } from ${JSON.stringify(join(import.meta.dir, 'allowance.ts'))};
+      console.log(JSON.stringify(await inspectAllowance('sample-c', { continue: true,
+        settings: { directory: ${JSON.stringify(f.settings)} }, lockDirectory: ${JSON.stringify(f.options.lockDirectory)} })));`;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const child = Bun.spawn([process.execPath, '-e', source], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
+      children.push(child);
+      const [code, output, errors] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+      expect({ code, errors }).toEqual({ code: 0, errors: '' });
+      expect(JSON.parse(output)).toMatchObject({ status: 'unavailable', canResume: false, redemption: 'unconfirmed', error: 'transport' });
+      expect(output).not.toMatch(/private|secret|@|creditId|accountId|idempotencyKey/);
+    }
+    const requests = readFileSync(join(f.directory, 'requests.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    const spends = requests.filter(request => request.method === 'account/rateLimitResetCredit/consume');
+    expect(spends).toHaveLength(3);
+    expect(spends[0].params.creditId).toBe('private-card-earlier');
+    expect(spends[0].params.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
+    expect(spends.map(request => request.params)).toEqual(Array(3).fill(spends[0].params));
   } finally {
     for (const child of children) child.kill();
     await Promise.allSettled(children.map(child => child.exited));
