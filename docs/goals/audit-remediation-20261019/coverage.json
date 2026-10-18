@@ -169,8 +169,8 @@
       "severity": "P1",
       "sourceConfidence": "intermittent",
       "title": "一次 SSR useState 异常使开发错误遮罩盖住 Discover",
-      "status": "pending",
-      "owner": null,
+      "status": "build-dispatched",
+      "owner": "G-2747",
       "proof": []
     },
     {
@@ -178,8 +178,8 @@
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "图片编辑失败没有传到草稿状态，显示已保存却在刷新后丢图",
-      "status": "pending",
-      "owner": null,
+      "status": "build-dispatched",
+      "owner": "G-2748",
       "proof": []
     },
     {
@@ -223,8 +223,8 @@
       "severity": "P1",
       "sourceConfidence": "injected",
       "title": "一次游标冲突后 Refresh 在三次 30 秒等待内都不能恢复",
-      "status": "pending",
-      "owner": null,
+      "status": "build-dispatched",
+      "owner": "G-2749",
       "proof": []
     },
     {
@@ -232,8 +232,8 @@
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "发帖把一次尝试当作已提交内容，写入前失败也锁死草稿",
-      "status": "pending",
-      "owner": null,
+      "status": "build-dispatched",
+      "owner": "G-2748",
       "proof": []
     },
     {
@@ -241,8 +241,8 @@
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "公开 Feed 的匿名降级没有传到客户端，登录但无可用 Agent 时续页请求违反认证契约",
-      "status": "pending",
-      "owner": null,
+      "status": "build-dispatched",
+      "owner": "G-2749",
       "proof": []
     },
     {
@@ -250,8 +250,8 @@
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "服务端路由调用客户端模块的普通函数，Proposals 列表在身份检查前崩溃",
-      "status": "pending",
-      "owner": null,
+      "status": "build-dispatched",
+      "owner": "G-2747",
       "proof": []
     },
     {
@@ -394,8 +394,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "手机底栏可见名称与辅助名称不一致",
-      "status": "pending",
-      "owner": null,
+      "status": "build-dispatched",
+      "owner": "G-2747",
       "proof": []
     },
     {
@@ -466,8 +466,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "横向导航在整页进入时丢掉当前选项的位置",
-      "status": "pending",
-      "owner": null,
+      "status": "build-dispatched",
+      "owner": "G-2747",
       "proof": []
     },
     {
@@ -529,8 +529,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "Feed预览复述刚读过的标题，有限预览空间没有新增判断信息",
-      "status": "pending",
-      "owner": null,
+      "status": "build-dispatched",
+      "owner": "G-2749",
       "proof": []
     },
     {
