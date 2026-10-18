@@ -25,14 +25,16 @@ test('a pass takes the ledger lock only for a task whose ended attempt nobody is
 
 test.each(['running', 'stopped', 'exited'] as const)('a quota-paused %s task is not claimed as an ended worker', state => {
   const current = task({ state, settlement: { attempt: 1, token: 'dead-owner', owner: { pid: ended } } }) as CapacityTask;
-  current.claudeCapacity = { attempt: 1, owner: { pid: ended }, pause: {
-    at: Date.now(), stage: 'interrupt', signalledAt: Date.now(), reason: 'about-reserve',
-  } };
+  const capacity: NonNullable<CapacityTask['claudeCapacity']> = {
+    attempt: 1, owner: { pid: ended, start: '1', boot: 'fixture', cgroup: '' },
+    pause: { at: Date.now(), stage: 'interrupt', signalledAt: Date.now(), reason: 'about-reserve' },
+  };
+  current.claudeCapacity = capacity;
   expect(settlementOwed(current)).toBe(false);
-  current.claudeCapacity.pause!.stage = 'waiting';
+  capacity.pause!.stage = 'waiting';
   expect(settlementOwed(current)).toBe(false);
   // The durable marker alone does not prevent settlement after a real resume/exit.
-  delete current.claudeCapacity.pause;
+  delete capacity.pause;
   expect(settlementOwed(current)).toBe(true);
 });
 
