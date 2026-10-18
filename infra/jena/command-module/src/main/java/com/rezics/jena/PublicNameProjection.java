@@ -26,7 +26,9 @@ final class PublicNameProjection {
     static final Node REPAIR = uri("urn:rezics:projection:public-name-repair");
     static final int REPAIR_BATCH_SIZE = 64;
     static final int NAME_BATCH_SIZE = 64;
-    private static final java.util.List<String> NAME_KINDS = java.util.List.of("concept", "realm", "site", "agent", "collection", "space", "work");
+    // Prepend new owners: retained negative cleanup phases for the original
+    // seven owners keep the same meaning across an online upgrade.
+    static final java.util.List<String> NAME_KINDS = java.util.List.of("resource", "concept", "realm", "site", "agent", "collection", "space", "work");
     private static final java.util.List<Node> NAME_PREDICATES = java.util.List.of(
         uri("http://www.w3.org/2000/01/rdf-schema#label"), uri("https://schema.org/name"),
         uri("https://schema.org/alternateName"), p("localizedName"),
@@ -104,15 +106,72 @@ final class PublicNameProjection {
             return has(data, resource, "catalogueVisible", NodeFactory.createLiteralByValue(true,
                 org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)) || publishedWork(data, resource) ? "work" : null;
         }
-        if (!listedPublic(data, resource, true)) return null;
         if (type(data, resource, RV + "Zone")) {
             Node space = one(data, resource, "space"), realm = space == null ? null : one(data, space, "realmCapability");
-            return has(data, resource, "zoneState", p("Active")) && realm != null && listedPublic(data, space, true) && publicRealm(data, realm) ? "site" : null;
+            return listedPublic(data, resource, true) && has(data, resource, "zoneState", p("Active"))
+                && realm != null && listedPublic(data, space, true) && publicRealm(data, realm) ? "site" : null;
         }
-        if (type(data, resource, RV + "Collection")) return has(data, resource, "collectionState", p("Active")) ? "collection" : null;
-        if (type(data, resource, RV + "Space")) return one(data, resource, "realmCapability") == null
+        if (type(data, resource, RV + "Collection")) return listedPublic(data, resource, true)
+            && has(data, resource, "collectionState", p("Active")) ? "collection" : null;
+        if (type(data, resource, RV + "Space")) return listedPublic(data, resource, true) && one(data, resource, "realmCapability") == null
             && one(data, resource, "zoneCapability") == null ? "space" : null;
-        return null;
+        // Semantic and Content components bind one generic source. Descriptive
+        // classes, including extensions, never select a collector or authority.
+        return publicSemanticResource(data, resource) || publicPost(data, resource) ? "resource" : null;
+    }
+    private static boolean publicSemanticResource(DatasetGraph data, Node resource) {
+        Node head = exactlyOne(data, CURRENT, resource, "semanticHead");
+        if (head == null || !data.contains(REVISIONS, head, RDF.type.asNode(), p("SemanticRevision"))
+            || !data.contains(REVISIONS, head, RDF.type.asNode(), p("RevisionAnchor"))
+            || !resource.equals(exactlyOne(data, REVISIONS, head, "component"))
+            || !p("Active").equals(exactlyOne(data, REVISIONS, head, "lifecycle"))
+            || !listedPublic(data, resource, false)) return false;
+        var works = data.find(CURRENT, resource, p("semanticWork"), Node.ANY);
+        try { for (int count = 0; works.hasNext(); count++) {
+            if (count == 256) throw new IllegalArgumentException("semantic assertions exceed their admitted bound");
+            Node work = works.next().getObject(), main = exactlyOne(data, CURRENT, work, "mainVersion");
+            if (productResource(work) && !withdrawn(data, work) && type(data, work, "https://schema.org/CreativeWork")
+                && main != null && type(data, main, RV + "MainVersion") && has(data, main, "work", work)
+                && unerasedContent(data, work)
+                && (has(data, work, "catalogueVisible", NodeFactory.createLiteralByValue(true,
+                    org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)) || publishedWork(data, work))) return true;
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(works); }
+        return false;
+    }
+    private static boolean publicPost(DatasetGraph data, Node resource) {
+        if (!type(data, resource, RV + "Post") || one(data, resource, "head") == null
+            || !listedPublic(data, resource, false) || !unerasedContent(data, resource)) return false;
+        var variants = data.find(CURRENT, Node.ANY, p("resource"), resource);
+        try { while (variants.hasNext()) {
+            Node variant = variants.next().getSubject();
+            if (!type(data, variant, RV + "ContentVariant")) continue;
+            Node publication = exactlyOne(data, CURRENT, variant, "contentPublicationHead"),
+                eligibility = exactlyOne(data, CURRENT, variant, "publicSearchEligibilityHead");
+            Node revision = publication == null ? null : exactlyOne(data, REVISIONS, publication, "contentRevision");
+            if (publication != null && eligibility != null
+                && CommandService.contentPublicationPublishable(data, publication)
+                && variant.equals(exactlyOne(data, REVISIONS, publication, "component"))
+                && resource.equals(exactlyOne(data, REVISIONS, publication, "resource"))
+                && revision != null && !data.contains(REVISIONS, revision, RDF.type.asNode(), p("ErasedRevision"))
+                && data.contains(REVISIONS, eligibility, RDF.type.asNode(), p("ContentSearchEligibilityDecision"))
+                && variant.equals(exactlyOne(data, REVISIONS, eligibility, "component"))
+                && variant.equals(exactlyOne(data, REVISIONS, eligibility, "variant"))
+                && resource.equals(exactlyOne(data, REVISIONS, eligibility, "resource"))
+                && publication.equals(exactlyOne(data, REVISIONS, eligibility, "publicationDecision"))
+                && p("Public").equals(exactlyOne(data, REVISIONS, eligibility, "disclosure"))) return true;
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(variants); }
+        return false;
+    }
+    /** Mirror publicWork/publicPost's erasure fence for every current Content
+     * publication, including a retained erased sibling of a live variant. */
+    private static boolean unerasedContent(DatasetGraph data, Node resource) {
+        var variants = data.find(CURRENT, Node.ANY, p("resource"), resource);
+        try { while (variants.hasNext()) {
+            Node publication = one(data, variants.next().getSubject(), "contentPublicationHead");
+            Node revision = publication == null ? null : exactlyOne(data, REVISIONS, publication, "contentRevision");
+            if (revision != null && data.contains(REVISIONS, revision, RDF.type.asNode(), p("ErasedRevision"))) return false;
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(variants); }
+        return true;
     }
     private static Node revisionValue(DatasetGraph data, Node subject, String predicate) {
         var rows = data.find(REVISIONS, subject, p(predicate), Node.ANY);
@@ -258,7 +317,7 @@ final class PublicNameProjection {
         // neighbourhood. Population fan-out is represented by durable cursors.
         Set<Node> changed = new LinkedHashSet<>(resources);
         for (Node subject : Set.copyOf(resources)) {
-            for (String predicate : Set.of("work", "space", "realmCapability", "zoneCapability")) {
+            for (String predicate : Set.of("work", "resource", "space", "realmCapability", "zoneCapability")) {
                 Node neighbour = one(data, subject, predicate);
                 if (productResource(neighbour)) resources.add(neighbour);
             }
@@ -843,7 +902,8 @@ final class PublicNameProjection {
         TemplateIndexService.workScopeBudget(deadline);
         return new RecipeTurn(sourceValues, lookahead, copies, additions, phase == 7, false);
     }
-    /** Each projected dependent adds at most four constant-time adjacency
+    /** Each projected dependent adds its constant owner links and at most 256
+     * semantic Work links. Each is an indexed adjacency
      * links. Links are immutable so a cursor survives moves, deletion and new
      * inserts without a sorted population scan or an offset replay. Historical
      * links may cause a redundant refresh, never a stale visibility decision.
@@ -863,6 +923,11 @@ final class PublicNameProjection {
             Node realm = space == null ? null : one(data, space, "realmCapability");
             if (realm != null) parents.add(realm);
         }
+        var works = data.find(CURRENT, resource, p("semanticWork"), Node.ANY);
+        try { for (int count = 0; works.hasNext(); count++) {
+            if (count == 256) throw new IllegalArgumentException("semantic assertions exceed their admitted bound");
+            parents.add(works.next().getObject());
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(works); }
         for (Node parent : parents) {
             if (!parent.isURI()) continue;
             Node member = uri(PREFIX + "dependent:" + java.util.UUID.nameUUIDFromBytes(
@@ -1067,7 +1132,7 @@ final class PublicNameProjection {
         finally { org.apache.jena.atlas.iterator.Iter.close(epochs); }
         for (Node owner : java.util.List.of(resource, source == null ? resource : source)) {
             key.append('|').append(owner).append('|').append(state(data, owner, "nameGeneration"));
-            for (String predicate : java.util.List.of("descriptiveMetadataHead", "collectionNameHead")) {
+            for (String predicate : java.util.List.of("descriptiveMetadataHead", "collectionNameHead", "semanticHead", "head")) {
                 Node head = one(data, owner, predicate);
                 key.append('|').append(head).append('|').append(head != null
                     && data.contains(REVISIONS, head, RDF.type.asNode(), p("ErasedRevision")));
@@ -1167,7 +1232,7 @@ final class PublicNameProjection {
         }
         if (more) {
             state(data, resource, "labelCopyGeneration", generation);
-            state(data, resource, "labelCopyPhase", NodeFactory.createLiteralString("-7"));
+            state(data, resource, "labelCopyPhase", NodeFactory.createLiteralString(Integer.toString(-NAME_KINDS.size())));
             // Retain this per-resource step after completion. A withdrawal and
             // restoration may return to the same recipe generation; reusing a
             // former (generation, phase, step) would replay a completed receipt.
@@ -1224,7 +1289,7 @@ final class PublicNameProjection {
             // with a cursor from the old order; reopening the same store resumes.
             // https://github.com/apache/jena/blob/jena-6.2.0/jena-tdb2/src/main/java/org/apache/jena/tdb2/sys/CopyDSG.java
             state(data, resource, "labelCopyStore", store);
-            state(data, resource, "labelCopyPhase", NodeFactory.createLiteralString("-7"));
+            state(data, resource, "labelCopyPhase", NodeFactory.createLiteralString(Integer.toString(-NAME_KINDS.size())));
             state(data, resource, "labelCopyAfter", null);
             java.math.BigInteger step = new java.math.BigInteger(state(data, resource, "labelCopyStep").getLiteralLexicalForm());
             state(data, resource, "labelCopyStep", NodeFactory.createLiteralString(step.add(java.math.BigInteger.ONE).toString()));
@@ -1235,7 +1300,7 @@ final class PublicNameProjection {
         while (processed < NAME_BATCH_SIZE && phase < 7) {
             Node after = state(data, resource, "labelCopyAfter");
             NamePage page;
-            if (phase < 0) page = namePage(data, PUBLIC, nameUnit(resource, NAME_KINDS.get(phase + 7)), p("publicTitle"), NAME_BATCH_SIZE - processed);
+            if (phase < 0) page = namePage(data, PUBLIC, nameUnit(resource, NAME_KINDS.get(phase + NAME_KINDS.size())), p("publicTitle"), NAME_BATCH_SIZE - processed);
             else if (kind == null) { phase = 7; break; }
             else if (phase < 6) page = nameRange(data, source, NAME_PREDICATES.get(phase), after, NAME_BATCH_SIZE - processed);
             else {
@@ -1247,7 +1312,7 @@ final class PublicNameProjection {
                 state(data, resource, "labelCopyAfter", NodeFactory.createLiteralString(Integer.toString(end)));
             }
             for (Node name : page.values()) {
-                if (phase < 0) data.delete(PUBLIC, nameUnit(resource, NAME_KINDS.get(phase + 7)), p("publicTitle"), name);
+                if (phase < 0) data.delete(PUBLIC, nameUnit(resource, NAME_KINDS.get(phase + NAME_KINDS.size())), p("publicTitle"), name);
                 else if (name.isLiteral()) data.add(PUBLIC, nameUnit(resource, kind), p("publicTitle"), name);
             }
             processed += page.values().size();

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { direction } from '@rezics/main/language';
 import { expect, within } from 'storybook/test';
 import { browseResources } from './browse-fixtures.ts';
 import { browseResourceHref, DiscoverResourceCard } from './resource-card.tsx';
@@ -45,6 +46,9 @@ export const SiteLatin: Story = { args: { item: browseResources[2]! } };
 export const PersonLatin: Story = { args: { item: browseResources[3]! } };
 export const ListLatin: Story = { args: { item: browseResources[4]! } };
 export const TopicLatin: Story = { args: { item: browseResources[5]! } };
+export const NamedResource: Story = { args: { item: { ...browseResources[5]!, kind: 'resource',
+  types: ['https://rezics.com/vocab/Character'],
+  name: { value: 'Artoria Pendragon', language: 'en', direction: direction('en', 'Artoria Pendragon'), basis: 'requested' } } } };
 export const WorkInCommunity: Story = {
   args: { scope: { kind: 'realm', realm: '00000000-0000-4000-8000-000000000009' } },
   async play({ canvasElement, args }) {

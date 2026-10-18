@@ -40,6 +40,9 @@ export function resourceTypeKinds(
   };
   for (const definition of definitions)
     if (definition.base === 'work') owned[definition.type] = ['work'];
+    else if (definition.base === 'resource' && !owned[definition.type]
+      && definition.type !== 'http://www.w3.org/2000/01/rdf-schema#Resource')
+      owned[definition.type] = ['resource'];
   let kinds: ResourceCard['kind'][] = [
     'work',
     'realm',
@@ -48,6 +51,7 @@ export function resourceTypeKinds(
     'site',
     'agent',
     'collection',
+    'resource',
   ];
   for (const condition of conditions.filter(
     (row) => row.facet === 'type' && row.operator !== 'none',

@@ -211686,6 +211686,8 @@
                     },
                     "nextCursor": {
                       "~elyTyp": 7,
+                      "maxLength": 2048,
+                      "minLength": 1,
                       "nullable": true,
                       "type": [
                         "string",
@@ -219126,7 +219128,8 @@
                                         "site",
                                         "agent",
                                         "collection",
-                                        "concept"
+                                        "concept",
+                                        "resource"
                                       ],
                                       "type": "string"
                                     },
@@ -219693,6 +219696,8 @@
                               },
                               "nextCursor": {
                                 "~elyTyp": 7,
+                                "maxLength": 2048,
+                                "minLength": 1,
                                 "nullable": true,
                                 "type": [
                                   "string",
@@ -219739,6 +219744,8 @@
                     },
                     "nextCursor": {
                       "~elyTyp": 7,
+                      "maxLength": 2048,
+                      "minLength": 1,
                       "nullable": true,
                       "type": [
                         "string",
@@ -597251,7 +597258,8 @@
                                       "site",
                                       "agent",
                                       "collection",
-                                      "concept"
+                                      "concept",
+                                      "resource"
                                     ],
                                     "type": "string"
                                   },
@@ -597818,6 +597826,8 @@
                             },
                             "nextCursor": {
                               "~elyTyp": 7,
+                              "maxLength": 2048,
+                              "minLength": 1,
                               "nullable": true,
                               "type": [
                                 "string",
@@ -615089,6 +615099,8 @@
                     },
                     "nextCursor": {
                       "~elyTyp": 7,
+                      "maxLength": 2048,
+                      "minLength": 1,
                       "nullable": true,
                       "type": [
                         "string",

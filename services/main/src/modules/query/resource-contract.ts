@@ -85,6 +85,7 @@ export const resourceCard = t.Object({
     t.Literal('agent'),
     t.Literal('collection'),
     t.Literal('concept'),
+    t.Literal('resource'),
   ]),
   name: readName,
   icon: readAvatar,
@@ -111,8 +112,8 @@ export interface ResourceListPlan {
  * A single-owner type selection enters the native collector before retrieval.
  * Each ranked window needs one live population join and zero per-hit text
  * collectors. Concept meaning needs one graph read per request, independent of
- * refill count. Names/types/disclosure admit the full 64-candidate window once;
- * credit/rating previews hydrate the delivered page once. An undecided
+ * refill count. Types admit each candidate window; names/disclosure and
+ * credit/rating previews hydrate the selected page once. An undecided
  * hit stays after the cursor. Application matching is O(C*T*I + M), with C
  * examined candidates, T selected Concepts, I interpretations and M membership
  * rows, rather than rescanning the whole membership relation for every chip.
@@ -128,7 +129,7 @@ export interface ResourceListPlan {
  * Two windows examine at most 128 candidates. Dense negation/disclosure returns
  * an advancing partial page when this allocation ends; zero matches then has
  * an at-least count, never exact empty. Source merges may fetch up to eight
- * bounded owner windows, but never hydrate more than the two admitted windows.
+ * bounded owner windows, but hydrate at most one selected page (<=64 cards).
  * One request owns native readiness and the final uncached graph/instance
  * fences. Work admission carries types/heads; Work topic matching uses SQL
  * postings and needs no resource-topic graph read. The Work path needs <=16
