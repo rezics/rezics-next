@@ -199,6 +199,8 @@ function sourceCaptureVerifier(
       }
       records.set(capture.digest, row);
     }
+    if (jsonPointerValue(row, evidence.field) !== image.url)
+      throw new Error(`Cover field locator does not identify its image URL: ${evidence.field}`);
     if (evidence.provider === 'bangumi') {
       if (
         !row ||
@@ -228,8 +230,6 @@ function sourceCaptureVerifier(
       )
         throw new Error('Bangumi media evidence differs from its endpoint role or image field');
     }
-    if (jsonPointerValue(row, evidence.field) !== image.url)
-      throw new Error(`Cover field locator does not identify its image URL: ${evidence.field}`);
     if (evidence.holder && jsonPointerValue(row, evidence.holder.field) !== evidence.holder.name)
       throw new Error(
         `Cover holder locator does not identify its holder: ${evidence.holder.field}`,
