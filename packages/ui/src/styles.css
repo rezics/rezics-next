@@ -70,6 +70,7 @@
 
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-control: var(--control);
   --color-ring: var(--ring);
 
   --color-code: var(--code);
@@ -331,6 +332,8 @@
 
   --border: #dad7d0;
   --input: #dad7d0;
+  /* Opaque control boundaries and off tracks; border/input keep softer decoration. */
+  --control: #827d75;
   --ring: #2f63ad;
 
   --sidebar: #f7f5f1;
@@ -403,6 +406,7 @@
 
     --border: #2a2e33;
     --input: #2a2e33;
+    --control: #7a8088;
     --ring: #86aee8;
 
     --sidebar: #11171d;

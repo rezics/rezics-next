@@ -18,7 +18,7 @@ export const inputGroupVariants = tv({
     'w-full min-w-0',
     'flex items-center',
     'bg-primary/5',
-    'rounded-xl border border-border/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-border',
+    'rounded-xl border border-control shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-muted-foreground',
     'transition-[color,box-shadow]',
     'has-[>textarea]:h-auto has-[>textarea]:rounded-2xl',
     'has-[>[data-align=inline-start]]:[&>input]:ps-2',
@@ -29,7 +29,7 @@ export const inputGroupVariants = tv({
     'data-disabled:pointer-events-none data-disabled:opacity-64',
     'has-[input:disabled,textarea:disabled]:opacity-64',
     // Keyed to the element, not data-slot: Ark parts such as Combobox.Input replace the slot.
-    'has-[input:focus-visible,textarea:focus-visible]:border-ring/50 has-[input:focus-visible,textarea:focus-visible]:ring-2 has-[input:focus-visible,textarea:focus-visible]:ring-ring/20',
+    'has-[input:focus-visible,textarea:focus-visible]:border-ring has-[input:focus-visible,textarea:focus-visible]:ring-2 has-[input:focus-visible,textarea:focus-visible]:ring-ring/20',
     'has-[[data-slot][aria-invalid=true]]:border-destructive has-[[data-slot][aria-invalid=true]]:ring-[3px] has-[[data-slot][aria-invalid=true]]:ring-destructive/24',
     'dark:has-[[data-slot][aria-invalid=true]]:border-destructive-foreground dark:has-[[data-slot][aria-invalid=true]]:ring-destructive-foreground/40',
     'motion-reduce:transition-none!',
