@@ -27,6 +27,16 @@ model assignment policy.
 The lifecycle is dispatch, handoff, then landing or resume, and close. With the
 coordinator's service running, its pump settles each exited task and no `wait`
 is needed; without it, a background `wait` does the same for its task.
+
+Automatic settlement requires explicit `land: auto` for changing tasks of every
+kind; a done handoff alone leaves them exited for a manager landing decision.
+A `## Wave` section in the task's recorded brief keeps a build handoff exited
+for program disposition even with `land: auto`. Wave builds never land
+individually: combined proof and review precede the wave's single landing
+([wave procedure](wave.md)). These boundaries preserve manual audit reviews
+and wave proof requirements. Complete read-only tasks may still verify without
+a merge or an automatic landing opt-in.
+
 A command of the tool that needs no shared state is one file in
 [`scripts/goal/commands/`](../../scripts/goal/commands/), named as the command. Worker processes are detached and survive
 a manager restart; the coordinator continues settling them. Without the
