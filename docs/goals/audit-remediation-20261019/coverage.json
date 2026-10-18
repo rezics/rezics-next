@@ -7,8 +7,8 @@
       "severity": "P0",
       "sourceConfidence": "confirmed",
       "title": "通知读取缺少共同预算和取消，遗留工作在无用户时继续耗尽共享读取容量",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2762 + G-2763",
       "proof": []
     },
     {
@@ -16,8 +16,8 @@
       "severity": "P0",
       "sourceConfidence": "confirmed",
       "title": "Discover默认合法列表耗尽自身32次调用预算，单用户稳定422",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2762 + G-2764",
       "proof": []
     },
     {
@@ -79,8 +79,8 @@
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "Discovery刷新对持续失败无限期重试，无用户仍持续消耗共享读取",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2766",
       "proof": []
     },
     {
@@ -88,8 +88,8 @@
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "全站搜索未覆盖公开可读角色、称号与讨论帖子",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2764",
       "proof": []
     },
     {
@@ -151,8 +151,8 @@
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "来源、许可与证据没有在页末统一区域集中呈现",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2757 + G-2758",
       "proof": []
     },
     {
@@ -160,8 +160,8 @@
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "Discover 自己生成的超长游标无法续页",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2764",
       "proof": []
     },
     {
@@ -259,8 +259,8 @@
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "正文搜索在前台做全人口Content资格化，索引健康时仍1.5秒503",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2762 + G-2765",
       "proof": []
     },
     {
@@ -268,8 +268,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "详情页缺少稳定的主体、分类型页头、动作区和信息顺序契约",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2757 + G-2758",
       "proof": []
     },
     {
@@ -358,8 +358,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "混合卡片没有 masonry，外部行高和内部占位共同制造大空洞",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2754",
       "proof": []
     },
     {
@@ -367,8 +367,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "断点叠加使视口变宽 1px、卡片反而骤缩",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2754",
       "proof": []
     },
     {
@@ -385,8 +385,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "分卷作品实际有 4 章，Studio 却显示 0 chapters",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2753",
       "proof": []
     },
     {
@@ -403,8 +403,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "浏览卡片封面过大，并随混排分支改变尺寸",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2754",
       "proof": []
     },
     {
@@ -412,8 +412,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "保存精选用不完整summary合成作品卡，同一本Book变成document并改变封面设计和信用信息",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2755",
       "proof": []
     },
     {
@@ -421,8 +421,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "手机详情导航浮层缺少 Escape、外点关闭与一致的焦点行为",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2757",
       "proof": []
     },
     {
@@ -430,8 +430,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "Work 子视图没有统一导航模型，Connections 错标 Overview",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2757",
       "proof": []
     },
     {
@@ -439,8 +439,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "非书籍散文正文沿用全宽容器，指南缺少阅读行宽",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2757",
       "proof": []
     },
     {
@@ -448,8 +448,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "设置共用 busy 状态，却让可操作的语言控件静默丢弃输入",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2751",
       "proof": []
     },
     {
@@ -457,8 +457,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "中性装饰色同时承担输入控件识别，空字段和亮色关闭开关对比不足",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2756",
       "proof": []
     },
     {
@@ -475,8 +475,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "Library以目标、统计和搬运工具占据首屏，正在读的作品最后出现",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2752",
       "proof": []
     },
     {
@@ -484,8 +484,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "手机通知偏好矩阵滚动后失去通道含义",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2751",
       "proof": []
     },
     {
@@ -493,8 +493,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "自动保存反馈放在45个开关之后，操作结果在手机屏外",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2751",
       "proof": []
     },
     {
@@ -502,8 +502,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "Home把获客横幅与空侧栏放在内容之前，首屏没有证明值得关注什么",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2752",
       "proof": []
     },
     {
@@ -511,8 +511,8 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "Studio用展示卡管理作品，却缺少定位和排序，状态与元数据挤成高卡",
-      "status": "pending",
-      "owner": null,
+      "status": "build-briefed",
+      "owner": "G-2753",
       "proof": []
     },
     {
