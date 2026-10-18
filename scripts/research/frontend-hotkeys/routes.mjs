@@ -23,7 +23,8 @@ async function run(command,cwd,env,path){
   writeFileSync(path,Buffer.concat(data));return code;
 }
 if(existsSync(copy))rmSync(copy,{recursive:true});mkdirSync(copy,{recursive:true});
-for(const directory of ['apps','packages'])cpSync(join(root,directory),join(copy,directory),{recursive:true,
+// The unchanged Vite config imports production-env, which imports service specs.
+for(const directory of ['apps','packages','services'])cpSync(join(root,directory),join(copy,directory),{recursive:true,
   filter:path=>!/(?:^|\/)(?:node_modules|dist|\.vinext|\.wrangler|\.temp)(?:\/|$)/.test(relative(root,path))});
 mkdirSync(join(copy,'scripts'),{recursive:true});cpSync(join(root,'scripts/ops'),join(copy,'scripts/ops'),{recursive:true});
 cpSync(join(root,'Taskfile.yml'),join(copy,'Taskfile.yml'));

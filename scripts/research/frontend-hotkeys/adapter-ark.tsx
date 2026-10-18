@@ -18,9 +18,10 @@ export function Adapter({ rows, act }: any) {
     },
   })) });
   useEffect(() => {
+    // Pair public init/destroy ourselves: the hook's one-time WeakSet does not
+    // reinitialize a destroyed store during Strict Mode effect replay.
+    store.init({ target: document });
     (window as any).__adapter = { count: () => store.getState().commands.size, kind: 'ark' };
-    // Public destroy is tested; the React hook's initialized WeakSet may prevent
-    // a reused store from attaching again after Strict Mode cleanup.
     return () => store.destroy();
   }, [store]);
   return null;
