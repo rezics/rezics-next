@@ -13,9 +13,11 @@ import { blobPath, verifiedBlob } from '../../datasets/store.ts';
 import { datasetMediaMapper } from '../../datasets/native/media.ts';
 import { selectDatasetRoots, type DatasetSelectionResult } from '../../datasets/selection.ts';
 import type { DatasetNativeMapper, DatasetSnapshot } from '../../datasets/types.ts';
+import { reconstructIntake } from '../../datasets/import.ts';
 import { RetainedSources, sourceFileDigests, sourceKey, type RetainedSourceAdapter,
   type RetainedSourceManifest, type SourceContext, type SourceInputs } from '../retained-source.ts';
 import matrix from '../../../tests/qa/fixtures/catalogue/import-outcomes.json';
+import { retainedAdmissionCases, type RetainedRecordInput } from '../../../tests/qa/fixtures/catalogue/import-admission-contract.ts';
 import { informationMatrix } from '../../../tests/qa/fixtures/catalogue-information-matrix.ts';
 import { publicDomainBaseline } from '../../../tests/qa/fixtures/catalogue-public-domain.ts';
 import { auditBaseline, auditConsumerForFile, auditConsumers, auditOwnerPrerequisites,
@@ -487,7 +489,9 @@ export function auditCorpusAdapter(checkout: string, inspection: AuditInspection
       const recorder = new AuditRecorder(join(checkout, '.temp/audit-corpus/attempts', `${key}-${randomUUID()}.jsonl`), now);
       let session: AuditSession | undefined, smoke: AuditSession | undefined;
       recorder.bind('originals', json(inspection.originals));
-      recorder.bind('source', json({ root: resolve(checkout, inspection.recipe.sourceRoot), pins: inspection.sourcePins }));
+      const importRecords = auditImportRecordInputs(inspection.snapshots);
+      recorder.bind('source', json({ root: resolve(checkout, inspection.recipe.sourceRoot), pins: inspection.sourcePins,
+        records: Object.fromEntries(importRecords) }));
       // Absence is not a created identity. These IDs enter provenance only after
       // an actual public 404 readiness read, below.
       recorder.bindings.set('controls', Object.fromEntries((inspection.recipe.unknownControls ?? [])
@@ -545,7 +549,8 @@ export function auditCorpusAdapter(checkout: string, inspection: AuditInspection
           const manifest = projectAuditManifest(consumer, fragment, cutManifest, smoke, checkout, runtime.revision);
           assertAuditNativeProvenance(manifest, recorder.observed);
           assertAuditGenerationProvenance(manifest, recorder.observed);
-          assertAuditManifest(consumer, manifest, inspection.originals.bindings.map(binding => binding.resource));
+          assertAuditManifest(consumer, manifest, inspection.originals.bindings.map(binding => binding.resource),
+            { records: importRecords, bindings: recorder.bindings });
         }
         await smoke.stop(); smoke = undefined;
         metadata.roundTripMs = now() - restoreStarted;
@@ -590,9 +595,150 @@ export function auditCorpusAdapter(checkout: string, inspection: AuditInspection
   };
 }
 
+type FrozenImportInput = Pick<RetainedRecordInput, 'identity' | 'snapshot' | 'record' | 'recordDigest'>;
+export interface AuditImportInputs {
+  records: ReadonlyMap<string, FrozenImportInput>;
+  bindings: ReadonlyMap<string, RetainedJson>;
+}
+
+/** Expose the already inspected complete records to the existing ref operator.
+ * Provider payloads and normalized records keep their separate coordinates. */
+export function auditImportRecordInputs(snapshots: ReadonlyMap<string, DatasetSnapshot>): Map<string, FrozenImportInput> {
+  const inputs = new Map<string, FrozenImportInput>();
+  for (const pin of matrix.sources) {
+    const snapshot = snapshots.get(pin.id);
+    if (!snapshot) continue;
+    requireFact(snapshot.id === pin.id && snapshot.digest === pin.digest, 'import snapshot pin differs');
+    const source = snapshot.sources.find(candidate => candidate.provider === pin.provider);
+    const recordDigests: Record<string, string | undefined> = pin.recordDigests;
+    for (const key of pin.recordKeys) {
+      const record = source?.records.find(candidate => candidate.key === key);
+      requireFact(record && hash(record) === recordDigests[key], `frozen import record differs: ${key}`);
+      inputs.set(key, { identity: { key, provider: record.provider, namespace: record.kind, externalId: record.externalId },
+        snapshot: { id: pin.id, digest: pin.digest, fileSha256: pin.fileSha256 }, record, recordDigest: hash(record) });
+    }
+  }
+  return inputs;
+}
+
+/** Validate consumer inputs, not the proposed conversion's success. Receipt
+ * joins use the existing recorder; an unrelated observed UUID is insufficient. */
+function assertAuditImportSources(value: Record<string, unknown>, inputs: AuditImportInputs): void {
+  requireFact(object(value.sources), 'import source receipts are missing');
+  const receipts = [...inputs.bindings].filter(([key, receipt]) => key.startsWith('command:') && object(receipt)
+    && [200, 201].includes(Number(receipt.status)) && !receipt.error)
+    .map(([, receipt]) => receipt as unknown as AuditCommandReceipt);
+  const equal = (actual: unknown, expected: unknown) => actual !== undefined && hash(actual) === hash(expected);
+  const result = (receipt: AuditCommandReceipt, key: string) => object(receipt.answer) ? receipt.answer[key] : undefined;
+  for (const key of retainedAdmissionCases) requireFact(object(value.sources[key]), `missing retained admission source: ${key}`);
+  for (const [key, entry] of Object.entries(value.sources)) {
+    const frozen = inputs.records.get(key);
+    if (!frozen) throw new AuditCorpusBlocked('retained-source', 'import-retained-inputs', `missing exact frozen record: ${key}`);
+    requireFact(object(entry) && native.test(String(entry.record)) && native.test(String(entry.observation))
+      && Array.isArray(entry.parts) && entry.parts.length > 0, `invalid import intake inputs: ${key}`);
+    const parts = entry.parts.map((part: unknown) => {
+      requireFact(object(part) && native.test(String(part.record)) && native.test(String(part.observation))
+        && typeof part.rawBytesBase64 === 'string' && hex.test(String(part.rawDigest)), `invalid actual intake part: ${key}`);
+      const bytes = Buffer.from(part.rawBytesBase64, 'base64');
+      requireFact(bytes.toString('base64') === part.rawBytesBase64 && bytes.length <= 65_536
+        && sha256(bytes) === part.rawDigest, `intake raw bytes differ: ${key}`);
+      const intake = receipts.find(receipt => {
+        const observation = result(receipt, 'observation'), body = receipt.body;
+        return receipt.method === 'POST' && receipt.path === '/v1/sources/intakes' && typeof receipt.key === 'string'
+          && object(body) && body.profile === 'source-manual-intake-v1' && body.provider === frozen.identity.provider
+          && body.sourceRevision === frozen.snapshot.digest && body.retention === 'retained' && object(body.rightsEvidence)
+          && body.rawBytesBase64 === part.rawBytesBase64 && object(observation)
+          && observation.record === part.record && observation.observation === part.observation
+          && observation.byteDigest === part.rawDigest && observation.byteLength === bytes.length
+          && observation.provider === body.provider && observation.sourceRevision === body.sourceRevision
+          && observation.namespace === body.namespace && observation.externalId === body.externalId;
+      });
+      if (!intake) throw new AuditCorpusBlocked('dataset-importer', 'import-intake-receipts',
+        `${key}: retain the successful POST /v1/sources/intakes request and matching part record/observation/byte receipt in command:<id>`);
+      return { part, bytes };
+    });
+    requireFact(parts.some(({ part }) => part.record === entry.record && part.observation === entry.observation),
+      `legacy Source identity is not an actual intake pair: ${key}`);
+    const payload = reconstructIntake(parts.map(part => part.bytes));
+    const envelope = object(payload) && payload.format === 'rezics-dataset-record-v1';
+    const expectedPayload = envelope ? frozen.record
+      : key.startsWith('bangumi:') && frozen.record.data.api_subject ? frozen.record.data.api_subject : frozen.record.data;
+    requireFact(equal(envelope ? payload.record : payload, expectedPayload),
+      `intake payload does not match the frozen record/provider bytes: ${key}`);
+    const conversion = entry.conversion;
+    if (conversion !== undefined) requireFact(native.test(String(conversion)) && receipts.some(receipt => {
+      const answer = result(receipt, 'conversion');
+      return receipt.method === 'POST' && receipt.path === `/v1/sources/observations/${String(entry.observation).slice(-36)}/conversions`
+        && object(answer) && answer.conversion === conversion && answer.observation === entry.observation;
+    }), `conversion has no matching actual command result: ${key}`);
+    if (entry.proposal !== undefined) requireFact(conversion !== undefined && native.test(String(entry.proposal)) && receipts.some(receipt => {
+      const answer = result(receipt, 'proposal');
+      return receipt.method === 'POST' && receipt.path === `/v1/sources/conversions/${String(conversion).slice(-36)}/proposals/native-work`
+        && object(answer) && answer.proposal === entry.proposal && answer.conversion === conversion
+        && answer.record === entry.record && answer.observation === entry.observation;
+    }), `proposal has no matching actual command result: ${key}`);
+    // These existing editorial and authority cases still address real legacy
+    // Bangumi commands. Other records need no successful proposed conversion.
+    if (key === 'bangumi:subject:1014') requireFact(conversion !== undefined && entry.proposal !== undefined,
+      'Bangumi editorial and negative-authority prerequisites need the actual conversion and proposal');
+    const request = entry.retainedRequest;
+    if ((retainedAdmissionCases as readonly string[]).includes(key) || request !== undefined) {
+      requireFact(object(request) && request.profile === 'source-retained-record-conversion-v1'
+        && typeof request.mappingRevision === 'string' && request.mappingRevision.length > 0 && object(request.retained),
+      `missing exact retainedRequest: ${key}`);
+      const retained = request.retained;
+      requireFact(equal(Object.keys(request).sort(), ['mappingRevision', 'profile', 'retained'])
+        && equal(Object.keys(retained).sort(), ['identity', 'intakes', 'payload', 'record', 'recordDigest', 'snapshot']),
+      `retainedRequest has fields outside the proposed input contract: ${key}`);
+      for (const field of ['identity', 'snapshot', 'record', 'recordDigest'] as const)
+        requireFact(equal(retained[field], frozen[field]), `retainedRequest ${field} differs from the full frozen record: ${key}`);
+      requireFact(equal(retained.intakes, parts.map(({ part }, index) => ({ index, record: part.record,
+        observation: part.observation, byteDigest: part.rawDigest }))), `retainedRequest ordered actual intakes differ: ${key}`);
+      const first = JSON.parse(parts[0]!.bytes.toString()) as Record<string, unknown>;
+      requireFact(equal(retained.payload, first.format === 'rezics-dataset-chunk-v1'
+        ? { format: 'rezics-dataset-chunk-v1', byteDigest: first.digest, byteLength: first.byteLength }
+        : { format: 'json', byteDigest: sha256(parts[0]!.bytes), byteLength: parts[0]!.bytes.length }),
+      `retainedRequest assembled payload metadata differs: ${key}`);
+      if (entry.retainedBinding !== undefined) {
+        const binding = entry.retainedBinding;
+        requireFact(object(binding) && binding.profile === 'source-retained-record-binding-v1'
+          && ['binding', 'sourceRecord', 'conversion'].every(field => native.test(String(binding[field])))
+          && typeof binding.normalizationRevision === 'string' && binding.normalizationRevision.length > 0
+          && binding.mappingRevision === request.mappingRevision, `invalid observed retainedBinding: ${key}`);
+        for (const field of ['identity', 'snapshot', 'recordDigest', 'intakes', 'payload'])
+          requireFact(equal(binding[field], retained[field]), `retainedBinding input differs: ${key}`);
+        requireFact(receipts.some(receipt => {
+          const answer = result(receipt, 'conversion');
+          return receipt.method === 'POST' && receipt.path === `/v1/sources/observations/${String(parts[0]!.part.observation).slice(-36)}/conversions`
+            && equal(receipt.body, request) && object(answer) && answer.conversion === binding.conversion
+            && equal(answer.retainedRecord, binding);
+        }), `retainedBinding has no matching actual conversion result: ${key}`);
+      }
+    } else requireFact(entry.retainedBinding === undefined, `retainedBinding lacks its exact request: ${key}`);
+  }
+  if (value.synopsisSupport !== undefined) {
+    const support = value.synopsisSupport, source = value.sources['bangumi:subject:1014'] as Record<string, unknown>;
+    const target = object(value.targets) && value.targets['bangumi:subject:1014'];
+    requireFact(object(support) && native.test(String(support.support)) && typeof support.supportIdentity === 'string'
+      && support.supportIdentity.length > 0 && object(target), 'invalid observed synopsisSupport');
+    requireFact(receipts.some(receipt => receipt.method === 'POST'
+      && receipt.path === `/v1/works/${String(target.resource).slice(-36)}/fields/synopsis/control`
+      && object(receipt.body) && receipt.body.profile === 'work-editorial-field-control-v1' && receipt.body.origin === 'source'
+      && object(receipt.body.source) && receipt.body.source.record === source.record
+      && receipt.body.source.observation === source.observation && receipt.body.source.conversion === source.conversion
+      && result(receipt, 'support') === support.support), 'synopsisSupport has no actual source-origin control result');
+    requireFact(receipts.some(receipt => receipt.method === 'GET'
+      && receipt.path === `/v1/sources/field-supports/${String(support.support).slice(-36)}` && object(receipt.answer)
+      && receipt.answer.support === support.support && receipt.answer.supportIdentity === support.supportIdentity
+      && receipt.answer.target === target.resource && receipt.answer.sourceRecord === source.record
+      && receipt.answer.conversion === source.conversion), 'synopsisSupport lacks its matching private management receipt');
+  }
+}
+
 /** Structural checks complement (and do not replace) the independent consumers'
  * deep assertions. No producer status promotes a pending product outcome. */
-export function assertAuditManifest<C extends AuditConsumer>(consumer: C, value: unknown, originalWorks: readonly string[]): asserts value is AuditManifests[C] {
+export function assertAuditManifest<C extends AuditConsumer>(consumer: C, value: unknown, originalWorks: readonly string[],
+  importInputs?: AuditImportInputs): asserts value is AuditManifests[C] {
   requireFact(object(value), `${consumer} projection is not an object`);
   const signatures: Record<AuditConsumer, readonly [string, string, readonly string[]]> = {
     imports: ['profile', 'import-outcomes-corpus-v1', ['phase', 'productRevision', 'selectionDigest', 'runId', 'fixtureRoot', 'sourceRoot', 'targets', 'relations', 'sources', 'selections', 'hidden', 'music', 'refresh', 'authority', 'realm', 'backup', 'preparation']],
@@ -632,8 +778,8 @@ export function assertAuditManifest<C extends AuditConsumer>(consumer: C, value:
     requireFact(typeof value.sourceRoot === 'string' && value.sourceRoot.length > 0, 'import frozen sourceRoot is missing');
     for (const target of Object.values(required(value.targets, [], 'import targets')))
       required(target, ['resource', 'revision', 'kind'], 'native import target');
-    for (const source of Object.values(required(value.sources, [], 'import source receipts')))
-      list(required(source, ['record', 'observation', 'conversion', 'parts'], 'import source').parts, 'intake parts', 1);
+    requireFact(importInputs, 'import validation requires frozen records and actual command bindings');
+    assertAuditImportSources(value, importInputs);
     required(value.refresh, ['sourceKey', 'baseConversion', 'candidateConversion', 'command', 'oldGeneration', 'newGeneration'], 'source refresh');
     list(value.selections, 'import selections', 1);
   }
@@ -1065,7 +1211,8 @@ export async function prepareAuditQaSelection(checkout: string, file: string, ru
     const manifest = projectAuditManifest(plan.consumer, fragment, retained.manifest, copy ?? undefined, checkout, source.runtime.revision);
     assertAuditNativeProvenance(manifest, observed);
     assertAuditGenerationProvenance(manifest, observed);
-    assertAuditManifest(plan.consumer, manifest, metadata.originals.map(binding => binding.resource));
+    assertAuditManifest(plan.consumer, manifest, metadata.originals.map(binding => binding.resource), plan.consumer === 'imports'
+      ? { records: auditImportRecordInputs(source.inspection.snapshots), bindings } : undefined);
     const path = writeAuditConsumer(checkout, plan.consumer, runId, manifest);
     const entry = auditConsumers[plan.consumer];
     mkdirSync(join(checkout, '.temp/fixture'), { recursive: true, mode: 0o700 });
