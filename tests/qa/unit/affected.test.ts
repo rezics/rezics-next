@@ -305,15 +305,13 @@ test('frontend-only changes list their workspace checks and run only targeted ch
   expect(result.ignored).toEqual([]);
 });
 
-test('Accounts and About retain their own checks, including non-code and documentation changes', () => {
-  const result = plan(['apps/accounts/messages/en.json', 'apps/about/README.md']);
-  expect(affectedCommands(result).map(item => item.command)).toEqual([
-    ['task', ['accounts:typecheck']], ['task', ['about:check']],
-  ]);
+test('Accounts retains its own checks, including non-code changes', () => {
+  const result = plan(['apps/accounts/messages/en.json']);
+  expect(affectedCommands(result).map(item => item.command)).toEqual([['task', ['accounts:typecheck']]]);
   expect(formatPlan(result)).toContain('task accounts:storybook:test');
   expect(formatPlan(result)).toContain('task accounts:e2e');
-  expect(needsGraph(['apps/accounts/messages/en.json', 'apps/about/README.md'])).toBe(true);
-  expect(needsGraph(['apps/about/README.md'])).toBe(false);
+  expect(needsGraph(['apps/accounts/messages/en.json', 'docs/README.md'])).toBe(true);
+  expect(needsGraph(['docs/README.md'])).toBe(false);
   expect(needsGraph(['apps/web/features/feed/state.ts'])).toBe(true);
 });
 

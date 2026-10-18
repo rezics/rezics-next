@@ -107,7 +107,7 @@ test('ordinary and mixed-tier dispatch do not supply screenshot environment or c
   const env = { REZICS_STACK_PROFILE: 'prod', REZICS_QA_ARTIFACT_ROOT: artifacts };
   for (const { args, expectedLaunches } of [
     { args: ['services/main/tests/command.test.ts', '-t', 'profile'], expectedLaunches: 1 },
-    { args: ['apps/about/tests/build.test.ts', 'scripts/dev/seed/api.test.ts'], expectedLaunches: 2 },
+    { args: ['apps/web/tests/g-944-shared-browser.test.ts', 'scripts/dev/seed/api.test.ts'], expectedLaunches: 2 },
   ]) {
     let launches = 0;
     expect(await dispatchTest(args, {

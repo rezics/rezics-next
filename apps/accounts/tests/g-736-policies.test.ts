@@ -41,7 +41,7 @@ describe('G-736 policy status', () => {
       { policyId: 'privacy', versionDigest: 'b'.repeat(64) }]);
   });
 
-  test('links point at the about site page of the person’s locale', () => {
+  test('links point at the policy page of the person’s locale', () => {
     expect(policyHref('https://rezics.com/', 'ja', 'privacy')).toBe('https://rezics.com/ja/legal/privacy/');
     expect(accountsConfig({}).ABOUT_SITE_URL).toBe('https://rezics.com');
   });

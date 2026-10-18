@@ -56,7 +56,7 @@ export interface GraphModule {
   }[];
 }
 
-const frontendWorkspaces = ['apps/web', 'apps/accounts', 'packages/ui', 'apps/about'] as const;
+const frontendWorkspaces = ['apps/web', 'apps/accounts', 'packages/ui'] as const;
 export type FrontendWorkspace = typeof frontendWorkspaces[number];
 export interface FrontendChecks {
   workspace: FrontendWorkspace;
@@ -73,7 +73,6 @@ function frontendChecks(workspace: FrontendWorkspace): FrontendChecks {
     'apps/web': { check: 'web:typecheck', deferred: [browser('task storybook:test'), browser('task web:e2e')] },
     'apps/accounts': { check: 'accounts:typecheck', deferred: [browser('task accounts:storybook:test'), browser('task accounts:e2e')] },
     'packages/ui': { check: 'ui:typecheck', deferred: [browser('task storybook:test'), browser('task accounts:storybook:test'), browser('task web:e2e'), browser('task accounts:e2e')] },
-    'apps/about': { check: 'about:check', deferred: [browser('task about:e2e')] },
   };
   return { workspace, tests: [], ...checks[workspace] };
 }
@@ -174,7 +173,7 @@ type Rule = { match: RegExp; reason: string } & (
 // Anything unmatched and unreferenced widens to every tier (fail closed).
 export const inputRules: Rule[] = [
   {
-    match: /^(?:apps\/(?:web|accounts|about)|packages\/ui)\//,
+    match: /^(?:apps\/(?:web|accounts)|packages\/ui)\//,
     effect: 'frontend',
     reason: 'frontend workspace checks',
   },
@@ -264,7 +263,7 @@ export function routeTest(path: string): { tier: AffectedTier } | { deferred: st
   const excluded = testExclusions.find(item => item.file === path && path.startsWith('apps/web/'));
   if (excluded) return { deferred: excluded.reason };
   const workspace = frontendWorkspace(path);
-  if (workspace) return workspace === 'apps/about' || isQaE2ePath(path) ? undefined : { workspace };
+  if (workspace) return isQaE2ePath(path) ? undefined : { workspace };
   if (isQaE2ePath(path) || path.startsWith('apps/') || path.startsWith('packages/ui/'))
     return undefined;
   if ((legacyHostJenaGateFiles as readonly string[]).includes(path)) {
@@ -594,8 +593,6 @@ export function planAffected(input: {
       : classify(path);
     if (rule?.effect === 'frontend') {
       frontend(frontendWorkspace(path)!);
-      // About owns its full cheap check. Other workspaces use import edges for targeted tests.
-      if (frontendWorkspace(path) === 'apps/about') continue;
       if (!codeFile.test(path)) {
         if (input.exists(path)) seeds.add(path);
         addReferences(path, true, true);
@@ -831,9 +828,7 @@ export function needsGraph(
   scriptOnly: ReadonlySet<string> = new Set(),
 ): boolean {
   return changed.some(
-    (path) => scriptOnly.has(path) || (classify(path)?.effect === 'frontend'
-      ? frontendWorkspace(path) !== 'apps/about'
-      : !['ignore', 'widen'].includes(classify(path)?.effect ?? '')),
+    (path) => scriptOnly.has(path) || !['ignore', 'widen'].includes(classify(path)?.effect ?? ''),
   );
 }
 
@@ -888,7 +883,7 @@ export function formatPlan(plan: AffectedPlan): string {
   for (const checks of plan.frontend) {
     lines.push(`  ${checks.workspace}: task ${checks.check}`);
     for (const file of checks.tests) lines.push(`  ${checks.workspace}: task test -- ${file}`);
-    if (!checks.tests.length && checks.workspace !== 'apps/about')
+    if (!checks.tests.length)
       lines.push(`  ${checks.workspace}: no targeted unit/component tests found; workspace type check runs`);
     for (const { command, reason } of checks.deferred) lines.push(`  not run: ${command} (${reason})`);
   }

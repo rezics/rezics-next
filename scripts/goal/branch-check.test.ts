@@ -111,13 +111,3 @@ test('Git-aware tools see the snapshot inventory and ordinary dependency directo
     return f.runner(command, tree, log);
   } });
 });
-
-test('the about site uses its owning Astro checker and workspace directory', async () => {
-  const f = fixture(); f.write('apps/about/tsconfig.json', '{}'); f.git('add', '.'); f.git('commit', '-qm', 'about');
-  let checked = false;
-  await branchCheck('HEAD', { ...f, runner: async (command, cwd, log) => {
-    if (command[0] === 'node') { expect(command).toEqual(['node', 'astro-check.cjs']); expect(cwd.endsWith('/apps/about/')).toBe(true); checked = true; return { code: 0, output: '' }; }
-    return f.runner(command, cwd, log);
-  } });
-  expect(checked).toBe(true);
-});

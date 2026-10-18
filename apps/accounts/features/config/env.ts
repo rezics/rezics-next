@@ -16,7 +16,7 @@ export const accountsSpec = {
   ACCOUNTS_COUNTRY_FROM_HEADER: bool({ default: false,
     desc: 'Development only: sign-up takes its country from the request CF-IPCountry header, not the Cloudflare edge, so a browser tool can choose a region. Production refuses it.' }),
   ABOUT_SITE_URL: url({ default: 'https://rezics.com',
-    desc: 'Public about site origin that publishes the policies sign-up and re-acceptance link to.' }),
+    desc: 'Public origin of the policy pages sign-up and re-acceptance link to.' }),
 };
 
 export function accountsConfig(env: Record<string, string | undefined> = process.env) {

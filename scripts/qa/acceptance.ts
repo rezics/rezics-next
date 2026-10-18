@@ -176,7 +176,7 @@ function isRetiredQaTest(test: TestResult): boolean {
 export { integrationGateFiles };
 
 // Exclusions are file-specific so a new test cannot silently inherit an opt-out.
-export const testExclusions: readonly { file: string; reason: string; category?: 'live' | 'load' | 'external' }[] = [
+export const testExclusions: readonly { file: string; reason: string; category?: 'live' | 'load' }[] = [
   ...legacyHostJenaGateFiles.map(file => ({ file,
     reason: file.endsWith('/full-work.integration.test.ts')
       ? 'Legacy host Jena harness needs separately installed REZICS_JAVA_HOME, REZICS_JENA_HOME and REZICS_FUSEKI_HOME.'
@@ -185,13 +185,6 @@ export const testExclusions: readonly { file: string; reason: string; category?:
     reason: 'Opt-in 10k Dgraph load evidence requires a completed research:architecture Dgraph probe and its retained results; ordinary Bun tiers do not prepare that workload.' },
   { file: 'apps/web/tests/g-944-shared-browser.test.ts',
     reason: 'Live shared-stack Playwright fixture requires running web, Accounts and Main services; run it explicitly through goalctl rather than the isolated Bun unit tier.' },
-  { file: 'apps/about/tests/build.test.ts', reason: 'The about site runs its tests through task about:check.' },
-  { file: 'apps/about/tests/catalogs.test.ts', reason: 'The about site runs its tests through task about:check.' },
-  { file: 'apps/about/tests/g-736-legal.test.ts', reason: 'The about site runs its tests through task about:check.' },
-  { file: 'apps/about/tests/image-safety-copy.test.ts', reason: 'The about site runs its tests through task about:check.' },
-  { file: 'apps/about/tests/status-badge.test.ts', reason: 'The about site runs its tests through task about:check.' },
-  { file: 'apps/about/tests/ui-sources.test.ts', reason: 'The about site runs its tests through task about:check.' },
-  { file: 'apps/about/tests/worker.test.ts', reason: 'The about site runs its tests through task about:check.' },
   { file: 'tests/live/cargo-crates-io.test.ts', reason: 'Live network fixtures run only on explicit request.' },
   { file: 'tests/live/g-722-images.test.ts', reason: 'Live network fixtures run only on explicit request.' },
   { file: 'tests/live/go-proxy-live.test.ts', reason: 'Live network fixtures run only on explicit request.' },

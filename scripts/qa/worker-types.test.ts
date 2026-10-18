@@ -87,18 +87,6 @@ test('the AppHost custom config and packages without named tasks retain full cov
     .toEqual([['task', 'goal:type-files', '--', '--project', 'packages/zone-sdk/tsconfig.json']]);
 });
 
-test('About source and dependency changes use Astro sync and its owning checker', () => {
-  const f = fixture();
-  f.write('apps/about/tsconfig.json', JSON.stringify({ compilerOptions: { noLib: true, types: [] }, include: ['src/*.ts'] }));
-  f.write('apps/about/src/sitemap.xml.ts', 'export {};');
-  f.write('apps/about/src/other.ts', 'export {};');
-  for (const changed of [['apps/about/src/sitemap.xml.ts'], ['apps/about/package.json'], ['yarn.lock']]) {
-    expect(workerTypePlans(f.root, changed).find(plan => plan.workspace === 'about')?.files).toBeUndefined();
-    expect(workerTypeCommands(f.root, changed)).toContainEqual(['task', 'about:typecheck']);
-    expect(workerTypeCommands(f.root, changed).some(command => command.includes('apps/about/tsconfig.json'))).toBe(false);
-  }
-});
-
 test('the selected checker rejects a broken dependent while leaving unrelated sources out', async () => {
   const f = fixture();
   f.write('services/main/tsconfig.json', JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'ESNext',

@@ -85,16 +85,15 @@ production drills. Existing owner evidence for the manager's regression:
 
 ## Common operator inputs and owner actions
 
-1. **Maintainer/operator → legal/about owner:** Supply legal name, incorporation
+1. **Maintainer/operator → legal owner:** Supply legal name, incorporation
    state, business address, covered domains, governing law/venue and monitored
    support, privacy, legal, safety, NCII, security and appeal contacts plus
-   account-free forms. Complete the existing
-   [legal fact slots](../../apps/about/src/legal/facts.ts), which are empty and
-   block release policy publication. Publish actual practices and refresh
-   acceptance digests through the existing workflow; do not publish placeholders.
-   Correct the Terms §4 claim that likely explicit images are automatically
-   held: current NSFW evidence creates no hold. This is a legal/about owner
-   change, not made by this review.
+   account-free forms. Fill the `[REZICS TO FILL]` markers in the
+   [legal drafts](../legal/README.md), which are empty; do not publish
+   placeholders. Publish actual practices and refresh acceptance digests through
+   the existing workflow. Correct the Terms §4 claim that likely explicit images
+   are automatically held: current NSFW evidence creates no hold. This is a
+   legal owner change, not made by this review.
 2. **Operator → trust-ops safety/deployment owners:** Name active primary and
    backup responders, their verified delivery addresses and grants; provide
    production SAFETY03/07/08 results for account-free intake, deadline alerts,

@@ -70,29 +70,6 @@
       // Imported from app/styles.css, which Knip does not follow.
       "ignoreDependencies": ["@fontsource-variable/manrope", "tailwindcss"]
     },
-    // Astro finds pages, layouts and the Worker by convention; the config, dev plugin and
-    // Playwright files are loaded by their tools. Stylesheets are not followed.
-    "apps/about": {
-      // tests/fixtures are imported from generated test source, which Knip cannot follow.
-      "entry": [
-        "src/pages/**/*.{astro,ts}",
-        "astro-check.cjs",
-        "tests/**/*.{test,e2e}.ts",
-        "tests/fixtures/**/*.astro"
-      ],
-      "project": ["**/*.{ts,tsx,astro,cjs}"],
-      // global.css imports the faces and Tailwind; og.ts and the axe helper resolve their
-      // packages by path; astro-check.cjs needs the WASM runtime @astrojs/astro2tsx forgot to declare.
-      "ignoreDependencies": [
-        "@emnapi/runtime",
-        "@fontsource-variable/geist-mono",
-        "@fontsource-variable/manrope",
-        "@fontsource-variable/source-serif-4",
-        "@fontsource/manrope",
-        "axe-core",
-        "tailwindcss"
-      ]
-    },
     "packages/wiki-toolkit": {
       "entry": [
         "src/cli.ts",

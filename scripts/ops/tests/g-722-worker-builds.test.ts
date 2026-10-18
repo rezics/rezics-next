@@ -6,7 +6,6 @@ import { repositoryRoot } from '../migrate.ts';
 for (const [app, variable] of [
   ['web', 'MAIN_ORIGIN'],
   ['accounts', 'ACCOUNT_BASE_URL'],
-  ['about', 'ABOUT_SITE_URL'],
 ]) {
   test(`G-722 ${app} production build refuses loopback ${variable}`, () => {
     const result = spawnSync('task', [`${app}:build`], {

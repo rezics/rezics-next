@@ -19,8 +19,7 @@
         "experimental": {
           "configFile": {
             "apps/web/app/styles.css": ["apps/web/**", "packages/ui/src/**"],
-            "apps/accounts/app/styles.css": "apps/accounts/**",
-            "apps/about/src/styles/global.css": "apps/about/**"
+            "apps/accounts/app/styles.css": "apps/accounts/**"
           }
         }
       }

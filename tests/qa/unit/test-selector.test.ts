@@ -232,7 +232,7 @@ test('a Bun file outside a tier keeps its own command and any group failure fail
   const launches: [string, string[]][] = [];
   try {
     const code = await dispatchTest([
-      'apps/about/tests/build.test.ts',
+      'apps/web/tests/g-944-shared-browser.test.ts',
       'scripts/dev/seed/api.test.ts',
     ], { runner: async command => { launches.push(command); return launches.length === 1 ? 0 : 3; } });
     expect(code).toBe(1);
@@ -240,7 +240,7 @@ test('a Bun file outside a tier keeps its own command and any group failure fail
   expect(launches.map(command => command[1][0])).toEqual(['test', 'scripts/qa/cli.ts']);
   expect(launches[1]![1]).toContain('--tier');
   expect(launches[1]![1]).toContain('owner');
-  expect(launches[0]![1]).toContain('apps/about/tests/build.test.ts');
+  expect(launches[0]![1]).toContain('apps/web/tests/g-944-shared-browser.test.ts');
   expect(launches[0]![1]).not.toContain('scripts/dev/seed/api.test.ts');
   expect(logs.join('\n')).toContain('bun: no run id passed');
   expect(logs.join('\n')).toContain('owner: no run id failed');

@@ -37,7 +37,7 @@ export function parsePolicyStatus(value: unknown): PolicyStatus | null {
 export const acceptances = (policies: readonly PolicyVersion[]): PolicyAcceptance[] =>
   policies.map(({ policyId, versionDigest }) => ({ policyId, versionDigest }));
 
-/** The policy's page on the about site, in the reader's locale (it publishes `legal/<policy id>`). */
+/** The policy's page under the configured public origin, in the reader's locale (`<locale>/legal/<policy id>/`). */
 export const policyHref = (aboutOrigin: string, locale: string, policyId: PolicyVersion['policyId']) =>
   `${aboutOrigin.replace(/\/$/, '')}/${locale}/legal/${policyId}/`;
 

@@ -43,8 +43,9 @@ for this system's jobs.
 - **Releases.** A stable tag sends one GitHub OIDC request to the gateway, which
   runs fixed, pre-registered Nomad jobs: image build, database release,
   maintenance cutover behind an HTTP 503 fallback, then API and worker rollout.
-  Web, Accounts and about are Cloudflare Workers released from GitHub's protected
-  `production` environment, outside the Nomad graph.
+  Web and Accounts are Cloudflare Workers released from GitHub's protected
+  `production` environment, outside the Nomad graph. The public about site lives
+  in its own repository and is released from there.
 
 Proposed placement, to confirm by measurement when deploying:
 
@@ -55,7 +56,7 @@ Proposed placement, to confirm by measurement when deploying:
 | Account service | A or B | Decide from measured latency over WireGuard; Content runs inside Main on B. |
 | Imports, index rebuilds, restore drills | B, as batch jobs | They read and write the data volumes. |
 | Media and snapshots | Cloudflare R2 | `MAIN_S3_*` already speaks S3. |
-| Web, Accounts and about | Cloudflare Workers | Web and Accounts make authenticated private calls through the Tunnel; about serves public pages and its notify form. |
+| Web and Accounts | Cloudflare Workers | They make authenticated private calls through the Tunnel. |
 | Telemetry | Collector beside each application host; GreptimeDB on B, Perses on A or B | Shared OTLP instrumentation; [checked-in configuration](../../infra/observability/compose.yaml) and [operating procedure](observability.md#configuration-and-operation). Host integration remains a deployment task. |
 
 ### PostgreSQL settings
@@ -97,7 +98,7 @@ With these in place, deployment is operations work:
 
 - OCI images with pinned digests for Main, its relay and initialization job,
   Account, the migration job and the Fuseki bundle; Content runs in Main, not
-  a separate HTTP service. Web, Accounts and about build as production Workers.
+  a separate HTTP service. Web and Accounts build as production Workers.
   The [release runbook](release.md) covers local builds, schema checks, migration,
   rollout, rollback and edge pauses; registry publication belongs to deployment.
 - Configuration only through the validated environment specs, with production

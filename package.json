@@ -6,7 +6,6 @@
   "workspaces": [
     "apps/web",
     "apps/accounts",
-    "apps/about",
     "packages/model",
     "packages/document",
     "packages/ui",

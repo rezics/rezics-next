@@ -236,13 +236,13 @@ prompts and recipes, wikis and worlds, communities.
 
 ## About site
 
-Decision 32, maintainer, 2026-09-29. The about site wins users through one page
-per product line in all eight UI locales. Before launch it presents direction;
-from launch it leads with working tasks. The
-[feature registry](../../apps/about/src/features.ts) owns availability rather
-than independent claims in marketing copy. Fundraising research belongs in the
-marketing repository. A usable demonstration is the basis for announcements,
-consistent with [Show HN's published criteria](https://news.ycombinator.com/showhn.html).
+Decision 32, maintainer, 2026-09-29. The public about site, which lives in its
+own repository, wins users through one page per product line in all eight UI
+locales. Before launch it presents direction; from launch it leads with working
+tasks. One feature registry owns availability rather than independent claims in
+marketing copy. Fundraising research belongs in the marketing repository. A
+usable demonstration is the basis for announcements, consistent with
+[Show HN's published criteria](https://news.ycombinator.com/showhn.html).
 
 ## Recognition, points and credit
 

@@ -81,14 +81,12 @@ export async function branchCheck(ref: string, options: BranchCheckOptions = {})
     const run = options.runner ?? runCheckCommand;
     const checks: CheckResult[] = [];
     // Regenerate this snapshot's ignored contracts; never borrow another tip's generated code.
-    const commands: [CheckResult['name'], string[], string?][] = [
+    const commands: [CheckResult['name'], string[]][] = [
       ['contract', ['task', 'install']],
       ['contract', ['task', 'gen']],
       ...WORKER_TYPE_PROJECTS.filter(project => existsSync(join(tree, project.project)))
-        .map(project => project.workspace === 'about'
-          ? ['types', ['node', 'astro-check.cjs'], project.root] as [CheckResult['name'], string[], string]
-          : ['types', project.task ? ['task', project.task]
-            : ['task', 'goal:type-files', '--', '--project', project.project]] as [CheckResult['name'], string[]]),
+        .map(project => ['types', project.task ? ['task', project.task]
+          : ['task', 'goal:type-files', '--', '--project', project.project]] as [CheckResult['name'], string[]]),
       // These fixtures prove that lint rejects violations; the branch scan checks their surrounding tests.
       ['lint', ['node_modules/.bin/oxlint', '--type-aware', 'apps', 'packages', 'services', 'scripts', 'tests', 'apphost',
         '--ignore-pattern', 'tests/fixtures/static-boundaries/lint-failing/**',
@@ -96,10 +94,10 @@ export async function branchCheck(ref: string, options: BranchCheckOptions = {})
       ['ast', ['task', 'ast-grep', '--', 'scan']],
       ['guards', ['task', 'guards']],
     ];
-    for (const [index, [name, command, directoryName]] of commands.entries()) {
+    for (const [index, [name, command]] of commands.entries()) {
       const start = performance.now();
       let result;
-      try { result = await run(command, directoryName ? join(tree, directoryName) : tree, join(directory, `${index}-${name}.log`)); }
+      try { result = await run(command, tree, join(directory, `${index}-${name}.log`)); }
       catch (error) { result = { code: 1, output: `error: ${String(error)}` }; }
       if (name === 'guards' && existsSync(join(tree, '.temp/repository-guards'))) {
         const artifacts = join(directory, 'guard-artifacts');

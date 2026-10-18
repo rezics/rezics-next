@@ -264,7 +264,7 @@ describe('production role isolation and error output', () => {
     };
     delete env.SAFETY_PRIMARY_ACCOUNT;
     delete env.SAFETY_BACKUP_ACCOUNT;
-    for (const role of ['relay', 'relay-init', 'migrate', 'web', 'about'] as const) {
+    for (const role of ['relay', 'relay-init', 'migrate', 'web'] as const) {
       expect(() => checkProductionEnv(env, [role])).not.toThrow();
     }
   });
@@ -273,7 +273,7 @@ describe('production role isolation and error output', () => {
     ['account', 'ACCOUNT_DATABASE_URL', 'private-credential-that-is-not-a-url'],
     ['account', 'ACCOUNT_MAIL_EVENTS_SECRET', 'private-short-secret'],
     ['main', 'SAFETY_BACKUP_ACCOUNT', 'private subject with spaces'],
-    ['about', 'ACCOUNT_DATABASE_URL', 'private-credential-that-is-not-a-url'],
+    ['web', 'ACCOUNT_DATABASE_URL', 'private-credential-that-is-not-a-url'],
     [
       'account',
       'ACCOUNT_DATABASE_URL',

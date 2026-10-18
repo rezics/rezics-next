@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { cleanEnv, url, type ValidatorSpec } from 'envalid';
+import { cleanEnv, type ValidatorSpec } from 'envalid';
 import { Pool } from 'pg';
 import { mainSpec, relaySpec, relayInitSpec } from '../../services/main/src/config.ts';
 import { requiredMatcherMode } from '../../services/main/src/modules/media-screen/required-matcher.ts';
@@ -22,9 +22,6 @@ export const productionSpecs = {
   },
   web: webSpec,
   accounts: accountsSpec,
-  about: {
-    ABOUT_SITE_URL: url({ desc: 'Canonical public about origin.' }),
-  },
 };
 export type ProductionRole = keyof typeof productionSpecs;
 

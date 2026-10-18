@@ -26,10 +26,10 @@ test('site config loaders validate production inputs under Node without Main run
           const { checkProductionEnv } = await environment.runner.import('/scripts/ops/production-env.ts');
           const { productionExample } = await environment.runner.import('/scripts/ops/tests/g-722-fixture.ts');
           const env = productionExample();
-          for (const role of ['about', 'web', 'accounts', 'main']) {
+          for (const role of ['web', 'accounts', 'main']) {
             assert.doesNotThrow(() => checkProductionEnv(env, [role]));
           }
-          assert.throws(() => checkProductionEnv({ ABOUT_SITE_URL: 'http://localhost:4321' }, ['about']), /ABOUT_SITE_URL/);
+          assert.throws(() => checkProductionEnv({ ...env, ABOUT_SITE_URL: 'http://localhost:4321' }, ['accounts']), /ABOUT_SITE_URL/);
           assert.throws(() => checkProductionEnv({ ...env, ACCOUNT_TURNSTILE_SITE_KEY: '' }, ['accounts']), /ACCOUNT_TURNSTILE_SITE_KEY/);
           for (const subject of ['TBD', env.SAFETY_BACKUP_ACCOUNT, 'with space', 'a'.repeat(129)]) {
             assert.throws(() => checkProductionEnv({ ...env, SAFETY_PRIMARY_ACCOUNT: subject }, ['main']), /SAFETY_PRIMARY_ACCOUNT/);

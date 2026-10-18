@@ -83,8 +83,8 @@ describe('G-722 production configuration', () => {
     delete smtp.ACCOUNT_SMTP_HOST;
     expect(() => checkProductionEnv(smtp)).toThrow('SMTP');
   });
-  test('production Worker configs exist for all three Workers', () => {
-    for (const app of ['web', 'accounts', 'about'] as const) {
+  test('production Worker configs exist for both Workers', () => {
+    for (const app of ['web', 'accounts'] as const) {
       const config = JSON.parse(
         readFileSync(`${repositoryRoot}/apps/${app}/wrangler.jsonc`, 'utf8'),
       );

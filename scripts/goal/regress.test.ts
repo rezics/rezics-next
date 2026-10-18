@@ -1388,7 +1388,7 @@ process.exit(0);
       r.write('scripts/qa/acceptance.ts', `export const unitHarnessFiles = ['tests/qa/harness.test.ts'];
 export const legacyHostJenaGateFiles = ['services/main/tests/legacy.integration.test.ts'];
 export const testExclusions = [
- { file: 'apps/about/tests/example.test.ts', reason: 'About owns its check' },
+ { file: 'scripts/research/example.test.ts', category: 'load', reason: 'Opt-in load evidence' },
  { file: 'apps/web/tests/shared-browser.test.ts', reason: 'Live shared stack fixture' }
 ];
 export function testArgs(tier) { return tier === 'owner' ? ['scripts/ops/tests/example.test.ts'] : tier === 'model' ? ['model/tests'] : tier === 'integration'
@@ -1407,7 +1407,7 @@ export function testArgs(tier) { return tier === 'owner' ? ['scripts/ops/tests/e
       expect(files).toContainEqual({ file: 'services/main/tests/gate.integration.test.ts', tier: 'integration', outcome: 'pending' });
       expect(files).toContainEqual({ file: 'tests/qa/integration/subdir/extra-0.test.ts', tier: 'integration', outcome: 'pending' });
       expect(files).toContainEqual({ file: 'packages/ui/src/example.stories.tsx', tier: 'e2e', outcome: 'pending' });
-      expect(files.filter(file => file.outcome === 'excluded').map(file => file.tier).sort()).toEqual(['external', 'legacy', 'live', 'live', 'load']);
+      expect(files.filter(file => file.outcome === 'excluded').map(file => file.tier).sort()).toEqual(['legacy', 'live', 'live', 'load', 'load']);
     } finally { r.cleanup(); }
   });
 

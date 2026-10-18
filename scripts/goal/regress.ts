@@ -25,7 +25,7 @@ export type RegressionTier = 'unit' | 'owner' | 'model' | 'integration' | 'fault
 export type Classification = 'infrastructure' | 'resource' | 'deadline' | 'order-dependent' | 'flaky' | 'deterministic';
 type Outcome = 'pending' | 'passed' | 'failed' | 'missing' | 'void' | 'excluded' | 'deferred';
 export interface MergeEvent { before: string; after: string; goal: string; taskIds: string[]; at: string }
-export interface ExpectedFile { file: string; tier: RegressionTier | 'live' | 'load' | 'legacy' | 'external'; outcome: Outcome; reason?: string; tests?: string[] }
+export interface ExpectedFile { file: string; tier: RegressionTier | 'live' | 'load' | 'legacy'; outcome: Outcome; reason?: string; tests?: string[] }
 export interface Execution {
   code: number; outcomes: Record<string, 'passed' | 'failed' | 'missing'>; artifactPaths: string[];
   queueMs: number; testMs: number; totalMs: number; evidence?: string; classification?: Classification;
@@ -623,7 +623,7 @@ export async function regressionRegistry(checkout: string): Promise<ExpectedFile
     outcome: 'excluded' as const, reason: 'Legacy tests require host JVM/Jena; retained QA gates run instead' })));
   for (const exclusion of registry.testExclusions ?? []) {
     if (!files.some(item => item.file === exclusion.file)) files.push({ file: exclusion.file,
-      tier: exclusion.category ?? (exclusion.file.startsWith('apps/about/') ? 'external' : 'live'), outcome: 'excluded', reason: exclusion.reason });
+      tier: exclusion.category ?? 'live', outcome: 'excluded', reason: exclusion.reason });
   }
   return files;
 }

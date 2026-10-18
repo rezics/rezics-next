@@ -153,10 +153,10 @@ and callback draining instead of intercepting assets; API commands are never rep
 The session lifecycle and bilingual Work-creation journeys allow 90 seconds
 for their multiple hydrated navigations; their existing assertions remain.
 
-The `typescript-6` aliases and dependency-cruiser's private parser use 6.0.3,
+The `typescript-6` alias and dependency-cruiser's private parser use 6.0.3,
 the newest TypeScript release with the JavaScript compiler API. TypeScript
-7.0.2 lacks `createSourceFile`, which Astro's language service and our AST
-consumers need; the native product typechecker remains on 7.0.2.
+7.0.2 lacks `createSourceFile`, which our AST consumers need; the native
+product typechecker remains on 7.0.2.
 
 markdown-it 15 closes internal subpath exports and supplies its own types.
 The document adapter obtains its blockquote rule through the public parser API;
@@ -424,8 +424,6 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | --- | --- | --- |
 | @ark-ui/react | 5.39.3 | packages/ui |
 | @ast-grep/cli | 0.50.0 | . |
-| @astrojs/check | 0.9.10 | apps/about |
-| @astrojs/react | 7.0.1 | apps/about |
 | @better-auth/core | 1.7.9 | services/account |
 | @better-auth/oauth-provider | 1.7.9 | services/account |
 | @better-auth/passkey | 1.7.9 | services/account |
@@ -435,11 +433,9 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @elysia/eden | 2.0.0-beta.6 | apps/web, services/account, services/main |
 | @elysia/openapi | 2.0.0-beta.6 | services/account, services/main |
 | @elysia/opentelemetry | 2.0.0-beta.2 | packages/observability |
-| @emnapi/runtime | 1.11.3 | apps/about |
-| @fontsource-variable/geist-mono | 5.3.0 | apps/about, apps/web |
-| @fontsource-variable/manrope | 5.3.0 | apps/about, apps/accounts, apps/web |
-| @fontsource-variable/source-serif-4 | 5.3.1 | apps/about, apps/web |
-| @fontsource/manrope | 5.3.0 | apps/about |
+| @fontsource-variable/geist-mono | 5.3.0 | apps/web |
+| @fontsource-variable/manrope | 5.3.0 | apps/accounts, apps/web |
+| @fontsource-variable/source-serif-4 | 5.3.1 | apps/web |
 | @js-temporal/polyfill | 0.5.1 | services/main |
 | @microsoft/aspire-cli | 13.6.1 | apphost |
 | @modelcontextprotocol/client | 2.3.1 | services/main |
@@ -457,12 +453,11 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @opentelemetry/sdk-node | 0.223.0 | packages/observability |
 | @opentelemetry/sdk-trace-base | 2.12.0 | packages/observability |
 | @playwright/test | 1.63.0 | . |
-| @resvg/resvg-js | 2.6.2 | apps/about |
 | @rezics/account | workspace:* | apps/accounts |
 | @rezics/document | workspace:* | apps/web, packages/ui, services/content, services/main |
 | @rezics/main | workspace:* | apps/web |
 | @rezics/observability | workspace:* | services/account, services/main |
-| @rezics/ui | workspace:* | apps/about, apps/accounts, apps/web |
+| @rezics/ui | workspace:* | apps/accounts, apps/web |
 | @rezics/wiki-toolkit | workspace:* | packages/model, services/main |
 | @rezics/zone-sdk | workspace:* | apps/web |
 | @scalar/types | 0.23.2 | services/account, services/main |
@@ -470,7 +465,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @storybook/addon-mcp | 11.0.0-alpha.6 | apps/web |
 | @storybook/addon-vitest | 11.0.0-alpha.6 | apps/accounts, apps/web |
 | @storybook/react-vite | 11.0.0-alpha.6 | apps/accounts, apps/web |
-| @tailwindcss/vite | 4.3.3 | apps/about, apps/accounts, apps/web |
+| @tailwindcss/vite | 4.3.3 | apps/accounts, apps/web |
 | @tanstack/react-query | 5.104.3 | apps/web |
 | @tensorflow/tfjs | 4.22.0 | apps/web, services/main |
 | @tiptap/core | 3.32.0 | packages/ui |
@@ -487,21 +482,20 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @tiptap/react | 3.32.0 | packages/ui |
 | @tiptap/starter-kit | 3.32.0 | packages/ui |
 | @tiptap/suggestion | 3.32.0 | packages/ui |
-| @types/bun | 1.4.3 | apps/about, apps/accounts, packages/document, packages/model, packages/observability, services/account, services/content, services/main |
+| @types/bun | 1.4.3 | apps/accounts, packages/document, packages/model, packages/observability, services/account, services/content, services/main |
 | @types/n3 | 1.26.4 | . |
-| @types/node | 26.6.5 | apphost, apps/about, apps/accounts, apps/web, packages/wiki-toolkit |
+| @types/node | 26.6.5 | apphost, apps/accounts, apps/web, packages/wiki-toolkit |
 | @types/nodemailer | 8.0.2 | services/account |
 | @types/pg | 8.23.1 | packages/observability, services/account, services/content, services/main |
-| @types/react | 19.3.0 | apps/about, apps/accounts, apps/web, packages/ui, packages/zone-sdk |
-| @types/react-dom | 19.3.0 | apps/about, apps/accounts, apps/web, packages/ui |
+| @types/react | 19.3.0 | apps/accounts, apps/web, packages/ui, packages/zone-sdk |
+| @types/react-dom | 19.3.0 | apps/accounts, apps/web, packages/ui |
 | @vinext/cloudflare | 1.0.0-beta.11 | apps/web |
 | @vitejs/plugin-react | 6.1.2 | apps/accounts, apps/web |
 | @vitejs/plugin-rsc | 0.5.38 | apps/accounts, apps/web |
 | @vitest/browser-playwright | 5.0.4 | apps/accounts, apps/web |
 | @xmldom/xmldom | 0.9.12 | packages/wiki-toolkit, services/main |
-| astro | 7.3.8 | apps/about |
 | aws4fetch | 1.0.20 | services/main |
-| axe-core | 4.14.0 | apps/about, apps/web |
+| axe-core | 4.14.0 | apps/web |
 | better-auth | 1.7.9 | services/account, services/main |
 | better-call | 1.4.2 | services/account |
 | buffer | 6.0.3 | apps/web, services/main |
@@ -516,9 +510,8 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | jose | 6.2.12 | services/account, services/main |
 | knip | 6.41.0 | . |
 | kysely | 0.29.6 | services/account |
-| lucide-react | 1.57.0 | apps/about, apps/accounts, apps/web, packages/ui |
+| lucide-react | 1.57.0 | apps/accounts, apps/web, packages/ui |
 | markdown-it | 15.0.2 | packages/document |
-| motion | 14.2.0 | apps/about |
 | n3 | 2.13.12 | . |
 | nanostores | 1.5.5 | services/account |
 | native-i18n | 0.2.0 | apps/accounts, apps/web |
@@ -538,27 +531,26 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | prosemirror-schema-list | 1.5.1 | packages/document |
 | prosemirror-tables | 1.8.5 | packages/document |
 | protobufjs | 8.8.1 | packages/observability |
-| react | 19.3.1 | apps/about, apps/accounts, apps/web, packages/ui, packages/zone-sdk |
-| react-dom | 19.3.1 | apps/about, apps/accounts, apps/web, packages/ui |
+| react | 19.3.1 | apps/accounts, apps/web, packages/ui, packages/zone-sdk |
+| react-dom | 19.3.1 | apps/accounts, apps/web, packages/ui |
 | react-is | 19.3.1 | packages/ui |
 | react-server-dom-webpack | 19.3.1 | apps/accounts, apps/web |
 | recharts | 3.10.1 | packages/ui |
-| satori | 0.59.1 | apps/about |
 | sharp | 0.35.5 | services/main |
 | storybook | 11.0.0-alpha.6 | apps/accounts, apps/web |
 | tailwind-variants | 3.3.1 | packages/ui |
-| tailwindcss | 4.3.3 | apps/about, apps/accounts, apps/web |
+| tailwindcss | 4.3.3 | apps/accounts, apps/web |
 | tsx | 4.23.15 | apphost |
 | tw-animate-css | 1.4.0 | packages/ui |
 | typebox | 1.3.37 | packages/document, packages/model, packages/observability, packages/wiki-toolkit, services/account, services/main |
 | typescript | 7.0.2 | apphost, apps/accounts, apps/web, packages/document, packages/model, packages/observability, packages/ui, packages/wiki-toolkit, packages/zone-sdk, services/account, services/content, services/main |
-| typescript-6 | npm:typescript@6.0.3 | apps/about, packages/wiki-toolkit |
+| typescript-6 | npm:typescript@6.0.3 | packages/wiki-toolkit |
 | vinext | 1.0.0-beta.13 | apps/accounts, apps/web |
-| vite | 8.3.4 | apps/about, apps/accounts, apps/web |
+| vite | 8.3.4 | apps/accounts, apps/web |
 | vitest | 5.0.4 | apps/accounts, apps/web |
 | vscode-jsonrpc | 8.2.0 | apphost |
 | webpack | 5.111.1 | apps/accounts, apps/web |
-| wrangler | 4.151.0 | apps/about, apps/accounts, apps/web |
+| wrangler | 4.151.0 | apps/accounts, apps/web |
 
 ### Repository index crates
 
@@ -674,11 +666,6 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task accounts:storybook` | Run the Accounts Storybook on port 6007. |
 | `task accounts:storybook:test` | Run the Accounts stories as Vitest browser tests with accessibility checks. |
 | `task accounts:e2e` | Run the Accounts Playwright journeys against a running Accounts app (ACCOUNTS_URL, default http://127.0.0.1:3004). |
-| `task about:dev` | Run the about site with Astro on 127.0.0.1:4321 (pass -- --port <n>), with a local D1 for the notify form. |
-| `task about:build` | Build the about site into apps/about/dist, the assets directory of its Worker. |
-| `task about:typecheck` | Generate Astro content types and check the about site's Astro and TypeScript sources. |
-| `task about:check` | Check the about site's types (Astro, TypeScript), lint, format and unit tests. |
-| `task about:e2e` | Build the about site, serve it with its Worker and a local D1 on 127.0.0.1:4322, and run the Playwright smoke and axe tests. |
 | `task ui:typecheck` | Type-check Rezics UI. |
 | `task document:typecheck` | Type-check the independent document protocol. |
 | `task document:gen` | Generate the standalone Document Core, Text and Blocks JSON Schemas. |

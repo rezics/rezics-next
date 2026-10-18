@@ -1,6 +1,5 @@
 {
   "migrationHeads": {
-    "apps/about/migrations": 1,
     "services/account/migrations": 71,
     "services/content/migrations": 500,
     "services/main/migrations/access": 965,

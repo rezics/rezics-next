@@ -20,23 +20,19 @@ deployment repository owns those actions and the host placement described in
    digest fail. Local image IDs are not registry manifest digests; the deployment
    phase must record the registry digests returned by its push and pull by those
    digests. Never substitute a mutable tag during rollout or recovery.
-4. Build Workers with `CLOUDFLARE_ENV=production task web:build`,
-   `CLOUDFLARE_ENV=production task accounts:build` and
-   `CLOUDFLARE_ENV=production task about:build`. Supply the registered
+4. Build Workers with `CLOUDFLARE_ENV=production task web:build` and
+   `CLOUDFLARE_ENV=production task accounts:build`. Supply the registered
    `WEB_OAUTH_CLIENT_ID` to the web build. Production vars in each
    `wrangler.jsonc` contain `<VARIABLE_NAME>` placeholders: replace them with the
    deployment's configured origins, or supply the corresponding process variables
    to the Vite builds. Unresolved placeholders and loopback origins fail validation.
-   Set `MAIN_ORIGIN`, `ACCOUNT_ORIGIN` and `MAIN_RESOURCE` for web;
-   `ACCOUNT_SERVICE_ORIGIN`, `ACCOUNT_BASE_URL` and `WEB_ORIGIN` for Accounts;
-   and `ABOUT_SITE_URL` in the about build environment (Astro uses it for canonical
-   URLs). These are deployment inputs; this repository assigns no production
-   hostnames. Retain the effective Worker vars with the release output so publishing
-   uses the same configuration as the build.
-   The about site's D1 binding is not inherited by Wrangler environments: supply
-   its real production DB binding in the deployment repository before deployment.
-   The production about command also bundles its Worker with Wrangler's dry run;
-   the output is under `.temp/worker-builds/about` and no Worker is deployed.
+   Set `MAIN_ORIGIN`, `ACCOUNT_ORIGIN` and `MAIN_RESOURCE` for web, and
+   `ACCOUNT_SERVICE_ORIGIN`, `ACCOUNT_BASE_URL`, `WEB_ORIGIN` and `ABOUT_SITE_URL`
+   (the public origin of the policy pages sign-up links to) for Accounts. These
+   are deployment inputs; this repository assigns no production hostnames.
+   Retain the effective Worker vars with the release output so publishing uses
+   the same configuration as the build. The public about site lives in its own
+   repository and is released from there.
 
 The [Bun container guide](https://bun.sh/guides/ecosystem/docker) describes the
 builder/runtime split. The build sets `SOURCE_DATE_EPOCH=0` to normalize image

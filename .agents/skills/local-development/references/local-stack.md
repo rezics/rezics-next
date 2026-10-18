@@ -4,8 +4,8 @@ Start at the [task reading routes](../../../../docs/plan/README.md#task-reading-
 contract, implementation owner and acceptance cases of one change. The
 [repository map](../../../../docs/development/repository-structure.md) locates workspaces and generated files;
 the [toolchain](../../../../docs/development/toolchain.md) records pinned tools and root commands. Frontend
-owners are in [web organization](../../../../docs/development/web-features.md), the [design system](../../../../docs/development/design-system.md)
-[Storybook review](../../../../docs/development/storybook.md), the [about site](../../../../docs/development/about-site.md) and
+owners are in [web organization](../../../../docs/development/web-features.md), the [design system](../../../../docs/development/design-system.md),
+[Storybook review](../../../../docs/development/storybook.md) and
 [launch journey accessibility](../../../../docs/development/launch-accessibility.md).
 
 Run commands from the repository root through Task. `task --list` shows the

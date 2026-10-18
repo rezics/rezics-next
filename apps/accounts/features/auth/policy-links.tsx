@@ -3,7 +3,7 @@
 import { useLocale, useTranslation } from '../../i18n/client.ts';
 import { policyHref, type PolicyVersion } from './policies.ts';
 
-/** The exact versions a person accepts, each linking to the text the about site publishes for it. */
+/** The exact versions a person accepts, each linking to its policy page. */
 export function PolicyLinks({ policies, aboutOrigin }: { policies: readonly PolicyVersion[]; aboutOrigin: string }) {
   const { t } = useTranslation('auth');
   const locale = useLocale().current;

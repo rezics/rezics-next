@@ -107,7 +107,6 @@ Design documents do not claim that a capability or deployment is complete.
 ## Development
 
 - [Local stack workflow](development/README.md) — Local stack workflow; read when changing or using that development surface.
-- [About site](development/about-site.md) — About site; read when changing or using that development surface.
 - [Rezics UI and Rezics Aura](development/design-system.md) — Rezics UI and Rezics Aura; read when changing or using that development surface.
 - [Primary-source retrieval](development/external-sources.md) — Primary-source retrieval; read when changing or using that development surface.
 - [Hidden ids](development/hidden-ids.md) — Hidden ids; read when changing or using that development surface.
