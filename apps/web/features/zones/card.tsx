@@ -24,7 +24,7 @@ export function workTitle(work: Pick<ZoneWork, 'title'>, messages: ZoneMessages)
 }
 
 const name = (text: ZoneText) => ({ value: text.value, language: text.lang, direction: text.dir,
-  basis: 'requested' as const });
+  basis: text.basis ?? 'requested' as const });
 
 /**
  * A Zone Work as the catalogue takes it. Covers load only from Main's media
@@ -38,7 +38,7 @@ const name = (text: ZoneText) => ({ value: text.value, language: text.lang, dire
  * fact line; the platform chip would repeat it.
  */
 export function cataloguePlatformWork(work: ZoneWork): ZoneWork {
-  return { ...work, author: null, authorHref: null, status: null };
+  return { ...work, author: null, authorHref: null, authors: [], status: null };
 }
 
 export function catalogueWork(work: ZoneWork): CatalogueWork {
@@ -49,7 +49,7 @@ export function catalogueWork(work: ZoneWork): CatalogueWork {
     cover: media && work.cover ? { kind: 'image', url: media, width: work.cover.width, height: work.cover.height,
       selection: '', mediaType: '', crop: null, coverCredit: work.cover.coverCredit ?? null,
       basis: { policy: '', context: '' } } : null,
-    kind: work.kind, authors: work.author ? [{ name: work.author.value, href: work.authorHref ?? null }] : [],
+    kind: work.kind, authors: work.authors ?? (work.author ? [{ name: work.author.value, href: work.authorHref ?? null }] : []),
     rating: null,
     tagline: work.tagline ? name(work.tagline) : null, completion: work.status,
     factObligations: work.factObligations };

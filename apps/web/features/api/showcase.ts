@@ -1,6 +1,7 @@
 import type { MediaImageMetadata } from '@rezics/ui/media-image';
 import { mediaImageKey } from '@rezics/ui/media-image-key';
 import type { MainClient } from '../discover/types.ts';
+import type { CanonicalAddress } from '@rezics/model/address';
 import type { AnonymousMainClient } from './main.ts';
 import { browserMainApi } from './browser.ts';
 import { imageReferenceFromUrl, mediaMetadataItems, mediaMetadataOf } from './media-metadata.ts';
@@ -19,27 +20,14 @@ export type WorkShowcase = Omit<Available, 'images'> & { images: ShowcaseImage[]
 export type WorkSummaryBatch = Result<MainClient['v1']['resources']['summaries']['post']>;
 export type WorkSummary = Extract<WorkSummaryBatch['summaries'][number], { status: 'available' }>;
 type WorkHeader = Result<ReturnType<MainClient['v1']['works']>['get']>;
-
-/** At most five configured picks need a header when the feed's bounded window does not contain them. */
-export async function readShowcaseHeaders(
-  targets: readonly string[],
-): Promise<ReadonlyMap<string, WorkHeader>> {
-  const wanted = showcaseTargets(targets);
-  if (wanted.length > 5) throw new Error('Showcase header bound exceeded');
-  const { mainApiWithToken } = await import('./main.ts');
-  const main = mainApiWithToken(undefined);
-  const items = await Promise.all(
-    wanted.map(async (target) => {
-      try {
-        const { data, error } = await main.v1.works({ id: target.slice(-36) }).get({ query: {} });
-        return data && !error ? ([target, data] as const) : null;
-      } catch {
-        return null;
-      }
-    }),
-  );
-  return new Map(items.filter((item): item is NonNullable<typeof item> => item !== null));
-}
+type AuthorCredits = Extract<Result<MainClient['v1']['query']['post']>['result'], {
+  query: 'https://rezics.com/query/work-credits';
+}>;
+/** A summary alone cannot describe a Work card. Keep Main's complete card and public credit preview. */
+export type ShowcaseWork = WorkHeader & {
+  address: CanonicalAddress;
+  primaryCredits: AuthorCredits['items'];
+};
 
 export function showcaseTargets(targets: readonly string[]): string[] {
   const unique = [...new Set(targets)];
@@ -100,25 +88,50 @@ async function readShowcaseBatch(
 export async function readShowcaseWorks(
   targets: readonly string[],
   context: string,
-): Promise<ReadonlyMap<string, WorkSummary>> {
+  anonymous?: AnonymousMainClient,
+): Promise<ReadonlyMap<string, ShowcaseWork>> {
   const wanted = showcaseTargets(targets);
   if (!wanted.length) return new Map();
   try {
-    const { mainApiWithToken } = await import('./main.ts');
-    const { data, error } = await mainApiWithToken(undefined).v1.resources.summaries.post({
+    if (!anonymous) {
+      const { mainApiWithToken } = await import('./main.ts');
+      return readShowcaseWorks(wanted, context, mainApiWithToken(undefined));
+    }
+    const { data, error } = await anonymous.v1.resources.summaries.post({
       profile: 'resource-summary-batch-v1',
       resources: wanted,
-      context,
+      ...(context ? { context } : {}),
     });
     if (error || !data || !data.complete) return new Map();
-    const admitted = new Set(wanted);
-    return new Map(
-      data.summaries.flatMap((item) =>
-        item.status === 'available' && item.type === 'work' && admitted.has(item.reference)
-          ? [[item.reference, item]]
-          : [],
-      ),
-    );
+    const summaries = new Map(data.summaries.flatMap(item => item.status === 'available'
+      && item.type === 'work' && wanted.includes(item.reference) ? [[item.reference, item] as const] : []));
+    const works = new Map<string, ShowcaseWork>();
+    // A bounded batch has at most four Works in flight. Missing/denied card or credit reads
+    // remain unavailable; neither an empty type list nor an invented byline fills the gap.
+    for (let offset = 0; offset < wanted.length; offset += 4) {
+      await Promise.all(wanted.slice(offset, offset + 4).map(async target => {
+        const summary = summaries.get(target);
+        if (!summary) return;
+        try {
+          const [header, credits] = await Promise.all([
+            anonymous.v1.works({ id: target.slice(-36) }).get({ query: {} }),
+            anonymous.v1.query.post({ profile: 'template-query-v1',
+              query: 'https://rezics.com/query/work-credits', revision: 1,
+              parameters: { roots: [target], role: 'author' }, limit: 3 }),
+          ]);
+          const authors = credits.data?.result;
+          if (header.error || !header.data || header.data.id !== target || credits.error
+            || authors?.profile !== 'template-result-v1'
+            || authors.query !== 'https://rezics.com/query/work-credits'
+            || (!authors.complete && !authors.nextCursor)) return;
+          // Match discovery's first three public authors. A real continuation admits this
+          // bounded byline preview; an incomplete result without one cannot supply a card.
+          works.set(target, { ...header.data, title: summary.name, cover: summary.avatar,
+            address: summary.address as CanonicalAddress, primaryCredits: authors.items });
+        } catch { /* The caller presents an unavailable region when a displayed Work is missing. */ }
+      }));
+    }
+    return works;
   } catch {
     return new Map();
   }

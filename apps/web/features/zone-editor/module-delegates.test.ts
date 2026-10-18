@@ -31,7 +31,12 @@ const iri = (index: number) => `https://rezics.com/id/00000000-0000-4000-8000-${
 const context: AdaptContext = { locale: 'en', ref: 'harbor', realm: iri(1) };
 const position = { dataEpoch: '00000000-0000-4000-8000-000000000002', sequence: '7' };
 const continuation = 'more-public-candidates';
-const cards = async () => new Map<string, ZoneWork>();
+const cards = async (context: AdaptContext, targets: readonly string[]) => new Map<string, ZoneWork>(
+  targets.map(target => {
+    const card = work(Number(target.slice(-12)) - 10);
+    return [target, zoneWork(card, context, card.evidence)];
+  }),
+);
 const name = (value: string): MainName => {
   const text = zoneContentText(value, 'en');
   return { value: text.value, language: text.lang, direction: text.dir, basis: 'requested' };

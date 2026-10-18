@@ -55,7 +55,11 @@ export type RankingInterval = 'day' | 'week' | 'month';
 export type RankingMetric = 'reads' | 'finished-chapters';
 
 /** Text in the language Main returned it in. */
-export interface ZoneText { value: string; lang: string; dir: 'ltr' | 'rtl' }
+export interface ZoneText {
+  value: string; lang: string; dir: 'ltr' | 'rtl';
+  /** Main supplied another language when none of the reader's requested titles was available. */
+  basis?: 'requested' | 'fallback';
+}
 
 /** The copyright credit Main returned for an admitted imported cover. */
 export interface ZoneCoverCredit {
@@ -86,6 +90,8 @@ export interface ZoneWork {
   author: ZoneText | null;
   /** Destination for the credited author when Main identifies one. */
   authorHref?: string | null;
+  /** Public author preview in credit order, also used by the shared generated cover. */
+  authors?: readonly { name: string; href: string | null }[];
   /** The one-line hook shown under the cover, separate from the synopsis. */
   tagline: ZoneText | null;
   status: 'ongoing' | 'completed' | 'hiatus' | 'upcoming' | 'cancelled' | null;
@@ -664,7 +670,7 @@ export function defineZonePackage<const Package extends ZonePackage>(pkg: Packag
  */
 export function workCoverProps(work: ZoneWork) {
   return { title: work.title?.value ?? '', lang: work.title?.lang, dir: work.title?.dir,
-    authors: work.author ? [work.author.value] : [], kind: work.kind, id: work.id,
+    authors: work.authors?.map(author => author.name) ?? (work.author ? [work.author.value] : []), kind: work.kind, id: work.id,
     image: work.cover ? { src: work.cover.url, width: work.cover.width, height: work.cover.height,
       coverCredit: work.cover.coverCredit ?? null } : null };
 }
