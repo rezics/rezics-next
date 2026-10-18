@@ -40,7 +40,8 @@ export class GoalMailStore {
     for (const goal of options.goals) {
       if (!/^[a-z][a-z0-9-]{1,40}$/.test(goal) || goal === 'tasks') throw new Error(`Invalid mail Goal: ${goal}`);
     }
-    this.goals = new Set(options.goals);
+    // The resident supermanager has a mailbox even without a product Goal registration.
+    this.goals = new Set(['program', ...options.goals]);
     this.path = join(options.stateDir, 'mail.sqlite');
     this.messagesDir = options.messagesDir ?? join(options.stateDir, 'messages');
   }
