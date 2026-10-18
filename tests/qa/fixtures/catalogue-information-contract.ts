@@ -4,6 +4,10 @@ import type { CollectionKey, FieldState, OrderKey, SupportingKey } from './catal
 import type { RetainedPersonaRealm } from '../support/personas.ts';
 import type { FieldSupportResult } from '../../../services/main/src/modules/source/withdrawal.ts';
 import type { NativeReadKey, NativeRefusalKey } from './catalogue-information-matrix.ts';
+import type {
+  NativeFieldBasis, RetainedConversionRequest, RetainedFieldCoordinate, RetainedRecordBinding,
+  RetainedSupportAdmission, RetainedSupportRequest,
+} from './catalogue/import-admission-contract.ts';
 
 // Proposed additions are local test types. No production header, schema or frame is changed.
 export type FactValue =
@@ -95,7 +99,7 @@ export type SuppliedLanguage =
   | { state: 'omitted' }
   | { state: 'null' }
   | { state: 'value'; value: string };
-export type SourceFieldPresence = 'value' | 'omitted' | 'null' | 'empty-string' | 'empty-array' | 'empty-object';
+export type SourceFieldPresence = RetainedFieldCoordinate['presence'];
 
 /** Pending language-preserving extension of the current editorial command.
  * Current requests/receipts do not imply that this addition is implemented.
@@ -111,19 +115,13 @@ export interface NativeSynopsisRequest {
   actingSubject: string;
 }
 
-/** Source-owned resolution target for the conversion inventory proposal.
- * recordDigest, observation.byteDigest and both value digests are distinct.
- * No file path or client assertion of successful verification is a command input.
+/** Consumer coordinates reuse the Source proposal rather than inventing another
+ * record binding. A payload pointer resolves after ordered multipart decoding.
+ * These are genuine corpus inputs/results, never a successful preparation fallback.
  */
 export interface RetainedFieldBinding {
-  inventoryKey: string; sourceKey: string; sourceRecord: string; conversion: string;
-  mappingRevision: string; grain: string; sourceField: string;
-  record: { provider: string; namespace: string; externalId: string; recordDigest: string; pointer: string };
-  presence: SourceFieldPresence; language: SuppliedLanguage;
-  sourceValueDigest: string | null;
-  observation: { observation: string; byteDigest: string; pointer: string; valueDigest: string | null };
-  // All ordered intake parts, not just the part containing the selected field.
-  parts: { observation: string; byteDigest: string }[];
+  inventoryKey: string; record: RetainedRecordBinding; field: RetainedFieldCoordinate;
+  correspondence: RetainedSupportAdmission['correspondence']; language: SuppliedLanguage;
 }
 
 interface NativeValueBasis {
@@ -138,21 +136,22 @@ export type NativeValueBinding = NativeValueBasis & (
   | { owner: 'work-editorial'; field: 'synopsis'; value: SemanticValue; language: SuppliedLanguage }
 );
 
-/** Proposed extension of the existing attachment, not a new admission owner. */
-export interface NativeSupportAttachment {
-  profile: 'source-field-support-attachment-v1'; target: string; slot: string;
-  occurrence: string | null; context: string; sourceRecord: string; conversion: string;
-  grain: string; sourceField: string; sourceOccurrence: string | null;
-  sourcePointer: string; expectedHead: string; actingSubject: string;
-  native: NativeValueBinding;
-  retained: RetainedFieldBinding;
-}
+/** Native acknowledgement additions to Source's pending v2 basis. No second
+ * native authority or conversion/attachment operation is introduced.
+ */
+export type AcknowledgedNativeBasis = NativeFieldBasis & (
+  | { kind: 'component-property'; owner: 'semantic'; component: string; receipt: string }
+  | { kind: 'component-property'; owner: 'work-editorial'; component: string; receipt: string;
+    field: 'synopsis'; language: SuppliedLanguage }
+  | { kind: 'statement'; owner: 'statement'; receipt: string; relationDefinition: string }
+);
+export type NativeSupportAttachment = Omit<RetainedSupportRequest, 'native'> & { native: AcknowledgedNativeBasis };
 export interface ReadableEvidence extends FrozenSupport {
   attribution: { sourceName: string; sourceUrl: string; licence: string | null };
   language: SuppliedLanguage;
 }
 export type NativeSupportReceipt = FieldSupportResult & {
-  native: NativeValueBinding; retained: RetainedFieldBinding;
+  admission: Omit<RetainedSupportAdmission, 'native'> & { native: AcknowledgedNativeBasis };
   publicEvidence: Omit<ReadableEvidence, 'file'>;
   attachment: { profile: 'source-field-attachment-certificate-v1'; receipt: string;
     requestDigest: string; nativeReceipt: string };
@@ -174,11 +173,18 @@ export interface NativeAdmissionFixture {
   cases: Record<NativeReadKey, NativeReadFixture>;
   controls: {
     // Dedicated targets, disjoint from the positive read cases and cursor controls.
-    primary: { request: NativeSupportAttachment; key: string };
-    secondary: { request: NativeSupportAttachment; key: string };
+    primary: { request: NativeSupportAttachment; retained: RetainedFieldBinding; key: string };
+    secondary: { request: NativeSupportAttachment; retained: RetainedFieldBinding; key: string };
     // Genuine existing native-owner command with current write/control bases.
     human: FixtureCommand;
     publicField: { resource: string; field: FactExpectation };
-    refusals: Record<NativeRefusalKey, { request: NativeSupportAttachment; key: string }>;
+    refusals: Record<Exclude<NativeRefusalKey, 'parts-order'>, {
+      request: NativeSupportAttachment; key: string;
+      // Required for the Statement qualifier control, whose genuine native basis
+      // differs from the dedicated synopsis attachment's component property.
+      basis?: NativeSupportAttachment;
+    }> & {
+      'parts-order': { request: RetainedConversionRequest; key: string };
+    };
   };
 }
