@@ -10,3 +10,4 @@ the [goal page](docs/product/goal.md) and the
 `task goal -- status` shows each running Goal's manager session and live tasks.
 
 - [Audit remediation](docs/goals/audit-remediation-20261019/GOAL.md) — Implement and prove every finding in the site and catalogue audits of 2026-10-18.
+- [Product completeness](docs/goals/product-completion-20261019/GOAL.md) — Exceed domain leaders through complete API capabilities and excellent end-to-end user experience.
