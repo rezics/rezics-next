@@ -1,0 +1,21 @@
+version: '3'
+
+tasks:
+  prepare:
+    desc: Prepare private keyboard fixture and exact-pin trial configuration.
+    cmds:
+      - node scripts/research/frontend-hotkeys/prepare.mjs
+  fixture:dev:
+    dir: '{{.USER_WORKING_DIR}}/.temp/frontend-hotkeys/fixture'
+    cmds:
+      - node ../../../node_modules/vinext/dist/cli.js dev --host 127.0.0.1 {{.CLI_ARGS}}
+  behavior:
+    cmds:
+      - node scripts/research/frontend-hotkeys/behavior.mjs
+  routes:
+    desc: Build private Web and Accounts copies sequentially with host admission.
+    cmds:
+      - node scripts/research/frontend-hotkeys/routes.mjs
+  validate:
+    cmds:
+      - node scripts/research/frontend-hotkeys/validate.mjs
