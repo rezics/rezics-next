@@ -264,6 +264,24 @@ function CookMode({ page, messages: t, units, onClose, recordingFetch }: {
   </div>;
 }
 
+/** Known yield and times, shared by the identity and the recipe reading surface. */
+export function RecipeFacts({ page, messages: t }: { page: ReadableRecipe; messages: WorkPageMessages }) {
+  const measures = page.measures;
+  const facts = [
+    [t.servings, measures.find(item => item.kind === 'servings')],
+    [t.recipeYield, measures.find(item => item.kind === 'yield')],
+    [t.prepTime, measures.find(item => item.kind === 'preparation-duration')],
+    [t.cookTime, measures.find(item => item.kind === 'cooking-duration')],
+    [t.totalTime, measures.find(item => item.kind === 'total-duration')],
+  ] as const;
+  if (!facts.some(([, measure]) => measure)) return null;
+  return <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm" data-recipe-facts>
+    {facts.map(([label, measure]) => measure ? <div key={label} className="flex gap-1">
+      <dt className="font-semibold">{label}</dt><dd>{formatMeasure(measure.value, measure.unitText)}</dd>
+    </div> : null)}
+  </dl>;
+}
+
 /** Yield, times, ingredients and method, shared by the Work page and the editor's preview. */
 export function RecipeContent({ page, units, messages: t, notes, controls, columns = true, recordingFetch }: {
   page: ReadableRecipe; units: Units; messages: WorkPageMessages; notes?: string | null; controls?: ReactNode;
@@ -271,19 +289,8 @@ export function RecipeContent({ page, units, messages: t, notes, controls, colum
   columns?: boolean;
   recordingFetch?: typeof fetch;
 }) {
-  const measures = page.measures;
-  const total = measures.find(item => item.kind === 'total-duration');
-  const prep = measures.find(item => item.kind === 'preparation-duration');
-  const cook = measures.find(item => item.kind === 'cooking-duration');
-  const yieldMeasure = measures.find(item => item.kind === 'yield');
-  const facts = Boolean(yieldMeasure || prep || cook || total);
   return <div className="grid gap-4">
-    {facts ? <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-      {yieldMeasure ? <span><strong>{t.recipeYield}</strong> {formatMeasure(yieldMeasure.value, yieldMeasure.unitText)}</span> : null}
-      {prep ? <span><strong>{t.prepTime}</strong> {formatMeasure(prep.value, prep.unitText)}</span> : null}
-      {cook ? <span><strong>{t.cookTime}</strong> {formatMeasure(cook.value, cook.unitText)}</span> : null}
-      {total ? <span><strong>{t.totalTime}</strong> {formatMeasure(total.value, total.unitText)}</span> : null}
-    </div> : null}
+    <RecipeFacts page={page} messages={t} />
     {controls}
     <div className={cn('grid gap-8', columns && 'md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]')}>
       <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.ingredients}</h3>

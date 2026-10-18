@@ -5,7 +5,7 @@ import { withoutLocale } from '../../i18n/locale.ts';
 import { type AddressTarget, parseAddressSegment, resourceHref } from '../address/path.ts';
 
 /** The Work's views, in tab order. Each is its own URL. */
-export const workTabs = ['overview', 'contents', 'versions', 'discussion', 'history'] as const;
+export const workTabs = ['overview', 'contents', 'versions', 'editions', 'connections', 'discussion', 'history'] as const;
 export type WorkTab = (typeof workTabs)[number];
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -115,6 +115,14 @@ export function defaultScope(at: WorkAt): WorkScope {
 export function scopeAt(at: WorkAt, params: SearchParams): WorkScope | null {
   return typeof at !== 'string' && params.scope === undefined && params.realm === undefined
     ? defaultScope(at) : parseScope(params);
+}
+
+/** Reading choices travel between views; inventory filters and cursors belong to their own view. */
+export function workNavigationQuery(params: URLSearchParams): Record<string, string> {
+  return Object.fromEntries(['language', 'open'].flatMap(key => {
+    const value = params.get(key);
+    return value ? [[key, value]] : [];
+  }));
 }
 
 /**

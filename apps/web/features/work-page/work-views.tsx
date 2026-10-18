@@ -34,7 +34,7 @@ import { publicationSource } from './publication-source.tsx';
 import { readAnimeAgentCredits, readAnimeReaderState, readAnimeWorkCredits, readSelectedWorkCredits } from './anime-hub-recorded-page.ts';
 import { oneTextLanguage, readAdoptions, readAgentWorks, readAlsoEnjoyed, readClassifications,
   readContents, readDiscussion, readHistory, readingAgent, readRatings, readRealm,
-  readReviewer, readReviews, readVersions, readWorkStats,
+  readReviewer, readReviews, readVersions, readWorkStats, readReleases,
   readHubWorkPage, readText, readRatingPopulations, reader, type SuppliedClient } from './read.ts';
 import { Region, RegionFailure, RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
@@ -62,6 +62,7 @@ import type { RecipeWorkHost } from './recipe-reading-recorded-page.ts';
 import { recipeRegion, recipeWorkFrame, recipeWorkOverview } from './recipe-reading-recorded-page.tsx';
 import { HubExperience } from './types/hub.tsx';
 import { GuideExperience } from './types/guide.tsx';
+import { NextActionView } from './primary-action.tsx';
 
 // Server compositions for the `/w/[ref]` routes: each region reads Main on its
 // own under Suspense, so the page streams as answers arrive and one failure
@@ -199,6 +200,16 @@ async function ReadSlot({ workRef, id, work, experience, locale, messages, clien
   if (experience.kind === 'book') {
     return PrimaryAction({ workRef, id, work, locale, messages, client });
   }
+  if (showsEditionStatus(experience)) {
+    const releases = await readReleases(id, client);
+    const inventory = releases.ok ? { editions: releases.data.items, nextCursor: releases.data.nextCursor } : null;
+    return inventory && (inventory.editions.length || inventory.nextCursor) ? <NextActionView
+      action={{ kind: 'choose', href: '#availability', part: null }} workRef={workRef} locale={locale} messages={messages} /> : null;
+  }
+  if (experience.kind === 'guide') {
+    const text = await readText(work.mainVersion, work.selectedLanguage ?? undefined);
+    if (!text.ok || !text.data.body.trim()) return null;
+  }
   const hub = experience.typeSection && experience.kind !== 'recipe' ? await readHubWorkPage(experience.typeSection.href)
     : null;
   return <WorkKindActions kind={experience.kind} workId={work.id} title={work.title.value} locale={locale}
@@ -213,15 +224,17 @@ export const readHubPlan = async (id: string, client?: WorkPageClient): Promise<
 };
 
 /** Header and tabs around every Work view; credits and the rating summary stream in on their own. */
-export async function WorkFrameView({ workRef, id, work, locale, messages, lead, children, client, readerActions, relationships }: Common & {
+export async function WorkFrameView({ workRef, id, work, locale, messages, lead, children, sources, client, readerActions, relationships }: Common & {
   workRef: WorkAt; id: string; work: Header; children: ReactNode;
+  sources?: ReactNode;
   readerActions?: ReaderActions; relationships?: RelationshipsApi;
   /** The sections a Zone's page leads with (`ZonePackage.hubOrder`). */
   lead?: readonly HubSection[];
 }) {
   const experience = await readExperience(id, work.types, client);
   if (experience.kind === 'recipe') {
-    return recipeWorkFrame({ host: await recipePageHost(), workRef, id, work, locale, messages, children });
+    return recipeWorkFrame({ host: await recipePageHost(), workRef, id, work, locale, messages, children, sources,
+      readerActions, relationships });
   }
   const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, plan, art, showcaseMessages] = await Promise.all([
     readingAgent(client), (client ?? browseReader()), animeReaderState(id, client), readRatings(id, EVERYONE, undefined, client),
@@ -246,6 +259,15 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
       {(client ? Credits({ id, work, locale, messages, client }) : <Credits id={id} work={work} locale={locale} messages={messages} />)}</Suspense>}
     ratingLine={<Suspense fallback={null}>{(client ? RatingLineSlot({ id, experience, locale, messages, client }) : <RatingLineSlot id={id} experience={experience} locale={locale} messages={messages} />)}</Suspense>}
+    sources={<>
+      {sources}
+      <Suspense fallback={null}>{plan.includes('about') ? (client ? AboutFacts({ id, locale, messages, client })
+        : <AboutFacts id={id} locale={locale} messages={messages} />) : null}</Suspense>
+      <Suspense fallback={<WorkRecord work={work} locale={locale} messages={messages} />}>
+        {client ? Record({ id, workRef, work, locale, messages, client })
+          : <Record id={id} workRef={workRef} work={work} locale={locale} messages={messages} />}
+      </Suspense>
+    </>}
     sections={hubLabels(messages, plan, lead)}
     readAction={<Suspense fallback={experience.kind === 'book'
       ? <ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} /> : null}>
@@ -431,7 +453,6 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
         <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} /></Suspense> : null
       : experience.kind === 'book' || experience.kind === 'plain' ? null : specialist}
     about={<WorkAbout work={work} locale={locale} messages={messages} />}
-    facts={<Suspense fallback={null}>{plan.includes('about') ? (client ? AboutFacts(common) : <AboutFacts {...common} />) : null}</Suspense>}
     availability={<>
       <Suspense fallback={<RegionSkeleton id="work-availability-loading" title={t.sectionAvailability} label={loading}
         lines={4} />}>
@@ -466,8 +487,7 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
       label={loading} lines={2} />}>
       {plan.includes('discussion') ? (client ? Adoption({ workRef, id, scope, locale, messages, client }) : <Adoption workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />) : null}
     </Suspense> : null}
-    record={<Suspense fallback={<WorkRecord work={work} locale={locale} messages={messages} />}>
-      {(client ? Record({ id, workRef, work, locale, messages, client }) : <Record id={id} workRef={workRef} work={work} locale={locale} messages={messages} />)}</Suspense>}
+    record={null}
     alsoEnjoyed={<Suspense fallback={null}>
       {plan.includes('lists') ? (client ? AlsoEnjoyed({ id, work, locale, messages, client }) : <AlsoEnjoyed id={id} work={work} locale={locale} messages={messages} />) : null}</Suspense>}
     author={<Suspense fallback={null}>{plan.includes('lists') ? (client ? Author({ id, locale, messages, client }) : <Author id={id} locale={locale} messages={messages} />) : null}</Suspense>} />;

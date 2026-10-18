@@ -519,7 +519,7 @@ export const SkillChinesePhone: Story = {
     await expect(canvas.getByText(/技能 · 英语/)).toBeVisible();
     await expect(canvas.getAllByRole('button', { name: '安装' }).length).toBeGreaterThan(1);
     await expect(canvas.getByText('.cursor/skills/recipe-scaling/SKILL.md')).toBeVisible();
-    await expect(canvas.getByRole('button', { name: '复制 SKILL.md' })).toBeEnabled();
+    for (const copy of canvas.getAllByRole('button', { name: '复制 SKILL.md' })) await expect(copy).toBeEnabled();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };

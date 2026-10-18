@@ -2,6 +2,11 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  editionsView: 'Éditions',
+  connectionsView: 'Liens',
+  sourcesAndEvidence: 'Sources, licences et preuves',
+  sourceFacts: 'Données de l’œuvre',
+  sourceDescription: 'Description',
   openRecording: "Ouvrir l’enregistrement",
   recordingMasked: "Cet enregistrement est masqué. Ouvrez-le pour le lire.",
   instructionTransformation: "Transformation",

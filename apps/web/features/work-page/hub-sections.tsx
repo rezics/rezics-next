@@ -23,7 +23,7 @@ import type { WorkPageMessages } from './messages.ts';
 import { IdentityStatus, nextAction, NextActionView } from './primary-action.tsx';
 import { ProposeCorrectionSlot } from './correction-slot.tsx';
 import { readEditionPreference, readEditionRelease, readEditionRealization, readProgressSummary, readReleases, readStart, readingAgent, readWorkHeader } from './read.ts';
-import { Region } from './region.tsx';
+import { Region, RegionFailure } from './region.tsx';
 import { iriOf, workHref, type WorkAt, workRefOf } from './route.ts';
 import type { WorkHeader as Header } from './types.ts';
 import { YourEdition } from './your-edition.tsx';
@@ -69,6 +69,7 @@ export async function Status({ id, locale, messages, client }: Common & { id: st
 /** "About" on expansion: every accepted fact with its sources, and the way to propose a correction. */
 export async function AboutFacts({ id, locale, messages, client }: Common & { id: string }) {
   const page = await readEntityProjection(id, undefined, client);
+  if (!page.ok) return <RegionFailure title={messages.fullFacts} failure={page.failure} messages={messages} />;
   const section = page.ok ? sectionOf(page.data, 'statements') : undefined;
   if (!section) return null;
   const t = entityCopy(locale);
@@ -100,9 +101,12 @@ export async function Availability({ workRef, id, locale, messages, client }: Co
   }
   const [realizations, releases, parts] = await Promise.all([readRealizations(id), readReleasePage(id),
     readParts(id, { limit: 1 })]);
-  const none = (read: { ok: true; data: { items?: unknown[]; parts?: unknown[] } } | { ok: false; failure: string }) =>
-    read.ok ? !(read.data.items ?? read.data.parts)?.length : read.failure === 'missing' || read.failure === 'sign-in'
-      || read.failure === 'identity';
+  const none = (read: { ok: true; data: { items?: unknown[]; parts?: unknown[]; nextCursor?: string | null } }
+    | { ok: false; failure: string }) => {
+    if (!read.ok) return false;
+    const page = { entries: read.data.items ?? read.data.parts, nextCursor: read.data.nextCursor };
+    return !page.entries?.length && !page.nextCursor;
+  };
   if (none(realizations) && none(releases) && none(parts)) return null;
   const t = materializeData(messages, { locale });
   return <Region id="work-availability" title={t.sectionAvailability}>
@@ -132,7 +136,8 @@ export async function Parts({ workRef, id, locale, messages, client }: Common & 
 export async function DiscussionHub({ workRef, id, locale, messages, client }: Common & { workRef: WorkAt; id: string }) {
   const [page, { signedIn }] = await Promise.all([readEntityProjection(id, undefined, client), readingAgent(client)]);
   const section = page.ok ? sectionOf(page.data, 'discussion') : undefined;
-  if (!page.ok || !section) return null;
+  if (!page.ok) return <RegionFailure title={messages.sectionDiscussion} failure={page.failure} messages={messages} />;
+  if (!section) return null;
   const t = materializeData(messages, { locale });
   const discussion = workHref(workRef, 'discussion');
   const hrefFor = standaloneHrefFor({}, entityHref(id));
