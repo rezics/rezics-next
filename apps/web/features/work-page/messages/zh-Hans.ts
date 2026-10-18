@@ -2,6 +2,11 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  editionsView: '版本与发行',
+  connectionsView: '关联',
+  sourcesAndEvidence: '来源、许可与证据',
+  sourceFacts: '作品资料',
+  sourceDescription: '简介',
   openRecording: "打开录制内容",
   recordingMasked: "此录制内容已遮蔽。打开后即可播放。",
   instructionTransformation: "转换",

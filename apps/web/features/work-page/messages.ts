@@ -9,6 +9,11 @@ import zhHans from './messages/zh-Hans.ts';
 import zhHant from './messages/zh-Hant.ts';
 
 const en = {
+  editionsView: 'Editions',
+  connectionsView: 'Connections',
+  sourcesAndEvidence: 'Sources, licences and evidence',
+  sourceFacts: 'Catalogue facts',
+  sourceDescription: 'Description',
   openRecording: "Open recording",
   recordingMasked: "This recording is masked. Open it to play.",
   authorNote: "Author’s note",

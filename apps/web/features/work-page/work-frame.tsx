@@ -4,12 +4,11 @@ import { cn } from '@rezics/ui/utils';
 import { BookOpenIcon, CircleAlertIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { RateWork, type ReaderActions, ReaderActionsProvider, ShelfButton } from '../catalogue/reader-actions.tsx';
+import { type ReaderActions, ReaderActionsProvider, ShelfButton } from '../catalogue/reader-actions.tsx';
 import type { RatingTarget, ReaderSeed } from '../catalogue/reader-store.ts';
 import { coverKindOf, type CatalogueAuthor } from '../catalogue/work.ts';
-import { CatalogueCover, CatalogueCoverCredit } from '../catalogue/cover.tsx';
+import { CatalogueCover } from '../catalogue/cover.tsx';
 import { RelationshipControl } from '../relationships/control.tsx';
-import { ReportAction } from '../safety/report-action.tsx';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import type { WorkPageMessages } from './messages.ts';
@@ -21,8 +20,11 @@ import { WorkArtHero, type WorkShowcaseHeader } from '../showcase/work-header.ts
 import { ArtGrid, HiddenOnOverview, OverviewOnly } from '../showcase/work-header-tab.tsx';
 import { ACTION_ATTRIBUTE, ACTION_ID, type HubSection, drawOrder, hubAnchors } from './hub.ts';
 import { WorkTabs } from './work-tabs.tsx';
-import { OnThisPage, StickyAction } from './work-nav.tsx';
+import { OnThisPage, StickyAction, WorkRating } from './work-nav.tsx';
 import { type WorkExperience, showsBookControls, workExperience } from '../entity-page/experience.ts';
+import { shelfWords } from './shelf-words.ts';
+import { WorkSources } from './work-sources.tsx';
+import { workReportTargets } from './work-report-targets.ts';
 
 /**
  * The cover as a thumbnail or a rail: it fills its column, which is 6.5–8 rem beside the title on a phone and
@@ -34,10 +36,6 @@ export function WorkPageCover({ work, authors = [], avatarQuery }: {
   const coverWork = { id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types), authors };
   return <div className="grid w-full gap-1.5 xl:w-60">
     <CatalogueCover work={coverWork} avatarQuery={avatarQuery} loading="eager" revealable className="w-full" />
-    <CatalogueCoverCredit work={coverWork} avatarQuery={avatarQuery} />
-    {work.cover.kind === 'image' ? <ReportAction target={work.id} kind="cover"
-      selection={{ component: 'cover', revision: work.cover.selection, locator: null }}
-      className="inline-flex w-fit items-center gap-1 text-muted-foreground text-xs hover:underline" /> : null}
   </div>;
 }
 
@@ -48,7 +46,7 @@ export function WorkPageCover({ work, authors = [], avatarQuery }: {
  * main column. Tabs belong to wide screens; a phone gets "On this page".
  */
 export function WorkFrame({ workRef, work, experience = workExperience(null, work.types), credits, authors = [], cover,
-  ratingLine, showcase, readAction, status, shortcuts, sections = [],
+  domainFacts, ratingLine, showcase, readAction, status, shortcuts, sections = [], sources,
   signedIn = false, signInHref, actingSubject, relationships,
   readerSeed, ratingTarget, readerActions, avatarQuery, locale, messages, children }: {
   workRef: WorkAt; work: Header; credits: ReactNode; authors?: readonly CatalogueAuthor[];
@@ -64,8 +62,12 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
   shortcuts?: ReactNode;
   /** The overview's sections for "On this page", in the order they are drawn. */
   sections?: readonly { id: string; label: string }[];
+  /** Accepted facts and evidence, after every view's content. */
+  sources?: ReactNode;
   /** The rating summary under the title, streamed on its own. */
   ratingLine?: ReactNode;
+  /** Known type-specific facts before the rating and primary action. */
+  domainFacts?: ReactNode;
   /** The Work's showcase art: the page opens with it, and the header lies over it. Without it the header stays plain. */
   showcase?: WorkShowcaseHeader | null;
   signedIn?: boolean;
@@ -83,41 +85,55 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
   const nav = <>
     <WorkTabs workRef={workRef} label={messages.sections} labels={{ overview: messages.overview,
       contents: messages.contents, versions: messages.versions, discussion: messages.discussion,
-      history: messages.history }} />
+      editions: messages.editionsView, connections: messages.connectionsView, history: messages.history }} />
     <OnThisPage workRef={workRef} label={messages.pageSections} viewsLabel={messages.sections} sections={sections}
       labels={{ overview: messages.overview, contents: messages.contents, versions: messages.versions,
+        editions: messages.editionsView, connections: messages.connectionsView,
         discussion: messages.discussion, history: messages.history }} />
   </>;
-  const header = <WorkHeader work={work} credits={credits} ratingLine={ratingLine} locale={locale} messages={messages} />;
+  const header = <WorkHeader work={work} credits={credits} domainFacts={domainFacts} ratingLine={ratingLine}
+    locale={locale} messages={messages} />;
   // With art the Overview opens with it, and the other tabs keep the compact header above.
   const artHeader = showcase ? <OverviewOnly workRef={workRef}><WorkArtHero header={showcase}>
-    <WorkHeader work={work} credits={credits} ratingLine={ratingLine} showcase={showcase} locale={locale}
+    <WorkHeader work={work} credits={credits} domainFacts={domainFacts} ratingLine={ratingLine} showcase={showcase} locale={locale}
       messages={messages} /></WorkArtHero></OverviewOnly> : null;
   const compactHeader = showcase ? <HiddenOnOverview workRef={workRef}>{header}</HiddenOnOverview> : header;
-  const primary = readAction === undefined ? <ReadButton workRef={workRef} start={{ kind: 'contents' }}
+  const primary = readAction === undefined && showsBookControls(experience) ? <ReadButton workRef={workRef} start={{ kind: 'contents' }}
     messages={messages} /> : readAction;
+  const reactions = <div data-work-reactions className="flex min-w-0 items-start justify-end gap-2">
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
+      <ShelfButton work={work.id} title={work.title.value} locale={locale} size="sm" variant="outline"
+        words={shelfWords(experience, messages)} className="min-h-11" />
+      <WorkRating work={work.id} locale={locale} label={messages.ratings} />
+    </div>
+    <div className="shrink-0 [&_button]:min-h-11 [&_button]:min-w-11 [&_a]:min-h-11">
+      <RelationshipControl target={work.id} kind="work" name={work.title.value} locale={locale} compact
+      signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref ?? '/auth/start'} api={relationships}
+      {...{ reports: workReportTargets(work, workRef) }} />
+    </div>
+  </div>;
+  const evidence = <WorkSources work={work} locale={locale} messages={messages} avatarQuery={avatarQuery}>
+    {sources}
+  </WorkSources>;
   if (!showsBookControls(experience)) {
     return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'}
       actingSubject={actingSubject} seed={readerSeed} ratingTarget={ratingTarget} actions={readerActions}>
       <PageContainer className="grid gap-7 max-lg:pb-24 [text-autospace:normal]">
-        <div className="grid min-w-0 gap-5 border-border/60 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div data-work-identity className="grid min-w-0 gap-4 border-border/60 border-b pb-6">
+          {reactions}
           <div className="grid min-w-0 content-start gap-3">
             {artHeader}
             {compactHeader}
             {shortcuts}
           </div>
-          <div id={ACTION_ID} className="flex flex-wrap content-start items-center gap-2 sm:max-w-56 sm:flex-col sm:items-stretch">
+          <div id={ACTION_ID} className="grid w-fit max-w-full content-start gap-2">
             {primary}
             {status}
-            <RateWork work={work.id} locale={locale} className="sm:mt-2" />
-            <RelationshipControl target={work.id} kind="work" name={work.title.value} locale={locale}
-              signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref ?? '/auth/start'}
-              api={relationships} />
-            <ReportAction target={work.id} kind="work" />
           </div>
         </div>
         {nav}
         <div className="grid min-w-0 content-start gap-8">{children}</div>
+        {evidence}
         <StickyAction label={messages.nextAction} />
       </PageContainer>
     </ReaderActionsProvider>;
@@ -139,12 +155,6 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
       'max-lg:group-data-[art]/art:self-center')}>
         {primary}
         {status}
-        <ShelfButton work={work.id} title={work.title.value} locale={locale} size="lg" variant="outline" />
-        <RateWork work={work.id} locale={locale} className="mt-1" />
-        <RelationshipControl target={work.id} kind="work" name={work.title.value} locale={locale}
-          signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref ?? '/auth/start'}
-          api={relationships} />
-        <ReportAction target={work.id} kind="work" />
       </div>
     </div>
     <div className="col-start-2 row-start-1 grid min-w-0 content-start gap-3 empty:hidden lg:col-start-2
@@ -159,18 +169,14 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
   </>;
   return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'} actingSubject={actingSubject}
     seed={readerSeed} ratingTarget={ratingTarget} actions={readerActions}>
-    {/* CJK text spaces itself from inserted Latin names and digits ("来自 Tidewater Readers"). */}
-    {showcase
-      // The art opens the page above the cover rail, which then starts below it with the same columns.
-      ? <PageContainer className="grid gap-6 max-lg:pb-24 [text-autospace:normal]">
-        {artHeader}
-        <ArtGrid workRef={workRef} className={`group/art ${bookGrid}`}>{columns}</ArtGrid>
-        <StickyAction label={messages.nextAction} />
-      </PageContainer>
-      : <PageContainer className={`${bookGrid} max-lg:pb-24 [text-autospace:normal]`}>
-        {columns}
-        <StickyAction label={messages.nextAction} />
-      </PageContainer>}
+    <PageContainer className="grid gap-6 max-lg:pb-24 [text-autospace:normal]">
+      <div data-work-identity>{reactions}</div>
+      {artHeader}
+      {showcase ? <ArtGrid workRef={workRef} className={`group/art ${bookGrid}`}>{columns}</ArtGrid>
+        : <div className={bookGrid}>{columns}</div>}
+      {evidence}
+      <StickyAction label={messages.nextAction} />
+    </PageContainer>
   </ReaderActionsProvider>;
 }
 
@@ -246,9 +252,9 @@ export function OverviewLayout({ plan, lead, type, about, facts, classification,
     discussion: <>{discussion}{scoped ? adoption : null}</>,
     lists: <>{alsoEnjoyed}{author}</>,
   };
-  return <div className="grid min-w-0 gap-10">
+  return <div className="grid min-w-0 gap-6">
     {drawOrder(plan, lead).map(section => <div key={section} id={hubAnchors[section]} data-hub-section={section}
-      className="grid min-w-0 scroll-mt-20 content-start gap-8 empty:hidden">{slots[section]}</div>)}
+      className="grid min-w-0 scroll-mt-20 content-start gap-5 empty:hidden">{slots[section]}</div>)}
     {record}
   </div>;
 }

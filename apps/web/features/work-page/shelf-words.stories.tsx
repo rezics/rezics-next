@@ -4,7 +4,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { findMenuItem } from '../stories/choose-option.ts';
 import { memoryReaderActions, storyWorkId } from '../catalogue/fixtures.ts';
-import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
+import { ReaderActionsProvider, ShelfButton } from '../catalogue/reader-actions.tsx';
 import * as fixture from './fixtures.ts';
 import { messages } from './messages.ts';
 import { RatingLine } from './ratings.tsx';
@@ -31,6 +31,7 @@ function Actions({ experience, signedIn }: { experience: keyof typeof kinds; sig
       actions={signedIn ? memoryReaderActions() : undefined}
     >
       <div className="grid w-64 gap-3 p-6">
+        <ShelfButton work={storyWorkId(1)} title="Work" locale="en" words={shelfWords(kind, t)} />
         <WorkKindActions
           kind={kind.kind}
           workId={storyWorkId(1)}

@@ -37,7 +37,7 @@ export function WholesLines({
   pages?: { first: string | null; next: (cursor: string) => string };
   messages?: WorkPageMessages;
 }) {
-  if (wholes && !wholes.ok) return wholes.failure === 'missing' ? null : messages
+  if (wholes && !wholes.ok) return messages
     ? <RegionFailure title={t.wholesUnavailable} failure={wholes.failure} messages={messages}
       restartHref={pages?.first ?? undefined} />
     : <p role="alert">{t.wholesUnavailable}</p>;
@@ -187,7 +187,7 @@ export function PartsSection({
   // Main answers 404 for a Work that has no composition: the page already showed the Work, so it has no parts.
   const page = parts.ok ? parts.data : null;
   const body =
-    !parts.ok && parts.failure !== 'missing' ? (
+    !parts.ok ? (
       <RegionFailure
         title={t.partsUnavailable}
         failure={parts.failure}

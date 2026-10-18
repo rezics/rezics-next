@@ -23,7 +23,7 @@ import { messages as showcaseMessages } from '../showcase/messages.ts';
 import { workShowcaseHeader } from '../showcase/work-header.tsx';
 import { allowedActionsOf, mayEdit } from '../work-levels-edit/allowed.ts';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
-import { ConnectionsPreviewView, PartsPreviewView, PREVIEW_COUNTS } from '../work-levels/previews.tsx';
+import { ConnectionsPreviewView, EditionsPreviewView, PartsPreviewView, PREVIEW_COUNTS } from '../work-levels/previews.tsx';
 import type { Names } from '../work-levels/types.ts';
 import { readAnimeReaderState, readLinkedStatements, readResourcePage, readWorkParts, readWorkRealizations } from './anime-hub-recorded-page.ts';
 import { AlsoEnjoyedSection } from './also-enjoyed.tsx';
@@ -40,7 +40,7 @@ import {
   loadRecipeIdentity, recipeReadingReads, type RecipeWorkHost,
 } from './recipe-reading-recorded-page.ts';
 import { RegionFailure } from './region.tsx';
-import { RecipeExperience, type RecipePageRead } from './types/recipe.tsx';
+import { RecipeExperience, RecipeFacts, type RecipePageRead } from './types/recipe.tsx';
 import { WorkRecord } from './record.tsx';
 import { EVERYONE, iriOf, mainScope, workHref, workRefOf, type WorkAt, type WorkScope } from './route.ts';
 import { ScopeBar, type ScopeRealm } from './scope-bar.tsx';
@@ -177,9 +177,9 @@ export async function recipeRegion({ host, id, work, href, locale, messages }: {
 }
 
 /** Header, credits, ratings and the reached frame. The overview is `children`. */
-export async function recipeWorkFrame({ host, workRef, id, work, locale, messages, children, readerActions, relationships }: {
+export async function recipeWorkFrame({ host, workRef, id, work, locale, messages, children, sources, readerActions, relationships }: {
   host: RecipeWorkHost; workRef: WorkAt; id: string; work: Header; locale: UiLocale; messages: WorkPageMessages;
-  children: ReactNode; readerActions?: ReaderActions; relationships?: RelationshipsApi;
+  children: ReactNode; sources?: ReactNode; readerActions?: ReaderActions; relationships?: RelationshipsApi;
 }) {
   const actingSubject = actor(host);
   const reads = recipeReadingReads({ main: host.main, actingSubject: host.actingSubject });
@@ -195,6 +195,7 @@ export async function recipeWorkFrame({ host, workRef, id, work, locale, message
   const plan = hubPlan(projection.ok ? projection.data : null);
   const statements = projection.ok ? sectionOf(projection.data, 'statements') : undefined;
   const facts = statements ? await readLinkedStatements(host.main, actingSubject, statements.href) : undefined;
+  const recipe = experience.typeSection ? await reads.readRecipe(experience.typeSection.href) : null;
   const zone = wikiZoneRead(projection, facts);
   const t = materializeData(messages, { locale });
   // A recipe does not render the cover rail. Native authors stay on the credit read; the cover
@@ -215,9 +216,25 @@ export async function recipeWorkFrame({ host, workRef, id, work, locale, message
       : <WorkCredits agentCredits={{ ok: false, failure: 'unavailable' }} credits={{ ok: false, failure: 'unavailable' }}
         locale={locale} messages={messages} />}
     ratingLine={<RatingLine ratings={ratings} stats={stats} experience={experience} locale={locale} messages={messages} />}
+    domainFacts={recipe?.ok && recipe.data ? <RecipeFacts page={recipe.data} messages={messages} /> : null}
+    sources={<>
+      {sources}
+      {!projection.ok ? <RegionFailure title={messages.fullFacts} failure={projection.failure} messages={messages} /> : null}
+      {facts ? <details className="group min-w-0 border-border/70 border-y" data-full-facts>
+        <summary className="cursor-pointer rounded-sm py-4 font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          {messages.fullFacts}</summary>
+        <div className="grid gap-5 pb-6">
+          <StatementsView page={facts} names={new Map()} cursor={undefined}
+            hrefFor={standaloneHrefFor({}, entityHref(id))} locale={locale} t={entityCopy(locale)} messages={messages} />
+          <ProposeCorrectionSlot work={id} locale={locale} messages={messages} />
+        </div>
+      </details> : null}
+      <WorkRecord work={work} locale={locale} messages={messages} />
+    </>}
     sections={hubLabels(messages, plan)}
-    readAction={<WorkKindActions kind={experience.kind} workId={work.id} title={work.title.value} locale={locale}
-      messages={messages} words={shelfWords(experience, messages)} />}
+    readAction={recipe?.ok && recipe.data && (recipe.data.ingredients.length || recipe.data.instructions?.length)
+      ? <WorkKindActions kind={experience.kind} workId={work.id} title={work.title.value} locale={locale}
+        messages={messages} words={shelfWords(experience, messages)} /> : null}
     shortcuts={<>
       <ProvisionalNotice verification={work.verification} provenance={work.fieldProvenance} locale={locale} />
       {plan.includes('wiki') ? <WikiShortcutView realm={zone.ok ? zone.data : null} locale={locale} messages={messages} /> : null}
@@ -246,7 +263,7 @@ export async function recipeWorkOverview({ host, workRef, id, work, scope, local
   const statementsSection = sectionOf(page, 'statements');
   const discussionSection = sectionOf(page, 'discussion');
   const section = experience.typeSection;
-  const [recipe, statements, discussion, parts, wholes, relations, realizations, releases, availabilityParts, populations,
+  const [recipe, statements, discussion, parts, wholes, relations, realizations, releases, populations,
     ratings, classifications, facets, adoptions, alsoEnjoyed, authority] = await Promise.all([
     section ? recipeRegion({ host, id, work, href: section.href, locale, messages }) : Promise.resolve(null),
     statementsSection ? readLinkedStatements(host.main, actingSubject, statementsSection.href) : Promise.resolve(null),
@@ -262,7 +279,6 @@ export async function recipeWorkOverview({ host, workRef, id, work, scope, local
     })),
     readWorkRealizations(host.main, actingSubject, id),
     booksEditionReads({ main: host.main, ...(actingSubject ? { actingSubject } : {}) }).readReleases(id),
-    readWorkParts(host.main, actingSubject, id, { limit: 1 }),
     settleOpen(() => host.main.v1['rating-populations'].get({
       query: { target: iriOf(id), limit: 20, ...(actingSubject ? { actingSubject } : {}) },
     })),
@@ -282,13 +298,11 @@ export async function recipeWorkOverview({ host, workRef, id, work, scope, local
   if (populations.ok) {
     // A continued population page is not the set of Realms this bar can offer.
     if (populations.data.nextCursor) throw new Error('Rating populations still continue');
-    ratingRealms = populations.data.items.filter(item => !item.global)
-      .map(item => ({ id: item.id.slice(-36), name: item.name, ratingCount: item.ratingCount, readerCommunity: item.readerCommunity }));
+    for (const item of populations.data.items) {
+      if (!item.global) ratingRealms.push({ id: item.id.slice(-36), name: item.name, ratingCount: item.ratingCount,
+        readerCommunity: item.readerCommunity });
+    }
   }
-  const shown = (read: { ok: true; data: { items?: readonly unknown[]; parts?: readonly unknown[] } } | { ok: false; failure: string }) =>
-    read.ok ? Boolean((read.data.items ?? read.data.parts)?.length) : read.failure !== 'missing' && read.failure !== 'sign-in'
-      && read.failure !== 'identity';
-  const availability = shown(realizations) || shown(releases) || shown(availabilityParts);
   const names: Names = new Map();
   const avatarQuery = host.actingSubject ? `?actingSubject=${encodeURIComponent(host.actingSubject)}` : '';
   const scopeView = { workRef, scope: scope ?? EVERYONE, realms: ratingRealms };
@@ -305,18 +319,8 @@ export async function recipeWorkOverview({ host, workRef, id, work, scope, local
       {recipe}
     </>}
     about={null}
-    facts={statements ? <details className="group min-w-0 border-border/70 border-y" data-full-facts>
-      <summary className="flex cursor-pointer list-none items-center gap-2 py-4 font-semibold outline-none
-        focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-        {materializeData(messages, { locale }).fullFacts}
-      </summary>
-      <div className="grid gap-5 pb-6">
-        <StatementsView page={statements} names={names} cursor={undefined} hrefFor={hrefFor} locale={locale} t={entity}
-          messages={messages} />
-        <ProposeCorrectionSlot work={id} locale={locale} messages={messages} />
-      </div>
-    </details> : null}
-    availability={availability ? null : null}
+    availability={<EditionsPreviewView realizations={realizations} releases={releases} workRef={workRefOf(workRef)}
+      locale={locale} pageMessages={messages} t={levels} />}
     parts={<>
       {host.actingSubject ? <SeriesProgressPanel work={iriOf(id)} locale={locale} preferenceForm={false} /> : null}
       <PartsPreviewView parts={parts} wholes={wholes} names={names} workRef={workRefOf(workRef)} pageMessages={messages}
@@ -337,7 +341,7 @@ export async function recipeWorkOverview({ host, workRef, id, work, scope, local
       subject={subject} signedIn={host.signedIn} hrefFor={hrefFor} locale={locale} t={entity} messages={messages} /> : null}
     adoption={scope && adoptions ? <AdoptionRegion adoptions={adoptions} view={scopeView} locale={locale}
       messages={messages} /> : null}
-    record={<WorkRecord work={work} locale={locale} messages={messages} />}
+    record={null}
     alsoEnjoyed={<AlsoEnjoyedSection alsoEnjoyed={alsoEnjoyed} book={false} realms={[]} avatarQuery={avatarQuery}
       locale={locale} messages={messages} />}
     author={identity.author ? <AuthorSection author={{ kind: 'agent', name: identity.author.name, handle: identity.author.handle,

@@ -5,8 +5,6 @@ import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import { Expandable } from './expandable.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
-import { RightsMark } from '../rights-mark/rights-mark.tsx';
-import { ReportAction } from '../safety/report-action.tsx';
 import { typeLabel } from '../catalogue/types.ts';
 import { formatCompact } from '../catalogue/work.ts';
 import { formatNumber, isoTime, languageName, paragraphs, sinceWhen, titleNeedsLanguageNote }
@@ -62,8 +60,8 @@ const titleClass = `text-balance font-semibold font-work-title text-2xl/tight tr
  * Work-title face, who made it, the rating summary, a plain line of what it
  * is and, for a serial, its state. Model detail lives in Details below.
  */
-export function WorkHeader({ work, credits, ratingLine, showcase, now = new Date(), locale, messages }: {
-  work: Header; credits: ReactNode; ratingLine?: ReactNode;
+export function WorkHeader({ work, credits, domainFacts, ratingLine, showcase, now = new Date(), locale, messages }: {
+  work: Header; credits: ReactNode; domainFacts?: ReactNode; ratingLine?: ReactNode;
   /** The Work's showcase art; the frame places the header over it, and the title and trailer follow it. */
   showcase?: WorkShowcaseHeader;
   /** The moment "Updated 3 days ago" is measured from; stories fix it. */
@@ -93,26 +91,23 @@ export function WorkHeader({ work, credits, ratingLine, showcase, now = new Date
       ? <p className="text-muted-foreground text-sm">{t.originalTitle}{': '}
         <LocalizedText text={work.originalTitle} className="font-work-title text-foreground" /></p> : null}
     <div className="w-full [&_p]:justify-start">{credits}</div>
-    {ratingLine}
     {facts.length ? <p className="text-muted-foreground text-sm">{facts.join(' · ')}</p> : null}
     <WorkStats work={work} now={now} locale={locale} messages={messages} />
+    {domainFacts}
+    {ratingLine}
     {showcase ? <WorkTrailer header={showcase} title={work.title.value} /> : null}
   </header>;
 }
 
 /**
  * The Work's recorded description, in the reader's language when Main has one, folded after a few lines.
- * The rights mark stays outside the fold, so the credit remains visible when the text is cut.
+ * Evidence and report targets belong to the frame, so folding or omitting a synopsis never duplicates them.
  */
-export function WorkAbout({ work, locale = 'en', messages }: {
+export function WorkAbout({ work, messages }: {
   work: Header; locale?: UiLocale; messages: WorkPageMessages;
 }) {
-  const mark = <>
-    {work.factObligations ? <RightsMark rights={work.factObligations} locale={locale} /> : null}
-    <RightsMark rights={work.descriptionObligations} locale={locale} />
-  </>;
-  if (!work.description) return mark;
-  return <section aria-labelledby="work-about" className="grid max-w-3xl gap-2">
+  if (!work.description) return null;
+  return <section aria-labelledby="work-about" className="grid max-w-[70ch] gap-2">
     <h2 id="work-about" className="sr-only">{messages.about}</h2>
     <Expandable more={messages.showMore} less={messages.showLess}>
       <div lang={work.description.language} dir={work.description.direction}
@@ -120,9 +115,5 @@ export function WorkAbout({ work, locale = 'en', messages }: {
         {paragraphs(work.description.value).map((line, index) => <p key={index}>{line}</p>)}
       </div>
     </Expandable>
-    {mark}
-    <ReportAction target={work.id} kind="text" selection={{ component: 'synopsis',
-      revision: work.metadataRevision ?? work.revision, locator: null }}
-      className="inline-flex w-fit items-center gap-1 text-muted-foreground text-xs hover:underline" />
   </section>;
 }

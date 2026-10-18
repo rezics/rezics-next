@@ -66,8 +66,8 @@ export function PartsPreviewView({
 }) {
   const shown = parts.ok ? parts.data.parts.slice(0, PREVIEW_COUNTS.parts) : [];
   const hasWholes = wholes?.ok && wholes.data.wholes.length > 0;
-  const failure = !parts.ok && parts.failure !== 'missing' ? parts.failure : null;
-  const wholeFailure = wholes && !wholes.ok && wholes.failure !== 'missing';
+  const failure = !parts.ok ? parts.failure : null;
+  const wholeFailure = wholes && !wholes.ok;
   if (!shown.length && !hasWholes && !failure && !wholeFailure) return null;
   return (
     <Region id="parts-preview" title={t.parts}>
@@ -121,7 +121,7 @@ export function ConnectionsPreviewView({
   t: Copy;
 }) {
   if (!relations.ok) {
-    return relations.failure === 'missing' ? null : (
+    return (
       <Region id="connections-preview" title={t.connections}>
         <RegionFailure
           title={t.connectionsUnavailable}
@@ -131,9 +131,10 @@ export function ConnectionsPreviewView({
       </Region>
     );
   }
-  const rows = relationRows(relations.data.items).slice(0, PREVIEW_COUNTS.relations);
-  const franchises = franchisesOf(relations.data.items);
-  if (!rows.length && !franchises.length) return null;
+  const page = { entries: relations.data.items, nextCursor: relations.data.nextCursor };
+  const rows = relationRows(page.entries).slice(0, PREVIEW_COUNTS.relations);
+  const franchises = franchisesOf(page.entries);
+  if (!rows.length && !franchises.length && !page.nextCursor) return null;
   return (
     <Region id="connections-preview" title={t.connections}>
       {franchises.length ? (
@@ -173,14 +174,15 @@ export function EditionsPreviewView({
   pageMessages: WorkPageMessages;
   t: Copy;
 }) {
-  const languages = realizations.ok
-    ? [...new Set(realizations.data.items.map((item) => item.language))]
-    : [];
-  const listed = releases.ok ? releases.data.items.slice(0, PREVIEW_COUNTS.releases) : [];
+  const texts = realizations.ok ? { entries: realizations.data.items, nextCursor: realizations.data.nextCursor } : null;
+  const editions = releases.ok ? { entries: releases.data.items, nextCursor: releases.data.nextCursor } : null;
+  const languages = [...new Set(texts?.entries.map(item => item.language) ?? [])];
+  const listed = editions?.entries.slice(0, PREVIEW_COUNTS.releases) ?? [];
+  const continues = texts?.nextCursor || editions?.nextCursor;
   const realizationsFailure =
-    !realizations.ok && realizations.failure !== 'missing' ? realizations.failure : null;
-  const releasesFailure = !releases.ok && releases.failure !== 'missing' ? releases.failure : null;
-  if (!languages.length && !listed.length && !realizationsFailure && !releasesFailure) return null;
+    !realizations.ok ? realizations.failure : null;
+  const releasesFailure = !releases.ok ? releases.failure : null;
+  if (!languages.length && !listed.length && !continues && !realizationsFailure && !releasesFailure) return null;
   return (
     <Region id="editions-preview" title={t.editions}>
       {realizationsFailure ? (
@@ -223,7 +225,7 @@ export function EditionsPreviewView({
           ))}
         </ul>
       ) : null}
-      {languages.length || listed.length ? (
+      {languages.length || listed.length || continues ? (
         <ViewAll href={editionsHref(workRef, {}, anchors.realizations)} label={t.allEditions} />
       ) : null}
     </Region>

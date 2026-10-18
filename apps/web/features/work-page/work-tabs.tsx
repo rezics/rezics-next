@@ -3,7 +3,7 @@
 import { cn } from '@rezics/ui/utils';
 import Link from '../shell/localized-link.tsx';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { scopeAt, tabOf, type WorkAt, workHref, type WorkTab, workTabs } from './route.ts';
+import { scopeAt, tabOf, type WorkAt, workHref, workNavigationQuery, type WorkTab, workTabs } from './route.ts';
 
 /**
  * The Work's views as links, so each has its own URL and history entry. The
@@ -13,11 +13,13 @@ export function WorkTabs({ workRef, labels, label }: {
   workRef: WorkAt; labels: Record<WorkTab, string>; label: string;
 }) {
   const current = tabOf(usePathname(), workRef);
-  const scope = scopeAt(workRef, Object.fromEntries(useSearchParams()));
+  const params = useSearchParams();
+  const scope = scopeAt(workRef, Object.fromEntries(params));
+  const query = workNavigationQuery(params);
   return <nav aria-label={label} className="hidden overflow-x-auto sm:block">
     <ul className="flex w-max min-w-full gap-1 border-border/70 border-b">
       {workTabs.map(tab => <li key={tab}>
-        <Link href={workHref(workRef, tab, scope)}
+        <Link href={workHref(workRef, tab, scope, query)}
           aria-current={tab === current ? 'page' : undefined}
           className={cn('relative flex h-11 items-center whitespace-nowrap rounded-t-lg px-3 font-medium text-sm',
             'text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground',

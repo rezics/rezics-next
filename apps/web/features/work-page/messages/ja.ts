@@ -2,6 +2,11 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  editionsView: '版',
+  connectionsView: '関連',
+  sourcesAndEvidence: '出典・ライセンス・根拠',
+  sourceFacts: '作品情報',
+  sourceDescription: '紹介文',
   openRecording: "録音・動画を開く",
   recordingMasked: "この録音・動画は非表示です。開くと再生できます。",
   instructionTransformation: "変換",

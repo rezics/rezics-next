@@ -218,6 +218,7 @@ export const EmptyInventory: Story = { args: { state: 'empty' }, async play({ ca
   const status = canvas.getByRole('list', { name: messages[args.locale].yourEdition });
   await expect(within(status).getAllByRole('listitem')).toHaveLength(1);
   await expect(status).toHaveTextContent(t.notStarted);
+  await userEvent.click(canvas.getByText(messages[args.locale].yourEdition, { selector: 'summary' }));
   const select = await canvas.findByRole('combobox', { name: t.edition });
   await expect(select).toHaveTextContent(t.anyEdition);
   await expect(canvas.getByRole('button', { name: t.savePreference })).toBeVisible();

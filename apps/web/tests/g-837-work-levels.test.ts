@@ -56,7 +56,7 @@ describe('independent Work reads preserve disclosed results', () => {
       expect(markup).toContain('Part of');
       expect(markup).toContain('A Certain Magical Index');
       expect(markup).toContain(resourceHref('/w/', fixture.iri('200')));
-      expect(markup.includes('role="alert"')).toBe(failure !== 'missing');
+      expect(markup).toContain('role="alert"');
     });
 
     test(`the full parts section keeps the whole when parts are ${failure}`, () => {
@@ -71,7 +71,7 @@ describe('independent Work reads preserve disclosed results', () => {
       expect(markup).toContain('Part of');
       expect(markup).toContain('A Certain Magical Index');
       expect(markup).toContain(resourceHref('/w/', fixture.iri('200')));
-      expect(markup.includes('role="alert"')).toBe(failure !== 'missing');
+      expect(markup).toContain('role="alert"');
     });
 
     test(`the editions preview keeps releases when realizations are ${failure}`, () => {
@@ -85,7 +85,7 @@ describe('independent Work reads preserve disclosed results', () => {
       );
       expect(markup).toContain('A Certain Magical Index, Vol. 1');
       expect(markup).toContain(releaseHref(fixture.iri('c1')));
-      expect(markup.includes('role="alert"')).toBe(failure !== 'missing');
+      expect(markup).toContain('role="alert"');
     });
 
     test(`the editions preview keeps languages when releases are ${failure}`, () => {
@@ -99,7 +99,7 @@ describe('independent Work reads preserve disclosed results', () => {
       );
       expect(markup).toContain('Japanese');
       expect(markup).toContain(copyOf('en').realizations);
-      expect(markup.includes('role="alert"')).toBe(failure !== 'missing');
+      expect(markup).toContain('role="alert"');
     });
   }
 
