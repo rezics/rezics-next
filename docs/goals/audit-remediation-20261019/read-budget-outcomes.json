@@ -5,21 +5,21 @@
   "baseline": {
     "revision": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
     "workingTree": "Outcome tests and minimal QA support only; production code unchanged.",
-    "run": "20261018t214255-42a748",
-    "recordedJob": "ad51ec21-4e8b-43d5-9268-f06e9f0bff1d",
-    "assertionReached": "Zone visitor body proves 8 succeeds and 9/10 fail; signed-in Zone body failures are a missing actingSubject test premise, corrected for next retained-corpus run. Earlier runs prove five notification cancellation bodies, six chapter qualification bodies and six 101-vote bodies fail; stranger default discovery fails. All six cursor traversals pass. D5-004 persistent fault and notification allocation exhaustion remain unconfirmed.",
+    "run": "20261018t220049-e353cb",
+    "recordedJob": "a679a5e4-636f-4e85-9913-2faff883a543",
+    "assertionReached": "Confirmed failing bodies: five signed-in D5-001 cancellations, six D5-003 foreground qualifications, six D5-006 rating populations, six D5-006 Zone populations, and stranger D5-002 default-discovery availability. All six AUD-001 complete traversals pass. D5-004 persistent failure and D5-001 allocation exhaustion remain unconfirmed.",
     "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check --only types,lint' --then 'bun scripts/goal/goalctl.ts test tests/qa/integration/official-zone-read-budget.test.ts' -- task docs:check",
     "expectedGate": "Intentionally failing baseline regression, never a passing done gate.",
     "dispatchedRevision": "50e53025617238f9d9d8127be78179c3fa3bc12c",
-    "currency": "Required check refreshed worker to main 9f5a8ad20c4bacddda4be2b1583f4987f6d478a3; git diff 7df2e285d3..9f5a8ad20c -- services/main/src is empty. Exact tested heads are recorded per attempt; API code stays production-equivalent to revision.",
+    "currency": "Required check adopted main 018f58d0bcc28cb323382ea4ac23c5dcdb567e99; git diff 7df2e285d3..018f58d0bc -- services/main/src is empty. Exact tested heads are recorded per attempt/persona. Production API revision remains 7df2e285d3199c32b4e61c08c33ba9c25afaaa21.",
     "staticChecks": {
-      "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
+      "job": "a679a5e4-636f-4e85-9913-2faff883a543",
       "docs": "passed",
       "types": "passed",
       "lint": "passed",
       "ast": "passed",
       "guards": "passed in preceding job 952ad34f-5eba-4250-9cd5-37c617521094; not repeated after test premise edits",
-      "evidence": ".temp/goal/check/run-mKmK79/output.log",
+      "evidence": ".temp/goal/check/run-OnCiRl/output.log",
       "targetedHarness": "raw-update-scan and integration-shards passed in preceding run 20261018t200309-394b25"
     },
     "attempts": [
@@ -253,17 +253,50 @@
           }
         ],
         "nextCheck": "One final targeted Zone attempt restores fixture sessions serially to reduce preparation demand. Default restore concurrency remains unchanged for other callers; no product timeout, candidate limit or assertion changes."
+      },
+      {
+        "job": "a679a5e4-636f-4e85-9913-2faff883a543",
+        "run": "20261018t220049-e353cb",
+        "sourceRevision": "27848701b8d34d8e260903f7361c1a97b3331b2f",
+        "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
+        "result": "six expected Zone population assertion failures; six admission controls pass",
+        "projectBudgetMs": 480000,
+        "capabilities": [
+          {
+            "capability": "zones",
+            "project": 1,
+            "wallMs": 135200,
+            "assertionReached": true,
+            "diagnosis": "Serial real-session restoration succeeds on the retained cut. Every persona passes 8 official Zones with three bounded disclosed suggestions, then fails expected HTTP 200 at 9 with raw 503 work_read_unavailable; all 10-Zone responses are also 503. All six missing authentication/acting-Agent pair controls pass with 400 invalid_home_command and zero graph calls. No project, candidate or preparation limit raised.",
+            "evidence": ".artifacts/qa/20261018t220049-e353cb/logs/integration-1.log",
+            "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-6905ecc8c6534699-evidence.json"
+          }
+        ],
+        "preparation": {
+          "sourceBuildMs": 231959,
+          "sourceRunnerStartupMs": 58017,
+          "sourceRebuiltThisAttempt": false,
+          "restoreMs": 79567,
+          "restoreAdmissionMs": 55666
+        },
+        "nextCheck": "None required for observed assertions. Manager reads this matrix before dispatching shared API work; unconfirmed fault/allocation premises require separate proof."
       }
     ],
-    "harnessBase": "9f5a8ad20c4bacddda4be2b1583f4987f6d478a3",
-    "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
+    "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
+    "sourceRevision": "27848701b8d34d8e260903f7361c1a97b3331b2f",
     "latestAttempt": {
-      "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
-      "run": "20261018t215239-52567d",
-      "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
+      "job": "a679a5e4-636f-4e85-9913-2faff883a543",
+      "run": "20261018t220049-e353cb",
+      "sourceRevision": "27848701b8d34d8e260903f7361c1a97b3331b2f",
       "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
-      "assertionReached": false,
-      "status": "setup failed during restored Main session-Agent choice with 503 rate_limit_unavailable; previous visitor Zone proof remains valid, corrected signed-in and admission bodies not reached"
+      "assertionReached": true,
+      "status": "All six Zone bodies fail at 9 after passing 8; all six admission controls pass."
+    },
+    "observationRuns": {
+      "queries": "20261018t204708-fb68cb",
+      "ratings": "20261018t204708-fb68cb",
+      "notificationCancellationAndControls": "20261018t212935-ae08d6",
+      "zonesAndAdmission": "20261018t220049-e353cb"
     }
   },
   "fixture": {
@@ -587,55 +620,55 @@
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t214255-42a748",
-          "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
-          "evidence": ".artifacts/qa/20261018t214255-42a748/logs/integration-1.log",
-          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-c3b4c64624d84807-evidence.json",
+          "run": "20261018t220049-e353cb",
+          "sourceRevision": "27848701b8d34d8e260903f7361c1a97b3331b2f",
+          "evidence": ".artifacts/qa/20261018t220049-e353cb/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-6905ecc8c6534699-evidence.json",
           "assertionReached": true,
           "defectAssertionConfirmed": true,
           "answers": [
             {
               "population": 8,
               "status": 200,
-              "elapsedMs": 2232.4259590000147,
+              "elapsedMs": 2289.4390279999934,
               "graphCalls": 67,
               "graphBytes": 89107,
-              "trace": "ae538c17a87871f18f17bfe8908ee16e",
+              "trace": "a8847910b9a9a95cdb3a6f039b46dbd8",
               "code": null,
               "items": 3
             },
             {
               "population": 9,
               "status": 503,
-              "elapsedMs": 229.01771400001599,
+              "elapsedMs": 195.02063100002124,
               "graphCalls": 16,
               "graphBytes": 34668,
-              "trace": "50449a21ddd35cb28afca67e2864ff89",
+              "trace": "5a8ec9352fa92a969dd3b612e6f43a38",
               "code": "work_read_unavailable",
               "items": null
             },
             {
               "population": 10,
               "status": 503,
-              "elapsedMs": 228.34149899997283,
+              "elapsedMs": 322.3339879999985,
               "graphCalls": 16,
               "graphBytes": 34668,
-              "trace": "4c00b720006c30bba2c080a15c88f5c6",
+              "trace": "49d28ad41e547814ad4cce6ffc6ab55c",
               "code": "work_read_unavailable",
               "items": null
             }
           ],
-          "status": "8 succeeds, 9/10 fail raw 503 at population assertion."
+          "eightZoneControls": "passed: nonempty bounded suggestions, actual graph allocation, private Realm omitted",
+          "admission": {
+            "assertionReached": true,
+            "status": 400,
+            "code": "invalid_home_command",
+            "graphCalls": 0,
+            "disclosesItems": false
+          },
+          "status": "Body fails at 9-Zone expected 200 with actual 503; 10-Zone 503 also observed."
         },
-        "admissionTest": "zonesAdmission",
-        "latestAttempt": {
-          "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
-          "run": "20261018t215239-52567d",
-          "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
-          "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
-          "assertionReached": false,
-          "status": "setup failed during restored Main session-Agent choice with 503 rate_limit_unavailable; previous visitor Zone proof remains valid, corrected signed-in and admission bodies not reached"
-        }
+        "admissionTest": "zonesAdmission"
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -859,55 +892,55 @@
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t214255-42a748",
-          "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
-          "evidence": ".artifacts/qa/20261018t214255-42a748/logs/integration-1.log",
-          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-c3b4c64624d84807-evidence.json",
+          "run": "20261018t220049-e353cb",
+          "sourceRevision": "27848701b8d34d8e260903f7361c1a97b3331b2f",
+          "evidence": ".artifacts/qa/20261018t220049-e353cb/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-6905ecc8c6534699-evidence.json",
           "assertionReached": true,
-          "defectAssertionConfirmed": false,
+          "defectAssertionConfirmed": true,
           "answers": [
             {
               "population": 8,
-              "status": 400,
-              "elapsedMs": 14.396852999983821,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "505c0b9f220a88e1cd8ee55f52128fab",
-              "code": "invalid_home_command",
-              "items": null
+              "status": 200,
+              "elapsedMs": 1655.7763160000031,
+              "graphCalls": 67,
+              "graphBytes": 89107,
+              "trace": "ffbe01cc9979d925411692313faf2ad5",
+              "code": null,
+              "items": 3
             },
             {
               "population": 9,
-              "status": 400,
-              "elapsedMs": 10.386117000016384,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "36a7442ac95a61601b5a367e4a901400",
-              "code": "invalid_home_command",
+              "status": 503,
+              "elapsedMs": 215.88271299999906,
+              "graphCalls": 16,
+              "graphBytes": 34668,
+              "trace": "36867994637f7012b1039d04e75aa786",
+              "code": "work_read_unavailable",
               "items": null
             },
             {
               "population": 10,
-              "status": 400,
-              "elapsedMs": 8.392875000019558,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "119103cf9fa4caece62bf1d9864996c7",
-              "code": "invalid_home_command",
+              "status": 503,
+              "elapsedMs": 383.5182559999812,
+              "graphCalls": 16,
+              "graphBytes": 34668,
+              "trace": "7024481e2ae23a39f08f4297b8067b24",
+              "code": "work_read_unavailable",
               "items": null
             }
           ],
-          "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
+          "eightZoneControls": "passed: nonempty bounded suggestions, actual graph allocation, private Realm omitted",
+          "admission": {
+            "assertionReached": true,
+            "status": 400,
+            "code": "invalid_home_command",
+            "graphCalls": 0,
+            "disclosesItems": false
+          },
+          "status": "Body fails at 9-Zone expected 200 with actual 503; 10-Zone 503 also observed."
         },
-        "admissionTest": "zonesAdmission",
-        "latestAttempt": {
-          "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
-          "run": "20261018t215239-52567d",
-          "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
-          "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
-          "assertionReached": false,
-          "status": "setup failed during restored Main session-Agent choice with 503 rate_limit_unavailable; previous visitor Zone proof remains valid, corrected signed-in and admission bodies not reached"
-        }
+        "admissionTest": "zonesAdmission"
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -1130,55 +1163,55 @@
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t214255-42a748",
-          "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
-          "evidence": ".artifacts/qa/20261018t214255-42a748/logs/integration-1.log",
-          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-c3b4c64624d84807-evidence.json",
+          "run": "20261018t220049-e353cb",
+          "sourceRevision": "27848701b8d34d8e260903f7361c1a97b3331b2f",
+          "evidence": ".artifacts/qa/20261018t220049-e353cb/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-6905ecc8c6534699-evidence.json",
           "assertionReached": true,
-          "defectAssertionConfirmed": false,
+          "defectAssertionConfirmed": true,
           "answers": [
             {
               "population": 8,
-              "status": 400,
-              "elapsedMs": 10.172514000034425,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "148bac38996e471dd4cacd223f767d6f",
-              "code": "invalid_home_command",
-              "items": null
+              "status": 200,
+              "elapsedMs": 1487.0048289999831,
+              "graphCalls": 67,
+              "graphBytes": 89107,
+              "trace": "609edbad942f432cf9c4b6d214f8baa1",
+              "code": null,
+              "items": 3
             },
             {
               "population": 9,
-              "status": 400,
-              "elapsedMs": 8.987396000011358,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "d063f36cd51c415473d451c824e896fa",
-              "code": "invalid_home_command",
+              "status": 503,
+              "elapsedMs": 193.15610400002333,
+              "graphCalls": 16,
+              "graphBytes": 34668,
+              "trace": "8a07b57b86553bd8853c1ae240928f85",
+              "code": "work_read_unavailable",
               "items": null
             },
             {
               "population": 10,
-              "status": 400,
-              "elapsedMs": 6.426264000008814,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "6d0fb42b2ad0c151fe92016d43c48bdd",
-              "code": "invalid_home_command",
+              "status": 503,
+              "elapsedMs": 442.6804589999956,
+              "graphCalls": 16,
+              "graphBytes": 34668,
+              "trace": "50f7a9456e1cb548b079a4138e044274",
+              "code": "work_read_unavailable",
               "items": null
             }
           ],
-          "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
+          "eightZoneControls": "passed: nonempty bounded suggestions, actual graph allocation, private Realm omitted",
+          "admission": {
+            "assertionReached": true,
+            "status": 400,
+            "code": "invalid_home_command",
+            "graphCalls": 0,
+            "disclosesItems": false
+          },
+          "status": "Body fails at 9-Zone expected 200 with actual 503; 10-Zone 503 also observed."
         },
-        "admissionTest": "zonesAdmission",
-        "latestAttempt": {
-          "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
-          "run": "20261018t215239-52567d",
-          "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
-          "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
-          "assertionReached": false,
-          "status": "setup failed during restored Main session-Agent choice with 503 rate_limit_unavailable; previous visitor Zone proof remains valid, corrected signed-in and admission bodies not reached"
-        }
+        "admissionTest": "zonesAdmission"
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -1401,55 +1434,55 @@
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t214255-42a748",
-          "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
-          "evidence": ".artifacts/qa/20261018t214255-42a748/logs/integration-1.log",
-          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-c3b4c64624d84807-evidence.json",
+          "run": "20261018t220049-e353cb",
+          "sourceRevision": "27848701b8d34d8e260903f7361c1a97b3331b2f",
+          "evidence": ".artifacts/qa/20261018t220049-e353cb/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-6905ecc8c6534699-evidence.json",
           "assertionReached": true,
-          "defectAssertionConfirmed": false,
+          "defectAssertionConfirmed": true,
           "answers": [
             {
               "population": 8,
-              "status": 400,
-              "elapsedMs": 11.383027000003494,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "be4f895f07f0ec4c56c2304bf738d895",
-              "code": "invalid_home_command",
-              "items": null
+              "status": 200,
+              "elapsedMs": 1615.1030170000158,
+              "graphCalls": 67,
+              "graphBytes": 89107,
+              "trace": "20ce9e8492f39eb44a68b8f0d782ebdd",
+              "code": null,
+              "items": 3
             },
             {
               "population": 9,
-              "status": 400,
-              "elapsedMs": 9.187284000043292,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "9fabfc441ecb36f837e5316a95d01429",
-              "code": "invalid_home_command",
+              "status": 503,
+              "elapsedMs": 214.97394799999893,
+              "graphCalls": 16,
+              "graphBytes": 34668,
+              "trace": "d0bfdbfb179128fe2eff600a7746ce71",
+              "code": "work_read_unavailable",
               "items": null
             },
             {
               "population": 10,
-              "status": 400,
-              "elapsedMs": 7.027538999973331,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "7842bd9db70458ef056d7d9fe3ed5ae9",
-              "code": "invalid_home_command",
+              "status": 503,
+              "elapsedMs": 615.9852090000059,
+              "graphCalls": 16,
+              "graphBytes": 34668,
+              "trace": "f142dac0dfe60375409d5691b1212c86",
+              "code": "work_read_unavailable",
               "items": null
             }
           ],
-          "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
+          "eightZoneControls": "passed: nonempty bounded suggestions, actual graph allocation, private Realm omitted",
+          "admission": {
+            "assertionReached": true,
+            "status": 400,
+            "code": "invalid_home_command",
+            "graphCalls": 0,
+            "disclosesItems": false
+          },
+          "status": "Body fails at 9-Zone expected 200 with actual 503; 10-Zone 503 also observed."
         },
-        "admissionTest": "zonesAdmission",
-        "latestAttempt": {
-          "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
-          "run": "20261018t215239-52567d",
-          "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
-          "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
-          "assertionReached": false,
-          "status": "setup failed during restored Main session-Agent choice with 503 rate_limit_unavailable; previous visitor Zone proof remains valid, corrected signed-in and admission bodies not reached"
-        }
+        "admissionTest": "zonesAdmission"
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -1672,55 +1705,55 @@
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t214255-42a748",
-          "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
-          "evidence": ".artifacts/qa/20261018t214255-42a748/logs/integration-1.log",
-          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-c3b4c64624d84807-evidence.json",
+          "run": "20261018t220049-e353cb",
+          "sourceRevision": "27848701b8d34d8e260903f7361c1a97b3331b2f",
+          "evidence": ".artifacts/qa/20261018t220049-e353cb/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-6905ecc8c6534699-evidence.json",
           "assertionReached": true,
-          "defectAssertionConfirmed": false,
+          "defectAssertionConfirmed": true,
           "answers": [
             {
               "population": 8,
-              "status": 400,
-              "elapsedMs": 11.12943799997447,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "7f74d9f88c091aa3de3da5bbd4451aa3",
-              "code": "invalid_home_command",
-              "items": null
+              "status": 200,
+              "elapsedMs": 2352.134477000014,
+              "graphCalls": 67,
+              "graphBytes": 89107,
+              "trace": "cfc282faeaacacc74d902f4988fb7ae0",
+              "code": null,
+              "items": 3
             },
             {
               "population": 9,
-              "status": 400,
-              "elapsedMs": 7.288120999990497,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "235787004af56b8a129cb2c4d96a5e97",
-              "code": "invalid_home_command",
+              "status": 503,
+              "elapsedMs": 309.54493799997726,
+              "graphCalls": 16,
+              "graphBytes": 34668,
+              "trace": "16f2747e85ca35751ae5073c3c330667",
+              "code": "work_read_unavailable",
               "items": null
             },
             {
               "population": 10,
-              "status": 400,
-              "elapsedMs": 7.722379999991972,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "6cce26dc78354141a0a76676163d60d3",
-              "code": "invalid_home_command",
+              "status": 503,
+              "elapsedMs": 576.8950570000161,
+              "graphCalls": 16,
+              "graphBytes": 34668,
+              "trace": "1298d336c41801c6b1eff23af7e28e23",
+              "code": "work_read_unavailable",
               "items": null
             }
           ],
-          "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
+          "eightZoneControls": "passed: nonempty bounded suggestions, actual graph allocation, private Realm omitted",
+          "admission": {
+            "assertionReached": true,
+            "status": 400,
+            "code": "invalid_home_command",
+            "graphCalls": 0,
+            "disclosesItems": false
+          },
+          "status": "Body fails at 9-Zone expected 200 with actual 503; 10-Zone 503 also observed."
         },
-        "admissionTest": "zonesAdmission",
-        "latestAttempt": {
-          "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
-          "run": "20261018t215239-52567d",
-          "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
-          "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
-          "assertionReached": false,
-          "status": "setup failed during restored Main session-Agent choice with 503 rate_limit_unavailable; previous visitor Zone proof remains valid, corrected signed-in and admission bodies not reached"
-        }
+        "admissionTest": "zonesAdmission"
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -1943,55 +1976,55 @@
         "budget": "suggestions",
         "traversal": "Suggestions are a bounded selection, not an exhaustive Zone inventory. No global 8-Zone capacity limit.",
         "observed": {
-          "run": "20261018t214255-42a748",
-          "sourceRevision": "fe94c46c0a518993b3203056c79e62af7af96f36",
-          "evidence": ".artifacts/qa/20261018t214255-42a748/logs/integration-1.log",
-          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-c3b4c64624d84807-evidence.json",
+          "run": "20261018t220049-e353cb",
+          "sourceRevision": "27848701b8d34d8e260903f7361c1a97b3331b2f",
+          "evidence": ".artifacts/qa/20261018t220049-e353cb/logs/integration-1.log",
+          "wireEvidence": ".temp/audit-bounded-reads/zones/bounded-6905ecc8c6534699-evidence.json",
           "assertionReached": true,
-          "defectAssertionConfirmed": false,
+          "defectAssertionConfirmed": true,
           "answers": [
             {
               "population": 8,
-              "status": 400,
-              "elapsedMs": 11.593012999976054,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "fbd856b501b438fd5e7f3e6b5397613d",
-              "code": "invalid_home_command",
-              "items": null
+              "status": 200,
+              "elapsedMs": 1589.4255199999898,
+              "graphCalls": 67,
+              "graphBytes": 89107,
+              "trace": "e1a8a14bdaf322faed9ae1224c86f69e",
+              "code": null,
+              "items": 3
             },
             {
               "population": 9,
-              "status": 400,
-              "elapsedMs": 9.618849000020418,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "4ab13e53367ff2dd623a43bd641cae2f",
-              "code": "invalid_home_command",
+              "status": 503,
+              "elapsedMs": 322.325462000008,
+              "graphCalls": 16,
+              "graphBytes": 34668,
+              "trace": "35a14111e3e4bd0200d437c0ae787868",
+              "code": "work_read_unavailable",
               "items": null
             },
             {
               "population": 10,
-              "status": 400,
-              "elapsedMs": 8.84881499997573,
-              "graphCalls": 0,
-              "graphBytes": 0,
-              "trace": "b8530c614529b4f0b835c0ff12488736",
-              "code": "invalid_home_command",
+              "status": 503,
+              "elapsedMs": 596.5623130000022,
+              "graphCalls": 16,
+              "graphBytes": 34668,
+              "trace": "6b9aecc25f94138cae343e3e59d73071",
+              "code": "work_read_unavailable",
               "items": null
             }
           ],
-          "status": "Body reached, but omitted actingSubject gives proper 400; not population defect proof. Corrected own-Agent request awaits retained-corpus run."
+          "eightZoneControls": "passed: nonempty bounded suggestions, actual graph allocation, private Realm omitted",
+          "admission": {
+            "assertionReached": true,
+            "status": 400,
+            "code": "invalid_home_command",
+            "graphCalls": 0,
+            "disclosesItems": false
+          },
+          "status": "Body fails at 9-Zone expected 200 with actual 503; 10-Zone 503 also observed."
         },
-        "admissionTest": "zonesAdmission",
-        "latestAttempt": {
-          "job": "b130cdd4-c314-468b-a66e-24520a609ad5",
-          "run": "20261018t215239-52567d",
-          "sourceRevision": "68b8132b95b0e1ff5d15310cd069477562881d22",
-          "harnessBase": "018f58d0bcc28cb323382ea4ac23c5dcdb567e99",
-          "assertionReached": false,
-          "status": "setup failed during restored Main session-Agent choice with 503 rate_limit_unavailable; previous visitor Zone proof remains valid, corrected signed-in and admission bodies not reached"
-        }
+        "admissionTest": "zonesAdmission"
       },
       "ratingPopulation": {
         "case": "D5-006-ratings",
@@ -2105,7 +2138,7 @@
         "services/main/src/modules/onboarding/suggestions.ts",
         "services/main/src/modules/zone/publication.ts"
       ],
-      "status": "Visitor outcome proves 8 official Zones readable and 9/10 raw 503. Five signed-in requests omitted actingSubject and their 400 is not population evidence; corrected own-Agent requests need the final retained-corpus run."
+      "status": "All six independent bodies pass 8-Zone response/budget/privacy controls and fail the 9-Zone 200 expectation with raw 503. 10-Zone 503 also observed for all six. All six missing authentication/acting-Agent pair controls pass. The internal candidate-next rejection is a source hypothesis consistent with this public boundary, not permission to increase its limit."
     },
     {
       "case": "D5-006-ratings",
@@ -2130,5 +2163,94 @@
     ],
     "authority": "All eight support/capability paths were owner-checked as unclaimed before editing, including joining-auth.ts for optional fixture OAuth scopes. No schema, migration, route or production change.",
     "reason": "Capability files keep each existing 480-second project isolated. Shared support retains real command-built backups, restores sessions, measures actual I/O, and adds optional OAuth scopes needed for official population preparation. All defaults remain unchanged for existing tests. An optional serial session-restore mode bounds this corpus setup traffic; existing callers retain their defaults."
+  },
+  "handoff": {
+    "result": "partial",
+    "managerReadRequiredBeforeApiDispatch": true,
+    "autoLand": false,
+    "productionCodeChanged": false,
+    "confirmed": [
+      "D5-001 cancellation for all five signed-in personas",
+      "D5-003 foreground eligibility population audit for all six personas",
+      "D5-006 official Zones at 9/10 for all six personas",
+      "D5-006 ratings at 101/102 for all six personas",
+      "D5-002 default discovery raw 503/deadline for stranger; root cause unconfirmed"
+    ],
+    "passingControls": [
+      "All six AUD-001 complete cursor traversals: 13 pages, 12 unique items, largest issued cursor 1422 characters",
+      "All six notification stream/unread starting-budget and admission/missing/alien controls",
+      "All six chapter absent/unpublished disclosure controls",
+      "All six eight-Zone controls and authentication/acting-Agent pair refusals",
+      "All six exact 100-vote shape/count/mean/privacy/allocation controls",
+      "One operator diagnostic disclosure/bounds control"
+    ],
+    "unconfirmed": [
+      "D5-004 permanent refresh fault: audit trigger is stale on this API baseline",
+      "D5-001 request-wide allocation exhaustion: real governance corpus passes; original Feed subjects have incompatible producer/reader identity",
+      "AUD-001 oversized cursor: current public traversal passes"
+    ],
+    "implementationReady": [
+      {
+        "case": "D5-001 cancellation",
+        "tests": [
+          "notificationCancel"
+        ],
+        "owners": [
+          "services/main/src/routes/notifications.ts",
+          "services/main/src/modules/notification/store.ts",
+          "services/main/src/modules/notification-producers/subjects.ts"
+        ],
+        "contract": "Propagate caller cancellation through all admitted subject reads; after 100 ms grace no further graph work starts, fresh retry still succeeds."
+      },
+      {
+        "case": "D5-003",
+        "tests": [
+          "chapter"
+        ],
+        "owners": [
+          "services/main/src/modules/content-publication/search.ts",
+          "services/main/src/modules/content-publication/eligibility-state.ts"
+        ],
+        "contract": "Public hit/no-hit/unpublished-hit after unrelated graph changes must stay within search bounds without foreground global eligibility qualification."
+      },
+      {
+        "case": "D5-006-zones",
+        "tests": [
+          "zones",
+          "zonesAdmission"
+        ],
+        "owners": [
+          "services/main/src/modules/onboarding/suggestions.ts",
+          "services/main/src/modules/zone/publication.ts"
+        ],
+        "contract": "Keep bounded nonempty disclosed suggestions when total official population exceeds eight; keep the internal candidate window and public admission controls."
+      },
+      {
+        "case": "D5-006-ratings",
+        "tests": [
+          "ratings"
+        ],
+        "owners": [
+          "services/main/src/modules/rating/global-aggregate.ts",
+          "services/main/src/modules/rating/aggregate-inventory.ts"
+        ],
+        "contract": "Return the correct public aggregate at 100/101/102 independent principals under the existing read allocation, without disclosing voters or increasing a total verifier cap."
+      }
+    ],
+    "proposedTasks": [
+      {
+        "case": "D5-004",
+        "reason": "Find an admitted persistent-fault public producer, or separately own a fault proof, before selecting refresh repair. Passing health diagnostics do not prove a permanent failure."
+      },
+      {
+        "case": "D5-001 Feed/allocation",
+        "reason": "Evaluate the producer eligibility URN/native-ref reader incompatibility and prove whole-request allocation exhaustion on admitted visible subjects. Preserve null disclosure."
+      },
+      {
+        "case": "D5-002",
+        "reason": "Isolate the stranger default all availability failure from co-occurring SQL pool timeouts before choosing the query/shared-budget owner repair. Keep five passing persona controls."
+      }
+    ],
+    "limitations": "Expected baseline failures, not a passing done gate. SQL engine allocation is unmeasured/unknown. No production implementation or shared development stack operation. Exact setup errors and earlier wrong request premises remain recorded; only the final admitted bodies confirm outcomes."
   }
 }
