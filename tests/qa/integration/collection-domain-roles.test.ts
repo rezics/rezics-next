@@ -20,7 +20,7 @@ describe('C29: explicit Collection purpose through shared membership and Structu
   // Supplemental contracts are pending just like the registered row. No successful
   // build run changes declaration state or establishes source/persona proof.
   for (const persona of allPersonas) {
-    test.failing(`${persona}: ordinary membership, a book list, recipe selection, series and franchise stay distinct`, async () => {
+    test(`${persona}: ordinary membership, a book list, recipe selection, series and franchise stay distinct`, async () => {
       const read = publicRead(sessions[persona]);
       for (const key of Object.keys(collectionCases) as CollectionKey[])
         await assertCollectionPurpose(read, corpus, key);
@@ -36,7 +36,7 @@ describe('C29: explicit Collection purpose through shared membership and Structu
     });
   }
 
-  test.failing('six personas: cursors bind subject, parent and order; private changes preserve them, public changes restart explicitly', async () => {
+  test('six personas: cursors bind subject, parent and order; private changes preserve them, public changes restart explicitly', async () => {
     const order = corpus.orders.tracks;
     const base = resourcePath(order.resource, 'parts');
     const selection = new URLSearchParams({ limit: '1', parent: order.parent! });

@@ -184,7 +184,7 @@ function checkFieldPremise(field: FactExpectation): void {
 }
 
 /** Read before starting a stack. Missing preparation is a setup blocker, never a
- * test.failing success or an invented product failure. No network acquisition here. */
+ * successful proof or an invented product failure. No network acquisition here. */
 export function loadInformationCorpus(): InformationCorpus {
   const path = Bun.env.REZICS_INFORMATION_CORPUS ?? informationMatrix.sourceFixture.path;
   let corpus: InformationCorpus;

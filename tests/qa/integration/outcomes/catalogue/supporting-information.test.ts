@@ -67,17 +67,17 @@ async function supportingInformation(persona: PersonaName): Promise<void> {
 }
 
 describe(declaration.rowId, () => {
-  // Premise checks are outside test.failing: absent bytes, rights, imports or a
-  // restore cannot masquerade as a demonstrated product assertion failure.
+  // Setup failures are separate from product assertions. Pending is declaration
+  // state; baseline assertions report their genuine result without inversion.
   beforeAll(async () => {
     corpus = loadInformationCorpus();
     sessions = await openInformationCorpus(corpus);
   }, 600_000);
   afterAll(async () => { await sessions?.close(); });
-  outcomeTest(declaration, 'visitor', () => supportingInformation('visitor'));
-  outcomeTest(declaration, 'stranger', () => supportingInformation('stranger'));
-  outcomeTest(declaration, 'member', () => supportingInformation('member'));
-  outcomeTest(declaration, 'owner', () => supportingInformation('owner'));
-  outcomeTest(declaration, 'moderator', () => supportingInformation('moderator'));
-  outcomeTest(declaration, 'operator', () => supportingInformation('operator'));
+  outcomeTest(declaration, 'visitor', () => supportingInformation('visitor'), undefined, { pending: 'assert' });
+  outcomeTest(declaration, 'stranger', () => supportingInformation('stranger'), undefined, { pending: 'assert' });
+  outcomeTest(declaration, 'member', () => supportingInformation('member'), undefined, { pending: 'assert' });
+  outcomeTest(declaration, 'owner', () => supportingInformation('owner'), undefined, { pending: 'assert' });
+  outcomeTest(declaration, 'moderator', () => supportingInformation('moderator'), undefined, { pending: 'assert' });
+  outcomeTest(declaration, 'operator', () => supportingInformation('operator'), undefined, { pending: 'assert' });
 });

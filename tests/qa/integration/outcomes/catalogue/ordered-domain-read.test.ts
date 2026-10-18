@@ -62,10 +62,10 @@ describe(declaration.rowId, () => {
     sessions = await openInformationCorpus(corpus);
   }, 600_000);
   afterAll(async () => { await sessions?.close(); });
-  outcomeTest(declaration, 'visitor', () => orderedDomainRead('visitor'));
-  outcomeTest(declaration, 'stranger', () => orderedDomainRead('stranger'));
-  outcomeTest(declaration, 'member', () => orderedDomainRead('member'));
-  outcomeTest(declaration, 'owner', () => orderedDomainRead('owner'));
-  outcomeTest(declaration, 'moderator', () => orderedDomainRead('moderator'));
-  outcomeTest(declaration, 'operator', () => orderedDomainRead('operator'));
+  outcomeTest(declaration, 'visitor', () => orderedDomainRead('visitor'), undefined, { pending: 'assert' });
+  outcomeTest(declaration, 'stranger', () => orderedDomainRead('stranger'), undefined, { pending: 'assert' });
+  outcomeTest(declaration, 'member', () => orderedDomainRead('member'), undefined, { pending: 'assert' });
+  outcomeTest(declaration, 'owner', () => orderedDomainRead('owner'), undefined, { pending: 'assert' });
+  outcomeTest(declaration, 'moderator', () => orderedDomainRead('moderator'), undefined, { pending: 'assert' });
+  outcomeTest(declaration, 'operator', () => orderedDomainRead('operator'), undefined, { pending: 'assert' });
 });

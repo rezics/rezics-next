@@ -63,7 +63,7 @@ describe('C17/C31: independent failures and explicit information states', () => 
     if (!Bun.env.FUSEKI_URL) throw new Error('Isolated Fuseki URL is required');
     fault = graphFaultProxy(Bun.env.FUSEKI_URL);
     sessions = await openInformationCorpus(corpus, fault.endpoint);
-    // Check the real query selectors with failure disabled before test.failing.
+    // Check the real query selectors with failure disabled during setup.
     // A stale selector is a fixture defect, never an expected product failure.
     const read = publicRead(sessions.visitor);
     for (const key of ['person', 'recipe'] as const) {
@@ -90,7 +90,7 @@ describe('C17/C31: independent failures and explicit information states', () => 
   });
 
   for (const persona of allPersonas) {
-    test.failing(`${persona}: null, empty, zero, unknown, unmapped and withheld facts remain different`, async () => {
+    test(`${persona}: null, empty, zero, unknown, unmapped and withheld facts remain different`, async () => {
       const read = publicRead(sessions[persona]);
       for (const state of fieldStates) {
         const control = corpus.controls.states[state];
@@ -106,7 +106,7 @@ describe('C17/C31: independent failures and explicit information states', () => 
     });
 
     for (const key of ['person', 'recipe'] as const) {
-      test.failing(`${persona}: ${key} keeps known identity and type when only summary/name fails, then recovers`, async () => {
+      test(`${persona}: ${key} keeps known identity and type when only summary/name fails, then recovers`, async () => {
         const read = publicRead(sessions[persona]);
         const href = resourcePath(corpus.records[key].resource, 'page');
         const before = await body<EntityPage>(read, href);
@@ -132,7 +132,7 @@ describe('C17/C31: independent failures and explicit information states', () => 
       });
     }
 
-    test.failing(`${persona}: failed facts keep identity, inverse paths and section href, with bounded retry and recovery`, async () => {
+    test(`${persona}: failed facts keep identity, inverse paths and section href, with bounded retry and recovery`, async () => {
       const read = publicRead(sessions[persona]);
       const resource = corpus.records.person.resource;
       const before = await body<EntityPage>(read, resourcePath(resource, 'page'));
@@ -153,7 +153,7 @@ describe('C17/C31: independent failures and explicit information states', () => 
     });
 
     for (const kind of ['recipe', 'chapter'] as const) {
-      test.failing(`${persona}: unavailable ${kind} keeps the same public Work and successful facts, then retries the same section`, async () => {
+      test(`${persona}: unavailable ${kind} keeps the same public Work and successful facts, then retries the same section`, async () => {
         const read = publicRead(sessions[persona]);
         const section = corpus.controls.recovery[kind];
         const key = kind === 'recipe' ? 'recipe' : 'book';
