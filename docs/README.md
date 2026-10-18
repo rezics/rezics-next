@@ -161,6 +161,7 @@ Design documents do not claim that a capability or deployment is complete.
 ## Testing
 
 - [Acceptance design](testing/README.md) — Acceptance design; read when selecting or implementing its verification.
+- [Pending catalogue release and media outcomes](goals/audit-remediation-20261019/releases-and-media.md) — Exact release selection, source media, navigation contracts and their retained fixture prerequisites.
 - [Complexity verification](testing/complexity.md) — Complexity verification; read when selecting or implementing its verification.
 - [seed-build-command-cost](testing/seed-build-command-cost.md) — seed-build-command-cost; read when selecting or implementing its verification.
 - [Live source conversion and conformance](testing/source-conformance.md) — Live source conversion and conformance; read when selecting or implementing its verification.

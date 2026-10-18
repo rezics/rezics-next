@@ -267,6 +267,15 @@ export async function openReleaseMediaFixture(): Promise<{ fixture: ReleaseMedia
   expect(fixture.mediaDispositions.map(item => item.reason)).toEqual(expect.arrayContaining([
     'missing-evidence', 'acquisition-failed', 'publication-forbidden',
   ]));
+  const reading = fixture.reading;
+  const catalogue = fixture.catalogues.find(item => item.work === reading.work);
+  expect(catalogue, 'saved choice must use an actual retained source Work').toBeDefined();
+  const release = catalogue!.releases.find(item => item.id === reading.release && item.revision === reading.releaseRevision);
+  expect(release).toBeDefined();
+  expect(release!.coverage).toContainEqual(expect.objectContaining({ work: reading.work,
+    realization: reading.realization, revision: reading.realizationRevision, language: reading.language }));
+  expect(catalogue!.realizations).toContainEqual(expect.objectContaining({ id: reading.realization,
+    revision: reading.realizationRevision, language: reading.language }));
   const [sessions] = await restorePersonaRealms([fixture.personas]);
   return { fixture, sessions: sessions! };
 }
