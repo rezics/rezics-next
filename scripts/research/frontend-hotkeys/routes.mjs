@@ -9,11 +9,15 @@ const root=process.cwd(), base=resolve('.temp/frontend-hotkeys');
 const source=resolve('scripts/research/frontend-hotkeys');
 const copy=join(base,'route-copy');
 const out=join(base,'route-captures');mkdirSync(out,{recursive:true});
+const requestedApp=process.argv.includes('--app')?process.argv[process.argv.indexOf('--app')+1]:undefined;
+if(requestedApp&&!['web','accounts'].includes(requestedApp))throw new Error('--app must be web or accounts');
+const previous=existsSync(join(base,'routes.json'))?JSON.parse(readFileSync(join(base,'routes.json'),'utf8')):undefined;
 const result={revision:spawnSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).stdout.trim(),
   sourceRevision:spawnSync('git',['rev-parse','HEAD:apps/web'],{encoding:'utf8'}).stdout.trim(),
   method:'Private copies of both complete apps and their original Vinext/Cloudflare/Tailwind production configurations. The same fixture is appended in the private root layout. Native means the corrected native adapter; current native owners are preserved separately in behavior evidence.',
   buildFlags:{NODE_ENV:'production',CLOUDFLARE_SEND_METRICS:'false',NEXT_TELEMETRY_DISABLED:'1', minify:'repository default'},
-  compression:{gzipLevel:9,brotliQuality:11,unit:'per loaded JS/CSS response, no source maps; transfer headers excluded'}, builds:[]};
+  compression:{gzipLevel:9,brotliQuality:11,unit:'per loaded JS/CSS response, no source maps; transfer headers excluded'},
+  builds:requestedApp?(previous?.builds??[]).filter(row=>row.app!==requestedApp).map(row=>({...row,revision:row.revision??previous.revision})):[]};
 const wait=ms=>new Promise(done=>setTimeout(done,ms));
 async function port(){const s=createServer();await new Promise(done=>s.listen(0,'127.0.0.1',done));const n=s.address().port;await new Promise(done=>s.close(done));return n;}
 async function run(command,cwd,env,path){
@@ -24,7 +28,7 @@ async function run(command,cwd,env,path){
 }
 if(existsSync(copy))rmSync(copy,{recursive:true});mkdirSync(copy,{recursive:true});
 // The unchanged Vite config imports production-env, which imports service specs.
-for(const directory of ['apps','packages','services'])cpSync(join(root,directory),join(copy,directory),{recursive:true,
+for(const directory of ['apps','packages','services','generated'])cpSync(join(root,directory),join(copy,directory),{recursive:true,
   filter:path=>!/(?:^|\/)(?:node_modules|dist|\.vinext|\.wrangler|\.temp)(?:\/|$)/.test(relative(root,path))});
 mkdirSync(join(copy,'scripts'),{recursive:true});cpSync(join(root,'scripts/ops'),join(copy,'scripts/ops'),{recursive:true});
 cpSync(join(root,'Taskfile.yml'),join(copy,'Taskfile.yml'));
@@ -49,10 +53,10 @@ export default mergeConfig(base,{
   const layoutPath=join(appRoot,'app/layout.tsx');const layout=readFileSync(layoutPath,'utf8');
   writeFileSync(layoutPath,`import KeyboardFixture from '${source}/fixture.tsx';\n`+layout.replace('{children}','{children}<KeyboardFixture />'));
 }
-for(const candidate of ['native','ark','tanstack'])for(const app of ['web','accounts']){
+for(const candidate of ['native','ark','tanstack'])for(const app of requestedApp?[requestedApp]:['web','accounts']){
   const appRoot=join(copy,'apps',app),id=`${candidate}-${app}`;
   const env={...process.env,HOTKEY_CANDIDATE:candidate,CLOUDFLARE_SEND_METRICS:'false',NEXT_TELEMETRY_DISABLED:'1',NODE_ENV:'production'};
-  const record={candidate,app,route:app==='web'?'/en/discover':'/sign-in',buildCommand:`task ${app==='web'?'web':'accounts'}:build`,buildLog:`${out}/${id}-build.log`};
+  const record={candidate,app,revision:result.revision,route:app==='web'?'/en/discover':'/sign-in',buildCommand:`task ${app==='web'?'web':'accounts'}:build`,buildLog:`${out}/${id}-build.log`};
   result.builds.push(record);
   console.log(`Building private ${id}`);
   // Each whole build obtains host memory/CPU admission; no shared services start.
