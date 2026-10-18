@@ -24,12 +24,25 @@
     "pinnedRef": "wave/audit-20261019",
     "sha": "8f07c6b4e834dea67898513f00032b29c5fe05d9",
     "pinCommand": "git reset --hard 8f07c6b4e834dea67898513f00032b29c5fe05d9",
-    "heldUnchangedDuringAllChecks": true,
+    "heldUnchangedDuringAllChecks": false,
     "buildCommits": [
       "535fbcdaf1",
       "65ceedab66"
     ],
-    "note": "Pinned the initially clean isolated branch before any checks. Later wave advances were not adopted. Only the requested review JSON is a tracked change."
+    "note": "Pinned the initially clean isolated branch before browser checks. All browser captures, measurements and diagnostic observations used the recorded source SHA. The first administrative worker check automatically rebased before selecting/running checks; that advance was subsequently restored after completion. Only the requested review JSON is a tracked change.",
+    "heldUnchangedDuringBrowserChecks": true,
+    "administrativeCheckRebase": {
+      "job": "f853ebf3-382d-47b5-9a4f-bf667fb44bfd",
+      "before": "89af4094c60ab2e675021a481411f8dbc735608b",
+      "after": "7a0703887f577d90934d3bb25bf7162259e177d5",
+      "advancedBase": "72de11c0dabfa454181f2a26147fcd0dcc9a2c52",
+      "mechanism": "task goal -- check calls prepareCheckTree, which rebases a clean worker branch onto its current wave before checks. This was automatic harness behavior, not a requested source advance.",
+      "implementation": "scripts/goal/tree-currency.ts:100",
+      "restoredAfterCompletion": true,
+      "restoreCommand": "git reset --hard 89af4094c60ab2e675021a481411f8dbc735608b",
+      "browserChecksRunningDuringAdvance": false,
+      "finalCheckPlan": "Completed pinned-source worker integrity rerun with report metadata uncommitted; prepareCheckTree left source unchanged. Committed metadata after checks finished."
+    }
   },
   "method": {
     "skills": [
@@ -143,6 +156,58 @@
       "log": ".temp/goal/jobs/e1faab4e-3071-4e25-9b77-15074bf98b82.2.log",
       "reason": "Both controls, both themes, both viewports receive focus but have identical boundary and ring before/after keyboard focus.",
       "limitation": "Diagnostic asserts previously collected live-browser observations in measurements.ndjson. It does not launch a browser or respond to a subsequent source fix by itself; regenerate observations with the temporary Vitest config before using it for a fix review."
+    },
+    {
+      "job": "f853ebf3-382d-47b5-9a4f-bf667fb44bfd",
+      "step": 1,
+      "command": "task docs:check",
+      "status": "passed",
+      "resultClass": "passed",
+      "exitStatus": 0,
+      "sourceHead": "89af4094c60ab2e675021a481411f8dbc735608b",
+      "log": ".temp/goal/jobs/f853ebf3-382d-47b5-9a4f-bf667fb44bfd.1.log",
+      "result": "13 documentation checker tests passed; 182 Markdown files checked. External URLs and runtime behavior not tested."
+    },
+    {
+      "job": "f853ebf3-382d-47b5-9a4f-bf667fb44bfd",
+      "step": 2,
+      "command": "task goal -- check",
+      "status": "passed",
+      "resultClass": "passed",
+      "exitStatus": 0,
+      "sourceHead": "7a0703887f577d90934d3bb25bf7162259e177d5",
+      "log": ".temp/goal/jobs/f853ebf3-382d-47b5-9a4f-bf667fb44bfd.2.log",
+      "checkOutput": ".temp/goal/check/run-AjBPh6/output.log",
+      "checks": {
+        "types": "ok: no TypeScript workspace changed",
+        "tests": "ok: no test files named in brief",
+        "lint": "ok: no source file changed",
+        "ast": "ok",
+        "guards": "ok: 1/45 selected for review JSON"
+      },
+      "limitation": "Automatically advanced source before checks; this is not a browser proof run on the advanced source. Restore and pinned-source integrity rerun documented separately."
+    },
+    {
+      "job": "69a7e327-e8e2-4e47-97cb-7710125976ec",
+      "command": "task goal -- check",
+      "status": "passed",
+      "resultClass": "passed",
+      "exitStatus": 0,
+      "sourceHead": "89af4094c60ab2e675021a481411f8dbc735608b",
+      "sourceProductSha": "8f07c6b4e834dea67898513f00032b29c5fe05d9",
+      "uncommittedFiles": [
+        "docs/goals/audit-remediation-20261019/control-review.json"
+      ],
+      "log": ".temp/goal/jobs/69a7e327-e8e2-4e47-97cb-7710125976ec.log",
+      "checkOutput": ".temp/goal/check/run-w0q9M4/output.log",
+      "checks": {
+        "types": "ok: no TypeScript workspace changed",
+        "tests": "ok: no test files named in brief",
+        "lint": "ok: no source file changed",
+        "ast": "ok",
+        "guards": "ok: 1/45 selected for review JSON"
+      },
+      "sourceAdvanced": false
     }
   ],
   "coverage": {
@@ -1103,7 +1168,9 @@
     "roots": [
       ".temp/control-review",
       ".artifacts/qa/20261018t195308-c568fd",
-      ".artifacts/qa/20261018t195624-2bc3b5"
+      ".artifacts/qa/20261018t195624-2bc3b5",
+      ".temp/goal/check/run-AjBPh6",
+      ".temp/goal/check/run-w0q9M4"
     ],
     "jobLogs": [
       ".temp/goal/jobs/96a932d2-acc2-489f-a693-5ea31c28ece6.log",
@@ -1111,7 +1178,10 @@
       ".temp/goal/jobs/81f00b87-ff0b-4953-a3b8-030a49319897.log",
       ".temp/goal/jobs/1be69ac3-742a-4420-8794-af6e2766e502.log",
       ".temp/goal/jobs/e1faab4e-3071-4e25-9b77-15074bf98b82.1.log",
-      ".temp/goal/jobs/e1faab4e-3071-4e25-9b77-15074bf98b82.2.log"
+      ".temp/goal/jobs/e1faab4e-3071-4e25-9b77-15074bf98b82.2.log",
+      ".temp/goal/jobs/f853ebf3-382d-47b5-9a4f-bf667fb44bfd.1.log",
+      ".temp/goal/jobs/f853ebf3-382d-47b5-9a4f-bf667fb44bfd.2.log",
+      ".temp/goal/jobs/69a7e327-e8e2-4e47-97cb-7710125976ec.log"
     ],
     "hashManifest": ".temp/control-review/proof-sha256.json",
     "instruction": "Retain this JSON plus temporary measurement/capture code, measurement and pixel JSON, actual viewed PNGs, original QA artifacts and logs before worktree removal. Generated screenshots and credentials are not committed."
@@ -1123,6 +1193,12 @@
     "productChanges": false,
     "originalAssertionsChanged": false,
     "pushed": false,
-    "automaticLanding": false
+    "automaticLanding": false,
+    "instructionEffect": {
+      "path": ".agents/skills/goal-worker/SKILL.md",
+      "instruction": "Run the recorded check once before handing off done; it includes the repository-wide guards.",
+      "effect": "Running the required check on a clean branch triggered the harness automatic rebase. Restored the recorded review source after completion and used uncommitted report metadata to keep the final integrity rerun pinned. No product fixes were implemented because the user brief explicitly reserves implementation to codex-2/max."
+    },
+    "integrityChecksComplete": true
   }
 }
