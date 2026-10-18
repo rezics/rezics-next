@@ -37,7 +37,7 @@ public class RequestReadBoundaryTest {
             if (!predicate.isURI() || !predicate.getURI().equals(PREDICATE)) return;
             active.incrementAndGet(); started.countDown();
             try { Thread.sleep(10_000); }
-            catch (InterruptedException cancelled) { throw new QueryCancelledException("test execution interrupted"); }
+            catch (InterruptedException cancelled) { throw new QueryCancelledException(cancelled); }
             finally { active.decrementAndGet(); finished.countDown(); }
         }
         final class SlowData extends org.apache.jena.sparql.core.DatasetGraphWrapper

@@ -61,7 +61,8 @@ final class QueryWorkService extends SPARQL_QueryDataset {
         }
         private synchronized void check() {
             if (reason == null && System.nanoTime() >= deadline) cancel("deadline");
-            if (reason != null) throw new org.apache.jena.query.QueryCancelledException("Native read " + reason);
+            if (reason != null) throw new org.apache.jena.query.QueryCancelledException(
+                new java.util.concurrent.CancellationException("Native read " + reason));
         }
         static void checkCurrent() {
             ReadBoundary current = CURRENT.get();
