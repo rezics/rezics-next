@@ -1373,7 +1373,7 @@ describe('isolated PostgreSQL migration rehearsal', () => {
   function docker(args: string[], budgetMs = 15_000): string {
     const result = spawnSync('docker', args, { encoding: 'utf8', timeout: budgetMs });
     if (result.error || result.status !== 0)
-      throw new Error(`Scratch PostgreSQL ${args[0]} failed: ${result.error?.message ?? result.stderr}`);
+      throw new Error(`Scratch PostgreSQL ${args[0]} failed (${fixtureName}): ${result.error?.message ?? result.stderr}`);
     return result.stdout.trim();
   }
 
@@ -1400,7 +1400,10 @@ describe('isolated PostgreSQL migration rehearsal', () => {
         await admin.query('CREATE DATABASE refreshsource OWNER refresh_owner');
         break;
       } catch (error) {
-        if (Date.now() >= deadline) throw error;
+        if (Date.now() >= deadline) {
+          const logs = spawnSync('docker', ['logs', '--tail', '30', container], { encoding: 'utf8', timeout: 5_000 });
+          throw new Error(`Scratch PostgreSQL startup failed: ${String(error)}\n${logs.stdout}${logs.stderr}`, { cause: error });
+        }
         await Bun.sleep(100);
       } finally { await admin.end(); }
     }
@@ -1552,6 +1555,87 @@ describe('isolated PostgreSQL migration rehearsal', () => {
           .toEqual([]);
       } finally { rmSync(dir, { recursive: true, force: true }); }
     }, 30_000);
+  }
+
+  for (const [signal, exitCode] of [['SIGINT', 130], ['SIGTERM', 143]] as const) {
+    test(`${signal} during a pending migration removes only its own snapshot and connections`, async () => {
+      const { dir, first, env } = migrations();
+      const sibling = await snapshotRefreshDatabase(container, sourceUrl);
+      const siblingClient = client(sibling.url);
+      const application = `refresh-cancel-${randomBytes(8).toString('hex')}`;
+      const script = join(dir, 'cancel.ts');
+      writeFileSync(join(dir, first), 'SELECT pg_sleep(30);');
+      writeFileSync(script, `
+import { Client } from 'pg';
+import { rehearseRefreshMigrations } from '${join(root, 'scripts/dev/refresh-stack.ts')}';
+import { snapshotRefreshDatabase } from '${join(root, 'scripts/dev/refresh-rehearsal.ts')}';
+await rehearseRefreshMigrations(${JSON.stringify(dir)}, ${JSON.stringify(env)}, [${JSON.stringify(first)}],
+  url => new Client({ connectionString: url, application_name: ${JSON.stringify(application)},
+    connectionTimeoutMillis: 2000, statement_timeout: 30000, query_timeout: 31000 }),
+  url => snapshotRefreshDatabase(${JSON.stringify(container)}, url));
+throw new Error('Pending migration completed before cancellation');
+`);
+      const child = Bun.spawn([process.execPath, script], {
+        cwd: root, stdin: 'ignore', stdout: 'ignore', stderr: 'pipe',
+      });
+      const stderr = new Response(child.stderr).text();
+      let pending: { datname: string; pid: number } | undefined;
+      let copyConnection: Client | undefined;
+      try {
+        await siblingClient.connect();
+        const siblingPid = (await siblingClient.query('SELECT pg_backend_pid() AS pid')).rows;
+        const preservedSql = `SELECT pg_backend_pid() AS pid,
+          (SELECT value FROM access.principal WHERE id=1) AS value,
+          (SELECT last_value::text FROM public.refresh_probe_sequence) AS called_value,
+          (SELECT is_called FROM public.refresh_probe_sequence) AS called,
+          (SELECT last_value::text FROM public.refresh_probe_uncalled) AS uncalled_value,
+          (SELECT is_called FROM public.refresh_probe_uncalled) AS uncalled`;
+        const preserved = (await source.query(preservedSql)).rows;
+        const deadline = Date.now() + 10_000;
+        while (Date.now() < deadline) {
+          pending = (await source.query<{ datname: string; pid: number }>(
+            "SELECT datname, pid FROM pg_stat_activity WHERE application_name=$1 AND wait_event='PgSleep'",
+            [application])).rows[0];
+          if (pending || child.exitCode !== null) break;
+          await Bun.sleep(25);
+        }
+        // Establish the real pending SQL before signalling, rather than racing
+        // child startup or passing because a normal migration already ended.
+        expect(pending).toBeDefined();
+        const copyUrl = new URL(sourceUrl);
+        copyUrl.pathname = `/${pending!.datname}`;
+        copyConnection = client(copyUrl.toString());
+        copyConnection.on('error', () => {}); // Cancellation must terminate this exact copy's sessions too.
+        await copyConnection.connect();
+        const copyPid = (await copyConnection.query('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+        let forced = false;
+        const started = Date.now();
+        const wall = setTimeout(() => { forced = true; child.kill('SIGKILL'); }, 12_000);
+        let status: number;
+        try {
+          child.kill(signal);
+          status = await child.exited;
+        } finally { clearTimeout(wall); }
+        expect(forced).toBe(false);
+        expect(Date.now() - started).toBeLessThan(12_000);
+        expect((await source.query('SELECT datname FROM pg_database WHERE datname=$1', [pending!.datname])).rows)
+          .toEqual([]);
+        expect((await source.query('SELECT pid FROM pg_stat_activity WHERE pid=ANY($1::int[])',
+          [[pending!.pid, copyPid]])).rows).toEqual([]);
+        expect((await source.query(preservedSql)).rows).toEqual(preserved);
+        expect((await siblingClient.query('SELECT pg_backend_pid() AS pid')).rows).toEqual(siblingPid);
+        expect({ status, stderr: await stderr }).toEqual({ status: exitCode, stderr: '' });
+      } finally {
+        child.kill('SIGKILL');
+        await child.exited;
+        await copyConnection?.end();
+        if (pending) docker(['exec', '--user', 'postgres', container, 'dropdb',
+          '--host=/var/run/postgresql', '--username=postgres', '--force', '--if-exists', pending.datname]);
+        await siblingClient.end();
+        await sibling.dispose();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }, 45_000);
   }
 
   test('a conflicting source DDL lock bounds snapshot failure, cleans up and leaves writers running', async () => {
