@@ -3,7 +3,7 @@ import type { RecipeMeasure } from '../../../services/main/src/modules/structure
 import type { ingredientLine, recipeStep } from '../../../services/main/src/routes/recipe-qualifiers.ts';
 import type { RetainedPersonaRealm } from '../support/personas.ts';
 
-export const publicDomainBaseline = '79be80d4d0e1cad1639b6a65e8f0795d6a95929a';
+export const publicDomainBaseline = '69eac3ceeaf885be70205a70248bc951e9d81cc9';
 export const privateRecipeText = 'PRIVATE unpublished catalogue recipe annotation';
 export type Rational = { numerator: number; denominator: number };
 export type Measure = Static<typeof RecipeMeasure>;
