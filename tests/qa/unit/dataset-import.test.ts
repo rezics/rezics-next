@@ -276,6 +276,7 @@ function coverSnapshot(directory: string, sourceRecord: DatasetRecord, source?: 
   sourceRecord.provider = sourceProvider as DatasetRecord['provider'];
   sourceRecord.kind = sourceNamespace;
   sourceRecord.externalId = sourceExternalId;
+  sourceRecord.key = `${sourceProvider}:${sourceNamespace}:${sourceExternalId}`;
   sourceRecord.sourceUrl = evidence.sourceUrl;
   const image: StoredImage = {
     record: sourceRecord.key,
@@ -355,7 +356,9 @@ describe('offline selection and published producer helpers', () => {
 
   test('retains field candidates and never-acquired source images without inventing adoption or image occurrences', async () => {
     const fixture = apiFixture(), directory = root(), work = record('field-plan', 'work');
-    work.data = { alias: 'First alias\nSecond alias', rating: 0, unknown: false };
+    work.key = `vndb:vn:${work.externalId}`;
+    work.data = { alias: 'First alias\nSecond alias', aliases: [{ locale: 'en', name: 'Qualified alias' }],
+      rating: 0, unknown: false };
     const source = snapshot([work]);
     source.sources[0]!.images = [{ record: work.key, role: 'cover', url: 'https://images.example.test/never-acquired.png' }];
     sealSnapshot(source);

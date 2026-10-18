@@ -27,7 +27,7 @@ export function testDatasetImportCoverage(snapshot: DatasetSnapshot, report: Dat
     observed.add(id);
     require(expected && entry.recordDigest === expected.recordDigest
       && entry.valueDigest === expected.valueDigest && entry.observation === expected.observation,
-    'coverage changed or invented source evidence');
+    `coverage changed or invented source evidence: ${id}`);
     require(entry.acquisition === expected.acquisition, 'coverage changed source acquisition evidence');
     inventory.retain(entry.record);
     for (const mapping of entry.mappings ?? [])
