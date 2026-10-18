@@ -1,9 +1,19 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import fidelity from '../../../scripts/qa/cases/outcomes/catalogue/import-fidelity.ts';
 import coverage from '../../../scripts/qa/cases/outcomes/catalogue/source-coverage.ts';
 import { personas } from '../../../scripts/qa/cases/outcome-cells.ts';
 import type { DatasetRecord } from '../../../scripts/datasets/types.ts';
 import { assertDispositionConservation, assertMatrix, exactRecords, matrix } from '../support/import-outcomes.ts';
+
+test('the executable import pin and specification retain the original audit product baseline', () => {
+  const originalAuditBaseline = '69eac3ceeaf885be70205a70248bc951e9d81cc9';
+  const specification = readFileSync(new URL('../../../docs/goals/audit-remediation-20261019/import-outcomes.md',
+    import.meta.url), 'utf8');
+  expect(matrix.baselineProduct).toBe(originalAuditBaseline);
+  expect(specification.match(/original audit product baseline[^`]*`([a-f0-9]{40})`/)?.[1])
+    .toBe(originalAuditBaseline);
+});
 
 test('both import rows retain six pending cells and the accepted inventory partition', () => {
   assertMatrix();
