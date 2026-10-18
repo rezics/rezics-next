@@ -59,8 +59,8 @@ test.each([
 // traversal consumes every parent/cursor or explicitly reports a lower bound.
 // These exact exceptions must stop applying when either flow changes.
 test.each([
-  ['apps/web/features/studio/counts.ts', 'if (page.nextCursor) pending.push', 'if (false) pending.push'],
-  ['apps/web/features/studio/counts.ts', 'maxPages = 20', 'maxPages = 1'],
+  ['apps/web/features/studio/inventory-counts.ts', 'if (page.nextCursor) pending.push', 'if (false) pending.push'],
+  ['apps/web/features/studio/inventory-counts.ts', 'maxPages = 20', 'maxPages = 1'],
   ['apps/web/features/studio/read.ts', 'page: { ...page.data, items }', 'page: { ...page.data, items, nextCursor: null }'],
   ['apps/web/features/studio/studio-home.tsx', '{moreHref ? <Link', '{false ? <Link'],
   ['apps/web/app/[locale]/studio/[agent]/page.tsx', 'validCursor(query.cursor)', 'validCursor(query.cursor + "suffix")'],
