@@ -34,20 +34,28 @@ Accepted wave builds remain exited for combined proof, review and wave merge:
   107 tests passing. Read its exact Work/Zone proof checklist. Zone module
   readiness failed at an assertion; mounted-Collection setup failed before one.
   Neither is resolved. Independent review and rendered acceptance remain pending.
-- G-2762 request allocation: 5af7f5038a/52b50a5eb5/459d44b630. Its 122 unit
-  passes and generation did not execute native tests. Decision 86d54061b2
-  resumed it to consume G-2784's absolute x-rezics-server-deadline before
-  admission/preflight, preserving tighter parent/local caps and cancellation.
-  Expired, partly spent, future and malformed-header cases need scoped checks.
-  Public/composition/native proof still requires cancellation/retry, the 100 ms
-  composition grace and 300 ms native disconnect release; review remains pending.
+- G-2762 request allocation: 5af7f5038a/52b50a5eb5/459d44b630 and accepted
+  deadline continuation fd75c85a54. It consumes G-2784's absolute deadline
+  before reads, preserving tighter parent/local caps; 169 stack-free tests
+  passed, including 15 deadline cases. Native tests remain unexecuted.
+  Decision 0fe1213f33 assigns the remaining Account admission/JWKS/introspection
+  boundary to this owner, preserving other shared-key waiters and typed causes.
+  Its resume was initially memory-deferred; the continuation's result event
+  owns disposition. Public/composition/native proof still requires mixed
+  readers, cancellation/retry, 100 ms composition grace and 300 ms native
+  disconnect release; independent review remains pending.
 - G-2763 notification allocation: 321cc3085589. Six-persona disclosure,
   fifty-result capacity, mixed readers, cancellation/retry, native composition
   and codex-1/xhigh review remain pending.
 - G-2764 discovery: 8d6e451d75/dc830ee5da. Compose with G-2762/G-2765; recheck
   the reported registry/canary failures. Native traversal, named-card browser
-  proof and review remain pending. Continuation f54366c73c resumed this existing
-  query owner for approved SA1–SA6; its result event owns exact prerequisite gaps.
+  proof and review remain pending. Attempt 8 made no changes: association
+  kind/role bindings, exact Statement participation/occurrence coverage and
+  participation source attribution with retained-credit identity mapping are
+  missing from authored admission. Keep this query owner exited until the
+  existing model/write owners' prerequisites are admitted and implemented.
+  G-2770 supplies their separate OA1–OA3 specification; both contextual-associations
+  and credits-and-inverse proof files and all twelve cells remain pending.
 - G-2765 Content qualification: cf8407c4b8/2320badddd. The build handoff is
   accepted on the wave. Generation and scoped checks passed; native tests only
   compiled. D5-003 public/native proof, real-composition latency, growing-corpus
@@ -75,9 +83,11 @@ acceptance. Its adopted studioInventory brief is committed in 95641cf35f, with
 references corrected in 3f7d25f587; the existing worker was resumed for
 reconciliation before formal review. Acceptance requires recent/created/title,
 NFKC title matching, bound query/authority continuations and API chapterCount
-on list/exact reads consumed by the web. Separate lifecycle contracts were not
-adopted. G-2758 remains partial at b6d6ecc2e1. G-2796's pinned report is retained;
-its report landing was started and its result event owns closure. Decision
+on list/exact reads consumed by the web. G-2776's separate lifecycle ruling
+does not reopen this inventory contract. G-2758 remains partial at b6d6ecc2e1.
+G-2796's pinned report is retained; its landing stopped because RESULT was
+missing or ambiguous. Its owner was resumed only to supply exact RESULT: done,
+preserving the review. Handle its corrected handoff in its own event. Decision
 6f0ae26bfb resumed G-2758 for all seven source findings: current thread credit,
 honest evidence navigation, preserved menu assertions, exact realization identity
 and revision reads, claim/citation association and supplied structured evidence.
@@ -99,28 +109,36 @@ codex-2 cards/credits on actual exhaustion.
 Root's ownership-transfer mail a435fb44-9a50-4f5c-8124-4fa158e544e9 was
 acknowledged and answered. G-2759 landed at 187f608531ca, passed its gates and is
 closed verified; its stale task event and landing-result mail are handled.
-Shared refresh refused before starting because G-2767's brief deletion was
-uncommitted. Mail e18ea414-8970-4a1a-955a-b2d3299d2a54 is acknowledged; a durable
-follow-up asks the archival owner to settle that commit and trigger the safe
-refresh from clean committed main with task dev:refresh -- --wait and exact-owned
-scratch cleanup, with no shared business-session killing/reset. The failed
-attempt left no refresh running. The earlier rehearsal stopped before writers
-stopped; data is intact. Do not restart G-2759's landing.
+Shared refresh previously refused before starting because G-2767's brief
+deletion was uncommitted. The acknowledged follow-up 7dd48371 was routed through
+product-completion to G-2767's original archival owner to settle the deletion
+and trigger the safe refresh from clean committed main with
+task dev:refresh -- --wait and exact-owned scratch cleanup, preserving shared
+business sessions. That deletion is now archived in d852378475; the delegated
+refresh's result owns runtime disposition. Neither handled refresh mail started
+a refresh. The earlier rehearsal stopped before writers stopped; data is intact.
+Do not repeat the refresh or G-2759's landing.
 
-G-2782's completed control-review report is accepted. Its landing stopped on
-inherited out-of-claim wave files; mail 6664b7f1-ce2a-4dd7-ac99-df80577588e7 is
-acknowledged. Decision 0b30e0f746 isolated the unchanged report onto committed
-main and resumed delivery checks/handoff only. Its rendered source remains
-8f07c6b4e8; do not rerun or relabel proof against main. The retained directory
+G-2782's completed control-review report is accepted. After its first landing
+stopped on inherited out-of-claim wave files, decision 0b30e0f746 isolated the
+unchanged report onto committed main. Its report-only attempt-6 handoff was
+accepted and manual landing started once; its result event owns final disposition.
+Do not restart it. Its rendered source remains 8f07c6b4e8; do not rerun or relabel
+proof against main. The retained directory
 .temp/audit-remediation-20261019/control-review-retained contains 216 evidence
 files with all 215 manifest entries verified. Review viewed 48 PNGs: measured
 contrast passed, but eight invalid Input/InputGroup keyboard-focus assertions
-failed. G-2756's attempt-10 repair is retained at 0b64ee10c7/0215222300.
-Decision c0e9c38a3e resumed the same owner for standalone Textarea's suspected
-boundary/focus defect, with separate rendered observations and preserved error,
-disabled and read-only behavior. Do not edit the contrast helper now shared
-with G-2791. Independent codex-1/xhigh review must cover the complete four-control
-patch and actual screenshots; worker measurements establish no D4-001 proof.
+failed. G-2756's complete build is accepted on the wave: 0b64ee10c7/0215222300
+plus Textarea commits 988794e917/c7e948dd21. Error association, disabled and
+read-only behavior and original assertions are preserved. Scoped checks and
+59/59 focused stories passed; the worker viewed 140 fresh PNGs. G-2807 owns
+independent codex-1/xhigh review of the complete four-control patch pinned to
+c7e948dd21369900f3eee05adefe6c9ca2b46f2f, including actual new screenshots.
+The 592 retained evidence files are under
+.temp/audit-remediation-20261019/control-four-controls-c7e948dd/.
+Leave G-2756 exited for combined proof/merge. Do not edit the contrast helper
+shared with G-2791. Worker observations establish no D4-001 proof; Accounts
+sign-up, broader consumers and screen-reader announcements remain unverified.
 Settings remains unverified. The temporary frontend's OAuth 503 is a
 proof-environment premise: shared masked configuration does have a client.
 Use the supported local-development environment and signed-in fixture;
@@ -137,14 +155,29 @@ and dispatched for codex-1/xhigh review of that four-file change against
 d7c1d02e2e, without fallback. Source/Structure extensions still need Program
 disposition; the question was relayed through product-completion after direct
 delivery failed. Review accepts no native adoption or persona outcome.
-G-2800 credit adapters retain their assignment; G-2801 was dispatched for
-release/realization correspondence through existing commands. Their result
-events own review, acceptance and exact owner gaps.
+G-2800 credit adapters retain their assignment. G-2801 remains a partial
+release/realization producer at 0eafea6bbb/65a496efdf, with 20 unit passes and
+scoped checks. G-2808 owns pinned codex-1/xhigh source review at 65a496efdf
+against 7b2c1e5d20. G-2778 retains integration/coverage wiring. Source admission
+does not yet cover release/realization correspondence; independent descriptive
+and native coverage, date precision, event correlation and translator status
+need owner disposition. Positive mappings require acknowledged correspondence.
+The Program question was relayed after direct delivery failed. Integration,
+both corpus epochs, public API, Red Chamber saved choices and rendered proof
+remain pending; no G-2771 proposal is approved by this producer or its review.
 
 G-2781 remains a partial field producer at 57024db71f/a4c7693c49. Generic fact
-support and lossless synopsis admission are missing; a retained-record pointer
-is not a verified observation pointer. G-2769/G-2772 jointly specify the existing
-Source/Semantic/Statement owners' contract before separate implementation.
+support and lossless synopsis admission are missing. Source owns exact retained
+conversion/evidence admission; Semantic/Statement owns exact native field,
+value and head verification jointly with Source support, receipts and withdrawal.
+A DatasetRecord pointer must be related to actual retained observation bytes
+and ordered multipart intake; invent no provider envelope, digest equivalence
+or support receipt. Existing Work/Structure adapters admit no arbitrary facts.
+G-2769/G-2772 were resumed for joint specification through these existing owners,
+preserving independent conversion/support and readable-attribution assertions.
+That admission contract still requires Program disposition before separate
+implementation or corpus execution; the question was relayed after direct
+delivery failed. G-2781 and G-2778 consume only admitted, receipt-backed contracts.
 Positive native facts, independently withdrawable supports and preserved human
 content remain required. G-2802's review of G-2780's a085885e48/769ea0c313 is
 retained at .temp/audit-remediation-20261019/reviews/captured-media-g2802.
@@ -195,15 +228,18 @@ G-2793's b01e6f4d87 is accepted on the wave: eight baseline metadata corrections
 and recorded checks passed, preserving history/assertions. No baseline ran.
 G-2770's SA1–SA6 query/credit-profile interface is approved in 5f5d953ff0,
 superseding mail 75459e14-b2b7-4913-8ca8-c0231b57d758's delivery-failure status.
-Its partial specification remains on the wave with twelve pending persona
-cells; no further G-2770 worker action is needed. G-2764 owns separate
-implementation and G-2791 the shared corpus. Later routing acknowledgements do
-not undo the approval. Direct Program delivery remains unregistered for other
-unresolved readings; peer routing/acknowledgement alone supplies no approval.
+Its specification-only continuation 6af52b2cfe resumed attempt 5 for G-2764's
+three owner gaps; f6698fae788f is now on the wave proposing OA1–OA3. Leave
+G-2770 exited pending their Program disposition and independent review; accepted
+SA1–SA6 and all twelve pending cells are unchanged. G-2764 owns subsequent query
+implementation after model/write prerequisites, and G-2791 the shared corpus.
+Direct Program delivery failed for this reading and was relayed through
+product-completion; routing acknowledgement supplies no approval of OA1–OA3.
 
-G-2772's attempt-7 partial handoff is retained on the wave; leave it exited.
-Its executable original-baseline correction and four-file
-information-support-and-order plan are delivered. Its committed brief accepts
+G-2772's attempt-7 partial handoff, executable original-baseline correction and
+four-file information-support-and-order plan are retained on the wave. Its
+joint source-admission continuation is specification only, as described above;
+its result event owns disposition. Its committed brief separately accepts
 the shared information contract for separate existing-owner work:
 exact values/coverage/attribution, Context-bound inverse entries, adopted
 Collection purpose, generic parts and bounded partial recovery. This supersedes
@@ -218,17 +254,28 @@ fabricated. Missing public-domain-corpus.json reached no outcome assertion and
 used zero preparation seconds. Preserve Program request
 713616b6-eea1-43c9-8d71-844f793c5ab1; contract disposition, shared preparation and
 later explicit authorization still hold its three-file baseline and implementation.
-G-2777 remains partial: resource-search-v1 needs its recorded reading; preserve
-existing adapters. Both program and root mail recipients are unregistered; its
-exact question is retained in
-.temp/audit-remediation-20261019/program-reading-G-2777-c862babf.md.
+G-2777 remains partial, with resource-search-v1 accepted for separate existing-owner
+implementation on POST /v1/query. The ruling was restored after a train conflict
+in 46f10d52c8: conjunctive keywords/quoted spans, disclosed named-resource summaries
+and at most three explicit opt-in spelling suggestions preserve advanced selectors,
+catalogue/typeahead contracts, named phrase semantics and live authority.
+This supersedes the earlier unresolved reading; no further ruling is requested
+for this proposal. It releases no production change or baseline/fixed execution.
 G-2773's routing reply likewise identifies no registered Program authority.
 G-2791's genuine 24-record public/private/incomplete manifest must precede
 SEARCH01. These continuations supply no outcome proof.
 
+G-2776's same-identity correction, exact retained member-reply history and
+qualification/Realm-reply placement withdrawal contracts are accepted for
+separate existing-owner implementation. Preserve exact target/head-bound
+retry/stale receipts, immutable provenance and independent publication/placement
+authority. Its outcome worker receives no work merely to acknowledge acceptance;
+genuine corpus/restore prerequisites and combined proof still hold all twelve cells.
+
 G-2769's attempt-6 correction and exact import-corpus handoff are on the wave;
-leave it partial/exited, preserving twelve cells/assertions. Its shared source,
-support/name and Structure proposals still need their reading. Program mail
+its twelve cells/assertions remain pending through the joint source-admission
+specification continuation. Its shared source, support/name and Structure
+proposals still need their reading. Program mail
 failed again and was relayed through product-completion. G-2791's next disposition
 must consume the retained handoff: supported mappings, original-grain bindings,
 real refresh generations and a baseline-compatible stopped-owner backup cannot
@@ -268,18 +315,19 @@ two builds, including early failures. Mixed repair-turn tokens establish no savi
 Domain-leading research complements, never replaces, these 61 findings.
 Keep account/allowance settings, observations and scheduling notes untracked.
 
-Checkpoint measures: 0/61 proved; tokens/proved row n/a. Status observed 56/66
-first attempts (85%), ten fix rounds, five capacity continuations, attempts/landed
-median two and maximum fourteen (G-2759), 433.8M worker input and 3.4M output
-tokens. Of 216 job wakes: 102 passed, 61 assertion, one timeout, two environment,
-48 harness and two unclassified. Fix rounds do not dominate; assertion and
+Checkpoint measures: 0/61 proved; tokens/proved row n/a. Status observed 58/69
+first attempts (84%), eleven fix rounds, five capacity continuations, attempts/landed
+median two and maximum fourteen (G-2759), 447.3M worker input and 3.5M output
+tokens. Of 221 job wakes: 104 passed, 63 assertion, one timeout, two environment,
+49 harness and two unclassified. Fix rounds do not dominate; assertion and
 harness wakes account for most failures. G-2791's shared preparation and
 stack-free author handoffs address repeated setup; compatible preparation
 precedes more proof.
 The last recorded 12-hour window (2026-10-18 08:36:08–20:36:08 UTC) attributes
 63% of input to workers and 37% to other sessions, not an isolated manager share.
-Checkpoint 99450ae0's ten handled events used ten measured manager attempts:
-8,924,297 input (8,295,296 cached), 93,558 output. Both supplied mails are
+Checkpoint a643a092's ten handled events used eleven measured manager attempts,
+including the repeated G-2764 event: 8,192,446 input (7,652,352 cached),
+104,519 output. All four supplied mails are
 acknowledged. The prior efficiency instrumentation question was relayed through
 product-completion: identify G-2743's extra session/two turns and reconcile the
 24,637,693-input gap with session/event/role/window/landing receipts. Complete
@@ -290,15 +338,15 @@ coordinator events. That disposition started no watcher or capacity policy.
 
 Next executable actions:
 
-1. Dispose G-2782's repackaged handoff, G-2796's report landing result,
-   G-2802's corrected handoff, G-2756's Textarea continuation and pinned
-   reviews G-2803/G-2804/G-2805/G-2806 in their own events. Read existing-owner
-   continuations without duplicating work or restarting a landing.
-   The durable follow-up finishes G-2759's delegated safe refresh after the
-   uncommitted brief deletion is settled and main is clean; do not reland G-2759.
+1. Dispose G-2782's landing result, G-2796/G-2802's corrected report handoffs,
+   G-2762's Account continuation and pinned reviews G-2803 through G-2808 in
+   their own events. Read existing-owner continuations without duplicating work
+   or restarting a landing. Track the delegated safe refresh's result with its
+   existing owner; do not repeat it or reland G-2759.
 2. Read registry/author continuations and current committed rulings. Restore
-   Program routing for unresolved source/support, release/media, public-domain
-   and search proposals before separate implementation; preserve accepted readings.
+   Program routing for joint source admission, OA1–OA3, release/media and
+   public-domain proposals before separate implementation. Information display,
+   resource search and author lifecycle readings are accepted; preserve them.
 3. Dispose mapper and generic owner gaps, then complete G-2778 importer wiring.
    Map every remaining canonical class and C01–C31 to an executable owner using
    both accepted maps. Do not infer live discovery/native-name/budget behavior.
