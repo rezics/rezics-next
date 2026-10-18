@@ -29,7 +29,9 @@
     "baselineSeparation": "The source comparison base is not the product regression baseline. No moving wave or current main was substituted for the reviewed head.",
     "branch": "goal/g-2813",
     "reportBranchStartingHead": "2c3c12f5c478498f7b9a654e4997946272ee4a95",
-    "branchBasis": "The task started clean on committed main ancestry. Pinned source was read with git show/diff; no wave commits were merged, rebased or checked out into the task branch."
+    "branchBasis": "The task started clean on committed main ancestry. Source was read only with git show/diff at the fixed review pin. The required task goal -- check automatically rebased the report-only commit from d90994fa283b72cdc2dc84d24f500ad5f3c7338f to 85db8248bf21b14b75c011e432dc6747519bab77 on committed main d99830317cc43f9f19eba1912a15698e34b1aa05 and ran task install. The worker initiated no separate rebase/merge or wave checkout. The final task diff is checked against this committed main base; moving main never defined reviewed source.",
+    "reportBranchDeliveryBase": "d99830317cc43f9f19eba1912a15698e34b1aa05",
+    "documentationUpdates": "Delivery-check rebase brought manager state/task documentation updates from committed main. The request-budget state retains this exact pin, source-review assignment and pending prove requirements. Those documentation edits were preserved; no instructions file changed."
   },
   "scope": {
     "method": "Read the complete changes for all 20 named files across the seven commits and the base-to-pin comparison; read final source, complete changed test files and unchanged owners needed to trace entry, authority, accounting, retained reads and native cleanup. Unrelated interleaved wave changes are outside this report.",
@@ -750,21 +752,69 @@
       "check": "JSON parse, exact scope/blob/path/line bounds and commit ancestry validation",
       "result": "pass",
       "reach": "7 commits, 20 pinned changed blobs, all cited repository owner paths and source line ranges. No implementation execution."
+    },
+    {
+      "check": "Recorded task docs:check",
+      "result": "pass",
+      "job": "f43a3918-d304-4049-b3bb-c54047a34bc1",
+      "log": ".temp/goal/jobs/f43a3918-d304-4049-b3bb-c54047a34bc1.1.log",
+      "reach": "Documentation delivery validation; no product outcome execution."
+    },
+    {
+      "check": "Recorded task goal -- check",
+      "result": "pass",
+      "job": "f43a3918-d304-4049-b3bb-c54047a34bc1",
+      "log": ".temp/goal/check/run-fwqXz7/output.log",
+      "reach": "AST scan and selected repository guard (2 tests); types, source lint and brief tests skipped because this task changes only JSON documentation and names no tests."
+    },
+    {
+      "check": "Final report-only task diff and clean-tree verification",
+      "result": "pass",
+      "comparisonBase": "d99830317cc43f9f19eba1912a15698e34b1aa05",
+      "reach": "Only docs/goals/audit-remediation-20261019/request-budget-review.json is added by the task; no inherited wave files or source/assertion edits."
     }
   ],
   "reportDeliveryChecks": {
-    "status": "pending",
-    "required": [
-      "task docs:check",
-      "task goal -- check"
+    "status": "passed",
+    "job": "f43a3918-d304-4049-b3bb-c54047a34bc1",
+    "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+    "steps": [
+      {
+        "command": "task docs:check",
+        "exit": 0,
+        "result": "pass",
+        "log": ".temp/goal/jobs/f43a3918-d304-4049-b3bb-c54047a34bc1.1.log",
+        "reach": "13 documentation-check tests; 228 Markdown files checked for local links/fragments/design navigation. External URLs and runtime behavior were not tested."
+      },
+      {
+        "command": "task goal -- check",
+        "exit": 0,
+        "result": "pass",
+        "log": ".temp/goal/jobs/f43a3918-d304-4049-b3bb-c54047a34bc1.2.log",
+        "detailLog": ".temp/goal/check/run-fwqXz7/output.log",
+        "checks": {
+          "types": "no TypeScript workspace changed; skipped",
+          "tests": "no test files named in brief; skipped",
+          "lint": "no source file changed; skipped",
+          "ast": "pass, 0.3 seconds",
+          "guards": "pass, 1 of 44 guard files selected; 2 tests, 0 failing files"
+        },
+        "selectedGuard": "scripts/static/one-language-parser-debt.test.ts",
+        "testedReportCommit": "85db8248bf21b14b75c011e432dc6747519bab77"
+      }
     ],
-    "recordedJobCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check"
+    "qaProductRunIds": [],
+    "scope": "Report-delivery checks only. No implementation tests or retained worker passing checks were repeated. The final result-metadata edit was JSON/path-validated; no source, assertion or public outcome changed."
   },
   "retainedEvidence": [
     ".temp/ref/request-budget-findings.json",
     ".temp/ref/bounded-read-outcome-spec.ts",
     ".temp/ref/request-budget-account-handoff.md",
-    ".temp/request-budget-review/build-inputs.json"
+    ".temp/request-budget-review/build-inputs.json",
+    ".temp/goal/jobs/f43a3918-d304-4049-b3bb-c54047a34bc1.1.log",
+    ".temp/goal/jobs/f43a3918-d304-4049-b3bb-c54047a34bc1.2.log",
+    ".temp/goal/jobs/f43a3918-d304-4049-b3bb-c54047a34bc1.log",
+    ".temp/goal/check/run-fwqXz7/output.log"
   ],
   "changeScope": {
     "onlyClaimedReport": "docs/goals/audit-remediation-20261019/request-budget-review.json",
