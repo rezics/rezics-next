@@ -29,6 +29,9 @@ final class QueryWorkService extends SPARQL_QueryDataset {
         private final boolean wasInterrupted = worker.isInterrupted();
         private final long deadline;
         private final java.util.concurrent.ScheduledFuture<?> expiry;
+        private org.eclipse.jetty.server.internal.HttpConnection connection;
+        private java.util.concurrent.ScheduledFuture<?> disconnect;
+        private final java.nio.ByteBuffer transportInput = java.nio.ByteBuffer.allocate(1).limit(0);
         private Runnable execution;
         private boolean closed;
         private String reason;
@@ -40,11 +43,36 @@ final class QueryWorkService extends SPARQL_QueryDataset {
         synchronized void cancel(String why) {
             if (closed || reason != null) return;
             reason = why;
+            if (disconnect != null) disconnect.cancel(false);
             worker.interrupt();
             if (execution != null) execution.run();
         }
+        private synchronized void monitorTransport() {
+            if (connection == null || disconnect != null || closed || reason != null) return;
+            // A synchronous HTTP/1 handler has no socket read pending after its
+            // body is consumed. Jetty's failure listener alone cannot observe a
+            // disconnect while that handler waits for publication or an engine.
+            disconnect = TIMER.scheduleWithFixedDelay(this::probeTransport, 0, 10,
+                java.util.concurrent.TimeUnit.MILLISECONDS);
+        }
+        private synchronized void probeTransport() {
+            if (closed || reason != null) return;
+            // Only the operation's body-complete execution/capture path arms
+            // this probe. Leave any bytes already owned by Jetty untouched.
+            if (!connection.getParser().isComplete() || !connection.isRequestBufferEmpty()) return;
+            try {
+                int filled = connection.getEndPoint().fill(transportInput);
+                if (filled < 0) cancel("client-cancelled");
+                else if (filled > 0) {
+                    // A pipelined request is not a cancellation. Return its
+                    // byte to Jetty's existing input buffer before completion.
+                    connection.onUpgradeTo(transportInput);
+                    disconnect.cancel(false);
+                }
+            } catch (java.io.IOException failure) { cancel("client-cancelled"); }
+        }
         private synchronized void watch(Runnable abort) {
-            check(); execution = abort;
+            check(); execution = abort; monitorTransport();
         }
         static void watch(QueryExec execution) {
             ReadBoundary current = CURRENT.get();
@@ -74,6 +102,7 @@ final class QueryWorkService extends SPARQL_QueryDataset {
         static void lockForRead(java.util.concurrent.locks.ReentrantLock lock) {
             ReadBoundary current = CURRENT.get();
             checkCurrent();
+            if (current != null) current.monitorTransport();
             try {
                 if (current == null) lock.lockInterruptibly();
                 else if (!lock.tryLock(Math.max(0, current.deadline - System.nanoTime()),
@@ -91,6 +120,7 @@ final class QueryWorkService extends SPARQL_QueryDataset {
         }
         @Override public synchronized void close() {
             closed = true; execution = null; expiry.cancel(false);
+            if (disconnect != null) disconnect.cancel(false);
             // The servlet executor reuses this thread for unrelated requests.
             if (reason != null && !wasInterrupted) Thread.interrupted();
         }
@@ -109,6 +139,9 @@ final class QueryWorkService extends SPARQL_QueryDataset {
             try (var boundary = new ReadBoundary(Integer.parseInt(header))) {
                 ReadBoundary.CURRENT.set(boundary);
                 var transport = org.eclipse.jetty.ee11.servlet.ServletContextRequest.getServletContextRequest(request);
+                if (transport.getConnectionMetaData().getConnection()
+                        instanceof org.eclipse.jetty.server.internal.HttpConnection connection)
+                    boundary.connection = connection;
                 transport.addFailureListener(failure -> boundary.cancel("client-cancelled"));
                 try { boundary.check(); chain.doFilter(request, response); }
                 finally {
