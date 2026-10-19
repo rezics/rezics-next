@@ -634,5 +634,229 @@
     "blocking_findings": 0,
     "scope": "Exact correction source review with three original counterexamples passing; original request_changes preserved above.",
     "limitations": "Retained original validation and explicit unexecuted limits apply; no product landing, audit closure or future assembled-tree approval."
+  },
+  "explicitFileSelectionFirstReview": {
+    "reviewedAtUtc": "2026-10-19T15:24:41.159521+00:00",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independentSourceReviewCountForThisCandidate": 1,
+      "accountFallbackUsed": false,
+      "nestedAgentsUsed": false,
+      "implementationResultsUsedAsIndependentProof": false
+    },
+    "authority": "Existing G-2852 claim and the 2026-10-19T15:11:31.473895Z explicit QA file-selection Decision; no product contract or original audit assertion change.",
+    "historyPreservation": {
+      "priorHead": "8cdf8373d6c04f2129708bfa4c1d7cdef43e015e",
+      "priorReportBlob": "af687dc08660a1bbdf32fe5d8d16596639e7390b",
+      "allPriorFieldsUnchanged": true,
+      "admissionReviewReopened": false
+    },
+    "candidate": {
+      "commit": "3c039218d5052e48704e1135dbbf1d6c76832c4c",
+      "base": "ffca2b5c4c692d7678c31a6d5deca3bb389d56a0",
+      "parent": "ffca2b5c4c692d7678c31a6d5deca3bb389d56a0",
+      "tree": "0371d581c14483fb2fb2b7a2437bc19e9eaf3ba6",
+      "sourceAndTestBlobs": {
+        "scripts/qa/cli.ts": "7307ed8ba68996ab99f3351b9024cd0e1e2f75e7",
+        "tests/qa/unit/qa-harness.test.ts": "11bc84a1cde8d058e8df60703c2122b6782d7850"
+      },
+      "allManifestPinsMatch": true,
+      "onlyChangedPaths": [
+        "scripts/qa/cli.ts",
+        "tests/qa/unit/qa-harness.test.ts"
+      ],
+      "patchManifestSHA256Verified": true,
+      "readOnlyManagerCandidate": ".temp/qa-explicit-path-candidate",
+      "executionCheckout": ".temp/explicit-file-selection-review/candidate",
+      "executionMethod": "Detached shared-object local clone under this worker worktree; no candidate source edits. Local package symlinks reuse the manager candidate dependency installation only after input and installed-stamp digests matched; stamp and cache paths remain local.",
+      "trackedCandidateSourceModified": false
+    },
+    "scope": "Complete two-path base-to-candidate diff, the new regression, directly relevant existing AST/VM boundary pattern, canonical test selection/expansion and file-result normalization, tier arguments and surrounding final command calls. No side-effectful whole CLI import or real integration stack.",
+    "verdict": {
+      "decision": "approve",
+      "blockingFindings": 0,
+      "reason": "The final Bun boundary converts selected expanded file operands to explicit relative paths without mutating canonical batch identities or other arguments. The focused real-child regression independently passes both success and reached assertion failure cases.",
+      "scope": "Exact pinned two-path candidate only; accepted admission verdict/history and product acceptance remain unchanged."
+    },
+    "findings": [],
+    "sourceOnlyConclusions": [
+      {
+        "file": "scripts/qa/cli.ts",
+        "line": 907,
+        "endLine": 910,
+        "conclusion": "Only batch.map constructs new ./-prefixed file operands in the final tierBunTestArgs call. The original batch array, flags, JUnit outfile and optional timeout arguments remain unchanged."
+      },
+      {
+        "file": "scripts/qa/cli.ts",
+        "line": 1049,
+        "endLine": 1058,
+        "conclusion": "testArgs paths are separated from flags, expanded to files and passed through existing preparation selection before sharding. The ordinary integration outer budget remains 480000ms, separate from the inner Bun test timeout."
+      },
+      {
+        "file": "scripts/qa/acceptance.ts",
+        "line": 382,
+        "endLine": 425,
+        "conclusion": "Chosen and retained selections retain existing registered root-relative path validation. The ./ conversion happens after this canonical selection; no registry or shard keys are rewritten."
+      },
+      {
+        "file": "scripts/qa/core.ts",
+        "line": 57,
+        "endLine": 77,
+        "conclusion": "tierBunTestArgs still preserves a single explicit caller timeout or adds the existing tier default; the one-line CLI edit does not map or alter flags. Integration default remains 60000ms."
+      },
+      {
+        "file": "scripts/qa/cli.ts",
+        "line": 911,
+        "endLine": 936,
+        "conclusion": "Both ordinary and campaign command paths consume the same batchArgs with existing active budget, run deadline, phase callback, environment and startup admission. None of those contracts changes in this patch."
+      },
+      {
+        "file": "scripts/qa/cli.ts",
+        "line": 959,
+        "endLine": 985,
+        "conclusion": "Report completion still consumes the canonical batch. The unchanged file-results.ts:24-28 strips a leading ./ from observed JUnit file names before matching completeness; this review does not claim an executed full shard/report flow."
+      },
+      {
+        "file": "tests/qa/unit/qa-harness.test.ts",
+        "line": 1311,
+        "endLine": 1335,
+        "conclusion": "The regression extracts the unique real batchArgs initializer from runShardWork and evaluates it through the existing TypeScript AST/VM boundary pattern, instead of importing the whole CLI or duplicating the argument expression."
+      },
+      {
+        "file": "tests/qa/unit/qa-harness.test.ts",
+        "line": 1336,
+        "endLine": 1350,
+        "conclusion": "Each bounded Bun child is awaited with drained output before its exit, import witness and exact named non-skipped JUnit result are checked. Both pass and intentional assertion failure are required; no-match alone cannot satisfy these checks. Scratch cleanup runs in finally."
+      }
+    ],
+    "independentlyVerifiedBehavior": {
+      "command": "env CLAUDECODE=1 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/explicit-file-selection-review/candidate goal -- test tests/qa/unit/qa-harness.test.ts --test-name-pattern '^explicit selected hidden integration paths reach Bun and preserve failure$'",
+      "job": "f10e6fbc-d9d9-4a30-ae1d-ed82a3bcc185",
+      "exitStatus": 0,
+      "testsPassed": 1,
+      "assertions": 13,
+      "failed": 0,
+      "filteredOut": 81,
+      "testElapsedSeconds": 1.73,
+      "bunVersion": "1.4.3",
+      "selector": "^explicit selected hidden integration paths reach Bun and preserve failure$",
+      "observed": "The actual pinned regression passes: hidden selected file imports and produces exactly the named passing JUnit case; its intentional assertion failure imports, produces that failed case and exits 1. Original batch stays canonical in both cases. Default inner timeout is 60000ms and explicit inner timeout is 1234ms.",
+      "evidence": ".temp/goal/jobs/f10e6fbc-d9d9-4a30-ae1d-ed82a3bcc185.log",
+      "testCustody": "The pinned candidate test/source were unmodified. No private replacement assertion, extra selector or integration stack was used. The owned children use their existing 10000ms watchdog.",
+      "postRun": "Execution checkout tracked source remained clean; no explicit-bun-file scratch directories remained."
+    },
+    "unchangedContractBlobPins": {
+      "scripts/qa/core.ts": "7e73c7a7b25c09930781ef55fd0f837587c7a97f",
+      "scripts/qa/acceptance.ts": "aa99f17a1df1b75a7edf0f10768c980deabcc445",
+      "scripts/qa/preparation-selection.ts": "117c625df0425a80615d202f8dd4aa425c4893a9",
+      "scripts/qa/test.ts": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+      "Taskfile.yml": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+      "scripts/qa/file-results.ts": "30afe0840709b4ca409f0f06b412f71091a9ba65"
+    },
+    "commandsAndResults": [
+      {
+        "command": "git diff ffca2b5c4c692d7678c31a6d5deca3bb389d56a0 3c039218d5052e48704e1135dbbf1d6c76832c4c -- scripts/qa/cli.ts tests/qa/unit/qa-harness.test.ts",
+        "exitStatus": 0,
+        "result": "Complete one-line source change and new regression reviewed; 55 insertions, 1 deletion across exactly two paths. Git parent/tree/blob pins match supplied manifest; supplied patch SHA256 verified."
+      },
+      {
+        "command": "git clone --shared --no-checkout . .temp/explicit-file-selection-review/candidate",
+        "exitStatus": 0,
+        "result": "Isolated clone created inside the worker worktree."
+      },
+      {
+        "command": "git checkout --detach 3c039218d5052e48704e1135dbbf1d6c76832c4c",
+        "cwd": ".temp/explicit-file-selection-review/candidate",
+        "exitStatus": 0,
+        "result": "Exact candidate checked out; all mutations and QA outputs stay inside worker paths."
+      },
+      {
+        "exitStatus": 1,
+        "result": "Old worker dependency input digest differed from candidate. No test ran and no install or budget change was attempted. Retained mismatch evidence; then selected the existing manager candidate installation whose input/stamp digest equals the execution clone.",
+        "operation": "dependencyDigest worker/candidate preflight before reuse"
+      },
+      {
+        "command": "env CLAUDECODE=1 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/explicit-file-selection-review/candidate goal -- test tests/qa/unit/qa-harness.test.ts --test-name-pattern '^explicit selected hidden integration paths reach Bun and preserve failure$'",
+        "exitStatus": 0,
+        "job": "f10e6fbc-d9d9-4a30-ae1d-ed82a3bcc185",
+        "result": "1 pass / 13 assertions / 81 filtered / 0 fail, through recorded Task and local goalctl test."
+      }
+    ],
+    "implementationContextOnly": "The Decision reports root red then green 1-test/13-assertion proof, including an initially mistaken timeout expectation corrected to inner 60000/1234 rather than outer 480000. Those logs and original G-2753 no-discovery result were not independently replayed or used as independent proof. Only supplied manifest pin/patch metadata was checked; its actualChecks are context.",
+    "unexecutedLimits": [
+      "No independent red/base replay was performed. The independent execution above is only the exact new selector on the pinned candidate.",
+      "No whole QA tier, original count/author lifecycle, original admission suite, Docker stack, data restore, source-support generation, compiler/lint graph, budget rewrite or product journey was run.",
+      "The regression verifies real Bun process discovery and assertion/JUnit behavior through the actual argument initializer; full CLI sharding, callbacks, integration fixture custody and report aggregation remain source-only unchanged-contract conclusions.",
+      "The regression does not assert the exact JUnit file attribute or exhaust ordinary/non-hidden/multiple-file operands. Canonical input preservation is asserted and existing file-result normalization is inspected; no broader runtime identity claim is added.",
+      "Author-created scratch witnesses and child JUnit files are removed by the pinned test finally block. The retained independent job log establishes the passing 13 assertions; no removed child artifact is claimed as retained evidence.",
+      "Approval does not land the candidate, resolve manager merge conflicts, validate a future assembled tree, alter original audit assertions or close any product/audit class."
+    ],
+    "retainedEvidence": [
+      {
+        "path": ".temp/explicit-file-selection-review/candidate.diff",
+        "sha256": "69ed6f4812e832e481e1693ee32c5d5adb1ee8cdc487fe901e928e7fbc905989"
+      },
+      {
+        "path": ".temp/explicit-file-selection-review/pins.json",
+        "sha256": "77b6bb6a8213caa8e5b567e25caa926c600520fc9d93d5f1febff47b5771b9fc"
+      },
+      {
+        "path": ".temp/explicit-file-selection-review/qa-explicit-selected-files-candidate.json",
+        "sha256": "197768d93b1a7fd49544695e1791fb7782f65edfa36691cde045d5ea32b2687a"
+      },
+      {
+        "path": ".temp/explicit-file-selection-review/qa-explicit-selected-files.patch",
+        "sha256": "69ed6f4812e832e481e1693ee32c5d5adb1ee8cdc487fe901e928e7fbc905989"
+      },
+      {
+        "path": ".temp/explicit-file-selection-review/dependencies.json",
+        "sha256": "b01254351611fbb6a8fd6304c6bf5438cdea683ec963499c86d56962afdebb0e"
+      },
+      {
+        "path": ".temp/explicit-file-selection-review/dependency-worker-mismatch.json",
+        "sha256": "153a9085eec4b748fc672728d128456e95b269a7d917d1c358a9bc5df9dbc402"
+      },
+      {
+        "path": ".temp/goal/jobs/f10e6fbc-d9d9-4a30-ae1d-ed82a3bcc185.log",
+        "sha256": "4118ccd86181a14dcc5c596ccb031e9ffb7ee4b3bb9a0f87fd70338e5527a8b8"
+      },
+      {
+        "path": ".temp/goal/jobs/172744cc-f32d-4db6-8ddc-614cec67da10.1.log",
+        "sha256": "b90cadba2e959866b621438a8a13121442ad870ebf6e26621915ca6301fe71a1"
+      },
+      {
+        "path": ".temp/goal/jobs/172744cc-f32d-4db6-8ddc-614cec67da10.2.log",
+        "sha256": "81240631e719c20b739b7d852dda1f8274ace74b8fd9929f44a4f13821f6041a"
+      },
+      {
+        "path": ".temp/goal/check/run-tTjTP5/output.log",
+        "sha256": "7bd65ab29cd6a498d4a1b9fc32a12e6a036adb0dc4a656f7196818fecee2e8e6"
+      }
+    ],
+    "publicationValidation": {
+      "status": "passed",
+      "job": "172744cc-f32d-4db6-8ddc-614cec67da10",
+      "recordedCommand": "env CLAUDECODE=1 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exitStatus": 0,
+          "result": "13 checker tests passed; 250 Markdown files checked for local links, fragments and navigation.",
+          "log": ".temp/goal/jobs/172744cc-f32d-4db6-8ddc-614cec67da10.1.log"
+        },
+        {
+          "command": "task goal -- check",
+          "exitStatus": 0,
+          "result": "AST and 1/45 repository guards selected for the sole changed JSON path passed. No TypeScript/source workspace changed and no test files named in brief.",
+          "log": ".temp/goal/jobs/172744cc-f32d-4db6-8ddc-614cec67da10.2.log",
+          "fullOutput": ".temp/goal/check/run-tTjTP5/output.log",
+          "advisory": "Gate reported one harness commit behind main; checks passed. Worker did not rebase or resolve manager assembly conflicts."
+        }
+      ],
+      "note": "These checks validate publication of this JSON only. Results and evidence hashes were appended after passing checks with no subsequent Markdown link, source or check-selection change."
+    },
+    "completedAtUtc": "2026-10-19T15:25:45.843351+00:00"
   }
 }
