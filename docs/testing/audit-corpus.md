@@ -26,6 +26,15 @@ credentials, retained receipts or backup belong in a commit.
 The recipe has format `audit-corpus-recipe-v1`; its TypeScript interface is the
 input contract. It contains:
 
+- `productRevision`: when the manager admits current-product preparation, pin
+  the exact committed executable head. Inspection and runtime refuse a different
+  head. Omitting this field retains the historical baseline workflow; it does
+  not advance any independently pinned baseline. Projection fields that describe
+  the running product retain that actual revision, including public domain.
+- `inputPreparationMs`: measured input copying/verification and offline stage
+  assembly performed before producer inspection. Retain the actual recorded job
+  and timing evidence privately; this duration is charged once through the
+  existing preparation budget, in addition to inspection and live work.
 - `sourceRoot`: the byte-identical frozen dataset tree. All snapshot file and
   logical digests, record digests and qualified edge occurrences are checked
   against the independent [import matrix](../../tests/qa/fixtures/catalogue/import-outcomes.json),
@@ -39,8 +48,15 @@ input contract. It contains:
   `retainedOperator`/`retainedAuth`; it cannot designate another first platform
   administrator on a restored catalogue.
 - `imports`: deterministic root selections with explicit budgets and mapper
-  IDs/revisions. A bounded selected view currently blocks on the importer
-  owner seam; it must never become a fabricated snapshot or `maxRecords` prefix.
+  IDs/revisions. The delivered importer consumes these selections against their
+  immutable parents. It must never receive a fabricated snapshot or `maxRecords`
+  prefix. `native: false` runs retained intake without creating replacement Works;
+  use it for the initial Source trace of an existing native identity. Native
+  journal reuse requires matching origin, acting subject and data epoch. An old
+  journal from another origin is evidence, not permission to recreate its Works.
+  An intake-only selection may retain media-only incompleteness when knowledge
+  closure is complete. Its missing-image dispositions remain unchanged; this
+  admission establishes neither licensed media nor catalogue readiness.
 - `evidence`: exact source record bytes/pointers, qualified public-domain or
   licensed text quotes, real cover/portrait bytes with source URL, credit,
   rights evidence and obligations, or clearly original fixture contributions.
@@ -76,6 +92,23 @@ Failed/unexecuted commands have no binding. `controls` contains
 fresh unknown IDs, admitted to provenance only after a genuine 404 read.
 Runtime addresses, product revisions, measured timings, backup digest and
 command-ledger custody are producer-owned projection fields.
+
+`import:<snapshot>` also retains the importer's actual `intakeCustody` journal
+from `DatasetImportResult.intakeReceiptsFile`. Existing `ref` projections may
+read `/intakeCustody/records/{sourceKey}` for the full record, ordered acknowledged
+intakes and payload metadata. Import validation joins command results to their
+actual 200/201 replies, exact frozen identity/snapshot/record coordinates and
+part indexes. Old journals without HTTP status remain unknown; the producer
+does not manufacture recorder callers or successful statuses for them. A
+conversion result remains distinct from these intake receipts.
+
+For a conversion request's `retained.intakes`, the projection
+`{"$audit":"intakes","from":"import:<snapshot>","pointer":"/intakeCustody/records/<sourceKey>/intakes"}`
+selects only `index`, `record`, `observation` and `byteDigest` from ordered,
+acknowledged record parts. It verifies the retained requests/replies through
+`datasetIntakeReceipt` and refuses missing status, refused replies, reordered
+parts or identity changes. The other retained fields reference that same actual
+record; no recipe recreates an importer envelope or guesses multipart identities.
 
 `receipt:<id>` is the existing search consumer's `{path, sha256}` evidence
 shape: a mode-0600 file containing the same single successful command receipt
@@ -114,14 +147,22 @@ bindings, obtains exact fixture grants, imports isolated byte-identical copies
 and runs the ordered stages. It verifies original identities and read readiness
 again before closing API writers.
 
+Before restore/startup or migrations can write, the source backup's `compose.env`
+must explicitly retain persistent storage and `REZICS_STACK_RAW_UPDATE=0`.
+An absent marker or raw-update source stops at
+`catalogue-backup [before-restore-storage]`. Storage compatibility remains the
+backup owner's current-product check; historical baseline storage compatibility
+is not a prerequisite to an explicitly admitted fixed-product preparation.
+
 The same command calls `retainStoppedOwnerBackup` once with `purpose: corpus`,
 `resumeSource: false` and `stopCorpusSourcePostgres`. It retains Postgres, Fuseki,
 RustFS and local object stores at the same stopped cut. It then calls
 `restoreCatalogueBackup` on that cut for migrations and an independent readiness
 round trip. There is no separate raw storage/SQL/RDF preparation command.
 
-The entire active preparation, including source inspection, initial restore, API stages, stopped
-cut, round trip and source cleanup, must fit **600 seconds**. Only host admission
+The entire active preparation, including input staging, source inspection,
+initial restore, API stages, stopped cut, round trip and source cleanup, must fit
+**600 seconds**. Only host admission
 wait is excluded. Each proof restore has its own existing 600-second preparation
 budget. No larger producer deadline is introduced. Measured build/round-trip and
 restore/startup/readiness times are retained; a build that exceeds budget cannot
@@ -160,14 +201,15 @@ preserved and blocks publication; it is never overwritten. Setup/restore failure
 are classified as environment failures before product assertions. The harness
 releases the copy and source/publication leases when the proof ends.
 
-The original baseline product is `69eac3ceeaf885be70205a70248bc951e9d81cc9`,
-as corrected by the wave's audit specifications and consumer owners. The import,
-information and public-domain fixture pins now agree with it.
-`auditBaselineBlockers()` checks their actual pins and refuses an incompatible
-premise; this producer does not relabel fixtures or alter independent assertions.
-The manager must still establish a compatible fixture/test overlay. Product
-revision, test overlay, fixed wave, corpus generation and frozen source identity
-are separate facts.
+The original baseline product is `69eac3ceeaf885be70205a70248bc951e9d81cc9`.
+`auditBaselineBlockers()` retains the historical consumer-pin check. Explicit
+current-product admission uses the recipe's exact `productRevision` and the
+backup owner's current storage compatibility; original-baseline compatibility
+does not gate that fixed preparation. A consumer that still enforces only the
+historical baseline needs its existing helper owner's fixed-product admission.
+Do not relabel the running product to satisfy that check. Product revision,
+test overlay, fixed wave, corpus generation and frozen source identity remain
+separate facts.
 
 This producer does not introduce a baseline-overlay or proof receipt owner.
 The manager must use the existing pinned proof workflow, retain baseline failures
@@ -178,9 +220,12 @@ Producing a source does not certify any pending product outcome.
 
 The `auditOwnerPrerequisites` export is the executable handoff:
 
-- The importer must accept the selector's `DatasetRootSelection` together with
-  its immutable parent and manifest, retaining original record/edge/image indexes
-  and exact journal native bindings. The current prefix API is insufficient.
+- The delivered importer accepts `DatasetSelectionOptions` and calls the
+  deterministic selector on the immutable parent. This producer passes that
+  selection and retains the actual intake custody; no prefix API or independent
+  selected-snapshot importer is needed. Native journal reuse still requires its
+  actual origin, acting subject and data epoch; copying an old journal to another
+  restore is insufficient to authorize replacement native creation.
 - Native mapper owners must register executable fields, relations, credits,
   releases and media `DatasetNativeMapper` implementations with stable
   `id`/`revision` and actual receipt/coverage/occurrence/source generation data.
@@ -195,9 +240,10 @@ The `auditOwnerPrerequisites` export is the executable handoff:
 
 The consumer authors' [import handoff](../goals/audit-remediation-20261019/import-corpus-handoff.md)
 and [information handoff](../goals/audit-remediation-20261019/information-outcomes.md)
-remain authoritative. In particular, the original baseline's storage owner must
-accept the retained backup: a current-wave backup with newer migrations, model
-or compose configuration cannot stand in for it. Unavailable refresh generation
+remain authoritative. Historical original-baseline proof still needs that
+runner/storage owner's compatibility; a physical fixed-wave backup establishes
+none. This historical requirement does not block an explicitly admitted
+current-product preparation. Unavailable refresh generation
 tokens and required native identities block preparation; proposed coverage,
 release or relation results are still tested independently in the proof bodies.
 

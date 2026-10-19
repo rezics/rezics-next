@@ -23,6 +23,71 @@ The tables below identify requirements, not a second manifest format or seeds.
 An unavailable command, source or readiness predicate has no successful binding
 and cannot publish a ready manifest.
 
+## Current-product sprint disposition, 2026-10-19
+
+The maintainer's `2026-10-19T06:11:19Z` decision admits current-product isolated
+preparation and proof after normal Task/host admission. It supersedes the
+execution holds in the historical triage above and below; it does not turn any
+historical setup failure into a product result. Original-baseline compatibility
+is not a prerequisite for fixed-product preparation. Use the actual committed
+product pin and the current backup owner's storage compatibility.
+
+Recorded job `9552da48-d12c-484d-9078-2ed3737c12a8` staged private byte-identical
+inputs in `.temp/audit-corpus/inputs/` from the supplied dataset root and original
+audit evidence. Copying and verification took 68,807 ms for 1,098,083,104 bytes.
+The recovered ledger contains exactly 113 source/Work/Main/revision bindings
+matched to actual original importer receipts at data epoch
+`8c483e38-59e7-4d95-b27b-de9cd6742a3e`; its SHA-256 is
+`bf9f7abc94aa30887511c05c61bd0433c0fdbb894a2d7d7e30aacdb7e12efa6e`.
+The separate original journal copies preserve their original origin, acting
+subject, epoch and source positions. No old journal is injected into a new
+import context to authorize replacement native creation.
+
+Job `d8c8233b-06ec-489f-914c-f7b568911795` assembled private fields for the existing
+`AuditRecipe` in `inputs/trace-plan/recipe-fields.json` (under the same directory),
+with four retained conversion commands, their conversion reads and 113 original
+native revision reads. Assembly took 21,513 ms, making the measured input work
+90,320 ms before producer inspection, restore, API stages, stopped backup and
+round trip. Charge that work through `inputPreparationMs` in the same 600,000 ms
+preparation budget. No end-to-end budget pass is established. Each eventual
+proof restore retains its separate existing 600,000 ms limit.
+
+Selections use the matrix's exact VNDB `v11`, Bangumi `1014` and MusicBrainz
+release-group `7c8f2d45-d764-347a-9ab9-0aa771a3447d` roots. All have complete
+knowledge closure and incomplete media; their actual limitations remain in the
+private manifests. The earlier offline attempt to select a supporting
+MusicBrainz release as a Work root remains a refused selection, not a successful
+preparation. The independent selection digest remains
+`e86819db195bef7bc5d9a4e986ad628e521b748441ba9bd21d1788f18428c305`.
+
+| Consumer/case or stage | Genuine input and supported owner interface | Current reach and next prerequisite |
+| --- | --- | --- |
+| Initial isolated restore; every consumer's setup | `AuditOriginals.backup` pins `command-catalogue-backup-v1`; [restoreCatalogueBackup](../../scripts/load/catalogue-backup.ts) validates current storage compatibility. Before it writes, the producer requires persistent storage and `REZICS_STACK_RAW_UPDATE=0` in the retained `compose.env`. | No stopped all-owner backup containing the recovered 113-binding generation was identified in the supplied original audit. Original journals and mappings are not a physical backup. Supply the actual cut and owner-store bindings; do not substitute an unrelated seed backup or reset/import the shared stack. No restore or outcome assertion ran. |
+| Retained operator admission | [personaSessions](../../tests/qa/support/personas.ts) receives actual `retainedOperator` and `retainedAuth`, signs in normally and verifies `/v1/me/platform-access` includes `platform-admin`. | The original audit's account file alone is not a verified `RetainedPersonaRealm` or an OAuth-client binding. Supply the retained principal/client configuration for the backup; no `designateFirst`, same-name replacement or assumed authority. Original native reads also retain the journal's exact acting subject, which the signed-in principal must control. |
+| `import-fidelity.test.ts`, operator: “replays both named two-source selections without duplicate identities, truncated adjacency or conflated musical grains”; `source-coverage.test.ts`, operator: “accounts for every elected field and edge, exports retained evidence, and withdraws one support without erasing independent or human decisions” | The existing `openImportFixture` parser consumes `import-outcomes-corpus-v1`. Its independent body calls `assertRetainedRecordAdmissions` for `vndb:vn:v11`, `bangumi:subject:1014`, MusicBrainz artist `24f1766e-9635-4d58-a4d4-9413f9f98a4c` and release `2ab08baa-b1c6-4aca-8cf7-c31565ef71b4`. [importDataset](../../scripts/datasets/import.ts) accepts the deterministic selection with `native:false`, preserving actual intake custody without recreating Works. | These four full frozen records and their matrix digests are staged; actual `POST /v1/sources/intakes` acknowledgements are not observed on an isolated restore. Use those real command results to fill exact ordered `retainedRequest` parts/payload and legacy Source identities. Optional proposed-result receipts remain absent until observed. No setup or outcome assertion ran. This trace is not either complete named replay selection. |
+| Four retained conversions and exact native reads | [Source retained normalization](../../services/main/src/modules/source/retained-record-normalization.ts) supplies the registered mapping names. Execute `POST /v1/sources/observations/{actual-first-part}/conversions` with `source-retained-record-conversion-v1`, full original `DatasetRecord`, identity, snapshot/file/record pins, assembled payload and ordered actual intakes. Then `GET /v1/sources/conversions/{actual-conversion}` and the ledger's exact `/v1/revisions/{revision}?actingSubject=...` reads. | Current route/normalization support exists; the previous blanket “conversion owner unavailable” premise no longer describes this code. Actual mapping registration, `source:convert`, platform import authority and successful public responses remain execution prerequisites. `$audit: intakes` projects only the importer's ordered acknowledged parts. A missing status/result supplies no successful binding. `retainedBinding`/`synopsisSupport` stay optional when unobserved; Bangumi editorial and negative-authority conversions/proposals remain separately required. |
+| Qualified Book/Recipe and media inputs | Existing [launch-corpus](../../scripts/load/launch-corpus.ts) owns Gutenberg Source intake/file import; staged fixtures are pg1342, pg65061, pg59047 and their unchanged recipe-extract pins. | No live publication/qualification receipt is claimed. Retained v11 image fetches prove HTTP 200 and bytes, not license/credit/correspondence. Frozen v11 points to `cv24185`; the retained cover URL points to `cv89071`. Preserve that discrepancy and obtain genuine licensed source correspondence; do not substitute the fetched image as qualified evidence. |
+| Public-domain fixed-product helper admission | [loadPublicDomainCorpus](../../tests/qa/support/catalogue-public-domain.ts) currently requires `productRevision === publicDomainBaseline`; its [fixture type](../../tests/qa/fixtures/catalogue-public-domain.ts) also uses that literal baseline. | The producer now emits the actual executable revision. The existing helper owner must admit the fixed-product fixture separately while preserving the original baseline and independent assertions. No successful current-product public-domain corpus is claimed. |
+
+The private trace fields/disposition are **not** a complete recipe, ready
+consumer manifest or successful API receipt. Their blockers name
+`catalogue-backup [original-stopped-cut]` and
+`personaSessions [retained-platform-administrator]`. No owner was started;
+no import, backup, restore, baseline or fixed proof ran. All original assertions
+remain unchanged. The only successful checks are stack-free producer/importer
+units, documentation, types, lint and guards; the first job's test-only type
+failure remains harness evidence and was corrected before the passing job.
+
+Once the existing custodians supply the cut and administrator bindings, finish
+the same private recipe and use `task goal -- prepare-audit inspect` followed by
+`task goal -- prepare-audit prepare`. The prepare command already orders
+`quiesce`, `stopCorpusSourcePostgres`, one `retainStoppedOwnerBackup` cut with
+`resumeSource:false`, and an isolated `restoreCatalogueBackup` round trip.
+Run original files through `bun scripts/goal/goalctl.ts test` with
+`REZICS_AUDIT_CORPUS_RECIPE` set, each on its own restore. The exact commands in
+the final section remain the existing interfaces; no new tool, seed, importer,
+API or backup implementation is introduced by this disposition.
+
 ## Existing manifests and readiness
 
 All paths are relative to the assigned worktree. Private manifests and receipts
