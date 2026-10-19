@@ -255,6 +255,8 @@ interface Attempt {
 interface WakeRow { goal: string; due_at: number; failures: number; error: string | null; token: string | null }
 interface EventRow extends WakeRow {event_key: string; body: string; handled: number; cuts:number}
 export function eventTasks(event: Pick<WakeEvent,'key'|'body'>): string[] {
+  // Checkpoints only write state.md; their task IDs describe handled history, not mutations.
+  if (event.key.startsWith('checkpoint:')) return [];
   return [...new Set((`${event.key}\n${event.body}`.match(/\bG-\d+\b/gi) ?? []).map(task=>task.toUpperCase()))];
 }
 export interface CoordinatorOptions {
