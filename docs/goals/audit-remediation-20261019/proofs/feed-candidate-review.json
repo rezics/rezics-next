@@ -1,4 +1,323 @@
 {
+  "d3ReaderAuthorityCaptureCustodyVerdict": {
+    "result": "partial-original-D3-001; ignored passive body-custody correction prepared, coherent genuine ineligible browser premise pending",
+    "summary": "Accepted actual Accounts qualification2f8748d5 remains PASS1case/4assertions,254HTTP200 and actual hydration/editable Email. The252 empty body records were an instrumentation failure, not module failure. Corrected only ignored capture/startup lifecycle; reused the passing hydration premise and removed the separate disposable qualification gate. No fresh browser run, source review, build, install or original Feed callback was executed.",
+    "currentAccountsPremise": "Qualified hydrated at the exact accepted attempt. Historical d2ede738 remains retained, not evidence that current Accounts is unhydrated and not a Feed failure.",
+    "captureScope": "Passive protocol response completion/body reads are diagnostic within the existing original proof. Capture failure is explicit; no unavailable/empty positive-payload response is silently given a valid body hash. No standalone extra capture qualification or review tier is required before the original Feed attempt.",
+    "pendingDependency": "Observed published G2775 readiness does not publish a runtime-ready coherent browser/session/data fixture. Root describes attempt12 ongoing at approvedQA2runner147371ab atopdonor9da/originalgen40bb; that ownership is not a ready same-isolated-Main/Accounts browser premise. Shared Main3001 or a backend-only receipt cannot substitute.",
+    "classClosed": false,
+    "productFinding": "No new Feed defect or source counterexample established. Original genuine signed-in outcomes remain unexecuted.",
+    "reportLanding": "Report-only ready after administrative checks. No product source changes; all prior report fields, failures, completed checks and actual screenshots retained.",
+    "next": "Root validates and supplies the ready G2775 current handoff, matching isolated Main/Accounts/data, normal own OAuth Account/session lineage and real nonNULL/ineligible Agent receipt. Only then bind the same original proof coherently and run its remaining original assertions under normal Goal admission; no standalone body qualification, full build or wrong-premise shared3001 attempt."
+  },
+  "d3ReaderAuthorityCaptureCustodyContinuation": {
+    "recordedAt": "2026-10-19T15:44:44.390680+00:00",
+    "authority": "Latest same-scope manager correction: preserve original D3 outcome/authority, exact productFE6cf and five frozen callback regions/limits. Reuse actual hydrated Accounts qualification. Correct only ignored passive response-body custody; do not stage another qualification gate. If coherent G2775 original same-browser/data/session fixture is not ready, finish correction and report exact pending dependency instead of executing on wrong premise.",
+    "reviewer": {
+      "worker": "G-2836",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "candidateAuthor": false,
+      "fallback": false,
+      "nestedAgents": false
+    },
+    "preservedHistory": {
+      "previousReportCommit": "b8a7f841e3ef07ca1047c676c7e02b27835d3d48",
+      "previousReportSnapshot": {
+        "path": ".temp/feed-authority-evidence/capture-custody-correction/report-before-correction.json",
+        "sha256": "306ce551fb2cabb718e5736adc0aeeb1661a4a45ee1f97f1008e8b1e3ff48ab7",
+        "bytes": 426656
+      },
+      "allPreviousFieldsUnchangedByValue": true,
+      "historicalFailuresRetained": true,
+      "noSecondSourceReview": true,
+      "unchangedPassingEvidenceNotRerun": [
+        "preview148",
+        "frozenRSC22",
+        "focus",
+        "source/adapter/story/static",
+        "actual anonymous Feed control",
+        "Accounts qualification2f8748d5"
+      ]
+    },
+    "sourceAndRunnerPins": {
+      "frontend": {
+        "head": "6cf460b284cca8677a9b696f8f842fea9fac5321",
+        "tree": "b98454fc990705e15d704031471dabab13e2ba29",
+        "status": "clean",
+        "directory": ".temp/feed-authority-candidate",
+        "compiledGeneration": "g-2836-compiled-2026-10-19T15:11:55.063Z",
+        "buildJob": "d2ede738-0793-4fef-9aa1-eac9ac4f16e6:step1",
+        "rebuilt": false
+      },
+      "retainedDependencyAndBuildInputs": [
+        {
+          "path": ".temp/feed-authority-candidate/node_modules/.rezics-dependencies",
+          "sha256": "4e85518bfd315f8d440f0d5b617c8e51d918b9e7eac014b9079f7adb9d50e4c2",
+          "bytes": 64
+        },
+        {
+          "path": ".temp/feed-authority-candidate/apps/web/dist/server/wrangler.json",
+          "sha256": "163f876482344849daa88d2b0eb1531d6dfd49a35c8d5cdeb4f2f28d70f182da",
+          "bytes": 1712
+        },
+        {
+          "path": ".temp/feed-authority-evidence/compiled-output-manifest.json",
+          "sha256": "c3dc87a8b9342c0127b5cc1946fdc38dcf367a1526da27e5412184ad3c78f35e",
+          "bytes": 656685
+        },
+        {
+          "path": ".temp/accounts-hydration-qualification/qualification.json",
+          "sha256": "d1a304b592953700386574448a8560b7dfd6784762c92851d4d5761222d08d22",
+          "bytes": 368579
+        },
+        {
+          "path": ".temp/accounts-hydration-qualification/accounts-qualification.png",
+          "sha256": "66cede5444ca52bdab1c9aca0af670538a6ae59986ee1c58d4710d60d6c2b584",
+          "bytes": 508559
+        },
+        {
+          "path": "node_modules/playwright/package.json",
+          "sha256": "8bc2ddebe8d9b051b9ecb87d62c6c63877e59d08617f32c3215681ca8bb70998",
+          "bytes": 1359
+        },
+        {
+          "path": "node_modules/playwright-core/types/protocol.d.ts",
+          "sha256": "0410ed82a9ac63269dc1471ed249b280e2d461249a3a331e71cdb54cdf10db33",
+          "bytes": 814210
+        }
+      ],
+      "inputPinManifest": {
+        "path": ".temp/feed-authority-evidence/capture-custody-correction/retained-input-pins.json",
+        "sha256": "9ad89f11d58a8958b3b1ff3aa36f5ecff26e8ed2bffea043ea64c8b6782e89c4",
+        "bytes": 1417
+      },
+      "driverBefore": {
+        "path": ".temp/feed-authority-evidence/capture-custody-correction/driver-before.ts",
+        "sha256": "9db43dcdf55f4bb4167791bb5c4b2a0e9538e0cc735b89e02f7999e07e0d0795",
+        "bytes": 25572,
+        "originalPath": ".temp/feed-authority-live.test.ts"
+      },
+      "driverAfter": {
+        "path": ".temp/feed-authority-live.test.ts",
+        "sha256": "ab057449c4b44a3f22695188b1d1170ca4ce6406c46ccac25d7295d16cdd7cc5",
+        "bytes": 26839
+      },
+      "sealedDriverAfter": {
+        "path": ".temp/feed-authority-evidence/capture-custody-correction/driver-after.ts",
+        "sha256": "ab057449c4b44a3f22695188b1d1170ca4ce6406c46ccac25d7295d16cdd7cc5",
+        "bytes": 26839
+      },
+      "privateCaptureDiff": {
+        "path": ".temp/feed-authority-evidence/capture-custody-correction/capture-only.diff",
+        "sha256": "d69c85feb106739dc2b27faa6b518d0f07641e4729d623d71614b28d2f0a5052",
+        "bytes": 15188
+      },
+      "correctionManifest": {
+        "path": ".temp/feed-authority-evidence/capture-custody-correction/correction-manifest.json",
+        "sha256": "4db8f022ab856cbf315a64da31f4001fa31594d9fc35e5a31df9381e16c5864b",
+        "bytes": 2069
+      },
+      "frozenRegionsAndAnonymousControls": [
+        {
+          "name": "observerForwardingAndFaults",
+          "sha256": "fa768fa886cb073bea0e53def9cf86e4adc219919a693e73a2a4ced50047ecfd",
+          "bytes": 3809,
+          "equal": true
+        },
+        {
+          "name": "browserFetchAuthorityCapture",
+          "sha256": "58c9f6652c7cc25b46cb61f92b4674f2c1e3ef740713432073d1c325bef906ad",
+          "bytes": 662,
+          "equal": true
+        },
+        {
+          "name": "sessionAndSelection",
+          "sha256": "e8463431155b6c6325238b9f1474f123b83c8c88b8f97ec57d6c39a27dd017e0",
+          "bytes": 981,
+          "equal": true
+        },
+        {
+          "name": "runCell",
+          "sha256": "a258ffc03ad48ca9ea02896c445b4775f23a93d4fa1313a8f7b05738c4f9ca26",
+          "bytes": 5016,
+          "equal": true
+        },
+        {
+          "name": "originalTestCallback",
+          "sha256": "84e734f8a763da977194916cbe5eb020124851b2a08f813af0507769a262fdf0",
+          "bytes": 2268,
+          "equal": true
+        },
+        {
+          "name": ".temp/feed-review-live-focus.test.ts",
+          "sha256": "3d92e6262c83f760c28620327b92fa5ed30bb9a9d2f31ab9cd36239ba1fe92ac",
+          "bytes": 6438,
+          "equal": true
+        },
+        {
+          "name": ".temp/feed-rsc-patch.test.ts",
+          "sha256": "0d2d4ad3b8674d36eba41221cd810c464bc0adc772b737eb77d2af6807a3b74d",
+          "bytes": 11809,
+          "equal": true
+        }
+      ],
+      "allFrozenRegionsAndControlsPreserved": true,
+      "retainedCurrentDriverBindingsNotExecuted": {
+        "web": "http://127.0.0.1:62841",
+        "observer": "http://127.0.0.1:62842",
+        "main": "http://127.0.0.1:3001",
+        "accounts": "http://127.0.0.1:3004",
+        "qualification": "These unchanged old bindings are not validated as the new G2775 fixture runtime. No test run against them. Main754 remains the earlier explicitly compatible consumer backend, not current-main native proof."
+      }
+    },
+    "captureCorrection": {
+      "scope": "Ignored attachModuleCapture and setup/capture lifecycle only; no product/frontend/dependency/network/proxy/source-import changes.",
+      "protocol": "Before navigation enable Network and passive Network.configureDurableMessages with bounded64MiB total/8MiB per-resource diagnostic response storage. Track exact requestId, loader/frame, initiator and decoded Network.dataReceived payload bytes. At actual Network.loadingFinished immediately request Network.getResponseBody for that requestId. This does not pause/intercept/rewrite responses or change cache.",
+      "failureSemantics": "Unavailable protocol/body records explicit capability/module-body failure. Empty capture with actual positive decoded payload fails capture and never receives bodySha256. Transport loadingFailed retains canceled/error/noHTTP/loader/initiator separately from body custody failure. No streamResourceContent setup-success or empty hash is equated with completed capture.",
+      "lifecycle": "Drain module captures and pending reads within the existing45s bound before closing own browser. Record any incomplete drain explicitly, then retain own cleanup. Original90s binding,45s browser operations,120s navigation,240s setup and original callback budget unchanged.",
+      "hydrationReuse": "Removed separate warmContext and whole graph/body-completeness gate per current manager instruction; records accepted actual Accounts2f8748d5 proof reuse. Fresh original proof context still acquires own genuine OAuth using unchanged signInAtAccounts and captures errors in that same attempt.",
+      "diagnosticOnly": "A particular body read is diagnostic evidence, not an added standalone prerequisite tier or a product/authority outcome assertion. Actual login/selection/Feed assertions remain unchanged. No fabricated hydration/API data or body success.",
+      "runtimeValidation": "Not executed: coherent fixture premise not ready. Capture correction is source/syntax preparation only; no runtime success claimed."
+    },
+    "acceptedActualAccountsEvidence": {
+      "job": "2f8748d5-63e0-4e54-bcfd-28c05d39c4f5",
+      "testsPassed": 1,
+      "expectCalls": 4,
+      "actualHydrationMarker": true,
+      "actualEmailEditable": true,
+      "actualRequestsHTTP200": 254,
+      "moduleBodyHashQualification": false,
+      "qualification": {
+        "path": ".temp/accounts-hydration-qualification/qualification.json",
+        "sha256": "d1a304b592953700386574448a8560b7dfd6784762c92851d4d5761222d08d22",
+        "bytes": 368579
+      },
+      "screenshotPreviouslyActuallyViewed": {
+        "path": ".temp/accounts-hydration-qualification/accounts-qualification.png",
+        "sha256": "66cede5444ca52bdab1c9aca0af670538a6ae59986ee1c58d4710d60d6c2b584",
+        "bytes": 508559
+      },
+      "limits": "Passing direct Accounts hydration/form proof reused. Historical252 empty Script/Stylesheet body records remain invalid hashes and do not retroactively invalidate hydration. No new OAuth or Feed assertion follows; historical42ERR_NETWORK_CHANGED traces retain their original limits."
+    },
+    "G2775Dependency": {
+      "rootInput": "Existing attempt12 owns original same-browser/data/session nonNULL ineligibility fixture via approvedQA2 runner147371ab atopdonor9da, original qualified backup/gen40bb. No runtime/receipt claimed ready solely from this input.",
+      "readinessObserved": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2775/.temp/d3001-ineligible-agent-G2775/readiness.json",
+        "sha256": "93fa7ce70706ffe32386145b9c1009bf67efcd490c37d88d74a5f312e3b2e6c2",
+        "mtime": 1792423209.6584406,
+        "status": "entry ready; focused typecheck passed; blocked before first runtime on root-provided corrected runner pin",
+        "handoffRead": false,
+        "reason": "Only readiness read. No runtime-ready coherent browser fixture published here; user directs handoff read only when ready. Shared3001 receipt is not a substitute."
+      },
+      "privateReadinessSnapshot": {
+        "path": ".temp/feed-authority-evidence/capture-custody-correction/G2775-readiness-observed.json",
+        "sha256": "93fa7ce70706ffe32386145b9c1009bf67efcd490c37d88d74a5f312e3b2e6c2",
+        "bytes": 6140
+      },
+      "observationLimit": "Observed published readiness is old entry-ready/typecheck status blocked before first runtime on root-provided corrected runner pin. This is absence of a ready fixture here, not a conclusion about success/failure of currently running attempt12.",
+      "handoffRead": false,
+      "reason": "Current manager says read current handoff only when ready; readiness file supplies no runtime-ready coherent browser custody.",
+      "requiredBeforeExecution": [
+        "Root-accepted current successful runner/fixture/source/data pins",
+        "Same isolated Main+Accounts runtime with compatible real Feed data and own normal OAuth lineage",
+        "Actual own saved-session nonNULL actingSubject and genuine eligible=false receipt",
+        "Supported session selection paths and original expected Account/Agent lineage without cross-backend transfer"
+      ],
+      "prohibitedSubstitutions": "No shared3001 backend-only receipt, peer cookie/profile, null-Agent state, SQL/ad-hoc grants/signup/new Person, first-screen success injection, data restore or new shared runtime.",
+      "finalReadinessObservation": {
+        "observedAt": "2026-10-19T15:45:51.650159+00:00",
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2775/.temp/d3001-ineligible-agent-G2775/readiness.json",
+        "sha256": "93fa7ce70706ffe32386145b9c1009bf67efcd490c37d88d74a5f312e3b2e6c2",
+        "mtime": 1792423209.6584406,
+        "status": "entry ready; focused typecheck passed; blocked before first runtime on root-provided corrected runner pin",
+        "handoffRead": false,
+        "artifact": {
+          "path": ".temp/feed-authority-evidence/capture-custody-correction/G2775-readiness-final-observation.json",
+          "sha256": "97b0d6237fba70e80da37502ca73896be76e34dfd1e7d06894d57427f721de4f",
+          "bytes": 436
+        }
+      }
+    },
+    "acceptanceMapping": {
+      "sameOriginalD3001Acceptance": "Verbatim original criteria retained unchanged in preceding cumulative sections. No new acceptance requirement added.",
+      "exceptionalStates": "Unselected, real nonNULL/ineligible, and actual identity-read-unavailable are distinct original conditions. Existing callback implements unselected/eligible-control/unavailable byte-for-byte; that is not all three exceptional premises. Lawful ineligible fixture remains pending G2775/root.",
+      "firstNextHeadRecoveryAndGeneration": "No new signed-in Feed assertion reached. Preserve first/two genuine pages/head/recovery, explicit anonymous transport for exceptional authority, matched selected reader auth/actor, fresh generation/cursor and no omissions/duplicates. Main pairing contract unchanged.",
+      "errorsAndMatrix": "No new401/403/409 or en/zh1440/390light/dark claim. Original applicable callback cells/assertions and retained actual409/503 limits unchanged; no full61matrix or broader identity journey.",
+      "independentClasses": "Accepted preview148, frozenRSC22 and other original passing proof retained without rerun or new class self-closure."
+    },
+    "checks": {
+      "frozenVerificationCommand": "python3 .temp/verify-feed-authority-callbacks.py",
+      "exitCode": 0,
+      "allPreserved": true,
+      "evidence": {
+        "path": ".temp/feed-authority-evidence/capture-custody-correction/frozen-callback-check.json",
+        "sha256": "94970d940227ba812f34ee0be34017315128bd1ed17511991b6e9031d2d343ea",
+        "bytes": 1423
+      },
+      "syntaxAndAdministrativeChecks": {
+        "jobId": "fb96835d-e6c6-4584-9474-e4520bacb1d9",
+        "exitCode": 0,
+        "recordedSequence": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task docs:check' --then 'task goal -- check' -- task goal -- slot -- bun build --target=bun --external '*' --outfile .temp/feed-authority-evidence/capture-custody-correction/driver-syntax-check.js ./.temp/feed-authority-live.test.ts",
+        "steps": [
+          {
+            "command": "task goal -- slot -- bun build --target=bun --external '*' --outfile .temp/feed-authority-evidence/capture-custody-correction/driver-syntax-check.js ./.temp/feed-authority-live.test.ts",
+            "exitCode": 0,
+            "log": ".temp/goal/jobs/fb96835d-e6c6-4584-9474-e4520bacb1d9.1.log",
+            "result": "Parsed/bundled only the ignored proof driver with imports external.1module,16ms. Did not execute driver, read fixture credentials or build/serve product Web.",
+            "output": {
+              "path": ".temp/feed-authority-evidence/capture-custody-correction/driver-syntax-check.js",
+              "sha256": "537481e9e8a932358e6b3f2e07ac3ed8f5ef5099540a1d2e64289d300d4cdd27",
+              "bytes": 26704
+            }
+          },
+          {
+            "command": "task docs:check",
+            "exitCode": 0,
+            "log": ".temp/goal/jobs/fb96835d-e6c6-4584-9474-e4520bacb1d9.2.log",
+            "result": "13tests pass;250Markdown files and local links/fragments/design navigation pass."
+          },
+          {
+            "command": "task goal -- check",
+            "exitCode": 0,
+            "runId": "run-b0Tbp8",
+            "log": ".temp/goal/jobs/fb96835d-e6c6-4584-9474-e4520bacb1d9.3.log",
+            "result": "AST and1selected repository guard pass. No source workspace changed, types/lint skipped; no test files named in brief. No fresh browser/product proof."
+          }
+        ]
+      },
+      "freshBrowserRuns": 0,
+      "originalFeedAssertionsReached": 0,
+      "originalCallbackExecuted": false,
+      "newRuntimeStarted": false,
+      "buildInstallOrDependencyChange": false
+    },
+    "screenshotsActuallyViewedThisContinuation": [],
+    "cleanup": {
+      "newBrowserServerObserver": false,
+      "sharedLifecycleActions": false,
+      "fixtureWrites": false,
+      "accountOrGrantMutation": false,
+      "dataRestoreOrCorpusWork": false,
+      "externalMessages": false
+    },
+    "instructionEffects": {
+      "explicitManagerScope": "\"ifmissingready, finish bodycapturecorrection and exact pendingdependency ratherthanrunanotherwrongpremise.\" Applied because published G2775 readiness has no runtime-ready coherent browser fixture; no repeated original proof or standalone qualification executed.",
+      "supersedesPriorRecommendation": "Latest manager explicitly removes the prior suggested standalone capture qualification gate. Prior report retained as history; current top-level verdict uses actual accepted Accounts hydration and diagnostic capture in original proof only."
+    },
+    "administrativeReportChecks": {
+      "jobId": "fb96835d-e6c6-4584-9474-e4520bacb1d9",
+      "docsExitCode": 0,
+      "goalcheckExitCode": 0,
+      "goalcheckRunId": "run-b0Tbp8",
+      "scope": "Report-only administrative checks. Syntax preparation does not qualify runtime body custody or genuine reader authority."
+    },
+    "ownerChanges": [],
+    "productChanges": [],
+    "next": "Land only cumulative report. Root supplies/accepts ready G2775 handoff and coherent runtime/custody, then dispatch the existing remaining original proof with normal recorded Task QA admission. No new standalone capture tier or full build; one exact same-attempt diagnostic if fresh actual OAuth fails."
+  },
   "d3ReaderAuthorityAccountsQualificationVerdict": {
     "result": "partial-original-D3-001; single direct Accounts hydration premise passes, module body capture remains unqualified",
     "summary": "One authorized fresh fixture-free Accounts3004 /sign-in journey reached the genuine ClientProviders hydration effect and actual visible/editable Email/Next form.254 actual requests returnedHTTP200 and completed under one loader/timeOrigin, no request failure/pageerror/HMR reload, credentials or writes. Original Feed callback was not run.",
