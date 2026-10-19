@@ -11,7 +11,7 @@ import { recipeReadingReads } from './recipe-reading-recorded-page.ts';
 import { failureOf } from './failure.ts';
 import type { MainClient } from '../discover/types.ts';
 import { booksEditionReads, settle, refusedRead, settleNullable } from './books-edition-page.read.ts';
-import { readSuppliedContents, readSuppliedStart } from './games-hub-recorded-page.ts';
+import { readSuppliedBookStart, readSuppliedContents } from './games-hub-recorded-page.ts';
 import { booksLanguageReads } from './books-language-recorded-page.ts';
 import { WORK_MISSING_HEADER } from './admission.ts';
 import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
@@ -352,16 +352,15 @@ export const oneTextLanguage = cache(async (id: string, locale: UiLocale, select
 });
 
 /**
- * Where "Read" leads. A reader already in the Work continues at the next
- * chapter they have not read, as Main's Continue read gives it; anyone else
- * starts at chapter 1, found by descending the first parts of the contents
- * (at most three levels, one page each). A Work with no contents but a
- * selected text is read as that one text. Null when the Work has nothing to
- * read. A refused contents read remains unavailable, with its owner refusal.
+ * Where a Book's "Read" leads. Signed-in readers use Main's exact per-Work
+ * resume, including its chapter and language. Anonymous readers start from
+ * the first readable contents. A Work without a chapter resume may still
+ * have its own standalone text. Null when there is nothing to read;
+ * `contents` when Main could not say, so Contents explains.
  */
 export const readStart = cache(async (id: string, work: string, locale: UiLocale, selected: string | null,
   client?: SuppliedClient): Promise<ReadStart> => {
-  return readSuppliedStart(client ?? await reader(), id, work, () => oneTextLanguage(id, locale, selected, client));
+  return readSuppliedBookStart(client ?? await reader(), id, work, () => oneTextLanguage(id, locale, selected, client));
 });
 
 /**
