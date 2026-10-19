@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
+import { expectNavigationFocus, expectRevealedSelection } from '../shell/navigation-focus.test-utils.ts';
 import { chooseOption } from '../stories/choose-option.ts';
 import { agents, curated, inventory, now, review } from './fixtures.ts';
 import { messages } from './messages.ts';
@@ -72,16 +73,24 @@ export const InReview: Story = {
 /** Works this Agent imported or curates are kept apart, and Studio never offers to write in someone else's text. */
 export const Curated: Story = {
   args: { content: { view: 'curated', works: { ok: true, data: curated } } },
+  globals: { viewport: { value: 'desktop1440' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    const current = canvas.getByRole('link', { name: 'Imported & curated' });
+    await expect(current).toHaveAttribute('aria-current', 'page');
+    await expectRevealedSelection(current);
     const list = canvas.getByRole('region', { name: 'Imported & curated' });
     await expect(within(list).getAllByRole('listitem')).toHaveLength(2);
     await expect(within(list).getAllByText('Imported or curated')).toHaveLength(2);
     await expect(within(list).queryByRole('link', { name: 'Continue writing' })).toBeNull();
     await expect(within(list).getAllByRole('link', { name: 'Open' })[0]).toHaveAttribute('href',
       `${home}/works/00000000-0000-4000-8000-000000000105`);
+    await expectNavigationFocus(current.closest('nav')!);
   },
 };
+
+export const CuratedPhone: Story = { ...Curated, globals: { viewport: { value: 'phone' } } };
+export const CuratedPhoneDark: Story = { ...CuratedPhone, globals: { ...CuratedPhone.globals, theme: 'dark' } };
 
 export const DraftsEmpty: Story = {
   args: { content: { view: 'draft', works: { ok: true, data: { ...inventory, page: { ...inventory.page, items: [] },
@@ -138,7 +147,8 @@ export const Chinese: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: '创作室' })).toBeInTheDocument();
     await expect(canvas.getByText('3 章')).toBeInTheDocument();
-    await expect(canvas.getByText('已发布 2 章')).toBeInTheDocument();
+    // Inventory counts chapter occurrences; publication is the Work's state, not a second chapter total.
+    await expect(canvas.getByRole('heading', { name: '雨夜书店' }).closest('li')).toHaveTextContent('已发布');
     await expect(canvas.getByRole('heading', { name: 'Ginger lemon tea' }).closest('li')).toHaveTextContent('菜谱');
   },
 };
