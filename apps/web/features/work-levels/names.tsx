@@ -3,6 +3,7 @@ import { LocalizedText } from '@rezics/ui/localized-text';
 import Link from '../shell/localized-link.tsx';
 import { resourceHref } from '../address/path.ts';
 import { workLinkHref } from './route.ts';
+import { NameRecovery } from './name-recovery.tsx';
 import type { AvailableSummary, Names, NameText, NameSummary } from './types.ts';
 
 /** Where a named resource's page is; null when it has none to link. Works link to their own host by default. */
@@ -39,14 +40,18 @@ export function SummaryLink({ summary, unavailable, unnamed, undisclosed = unava
   summary: NameSummary | null | undefined; unavailable: string; unnamed: string;
   undisclosed?: string; hrefFor?: SummaryHref;
 }) {
-  if (!summary || summary.status === 'unavailable-read') return <span data-name-state="unavailable" className="text-muted-foreground">{unavailable}</span>;
-  if (summary.status !== 'available') return <span data-name-state="undisclosed" className="text-muted-foreground">{undisclosed}</span>;
-  const href = hrefFor ? hrefFor(summary) : summaryWorkHref(summary);
-  const text = summary.name.value ? <LocalizedText text={summary.name} /> : <span data-name-state="unnamed">{unnamed}</span>;
-  // A Work hub streams independent reads. Its RSC response can stay open while
-  // the client router keeps the old Work; the browser can commit the document as it streams.
-  return href ? <Link href={href} documentNavigation={summary.type === 'work'} className={link}>{text}</Link>
-    : <span className="font-medium">{text}</span>;
+  let content;
+  if (!summary || summary.status === 'unavailable-read') content = <span data-name-state="unavailable" className="text-muted-foreground">{unavailable}</span>;
+  else if (summary.status !== 'available') content = <span data-name-state="undisclosed" className="text-muted-foreground">{undisclosed}</span>;
+  else {
+    const href = hrefFor ? hrefFor(summary) : summaryWorkHref(summary);
+    const text = summary.name.value ? <LocalizedText text={summary.name} /> : <span data-name-state="unnamed">{unnamed}</span>;
+    // A Work hub streams independent reads. Its RSC response can stay open while
+    // the client router keeps the old Work; the browser can commit the document as it streams.
+    content = href ? <Link href={href} documentNavigation={summary.type === 'work'} className={link}>{text}</Link>
+      : <span className="font-medium">{text}</span>;
+  }
+  return <NameRecovery status={summary?.status ?? 'unavailable-read'}>{content}</NameRecovery>;
 }
 
 /** `SummaryLink` for a resource named by a batch read. */

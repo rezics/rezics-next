@@ -16,6 +16,7 @@ import Link from '../shell/localized-link.tsx';
 import { coverageLabel, LanguageName, RealizationRow, ReleaseCard } from './editions.tsx';
 import type { Copy } from './messages.ts';
 import { NameLink } from './names.tsx';
+import { SectionNamesRecovery } from './name-recovery.tsx';
 import { ReleaseNamesRecovery } from './release-names-recovery.tsx';
 import type { SelectedRealizationRead } from './read.ts';
 import type { Loaded, Names, Realization, Release } from './types.ts';
@@ -41,7 +42,7 @@ export function ReleaseView({ release, realizations, sources, sourceReads = [], 
   const original = sourceHref(release.originalUrl);
   const detail = detailCopy(locale);
   const namesUnavailable = [...names.values()].some(item => item.status === 'unavailable-read');
-  return <div className="grid gap-8">
+  return <SectionNamesRecovery><div className="grid gap-8">
     <SubjectHeader locale={locale} resource={release.id} semanticType={iri['rv:Release']} identity={<div className="grid gap-1.5">
       <p className="text-muted-foreground text-sm">{t.release}</p>
       <h1 className="font-semibold text-2xl tracking-tight [overflow-wrap:anywhere] sm:text-3xl">
@@ -88,7 +89,7 @@ export function ReleaseView({ release, realizations, sources, sourceReads = [], 
     </div>
     {pageEndSources ? null : <ReleaseSources release={release} realizations={realizations} sources={sources}
       sourceReads={sourceReads} names={names} locale={locale} t={t} />}
-  </div>;
+  </div></SectionNamesRecovery>;
 }
 
 /** The selected Release's records, shared by standalone views and the server page-end slot. */
