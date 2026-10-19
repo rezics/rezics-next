@@ -16,6 +16,7 @@ import { browserMainApi } from '../api/browser.ts';
 import { CatalogueCover, CatalogueCoverCredit } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
 import { ShareButton, VoteControl } from '../feed/actions.tsx';
+import { ReplyAuthorActions } from '../feed/author-actions.tsx';
 import { LinkMenu } from '../feed/controls.tsx';
 import { resourceHref } from '../address/path.ts';
 import { markedSpoiler, threadPath } from '../feed/discussion.ts';
@@ -190,6 +191,10 @@ function OpeningPost({
       <AboutWork work={read.work} />
       <fieldset className="-ms-1 flex flex-wrap items-center gap-1.5">
         <legend className="sr-only">{t.actions}</legend>
+        {!post.blocked && post.author ? (
+          <ReplyAuthorActions target={{ reply: post.reply, realm: read.realm, author: post.author.id,
+            revisionId: post.revisionId, placement: post.placement }} />
+        ) : null}
         {post.blocked ? null : (
           <VoteControl
             target={{
