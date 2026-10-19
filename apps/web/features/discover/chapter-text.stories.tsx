@@ -5,6 +5,8 @@ import { direction } from '@rezics/main/language';
 import { localizedPath } from '../../i18n/locale.ts';
 import { chapterHref, workHref } from '../work-page/route.ts';
 import type { SearchLoaded } from '../search/types.ts';
+import { Providers } from '../shell/providers.tsx';
+import { chapterSearchState } from './chapter-text-read.ts';
 import { ChapterTextResults } from './chapter-text.tsx';
 import { chapterTextMessages } from './chapter-text-messages.ts';
 import { DiscoverView } from './discover-view.tsx';
@@ -21,8 +23,9 @@ const read: Extract<SearchLoaded, { ok: true }> = { ok: true, page: { total: 1, 
     reasons: { language: 'en', field: 'body', matchedText: null, matchedLanguage: null,
       chapter: { title: 'At the harbour', href: chapter }, realm: null, classification: null } }],
 } };
+const state = chapterSearchState({ ...emptyBrowse, q: 'lanternroad' });
 const meta = { title: 'Discover/Chapter text matches', component: ChapterTextResults,
-  args: { read, locale: 'en' }, decorators: [Story => <div className="mx-auto max-w-5xl p-4"><Story /></div>],
+  args: { read, state, locale: 'en' }, decorators: [Story => <Providers><div className="mx-auto max-w-5xl p-4"><Story /></div></Providers>],
 } satisfies Meta<typeof ChapterTextResults>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -43,7 +46,7 @@ export const NoChapterHitsLeaveNoTrace: Story = { args: { read: { ok: true, page
   hits: read.page.hits.map(hit => ({ ...hit, reasons: { ...hit.reasons, chapter: null } })) } } },
   async play({ canvasElement }) { await expect(within(canvasElement).queryByRole('region')).toBeNull(); } };
 export const AllEightLabels: Story = { render: () => <div className="grid gap-8">
-  {uiLocales.map(locale => <ChapterTextResults key={locale} read={read} locale={locale} />)}
+  {uiLocales.map(locale => <ChapterTextResults key={locale} read={read} state={state} locale={locale} />)}
 </div>, async play({ canvasElement }) {
   const canvas = within(canvasElement);
   for (const locale of uiLocales) {

@@ -15,6 +15,7 @@ import { BrowseContinuation, ResourceList } from './resource-list.tsx';
 import type { TopicItem } from './topic-picker.tsx';
 import { ChapterTextResults } from './chapter-text.tsx';
 import { chapterTextMessages } from './chapter-text-messages.ts';
+import { chapterSearchState } from './chapter-text-read.ts';
 
 export interface DiscoverPageProps extends LoadedBrowse {
   topicLoad?: EntityPickerLoad<TopicItem>;
@@ -131,7 +132,8 @@ export function DiscoverView({
           </Link>
         ) : null}
       </header>
-      <ChapterTextResults read={chapterText ?? null} locale={locale} />
+      <ChapterTextResults read={chapterText ?? null} state={chapterSearchState(state)} locale={locale}
+        actingSubject={actingSubject} signedIn={signedIn} />
       {sections ? (
         sections.ok ? (
           sections.data.map((section) => (
@@ -170,7 +172,7 @@ export function DiscoverView({
             className="grid gap-4"
           >
             {state.q ? <h2 className="font-semibold text-xl">{chapterTextMessages[locale].resources}</h2> : null}
-            <ResourceList items={results.data.items} locale={locale} avatarQuery={avatarQuery} scope={state.scope}
+            <ResourceList {...results.data} locale={locale} avatarQuery={avatarQuery} scope={state.scope}
               headingLevel={state.q ? 3 : 2} />
             <BrowseContinuation page={results.data} state={state} locale={locale} />
           </section>
