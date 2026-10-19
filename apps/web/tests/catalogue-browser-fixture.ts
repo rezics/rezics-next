@@ -4,6 +4,7 @@ import { createReadStream, readFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import type { LaunchBooksCorpus, LaunchRecipesCorpus } from '../../../scripts/load/launch-corpus-types.ts';
+import { compatibleLoadStorage, loadCompatibility, type LoadCompatibility } from '../../../scripts/load/compatibility.ts';
 import { browserMainApi } from '../features/api/browser.ts';
 import type { ReportInput, ReportSelection } from '../features/safety/report.ts';
 import type { RecipeWorkPage } from '../features/work-page/types.ts';
@@ -12,8 +13,8 @@ import { credentials } from './g-855-library.ts';
 /**
  * Pending browser contract, C13-C15/C21-C22/C26-C31; no cell is proved by this declaration.
  *
- * Prove both e2e files through goalctl test, on one isolated restored corpus. API
- * outcome authors own preparation using seedImportedCatalogue/catalogueFixture,
+ * Prove both e2e files through goalctl test, on one isolated restored corpus. The
+ * sole shared producer (G-2791) owns preparation using seedImportedCatalogue/catalogueFixture,
  * prepareLaunchBooksCorpus/prepareLaunchRecipesCorpus, the retained audit import
  * receipts and grantFixtureAuthority. This module only consumes their receipts;
  * it never builds, publishes, restores, grants authority or substitutes demo data.
@@ -25,6 +26,10 @@ import { credentials } from './g-855-library.ts';
  * This is test input, not a new product API or corpus lifecycle. Missing inputs are
  * setup errors. Reuse one consistent backup; preparation + restore <= 600 seconds.
  * Never point this mapping at the shared audit account or a shared development stack.
+ * productRevision pins the immutable compatible product used for this proof;
+ * compatibility comes from its current storage/model metadata. Historical source
+ * receipts keep their original provenance; an obsolete product baseline is not
+ * a restore or execution prerequisite for these browser consumers.
  *
  * UI details proposed for review before implementation:
  * - one [data-subject-header][data-resource][data-semantic-type] per main, containing
@@ -120,7 +125,8 @@ export interface ReportTarget {
 
 export interface CatalogueBrowserFixture {
   runId: string;
-  baselineRevision: string;
+  productRevision: string;
+  compatibility: LoadCompatibility;
   preparationMs: number;
   backup: { path: string; sha256: string };
   /** Original retained receipt identities, not a newly generated synthetic corpus. */
@@ -212,7 +218,9 @@ export async function catalogueBrowserFixture(): Promise<CatalogueBrowserFixture
   try { fixture = JSON.parse(readFileSync(file, 'utf8')) as CatalogueBrowserFixture; }
   catch (cause) { throw new Error(`Missing prepared catalogue browser corpus: ${file}; API fixture owners must prepare and restore it before prove`, { cause }); }
   assert.equal(fixture.runId, runId);
-  assert.match(fixture.baselineRevision, /^[a-f0-9]{40}$/);
+  assert.match(fixture.productRevision, /^[a-f0-9]{40}$/);
+  assert(compatibleLoadStorage(fixture.compatibility, loadCompatibility(process.cwd())),
+    'Browser corpus must match the current isolated product storage/model metadata');
   assert(fixture.preparationMs > 0 && fixture.preparationMs <= 600_000, 'Combined preparation/restore exceeds 600 seconds');
   // Stream the frozen backup: reading a complete database archive into memory
   // would make the browser's fixture validation itself exceed its resource budget.
