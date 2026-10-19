@@ -88,6 +88,13 @@ still applies within each lane; a full ordinary pool cannot starve the fence.
 Reservation precedes request service and requires a pool limit of at least two.
 Only the existing journal's guarded completion, after every owner is exhausted,
 marks that fence finished; its cut and revocation evidence remain retained.
+Preparation itself is durable, bounded owner work. Before any graph effect,
+each page visits at most 100 context, origin, lineage-edge or component entries,
+including exhausted probes. A preparing request commits its cursor and refuses
+the graph effect; retry resumes that same task. This does not cap the task's
+total population or history. New effective origins register against open
+transitions through a bounded cursor and hold only their own component while
+registration remains pending.
 A native rollback or lost graph response holds the affected cuts until that
 exact task reconciles. An unrelated Work or a Context with no affected
 contribution stays readable. The fence covers detached contributions other than
@@ -101,10 +108,17 @@ paths. Immutable path nodes and per-person retained-item bindings distinguish
 different histories carried by the same task. A native vote overrides its
 inherited selection; undoing that selection's ancestor cannot revoke the native
 vote or a later descendant that inherited it. New selection delivery needs one
-indexed parent binding and at most two inserts, independently of ancestry depth.
+indexed parent binding and inherits one revocation pointer, independently of
+ancestry depth. The owner walks descendants before admitting an unmerge's graph
+effect. New descendants inherit that pointer and register cleanup without
+rediscovering their ancestors. Completed ancestry remains retained; it is not
+aggregated again on a read or an exhausted continuation.
 Upgrade reconstructs old paths from retained rating snapshots and refuses
 missing/cyclic ancestry or an orphan fence without its identity journal; it
 cannot guess an affected pair or silently discard revocation evidence.
+The forward migration leaves legacy inherited components held until bounded
+historical revocation discovery has established their cut. Pending legacy native
+cuts retain their known Work binding while the exact Main Version is recovered.
 
 A source head seal, replacement, deletion or reconstruction CAS refreshes its
 native slot and at most one retained projection synchronously. An indexed second
@@ -116,15 +130,25 @@ to resume one page of at most 100 projections; `--context`, `--batch-size` and
 `--batches` narrow or bound the work as for reconstruction. Progress stays in
 Access, and a new source seal rewinds the cursor atomically. Page replay applies
 the same native-precedence/delta function as admission, under the recovery,
-authority and source gates. Missing originals remain explicitly unknown. A read
-waits only if its effective contribution still differs from the current source
-head. Already refreshed projections and native overrides remain readable while
-other projections wait. Every page checks current revocation before refreshing
-a slot, so continuation cannot reconstruct an undone inherited contribution.
+authority and source gates. Missing originals remain explicitly unknown. Native
+readiness skips origin jobs entirely. Retained readiness uses indexed delivery
+frontiers grouped by effective inherited origin; it never compares every native
+person's contribution with its head. Already delivered targets remain readable
+while later projections wait. An origin-wide frontier is conservative: another
+pending person's delivery from the same origin can still hold a mixed component.
+Its work is proportional to distinct inherited origins, so constant readiness
+work for arbitrarily many distinct origins is not established by this mechanism.
+Every page checks current revocation before refreshing a slot, so continuation
+cannot reconstruct an undone inherited contribution.
 
 Completed unmerges can leave revoked inherited selections beyond their direct
-pair. The same continuation removes at most 100 of those selections per page,
-with each deletion applying the normal native-precedence delta. Affected reads
+pair. Preparation records a durable edge/component frontier for every affected
+lineage. Completion advances at most 100 metadata units and can release a fully
+consistent cut; it stops before a remaining projection deletion. The same
+continuation spends at most 100 total units on discovery, exhausted probes,
+selection deletion and fence release. Each deletion applies the normal
+native-precedence delta. Metadata progress does not increase `refreshed`, which
+continues to count changed selections. Affected reads
 remain unavailable until their own exact state is consistent; an unrelated cut
 does not need this cleanup to finish. The command's `complete` describes the
 selected Context's projection jobs and revoked-selection cleanup, and its
@@ -132,19 +156,20 @@ selected Context's projection jobs and revoked-selection cleanup, and its
 all standing reads available or finish an identity task.
 
 Each component carries a revision under its existing target gate. Publication
-hashes that revision and the sorted set of related identity task cuts, including
-finished cuts. A task that starts and finishes during a read changes its fence,
+hashes that revision and its local cut revision. Fence registration and release
+advance that cut under the same transaction as their membership change; there is
+no sorted finished-history aggregate or recursive lineage query on a read.
+A task that starts and finishes during a read changes its fence,
 including a late commit with a lower transaction id. Unrelated transactions do
 not hold publication behind a database-wide snapshot horizon. The recovery
-generation invalidates reads across logical restores. Validity follows grouped
-provenance rather than a scan of the rating population; recursive metadata reads
-retain the existing statement timeout and request cancellation budget.
+generation invalidates reads across logical restores. The existing statement
+timeout and request cancellation budget apply to every read and continuation.
 The repeatable-read inventory returns candidates, component and witness in one
 SELECT: BEGIN, SET, SELECT, COMMIT per Context, plus one final fence SELECT for
 synthesis, preserving the retained nine-statement SQL contract at 100 and 101.
 The final fence rechecks every selected Work/Context cut in that one fresh
 statement. Neither requests nor head triggers maintain a global publication
-counter. The eight standing Access relations are explicit authority-cut entries in
+counter. The fifteen standing Access relations are explicit authority-cut entries in
 `work/access-recovery-coverage.ts`, with their derivation and restore dependencies;
 none can be cleared independently to reopen publication.
 
@@ -153,10 +178,14 @@ This uses PostgreSQL's [stable repeatable-read snapshot](https://www.postgresql.
 and [indexed ordered limits](https://www.postgresql.org/docs/18/indexes-ordering.html).
 Stack-free checks cover owner protocol, adapter call counts and manifest
 composition; they do not establish native interruption, trigger fanout, lock
-contention or restore correctness. Public 101/102-head outcomes, delayed seals
-and graph-only loss, old retained merge snapshots, cancellation and authenticated
-corpus/backup restores still require the isolated prove phase at the retained
-original product baseline. A surviving
+contention or restore correctness. Native work assertions explain the actual
+inventory and final-fence SQL and use PostgreSQL's
+[nested auto-explain plans](https://www.postgresql.org/docs/18/auto-explain.html)
+for lineage trigger/continuation work. Execution receipts must state their pinned
+revision and assertions reached. Current-product isolated proof is authorized;
+delayed seals and graph-only loss, old retained snapshots, contention and
+authenticated corpus/backup restores need their own genuine prerequisites and
+evidence. A surviving
 witness is not an independent maximum-position seal for all earlier heads.
 
 For standing heads sealed before additive values existed, use
