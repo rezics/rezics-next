@@ -2456,6 +2456,521 @@
     },
     "next": "Program may integrate this minimal typed correction using the exact verified producer. No actionable source defect remains for this delta. Complete only the still-missing genuine destination status/body/navigation acceptance on compatible frontend/backend; program decides final class closure."
   },
+  "guard_selection_correction_review": {
+    "reviewed_at_utc": "2026-10-19T10:29:27.273898+00:00",
+    "reviewer": "Same original G-2847 actual source reviewer; one bounded correction review, no new review chain.",
+    "candidate": "72a3a1a8ce18d17b7904e08f85e8abc815c9db31",
+    "parent": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+    "changed_file_blobs": {
+      "apps/web/tests/server-client-boundary.test.ts": "12637901ebc9ebf2fed4120b7b133ec8cd393358",
+      "scripts/qa/repository-guards.ts": "4f28d77310103e41ac12fa035e7a5f860e020501"
+    },
+    "source_verdict": "No actionable findings for this delta. The original WEB-CLIENT-GUARD-SELECTION source counterexample is resolved.",
+    "changed_file_disposition": [
+      {
+        "path": "scripts/qa/repository-guards.ts",
+        "lines": [
+          77,
+          78,
+          79
+        ],
+        "disposition": "Expanded reads cover worker/zones plus the actual Account helper and generated exposure file; all five missed paths now select the guard. Existing self/registry selection remains supplied by selectRepositoryGuards."
+      },
+      {
+        "path": "apps/web/tests/server-client-boundary.test.ts",
+        "lines": [
+          15,
+          79,
+          80,
+          81,
+          156,
+          159,
+          160,
+          161,
+          164,
+          174,
+          175,
+          176,
+          177,
+          178,
+          181,
+          182,
+          183
+        ],
+        "disposition": "Passes the same visited set out of clientCalls without changing traversal or call classification; every actually visited graph path must select this guard. Explicit positive controls include all five missing inputs; unrelated backend/docs controls remain negative. Original named/default/namespace/alias/barrel calls and legal JSX/type/server-action/pure-function assertions are unchanged."
+      }
+    ],
+    "checks_reused": {
+      "focused": {
+        "command": "env CLAUDECODE=1 bun scripts/goal/goalctl.ts test apps/web/tests/server-client-boundary.test.ts apps/web/features/proposals/list-state.test.ts scripts/qa/repository-guards.test.ts",
+        "exit": 0,
+        "tests": 22,
+        "assertions": 360,
+        "qaRun": "20261019t100422-30af4d",
+        "reports": [
+          ".artifacts/qa/20261019t100422-30af4d/unit.xml",
+          ".artifacts/qa/20261019t100422-30af4d/owner.xml"
+        ],
+        "log": ".temp/goal/jobs/5589ef7d-7b39-4483-996f-dce9e0e5107f.1.log"
+      },
+      "static": {
+        "command": "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2747 task goal -- check --only types,lint,guards",
+        "exit": 0,
+        "passed": [
+          "types",
+          "guards",
+          "inference",
+          "lint",
+          "ast"
+        ],
+        "selectedGuardFiles": 45,
+        "automaticTimeoutRetriesPassed": 2,
+        "log": ".temp/goal/jobs/5589ef7d-7b39-4483-996f-dce9e0e5107f.2.log",
+        "details": ".temp/goal/check/run-QBNJSs/output.log"
+      },
+      "red": {
+        "base": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+        "testBlob": "12637901ebc9ebf2fed4120b7b133ec8cd393358",
+        "job": "09e41539-6981-4f48-9ad4-fa99fa43f1cd",
+        "command": "bun scripts/goal/goalctl.ts test apps/web/tests/server-client-boundary.test.ts",
+        "exit": 1,
+        "assertionReached": true,
+        "failure": "The live visited graph assertion at line 161 reported exactly the five reviewed uncovered inputs; the explicit selection assertion at line 181 also failed.",
+        "log": ".temp/goal/jobs/09e41539-6981-4f48-9ad4-fa99fa43f1cd.log"
+      }
+    },
+    "artifacts": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-selection-72a3a1a8",
+    "provenance": "Read exact changed source against its parent and reuse exact owner red/green runs. No additional source review or duplicated expensive check. Production Proposals unchanged by this correction.",
+    "historical_scope": "Preserves all earlier startup/navigation, private identity and guard evidence at their original pins. This source verdict does not close any runtime or audit class.",
+    "product_source_tests_or_owner_tree_edited": false,
+    "next": "Program owns source integration and class closure; continue only original AUD-012 actual assistive-technology supplement."
+  },
+  "aud_012_actual_assistive_technology_supplement": {
+    "reviewed_at_utc": "2026-10-19T11:31:54.784220+00:00",
+    "claim": "Same original AUD-012 acceptance continuation; existing independent codex-1 / GPT-6.1 Sol / xhigh reviewer; no new source review or class closure.",
+    "disposition": "Partial original acceptance: real anonymous screen-reader captions, keyboard activations and reachable peer reading verified; genuine signed-in and continue-reading card assertions remain unexecuted.",
+    "preserved_reports": {
+      "previous_head": "ad414f1bc79d92fa437e4b61ca5b4925ab8738b9",
+      "private_identity_review_commit": "fa6e2e5be7f82faf7cbc0c0b4480d0d0fdab8d48",
+      "all_previous_top_level_fields_unchanged": true,
+      "original_a27_196a_startup_navigation_and_open_findings": "Preserved at original pins, including incomplete history and all earlier dependencies/dispositions. Guard-selection 72a3 source verdict was returned first and is not reopened."
+    },
+    "source_and_runtime": {
+      "frontend_pin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "snapshot": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/../source",
+      "snapshot_tracked_diff": "empty before every run and after all owned processes stopped",
+      "command": "task web:dev -- --port 39493",
+      "origin": "http://127.0.0.1:39493",
+      "viewport": "390x600",
+      "frontend_warmup_status": 200,
+      "nav_blobs": {
+        "bottom_nav": "01b5eb673c0fef2555727da9e634606596fb7fd3",
+        "side_nav": "78da75177b25e3775d5e8ccfff7ff58fb9d8e609",
+        "community_nav": "1d33b3ad5e81a5d72e93552c9e45415027378152"
+      },
+      "unchanged_at_196a": "196a6f4a98413857dbf3e178d05ef65415035f29",
+      "backend_observation": {
+        "refreshRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "observedAt": "2026-10-19T11:22:31.641Z",
+        "provenanceLimit": "Current shared refresh and source directory, not immutable historical runtime identity",
+        "processes": [
+          {
+            "pid": 1372265,
+            "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+            "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+          }
+        ],
+        "readiness": {
+          "origin": "http://127.0.0.1:3001",
+          "status": 200
+        }
+      },
+      "provenance_limit": "Shared current backend source/readiness is observed, not immutable historical per-request identity. No repin, shared refresh, new stack, account creation or owner-runtime borrowing."
+    },
+    "genuine_at_qualification": {
+      "job": "20271167-f295-4cbc-8e40-b0322dd488a0",
+      "result": "passed: 1 test / 9 assertions",
+      "browser": "Owned headed Google Chrome on Xwayland :0, actual document exposed on existing live AT-SPI bus.",
+      "speech": "Orca 50.3 speechdispatcherfactory connected to owned speech-dispatcher 0.12.1 / espeak-ng; actual backend Pulse delivery and owned sink-monitor PCM retained.",
+      "input": "Product checks used natural native XTest Tab/Shift+Tab/Enter and real AT-SPI focus; Following used Orca h/Down. No DOM focus or copied-DOM TTS pass.",
+      "isolation": "Per-process task-local XDG and memory GSettings, owned Pulse sink/audio, no Orca --replace/--setup or persistent user/account/desktop preference edits.",
+      "temporary_native_permission": "One new owned KWin remote-input request accepted with Always allow unchecked; later delivery independently qualified by actual Orca Control_L events. No unrelated prompt approved; own failed prompt denied.",
+      "old_environment_premise": "A missing browser/device/external operator requirement is not established. Actual headed AT and speech delivery now demonstrated."
+    },
+    "executed_results": [
+      {
+        "job": "b0556fce-97ea-4b9f-b13b-d34536a45508",
+        "overall": "failed later German footer setup under Chrome Translate popup",
+        "bounded_pass": "15 English caption assertions reached and passed, including forward Tab and reverse Shift+Tab across all five links. Native Enter Alerts reached /en/notifications with Sign in to see your notifications."
+      },
+      {
+        "job": "8f66f986-aaee-415d-88d0-cc942c2c2fb7",
+        "overall": "failed later Library redirect observation on destroyed execution context",
+        "bounded_pass": "3 German actual caption checks passed: Bücher, Meldungen, Bücher. Native Enter Meldungen reached /de/notifications with Melde dich an, um deine Benachrichtigungen zu sehen."
+      },
+      {
+        "job": "ce845034-1a7b-454e-9da9-df60b52d60d9",
+        "overall": "passed: 1 test / 33 assertions",
+        "bounded_pass": "4 German/French actual caption checks passed: Bücher, Livres, Alertes, Livres. Native Enter Bücher and Livres reached localized Accounts sign-in pages (Anmelden / Se connecter), final document HTTP 200 after 307/302. Alertes reached /fr/notifications with Connectez-vous pour voir vos notifications; SPA activation has no new document response."
+      },
+      {
+        "job": "7faef917-0388-407c-a415-b5bcaa19cb8e",
+        "overall": "passed: 1 test / 14 assertions",
+        "bounded_pass": "Actual anonymous /en/following HTTP 200; Orca heading/line navigation announced Following, heading 1, Sign in, link. Backend delivery and AT-SPI reading events captured."
+      }
+    ],
+    "reachable_peer_limits": "Anonymous Settings reached Accounts sign-in; actual Orca read sign-in form controls. Anonymous Library is the genuine authentication gate. These do not claim authenticated Library/Settings/Following content acceptance. Anonymous continue-reading section absent (#continue-title false, cards 0); no card fabricated or unavailable description inferred accessible.",
+    "evidence": {
+      "directory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca",
+      "retained_index": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/retained-evidence.json",
+      "sha256": "1134ebed7f155163429556e17b3a09f6e64c7fdd7fd9593a293825a78714d4f4",
+      "caption_outcomes": 22,
+      "each_caption": "Owned real AT-SPI focus names, Orca-generated SPEECH OUTPUT and speechdispatcherfactory Speaking calls, actual Pulse writes, corresponding non-silent owned PCM windows and screenshots.",
+      "audio": "Four full owned speech.wav recordings plus 23 time-window clips retained with SHA-256, real RIFF PCM parsing and nonzero sample measurements. No independent ASR or human-listening claim; exact caption identity is tied to AT-SPI/Orca/backend records.",
+      "original_failures": "All 18 recorded job receipts/logs retained, including 15 failures. Original private executables, hashes, diagnoses and setup corrections retained where changed. No failed overall job relabeled passed; no product source/test assertion edited.",
+      "latest_setup_correction": "cf25cc44 tree setup failed after fixed 700ms despite actual document focus; ce845034 awaits the same named document tree predicate up to 20s. Caption, backend delivery and destination assertions unchanged.",
+      "inspected_screenshots": [
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/product-anon-1/caption-0.png",
+          "sha256": "6899d63a4481e5f1594ccf9704dd3ec089d6b786f28b0b159d575cf797ff4054",
+          "observation": "Original failed input setup: visible Library ring and five labels preserved; DOM focus was not a real AT announcement."
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/product-anon-6/caption-1.png",
+          "sha256": "46823ff0755dd213f0f96eca871c720aa8bdbeee0cc3472f44d74dc3f1b9c766",
+          "observation": "English Alerts visible caption and keyboard ring."
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/product-localized-2/caption-0.png",
+          "sha256": "f7f1ca7a11a1bf7ed12a6dc0d422564775813de36b9dae2ac2439c8e33a498fe",
+          "observation": "German Bücher visible caption and keyboard ring."
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/product-localized-2/caption-1.png",
+          "sha256": "e213b57c4911f095ed480c279f058f4cf55e5d25e1d7a13afc50202d550a1d46",
+          "observation": "German Meldungen visible caption and keyboard ring."
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/product-destinations-2/caption-1.png",
+          "sha256": "ff6ff5713f1d45c6936372c03d8c5f4f5319b4bf0eb085a29064b979002d8f40",
+          "observation": "French Livres visible caption and keyboard ring."
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/product-destinations-2/caption-2.png",
+          "sha256": "99e482ad4f6e4f7a242e8fb6e516c7ddefcd1af6b1e066e273680d139f4c0d66",
+          "observation": "French Alertes visible caption and keyboard ring."
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/product-following-1/following-peer.png",
+          "sha256": "df37fb2f403b881d324c0f17d26f5ff77cd9aa6f371fe5a6f5929aeb4a1f9093",
+          "observation": "Actual anonymous Following heading and Sign in link, read through real Orca navigation; no reading card present."
+        }
+      ]
+    },
+    "reused_automation": {
+      "report_commit": "aae78d7573c46c0f32d5c79aca348b1b139f6a05",
+      "main_proof_commit": "271b7e40b3713782eec2148443c0e3b53f65a059",
+      "actual_frontend_pin": "196a6f4a98413857dbf3e178d05ef65415035f29",
+      "artifact": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/reused-G2825-AUD012.json",
+      "matrix": "Existing actual eight-locale anonymous/signed-in caption/name automation and corrected genuine theme cells reused; neither build tier nor whole matrix rerun.",
+      "axe": "Original explicit label-content-name-mismatch: zero violations AND zero applicable nodes; explicit accessible-name/caption assertions supply automated coverage. No new axe execution claimed.",
+      "unread": "Actual account originally zero unread. Original synthetic unread3/99+ component evidence remains separate. No notification writes and no extra live nonzero prerequisite invented."
+    },
+    "remaining_genuine_assertions": [
+      "Actual Orca captions and native activation in a genuine authenticated state, with original reachable Library/Settings/Following content/status/body/navigation assertions.",
+      "Actual Orca reading/navigation of a genuine continue-reading card description and status when the original surface is present; anonymous absence supplies no card-content pass."
+    ],
+    "session_qualification": {
+      "owner": "G-2829",
+      "saved_origin": "http://127.0.0.1:42833",
+      "target_origin": "http://127.0.0.1:39493",
+      "metadata": "Existing 0600 state loaded only by Playwright storageState authorization transport; same 127.0.0.1 cookie host, no fresh rezics_access cookie. Browser context closed without an app request or refresh. No token, credential or storage-state copied to evidence.",
+      "coordination": [
+        "mail:f5ec6984-ef4a-4a5a-b752-968dd4d42150",
+        "mail:2e46c87b-bf9c-4312-a3b5-bb93a1a30851"
+      ],
+      "unresolved": "No fixture-owner response/fresh disposable session provided at report preparation. Do not consume an uncoordinated shared rotating refresh chain. Existing G-2829 frontend preserved."
+    },
+    "cleanup": "Every owned frontend stopped; no recorded owned browser/Orca/helper PID remained. Owned sinks unloaded. Exact source clean. No product source/tests, brief, other owner tree, account data or shared stack changed.",
+    "new_confirmed_product_findings": [],
+    "class_closed": false,
+    "next": "Manager coordinates existing fixture owner for a genuine valid disposable session; only remaining original signed-in/card assertions follow. Program retains canonical class closure. No repeat source review, full catalogue/matrix, build tier or backend suite.",
+    "report_validation": {
+      "job": "42e78a7d-b7c2-495e-be86-91bc2ed40cf9",
+      "documentation": "passed: task docs:check, 13 tests, 250 Markdown files",
+      "worker_check": "passed: task goal -- check; types/tests/lint skipped appropriately for report-only branch, AST and selected 1/45 guards passed",
+      "check_detail": ".temp/goal/check/run-nosFIc/output.log",
+      "logs": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/job-logs",
+      "artifact_consistency": "All 27 earlier top-level fields equal their pre-supplement snapshot; 7 screenshot hashes, 18 job receipts and 22 actual caption outcome records verified; git diff --check passed."
+    }
+  },
+  "aud_012_supported_renewal_continuation": {
+    "recorded_at_utc": "2026-10-19T11:55:30.726252+00:00",
+    "claim": "Same original AUD-012 missing signed-in/card actual assistive-technology assertions; no new source review.",
+    "preserved_previous_report": {
+      "head": "a948a8d6bc58d9bbd09f5b50ea871b717ae370e0",
+      "original_actual_at_commit": "5d65d09792a2bd83f23b085f330f5605ee9c02e8",
+      "all_previous_top_level_fields_unchanged": true,
+      "prior_approvals": "fa6e2e5be7 private401/403 correction, guard72a3 approval and all preceding a27/196a startup/navigation proofs retained; no source review reopened.",
+      "actual_at": "22 anonymous Orca captions/localized native activation and Following1PASS14expects unchanged; eight-locale genuine automation, zero-unread account limit, synthetic3/99+ proof and axe zero-applicable-node distinction preserved."
+    },
+    "source_and_runtime": {
+      "frontend_pin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "tracked_snapshot": "clean before and after run",
+      "origin": "http://127.0.0.1:39493",
+      "viewport": {
+        "width": 390,
+        "height": 600
+      },
+      "backend_observation": {
+        "refreshRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "observedAt": "2026-10-19T11:49:46.352Z",
+        "provenanceLimit": "Current shared refresh and source directory, not immutable historical runtime identity",
+        "processes": [
+          {
+            "pid": 1372265,
+            "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+            "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+          }
+        ],
+        "readiness": {
+          "origin": "http://127.0.0.1:3001",
+          "status": 200
+        }
+      },
+      "provenance_limit": "Observed current shared refresh/readiness; no immutable historical backend identity or successful browser auth inferred."
+    },
+    "supported_renewal": {
+      "job": "f2d1f74f-7ccd-4ce0-a12e-6cdc84a9f87e",
+      "result": "failed:0pass/1fail/6expects before auth premise; original outcome assertion not reached",
+      "test": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/aud012-signed-in.test.ts",
+      "runner_sha256": "3b44b4a91a1d74083be7a023b3dc4cd9db92dc8996a7f54d43b4084a2c7efe58",
+      "method": "Manager authorized existing configured same-fixture normal OAuth renewal via unchanged signInAtAccounts in owned browser. No peer saved or rotating refresh state, account fallback, provider change, registration, account/data/preference mutation.",
+      "stage": "Owned frontend auth/start document HTTP200; wait for Accounts sign-in, identity failure or final target timed out after30000ms.",
+      "observed_failure": "7:50:41 PM [vite] (client) [Unhandled error] TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:39493/@id/__x00__virtual:vinext-app-browser-entry",
+      "cause_limit": "Observed failed dynamic browser-entry import prevents qualification of auth-start client redirect. Browser module response status/body and underlying fetch cause were not captured; no backend/OAuth refusal is established.",
+      "identity_binding": "Expected same eligible fixture actor71473997-6e2e-4e59-9044-01627a79e839; not authenticated or qualified in this run.",
+      "outcome_assertions_reached": false
+    },
+    "disposition": "Partial original AUD-012 acceptance retained. Route exact auth-start runtime qualification failure to existing auth/startup owner through manager. No anonymous replay, source review, assertion change, full matrix/build or class closure.",
+    "remaining_original_assertions": [
+      "Genuine authenticated English Alerts and German/French Meldungen/Bücher and Alertes/Livres actual Orca captions/native activation, live unread observation and originally reachable Library/Settings/Following content/status/body/navigation.",
+      "Actual Orca reading/navigation of a genuine continue-reading card description/status after existing G-2831 owner-qualified populated fixture binding; no card fabricated or absent surface passed."
+    ],
+    "evidence": {
+      "diagnosis": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/signed-in-renewal-diagnosis.json",
+      "sha256": "430b5b9b2345d539adeaf6de1b5c0aaaece7bbf551bcb5145faa25d20995fd83",
+      "job_log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/job-logs/f2d1f74f-7ccd-4ce0-a12e-6cdc84a9f87e.log",
+      "job_log_sha256": "840192298d63fdc42e91b8d2a2e939d175349f3341ead82b9db258108355d20b",
+      "voice_assertion_function_unchanged": {
+        "unchangedVoiceOutcomeFunctionSha256": "2369a9792d428c67e36879dde39eeed1db03f474a3aacbbcc36a2606434427ab",
+        "original": "aud012-destinations.test.ts",
+        "new": "aud012-signed-in.test.ts",
+        "functionBytesEqual": true,
+        "priorAnonymousRunnersEdited": false
+      },
+      "screenshots_and_speech": "No new screenshot/Orca speech acceptance: failure preceded Orca start. All prior actual screenshots/speech/audio and failures retained.",
+      "cleanup": {
+        "run": {
+          "ownedFrontendStopped": true,
+          "at": "2026-10-19T11:51:10.906Z"
+        },
+        "ownedAT": {
+          "at": "2026-10-19T11:51:10.076Z",
+          "ownedProcessGroupsOnly": true,
+          "sinkUnloaded": true
+        },
+        "allRecordedOwnedPidsAbsent": true
+      },
+      "private_material": "No credentials, tokens, cookies, storage state or whole environment copied to evidence. Original private fixture read only in supported authorization transport; failure preceded Accounts credential entry."
+    },
+    "owner_coordination": {
+      "earlier_mail": "2679c6cb-0301-488e-b070-fbcb28b74031",
+      "request": "Route exact runtime/auth-start qualification to existing auth/startup owner; preserve existing G-2831 populated binding continuation. No new reviewer or product change requested.",
+      "failure_handoff_mail": "01f30917-86ff-460f-91b5-a246b8b10100"
+    },
+    "manager_next": "Existing auth/startup owner qualifies browser-entry load and supported normal OAuth at exact frontend. Then rerun only original missing signed-in voice/navigation cells; card cells only after G-2831 provides genuine owner-qualified populated binding. Do not hold unrelated D3-002, D4-015 or private source integration on this supplement. Program retains original-class closure."
+  },
+  "aud_012_composed_frontend_continuation": {
+    "recorded_at_utc": "2026-10-19T12:47:37.852324+00:00",
+    "claim": "Same original AUD-012 missing genuine signed-in/card actual AT continuation; no new review, source implementation, account fallback or class closure.",
+    "preserved_previous_report": {
+      "head": "fe340f71d723a75a6fd0384c3620e4b2076ac3db",
+      "prior_fields_unchanged": 29,
+      "before_sha256": "e0c6abb23ae9ce1b6ab0991994d96789c7370fbeb1376879fe46fbd0a014c1e8",
+      "before_artifact": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/report-before-composed-continuation.json",
+      "evidence": "Retain all original a27/196a startup/navigation, guard72a3, private401/403 fa6e2e5be7 reviews and checks,22 anonymous actual Orca captions/localized activation and Following1PASS14expects. Genuine eight-locale automation, zero-unread account limit, separate synthetic3/99+ and axe zero-applicable-node distinction unchanged."
+    },
+    "source_selection": {
+      "composed_pin": "716d0f3fb23325df04c283e67eb9d0f38542a3b8",
+      "parent": "53f4ec6709f31bfb0cf7eca934e25b796644fa88",
+      "disposable_snapshot": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/leased-source",
+      "only_selected_changes": {
+        "apps/web/features/shell/bottom-nav.tsx": "01b5eb673c0fef2555727da9e634606596fb7fd3",
+        "apps/web/features/shell/side-nav.tsx": "0b22ec801aed87b52740d88a58a25138b8e57895"
+      },
+      "source_authorship": "Exact approved Git blobs selected mechanically; no newly authored product implementation. Original bottom-nav independent review retained; current side-nav G2854 approval retained. Qualified G2831 control Library and API graph unchanged.",
+      "manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/leased-source-selection.json",
+      "manifest_sha256": "7bdb771a0e50acf5aa2d1515cefd68b1ed771f078cb03e7ec2d4d36db96e3f48",
+      "tracked_snapshot_clean_before_and_after": true,
+      "dependencies": "Existing own same-lockfile dependency installation reflink-copied without Vite cache; no installation, build tier, shared stack, repin or import.",
+      "review_limit": "This is bounded runtime/AT qualification of an authorized composition, not another source review or whole-composition source approval."
+    },
+    "backend_observation": {
+      "refreshRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "observedAt": "2026-10-19T12:43:11.028Z",
+      "provenanceLimit": "Current shared refresh and source directory, not immutable historical runtime identity",
+      "processes": [
+        {
+          "pid": 1372265,
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+        }
+      ],
+      "readiness": {
+        "origin": "http://127.0.0.1:3001",
+        "status": 200
+      }
+    },
+    "attempts": [
+      {
+        "job": "ae01ba9c-93db-4128-a197-48d34914cd43",
+        "test": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/aud012-leased-signed-in.test.ts",
+        "runner_sha256": "f1f4b6555d0a31b1cce3371aa504dc2c95b34a46ec059eb451ee4cc1de584225",
+        "result": "0pass/1fail before original AT outcome",
+        "result_artifact": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/leased-signed-in-1/result.json",
+          "sha256": "35c00861261550b9b04b655963aad73236956c4f2b122f954d79a2018e802ebf",
+          "bytes": 148151
+        },
+        "original_at_assertions_reached": false
+      },
+      {
+        "job": "4e57e3c2-a69d-4081-9cc5-68c71aa091e1",
+        "test": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/aud012-signed-in-nav-visible.test.ts",
+        "runner_sha256": "ed6aff0005c2fba3bea269318c261f7236147d522586adfc3f2ad05d3686155a",
+        "result": "0pass/1fail before original AT outcome",
+        "result_artifact": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/signed-in-nav-visible-1/result.json",
+          "sha256": "58137c8790d3559cb0b1482241144f5c9c35055c02b2b748db5532a67fbb9f58",
+          "bytes": 148159
+        },
+        "original_at_assertions_reached": false
+      },
+      {
+        "job": "9292d7c6-1aef-4cae-8959-3b1015bd353d",
+        "test": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/aud012-signed-in-nav-supported.test.ts",
+        "runner_sha256": "00bea1e6ff17843bcadab97f20d332074136d63537266fb36e023b4b87465a40",
+        "result": "0pass/1fail before original AT outcome",
+        "result_artifact": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/signed-in-nav-supported-1/result.json",
+          "sha256": "8604465dbca57f9578ec9f654aeb0aaa09f2fe548daaba130be3f7183f526942",
+          "bytes": 354042
+        },
+        "original_at_assertions_reached": false
+      },
+      {
+        "job": "a46013ac-b599-410d-af50-b8bbd52eb7c9",
+        "test": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/aud012-signed-in-nav-qualified.test.ts",
+        "runner_sha256": "39d9208dd5b118f638837bccca392735666a7ab450a1713ac6d7ceddb4f31e64",
+        "result": "0pass/1fail before original AT outcome",
+        "result_artifact": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/signed-in-nav-qualified-1/result.json",
+          "sha256": "858e765cef9887edebc4c776f5093298c6bf703fdfd87e3cc6a3df19f5a9c1c4",
+          "bytes": 45542
+        },
+        "original_at_assertions_reached": false
+      }
+    ],
+    "actual_reached_and_failed_premises": [
+      {
+        "jobs": [
+          "ae01ba9c-93db-4128-a197-48d34914cd43",
+          "4e57e3c2-a69d-4081-9cc5-68c71aa091e1"
+        ],
+        "stage": "Before OAuth; AccountMenu hydration marker visibility timeout",
+        "cause": "Reviewer setup expected signed-in-only AccountMenu before authentication. layout.tsx:36 instead renders anonymous SignInLink. The first hidden-desktop explanation was incomplete and explicitly corrected; :visible alone could not fix this missing-component premise.",
+        "browser": "Each run412 successful module responses; entry200 and no browser errors. No product hydration failure established."
+      },
+      {
+        "job": "9292d7c6-1aef-4cae-8959-3b1015bd353d",
+        "stage": "Normal own supported OAuth reached sign-in/email200, callback307, /en200 and actual mounted visible AccountMenu",
+        "next_failure": "Reviewer identity qualifier GET/api/main/v1/me/session-agent omitted required x-session-key and returned400 invalid_request. This did not establish an identity refusal or eligible exact actor.",
+        "correction": "Next runner uses existing G2831 direct Main bearer plus required session key from this fresh own browser only, never retained in evidence. It failed earlier before this corrected call executed.",
+        "modules": "984 successful module responses, no module HTTP failures or request failures; one generic Accounts404 console message, no page error."
+      },
+      {
+        "job": "a46013ac-b599-410d-af50-b8bbd52eb7c9",
+        "stage": "GET/auth/start200 before auth/authorize, Accounts or Orca",
+        "actual_failure": "At12:44:12Z Chromium failed44 dependency requests with net::ERR_NETWORK_CHANGED; owned Task log reports failed dynamic import of virtual:vinext-app-browser-entry. Entry itself returned200 text/javascript with bounded transformed body retained.",
+        "status_body_limit": "The44 dependency requests have no HTTP response/body: failure occurred at network transport. One pageerror event had empty stack/message. Underlying browser network-change trigger unknown; no fabricated HTTP cause.",
+        "disposition": "First actual current browser qualification failure handed to existing G2747 startup owner through manager, with exact module/request/Task evidence. No opaque repeated startup, OAuth refusal, AT product failure, external-device requirement or auth weakening inferred."
+      }
+    ],
+    "actual_at_disposition": {
+      "new_signed_in_caption_activation_or_card_assertions_reached": false,
+      "orca_started_in_these_runs": false,
+      "no_new_speech_or_screenshot_acceptance": true,
+      "original_caption_function_sha256": "2369a9792d428c67e36879dde39eeed1db03f474a3aacbbcc36a2606434427ab",
+      "unchanged_outcome_helpers": [
+        "caption",
+        "reach",
+        "signed-in native activation",
+        "eight-locale nav and peer cells"
+      ],
+      "runner_provenance": [
+        ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/leased-assertion-provenance.json",
+        ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/visible-control-setup-correction.json",
+        ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/supported-oauth-setup-qualification.json",
+        ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/required-main-identity-transport.json"
+      ],
+      "screenshots": "No new PNG inspected in these setup-only attempts. All earlier inspected anonymous and startup/navigation screenshots and genuine AT-SPI/Orca/speech-backend/audio evidence retained. No DOM/TTS/tree substituted for speech."
+    },
+    "borrower_custody": {
+      "borrowerReleased": true,
+      "released_at": "2026-10-19T12:33:09.278Z",
+      "actor": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+      "book": "01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+      "borrower_product_data_writes": 0,
+      "restoration_by_borrower": false,
+      "cleanupDueG2831": "Completed by G2831, not pending: current-CAS expectedVersion1 -> null status/null dates version2; actual200 and two real readbacks, history preserved.",
+      "cleanup_job": "46cc5fe1-9d09-4f64-a5e8-c6298c8ad023",
+      "cleanup_completed_at": "2026-10-19T12:37:58.540Z",
+      "cleanup_receipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/G2831-sanitized-cleanup-receipt.json",
+      "cleanup_receipt_sha256": "1c92327a102e3af90a2fa9e36b18b8b6c9a9ad76ac87256a382a52e24d3cee6d",
+      "custody_reacquired": false,
+      "card_limit": "Populated Book was restored after borrower release before any card AT outcome. No card read/action/acceptance or fresh populated-state preparation inferred from old ready receipt.",
+      "own_cleanup": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/composed-continuation-cleanup-verification.json"
+    },
+    "product_audit": {
+      "milestone": "Partial original AUD012 acceptance, not closure recommended.",
+      "affected_original_surfaces": "Mobile localized navigation/unread semantics, genuine identity binding and destinations; originally applicable Library/Settings/Following; Continue card description/status at390/1440. Existing anonymous and automated proofs reused, no unrelated catalogue or navigation class added.",
+      "new_confirmed_product_findings": [],
+      "remaining_original_assertions": [
+        "Original eight UI-language signed-in natural Tab/Shift+Tab and Enter actual Orca caption/unread semantics with eligible exact actor; genuine zero-unread observation kept separate from existing nonzero component proof.",
+        "Genuine Continue-card description/status actual Orca reading/navigation at applicable390/1440 original surfaces under renewed root-qualified populated fixture custody; no absent card passed."
+      ],
+      "no_extra_prerequisites": "Nonzero notification manufacture, unrelated source integration and full catalogue/build/persona matrices not required."
+    },
+    "evidence": {
+      "diagnosis": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/composed-frontend-continuation-diagnosis.json",
+      "diagnosis_sha256": "8332302e563c69c155cc49befc93ca2fbf5a8440fc682f5218afcea1e1ca95bd",
+      "private_material": "Fixture read only in existing supported auth transport; no credentials, tokens, cookies, storage state, full environment or peer backups copied into retained evidence.",
+      "handoff_mail": "7456c608-52d7-4fab-be4b-7bedbda27f55",
+      "release_mail": "f9203f5c-3a2d-4f9f-a291-17dca947d749",
+      "premise_correction_mail": "b40e108b-63ff-466f-b087-364d8028f5c1",
+      "cleanup_owner_mail": "e5296daa-d58b-45b0-af2e-121a8d1567fd"
+    },
+    "report_validation": {
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "receipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/composed-continuation-report-checks.json",
+      "scope": "Recorded documentation and worker gates after this append; actual result in receipt/handoff."
+    },
+    "manager_next": "Existing G2747 startup owner consumes bounded browser network-change cause. After compatible owned browser qualification, resume only missing eligible same-actor signed-in AT cells with required Main session-key transport; card cells require root-renewed populated custody with existing fixture owner. Do not replay anonymous proof, reopen source reviews, retain held data unnecessarily or hold unrelated integration. Program owns original-class closure."
+  },
   "shell_page_end_source_review": {
     "recorded_at_utc": "2026-10-19T13:05:32.801895+00:00",
     "scope": "Manager-dispatched original-shell correction: one actual independent source review of five exact authored files only. Separate from prior guard-selector cut and all prior source approvals; no nested agents, product edits, AT expansion, landing or class closure.",
@@ -3446,6 +3961,905 @@
     },
     "manager_next": "Use this bounded recorded-component result to supply the originally missing Site peer inspection after listed Main equivalence. G-2825 remains closed. Audit manager owns D4-002 acceptance/class closure; no new task, product change or unrelated acceptance gate is requested."
   },
+  "aud_012_signed_in_real_at_transport_continuation": {
+    "recorded_at_utc": "2026-10-19T14:22:16.288087+00:00",
+    "claim": "SAME original AUD-012 actual screen-reader supplement; existing G-2847 codex-1 / GPT-6.1 Sol / xhigh; no fallback, nested agents, source re-review or audit-class self-closure",
+    "disposition": "Actual signed-in eight-locale mobile captions, six original native destinations, Settings and Following now have passing original Orca assertions. Continue-card original speech/description/status assertions remain unreached because owned focus setup selected browser chrome; no card product failure inferred.",
+    "preservation": {
+      "all_prior_fields_preserved": true,
+      "prior_report_sha256": "a756eb2ed0ae7df0ee9f2995dfcabc89434cb5d50b59e492fd9f4b2932f38ca8",
+      "prior_report_commit": "e5935025fe756dbbd5d58e30b46620d70b045a26",
+      "no_prior_failure_relabelled_or_removed": true,
+      "no_D4_002_or_source_review_repeated": true,
+      "prior_anonymous_22_and_Following_14_and_G2825_271b_aae78_proofs_retained_at_original_pins": true
+    },
+    "exact_pins": {
+      "owned_frontend": "716d0f3fb23325df04c283e67eb9d0f38542a3b8",
+      "owned_snapshot": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-transport/leased-source",
+      "bottom_nav_blob": "01b5eb673c0fef2555727da9e634606596fb7fd3",
+      "side_nav_blob": "0b22ec801aed87b52740d88a58a25138b8e57895",
+      "backend_observed_refresh": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "backend_origins": [
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3004"
+      ],
+      "backend_provenance_limit": "Actual refresh pointer, ready200 and served-process checkout observations retained in result files; not immutable historical runtime identity",
+      "original_driver_sha256": "39d9208dd5b118f638837bccca392735666a7ab450a1713ac6d7ceddb4f31e64",
+      "asset_transport_driver_sha256": "ede681a14a8fd618eecaf96df00a8077bc629309f18bb7253f481a871c3eb458",
+      "two_line_patch_sha256": "fe7564061a1f06d9d93d8935acba07a861f916e4709b891f9fcc31fc7141c93c",
+      "original_34_expect_call_sites_and_loops_byte_identical": true,
+      "transport": "Only existing serveStoryAsset import and page.route added; real same-origin GET script/stylesheet/font/image bodies, native documents/APIs/nonGET/other origins. No fabricated product response, interception fallback, timeout/framework/network change. Exact source/dependency hash manifest retained."
+    },
+    "executed": [
+      {
+        "job": "67ccc1cd-46ee-49e6-b93a-dcf86bf1bcf4",
+        "exit": 1,
+        "assertion_reached": false,
+        "result": "Owned frontend mounted auth/start; Accounts sign-in200 then25script GETs failed ERR_NETWORK_CHANGED; timed out Accounts html[data-hydrated] before credentials/OAuth callback/AT. Later isolated real GET200 is current probe only, not the canceled browser response.",
+        "evidence": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-transport/attempt-1-diagnosis.json"
+      },
+      {
+        "job": "c5dc5078-6172-4570-a901-f257abbfb53a",
+        "exit": 1,
+        "expects_reported": 530,
+        "original_outcome_assertions_reached": true,
+        "result": "15of16 cells passed: all8locales,6native activations,Settings; Following original spoken-heading assertion failed with no AT-SPI events and invalid Orca focus. Overall aggregate stays FAIL.",
+        "result_file": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-transport-retry/signed-in-nav-qualified-1/result.json"
+      },
+      {
+        "job": "4f1728b7-4edf-4772-8c50-8e64f96decf1",
+        "exit": 1,
+        "expects_reported": 20,
+        "result": "Following original body/assertions PASS with actual spoken heading/backend delivery/12AT-SPI events. All32card cells stop in owned focus qualifier before original card loop; aggregate stays FAIL.",
+        "result_file": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-remaining/remaining-original-at-1/result.json",
+        "selected_card_loop_sha256": "7d8800a402ecfcc4ff9c3c1206c48c5ed9f66f0e51d6c1804c5489a849bc9f95",
+        "original_card_loop_byte_identical": true
+      }
+    ],
+    "genuine_identity": {
+      "method": "Own fresh normal signInAtAccounts OAuth/PKCE using existing configured same member; no peer rotating refresh state, copied cookies/tokens/storage, new account or account fallback",
+      "observed": "Accounts sign-in POST200, callback307, mounted visible AccountMenu, supported Main session-agent200 eligible exact actor initially and finally in both reached runs",
+      "actor": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+      "secret_handling": "Own fresh bearer/session-key only in supported request memory; credentials/storage/environment not copied into report/evidence"
+    },
+    "actual_AT_outcomes": {
+      "mobile_locales": [
+        "en",
+        "de",
+        "fr",
+        "es",
+        "ja",
+        "ko",
+        "zh-Hans",
+        "zh-Hant"
+      ],
+      "mobile_viewport": {
+        "width": 390,
+        "height": 600
+      },
+      "caption_observations": 81,
+      "all_81_actual_caption_AT_SPI_backend_speak_and_audio_delivery_checks_passed": true,
+      "original_counterexamples": [
+        "Alerts",
+        "Meldungen",
+        "Bücher",
+        "Alertes",
+        "Livres"
+      ],
+      "actual_Enter_destinations": [
+        {
+          "caption": "Alerts",
+          "destination": "http://127.0.0.1:39493/en/notifications",
+          "headings": [
+            "Notifications"
+          ]
+        },
+        {
+          "caption": "Library",
+          "destination": "http://127.0.0.1:39493/en/library",
+          "headings": [
+            "Library"
+          ]
+        },
+        {
+          "caption": "Meldungen",
+          "destination": "http://127.0.0.1:39493/de/notifications",
+          "headings": [
+            "Benachrichtigungen"
+          ]
+        },
+        {
+          "caption": "Bücher",
+          "destination": "http://127.0.0.1:39493/de/library",
+          "headings": [
+            "Bibliothek"
+          ]
+        },
+        {
+          "caption": "Alertes",
+          "destination": "http://127.0.0.1:39493/fr/notifications",
+          "headings": [
+            "Notifications"
+          ]
+        },
+        {
+          "caption": "Livres",
+          "destination": "http://127.0.0.1:39493/fr/library",
+          "headings": [
+            "Bibliothèque"
+          ]
+        }
+      ],
+      "Settings": "Original Control+Home/h/Down reading reached actual Settings heading speech, backend delivery and AT-SPI events",
+      "Following": "Original failed attempt retained; native Tab/Shift+Tab established owned document focus in bounded retry, then unchanged original Control+Home/h/Down body passed actual Following speech/backend delivery and12AT-SPI events",
+      "unread": "Eight genuine account observations zero notification unread; no sr-only count text. Existing3/99+ synthetic component proof stays separate; no nonzero notifications fabricated or made prerequisite.",
+      "axe": "Eight mobile navigation scopes zero violations; label-content-name-mismatch had zero applicable nodes each, not a positive rule-node proof."
+    },
+    "real_AT_delivery": {
+      "method": "Owned headed installed Google Chrome on existing Xwayland:0, live AT-SPI bus, Orca speechdispatcherfactory server, owned Speech Dispatcher/espeak-ng and isolated Pulse sink monitor PCM; native XTEST keys and temporary per-process permission only",
+      "actual_backend_connection_and_espeak_initialization": true,
+      "matching_actual_SPEECH_DISPATCHER_Speaking_and_Pulse_Wrote_data_retained": true,
+      "audio": [
+        {
+          "file": "aud012-orca-transport-retry/signed-in-nav-qualified-1/speech.wav",
+          "sha256": "09b10c21b00621f133620cd3938432a5c40a0bc377c5f2bbb81cbc7f33918724",
+          "channels": 1,
+          "sampleWidth": 2,
+          "sampleRate": 16000,
+          "frames": 9728800,
+          "durationSeconds": 608.05,
+          "peakAbsolutePCM": 32768,
+          "nonzeroSamples": 2326654,
+          "rmsPCM": 3132.7854798989742,
+          "provenance": "Owned Pulse sink monitor PCM capture only; actual Orca/speech-dispatcher/espeak-ng, no copied DOM submitted to TTS. No human listening claim."
+        },
+        {
+          "file": "aud012-orca-remaining/remaining-original-at-1/speech.wav",
+          "sha256": "84e01e5bdfce7761f3acefcb90b9a65855b7396f364576bfc2ce3999ba775dfa",
+          "channels": 1,
+          "sampleWidth": 2,
+          "sampleRate": 16000,
+          "frames": 16332000,
+          "durationSeconds": 1020.75,
+          "peakAbsolutePCM": 32768,
+          "nonzeroSamples": 2322492,
+          "rmsPCM": 2712.6139307838503,
+          "provenance": "Owned Pulse sink monitor PCM capture only; actual Orca/speech-dispatcher/espeak-ng, no copied DOM submitted to TTS. No human listening claim."
+        }
+      ],
+      "no_DOM_text_to_TTS": true,
+      "no_accessibility_snapshot_called_heard_speech": true,
+      "no_human_listening_claim": true,
+      "no_shared_desktop_or_persistent_Orca_setting_change": true
+    },
+    "raw_transport_failures": {
+      "owner_attempt52_strict_zero_failure_qualification": "FAIL retained verbatim; one canceled /en RSCfetch, low-level abort caller unidentified. Not an original AT prerequisite.",
+      "owner_verbatim_diagnosis": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-transport/owner-cancellation-diagnosis.json",
+      "reviewer_c5dc_raw_cancellations": [
+        {
+          "at": "2026-10-19T13:51:03.798Z",
+          "url": "http://127.0.0.1:39493/auth/session",
+          "method": "GET",
+          "type": "fetch",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "at": "2026-10-19T13:51:05.756Z",
+          "url": "http://127.0.0.1:39493/en/notifications",
+          "method": "GET",
+          "type": "fetch",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "at": "2026-10-19T13:51:31.197Z",
+          "url": "http://127.0.0.1:39493/auth/session",
+          "method": "GET",
+          "type": "fetch",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "at": "2026-10-19T13:52:06.552Z",
+          "url": "http://127.0.0.1:39493/auth/session",
+          "method": "GET",
+          "type": "fetch",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "at": "2026-10-19T13:52:07.937Z",
+          "url": "http://127.0.0.1:39493/de/notifications",
+          "method": "GET",
+          "type": "fetch",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "at": "2026-10-19T13:52:37.982Z",
+          "url": "http://127.0.0.1:39493/auth/session",
+          "method": "GET",
+          "type": "fetch",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "at": "2026-10-19T13:53:20.023Z",
+          "url": "http://127.0.0.1:39493/auth/session",
+          "method": "GET",
+          "type": "fetch",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "at": "2026-10-19T13:53:21.835Z",
+          "url": "http://127.0.0.1:39493/fr/notifications",
+          "method": "GET",
+          "type": "fetch",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "at": "2026-10-19T13:53:56.487Z",
+          "url": "http://127.0.0.1:39493/auth/session",
+          "method": "GET",
+          "type": "fetch",
+          "error": "net::ERR_ABORTED"
+        }
+      ],
+      "reviewer_4f17_raw_cancellations": [
+        {
+          "at": "2026-10-19T14:00:31.925Z",
+          "url": "http://127.0.0.1:39493/en",
+          "method": "GET",
+          "type": "fetch",
+          "error": "net::ERR_ABORTED"
+        }
+      ],
+      "no_zero_failure_claim_or_filter": true
+    },
+    "card_premise_and_remaining": {
+      "new_ready_receipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-remaining/renewed-ready.json",
+      "ready_sha256": "2f1b91394133378b19dc4ee7fece216292b6f45b2257107d67769935dfb7b7a1",
+      "owner": "G-2831",
+      "Book": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+      "current_CAS_observed": 3,
+      "actual_readbacks": "Main reader-state and continuation each200 before14:00:38 and after14:17:06; reading3, datesnull/progressnull/customshelves[], unchanged5caa0cc4 At the harbour continuation. No borrower writes.",
+      "original_card_cells": "8UIlocales x390/1440 xHome/Library =32 selected; none reached original card speech assertions.",
+      "exact_focus_setup_failure": "Natural Tab reached Skip to content; added Shift+Tab went to Chrome Bookmark this tab toolbar, documentFocus=false. Actual AT-SPI events establish owned input selection failure, not a card product defect.",
+      "prepared_routine_setup_correction": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-card-only/selection-manifest.json",
+      "correction": "Native Tab only until first actual owned AT-SPI focus with documentFocus=true, then unchanged original card Control+Home/h/Down and all original assertions. No passing navigation/peer replay.",
+      "new_fixture_readiness_required": "Version3 custody explicitly released; a NEW actual owner ready/current-CAS receipt is required before further card execution; old ready not reused.",
+      "retained_metadata_correction": "Selected remaining driver inherited an obsolete lease.custody navigation-only string and borrowerReleased flag before reading. Actual before/after readbacks prove read-only v3 custody was used; finally and durable release are authoritative. Raw result is preserved."
+    },
+    "screenshots_viewed": [
+      {
+        "locale": "en",
+        "caption": "Alerts",
+        "file": "aud012-orca-transport-retry/signed-in-nav-qualified-1/caption-73.png",
+        "sha256": "a5a8f8747aecbbf047aed79a98ccb7ba5b65e31f859fa731a8b7cb7cd5a5504a",
+        "viewed": true,
+        "observation": "390px actual signed-in Home with five visible localized bottom captions; Alerts counterpart has visible focus outline; genuine account zero notification unread. Continue-card presence is visual context, not a card speech pass."
+      },
+      {
+        "locale": "de",
+        "caption": "Meldungen",
+        "file": "aud012-orca-transport-retry/signed-in-nav-qualified-1/caption-76.png",
+        "sha256": "61122ec2602f71eda784fc28f078717d26f32e0f0ad1ebc867131ae98a3ea066",
+        "viewed": true,
+        "observation": "390px actual signed-in Home with five visible localized bottom captions; Alerts counterpart has visible focus outline; genuine account zero notification unread. Continue-card presence is visual context, not a card speech pass."
+      },
+      {
+        "locale": "fr",
+        "caption": "Alertes",
+        "file": "aud012-orca-transport-retry/signed-in-nav-qualified-1/caption-79.png",
+        "sha256": "c471ccf2e13efcb958b79a5b544ee0b49d3ff7931a4c44a08e9ed0739d227c65",
+        "viewed": true,
+        "observation": "390px actual signed-in Home with five visible localized bottom captions; Alerts counterpart has visible focus outline; genuine account zero notification unread. Continue-card presence is visual context, not a card speech pass."
+      },
+      {
+        "locale": "es",
+        "caption": "Avisos",
+        "file": "aud012-orca-transport-retry/signed-in-nav-qualified-1/caption-34.png",
+        "sha256": "9f0b44bb89c40edd3fba135b7511757a3c750a9dce3e0527eb921b633a9b7791",
+        "viewed": true,
+        "observation": "390px actual signed-in Home with five visible localized bottom captions; Alerts counterpart has visible focus outline; genuine account zero notification unread. Continue-card presence is visual context, not a card speech pass."
+      },
+      {
+        "locale": "ja",
+        "caption": "通知",
+        "file": "aud012-orca-transport-retry/signed-in-nav-qualified-1/caption-43.png",
+        "sha256": "2267e02aa8a9a560bf36819bfda7189e8b68368655074c389a96a93a812a153e",
+        "viewed": true,
+        "observation": "390px actual signed-in Home with five visible localized bottom captions; Alerts counterpart has visible focus outline; genuine account zero notification unread. Continue-card presence is visual context, not a card speech pass."
+      },
+      {
+        "locale": "ko",
+        "caption": "알림",
+        "file": "aud012-orca-transport-retry/signed-in-nav-qualified-1/caption-52.png",
+        "sha256": "bb12768134b8505800dbf2f239a87107dcc17348806c5a3d419216d95aa1c739",
+        "viewed": true,
+        "observation": "390px actual signed-in Home with five visible localized bottom captions; Alerts counterpart has visible focus outline; genuine account zero notification unread. Continue-card presence is visual context, not a card speech pass."
+      },
+      {
+        "locale": "zh-Hans",
+        "caption": "通知",
+        "file": "aud012-orca-transport-retry/signed-in-nav-qualified-1/caption-61.png",
+        "sha256": "1eecbc2340a582f78f6ee25a51765b06cb17f2d742e10c7d290e85c4406234d5",
+        "viewed": true,
+        "observation": "390px actual signed-in Home with five visible localized bottom captions; Alerts counterpart has visible focus outline; genuine account zero notification unread. Continue-card presence is visual context, not a card speech pass."
+      },
+      {
+        "locale": "zh-Hant",
+        "caption": "通知",
+        "file": "aud012-orca-transport-retry/signed-in-nav-qualified-1/caption-70.png",
+        "sha256": "23d02f0d14b1db1d6fb6030510263596b2b5a30c000806b4aef2cfa92591c894",
+        "viewed": true,
+        "observation": "390px actual signed-in Home with five visible localized bottom captions; Alerts counterpart has visible focus outline; genuine account zero notification unread. Continue-card presence is visual context, not a card speech pass."
+      },
+      {
+        "file": "aud012-orca-transport-retry/signed-in-nav-qualified-1/peer-settings.png",
+        "sha256": "c468de83a5ea29aa6ca8ca956950db3b7f3e158b86bbbfcea7dd418f1cd8b904",
+        "viewed": true,
+        "observation": "Actual Settings and description visible; keyboard focus outline on Notifications tab"
+      },
+      {
+        "file": "aud012-orca-transport-retry/signed-in-nav-qualified-1/peer-following.png",
+        "sha256": "bc211770660744064e9d45d1e9958a1e8b837e1c8df866e11ab338bcd20bac4e",
+        "viewed": true,
+        "observation": "Original failed reader attempt: document visible scrolled below heading; no AT-SPI events and Orca invalid locus of focus"
+      },
+      {
+        "file": "aud012-orca-remaining/remaining-original-at-1/peer-following.png",
+        "sha256": "192cd56b698cb96b3070785c7d6ef71dd6763828acb52da21446b10725a9c982",
+        "viewed": true,
+        "observation": "Qualified original reader pass: Following heading and native focus on Search by name visible"
+      }
+    ],
+    "cleanup_and_release": {
+      "borrowerReleased": true,
+      "release_at_utc": "2026-10-19T14:17:08.784Z",
+      "durable_release": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-remaining/remaining-original-at-1/borrower-release.json",
+      "root_release_mail": "mail:11633aca-50db-4897-8254-5802c2ece39d",
+      "focus_cause_and_new_ready_request": "mail:a30ea03e-86f4-4028-8d31-3331dbde1798",
+      "cleanup_due": "G-2831 exact prior-state restoration using currentCAS for NEW renewed reading3 custody; borrower did not restore. Prior null/datev2 cleanup remains separate historical evidence.",
+      "owned_cleanup_verification": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-signed-in-transport-evidence/owned-cleanup-verification.json",
+      "owned_browser_orca_speech_audio_PIDs_absent_and_owned_sink_removed": true,
+      "owned_frontend39493_stopped": true,
+      "shared_stack_stopped_or_re_pinned": false
+    },
+    "product_audit": {
+      "scope": "Original AUD-012 same lost accessible caption/description principle only: signed-in8locale mobile captions+unread semantics, original Alerts/Library destinations, Settings/Following reading, and genuinely populated Home/Library card description/status. Existing anonymous and G2825 matrix reused.",
+      "confirmed_new_product_failure": null,
+      "remaining_genuine_assertion": "Continue-card description and status actual Orca reading at original8locale/390/1440 cells after fresh owner fixture readiness and corrected owned input selection",
+      "closure_owner": "Audit manager/Program; this job exit does not close an original class"
+    },
+    "safe_artifacts": {
+      "root": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-signed-in-transport-evidence",
+      "disposition_sha256": "7633def2485719ad17d96822b2dd8c5c6137e6f3986d15f5f375d677cbbfa95e",
+      "manifest_sha256": "7386d854df4328db89fbc77e97a1b45fd248f2e31d10715a242c9f25a8befa37",
+      "retained_files": 190,
+      "private_frontend_logs_and_all_credentials_storage_env_excluded_from_manifest": true
+    },
+    "report_validation": {
+      "job": "bb908101-d67d-4e7a-abfa-a1e3ff6894ea",
+      "exit": 0,
+      "docs_check": "PASS13tests/259Markdown",
+      "goal_check": "PASS run-181D6i; AST and1/45selectedguard; no source/types/lint/test file selection",
+      "validation_scope": "Report-only continuation; recorded browser jobs retain their nonzero aggregate results"
+    }
+  },
+  "aud_012_selected_card_reader_continuation": {
+    "recorded_at_utc": "2026-10-19T14:36:49.727370+00:00",
+    "claim": "SAME original AUD-012 actual screen-reader supplement; existing independent G-2847 codex-1 / GPT-6.1 Sol / xhigh; no fallback or nested agents",
+    "disposition": "All three selected original headingReached assertions failed after genuine fixture, owned document focus and actual speech backend qualification. Orca entered focus mode on the expandable navigation button and echoed h as a character. Original Continue-card description/status speech, screenshot and axe assertions were not reached. No new product defect or class closure is claimed.",
+    "preservation": {
+      "prior_report_commit": "06f14b0c08085a95103b34fc9511d393723da0ed",
+      "prior_report_sha256": "afbd8115a37e49e2fc92a97e7450570a9b9e258f88551b1582d61cbdecd1614a",
+      "all_33_prior_fields_preserved": true,
+      "all_prior_failures_and_source_runtime_dispositions_retained": true,
+      "prior_passing_evidence": "22 anonymous actual Orca captions, Following14 expectations, G-2825 271b/aae78 genuine locale proof, c5dc eight signed-in caption cells/81 actual observations and six native destinations, Settings and 4f17 Following remain at their original pins. The 32 historical card focus-setup failures remain unreached original assertions.",
+      "no_source_review_or_unchanged_navigation_replay": true,
+      "historical_pending_owner_ready_correction": "Root retained the same unchanged producer fixture after the earlier 14:17 borrower release; restoration had not been dispatched. That release did not restore or invalidate producer state. Root leasev2 and the frozen receipt authorized immediate read-only reacquisition; no restore/reseed/newlease prerequisite was imposed in this selected run."
+    },
+    "exact_pins_and_selection": {
+      "frontend": "716d0f3fb23325df04c283e67eb9d0f38542a3b8",
+      "owned_source": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/leased-source",
+      "clean_source_assertion_passed_at_job_start": true,
+      "bottom_nav_blob": "01b5eb673c0fef2555727da9e634606596fb7fd3",
+      "side_nav_blob": "0b22ec801aed87b52740d88a58a25138b8e57895",
+      "source_and_dependency_hashes_reused": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-transport/preparation.json",
+      "backend_observation": {
+        "refreshRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "observedAt": "2026-10-19T14:27:54.671Z",
+        "provenanceLimit": "Current shared refresh and source directory, not immutable historical runtime identity",
+        "processes": [
+          {
+            "pid": 1372265,
+            "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+            "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+          }
+        ],
+        "readiness": {
+          "origin": "http://127.0.0.1:3001",
+          "status": 200
+        }
+      },
+      "accounts_origin": "http://127.0.0.1:3004",
+      "backend_limit": "Actual observed shared refresh/source checkout and readiness, not immutable historical runtime identity",
+      "selected_driver_sha256": "9908f917ddaec163b77aa595c9f3cc13b84428ad956b45e911468cd3670dfe4c",
+      "prepared_driver_sha256": "b863034836ea693454c67ae74a8d7fd5da9426142e3656fbbc02332cd3b3078e",
+      "original_callback_bytes": 3268,
+      "original_callback_sha256": "9c56d91f687e9a03a00ce05dc88171ba22d63beab60d7de6b55592d0296aa4e8",
+      "selected_original_callback_byte_identical": true,
+      "selection": [
+        "card-home-de-390",
+        "card-home-fr-390",
+        "card-library-de-390"
+      ],
+      "retained_execution": "Only original broad card loop selected down to these three tuples. Forward Tab-only owned-focus setup correction retained; original callback, native Control+Home/h/Down sequence, timers and outcome assertions unchanged. Root-custody/readback/release journaling is setup only.",
+      "asset_transport": "Same qualified existing serveStoryAsset real same-origin GET assets; original driver39d9208d + exact two-line transport patch fe756406. No fabricated API/product responses, new timeout/framework/network change, blanket-zero-cancellation gate or copied-text TTS.",
+      "support_hashes": {
+        "at-session.ts": "0f04847d3d7eeacc2657395a527445f221fc683e01e38aaf67ab8f39f234c815",
+        "atspi-monitor.py": "9d83b6f8c89045e9be464a33a557db83230b193183d9e657fc7a1295658e6c08",
+        "native-key.py": "684c25d6943a6a70df4493a4e3a3ced2f0258782e13baa2abcbab29d69c557c1",
+        "native-key-server.py": "24be0ad831a58cf27cdb714c8fb0804f9156c2a1a9f02bb9894a471714fb1262",
+        "temporary-native-permission.py": "a85120ad75a72055d905be2f7ab2d273b5919af0ff0288f8332214a97003c9bf"
+      },
+      "selection_manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/selection-manifest.json"
+    },
+    "executed": {
+      "job": "3093bdd6-6e44-4eba-ad9b-95497c6cec44",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/aud012-card-only.test.ts",
+      "log": ".temp/goal/jobs/3093bdd6-6e44-4eba-ad9b-95497c6cec44.log",
+      "exit": 1,
+      "result_class": "assertion",
+      "summary": "0 pass / 1 fail / 23 expect() calls; 137948.15ms test",
+      "executed_once_only": true,
+      "original_heading_assertion": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/aud012-card-only.test.ts:220",
+      "aggregate_failure": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/aud012-card-only.test.ts:231",
+      "setup_qualified": "Own fresh normal supported OAuth, hydrated AccountMenu, eligible exact actor200, reader-state200/continue200 with exact root-retained fixture, genuine visible card and owned document AT-SPI focus all reached.",
+      "cells": [
+        {
+          "id": "card-home-de-390",
+          "document_status": 200,
+          "section_heading": "Weiterlesen",
+          "original_next_chapter_text_and_continuation_link_assertions": "PASS",
+          "original_heading_reached_assertion": "FAIL; reached at line220, expected true, received false",
+          "owned_document_focus": "PASS",
+          "native_h_keys": 24,
+          "actual_h_character_announcements": 24,
+          "actual_h_character_dispatcher_calls": 24,
+          "heading_announcements": 0,
+          "later_description_status_speech_dispatcher_audio_atspi_assertions": "unreached",
+          "later_original_axe_and_screenshot": "unreached"
+        },
+        {
+          "id": "card-home-fr-390",
+          "document_status": 200,
+          "section_heading": "Reprendre la lecture",
+          "original_next_chapter_text_and_continuation_link_assertions": "PASS",
+          "original_heading_reached_assertion": "FAIL; reached at line220, expected true, received false",
+          "owned_document_focus": "PASS",
+          "native_h_keys": 24,
+          "actual_h_character_announcements": 24,
+          "actual_h_character_dispatcher_calls": 24,
+          "heading_announcements": 0,
+          "later_description_status_speech_dispatcher_audio_atspi_assertions": "unreached",
+          "later_original_axe_and_screenshot": "unreached"
+        },
+        {
+          "id": "card-library-de-390",
+          "document_status": 200,
+          "section_heading": "Lese ich gerade",
+          "original_next_chapter_text_and_continuation_link_assertions": "PASS",
+          "original_heading_reached_assertion": "FAIL; reached at line220, expected true, received false",
+          "owned_document_focus": "PASS",
+          "native_h_keys": 24,
+          "actual_h_character_announcements": 24,
+          "actual_h_character_dispatcher_calls": 24,
+          "heading_announcements": 0,
+          "later_description_status_speech_dispatcher_audio_atspi_assertions": "unreached",
+          "later_original_axe_and_screenshot": "unreached"
+        }
+      ],
+      "no_failed_original_assertion_relabelled_as_pass_or_setup_only": true
+    },
+    "actual_assistive_technology_diagnosis": {
+      "observation": "For all three cells, native Tab focused the owned document expandable Navigation öffnen/Ouvrir la navigation button. Chromium Orca DOCUMENT PRESENTER logged Use focus mode: True. Subsequent original Control+Home plus 24 h keys stayed owned; each h generated actual SPEECH OUTPUT and speechdispatcherfactory Speaking h as char, with no matching section-heading announcement.",
+      "raw_orca_focus_mode_lines": [
+        {
+          "id": "card-home-de-390",
+          "lines": [
+            [
+              8295,
+              "22:28:58.560590 - DOCUMENT PRESENTER: [button: 'Navigation öffnen' (0x7fd763faaa80)]  is focus mode widget: it's expandable and focusable"
+            ],
+            [
+              8594,
+              "22:28:58.618566 - DOCUMENT PRESENTER: [button: 'Navigation öffnen' (0x7fd763faaa80)]  is focus mode widget: it's expandable and focusable"
+            ],
+            [
+              8596,
+              "22:28:58.618680 - DOCUMENT PRESENTER: set_presentation_mode. Use focus mode: True, [button: 'Navigation öffnen' (0x7fd763faaa80)]  in [document web: 'REZICS · Startseite' (0x7fd763f40140)]  notify user: True"
+            ]
+          ]
+        },
+        {
+          "id": "card-home-fr-390",
+          "lines": [
+            [
+              18320,
+              "22:29:25.337635 - DOCUMENT PRESENTER: [button: 'Ouvrir la navigation' (0x7fd763fd5640)]  is focus mode widget: it's expandable and focusable"
+            ],
+            [
+              18619,
+              "22:29:25.418869 - DOCUMENT PRESENTER: [button: 'Ouvrir la navigation' (0x7fd763fd5640)]  is focus mode widget: it's expandable and focusable"
+            ],
+            [
+              18621,
+              "22:29:25.418995 - DOCUMENT PRESENTER: set_presentation_mode. Use focus mode: True, [button: 'Ouvrir la navigation' (0x7fd763fd5640)]  in [document web: 'REZICS · Accueil' (0x7fd763fd7680)]  notify user: True"
+            ]
+          ]
+        },
+        {
+          "id": "card-library-de-390",
+          "lines": [
+            [
+              27746,
+              "22:29:52.382194 - DOCUMENT PRESENTER: [button: 'Navigation öffnen' (0x7fd77e257e00)]  is focus mode widget: it's expandable and focusable"
+            ],
+            [
+              28045,
+              "22:29:52.438877 - DOCUMENT PRESENTER: [button: 'Navigation öffnen' (0x7fd77e257e00)]  is focus mode widget: it's expandable and focusable"
+            ],
+            [
+              28047,
+              "22:29:52.439022 - DOCUMENT PRESENTER: set_presentation_mode. Use focus mode: True, [button: 'Navigation öffnen' (0x7fd77e257e00)]  in [document web: 'Bibliothek · REZICS' (0x7fd77c2bcd40)]  notify user: True"
+            ]
+          ]
+        }
+      ],
+      "attribution": "Reader browse-heading mode was not qualified. This explains the observed navigation failure; card description/status availability remains untested by the original later assertions. No product aria-label loss is inferred from DOM strings or key echo.",
+      "connected_delivery": "Retained actual speechdispatcherfactory SpeechServer, successfully initialized espeak-ng server audio, matching native h character calls and Pulse writes in all three intervals, actual owned AT-SPI events and nonzero owned sink audio. SPEECH OUTPUT alone is not the delivery proof.",
+      "audio": {
+        "sha256": "d826e69108aceab1c595ce8e14498285d05c9535cab8a7b536324752c5a0b9d4",
+        "channels": 1,
+        "sampleWidthBytes": 2,
+        "sampleRate": 16000,
+        "frames": 1704000,
+        "seconds": 106.5,
+        "nonzeroSamples": 513547,
+        "peakAbsoluteSample": 32768,
+        "source": {
+          "started": "2026-10-19T14:28:23.462Z",
+          "sink": "rezics_aud012_g2847_1134848",
+          "source": "owned sink monitor only"
+        },
+        "limit": "Actual owned speech sink monitor capture plus connected dispatcher/Pulse writes; no human-listening claim or card speech pass. Recorded h echo is not card description/status delivery."
+      },
+      "audio_path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/card-only-original-at-1/speech.wav",
+      "excerpts": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/actual-at-excerpts.json",
+      "no_copied_dom_tts_or_accessibility_snapshot_as_speech": true,
+      "human_listening_claim": false,
+      "browser_observations": {
+        "consoleCount": 0,
+        "pageErrorCount": 0,
+        "requestFailuresCount": 0,
+        "moduleResponsesCount": 2287,
+        "limit": "Observed this run only, not a blanket-zero diagnostic gate; previous raw cancellations and failures remain unchanged."
+      }
+    },
+    "genuine_fixture_custody": {
+      "root_retained_custody": true,
+      "root_lease_version": 2,
+      "frozen_ready_sha256": "2f1b91394133378b19dc4ee7fece216292b6f45b2257107d67769935dfb7b7a1",
+      "root_lease_sha256": "44ab97df5a041e74e64dce48c827d0ee3d796f72611cb12c71a85623cfb64573",
+      "frozen_ready_owned_copy": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/renewed-ready.json",
+      "root_lease_owned_copy": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/root-retained-lease-v2.json",
+      "actor": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+      "book": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+      "fresh_own_supported_oauth": {
+        "authStage": "eligible exact actor qualified",
+        "sessionAgent": {
+          "at": "2026-10-19T14:28:41.901Z",
+          "status": 200,
+          "eligible": true,
+          "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839"
+        },
+        "final": {
+          "status": 200,
+          "eligible": true,
+          "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839"
+        }
+      },
+      "reacquired_at_utc": "2026-10-19T14:28:50.107Z",
+      "before_readback_at_utc": "2026-10-19T14:28:50.103Z",
+      "after_readback_at_utc": "2026-10-19T14:30:10.741Z",
+      "before_and_after_readonly_reader_state_and_continue": "200/200; same currentCAS3 reading, null startedOn/finishedOn/progress, customShelves[], source sequence11954; exact nextUnread5caa0cc4-f716-876a-8a46-fa048620c48d At the harbour, unreadCount exact1; final identity200 eligible same actor",
+      "chapter_unread_not_notification_count": true,
+      "no_status_progress_shelf_follow_preferences_grant_writes": true,
+      "no_borrowed_cookies_tokens_storage_or_peer_session_rotation": true,
+      "borrower_release": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/card-only-original-at-1/borrower-release.json",
+      "borrower_reacquisition": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/card-only-original-at-1/borrower-reacquisition.json",
+      "borrower_released": true,
+      "final_release_at_utc": "2026-10-19T14:30:12.551Z",
+      "root_release_mail": "mail:9737074e-f777-48de-9b4e-cc45b69c96f8",
+      "restoration_performed_by_borrower": false,
+      "cleanup_due": "Root serializes G-2831 fresh-current-CAS exact prior-state restoration after final selected job exit/release. This report records released custody and unchanged final readback, not completed producer restoration."
+    },
+    "owned_cleanup": {
+      "record": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/card-only-original-at-1/cleanup.json",
+      "verification": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/owned-cleanup-verification.json",
+      "verified_at_utc": "2026-10-19T14:35:21.781259+00:00",
+      "all_recorded_owned_pids_absent": true,
+      "owned_frontend_port_39493_listening": false,
+      "owned_audio_sink_present": false,
+      "no_shared_or_peer_process_stopped": true
+    },
+    "screenshots": {
+      "produced": 0,
+      "viewedThisRun": [],
+      "reason": "Original heading assertion failed before its screenshot line. No selected3 card PNG exists; earlier 11 actually viewed screenshots remain at their original tier."
+    },
+    "safe_artifacts": {
+      "directory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3",
+      "diagnosis": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/diagnosis.json",
+      "diagnosis_sha256": "3e440e0f3bccb21b940c778172ebc4dd255eafb5e9b75cd831c665ea876fcc46",
+      "manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3/artifact-manifest.json",
+      "manifest_sha256": "cb2f797a69fdf9bfb2ae901b66a10ef8deece631e6457de567ee94bad88b2ed6",
+      "safe_hashed_artifact_count": 28,
+      "secrets_policy": "No credentials, tokens, cookies, saved browser storage/profile, whole environment or frontend-private.log copied into report evidence."
+    },
+    "product_audit": {
+      "principle": "Actual card description, continuation and unread/status remain available through assistive reading despite the action name.",
+      "affected_selected_surfaces": [
+        "card-home-de-390",
+        "card-home-fr-390",
+        "card-library-de-390"
+      ],
+      "new_confirmed_product_findings": [],
+      "remaining_original_acceptance": "Actual native Orca heading/line reading must reach the genuine card and retain title, next chapter, applicable description/unread status, connected dispatcher delivery, owned AT-SPI/audio and original axe. This run failed the heading step and does not establish those later outcomes.",
+      "zero_notification_and_component_3_99_proofs": "Preserved separately at original pins; neither fabricated nonzero notifications nor expanded matrix is required.",
+      "class_closure": "Audit manager decision; no worker self-closure."
+    },
+    "report_validation": {
+      "required_commands": [
+        "task docs:check",
+        "task goal -- check"
+      ],
+      "status": "PASS; report-only validation, no product/AT rerun",
+      "job": "ffe56bcd-9e9d-4869-9d0d-c2d4beea8e6c",
+      "docs_check": "PASS; 13 tests, 259 Markdown files",
+      "goal_check": "PASS run-4NypSq; AST and 1/45 selected guard; no source/types/lint/test file selection",
+      "logs": [
+        ".temp/goal/jobs/ffe56bcd-9e9d-4869-9d0d-c2d4beea8e6c.1.log",
+        ".temp/goal/jobs/ffe56bcd-9e9d-4869-9d0d-c2d4beea8e6c.2.log"
+      ]
+    },
+    "manager_next": "Root may now serialize G-2831 restoration from fresh current CAS. Retain the original card reader acceptance gap and concrete Orca focus-mode diagnosis; decide any bounded browse-mode qualification continuation without replaying passed navigation, changing the original callback assertions, or reopening completed source reviews."
+  },
+  "aud_012_selected_card_browse_preparation_continuation": {
+    "recorded_at_utc": "2026-10-19T14:48:00.657252+00:00",
+    "claim": "SAME original AUD-012 selected3 actual AT supplement; existing independent G-2847 codex-1 / GPT-6.1 Sol / xhigh, no fallback/nested agents",
+    "disposition": "Prepared only the authorized go() conditional native Browse-mode setup; original callback remains byte-identical. Actual job failed earlier in unchanged native-input permission/window qualification, before that mode code or any original card outcome assertion. No product failure, card AT pass or class closure inferred.",
+    "preservation": {
+      "prior_report_commit": "b4310a15766a589d2ba35d72701d96b474582eee",
+      "prior_report_sha256": "99050a0ca034e6f30c451ab2c422572f8132a03813f65f394f1dddfa2d49d649",
+      "all_34_prior_fields_preserved": true,
+      "prior_3093_original_heading_failures_preserved": true,
+      "all_prior_anonymous_signed_in_navigation_runtime_source_shell_Site_and_failure_evidence_retained_at_original_pins": true,
+      "no_passed_navigation_or_source_review_repeated": true
+    },
+    "exact_pins": {
+      "frontend": "716d0f3fb23325df04c283e67eb9d0f38542a3b8",
+      "source_clean_at_job_start": true,
+      "backend": {
+        "refreshRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "observedAt": "2026-10-19T14:42:37.699Z",
+        "provenanceLimit": "Current shared refresh and source directory, not immutable historical runtime identity",
+        "processes": [
+          {
+            "pid": 1372265,
+            "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+            "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+          }
+        ],
+        "readiness": {
+          "origin": "http://127.0.0.1:3001",
+          "status": 200
+        }
+      },
+      "accounts_origin": "http://127.0.0.1:3004",
+      "backend_limit": "Actual current shared refresh/source/ready observation, not immutable historical runtime identity",
+      "original_callback_bytes": 3268,
+      "original_callback_sha256": "9c56d91f687e9a03a00ce05dc88171ba22d63beab60d7de6b55592d0296aa4e8",
+      "driver_sha256": "812a6cbf319260b562e32d9de8f4d1aed3476cf7fe8eb0641160339c11ce3c30",
+      "go_only_patch_sha256": "2406a8dfb593e6e8a690ff78a70482a689ab850ee6a9992a9e036981022c8134",
+      "support_hashes": {
+        "at-session.ts": "0f04847d3d7eeacc2657395a527445f221fc683e01e38aaf67ab8f39f234c815",
+        "atspi-monitor.py": "9d83b6f8c89045e9be464a33a557db83230b193183d9e657fc7a1295658e6c08",
+        "native-key.py": "684c25d6943a6a70df4493a4e3a3ced2f0258782e13baa2abcbab29d69c557c1",
+        "native-key-server.py": "24be0ad831a58cf27cdb714c8fb0804f9156c2a1a9f02bb9894a471714fb1262",
+        "temporary-native-permission.py": "a85120ad75a72055d905be2f7ab2d273b5919af0ff0288f8332214a97003c9bf"
+      },
+      "installed_orca_binding": {
+        "path": "/usr/lib/python3.14/site-packages/orca/document_presenter.py",
+        "sha256": "e1a1ce6f9e136c58f42f057df8cdc3351fdc7e5a0bf5a2e62ddf62cb33b503e8",
+        "lines": [
+          451,
+          458
+        ],
+        "binding": "OrcaModifier+a toggle_presentation_mode; actual retained default modifier Insert/KP_Insert"
+      },
+      "source_dependencies_and_real_GET_asset_transport": "Exact retained716d owned source and earlier preparation manifest, serveStoryAsset transport, original product bytes and API behavior unchanged."
+    },
+    "prepared_mode_correction": {
+      "scope": "Only go() changed; same selected deHome390/frHome390/deLibrary390 tuples, original timers/expectations/native card reader keys unchanged.",
+      "behavior": "After actual owned document focus, inspect this navigation Orca mode log. Send native Insert+a only when actual Focus mode is active; require actual Browse-mode log and matching Orca speech/dispatcher/Pulse delivery after a toggle. Refuse unknown mode or blind toggle.",
+      "patch": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3-browse/go-only.patch",
+      "actually_executed": false,
+      "reason_unreached": "Unchanged enableTemporaryNativeInput failed earlier at go line107."
+    },
+    "executed": {
+      "job": "291ecb9d-57dc-4e26-add9-be036189748c",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3-browse/aud012-card-only.test.ts",
+      "log": ".temp/goal/jobs/291ecb9d-57dc-4e26-add9-be036189748c.log",
+      "exit": 1,
+      "task_result_class": "assertion",
+      "actual_failure_class": "Native-input permission/window environment qualification before original callback",
+      "summary": "0 pass / 1 fail / 14 expect() calls; 110955.02ms test",
+      "aggregate_assertion": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3-browse/aud012-card-only.test.ts:252",
+      "cells": [
+        {
+          "id": "card-home-de-390",
+          "error": "Owned native input delivery to actual Orca not qualified",
+          "original_card_assertion_reached": false,
+          "new_browse_setup_reached": false
+        },
+        {
+          "id": "card-home-fr-390",
+          "error": "Owned native key refused: Refuse key outside owned browser window",
+          "original_card_assertion_reached": false,
+          "new_browse_setup_reached": false
+        },
+        {
+          "id": "card-library-de-390",
+          "error": "Owned native key refused: Refuse key outside owned browser window",
+          "original_card_assertion_reached": false,
+          "new_browse_setup_reached": false
+        }
+      ],
+      "card_observations": 0,
+      "screenshots_produced_or_viewed": 0,
+      "original_card_axe_reached": false
+    },
+    "native_input_diagnosis": {
+      "permission_observation": {
+        "request": {
+          "at": 1792421033.7052324,
+          "browserPid": 1428715,
+          "command": "Control",
+          "focusBefore": 44040196,
+          "focusAfter": 44040196,
+          "ownedAfter": true,
+          "target": null,
+          "inputConnectionPid": 1429268
+        },
+        "permission": {
+          "at": 1792421034.5926557,
+          "baselinePrompterPids": [
+            1397419
+          ],
+          "newMatchingRequests": 0,
+          "allowed": false,
+          "persistentOptionTouched": false
+        },
+        "actualOrcaNativeKeyReceived": false,
+        "policy": "Always allow remains unchecked when a temporary request appears; existing delivery is independently observed; no persistent preference edits"
+      },
+      "timeline": {
+        "nativeControlRequestedUTC": "2026-10-19T14:43:53.705232+00:00",
+        "permissionProbeUTC": "2026-10-19T14:43:54.592656+00:00",
+        "newPrompterApplicationAddedUTC": "2026-10-19T14:43:55.384834Z",
+        "chromeDeactivatedUTC": "2026-10-19T14:43:55.954557Z",
+        "remoteControlDialogActivatedUTC": "2026-10-19T14:43:55.985453Z",
+        "permissionRequestSpokenUTC": "2026-10-19T14:43:56.129567Z"
+      },
+      "explanation": "Unchanged at-session.ts:69-79 sends Control, waits600ms, probes once for a non-baseline matching permission request, then only polls actual Orca Control_L delivery. This probe found zero. A new prompter application/dialog appears later in the actual log, Chrome deactivates, and later cells refuse keys outside the owned window. No permission or persistent checkbox was changed.",
+      "inference_limit": "Consistent with asynchronous permission-prompt/focus qualification. Exact delayed dialog-to-requester/process binding was not established; no unrelated existing prompt was approved or dismissed.",
+      "Control_L_deliveries": 0,
+      "Insert_deliveries": 0,
+      "actual_speech_backend": "Connected speechdispatcherfactory and initialized espeak-ng/Pulse delivered actual page/permission announcements; this does not prove native input delivery or card reading.",
+      "audio": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3-browse/card-only-original-at-1/speech.wav",
+        "sha256": "d424d7025158c7cd4c84ed1e6b35b41396d1b85a831005acb2509a45c606a589",
+        "channels": 1,
+        "sampleWidthBytes": 2,
+        "sampleRate": 16000,
+        "seconds": 75.45,
+        "nonzeroSamples": 86446,
+        "source": "Owned Pulse speech sink monitor only",
+        "limit": "Actual page/permission speech delivery retained; no card speech assertion reached and no human-listening claim."
+      },
+      "raw_excerpts": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3-browse/actual-at-excerpts.json",
+      "minimal_next_setup_qualification": "If manager authorizes another custody period, qualify the asynchronously appearing request through the existing temporary-only permission transport, preserve baseline prompts/unchecked persistent option, reactivate owned Chrome and prove actual Control delivery before the conditional Browse-mode step. No original card assertion change."
+    },
+    "custody_and_release": {
+      "root_decision_at_utc": "2026-10-19T14:39:37.601898Z",
+      "root_retained_same_version3": true,
+      "frozen_ready_sha256": "2f1b91394133378b19dc4ee7fece216292b6f45b2257107d67769935dfb7b7a1",
+      "base_lease_sha256": "44ab97df5a041e74e64dce48c827d0ee3d796f72611cb12c71a85623cfb64573",
+      "current_same_lease_sha256": "c11e3ccd24c72837eb6e5c7e166842916df692bafc5345498c19092900e98578",
+      "lease_binding_note": "Driver and raw release retain exact base leasev2 SHA44ab; root current same-lease update/custody decision SHA is retained separately, with fresh actual readbacks required. Only go() code changed.",
+      "root_decision": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3-browse/root-custody-decision.json",
+      "current_lease_copy": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3-browse/root-retained-lease-v2-current.json",
+      "own_fresh_OAuth_identity": {
+        "authStage": "eligible exact actor qualified",
+        "sessionAgent": {
+          "at": "2026-10-19T14:43:37.411Z",
+          "status": 200,
+          "eligible": true,
+          "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839"
+        },
+        "final": {
+          "status": 200,
+          "eligible": true,
+          "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839"
+        }
+      },
+      "reacquired_at_utc": "2026-10-19T14:43:45.690Z",
+      "before_readback_at_utc": "2026-10-19T14:43:45.686Z",
+      "after_readback_at_utc": "2026-10-19T14:44:26.635Z",
+      "actual_before_after_readbacks": "reader-state200/continue200; same exact actor71473997 and Book01a10aff; readingCAS3/null dates/progressnull/customShelves[]/sequence11954, next5caa At the harbour unreadexact1; final eligible identity200",
+      "no_prohibited_writes": true,
+      "borrower_released": true,
+      "final_release_at_utc": "2026-10-19T14:44:28.602Z",
+      "release": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3-browse/card-only-original-at-1/borrower-release.json",
+      "release_mail": "mail:fd3efcb4-ee64-4743-a892-413cfaeead85",
+      "restoration_performed_by_borrower": false,
+      "cleanup_due": "Root dispatches G-2831 mandatory fresh-current-CAS exact original-state restoration after this final job/release and before another borrow. No restoration receipt claimed here."
+    },
+    "owned_cleanup": {
+      "verification": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3-browse/owned-cleanup-verification.json",
+      "verified_at_utc": "2026-10-19T14:46:00.052996+00:00",
+      "all_recorded_owned_pids_absent": true,
+      "port_39493_listening": false,
+      "owned_sink_present": false,
+      "no_shared_or_peer_lifecycle_or_persistent_configuration_change": true
+    },
+    "safe_artifacts": {
+      "directory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3-browse",
+      "diagnosis": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3-browse/diagnosis.json",
+      "diagnosis_sha256": "8b44ca7ad49cd11fc9c817c5f8e636963e78e1e2a64b1b4bb9d59f8988e14f34",
+      "manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-selected3-browse/artifact-manifest.json",
+      "manifest_sha256": "93be728353a24e8849c31a210b58b38818c55a0a7a682bf689bb21339a5e40b2",
+      "count": 31,
+      "no_credentials_tokens_browser_state_or_whole_environment_published": true
+    },
+    "product_audit": {
+      "same_principle_surfaces": [
+        "card-home-de-390",
+        "card-home-fr-390",
+        "card-library-de-390"
+      ],
+      "new_confirmed_product_findings": [],
+      "original_card_reader_acceptance": "Still unreached in this run; prior3093 heading failures retained separately. No DOM-name, page speech, permission speech or installed Browse-mode binding substitutes for actual card description/status speech.",
+      "external_operator_device_requirement": "Not established; exact routine native-input qualification issue identified.",
+      "zero_unread_notifications_and_component_3_99_limits": "Preserved at original proof tier; genuine chapter unread1 is a separate reading fixture.",
+      "class_closure": "Audit manager only; no worker closure."
+    },
+    "report_validation": {
+      "required_commands": [
+        "task docs:check",
+        "task goal -- check"
+      ],
+      "status": "passed recorded report-only validation",
+      "job": "99dce63f-ec64-443c-a5d3-0c48477419a5",
+      "docs_log": ".temp/goal/jobs/99dce63f-ec64-443c-a5d3-0c48477419a5.1.log",
+      "docs_result": "13 tests passed; 259 Markdown files checked",
+      "goal_log": ".temp/goal/jobs/99dce63f-ec64-443c-a5d3-0c48477419a5.2.log",
+      "goal_check_run": "run-wTEafh",
+      "goal_result": "AST and selected guard passed (1/45); no changed TypeScript/source workspace or brief-named tests",
+      "validation_limit": "Report-only validation; does not convert native-input setup failure into an original card assertion pass."
+    },
+    "manager_next": "Root/G2831 fresh-current-CAS exact prior-state restoration after this final release. Any further borrow requires new root custody; exact routine input-qualification gap is a one-shot permission probe before the asynchronously appearing prompt, followed by lost owned-window focus. No external operator/device or product defect established."
+  },
   "site_recovery_six_path_first_source_review": {
     "atUTC": "2026-10-19T14:57:43.823662+00:00",
     "worker": "G-2847",
@@ -3665,5 +5079,1117 @@
       "manifest_sha256": "36e7dd6e6ddaefb46b4d0648093cef3246f791e97034ddfce326a5c323508282",
       "count": 143
     }
+  },
+  "aud_012_fixture_free_native_input_qualification": {
+    "atUTC": "2026-10-19T15:20:12.365876+00:00",
+    "claim": "AUD-012 original AT supplement; one fixture-free native-input setup qualifier only",
+    "reviewer": {
+      "worker": "G-2847",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "nestedAgents": false,
+      "fallback": false
+    },
+    "scope": "One owned local static HTML document; no product routes/frontend/backend/Accounts/OAuth/fixture or source review. Stop after pass/fail as manager directed.",
+    "priorReportCommit": "a621a9cc2490d6a964fa6f0cc563dd285574ec53",
+    "preservedFields": [
+      "schema_version",
+      "review_id",
+      "goal",
+      "manager_session",
+      "reviewer",
+      "reviewed_at_utc",
+      "result",
+      "verdict",
+      "revisions",
+      "scope_and_provenance",
+      "common_web_review_reuse",
+      "new_confirmed_findings",
+      "reused_open_dependency_findings",
+      "product_audit",
+      "reused_candidate_checks",
+      "reused_runtime_readiness",
+      "independent_candidate_history_check",
+      "historical_counterexamples",
+      "screenshot_inspection",
+      "remaining_genuine_acceptance",
+      "report_validation",
+      "manager_next",
+      "latest_source_landing_verdict",
+      "corrected_candidate_delta_review",
+      "d3_002_guard_delta_review",
+      "typed_private_identity_delta_review",
+      "guard_selection_correction_review",
+      "aud_012_actual_assistive_technology_supplement",
+      "aud_012_supported_renewal_continuation",
+      "aud_012_composed_frontend_continuation",
+      "shell_page_end_source_review",
+      "d4_002_site_navigation_component_inspection",
+      "aud_012_signed_in_real_at_transport_continuation",
+      "aud_012_selected_card_reader_continuation",
+      "aud_012_selected_card_browse_preparation_continuation",
+      "site_recovery_six_path_first_source_review"
+    ],
+    "priorSixPathSourceApproval": "Unchanged and independent of this failed AT setup qualification. All prior source/runtime/anonymous/signed-in and historical failure dispositions remain at their original pins.",
+    "job": {
+      "atUTC": "2026-10-19T15:20:12.365876+00:00",
+      "reportBase": "a621a9cc2490d6a964fa6f0cc563dd285574ec53",
+      "job": "f0259312-ca08-40d5-8d39-d7e6f7ef9900",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-qualifier/qualification.test.ts",
+      "normalGoalctlTaskAdmission": true,
+      "exit": 1,
+      "classification": "setup/environment qualification failure; recorder result class assertion",
+      "oneAttemptOnly": true,
+      "testDriverSha256": "36743b0a89b23ae6999465bb7ea14b494207c07fe5155c7c5d94243da3ebf02a",
+      "documentSha256": "190aae5dcbcfd89693a513cfd9ca554609e518c417e2159cf43df4e5f1ccf088",
+      "onlySetupSupportChanges": [
+        "owned ignored at-session.ts",
+        "owned ignored temporary-native-permission.py"
+      ],
+      "unchangedSupport": [
+        "native-key-server.py",
+        "native-key.py",
+        "atspi-monitor.py"
+      ],
+      "unchangedFocusBrowseSectionSha256": "2839be25a015bbed9b4735394ab6291645bc060121efe6744a7f47afc59c75a9",
+      "originalCallbackBytes": 3268,
+      "originalCallbackSha256": "9c56d91f687e9a03a00ce05dc88171ba22d63beab60d7de6b55592d0296aa4e8",
+      "productSourceEdited": false,
+      "originalProductAssertionsEdited": false,
+      "sourceReviewRepeated": false,
+      "productFrontendPinUsed": null,
+      "backendUsed": null,
+      "authUsed": false,
+      "readerBorrowed": false,
+      "actualLocalOrigin": "http://127.0.0.1:38831",
+      "actualRequests": [
+        {
+          "at": "2026-10-19T15:16:54.041Z",
+          "method": "GET",
+          "url": "http://127.0.0.1:38831/qualification.html"
+        },
+        {
+          "at": "2026-10-19T15:16:54.231Z",
+          "method": "GET",
+          "url": "http://127.0.0.1:38831/favicon.ico"
+        }
+      ],
+      "outcome": "fixture-free environment/native-input qualification failed; no product finding or closure",
+      "cleanup": {
+        "atUTC": "2026-10-19T15:16:58.827Z",
+        "borrower": "G-2847",
+        "borrowerReleased": true,
+        "fixtureBorrowed": false,
+        "leaseState": "RELEASED/noFurtherBorrow before this job; root reports G-2831 restoration null status CAS4",
+        "oldReadySha256": "2f1b91394133378b19dc4ee7fece216292b6f45b2257107d67769935dfb7b7a1",
+        "oldReadyConsumed": false,
+        "rootRetainedCAS3Reacquired": false,
+        "readerWrites": false,
+        "productApiRequests": 0,
+        "cleanupDueG2831": false,
+        "reason": "Fixture-free local HTML qualifier only. No reader custody acquired, so no additional restoration requested.",
+        "ownedCleanupVerifiedAt": "2026-10-19T15:18:26.129278+00:00",
+        "ownedProcessesAbsent": true,
+        "ownedSocketsRemoved": true,
+        "ownPortClosed": true,
+        "ownSinkRemoved": true,
+        "baselinePromptsPreserved": [
+          {
+            "pid": 1397419,
+            "unchangedIdentityLabelsButtonsCheckboxes": true
+          },
+          {
+            "pid": 1439206,
+            "unchangedIdentityLabelsButtonsCheckboxes": true
+          }
+        ],
+        "unapprovedFreshPromptStillPresentAfterOwnedConnectionClosed": [
+          2262723
+        ],
+        "promptActionsOrDismissal": false,
+        "nextProductBorrow": "requires root fresh explicit serialized custody after qualification; no old-ready reuse"
+      }
+    },
+    "result": {
+      "atUTC": "2026-10-19T15:20:12.365876+00:00",
+      "disposition": "fixture-free environment/native-input qualification failed; no product finding or closure",
+      "job": "f0259312-ca08-40d5-8d39-d7e6f7ef9900",
+      "exit": 1,
+      "tests": {
+        "pass": 0,
+        "fail": 1,
+        "expectCalls": 2,
+        "testDurationMs": 21669.73
+      },
+      "failure": "Permission inspection/action failed: Allow action is not unambiguous",
+      "failureLocation": {
+        "helper": "temporary-native-permission.py:84-85",
+        "caller": "at-session.ts:80,104",
+        "driver": "qualification.test.ts:40"
+      },
+      "cause": "The new ignored helper imposed action.nActions == 1 on the unique Allow button and refused it before action.doAction. This setup restriction did not establish a product defect. Actual count and action names were not retained, so no particular activation action is identified.",
+      "observedBoundary": {
+        "soleFreshPromptFound": true,
+        "freshPid": 2262723,
+        "freshIdentity": {
+          "pid": 2262723,
+          "path": [
+            0
+          ],
+          "role": "dialog",
+          "name": "Remote Control"
+        },
+        "visible": true,
+        "showing": true,
+        "active": true,
+        "persistenceChecked": false,
+        "initialControlRequested": true,
+        "temporaryAllowActionsPerformed": 0,
+        "actualControlDelivered": 0,
+        "actualInsertDelivered": 0,
+        "postGrantReactivationReached": false,
+        "sixTabPreparationReached": false,
+        "conditionalBrowsePreparationReached": false,
+        "originalProductCallbacksReached": false,
+        "screenshotCount": 0,
+        "screenshotsViewed": []
+      },
+      "deadline": {
+        "absoluteMs": 6100,
+        "failureElapsedMs": 2488.2466069999973,
+        "resetPerPoll": false,
+        "helpersBoundedByRemainingDeadline": true,
+        "configuredYieldMs": 50,
+        "actualInspectionCompletionGapMs": 765.2286850000019,
+        "pollingLimit": "Read-only helper startup/AT-SPI calls took longer than250ms; requested maximum250ms sampling cadence was not established. Do not claim full polling-plan qualification."
+      },
+      "attributionLimit": "One root-authorized isolated request interval, own persistent X11 PID and sole fresh prompt with exact text; legacy python3 identity remains OS-unverified. No permission action was taken.",
+      "actualSpeech": {
+        "connectedFactory": "speechdispatcherfactory",
+        "observedUtterances": [
+          "Screen reader on.",
+          "about:blank - Google Chrome"
+        ],
+        "pulseWriteCount": 12,
+        "audio": {
+          "bytes": 574478,
+          "peak": 32767,
+          "nonzeroSamplesAbove50": 12843,
+          "sha256": "bc8bfdc5e653622a3f074471178f29d9f02b4320ed27d2b3cfcf4b6e1ed1e8f1",
+          "source": "owned Pulse sink monitor; actual Orca/backend only; no copied DOM TTS"
+        },
+        "localButtonOrBrowseSpeechQualified": false,
+        "humanListeningClaim": false
+      },
+      "remainingOriginalAssertion": "deHome390/frHome390/deLibrary390 genuine card heading/description/unread-status actual Orca callbacks remain unreached; prior all32 failures and nav81/six destinations/Settings/Following/anonymous proofs retained.",
+      "nextBoundedSetupEvidence": "Root may refine the existing setup only: retain/revalidate exact Allow action count and names, identify a unique supported activation without a one-total-action assumption, and meet/qualify the planned bounded polling cadence. No further run or product borrow was performed here."
+    },
+    "artifacts": {
+      "directory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-qualifier",
+      "inputManifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-qualifier/input-manifest.json",
+        "sha256": "6135eeaafc0d9ab4d11f66a8a7c2bf45628e5e0b11962f1c096838629395d85b"
+      },
+      "artifactManifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-qualifier/artifact-manifest.json",
+        "sha256": "b8ab3f56fab2d5cfb9c0581cd3df39465401fa8fd40bdf7ccc563c91e7e152eb"
+      },
+      "diagnosis": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-qualifier/diagnosis.json",
+        "sha256": "b237857760966958e81840cba8c1ceff8834a67a12198a9f21029c04cad805cf"
+      },
+      "executionReceipt": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-qualifier/execution-receipt.json",
+        "sha256": "98c92f6b2e966c7b1cb24ba8d7321e190d09d23662b1599903cd0da75e570e60"
+      },
+      "borrowerRelease": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-qualifier/borrower-release.json",
+        "sha256": "7e18392f829ee096279c1cd61f6c6923233d2585ce3bc274d7b9707ed1db1db5"
+      },
+      "cleanup": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-qualifier/owned-cleanup-verification.json",
+        "sha256": "05860af501cd739337a065dfdf7d8fc5a08e61b3c5f7130aed4cb13ab56bb7cd"
+      },
+      "actualAT": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-qualifier/at-evidence-excerpts.json",
+        "sha256": "9849fa5e2b52f5b429823194939ac0d0626331cbf451592fe23e11e1926d4a85"
+      },
+      "audio": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-qualifier/qualification-1/speech.wav",
+        "sha256": "bc8bfdc5e653622a3f074471178f29d9f02b4320ed27d2b3cfcf4b6e1ed1e8f1",
+        "listened": false
+      },
+      "screenshotsViewed": []
+    },
+    "closure": "No original class self-closure, no product failure inferred, no unavoidable external/operator requirement established. Root decides any next existing-scope setup correction or fresh serialized product borrow.",
+    "reportChecks": {
+      "job": "f14e5fac-77f4-4c2d-a112-98a3bd749aa3",
+      "exit": 0,
+      "commands": [
+        "task docs:check",
+        "task goal -- check"
+      ],
+      "docs": {
+        "tests": 13,
+        "markdownFiles": 259,
+        "passed": true
+      },
+      "goalCheckRun": "run-6otjUg",
+      "goalCheck": {
+        "types": "ok; no TypeScript workspace changed",
+        "tests": "ok; no tests named in brief",
+        "lint": "ok; no source changed",
+        "ast": "ok",
+        "guards": "ok; 1/45 selected"
+      },
+      "qualificationRerun": false,
+      "scope": "report-only checks; no original source/runtime/AT replay"
+    }
+  },
+  "aud_012_semantic_native_input_qualification": {
+    "atUTC": "2026-10-19T15:31:46.065095+00:00",
+    "claim": "AUD-012 original missing AT supplement; one fixture-free semantic-action native-input qualifier only",
+    "reviewer": {
+      "worker": "G-2847",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "nestedAgents": false,
+      "fallback": false
+    },
+    "priorReportCommit": "9d4c46a01ab3dcb2230c8399f0bd41f12e41343f",
+    "preservedFields": [
+      "schema_version",
+      "review_id",
+      "goal",
+      "manager_session",
+      "reviewer",
+      "reviewed_at_utc",
+      "result",
+      "verdict",
+      "revisions",
+      "scope_and_provenance",
+      "common_web_review_reuse",
+      "new_confirmed_findings",
+      "reused_open_dependency_findings",
+      "product_audit",
+      "reused_candidate_checks",
+      "reused_runtime_readiness",
+      "independent_candidate_history_check",
+      "historical_counterexamples",
+      "screenshot_inspection",
+      "remaining_genuine_acceptance",
+      "report_validation",
+      "manager_next",
+      "latest_source_landing_verdict",
+      "corrected_candidate_delta_review",
+      "d3_002_guard_delta_review",
+      "typed_private_identity_delta_review",
+      "guard_selection_correction_review",
+      "aud_012_actual_assistive_technology_supplement",
+      "aud_012_supported_renewal_continuation",
+      "aud_012_composed_frontend_continuation",
+      "shell_page_end_source_review",
+      "d4_002_site_navigation_component_inspection",
+      "aud_012_signed_in_real_at_transport_continuation",
+      "aud_012_selected_card_reader_continuation",
+      "aud_012_selected_card_browse_preparation_continuation",
+      "site_recovery_six_path_first_source_review",
+      "aud_012_fixture_free_native_input_qualification"
+    ],
+    "scope": "Manager-directed stop after this fixture-free result and cleanup. No Accounts, Main, backend, login, product routes, fixture custody, source review or product callbacks.",
+    "preservedHistory": "All 37 preceding fields remain unchanged, including failed f025 qualification, prior original card setup failures, source45 six-path approval, signed-in81/six activations/Settings/Following/anonymous22 and all preceding evidence tiers.",
+    "job": {
+      "atUTC": "2026-10-19T15:31:46.065095+00:00",
+      "reportBase": "9d4c46a01ab3dcb2230c8399f0bd41f12e41343f",
+      "job": "86f40d52-7522-4abd-acc5-e867eaba1e06",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-actions-qualifier/qualification.test.ts",
+      "normalGoalctlTaskAdmission": true,
+      "exit": 0,
+      "oneFixtureFreeAttemptOnly": true,
+      "testDriverSha256": "36743b0a89b23ae6999465bb7ea14b494207c07fe5155c7c5d94243da3ebf02a",
+      "documentSha256": "190aae5dcbcfd89693a513cfd9ca554609e518c417e2159cf43df4e5f1ccf088",
+      "originalQualifierDriverUnchanged": true,
+      "onlySetupSupportChanges": [
+        "owned ignored at-session.ts",
+        "owned ignored temporary-native-permission.py"
+      ],
+      "unchangedSupport": [
+        "native-key-server.py",
+        "native-key.py",
+        "atspi-monitor.py"
+      ],
+      "unchangedFocusBrowseSectionSha256": "2839be25a015bbed9b4735394ab6291645bc060121efe6744a7f47afc59c75a9",
+      "originalCallbackBytes": 3268,
+      "originalCallbackSha256": "9c56d91f687e9a03a00ce05dc88171ba22d63beab60d7de6b55592d0296aa4e8",
+      "productSourceEdited": false,
+      "originalProductAssertionsEdited": false,
+      "sourceReviewRepeated": false,
+      "productFrontendUsed": null,
+      "backendUsed": null,
+      "authUsed": false,
+      "browser": "/usr/bin/google-chrome",
+      "ownedBrowserPid": 2526327,
+      "display": ":0",
+      "atSpiBus": "unix:path=/run/user/1000/at-spi/bus_0",
+      "actualLocalOrigin": "http://127.0.0.1:36871",
+      "actualRequests": [
+        {
+          "at": "2026-10-19T15:27:08.128Z",
+          "method": "GET",
+          "url": "http://127.0.0.1:36871/qualification.html"
+        },
+        {
+          "at": "2026-10-19T15:27:08.190Z",
+          "method": "GET",
+          "url": "http://127.0.0.1:36871/favicon.ico"
+        }
+      ],
+      "nonlocalRequests": [],
+      "result": "PASS: one fixture-free owned native-input, actual document-focus and already-Browse qualification; no product assertion or class closure",
+      "cleanup": {
+        "atUTC": "2026-10-19T15:27:16.024Z",
+        "borrower": "G-2847",
+        "borrowerReleased": true,
+        "fixtureBorrowed": false,
+        "leaseState": "RELEASED/noFurtherBorrow before this job; root reports G-2831 exact restoration to null status CAS4",
+        "oldReadyConsumed": false,
+        "rootRetainedCAS3Reacquired": false,
+        "productApiRequests": 0,
+        "readerWrites": false,
+        "cleanupDueG2831": false,
+        "reason": "Fixture-free local HTML qualifier only; no reader custody acquired or current reader-state readback performed.",
+        "ownedCleanupVerifiedAt": "2026-10-19T15:30:20.954102+00:00",
+        "ownedPidsAbsent": true,
+        "ownedProcessGroupsAbsent": true,
+        "ownPortClosed": true,
+        "ownSinkRemoved": true,
+        "ownSocketsRemoved": true,
+        "baselinePromptsPreserved": [
+          {
+            "pid": 1397419,
+            "unchangedIdentityLabelsButtonsCheckboxes": true,
+            "allPersistenceUnchecked": true
+          },
+          {
+            "pid": 1439206,
+            "unchangedIdentityLabelsButtonsCheckboxes": true,
+            "allPersistenceUnchecked": true
+          },
+          {
+            "pid": 2262723,
+            "unchangedIdentityLabelsButtonsCheckboxes": true,
+            "allPersistenceUnchecked": true
+          }
+        ],
+        "newTemporaryPromptGone": true,
+        "persistentOptionTouched": false,
+        "nextProductBorrow": "Root alone may authorize a fresh serialized fixture custody after this published qualification. No old-ready reuse or automatic product run."
+      }
+    },
+    "result": {
+      "atUTC": "2026-10-19T15:31:46.065095+00:00",
+      "disposition": "PASS: one fixture-free owned native-input, actual document-focus and already-Browse qualification; no product assertion or class closure",
+      "job": "86f40d52-7522-4abd-acc5-e867eaba1e06",
+      "exit": 0,
+      "tests": {
+        "pass": 1,
+        "fail": 0,
+        "expectCalls": 9,
+        "totalDurationSeconds": 20.27
+      },
+      "passiveActionDiscovery": {
+        "baselinePids": [
+          1397419,
+          1439206,
+          2262723
+        ],
+        "actionCount": 2,
+        "observedActions": [
+          {
+            "index": 0,
+            "name": "Press",
+            "description": "Triggers the action",
+            "keybinding": ""
+          },
+          {
+            "index": 1,
+            "name": "SetFocus",
+            "description": "Sets the focus",
+            "keybinding": "Enter"
+          }
+        ],
+        "passiveActionsTaken": false,
+        "selected": {
+          "index": 0,
+          "name": "Press",
+          "description": "Triggers the action",
+          "keybinding": ""
+        },
+        "reason": "Unique observed Press/Triggers the action; SetFocus is distinct and was not selected. Immediate inventory/path/PID/label/unchecked/visible/enabled revalidation retained. Unknown or duplicate activation is still rejected."
+      },
+      "temporaryPermission": {
+        "freshPrompt": {
+          "pid": 2530337,
+          "path": [
+            0
+          ],
+          "role": "dialog",
+          "name": "Remote Control"
+        },
+        "actionsTaken": 1,
+        "baselineActions": 0,
+        "persistentOptionTouched": false,
+        "dialogGoneAt": "2026-10-19T15:27:11.292Z",
+        "reactivatedOwnedChrome": true,
+        "persistentConnectionPid": 2527556,
+        "freshControlNativeAtEpoch": 1792423631.705784,
+        "actualOrcaControlReceived": true
+      },
+      "deadline": {
+        "absoluteMs": 6100,
+        "actualElapsedMs": 3320.2417129999994,
+        "existingSettleMs": 500,
+        "resetPerPoll": false,
+        "helpersBoundedByRemainingDeadline": true,
+        "configuredYieldMs": 0,
+        "pureInspectionCompletionGapsMs": [
+          265.16577099999995,
+          407.71472600000016
+        ],
+        "samplingLimit": "Python/AT-SPI latency exceeded 250ms on some probes despite zero added yield. A maximum 250ms polling cadence was not established. Actual sole-fresh discovery, one semantic temporary action and fresh Control delivery completed within the unchanged absolute 6100ms qualification deadline."
+      },
+      "focus": {
+        "nativeTabCount": 1,
+        "maximumUnchanged": 6,
+        "actualOwnedDocumentFocus": true,
+        "caption": "Return to local heading",
+        "matchingAtSpiFocus": true
+      },
+      "browse": {
+        "actualBeforeFocusMode": false,
+        "actualAfterFocusMode": false,
+        "alreadyBrowseBranchQualified": true,
+        "conditionalFocusBranchExercised": false,
+        "insertASent": false,
+        "browseAnnouncementInNewModeSpan": false,
+        "limit": "This run was already Browse; it does not prove Insert delivery or a Focus-to-Browse transition. The original conditional native command and speech/backend predicates were preserved."
+      },
+      "speech": {
+        "actualFactoryConnection": true,
+        "actualLocalCaptionOrcaOutput": true,
+        "actualDispatcherSpeaking": true,
+        "actualPulseDelivery": true,
+        "backendPulseWriteCount": 53,
+        "audio": {
+          "bytes": 544078,
+          "peak": 32768,
+          "nonzeroSamplesAbove50": 81949,
+          "sha256": "454ba61ca549d0f810ac010e8e104e64e18d1bd9c813765ed173fdf240cd0e96",
+          "source": "owned Pulse sink monitor; actual Orca/backend only; no copied DOM TTS",
+          "pcm": {
+            "channels": 1,
+            "sampleRate": 16000,
+            "sampleWidthBytes": 2,
+            "frames": 272000,
+            "durationSeconds": 17.0
+          }
+        },
+        "domTextSentToTts": false,
+        "humanListeningClaim": false
+      },
+      "attributionLimit": "Root-authorized isolated single-request qualifier; temporal sole-fresh-dialog attribution only. Legacy X11 python3 identity is not OS-verified.",
+      "remainingOriginalAcceptance": "The selected deHome390/frHome390/deLibrary390 genuine card heading/description/unread-status callbacks remain unexecuted here. All prior failed attempts and passing anonymous22/signed-in81/six destinations/Settings/Following proof remain at their original pins. Root must separately authorize fresh serialized product custody; old restored CAS3 fixture/ready was not reused."
+    },
+    "artifacts": {
+      "directory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-actions-qualifier",
+      "inputManifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-actions-qualifier/input-manifest.json",
+        "sha256": "6610da1c57802b8e8bce660fa5f286f33fc5f97200ef00e4e7a6796c825ab4e8"
+      },
+      "artifactManifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-actions-qualifier/artifact-manifest.json",
+        "sha256": "c8030ab4ecf47a0bbac1e89565d4a37e70d7b25980176c64b42d94668121033f"
+      },
+      "diagnosis": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-actions-qualifier/diagnosis.json",
+        "sha256": "efceb177764ebcfe62a92ce0706f0d56e44f485c2c27d3db97e8e06f306decd5"
+      },
+      "executionReceipt": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-actions-qualifier/execution-receipt.json",
+        "sha256": "6411b998c774382dbd71a2bb98df4779b9af3e55fe5b9a6002a248ca183c3ee1"
+      },
+      "borrowerRelease": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-actions-qualifier/borrower-release.json",
+        "sha256": "acd7e63de14cfd3797dbfbff13824a210fbd131b5f4ae8450b65fa50bb42a829"
+      },
+      "ownedCleanup": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-actions-qualifier/owned-cleanup-verification.json",
+        "sha256": "7213b8953d3922acfb1c37673ddca7516c2e51d6bd81354ee8df3394a7fdfd76"
+      },
+      "actualATEvidence": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-actions-qualifier/at-evidence-excerpts.json",
+        "sha256": "001456213d8669b4f1bea79acd9f53defbc2a9e8782ee321bded685960108d45"
+      },
+      "visualInspection": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-actions-qualifier/visual-inspection.json",
+        "sha256": "47f9de1fc8d68c7be6ee7c4efda0bebbd4da190e327ac4446806a42b4228f16f"
+      },
+      "passiveActionEnumeration": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-actions-qualifier/passive-allow-actions.json",
+        "sha256": "526a760e6616e6831bf8fcbfe213205b3dedbc561063f4926e50f9adb8784396"
+      },
+      "recordedJobLog": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-actions-qualifier/recorded-qualification-job.log",
+        "sha256": "1601331480ba76db918c5d15e5e87624aa0138db263f4e0640c7dabafeb18cb0"
+      },
+      "ownedSpeechAudio": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-actions-qualifier/qualification-1/speech.wav",
+        "sha256": "454ba61ca549d0f810ac010e8e104e64e18d1bd9c813765ed173fdf240cd0e96"
+      },
+      "screenshotsActuallyViewed": [
+        {
+          "viewedAtUTC": "2026-10-19T15:31:46.065095+00:00",
+          "path": "qualification-1/qualification.png",
+          "sha256": "094455316860e9466b9aa6bc39ef2388e47771f1bf069bfe1e0d691355a18399",
+          "viewport": {
+            "width": 390,
+            "height": 600
+          },
+          "tier": "fixture-free local document, independent of product UI",
+          "observed": "Local native-input button, Local qualification document heading, explanatory paragraph, and Return to local heading link. The link has a visible focus outline following the recorded native Tab. No product content is present.",
+          "actualATCorrespondence": "The link focus has a matching owned-browser AT-SPI event and actual Orca/dispatcher caption output. Screenshot alone is not speech evidence."
+        }
+      ],
+      "reportChecks": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-native-input-actions-qualifier/report-checks.json",
+        "sha256": "69c919dbcf6dbef75aeb3ffc4cd9a5fcdd7860b514cf8c7ec1787f9f12b48c2a"
+      }
+    },
+    "managerNext": "Native transport and already-Browse local qualification passed. Root may now decide a fresh serialized product borrow for the three existing card assertions; no automatic borrow, no original class self-closure, no claim of the unexercised Focus-to-Browse branch.",
+    "reportChecks": {
+      "atUTC": "2026-10-19T15:32:41.335105+00:00",
+      "job": "81ad2290-f3d9-4ab7-822c-7f6ecd088ae2",
+      "exit": 0,
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "docs": {
+        "exit": 0,
+        "tests": 13,
+        "markdownFiles": 259,
+        "limit": "local links, fragments and design navigation; no external URLs/runtime testing"
+      },
+      "goal": {
+        "exit": 0,
+        "run": "run-FmLy2H",
+        "types": "no TypeScript workspace changed",
+        "tests": "no test files named in brief",
+        "lint": "no source file changed",
+        "ast": "passed",
+        "guards": "1/45 selected; passed"
+      },
+      "trackedChangedFiles": [
+        "docs/goals/audit-remediation-20261019/proofs/startup-navigation-review.json"
+      ],
+      "prior37FieldsDeeplyUnchanged": true
+    }
+  },
+  "coldHomeSsrEditorPrebundleFirstReview": {
+    "atUTC": "2026-10-19T15:49:52.639477+00:00",
+    "reviewer": {
+      "worker": "G-2847",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "fallback": false,
+      "nestedAgents": false
+    },
+    "scope": "One first independent source review of the bounded two-path cold Home SSR editor-prebundle correction; no repeat of prior reviews, implementation, landing or original-class closure.",
+    "verdict": "APPROVE: no actionable findings for the exact two-file delta caecadc10a37b36daaf03773282b47183673ee89..b16d670c7ab1f3f821b67c2696cbbd768703ee4a.",
+    "actionableFindings": [],
+    "source": {
+      "repository": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2747/.temp/hard-home-ssr/candidate",
+      "base": "caecadc10a37b36daaf03773282b47183673ee89",
+      "candidate": "b16d670c7ab1f3f821b67c2696cbbd768703ee4a",
+      "tree": "5f3f161fe278c28b1843109cb051482820146488",
+      "inspectionMethod": "read-only git -C on immutable owner repository; GIT_OPTIONAL_LOCKS=0 for status; no checkout/import/peer writes",
+      "exactlyTwoChangedPaths": true,
+      "observedSourceClean": true,
+      "bundle": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/source/ssr-editor-prebundle.bundle",
+        "bytes": 2016,
+        "sha256": "35e531e2fceb209f3e0d57962e7f217517c7c274ef01a7e510e2c7f59a094b32"
+      },
+      "selectedFiles": [
+        {
+          "path": "apps/web/vite.config.ts",
+          "beforeBlob": "5340e037be04b55b3499adb537984ee440edcb61",
+          "beforeSha256": "f3e735deaf8bc457f322eae2ec351394f33588604901e80b8a95b59a2020200e",
+          "afterBlob": "264ebde4faa74e864463bc20c9525d73361fbf05",
+          "afterSha256": "21bacb35aa1e1e5eba70fe28a61c91ba1b20289f41eeaa697a1b5c05771594b3",
+          "observedMainBlob": "5340e037be04b55b3499adb537984ee440edcb61",
+          "mainMatchesReviewedPreimage": true,
+          "verified": true
+        },
+        {
+          "path": "apps/web/tests/dependency-environments.test.ts",
+          "beforeBlob": "dec30ba944d262bdb2c78f8477dd282fe10acf12",
+          "beforeSha256": "51006661101d6147fe55e97feb90277ae247a5d55057fc78ccb923952ddeac2c",
+          "afterBlob": "274a7b0bff67e88c60bc4873c994dd9e360663b3",
+          "afterSha256": "6be70cf40dd0986017bec3d8729854a5169b4a3562c9d46193a5a5a134157225",
+          "observedMainBlob": "dec30ba944d262bdb2c78f8477dd282fe10acf12",
+          "mainMatchesReviewedPreimage": true,
+          "verified": true
+        }
+      ],
+      "sourcePatch": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/source/two-path.patch",
+        "bytes": 3647,
+        "sha256": "c000c0a4882e26a928004f93e39f9a4a554174e856ce190540f0d3cd4a539948"
+      }
+    },
+    "changedFileDisposition": [
+      {
+        "path": "apps/web/vite.config.ts",
+        "lines": "71-98; added SSR includes at 81-96",
+        "disposition": "APPROVE",
+        "assessment": "The twelve observed non-React Tiptap runtime imports are predeclared only in environments.ssr.optimizeDeps.include. Existing client/browser dependencies and the RSC native-i18n/tailwind-variants list remain unchanged. No top-level include, dependency/version change, plugin/environment reassignment, auth/read, timeout or discovery weakening is introduced."
+      },
+      {
+        "path": "apps/web/tests/dependency-environments.test.ts",
+        "lines": "26-46",
+        "disposition": "APPROVE",
+        "assessment": "Uses actual Vite resolveConfig and the existing typescript-6 AST API. Derives literal static runtime imports from the three existing TSX editor owners, excludes declaration-level and all-type named imports, retains mixed/default/namespace/side-effect runtime imports, excludes the intentional @tiptap/react client boundary, deduplicates, guards nonempty discovery, and checks each dependency in SSR and absent from RSC. The two earlier tests remain unchanged; no own module is mocked.",
+        "coverageLimit": "The regression targets the three named current owners and static import declarations. It does not purport to discover arbitrary future owners or dynamic imports."
+      }
+    ],
+    "ssrRuntimeDependencies": [
+      "@tiptap/core",
+      "@tiptap/extension-image",
+      "@tiptap/extension-list",
+      "@tiptap/extension-placeholder",
+      "@tiptap/extension-table",
+      "@tiptap/extension-text-align",
+      "@tiptap/extension-text-style",
+      "@tiptap/extension-unique-id",
+      "@tiptap/pm/model",
+      "@tiptap/pm/state",
+      "@tiptap/starter-kit",
+      "@tiptap/suggestion"
+    ],
+    "productAudit": {
+      "principle": "Predeclare the current editor runtime dependency class before cold SSR starts; preserve RSC/client separation across every current import owner in this class.",
+      "unchangedOwners": [
+        {
+          "path": "packages/ui/src/components/document-extensions.tsx",
+          "blob": "56615df034ae837a2a58fab16212acbdd474fd4b",
+          "inspected": "Runtime imports 1-14 and deferred extension construction at 176-192; pm/model is type-only here, ReactNodeViewRenderer remains the intentional React boundary."
+        },
+        {
+          "path": "packages/ui/src/components/editor-commands.tsx",
+          "blob": "e10d489e8170c3b4cc90b65a3a977439fb629f3e",
+          "inspected": "use client; mixed runtime core/model/state imports at 3-5, with useEditorState on the separate React boundary."
+        },
+        {
+          "path": "packages/ui/src/components/editor-slash-menu.tsx",
+          "blob": "167b767875d9ac0df705c77f8f8c20aaec773d59",
+          "inspected": "use client; core/Suggestion runtime imports at 3-4; client hooks unchanged."
+        }
+      ],
+      "affectedSurfaceCheck": "Scoped read-only @tiptap import inventory in existing UI components found no further unique non-React runtime package beyond these twelve; other observed references repeat core/model or are type-only/React. No unrelated component source approval is implied.",
+      "newCounterexample": null,
+      "newFocusedTestJustified": false
+    },
+    "installedBehaviorReview": {
+      "runtimeManifests": [
+        {
+          "package": "vinext",
+          "version": "1.0.0-beta.13",
+          "manifestSha256": "0c2a580d880166b94bbad71bdee9e35b418c8804152ca7c0cc28355a509b7082",
+          "currentInstalledWitnessSha256MatchesRetainedProof": true
+        },
+        {
+          "package": "@vitejs/plugin-rsc",
+          "version": "0.5.38",
+          "manifestSha256": "c8284b323d4c00f69a0dca1da722797a3c71eb2a93ceff939486385787a124ec",
+          "currentInstalledWitnessSha256MatchesRetainedProof": true
+        },
+        {
+          "package": "vite",
+          "version": "8.3.4",
+          "manifestSha256": "260a0a7a96a35e1b657480014c0f3b592b70061e42099edefc8fe97972f05fd4",
+          "currentInstalledWitnessSha256MatchesRetainedProof": true
+        },
+        {
+          "package": "react",
+          "version": "19.3.1",
+          "manifestSha256": "9cc9c3de5441a2eea7f41f52f3f2a15a4fc51f90c0b72741f0d7638643a85e67",
+          "currentInstalledWitnessSha256MatchesRetainedProof": true
+        },
+        {
+          "package": "react-dom",
+          "version": "19.3.1",
+          "manifestSha256": "89d54f11575c9b0f7819962d9d72a31970dfb4d103f07e8b1d1b37e6d1fc3258",
+          "currentInstalledWitnessSha256MatchesRetainedProof": true
+        }
+      ],
+      "evidence": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/installed/code-witness-excerpts.json",
+        "bytes": 15219,
+        "sha256": "74e9f696029a3b748a200761af5aefe905604d7f8515f76d0c812faf51abfc1c"
+      },
+      "vite": "Installed Vite node.js:28761-28805 and 35808-35828 resolves/adds each environment own manually included optimizer dependencies before discovery. At 35908-35988 changed optimized metadata can invalidate that environment graph and send full-reload.",
+      "vinext": "Installed Vinext index.js:1638-1710 copies incoming top-level includes into RSC and defines SSR separately; placing these imports only in the SSR environment preserves the existing separation.",
+      "loader": "Installed plugin-rsc core/ssr.js:1-18 initializes an evaluation-local memoized client loader, whose shared memoize helper owns a new Map. React server edge code:111-123 requires the current promise and throws its unset reason if it is not fulfilled. This agrees with the retained old/new loader and promise evidence; the repair does not alter framework code."
+    },
+    "mainIntegration": {
+      "frozenMain": "3d3767a816706d1668b8219b9eaf90c22e4fb860",
+      "selectedPreimagesMatch": true,
+      "threeEditorOwnersAndWebUiManifestsMatch": true,
+      "materialComparisons": [
+        {
+          "path": "packages/ui/src/components/document-extensions.tsx",
+          "sourceBlob": "56615df034ae837a2a58fab16212acbdd474fd4b",
+          "mainBlob": "56615df034ae837a2a58fab16212acbdd474fd4b",
+          "equal": true,
+          "disposition": "reuse identical material dependency",
+          "sourceSha256": "14ca95224907eee48a488142ef4deb7ed3b6a38f12f15318a158aaf026b38c61",
+          "frozenMainSha256": "14ca95224907eee48a488142ef4deb7ed3b6a38f12f15318a158aaf026b38c61",
+          "verified": true
+        },
+        {
+          "path": "packages/ui/src/components/editor-commands.tsx",
+          "sourceBlob": "e10d489e8170c3b4cc90b65a3a977439fb629f3e",
+          "mainBlob": "e10d489e8170c3b4cc90b65a3a977439fb629f3e",
+          "equal": true,
+          "disposition": "reuse identical material dependency",
+          "sourceSha256": "cfed7c3584b7b1b4532f57fde3dbd18a8f5c3edf74c907ba83e70cea2f8c0dc4",
+          "frozenMainSha256": "cfed7c3584b7b1b4532f57fde3dbd18a8f5c3edf74c907ba83e70cea2f8c0dc4",
+          "verified": true
+        },
+        {
+          "path": "packages/ui/src/components/editor-slash-menu.tsx",
+          "sourceBlob": "167b767875d9ac0df705c77f8f8c20aaec773d59",
+          "mainBlob": "167b767875d9ac0df705c77f8f8c20aaec773d59",
+          "equal": true,
+          "disposition": "reuse identical material dependency",
+          "sourceSha256": "2084d062a0210e9f9636b97108228d6fddf0235fe8eef3c98f8aa948794adc2e",
+          "frozenMainSha256": "2084d062a0210e9f9636b97108228d6fddf0235fe8eef3c98f8aa948794adc2e",
+          "verified": true
+        },
+        {
+          "path": "apps/web/package.json",
+          "sourceBlob": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+          "mainBlob": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+          "equal": true,
+          "disposition": "reuse identical material dependency",
+          "sourceSha256": "f0b29308365ed08148f73ba83b3c5f6c5b5e890c1df2d547ece26b541ad7965f",
+          "frozenMainSha256": "f0b29308365ed08148f73ba83b3c5f6c5b5e890c1df2d547ece26b541ad7965f",
+          "verified": true
+        },
+        {
+          "path": "packages/ui/package.json",
+          "sourceBlob": "008cd8a1e103f167b4f69117d7c455b83a251f30",
+          "mainBlob": "008cd8a1e103f167b4f69117d7c455b83a251f30",
+          "equal": true,
+          "disposition": "reuse identical material dependency",
+          "sourceSha256": "918f010f3942a38f238055257a22b226046a1fd0d43b4e99574f495854d1abe4",
+          "frozenMainSha256": "918f010f3942a38f238055257a22b226046a1fd0d43b4e99574f495854d1abe4",
+          "verified": true
+        },
+        {
+          "path": "package.json",
+          "sourceBlob": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+          "mainBlob": "4aed970288778fefd485dd2e401e6fdf458f7a2d",
+          "equal": false,
+          "disposition": "preserve main; only already-reviewed Vinext patch resolution/lock addition differs",
+          "sourceSha256": "507787932c026b08db8c45a0673da53ee42a8668bda84cfc5e2d4a62d30afdb4",
+          "frozenMainSha256": "487061c605dc753c9e60c657ecaa4dd7cf417a213ac65c2e906380367b98acaf",
+          "verified": true
+        },
+        {
+          "path": "yarn.lock",
+          "sourceBlob": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+          "mainBlob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+          "equal": false,
+          "disposition": "preserve main; only already-reviewed Vinext patch resolution/lock addition differs",
+          "sourceSha256": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30",
+          "frozenMainSha256": "026c93ddc3085e43b1ff6727a42f7c55b03a03cc1aa4c11cbf57438ce5b9d391",
+          "verified": true
+        }
+      ],
+      "rootPackageAndYarnDifference": "Only the already approved Vinext refresh-retain-document resolution and its lock stanza differ from b16d. Source selection must preserve those current-main dependencies; no old root package/lock restoration or whole-wave import.",
+      "approvedPatch": {
+        "path": ".yarn/patches/vinext-refresh-retain-document.patch",
+        "blob": "59e238412881bd350741a8b4528a586b77ba375a",
+        "sha256": "3c1f008b04ed3d37b42afcc007ef479de7405bc787bde671afa284fa1b7aecaf",
+        "integrationAssessment": "Observed integration comparison only: the patch adds the refresh catch return in dist/server/app-browser-entry.js near 1451, preserving finally; it does not change the inspected SSR optimizer/plugin paths. G-2836 accepted review is not reopened."
+      },
+      "dependencyComparisonEvidence": [
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/packet/main-package-json-comparison.diff",
+          "bytes": 615,
+          "sha256": "d6fac6df24c8a56442c786f32c60d6def7534f065bb00a6e2852ba48af9a6e77"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/packet/main-yarn-lock-comparison.diff",
+          "bytes": 1428,
+          "sha256": "c1e1a7d72dfd0439441d7f4fe6f7b14dc6364a193fec2911c1b8a16af11d23e5"
+        }
+      ],
+      "newerMainRuntimeTested": false
+    },
+    "reusedChecks": {
+      "independentDuplicateRuns": false,
+      "ownerJob": "9b5ab967-23ce-4ee0-85e5-c356b0b5414e",
+      "checkedHead": "b16d670c7ab1f3f821b67c2696cbbd768703ee4a",
+      "regression": {
+        "tests": 3,
+        "assertions": 35,
+        "result": "PASS",
+        "basis": "10 unchanged expectations, nonempty runtime-import set, and SSR inclusion plus RSC exclusion for all twelve imports."
+      },
+      "static": {
+        "result": "PASS",
+        "run": "run-VjR2ld",
+        "checks": [
+          "types",
+          "guards (8/45 selected)",
+          "inference",
+          "lint",
+          "AST"
+        ],
+        "retainedTimeoutAndRetry": "scripts/static/web-accepted-commands.test.ts production-adapters case initially exceeded the normal 5-second limit; unchanged standard retry passed in 8.803s. No assertions or timeout were edited."
+      },
+      "redRegression": {
+        "job": "d543ccda-53e9-47e7-a9f2-d3455ba3b110",
+        "base": "caecadc10a37b36daaf03773282b47183673ee89",
+        "testsPassed": 2,
+        "testsFailed": 1,
+        "assertions": 12,
+        "assertionReached": true,
+        "failure": "SSR include lacks @tiptap/core; actual array contains only native-i18n and tailwind-variants."
+      },
+      "earlierSetupFailure": {
+        "job": "786deb4d-5e10-4e44-830f-3bf19bfaa114",
+        "assertionReached": false,
+        "failure": "TypeScript 7 exposes version only, so ScriptTarget.Latest setup failed. Owner corrected the new regression to the existing typescript-6 AST API; original failure retained."
+      },
+      "ownerHandoff": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/retained/.temp/hard-home-ssr/repair-cold-1/handoff.json",
+        "bytes": 32138,
+        "sha256": "e50e55d10ae5cc32c2505b3b425392ff120b5ca6384af63933a69cba8b2232ca"
+      },
+      "ownerArtifactManifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/retained-owner-artifact-manifest.json",
+        "bytes": 11986,
+        "sha256": "0741540601205dc23a617d09c082c1976f7093b7eace9d93687c6e6ec92dde8b"
+      },
+      "verifiedAndCopiedOwnerArtifacts": 62
+    },
+    "retainedColdHomeProof": {
+      "job": "9b5ab967-23ce-4ee0-85e5-c356b0b5414e",
+      "step": 3,
+      "tests": 1,
+      "assertions": 15,
+      "result": "PASS",
+      "tier": "One controlled anonymous development cold Home request on the older b16d dependency pin, with genuine retained backend/data and temporary observational instrumentation; not production/current-main whole-product readiness.",
+      "frontend": "b16d670c7ab1f3f821b67c2696cbbd768703ee4a",
+      "origin": "http://127.0.0.1:31210",
+      "path": "/en",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "started": "2026-10-19T15:22:00.439Z",
+      "ended": "2026-10-19T15:23:18.421Z",
+      "backend": {
+        "mainOrigin": "http://127.0.0.1:46775",
+        "accountOrigin": "http://127.0.0.1:43369",
+        "productRevision": "4a616b079a364b8f5ac7fe4d4ff56bc99849e766",
+        "supportRevision": "1f1032cc60369a69bb07695b1b37e6a409c0ac56",
+        "provenance": "Exact retained catalogue mail e68db27d-b398-4163-84a0-8dca2dd88afe and G2791 custody receipt; not shared Main3001 identity.",
+        "fixtureGeneration": "recipes-build-mveymfp0-c3acb7",
+        "readOnly": true
+      },
+      "testSha256": "3e7b4fb80a4806bc229ae2a42d0fa5c4ad4b6b27bf649599ad3fa715a5098e00",
+      "originalSsrAssertions": {
+        "document200": true,
+        "oneMain": true,
+        "homeHeading": true,
+        "genuineRetainedWorkVisible": true,
+        "nativeNavigationHydrated": true,
+        "noSsrErrorTemplate": true,
+        "noErrorOverlay": true,
+        "noPageError": true,
+        "noWindowErrorOrUnhandledRejection": true
+      },
+      "response": {
+        "status": 200,
+        "bytes": 189577,
+        "sha256": "f2ac55d731df384ffa5c15877f3c779104050a2e6cf0313f4050be910c7bb737",
+        "domContentLoadedMs": 49543,
+        "bodyMs": 49569,
+        "timingLimit": "The retained headersMs driver field is actually measured at DOMContentLoaded, not first-header arrival."
+      },
+      "browser": {
+        "console": [],
+        "pageErrors": [],
+        "failures": [],
+        "httpErrors": [],
+        "navigations": [
+          {
+            "at": "2026-10-19T15:22:27.943Z",
+            "stage": "01-cold-home",
+            "url": "http://127.0.0.1:31210/en",
+            "method": "GET"
+          }
+        ],
+        "assets": {
+          "successful": 491,
+          "failures": []
+        }
+      },
+      "transport": "491 actual same-origin assets served with the existing serveStoryAsset transport; no fabricated product/API response. Browser failure arrays are retained as observed, without introducing a blanket-zero cancellation prerequisite.",
+      "observerLimit": "Temporary instrumentation.ts and shell-provider.tsx wrappers observe and return original thenables; exact observer patch and original/restored hashes are retained. This is instrumented controlled evidence, not an uninstrumented production run.",
+      "requestScopedOutboundCount": {
+        "observed": null,
+        "reason": "No request-scoped Main outbound counter in normal owned logs/headers; no peer instrumentation/reset."
+      },
+      "ownerCleanup": {
+        "ownedFrontendStopped": true,
+        "ownedBrowserStopped": true,
+        "sourceClean": true,
+        "observerFilesRestored": true,
+        "previousOwnedCacheRestored": true,
+        "peerProcessesSignaled": false,
+        "backendWrites": false,
+        "errors": []
+      },
+      "resultArtifact": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/retained/.temp/hard-home-ssr/repair-cold-1/result.json",
+        "bytes": 5977,
+        "sha256": "40b35f23057c26aeafea970a99c41dc4be9c1a8b963e2fc908d8380beb47dc3a"
+      }
+    },
+    "originalColdFailureAndMechanism": {
+      "baseline": "caecadc10a37b36daaf03773282b47183673ee89",
+      "initialDiagnosticJob": "decc508b-1aa0-4d46-9d9b-7493f31865fe",
+      "identityDiagnosticJob": "d9f95dac-c925-42e7-b6b8-518a3aeb42bf",
+      "preservedDisposition": "Both diagnostic captures exited 0 while actual cold SSR failed; neither is reclassified as product success.",
+      "before": "Late SSR dependency discovery reloads replaced the memoized loader. FeedList old promise26 later fulfilled, but the subsequent require returned new promise31 with unset status/undefined reason; the browser reported server rendering errored with undefined.",
+      "after": "At b16d the observed preload/require used the same promise26 in loader3/generation4, fulfilled before require. No SSR optimizer reload appeared in this capture. A separate RSC @zag-js/core discovery still occurred; this is not a claim of zero optimizer activity.",
+      "attributionLimit": "This bounded cache-replacement reproduction does not establish the cause of G-2836 ERR_NETWORK_CHANGED, the unknown transport abort, or every historical AUD-006 failure."
+    },
+    "inspectedScreenshots": [
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/retained/.temp/hard-home-ssr/identity-1/01-cold-home.viewport.png",
+        "bytes": 49812,
+        "sha256": "7a9346a3bd091974ec68d30362e022cd9a7d8e09d56dd76b0c6c76e9d4c9fd26",
+        "pin": "caecadc10a37b36daaf03773282b47183673ee89",
+        "actuallyViewed": true,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "observation": "Actually viewed retained 390x844 viewport: the genuine Home content sits behind an UNHANDLED SCRIPT ERROR panel stating that server rendering errored with undefined. Diagnostic capture exit 0 is not product SSR success."
+      },
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/retained/.temp/hard-home-ssr/repair-cold-1/01-cold-home.viewport.png",
+        "bytes": 52551,
+        "sha256": "9cf8a5ce2316f3138f2238b7d04aa4aa8db22c01a7270d940713f211a284c25b",
+        "pin": "b16d670c7ab1f3f821b67c2696cbbd768703ee4a",
+        "actuallyViewed": true,
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "observation": "Actually viewed retained 390x844 viewport: Home, Pride and Prejudice by Jane Austen, the follow-communities card and mobile navigation; no error panel. This is the retained development cold request, not a new capture or complete scroll/journey inspection."
+      }
+    ],
+    "historyPreservation": {
+      "priorReportCommit": "1e0e8f60132f0578a965328174c4e02afe0f850e",
+      "priorFields": 38,
+      "all38FieldsUnchanged": true,
+      "priorReport": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/prior-cumulative-report-1e0e8f60.json",
+        "bytes": 311636,
+        "sha256": "78b059a65817a274434e05f07896a2dc81e9b736da4162d8929b88a3c810edf0"
+      },
+      "currentMainAtAppend": "a829f1327a5a13273513249aac3ef74399d6224d",
+      "currentMainFieldsRetained": 29,
+      "allCurrentMainFieldsUnchanged": true,
+      "currentMainReport": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/current-main-report-at-append.json",
+        "bytes": 188874,
+        "sha256": "71b780ebc739e5c0fa834aedb04459a7838744211f93198911f85dde2dc6f5cb"
+      },
+      "preserved": "All source45 Site/private/guard/shell approvals, D4-002 inspection, original startup/history/readiness, genuine/anonymous/signed-in AT passes and failures, leased-Book release/restoration and semantic native-input qualification retain their original pins and dispositions."
+    },
+    "remainingLimits": [
+      "No new unit/static/runtime/proof, service, signed-in/AT/native/Feed journey, corpus/account or fixture borrow was run for this source review; only report validation follows.",
+      "No current-main dependency production build or cold runtime was executed. The older controlled b16d cold pass cannot establish production or whole-product readiness.",
+      "No AUD-006, D3-001, AUD-012 or other original class is closed. Genuine missing card AT assertions remain at their existing disposition; no old reader lease is reacquired.",
+      "No product source, product tests, original assertions, peer tree, shared lifecycle, root dependencies, brief or ledger were changed. Root owns selective integration and acceptance."
+    ],
+    "privateArtifacts": {
+      "directory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review",
+      "inputVerification": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/input-verification.json",
+        "bytes": 19882,
+        "sha256": "b34c0469f3f38b785a78c616f08b6a57f300b4ac46f150b95db1679c0c6bf1f5"
+      },
+      "manifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/artifact-manifest.json",
+        "bytes": 31869,
+        "sha256": "7c01d1f49ca3535f81bd9db023df3c056c1a25aaed9bfd5edd9ae66d402b412d"
+      }
+    },
+    "reportValidation": {
+      "atUTC": "2026-10-19T15:50:53.899573+00:00",
+      "job": "587c2188-8ed8-44b1-817f-6a4f9b25faf7",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "exit": 0,
+      "docs": {
+        "result": "PASS",
+        "tests": 13,
+        "markdownFiles": 259
+      },
+      "goal": {
+        "result": "PASS",
+        "run": "run-0xfnNd",
+        "AST": "PASS",
+        "guards": "PASS (1/45 selected)",
+        "types": "no TypeScript workspace changed",
+        "tests": "no test files named in brief",
+        "lint": "no source file changed",
+        "harnessNotice": "Reported one commit behind main; no harness failure occurred."
+      },
+      "retainedLogs": [
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/validation/587c2188-8ed8-44b1-817f-6a4f9b25faf7.log",
+          "bytes": 282,
+          "sha256": "e0f8fdae1bd204950e2ce62e5828b4cdd73530c527115f7e394240c15b80339c"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/validation/587c2188-8ed8-44b1-817f-6a4f9b25faf7.1.log",
+          "bytes": 348,
+          "sha256": "820853911bd217645c8a0be09d4d6a3c4afb1c8da39de7385a04b3278bd17977"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/validation/587c2188-8ed8-44b1-817f-6a4f9b25faf7.2.log",
+          "bytes": 618,
+          "sha256": "eccdee48c639f6ae999d46be89ddec18c28f47399896718f18be3f695cbfed3f"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/cold-home-ssr-editor-prebundle-first-review/validation/output.log",
+          "bytes": 2869,
+          "sha256": "46d3d018648cbcf52851211eb9d8c96d3f3d75050d6a066b658a121ee7986e9f"
+        }
+      ],
+      "gitDiffCheck": "PASS",
+      "noDuplicateProductChecks": true
+    },
+    "managerNext": "Select only the reviewed two-file delta, preserve the approved current-main Vinext patch and unrelated dependencies, and retain the source/runtime tier distinction. Root owns landing and original-class acceptance; no actionable source finding in this delta."
   }
 }
