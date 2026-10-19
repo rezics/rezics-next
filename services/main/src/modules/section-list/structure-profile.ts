@@ -1,4 +1,3 @@
-import { verifySectionListSource } from './source-correspondence.ts';
 import { CompositionUnavailable } from '../structure/unavailable.ts';
 import { checkExactInstructionSelection } from '../structure/selection.ts';
 import { RV } from '../work/activate.ts';
@@ -15,7 +14,11 @@ const entryNote: QualifierTemplate = {
 };
 
 export const structureProfiles: readonly StructureProfileRegistration[] = [{
-  workPublication: true, verifySourceCorrespondence: verifySectionListSource,
+  workPublication: true,
+  async verifySourceCorrespondence(input) {
+    const { verifySectionListSource } = await import('./source-correspondence.ts');
+    return verifySectionListSource(input);
+  },
   id: 'section-list-v1', graphProfile: `${RV}SectionList`,
   ownerType: genericWorkType, componentType: `${RV}MainVersion`,
   componentPredicate: `${RV}mainVersion`, editScopePrefix: 'work:edit:',

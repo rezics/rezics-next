@@ -481,6 +481,7 @@ test('every Recipe page scales whole-recipe nutrients exactly and preserves each
     expect(page.ingredients.every(item => item.amount?.numerator === 3 && item.amount.denominator === 4)).toBe(true);
     seen.push(...page.occurrences.map(item => item.occurrence));
     pages += 1;
+    expect(pages).toBeLessThanOrEqual(3);
     cursor = page.next;
   } while (cursor);
   expect(pages).toBe(3);
