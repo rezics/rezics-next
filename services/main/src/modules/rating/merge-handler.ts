@@ -51,7 +51,9 @@ export function ratingMergeHandler({ accessPool,graph }: MergeDependencies): Mer
   } }`,4096)).boolean === true;
   const read = async (client: PoolClient,principal: string,context: string,work: string): Promise<Slot> => {
     const currentMain = await main(work);
-    const selection = (await client.query<{ row: Row }>('SELECT to_jsonb(s) AS row FROM access.rating_merge_selection s WHERE context=$1 AND work=$2 AND principal_id=$3 AND main_version=$4 FOR UPDATE',[context,work,principal,currentMain])).rows[0]?.row ?? null;
+    // Publication metadata refines custody, not the retained v3 person snapshot.
+    // Including it would invalidate old item digests during replay/unmerge.
+    const selection = (await client.query<{ row: Row }>("SELECT to_jsonb(s)-'standing_lineage' AS row FROM access.rating_merge_selection s WHERE context=$1 AND work=$2 AND principal_id=$3 AND main_version=$4 FOR UPDATE",[context,work,principal,currentMain])).rows[0]?.row ?? null;
     const native = (await client.query<{ row: Row }>(`SELECT to_jsonb(h) AS row FROM access.rating_aggregate_head h
       WHERE context=$1 AND work=$2 AND principal_id=$3 AND target_release IS NULL AND main_version=$4 FOR UPDATE`,[context,work,principal,currentMain])).rows;
     if (native.length > 1) throw new MergeConflict('Rating person slot is ambiguous');

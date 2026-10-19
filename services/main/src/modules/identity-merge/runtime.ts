@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { reservedTransactionPool } from '../../infrastructure/pool-reservation.ts';
 import { accessClient } from '../access/topology-control.ts';
 import type { EditorialRuntime } from '../editorial-review/runtime.ts';
 import { EditorialBlocked, EditorialInvalid } from '../editorial-review/contract.ts';
@@ -11,11 +12,12 @@ import { MERGE_COST, MergeUnavailable, type IdentityHeader, type MergeTask } fro
 import type { MergePreflightOwner } from './preflight.ts';
 import type { MergeTaskRuntime } from './engine.ts';
 
-export interface MergeDependencies { accessPool: Pool; contentPool: Pool; graph: WorkActivationEnvironment['fuseki'] }
+export interface MergeDependencies { accessPool: Pool; contentPool: Pool; standingPublicationPool: Pool;
+  graph: WorkActivationEnvironment['fuseki'] }
 export function mergeDependencies(runtime: EditorialRuntime): MergeDependencies {
   const pools = runtime.work.identityMerge;
   if (!pools) throw new EditorialBlocked({ code: 'owner_unavailable' });
-  return { ...pools,graph: runtime.work.environment.fuseki };
+  return { ...pools,standingPublicationPool: reservedTransactionPool(pools.accessPool),graph: runtime.work.environment.fuseki };
 }
 export function mergePreflightOwner(runtime: EditorialRuntime, actingSubject: string): MergePreflightOwner {
   return { redirectOf: redirectOf(runtime.work.environment),
@@ -44,7 +46,7 @@ export function mergeTaskRuntime(runtime: EditorialRuntime): MergeTaskRuntime<Me
     // 64 graph reads per command. Pending stages resume through that kernel.
     itemsPerRun: 2,
     identityReceipt: task => readMergeIdentityReceipt(env,task),
-    begin: async task => { await commandWorkMerge(env,dependencies.accessPool,task); },
+    begin: async task => { await commandWorkMerge(env,dependencies.accessPool,dependencies.standingPublicationPool,task,deadline); },
     async finish(task: MergeTask,commandKey: string) {
       const receipt = await readMergeIdentityReceipt(env,task);
       if (!receipt) throw new MergeUnavailable('Identity effect is unavailable');

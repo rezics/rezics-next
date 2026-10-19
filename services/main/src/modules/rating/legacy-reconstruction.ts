@@ -6,11 +6,14 @@ import {
   listTargetsNeedingReconstruction,
   readTargetRatingReconstructionBatch,
   recordTargetRatingValues,
+  readStandingRatingReconstructionBatch,
+  recordStandingRatingValues,
 } from './aggregate-inventory.ts';
-import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { RatingAggregateUnavailable } from './aggregate.ts';
 import { readTargetRatingContext } from './target.ts';
 import { TARGET_AGGREGATE_COST, verifyTargetRatingHeads } from './target-aggregate.ts';
+import { verifyStandingRatingHeads } from './global-aggregate.ts';
 
 /** The operator retains this cursor between invocations. A recovery cut requires
  * a fresh job; an old cursor can never certify inventory from a different cut. */
@@ -20,6 +23,7 @@ export interface LegacyRatingCursor {
   contextRevision: string;
   recoveryGeneration: string;
   afterSlot: string;
+  standing?: true;
 }
 
 /** Each invocation verifies at most 100 immutable manifests within one aggregate
@@ -42,7 +46,7 @@ export const listLegacyTargetsNeedingReconstruction = listTargetsNeedingReconstr
 export async function reconstructLegacyTargetRatings(
   env: WorkActivationEnvironment,
   pool: Pool,
-  input: { context: string; target: string; batchSize?: number; cursor?: LegacyRatingCursor },
+  input: { context: string; target: string; batchSize?: number; cursor?: LegacyRatingCursor; standing?: boolean },
 ) {
   const batchSize = input.batchSize ?? LEGACY_RECONSTRUCTION_COST.heads;
   const signal = AbortSignal.timeout(LEGACY_RECONSTRUCTION_COST.deadlineMs);
@@ -55,10 +59,10 @@ export async function reconstructLegacyTargetRatings(
     },
     async () => {
       const cursor = input.cursor;
-      if (cursor && (cursor.context !== input.context || cursor.target !== input.target)) {
+      if (cursor && (cursor.context !== input.context || cursor.target !== input.target || !!cursor.standing !== !!input.standing)) {
         throw new RatingInventoryConflict('Reconstruction cursor names another target');
       }
-      const snapshot = await readTargetRatingReconstructionBatch(
+      const snapshot = await (input.standing ? readStandingRatingReconstructionBatch : readTargetRatingReconstructionBatch)(
         pool,
         input.context,
         input.target,
@@ -73,33 +77,47 @@ export async function reconstructLegacyTargetRatings(
       ) {
         throw new RatingInventoryConflict('Reconstruction cursor is stale');
       }
-      const context = await readTargetRatingContext(env, input.context, manifestBudget);
-      if (
-        !context ||
-        context.contextRevision !== snapshot.contextRevision ||
-        context.realm !== snapshot.realm
-      ) {
-        throw new RatingAggregateUnavailable('Target Context seal differs');
+      let recorded: number;
+      if (input.standing) {
+        let verified: Awaited<ReturnType<typeof verifyStandingRatingHeads>> = [];
+        if (snapshot.heads.length) {
+          const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?work WHERE {
+            GRAPH ${iri(GRAPHS.current)} { ${iri(input.target)} a rv:MainVersion ; rv:work ?work .
+              ?work rv:mainVersion ${iri(input.target)} } } LIMIT 2`, 4096)).results?.bindings ?? [];
+          if (rows.length !== 1 || !rows[0]?.work) throw new RatingAggregateUnavailable('Standing target is unavailable');
+          verified = await verifyStandingRatingHeads(env, snapshot, { context: input.context,
+            work: rows[0].work.value, mainVersion: input.target }, signal);
+        }
+        recorded = await recordStandingRatingValues(pool, input.context, snapshot.recoveryGeneration, verified, signal);
+      } else {
+        const context = await readTargetRatingContext(env, input.context, manifestBudget);
+        if (
+          !context ||
+          context.contextRevision !== snapshot.contextRevision ||
+          context.realm !== snapshot.realm
+        ) {
+          throw new RatingAggregateUnavailable('Target Context seal differs');
+        }
+        const verified = await verifyTargetRatingHeads(
+          env,
+          snapshot,
+          snapshot.heads,
+          null,
+          input,
+          context,
+          signal,
+          true,
+          manifestBudget,
+        );
+        recorded = await recordTargetRatingValues(
+          pool,
+          input.context,
+          input.target,
+          snapshot.recoveryGeneration,
+          verified.heads,
+          signal,
+        );
       }
-      const verified = await verifyTargetRatingHeads(
-        env,
-        snapshot,
-        snapshot.heads,
-        null,
-        input,
-        context,
-        signal,
-        true,
-        manifestBudget,
-      );
-      const recorded = await recordTargetRatingValues(
-        pool,
-        input.context,
-        input.target,
-        snapshot.recoveryGeneration,
-        verified.heads,
-        signal,
-      );
       const complete = snapshot.heads.length < batchSize;
       return {
         complete,
@@ -112,7 +130,8 @@ export async function reconstructLegacyTargetRatings(
               target: input.target,
               contextRevision: snapshot.contextRevision,
               recoveryGeneration: snapshot.recoveryGeneration,
-              afterSlot: snapshot.heads.at(-1)!.slot,
+              afterSlot: snapshot.heads.at(-1)!.effectiveSlot ?? snapshot.heads.at(-1)!.slot,
+              ...(input.standing ? { standing: true as const } : {}),
             },
       };
     },

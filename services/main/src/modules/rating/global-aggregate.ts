@@ -14,7 +14,7 @@ import { GLOBAL_CONTEXT_PROFILE, GLOBAL_OBSERVATION_PROFILE, GLOBAL_RATING_POPUL
   isGlobalContextState } from './global.ts';
 import { sameRatingInstant, STANDING_RATING_OBSERVATION_PROFILE, standingRatingDigest } from './observation.ts';
 import { REALM_GLOBAL_SYNTHESIS_POLICY, REALM_GLOBAL_SYNTHESIS_PROFILE, reduceStandingComponent,
-  synthesizeRealmGlobal } from './synthesis.ts';
+  reduceStandingCounts, synthesizeRealmGlobal } from './synthesis.ts';
 
 type Row = NonNullable<NonNullable<SparqlResult['results']>['bindings']>[number];
 type InventoryAccess = Pick<AccessAdmissionRegistry, 'readRatingAggregateInventory' | 'checkRatingAggregateFence'>;
@@ -38,6 +38,28 @@ const KINDS = {
 
 function unavailable(): never { throw new RatingAggregateUnavailable('standing Rating evidence is incomplete'); }
 
+/** Full verification stays bounded; a larger exact population is witnessed by
+ * the seal that last moved its additive state, as for target ratings. */
+function evidenceHeads(inventory: RatingAggregateInventory) {
+  if (inventory.selectedSlot !== undefined || inventory.selectedHeads) {
+    if (inventory.heads.length > MAX_RATING_AGGREGATE_SLOTS) unavailable();
+    return inventory.heads;
+  }
+  const component = inventory.standing;
+  if (component && component.slots > MAX_RATING_AGGREGATE_SLOTS) {
+    if (component.unvalued || !component.witness) {
+      throw new RatingAggregateUnavailable('Standing rating components need reconstruction');
+    }
+    if (inventory.heads.length !== MAX_RATING_AGGREGATE_SLOTS + 1) unavailable();
+    return [component.witness];
+  }
+  if (inventory.heads.length > MAX_RATING_AGGREGATE_SLOTS) {
+    throw new RatingAggregateBudgetExceeded('standing Rating evidence exceeds verification budget');
+  }
+  if (component && component.slots !== inventory.heads.length) unavailable();
+  return inventory.heads;
+}
+
 function contextPattern(kind: Kind, context: string): string {
   return kind === 'global' ? `${globalContextPattern(context)} ; rv:head ?contextRevision ; rv:question ?question .
       BIND(${iri(GLOBAL_RATING_POPULATION_OWNER)} AS ?owner)`
@@ -49,11 +71,15 @@ function contextPattern(kind: Kind, context: string): string {
         rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ; rv:head ?contextRevision ; rv:question ?question .`;
 }
 
-/** One read transaction for every component: each root plus at most 101 candidates.
- * Candidates do not require a head, so damaged or unsealed slots stay detectable. */
+/** One read transaction for every component: each root and either its bounded
+ * complete inventory or its additive-state witness. A small population's
+ * candidates do not require a head, so damaged/unsealed slots stay detectable. */
 function standingComponentsSelect(env: WorkActivationEnvironment,
   components: readonly { kind: Kind; context: string }[], target: Target, inventories?: readonly RatingAggregateInventory[]): string {
   const branches = components.flatMap(({ kind, context }, index) => {
+    const inventory = inventories?.[index];
+    const heads = inventory ? evidenceHeads(inventory) : [];
+    const explicit = inventory?.selectedSlot !== undefined || inventory?.selectedHeads || (inventory?.standing?.slots ?? 0) > MAX_RATING_AGGREGATE_SLOTS;
     const inherited = inventories?.[index]?.heads.filter(head => head.originWork) ?? [];
     const spec = KINDS[kind];
     return [`{
@@ -71,11 +97,16 @@ function standingComponentsSelect(env: WorkActivationEnvironment,
         rv:ratingContextRevision ?contextRevision ; rv:operation ?contextOperation ; rv:outcome rv:Succeeded . }
     }`, `{
       BIND("observation" AS ?kind) BIND("${kind}" AS ?component)
-      { SELECT DISTINCT ?observation WHERE {
+      ${explicit ? `{ VALUES (?observation ?originMain ?originWork) {
+        ${heads.map(head => `(${iri(head.observation)} ${iri(head.mainVersion!)} ${iri(head.work)})`).join(' ')} }
+        GRAPH ${iri(GRAPHS.current)} { ?observation rv:ratingContext ${iri(context)} ; rv:targetMainVersion ?originMain }
+        FILTER(?originMain = ${iri(target.mainVersion)} || EXISTS {
+          GRAPH ${iri(GRAPHS.current)} { ?originWork rv:mergedInto+ ${iri(target.work)} } })
+      }` : `{ SELECT DISTINCT ?observation WHERE {
         { GRAPH ${iri(GRAPHS.current)} { ?observation rv:ratingContext ${iri(context)} ; rv:targetMainVersion ${iri(target.mainVersion)} } }
         ${inherited.length ? `UNION { VALUES (?observation ?origin) { ${inherited.map(head => `(${iri(head.observation)} ${iri(head.originWork!)})`).join(' ')} }
           GRAPH ${iri(GRAPHS.current)} { ?origin rv:mergedInto+ ${iri(target.work)} } }` : ''}
-      } LIMIT ${101 + inherited.length} }
+      } LIMIT ${101 + inherited.length} }`}
       OPTIONAL {
         GRAPH ${iri(GRAPHS.current)} { ?observation a ${spec.observationType} ;
           rv:ratingSlot ?slot ; rv:observationHead ?head . }
@@ -136,16 +167,19 @@ function verifyComponent(env: WorkActivationEnvironment, kind: Kind, context: st
   const scale = contextScale(contextState);
   if (scale.min !== Number(root.scaleMin?.value) || scale.max !== Number(root.scaleMax?.value)
     || scale.step !== Number(root.scaleStep?.value ?? 1)) unavailable();
-  if (rows.length !== inventory.heads.length) unavailable();
+  const heads = evidenceHeads(inventory);
+  if (rows.length !== heads.length) unavailable();
   const byObservation = new Map<string, Row>();
   for (const row of rows) {
     if (!row.observation || byObservation.has(row.observation.value)) unavailable();
     byObservation.set(row.observation.value, row);
   }
   const values: (number | null)[] = [];
-  for (const head of inventory.heads) {
+  for (const head of heads) {
+    const selected = inventory.selectedSlot !== undefined || inventory.selectedHeads || (inventory.standing?.slots ?? 0) > MAX_RATING_AGGREGATE_SLOTS;
+    const headTarget = selected ? { work: head.work, mainVersion: head.mainVersion! } : target;
     const row = byObservation.get(head.observation);
-    if (!row || head.work !== target.work || row.slot?.value !== head.slot || row.head?.value !== head.revision
+    if (!row || !selected && head.work !== target.work || row.slot?.value !== head.slot || row.head?.value !== head.revision
       || row.receipt?.value !== head.receipt || row.digest?.value !== head.requestDigest
       || row.revisionEpoch?.value !== head.dataEpoch || row.revisionSequence?.value !== head.sequence
       || later(head.dataEpoch, head.sequence) || !row.manifest
@@ -164,22 +198,54 @@ function verifyComponent(env: WorkActivationEnvironment, kind: Kind, context: st
     if (state.observation !== head.observation || state.revision !== head.revision || state.slot !== head.slot
       || state.context !== context || state.contextRevision !== inventory.contextRevision
       || (kind === 'global' ? state.populationOwner !== inventory.realm : state.realm !== inventory.realm)
-      || state.work !== (head.originWork ?? target.work) || state.mainVersion !== (head.originMainVersion ?? target.mainVersion)
+      || state.work !== (head.originWork ?? headTarget.work) || state.mainVersion !== (head.originMainVersion ?? headTarget.mainVersion)
       || state.availability !== availability || state.value !== value
       || state.predecessor !== (row.predecessor?.value ?? null)
       || !sameRatingInstant(state.evaluatedAt, row.evaluatedAt?.value)
       || !sameRatingInstant(state.originalSubmissionAt, row.originalSubmissionAt?.value)
       || !sameRatingInstant(state.submittedAt, row.submittedAt?.value)
       || !sameRatingInstant(state.revisedAt, row.revisedAt?.value)) unavailable();
-    const intent = { context, work: head.originWork ?? target.work, mainVersion: head.originMainVersion ?? target.mainVersion, value,
+    const intent = { context, work: head.originWork ?? headTarget.work, mainVersion: head.originMainVersion ?? headTarget.mainVersion, value,
       expectedRevisionHead: state.predecessor as string | null, actingSubject: head.actingSubject };
     if ((kind === 'global' ? globalRatingDigest(intent) : standingRatingDigest(intent)) !== head.requestDigest) unavailable();
     if (onlySlot === undefined || (head.effectiveSlot ?? head.slot) === onlySlot) values.push(value);
   }
+  let figures = reduceStandingComponent(values, scale);
+  if (inventory.standing && inventory.selectedSlot === undefined && inventory.standing.unvalued === 0) {
+    const bins = Object.entries(inventory.standing.histogram);
+    if (bins.length > 1001) unavailable();
+    const counted = reduceStandingCounts(inventory.standing.slots,
+      new Map(bins.map(([value, count]) => [Number(value), count])), scale);
+    if (inventory.standing.slots > MAX_RATING_AGGREGATE_SLOTS) figures = counted;
+    else if (JSON.stringify(counted) !== JSON.stringify(figures)) unavailable();
+  }
+  budget.signal?.throwIfAborted();
   return { context, populationOwner: inventory.realm, contextProfile: (contextState.exactScale === true ? scaledProfile(spec.contextProfile) : spec.contextProfile).split('/').at(-1)!,
     populationPolicy: spec.populationPolicy, cadence: 'standing' as const,
     aggregationPolicy: 'latest-per-rater-mean' as const, contextRevision: inventory.contextRevision,
-    ...reduceStandingComponent(values, scale) };
+    ...figures };
+}
+
+/** Operator reconstruction uses the aggregate owner's exact same Context,
+ * receipt, admission, instant, digest and immutable-manifest verifier. A page
+ * is never exposed as a complete aggregate. */
+export async function verifyStandingRatingHeads(env: WorkActivationEnvironment, inventory: RatingAggregateInventory,
+  input: { context: string } & Target, signal: AbortSignal) {
+  const kind = inventory.realm === GLOBAL_RATING_POPULATION_OWNER ? 'global' : 'realm';
+  const page = { ...inventory, selectedHeads: true, standing: undefined };
+  const rows = (await env.fuseki.query(standingComponentsQuery(env, [{ kind, context: input.context }], input, [page]),
+    GLOBAL_AGGREGATE_BUDGET.graphBytes)).results?.bindings ?? [];
+  const root = rows[0];
+  if (!root?.epoch || !/^\d+$/.test(root.sequence?.value ?? '') || rows.some(row => row.epoch?.value !== root.epoch!.value
+    || row.sequence?.value !== root.sequence!.value || row.component?.value !== kind)) unavailable();
+  const roots = rows.filter(row => row.kind?.value === 'context');
+  const observations = rows.filter(row => row.kind?.value === 'observation');
+  if (roots.length !== 1 || roots.length + observations.length !== rows.length) unavailable();
+  verifyComponent(env, kind, input.context, input, page, roots[0]!, observations,
+    { bytesLeft: GLOBAL_AGGREGATE_BUDGET.manifestBytes, signal });
+  const byObservation = new Map(observations.map(row => [row.observation!.value, row]));
+  return inventory.heads.map(head => ({ mainVersion: head.mainVersion!, slot: head.slot, revision: head.revision,
+    value: byObservation.get(head.observation)!.value ? Number(byObservation.get(head.observation)!.value!.value) : null }));
 }
 
 async function snapshot(env: WorkActivationEnvironment, access: InventoryAccess,
@@ -187,13 +253,11 @@ async function snapshot(env: WorkActivationEnvironment, access: InventoryAccess,
   onlySlot?: string) {
   const inventories: RatingAggregateInventory[] = [];
   for (const { kind, context } of components) {
-    const inventory = await access.readRatingAggregateInventory(context, target.mainVersion, signal);
+    const inventory = await access.readRatingAggregateInventory(context, target.mainVersion, signal, onlySlot);
     if ((inventory.realm === GLOBAL_RATING_POPULATION_OWNER) !== (kind === 'global')) {
       throw new InvalidRatingAggregateQuery(`${kind} component names another Context kind`);
     }
-    if (inventory.heads.length > MAX_RATING_AGGREGATE_SLOTS) {
-      throw new RatingAggregateBudgetExceeded('standing Rating population exceeds admitted bound');
-    }
+    evidenceHeads(inventory);
     inventories.push(inventory);
   }
   if (inventories.some(inventory => inventory.recoveryGeneration !== inventories[0]!.recoveryGeneration)) unavailable();
@@ -213,7 +277,9 @@ async function snapshot(env: WorkActivationEnvironment, access: InventoryAccess,
       own.filter(row => row.kind?.value === 'observation'), budget, onlySlot);
   });
   if (rows.some(row => !components.some(({ kind }) => kind === row.component?.value))) unavailable();
-  if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal)) unavailable();
+  if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal,
+    components.flatMap(({ context },index) => inventories[index]!.standingGeneration === undefined ? []
+      : [{ context,mainVersion: target.mainVersion,generation: inventories[index]!.standingGeneration! }]))) unavailable();
   signal.throwIfAborted();
   return { components: verified,
     sourcePosition: { datasetId: 'product' as const, dataEpoch: root.epoch.value, sequence: root.sequence!.value } };
@@ -252,7 +318,7 @@ export async function queryGlobalRatingAggregate(env: WorkActivationEnvironment,
     sourcePosition: result.sourcePosition };
 }
 
-/** Work-page adapter: preserve the same sealed evidence and caps for a single Realm
+/** Work-page adapter: preserve the same sealed evidence and budgets for a single Realm
  * population or the authenticated reader's slot. Slot derivation stays server-side. */
 export async function queryWorkStandingRating(env: WorkActivationEnvironment, access: InventoryAccess,
   input: { kind: Kind; context: string; onlySlot?: string } & Target) {
@@ -281,7 +347,7 @@ export async function queryRealmStandingAggregate(env: WorkActivationEnvironment
 }
 
 /** Search's page adapter preserves the single-Work sealed-inventory verifier.
- * One graph transaction for <=64 targets, <=100 slots per target, one shared
+ * One graph transaction for <=64 targets, <=100 verified slots per target, one shared
  * 1 MiB graph / 512 KiB manifest budget and one recovery fence. Access still
  * owns each exact inventory; optional previews omit a damaged target while
  * authoritative callers still require every target's complete evidence.
@@ -303,9 +369,7 @@ export async function queryWorkStandingRatings(env: WorkActivationEnvironment, a
       try {
         const inventory = await access.readRatingAggregateInventory(input.context, target.mainVersion, signal);
         if ((inventory.realm === GLOBAL_RATING_POPULATION_OWNER) !== (input.kind === 'global')) unavailable();
-        if (inventory.heads.length > MAX_RATING_AGGREGATE_SLOTS) {
-          throw new RatingAggregateBudgetExceeded('standing Rating population exceeds admitted bound');
-        }
+        evidenceHeads(inventory);
         selected.push({ target, inventory });
       } catch (error) {
         signal.throwIfAborted();
@@ -350,7 +414,9 @@ export async function queryWorkStandingRatings(env: WorkActivationEnvironment, a
           || error instanceof RevisionReadBudgetExceeded) throw error;
       }
     }
-    if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal)) unavailable();
+    if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal,
+      selected.flatMap(({ target,inventory }) => inventory.standingGeneration === undefined ? []
+        : [{ context: input.context,mainVersion: target.mainVersion,generation: inventory.standingGeneration }]))) unavailable();
     signal.throwIfAborted();
     return values;
   });
