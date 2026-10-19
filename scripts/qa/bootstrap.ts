@@ -1,8 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { readEnv, replacePrivate } from '../dev/config.ts';
 import { compareMigrationPaths } from '../lib/migration-order.ts';
-import { applySqlMigration, sqlMigration } from '../lib/concurrent-index.ts';
+import { migrateTracked, migrationDirectories } from '../ops/migrate.ts';
 import { Client } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph } from '../../services/main/src/modules/work/activate.ts';
@@ -16,16 +16,14 @@ export function qaMigrationFiles(directory: string, files?: readonly string[]): 
   return selected.sort(compareMigrationPaths);
 }
 
-/** Apply one owner's SQL. Online index builds stay outside a transaction. */
+/** QA and later owner upgrades share receipts, locking and online-build recovery. */
 export async function applyQaSqlMigrations(connectionString: string, directory: string,
   files?: readonly string[]): Promise<void> {
-  const db = new Client({ connectionString });
-  await db.connect();
-  try {
-    for (const file of qaMigrationFiles(directory, files)) {
-      await applySqlMigration(db, sqlMigration(readFileSync(join(directory, file), 'utf8'), file));
-    }
-  } finally { await db.end(); }
+  const migrationRoot = resolve(directory, '../../../..');
+  const ownerDirectory = [migrationDirectories.access, migrationDirectories.relay]
+    .find(path => resolve(migrationRoot, path) === resolve(directory));
+  if (!ownerDirectory) throw new Error('QA SQL requires an Access or relay owner directory');
+  await migrateTracked(connectionString, migrationRoot, ownerDirectory, files);
 }
 
 /** Private JSON arguments for `scripts/qa/bootstrap.ts`, the script the QA runner launches. */

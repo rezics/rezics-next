@@ -1,0 +1,1244 @@
+{
+  "schemaVersion": 1,
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2846",
+  "title": "Independent exact-candidate Main read availability review",
+  "reviewedAt": "2026-10-19T07:34:07.390503+00:00",
+  "deadline": "2026-10-19T08:00:00Z",
+  "reviewer": {
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "authoredCandidateChanges": false,
+    "independentReviewsPerformed": 1,
+    "nestedAgentsUsed": false,
+    "accountFallbackUsed": false,
+    "unchangedControlReviewReplayed": false
+  },
+  "decision": {
+    "canLandExactCompleteMinimalCandidate": false,
+    "status": "review delivered; qualification incomplete; original findings remain open",
+    "reason": "Affected checks and all 60 focused units pass, and the current malformed-source owner-composition case passes. The required original discovery case fails at a credit-shape assertion; frozen notification persona cases cannot pass setup; the original diagnostic selector is unsupported. Fifty-notification mixed-load, public disclosure/cancellation and native resource-drain acceptance remain open.",
+    "confirmedCurrentPublicProductRegressions": 0,
+    "confirmedRequiredIntegrationAssertionFailures": 1,
+    "publicSetupFailures": 1,
+    "sourceConcernsRequiringPublicConfirmation": 1,
+    "findingClosure": {
+      "D5-001": false,
+      "D2-001": false,
+      "D6-001": false,
+      "AUD-004": false,
+      "D5-004": false
+    },
+    "noFixRoundConsumedBySetup": true
+  },
+  "candidate": {
+    "head": "1addc28512baa56bbe940561646c693f8e9aba47",
+    "base": "b25686eed5cf36e24b15088c4f34d11ef87417ec",
+    "branch": "candidate/site-read-availability-20261019",
+    "originalCheckout": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-read-availability-candidate",
+    "headVerifiedBeforeExecution": true,
+    "cleanSourceVerifiedBeforeExecution": true,
+    "headAndCleanSourceReverifiedAfterExecution": true,
+    "originalCheckoutMutatedOrRebased": false,
+    "executionTree": ".temp/read-availability-execution",
+    "executionMode": "disposable detached local shared-object clone rooted at exact candidate",
+    "executionSourceCleanAfterChecks": true,
+    "additionalProductCommitsImported": [],
+    "generatedInputs": "Copied the exact candidate checkout generated directory; no contract changes or hand-generated edits.",
+    "authoredImports": [
+      {
+        "task": "G-2763",
+        "source": "321cc3085589d7d36c6296a22c8de82d67381d0b",
+        "candidateImport": "b34d546dd8b203f91b9cee5b1e43006a1f8d55dc"
+      },
+      {
+        "task": "G-2766",
+        "source": "50f11211795621e95941719d745bfd3b3f381591",
+        "candidateImport": "1addc28512baa56bbe940561646c693f8e9aba47"
+      }
+    ],
+    "reviewedPathCount": 19,
+    "reviewedPaths": {
+      "services/main/src/composition.ts": {
+        "sha256": "d29ef79000981f1f1824c6e12c5cee6f7a11b00fd968b84c1f85b27f8bda35d6",
+        "authoredSource": "321cc3085589d7d36c6296a22c8de82d67381d0b",
+        "authoredTask": "G-2763",
+        "matchesSource": true
+      },
+      "services/main/src/modules/account/verify-assertion.ts": {
+        "sha256": "fd24da25a7b98b1674dcd4e55bbf2044696a6389dd0dcab4f9e64533ea523d2d",
+        "authoredSource": "321cc3085589d7d36c6296a22c8de82d67381d0b",
+        "authoredTask": "G-2763",
+        "matchesSource": true
+      },
+      "services/main/src/modules/notification/dispatcher.ts": {
+        "sha256": "152c558b41769ba0786cacf830b5e2bddfd23b20e5abdead5aee22035bc6708a",
+        "authoredSource": "321cc3085589d7d36c6296a22c8de82d67381d0b",
+        "authoredTask": "G-2763",
+        "matchesSource": true
+      },
+      "services/main/src/modules/notification/recipient-policy.ts": {
+        "sha256": "b6aa36ba239023594961416029ee2cea58b9ab1a7d35ca6b46da7d136072ea6d",
+        "authoredSource": "321cc3085589d7d36c6296a22c8de82d67381d0b",
+        "authoredTask": "G-2763",
+        "matchesSource": true
+      },
+      "services/main/src/modules/notification/request-budget.ts": {
+        "sha256": "0df5e7c1a290bfeecef6cec8b2a6493a53ab6d610bd98e5d9cfc4cbc0c1a2f8f",
+        "authoredSource": "321cc3085589d7d36c6296a22c8de82d67381d0b",
+        "authoredTask": "G-2763",
+        "matchesSource": true
+      },
+      "services/main/src/modules/notification/store.ts": {
+        "sha256": "575ba1b4ffe58eba5214f10a3dfede216bb78e71dbbbe724839c7441dd698a5b",
+        "authoredSource": "321cc3085589d7d36c6296a22c8de82d67381d0b",
+        "authoredTask": "G-2763",
+        "matchesSource": true
+      },
+      "services/main/src/routes/notifications.ts": {
+        "sha256": "9ad2dfd97725a052d52486c71337d8cdf33c41650c0b21bac5d6e2789e2306cf",
+        "authoredSource": "321cc3085589d7d36c6296a22c8de82d67381d0b",
+        "authoredTask": "G-2763",
+        "matchesSource": true
+      },
+      "services/main/tests/notification-actor-name.test.ts": {
+        "sha256": "eefc351a7927e1d25244adabdc982d2f412386af955c2b1a84670036a6472837",
+        "authoredSource": "321cc3085589d7d36c6296a22c8de82d67381d0b",
+        "authoredTask": "G-2763",
+        "matchesSource": true
+      },
+      "services/main/tests/notification-request-budget.test.ts": {
+        "sha256": "8e02afebbb2f8bc521bf69a5717b072850fccbbd5d8ee167369ec3a6ffa37a3f",
+        "authoredSource": "321cc3085589d7d36c6296a22c8de82d67381d0b",
+        "authoredTask": "G-2763",
+        "matchesSource": true
+      },
+      "services/main/migrations/access/2605_discovery_refresh_disposition.sql": {
+        "sha256": "ef134594fd78c03871e1fd18e7e9364b29deaa13c96df71f39ccf01e6414d90f",
+        "authoredSource": "50f11211795621e95941719d745bfd3b3f381591",
+        "authoredTask": "G-2766",
+        "matchesSource": true
+      },
+      "services/main/src/modules/discovery/credits.ts": {
+        "sha256": "726af3efd432013d6a337abd94a03c76d4c04fd74e31402ae0fc3d6c69ac4289",
+        "authoredSource": "50f11211795621e95941719d745bfd3b3f381591",
+        "authoredTask": "G-2766",
+        "matchesSource": true
+      },
+      "services/main/src/modules/discovery/lineage.ts": {
+        "sha256": "9ca45312e0ae102e816b2031b0f928c2e239c71bd84438808b028cfdbaf9f6d3",
+        "authoredSource": "50f11211795621e95941719d745bfd3b3f381591",
+        "authoredTask": "G-2766",
+        "matchesSource": true
+      },
+      "services/main/src/modules/discovery/refresh-store.ts": {
+        "sha256": "b651003ce756022907de938b4de338daf3286994df36aefb8d08d5cf3f18b6d7",
+        "authoredSource": "50f11211795621e95941719d745bfd3b3f381591",
+        "authoredTask": "G-2766",
+        "matchesSource": true
+      },
+      "services/main/src/modules/discovery/refresh.ts": {
+        "sha256": "02479ebd50095eb8abcbb76c153166abfeaf8ede1634ec02ca435865ca6b9106",
+        "authoredSource": "50f11211795621e95941719d745bfd3b3f381591",
+        "authoredTask": "G-2766",
+        "matchesSource": true
+      },
+      "services/main/src/modules/discovery/source.ts": {
+        "sha256": "114f6a6b7420664bc3429702be60f8c0265339a15bcb751fe1b180cd891dcc3b",
+        "authoredSource": "50f11211795621e95941719d745bfd3b3f381591",
+        "authoredTask": "G-2766",
+        "matchesSource": true
+      },
+      "services/main/src/modules/work/read-classifications.ts": {
+        "sha256": "683478a49188ab40465ce8cb72be2161754088a1b2d714ccd088432e99384f9a",
+        "authoredSource": "50f11211795621e95941719d745bfd3b3f381591",
+        "authoredTask": "G-2766",
+        "matchesSource": true
+      },
+      "services/main/src/modules/work/read-source-fault.ts": {
+        "sha256": "e235a7180ad1aec3dd5c041f60df868163122c0922da9c27e188be06f203bd97",
+        "authoredSource": "50f11211795621e95941719d745bfd3b3f381591",
+        "authoredTask": "G-2766",
+        "matchesSource": true
+      },
+      "services/main/tests/discovery-refresh.test.ts": {
+        "sha256": "d3d72b945dcdf9f235242c1c512ad64010e03d35d77de65810154616101683fd",
+        "authoredSource": "50f11211795621e95941719d745bfd3b3f381591",
+        "authoredTask": "G-2766",
+        "matchesSource": true
+      },
+      "tests/qa/integration/discovery-refresh.test.ts": {
+        "sha256": "79c899dec0a23cffba10f4fc8eebd1c3edfc91f4789196cf051eaa73ab830889",
+        "authoredSource": "50f11211795621e95941719d745bfd3b3f381591",
+        "authoredTask": "G-2766",
+        "matchesSource": true
+      }
+    },
+    "all19PathsByteMatchAuthoredImports": true,
+    "reviewMethod": "Read both original briefs and final handoffs, inspected the full actual base-to-candidate diff and owner composition/callers; checked material integration rather than adopting producer conclusions."
+  },
+  "historicalEvidence": {
+    "classification": "Original audits and supplementary historical proof only; separate from current execution.",
+    "preservedUnder": ".temp/read-availability-review/historical",
+    "originalFindings": [
+      {
+        "id": "D5-001",
+        "severity": "P0",
+        "aliases": [
+          "D2-001",
+          "D6-001",
+          "AUD-004"
+        ]
+      },
+      {
+        "id": "D5-004",
+        "severity": "P1"
+      }
+    ],
+    "frozenIndependentSource": "8ac4136b19a82de3ff5e5aee23857e742a7751b4",
+    "retainedPreparationSource": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
+    "originalBaseline": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+    "originalBaselineReproven": false,
+    "preparationHandoffReadBeforeOverlay": true,
+    "preparationHandoff": ".temp/read-availability-review/historical-preparation-handoff.json"
+  },
+  "admissionAndExecution": {
+    "recordedJobEntryPoint": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command>",
+    "workingDirectory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2846",
+    "outerRootSlot": "bun scripts/goal/goalctl.ts slot -- <candidate/overlay command>",
+    "reason": "Disposable clones have distinct git-common-dir ledgers; the worker-root slot holds normal shared admission and propagates GOAL_IN_SLOT into the isolated exact-source runner.",
+    "qaOwner": "supported QA runner; locked isolated stack lifecycle and automatic teardown",
+    "sharedDevelopmentStackUsed": false,
+    "sharedRefreshResetImportPerformed": false,
+    "newCorpusProduced": false,
+    "soleCorpusProducer": "G-2791",
+    "passingChecksReplayedWithoutRelevantChange": false,
+    "checks": [
+      {
+        "name": "candidate dependency preparation",
+        "job": "75646c07-cc40-4663-aa4c-a1c00b79e67c",
+        "step": 1,
+        "command": "bun scripts/goal/goalctl.ts slot -- task --dir .temp/read-availability-execution install",
+        "exitCode": 0,
+        "log": ".temp/read-availability-review/job-logs/75646c07-cc40-4663-aa4c-a1c00b79e67c.1.log"
+      },
+      {
+        "name": "focused existing units",
+        "job": "75646c07-cc40-4663-aa4c-a1c00b79e67c",
+        "step": 2,
+        "command": "bun scripts/goal/goalctl.ts slot -- bun --cwd .temp/read-availability-execution scripts/goal/goalctl.ts test services/main/tests/notification-request-budget.test.ts services/main/tests/notification-actor-name.test.ts services/main/tests/notification-display.test.ts services/main/tests/notification-presentation.test.ts services/main/tests/notification-producer.test.ts services/main/tests/notification-stream-position.test.ts services/main/tests/settings-notifications.test.ts services/main/tests/account-signing-key-budget.test.ts services/main/tests/discovery-refresh.test.ts services/main/tests/discovery-source.test.ts services/main/tests/discovery-credits.test.ts services/main/tests/g-1033-discovery-refresh.test.ts",
+        "exitCode": 0,
+        "run": "20261019t070112-6b5ef1",
+        "tier": "owner",
+        "sourceFingerprintPrefix": "73dab7bca819",
+        "sourceStable": true,
+        "executed": 60,
+        "pass": 60,
+        "fail": 0,
+        "error": 0,
+        "skip": 0,
+        "assertions": 1033,
+        "durationSeconds": 11.285680762,
+        "log": ".temp/read-availability-review/job-logs/75646c07-cc40-4663-aa4c-a1c00b79e67c.2.log",
+        "perFileCounts": [
+          {
+            "file": "services/main/tests/account-signing-key-budget.test.ts",
+            "tests": "1",
+            "assertions": "783",
+            "failures": "0",
+            "skipped": "0"
+          },
+          {
+            "file": "services/main/tests/discovery-credits.test.ts",
+            "tests": "1",
+            "assertions": "8",
+            "failures": "0",
+            "skipped": "0"
+          },
+          {
+            "file": "services/main/tests/discovery-refresh.test.ts",
+            "tests": "13",
+            "assertions": "42",
+            "failures": "0",
+            "skipped": "0"
+          },
+          {
+            "file": "services/main/tests/discovery-source.test.ts",
+            "tests": "3",
+            "assertions": "7",
+            "failures": "0",
+            "skipped": "0"
+          },
+          {
+            "file": "services/main/tests/g-1033-discovery-refresh.test.ts",
+            "tests": "3",
+            "assertions": "13",
+            "failures": "0",
+            "skipped": "0"
+          },
+          {
+            "file": "services/main/tests/notification-actor-name.test.ts",
+            "tests": "5",
+            "assertions": "87",
+            "failures": "0",
+            "skipped": "0"
+          },
+          {
+            "file": "services/main/tests/notification-display.test.ts",
+            "tests": "2",
+            "assertions": "6",
+            "failures": "0",
+            "skipped": "0"
+          },
+          {
+            "file": "services/main/tests/notification-presentation.test.ts",
+            "tests": "1",
+            "assertions": "1",
+            "failures": "0",
+            "skipped": "0"
+          },
+          {
+            "file": "services/main/tests/notification-producer.test.ts",
+            "tests": "3",
+            "assertions": "7",
+            "failures": "0",
+            "skipped": "0"
+          },
+          {
+            "file": "services/main/tests/notification-request-budget.test.ts",
+            "tests": "18",
+            "assertions": "48",
+            "failures": "0",
+            "skipped": "0"
+          },
+          {
+            "file": "services/main/tests/notification-stream-position.test.ts",
+            "tests": "4",
+            "assertions": "10",
+            "failures": "0",
+            "skipped": "0"
+          },
+          {
+            "file": "services/main/tests/settings-notifications.test.ts",
+            "tests": "6",
+            "assertions": "21",
+            "failures": "0",
+            "skipped": "0"
+          }
+        ]
+      },
+      {
+        "name": "affected candidate checks",
+        "job": "75646c07-cc40-4663-aa4c-a1c00b79e67c",
+        "step": 3,
+        "command": "bun scripts/goal/goalctl.ts slot -- task --dir .temp/read-availability-execution goal -- check --only types,lint,guards",
+        "exitCode": 0,
+        "selection": "all 19 candidate paths against the exact base; isolated clone main ref is the base",
+        "results": {
+          "guards": "pass (27/44 selected, 33.4s)",
+          "types": "pass (101.4s)",
+          "inference": "pass (156.2s)",
+          "lint": "pass (0.5s)",
+          "ast": "pass (0.5s)"
+        },
+        "guardCaseCounts": {
+          "executed": 179,
+          "pass": 179,
+          "fail": 0,
+          "error": 0,
+          "skip": 0
+        },
+        "guardCountEvidence": "Runner summary reports 27 files, 179 tests, 0 failing files; aggregate JUnit root reports 179/0/0 but the merged XML is not well-formed. Raw output/XML retained unchanged.",
+        "log": ".temp/read-availability-review/job-logs/75646c07-cc40-4663-aa4c-a1c00b79e67c.3.log",
+        "fullLog": ".temp/read-availability-execution/.temp/goal/check/run-g20A7L/output.log"
+      },
+      {
+        "name": "original discovery integration selection",
+        "job": "75646c07-cc40-4663-aa4c-a1c00b79e67c",
+        "step": 4,
+        "command": "bun scripts/goal/goalctl.ts slot -- bun --cwd .temp/read-availability-execution scripts/goal/goalctl.ts test tests/qa/integration/discovery-refresh.test.ts",
+        "exitCode": 1,
+        "run": "20261019t070623-ce62e2",
+        "project": "20261019t070623-ce62e2-1",
+        "sourceFingerprintPrefix": "73dab7bca819",
+        "sourceStable": true,
+        "resourceClass": "ordinary",
+        "budgetSeconds": 480,
+        "executed": 2,
+        "pass": 1,
+        "fail": 1,
+        "error": 0,
+        "skip": 0,
+        "assertions": 53,
+        "durationSeconds": 38.297,
+        "classification": "reached assertion failure plus separate owner-composition pass",
+        "log": ".temp/read-availability-review/job-logs/75646c07-cc40-4663-aa4c-a1c00b79e67c.4.log"
+      },
+      {
+        "name": "frozen original notification integration selection",
+        "job": "0e9f3137-27bf-4ee0-9260-622fcbf0ddaa",
+        "command": "bun scripts/goal/goalctl.ts slot -- bun --cwd .temp/read-availability-overlay scripts/goal/goalctl.ts test tests/qa/integration/notification-read-budget.test.ts",
+        "exitCode": 1,
+        "run": "20261019t071327-61abc0",
+        "project": "20261019t071327-61abc0-1",
+        "sourceFingerprintPrefix": "02a39380e92f",
+        "sourceStable": true,
+        "resourceClass": "catalogue-disk",
+        "budgetSeconds": 480,
+        "runnerCounts": {
+          "executed": 1,
+          "pass": 0,
+          "fail": 1,
+          "error": 0,
+          "skip": 0
+        },
+        "semanticCounts": {
+          "outcomeCasesExecuted": 0,
+          "outcomeCasesPassed": 0,
+          "outcomeCasesFailed": 0,
+          "setupErrors": 1,
+          "namedCasesUnexecuted": 17
+        },
+        "assertions": 0,
+        "durationSeconds": 2.835,
+        "classification": "setup failure; runner assertion classification is not a reached product assertion",
+        "error": "Incompatible catalogue backup or restore target",
+        "locations": [
+          "scripts/load/catalogue-backup.ts:272",
+          "tests/qa/support/bounded-read-corpus.ts:356"
+        ],
+        "log": ".temp/read-availability-review/job-logs/0e9f3137-27bf-4ee0-9260-622fcbf0ddaa.log"
+      },
+      {
+        "name": "original discovery public diagnostic selector admission",
+        "command": "bun scripts/goal/goalctl.ts slot -- bun --cwd .temp/read-availability-overlay scripts/goal/goalctl.ts test tests/qa/integration/audit-bounded-reads.test.ts -t 'D5-004 operator: quiescent refresh exposes deferred reasons without disclosing private scope identities'",
+        "recordedJob": false,
+        "exitCode": null,
+        "exitCodeNote": "validation output retained; shell wrapper did not preserve inner exit status",
+        "result": "runner rejected selector before stack/test execution",
+        "output": "QA stack selection accepts only -t <acceptance ID>",
+        "outcomeCasesExecuted": 0,
+        "assertionReached": false,
+        "log": ".temp/read-availability-review/diagnostic-selector.log",
+        "prerequisite": "Supported runner selection of this original named case; -t/--id accept only an acceptance-ID token. Running the whole audit file would add unrelated owners."
+      }
+    ],
+    "acceptanceRegistry": "Each QA run reports 0 acceptance IDs passed/partial/failed, 292 uncovered; selected file/case results do not certify an entire acceptance ID."
+  },
+  "overlay": {
+    "source": "8ac4136b19a82de3ff5e5aee23857e742a7751b4",
+    "files": {
+      "tests/qa/integration/notification-read-budget.test.ts": {
+        "sha256": "7e8fb5f50896ac7d5d7be1375dbe9f529f408f83f4e55c72ac2fb31e08a6346e",
+        "source": "8ac4136b19a82de3ff5e5aee23857e742a7751b4",
+        "kind": "test"
+      },
+      "tests/qa/integration/audit-bounded-reads.test.ts": {
+        "sha256": "de0086cdb8f1cdee1fbdef7c9cee1b10a0a65243b2e9b5400203dbde2be9a4d7",
+        "source": "8ac4136b19a82de3ff5e5aee23857e742a7751b4",
+        "kind": "test"
+      },
+      "tests/qa/support/bounded-read-corpus.ts": {
+        "sha256": "22b736942522a2915b25603908f8ef8b0ce4d2c1b187e87d3a7dc0b7a8374a79",
+        "source": "8ac4136b19a82de3ff5e5aee23857e742a7751b4",
+        "kind": "support"
+      },
+      "tests/qa/support/personas.ts": {
+        "sha256": "e38b4eff624b971ab4f6c58b028a66e4c7fe4017f83e47fbc2ce39bbb57c502b",
+        "source": "8ac4136b19a82de3ff5e5aee23857e742a7751b4",
+        "kind": "support"
+      },
+      "tests/qa/support/joining-auth.ts": {
+        "sha256": "75a589feff7afc2fb6766438328511a8af6a3530af81247a323b6ad1ba37ae81",
+        "source": "8ac4136b19a82de3ff5e5aee23857e742a7751b4",
+        "kind": "support"
+      },
+      "scripts/qa/isolated-integration-files.ts": {
+        "sha256": "b684f0ebd48e5f27f776984c74501d321f3fb7d6fc29ab713d744ac254b0b362",
+        "source": "8ac4136b19a82de3ff5e5aee23857e742a7751b4",
+        "kind": "original harness registration"
+      },
+      "scripts/qa/resource-classes.ts": {
+        "sha256": "ccbeac9d7c6a4fcd6451451e16771f6656cfecbae8aaffc3d0b872cba7578420",
+        "source": "8ac4136b19a82de3ff5e5aee23857e742a7751b4",
+        "kind": "original harness registration"
+      }
+    },
+    "candidateRunner": "1addc28512baa56bbe940561646c693f8e9aba47",
+    "runnerSource": "1addc28512baa56bbe940561646c693f8e9aba47",
+    "execution": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2846/.temp/read-availability-overlay",
+    "candidateProductSource": "1addc28512baa56bbe940561646c693f8e9aba47",
+    "sourceAncestryImported": false,
+    "independentAssertionsEdited": false,
+    "originalNamesAndBudgetsRetained": true,
+    "cancellationGraceMs": 100,
+    "cancellationObservationMs": 300,
+    "harnessCompatibility": "Original frozen registrations add the retained command-only/catalogue-disk file selection. Candidate goal/QA runner code is otherwise unchanged. Original test/support bytes and the two harness registrations are independently hashed.",
+    "currentHarnessComparison": {
+      "mainRevisionReadOnly": "2811e7dfa99d5dd56f72e55828413f2f116d1eaa",
+      "unchangedFromCandidate": [
+        "scripts/load/catalogue-backup.ts",
+        "scripts/load/compatibility.ts",
+        "scripts/qa/test.ts",
+        "scripts/qa/core.ts",
+        "scripts/qa/bootstrap.ts"
+      ],
+      "result": "Read-only object comparison found no newer supported retained-storage transition or original-name selector in these owners; this is not a failure caused by choosing an obsolete copy of those files."
+    },
+    "runtimeData": {
+      "notifications-governance": {
+        "sourceCorpus": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/audit-bounded-reads/notifications-governance/corpus.json",
+        "corpusSha256": "6cb1071be53f5067f4b59ce2405bb7adee11a56ad4e2d94ea53e431c587fad72",
+        "backup": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/audit-bounded-reads/notifications-governance/owners/backup.json",
+        "backupSha256": "d7a37e08ee2c9ca4980fe757f6754cfe801684c3cba6e899336b154e4ad0de86",
+        "runtimeOnlyAdaptation": "backup absolute locator points to local read-only source alias; all data, identities, baseline and assertions unchanged"
+      },
+      "queries": {
+        "sourceCorpus": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/audit-bounded-reads/queries/corpus.json",
+        "corpusSha256": "03ec7304ea3cd543a7c58e1fd208672707478f194fe508b77700fd0655337e2c",
+        "backup": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/audit-bounded-reads/queries/owners/backup.json",
+        "backupSha256": "42b007d3b38a5ec1cc2b5bb7d255ea5793f13676b0d303bc9022e9a0aefd0434",
+        "runtimeOnlyAdaptation": "backup absolute locator points to local read-only source alias; all data, identities, baseline and assertions unchanged"
+      }
+    },
+    "dataChange": "Only the absolute backup locator was retargeted to a local read-only alias of the exact retained backup. Identities, records, baseline, storage manifests and backup bytes were unchanged."
+  },
+  "migrationAndNativeCapability": {
+    "migration": "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+    "sha256": "ef134594fd78c03871e1fd18e7e9364b29deaa13c96df71f39ccf01e6414d90f",
+    "freshIsolatedPreparation": {
+      "run": "20261019t070623-ce62e2",
+      "procedure": "QA runner awaits scripts/qa/bootstrap.ts before test execution. applyQaSqlMigrations applies the numerically ordered Access migration inventory, then creates owner templates.",
+      "supportedPreparationBeforeChangedCode": true,
+      "observedSchemaEffects": "The passing real-owner case reads/writes quarantine_basis, quarantine_reason, last_error and discovery_refresh_catalog.probe_due_at before all assertions complete. No manual SQL schema/state repair was made.",
+      "appliedMigrationReceipt": null,
+      "receiptLimitation": "Successful bootstrap output is not retained by this runner; only failures get a bootstrap log. Its QA SQL bootstrap does not write the release migration history table or emit per-file receipts. Application of 2605 is inferred from the awaited bootstrap plus observed schema effects, not represented as an emitted applied-migration receipt. The brief's explicit receipt requirement is still open."
+    },
+    "retainedStorePreparation": {
+      "status": "setup-failure-before-copy-or-upgrade",
+      "compatibility": {
+        "notifications-governance": {
+          "compatible": false,
+          "retainedDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056",
+          "candidateDigest": "614cc34be9e2691c1443e0dff4c2f1665a135beccf5d0259472a647f65b4711d",
+          "retainedFileCount": 525,
+          "candidateFileCount": 526,
+          "differences": [
+            {
+              "path": "infra/dev/compose.yaml",
+              "retained": "ba0605d25cfa4edcc43960d8923de322d70cbfdf7822874b9cdb249183af62b8",
+              "candidate": "e4293719e97e2798187bf16144bdbb761f1a5ad55b8ab2bf22e106e9d47c9290"
+            },
+            {
+              "path": "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+              "retained": null,
+              "candidate": "ef134594fd78c03871e1fd18e7e9364b29deaa13c96df71f39ccf01e6414d90f"
+            }
+          ]
+        },
+        "queries": {
+          "compatible": false,
+          "retainedDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056",
+          "candidateDigest": "614cc34be9e2691c1443e0dff4c2f1665a135beccf5d0259472a647f65b4711d",
+          "retainedFileCount": 525,
+          "candidateFileCount": 526,
+          "differences": [
+            {
+              "path": "infra/dev/compose.yaml",
+              "retained": "ba0605d25cfa4edcc43960d8923de322d70cbfdf7822874b9cdb249183af62b8",
+              "candidate": "e4293719e97e2798187bf16144bdbb761f1a5ad55b8ab2bf22e106e9d47c9290"
+            },
+            {
+              "path": "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+              "retained": null,
+              "candidate": "ef134594fd78c03871e1fd18e7e9364b29deaa13c96df71f39ccf01e6414d90f"
+            }
+          ]
+        }
+      },
+      "retainedNativeImage": "rezics/fuseki:6.2.0-cmd0.5.43-dd0efff19707",
+      "candidateNativeImage": "rezics/fuseki:6.2.0-cmd0.5.43-57fb53d598b7",
+      "exactPrerequisite": "A supported isolated command-catalogue-backup-v1 restore/upgrade transition for these exact retained owner stores from the dd0efff19707 Compose/storage pin to 57fb53d598b7 plus Access 2605, preserving corpus identities/checkpoints and yielding a consistent immutable backup and applied-migration/native receipts. Current restoreCatalogueBackup requires equal storage inventories/hashes and rejects before copying. Do not substitute the different fixture format, edit compatibility manifests or SQL state, or produce a duplicate corpus."
+    },
+    "nativeImage": {
+      "id": "sha256:04504ec386b5285d376224e4e3af83924e41faef40fdb3d9c6a35246c284da95",
+      "repoDigests": [
+        "rezics/fuseki@sha256:04504ec386b5285d376224e4e3af83924e41faef40fdb3d9c6a35246c284da95"
+      ]
+    },
+    "nativeImageTag": "rezics/fuseki:6.2.0-cmd0.5.43-57fb53d598b7",
+    "imageBuiltOrChanged": false,
+    "runtimeObservation": "Fresh QA bootstrap checks command module version against Compose. The owner-composition case observes non-null native graphVersion and successfully rearms after its existing unreceipted graph repair on this stack. This is runtime evidence of that case, not a claim that the old retained storage is upgrade-compatible.",
+    "containerImageDigestReceipt": null,
+    "imageReceiptLimitation": "Local Docker tag ID/repo digest and authored Compose pin are retained; the runner tore down the container without retaining docker-inspect image identity. No direct per-container digest receipt is invented."
+  },
+  "notificationReview": {
+    "authenticationAndRecipientIsolation": "Composition wraps exactly inbox/unread GETs before rate admission and Account. Routes nest in the same allocation. Abort propagates into verification/introspection; a shared signing-key refresh may drain under its own finite timeout but cannot start later introspection for the abandoned request. Recipient queries bind each principal/actor/realm/resource tuple with ordinality; missing decisions deny. Reader identity and active state are checked again at stream/unread final disclosure.",
+    "liveAuthority": "Stored delivery/item data supplies provenance rather than disclosure authority. Stream, unread, digest subject resolution and dispatcher preparation resolve current subjects and invoke current disclosure; current block/mute/exclusion policy is checked again. Dispatcher rechecks active principal, item, endpoint generation, preferences and lease eligibility around subject resolution. Digest/delivery use the returned disclosed subject fields; inbox has the source concern recorded below.",
+    "reuseAndAllocation": "One AsyncLocalStorage lifetime and Fuseki allocation includes nested subject reads and closing fences. GraphReadFence reuses equal safe query inputs only within the request and a live native version; SQL/recipient decisions remain live. Sequence/native movement retries within the same budget, with at most six attempts. No cache survives the request. Without native version, inputs are read live.",
+    "bounds": {
+      "wallMs": 10000,
+      "graphRpc": 160,
+      "graphResponseBytes": 4194304,
+      "perQueryRequestBytesFromWorkContract": 524288,
+      "graphRetryAttempts": 6,
+      "streamPageRows": 50,
+      "unreadDisclosureScanRows": 256,
+      "unreadOverflowCurrentSubjects": 100,
+      "recipientBatchRows": 256,
+      "digestCandidatesPerDay": 50,
+      "digestExtraOverflowProbe": 1,
+      "deliveryBatchRows": 32
+    },
+    "sqlAndEngineLimits": "Store/dispatcher transactions set 2s lock and 5s statement timeouts. Shared pools have finite checkout/session/transaction defaults; cancellation retires an active checkout. The allocation has no independent aggregate SQL-statement/SQL-byte/native-engine-work counter. Existing bounded batches and timeouts are logical limits; WORK_READ_COST explicitly disclaims native query-plan complexity. Real SQL/engine work, post-abandonment drain and mixed-reader capacity were not measured by the blocked public run.",
+    "unitEvidenceLimits": "The synthetic fifty-subject reuse case performs 54 graph exchanges and 100 live owner decisions. Other existing units cover request isolation, graph movement/no-native fallback, parent budget propagation, Account cancellation, SQL wait/statement retirement, swallowed aborts, deferred work, unread final-recipient replacement and fresh retry. They do not establish fifty real active target notifications, public persona availability, the 100ms public cancellation grace, native engine work or pending returning to zero.",
+    "sourceConcern": "review-source-1"
+  },
+  "discoveryReview": {
+    "ownerPreservation": "The existing catalog, persistent refresh row, generation/checkpoint and lease-epoch owner remain authoritative. The migration adds disposition fields/partial due indexes and one durable fleet probe allowance, retaining generations/checkpoints. All attach/inspect/acknowledge/finish mutations retain lease/expiry fences.",
+    "permanentAndTransient": "Only diagnosed stable source/basis invalidity or inactivity becomes quarantine after closing source/authority fences. Unknown transport/owner errors remain transient; backoff is 30/60/120/240/300 seconds. Probe failure keeps its previous quarantine. Source movement retries instead of recording a stale permanent diagnosis. Projection steps are released.",
+    "sourceRearming": "Basis includes data epoch, graph sequence, native graph version, Access revision, recovery generation and source profile. A changed basis clears quarantine while preserving usable generation/checkpoint state. The new branded source fault remains a public WorkReadUnavailable; maintenance uses its brand to distinguish malformed inputs.",
+    "fleetAndFairness": "One atomic catalog allowance admits at most one quarantine probe per 30 seconds across owners. A foreground burst of eight gives background/probe work a turn; one job per tick, catalog enrollment batches of 20, work batches and due-index seeks remain bounded. The case covers 21 parked populations and one clock allowance, not a sustained fleet benchmark or concurrent restart race.",
+    "healthPrivacy": "Unchanged refresh-health SQL samples 21 due entries, returns at most 20 opaque hashed scope keys with bounded reason/status/retryAt, and excludes basis/last_error/raw owner or Realm identity. It is a sample, not a census. The independent public privacy selector was not executed.",
+    "actualMalformedProducer": "tests/qa/integration/discovery-refresh.test.ts inserts a contradictory rv:sequence value 9223372036854775808 on a current Work revision. projectDiscoveryBatch diagnoses ambiguous source; it does not hydrate the old audit invalid-media trigger.",
+    "ownerComposition": {
+      "name": "refresh owners quarantine malformed source once, bound fleet probes, recover transient work and rearm repaired input",
+      "result": "pass",
+      "assertions": 32,
+      "durationMs": 17242.892,
+      "personaJourney": false,
+      "realOwners": [
+        "native graph",
+        "Access refresh/projection",
+        "owner database clones",
+        "relay positions",
+        "generation/checkpoint and leases",
+        "existing isolated graph backup/restore"
+      ],
+      "seams": [
+        "injected queue clock",
+        "one transport-seam WorkReadUnavailable failure",
+        "inherited media-support bearer table in place of real Account verification"
+      ],
+      "accountEvidence": "The existing maintenance fixture composes Main in process and uses its authored bearer table. No real Account/persona journey is claimed, and no fallback Account/session was introduced to bypass the blocked independent public setup.",
+      "counters": {
+        "permanentFullClaims": 1,
+        "permanentPopulationReads": 1,
+        "unchangedPopulationReads": 0,
+        "parkedPopulations": 21,
+        "probesInOneAllowance": 1,
+        "transientAttempts": 2
+      },
+      "assertionReach": [
+        "diagnosed basis-invalid disposition and attempts reset",
+        "three unchanged probes retain checkpoint/generation/source basis and do not reread population",
+        "twenty additional malformed scopes receive quarantine turns",
+        "forty ticks in one allowance admit one fleet probe",
+        "native graphVersion is non-null",
+        "existing unreceipted graph repair plus new worker/store rearms and activates same generation",
+        "public global output excludes the private Work",
+        "transient failure respects delay, retains checkpoint/generation and then activates"
+      ],
+      "notProven": [
+        "public persona journeys",
+        "mixed core-reader availability",
+        "production-clock aggregate idle rate",
+        "native physical SQL/engine work",
+        "simultaneously competing restart/lease races"
+      ]
+    },
+    "originalCase": {
+      "name": "Discovery scheduled refresh: native source proof, automatic enrollment, restart, leases, Mine isolation and bounded work",
+      "result": "fail",
+      "assertionsReportedIncludingFailure": 21,
+      "durationMs": 18094.599,
+      "assertionReached": true,
+      "failureAt": "tests/qa/integration/discovery-refresh.test.ts:121",
+      "failure": "toEqual expects three external-reference credits without namespace; actual credits include namespace: author. Expect.any(String) IDs matched. Expected selector bytes at this assertion are unchanged from base; credits namespace production is also inherited. This is not evidence of a new credit regression.",
+      "reached": [
+        "native initial source/ready cut",
+        "relay drain",
+        "ready generation retained through activation outage",
+        "later source write and exact prior-generation activation",
+        "delta refresh",
+        "three public Works and credit list read",
+        "bounded graph/time/work assertions for preceding ticks"
+      ],
+      "unreachedAfterFailure": [
+        "later current-state check",
+        "new-account lease serialization assertions",
+        "later Mine/standing projection isolation and source updates",
+        "final complete-case counters"
+      ]
+    }
+  },
+  "perPersona": [
+    {
+      "persona": "visitor",
+      "inboxAndUnreadCompleteAllocation": "setup-error; assertion not reached",
+      "personalAdmissionAndMissingAlienIsolation": "setup-error; assertion not reached",
+      "cancellationAndFreshRetry": "not in original visitor selection",
+      "publicCasesExecuted": 0,
+      "publicCasesPassed": 0,
+      "publicCasesFailed": 0
+    },
+    {
+      "persona": "stranger",
+      "inboxAndUnreadCompleteAllocation": "setup-error; assertion not reached",
+      "personalAdmissionAndMissingAlienIsolation": "setup-error; assertion not reached",
+      "cancellationAndFreshRetry": "setup-error; assertion not reached",
+      "publicCasesExecuted": 0,
+      "publicCasesPassed": 0,
+      "publicCasesFailed": 0
+    },
+    {
+      "persona": "member",
+      "inboxAndUnreadCompleteAllocation": "setup-error; assertion not reached",
+      "personalAdmissionAndMissingAlienIsolation": "setup-error; assertion not reached",
+      "cancellationAndFreshRetry": "setup-error; assertion not reached",
+      "publicCasesExecuted": 0,
+      "publicCasesPassed": 0,
+      "publicCasesFailed": 0
+    },
+    {
+      "persona": "owner",
+      "inboxAndUnreadCompleteAllocation": "setup-error; assertion not reached",
+      "personalAdmissionAndMissingAlienIsolation": "setup-error; assertion not reached",
+      "cancellationAndFreshRetry": "setup-error; assertion not reached",
+      "publicCasesExecuted": 0,
+      "publicCasesPassed": 0,
+      "publicCasesFailed": 0
+    },
+    {
+      "persona": "moderator",
+      "inboxAndUnreadCompleteAllocation": "setup-error; assertion not reached",
+      "personalAdmissionAndMissingAlienIsolation": "setup-error; assertion not reached",
+      "cancellationAndFreshRetry": "setup-error; assertion not reached",
+      "publicCasesExecuted": 0,
+      "publicCasesPassed": 0,
+      "publicCasesFailed": 0
+    },
+    {
+      "persona": "operator",
+      "inboxAndUnreadCompleteAllocation": "setup-error; assertion not reached",
+      "personalAdmissionAndMissingAlienIsolation": "setup-error; assertion not reached",
+      "cancellationAndFreshRetry": "setup-error; assertion not reached",
+      "publicCasesExecuted": 0,
+      "publicCasesPassed": 0,
+      "publicCasesFailed": 0
+    }
+  ],
+  "originalCriteria": {
+    "D5-001": [
+      {
+        "criterion": "在目标工作负载预算内，创建卷章和发布获得成功回执后，刷新、返回目录、再开编辑页、自己的公开详情及另一账号视图均能读取该确切对象；不能靠重新创建或重复发布恢复。",
+        "disposition": "pending-other-owner-outcomes",
+        "evidenceAndResidual": "The creation/edit/navigation and exact-object read acceptance in this merged audit row is retained under its existing owners; this review adds no whole-suite gate."
+      },
+      {
+        "criterion": "同一受支持读取在 Main 成功所需的时间应处于整条 Web 读取链的契约内；给前置读取、目标读取和页面总期限分配可执行预算，并用持续测量验证。不能仅增加一个超时或降低访问校验。",
+        "disposition": "partial-source-and-unit-only",
+        "evidenceAndResidual": "Main notification allocation is shared, including Account. End-to-end BFF timing and normal successful pages on the retained corpus were not reached."
+      },
+      {
+        "criterion": "对预算超限、身份待校验、上游拒绝和暂时不可用分别保留可诊断结果；前门仍提供错误说明及重试入口，编辑内容和已成功回执继续可见。",
+        "disposition": "pending-public-outcomes",
+        "evidenceAndResidual": "No current public diagnostic/error/retry assertion ran; a finite 503 is not success."
+      },
+      {
+        "criterion": "举报原幂等键重试只生成一个案件并返回可访问的私有回执；临时读取失败不得丢字段或引导用户重复新建举报。",
+        "disposition": "pending-other-owner-outcomes",
+        "evidenceAndResidual": "The report idempotency/private receipt criterion remains with its existing owner."
+      },
+      {
+        "criterion": "stream/unread及所有内层读共享wall、RPC、字节和引擎工作预算。",
+        "disposition": "partial-source-and-unit-only",
+        "evidenceAndResidual": "Shared 10s/160 graph RPC/4MiB response allocation and bounded seeks are present; actual SQL/engine work and complete real pages remain unmeasured."
+      },
+      {
+        "criterion": "客户端中止后不再启动后续subject/SQL/RPC，存量工作在明确宽限内释放。",
+        "disposition": "partial-source-and-unit-only",
+        "evidenceAndResidual": "Existing unit doubles cover abort during Account, SQL checkout/statement and subject resolution; the five signed-in public 100ms-grace/300ms-observation cases hit setup failure."
+      },
+      {
+        "criterion": "1/2/4/8通知与Work、Discover、正文搜索混合会话均能完成；停止客户端后pending归零且不持续占用核心读容量。",
+        "disposition": "pending-workload-premise",
+        "evidenceAndResidual": "No original mixed 1/2/4/8 notification/Work/Discover/chapter-search selector or fifty-active-target-notification corpus was available through the supported retained restore. Native pending-to-zero and capacity recovery were not measured."
+      },
+      {
+        "criterion": "保持disclosure正确性，不以无界并行或不断提高超时掩盖放大。",
+        "disposition": "pending-public-disclosure-with-source-concern",
+        "evidenceAndResidual": "Recipient batches and final fences are present; original six-persona isolation assertions did not run. The inbox also discards sanitized process-notice fields from its final fence (unconfirmed public source counterexample below)."
+      },
+      {
+        "criterion": "在同等数据规模和正常并发读取下，All、推荐、概念/Realm 搜索、章节、New feed 和短续页均能完成；失败保留词与条件，明确取得/未取得部分，重试有可测终态。",
+        "disposition": "pending-other-owner-outcomes",
+        "evidenceAndResidual": "The larger All/recommendation/Realm/search/chapter/New-feed/continuation acceptance stays with its existing owners; this proof does not claim those pages pass."
+      },
+      {
+        "criterion": "预算保持有界；每个失败码对应可诊断阶段，错误和未完成扫描不得表示成零匹配；与 AUD-010 的 complete/scan 验收一起证明。",
+        "disposition": "partial-source-only",
+        "evidenceAndResidual": "Limits remain finite and unavailable unread subjects fail rather than lower the count. Native engine work and the broader complete/scan criteria are not proven here."
+      },
+      {
+        "criterion": "同一本地账户能够读取通知及未读数；控制其他只读页面可用时，列表与计数均在请求预算内完成；一次真实暂时故障后Try again可恢复。用Main原始请求和BFF请求进一步定位，不靠延长超时或隐藏错误视图通过。",
+        "disposition": "pending-public-outcomes",
+        "evidenceAndResidual": "Original notification complete-page, admission and fresh retry selectors were pinned unchanged but not executed past corpus setup. No current Main/BFF success or failure was reproduced."
+      }
+    ],
+    "D5-004": [
+      {
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
+        "disposition": "partial-owner-composition-pass",
+        "evidenceAndResidual": "The actual contradictory Work-revision sequence producer was quarantined once with a diagnosis and no unchanged population rereads. The obsolete invalid-media producer is absent and was not reproduced. Public diagnostic selection was rejected."
+      },
+      {
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
+        "disposition": "partial-owner-composition-pass",
+        "evidenceAndResidual": "Durable owners demonstrated retained checkpoints/generations, transient retries/recovery, 21 parked scopes and one fleet probe in an allowance. Production-clock concurrent restart/lease races, prolonged idle rates, SQL/engine work and mixed core reads remain unmeasured."
+      },
+      {
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
+        "disposition": "partial-current-producer-pass",
+        "evidenceAndResidual": "Current malformed-source producer and an unreceipted graph repair rearmed the same generation using a runtime native version. This is a maintenance-owner case with personaJourney=false, not original public/mixed-load acceptance or an invalid-media reproduction."
+      }
+    ]
+  },
+  "actionableFindingsAndPrerequisites": [
+    {
+      "id": "review-source-1",
+      "severity": "P1 potential disclosure issue",
+      "owner": "G-2763",
+      "classification": "static source counterexample; inherited path; public outcome unconfirmed",
+      "locations": [
+        "services/main/src/modules/notification/store.ts:821",
+        "services/main/src/modules/notification/store.ts:831",
+        "services/main/src/modules/disclosure/notifications.ts:61"
+      ],
+      "problem": "The final disclosure function may keep a process notice available while stripping optional hidden Work/Realm fields. readStreamPage renders its item before this fence, then tests only checked[index].status and returns the original item, discarding the sanitized fields. Digest and delivery consume the returned subject instead.",
+      "smallestSourceCounterexample": "An available access-owned realm-role-change-v1/realm-invitation-v1/moderation-outcome-v1/submission-decision-v1 subject has title/linkTarget/realm fields; current final disclosure denies its optional target and returns status available with those fields removed; current recipient remains allowed. The inbox branch returns the earlier display.target.title/linkTarget/display.realm instead of the sanitized result.",
+      "publicReproductionPremise": "Use a genuine retained process notification and a supported live disclosure transition between owner resolution and final fence; assert hidden fields are absent from returned inbox display. No new fixture or assertion was fabricated here.",
+      "publicAssertionReached": false,
+      "confirmedBlockingReviewTest": false,
+      "fixRoundConsumed": false,
+      "next": "Owner/manager confirm with an actual outcome test, then preserve sanitized fields when constructing final inbox output. Do not change independent assertions to hide it."
+    },
+    {
+      "id": "required-discovery-check",
+      "severity": "P1 qualification blocker",
+      "owner": "G-2766",
+      "classification": "reached existing assertion mismatch, inherited expectation; no new product regression attributed",
+      "location": "tests/qa/integration/discovery-refresh.test.ts:121",
+      "smallestReproduction": "bun scripts/goal/goalctl.ts slot -- bun --cwd .temp/read-availability-execution scripts/goal/goalctl.ts test tests/qa/integration/discovery-refresh.test.ts",
+      "actual": "three external-reference credits include namespace: author",
+      "expected": "original toEqual objects omit namespace",
+      "assertionReached": true,
+      "next": "Return the contract/expectation discrepancy to the manager/original test owner. This reviewer must preserve the assertions. Only after an authorized resolution should the failed selection run again; later lease/Mine assertions remain open."
+    },
+    {
+      "id": "retained-storage-transition",
+      "severity": "P1 proof prerequisite",
+      "owner": "G-2766 with G-2791 corpus/preparation owner and manager",
+      "classification": "setup failure; no product assertion reached",
+      "location": "scripts/load/catalogue-backup.ts:264",
+      "smallestReproduction": "bun scripts/goal/goalctl.ts slot -- bun --cwd .temp/read-availability-overlay scripts/goal/goalctl.ts test tests/qa/integration/notification-read-budget.test.ts",
+      "error": "Incompatible catalogue backup or restore target",
+      "next": "Provide the exact supported isolated backup/image/2605 transition described under migrationAndNativeCapability. Preserve genuine command-created corpus and immutable backup; do not forge storage compatibility or run changed refresh against old schema."
+    },
+    {
+      "id": "original-diagnostic-selector",
+      "severity": "P2 proof prerequisite",
+      "owner": "manager / supported QA harness owner for G-2766 proof",
+      "classification": "runner validation refusal",
+      "locations": [
+        "scripts/qa/test.ts:109",
+        "scripts/qa/core.ts:135"
+      ],
+      "smallestReproduction": "bun scripts/goal/goalctl.ts slot -- bun --cwd .temp/read-availability-overlay scripts/goal/goalctl.ts test tests/qa/integration/audit-bounded-reads.test.ts -t 'D5-004 operator: quiescent refresh exposes deferred reasons without disclosing private scope identities'",
+      "next": "Provide supported selection of the exact original named diagnostic without assertion/name edits or running unrelated query/chapter/rating/Zone cases. Even a pass would explicitly not prove persistent invalid input."
+    },
+    {
+      "id": "fifty-target-mixed-read-workload",
+      "severity": "P1 original acceptance prerequisite",
+      "owner": "G-2791 sole producer, G-2763 proof owner",
+      "classification": "missing supported data/workload premise",
+      "location": "tests/qa/integration/notification-read-budget.test.ts:28",
+      "retainedControl": "Frozen original selectors require at least 24 visible governance notices. Current run did not remeasure even those because restore failed.",
+      "missing": "Fifty real active target notifications with original subject/disclosure identities, and an existing supported workload that runs 1/2/4/8 notification, Work, Discover and chapter-search readers and observes native pending return to zero.",
+      "next": "Reuse a qualifying consistent G-2791 command-created backup and supported pinned workload when available. Do not relabel the 24-notice control, mocked fifty-subject unit, maintenance counters or diagnostic as full D5-001 acceptance."
+    }
+  ],
+  "residuals": [
+    "Required original discovery case is not green and later lease/Mine assertions were not reached.",
+    "All six original notification allocation/privacy personas and five cancellation/fresh-retry cases stopped in setup.",
+    "Original operator quiescent-refresh diagnostic cannot be selected by the current supported runner; it would not reach persistent-invalid-input acceptance even on a pass.",
+    "No emitted applied-2605 migration receipt or per-container image-digest receipt was retained; fresh schema effects and runtime graph-version behavior are narrower evidence.",
+    "Retained command-catalogue storage has no supported transition for its older image plus missing 2605.",
+    "Fifty active target notices, mixed 1/2/4/8 reader workload, native SQL/engine work and pending-to-zero drain remain unmeasured.",
+    "Inbox sanitized-field source concern needs public confirmation; no source repair or asserted failure test was introduced.",
+    "Production-clock sustained fleet idle/probe work, restart/lease races and mixed core-read availability are not established by the owner-composition pass."
+  ],
+  "ownedReportChecks": {
+    "job": "164b8f58-01b5-4b18-a8aa-6682f0affb60",
+    "docsCheck": {
+      "command": "task docs:check",
+      "exitCode": 0,
+      "executed": 13,
+      "pass": 13,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "coverage": "249 Markdown files; local links, fragments and design navigation; external URLs and runtime behavior not tested",
+      "log": ".temp/read-availability-review/job-logs/164b8f58-01b5-4b18-a8aa-6682f0affb60.1.log"
+    },
+    "workerCheck": {
+      "command": "task goal -- check",
+      "exitCode": 0,
+      "selection": "owned report only, 1/44 guards selected",
+      "results": {
+        "types": "pass; no TypeScript workspace changed",
+        "tests": "pass; no test files named in brief",
+        "lint": "pass; no source file changed",
+        "ast": "pass (0.5s)",
+        "guards": "pass (3.7s; 2/2 cases)"
+      },
+      "log": ".temp/read-availability-review/job-logs/164b8f58-01b5-4b18-a8aa-6682f0affb60.2.log"
+    },
+    "receiptFinalization": "Only report receipt metadata was finalized after these checks; no product/test bytes changed."
+  },
+  "evidence": {
+    "privateBundle": ".temp/read-availability-review",
+    "rawAndParsedReceipts": ".temp/read-availability-review/verification-receipts.json",
+    "jobReceipts": ".temp/read-availability-review/jobs.json",
+    "candidateDiff": ".temp/read-availability-review/candidate.diff",
+    "sourcePins": ".temp/read-availability-review/pins.json",
+    "overlayPins": ".temp/read-availability-review/overlay-pins.json",
+    "storageDifferences": ".temp/read-availability-review/storage-compatibility.json",
+    "inventory": ".temp/read-availability-review/evidence-inventory.json",
+    "credentialsPublished": false
+  },
+  "publication": {
+    "ownedPaths": [
+      "docs/goals/audit-remediation-20261019/proofs/read-availability-review.json"
+    ],
+    "productChanges": [],
+    "independentTestChanges": [],
+    "mainMutated": false,
+    "externalMessagesSent": false,
+    "handoff": "normal worker report-only commit; manager decides next proof prerequisites"
+  },
+  "transitionDependencyReview": {
+    "reviewedAt": "2026-10-19T07:48:03.732873+00:00",
+    "authority": "Manager continuation: one actual independent codex-1/GPT-6.1 Sol/xhigh review of G-2842 transition dependency; no migration adoption or shared stack writes by G-2846.",
+    "reviewer": {
+      "worker": "G-2846",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independentOfAuthor": true,
+      "nestedAgents": false,
+      "reviewCount": 1
+    },
+    "decision": {
+      "verdict": "approve",
+      "owner": "G-2842",
+      "canLandThisDependency": true,
+      "blockingFindings": [],
+      "reason": "The six-path change provides an explicit, narrowly pinned QA metadata bridge and shares the existing owner migration receipts, locks and per-file transactions. It verifies actual frozen baseline schema and seed effects before adoption; exact-source producer counterexamples and subsequent-upgrade assertions pass. No actionable defect was found within this scope.",
+      "doesNotApproveNotificationCandidate": "1addc28512baa56bbe940561646c693f8e9aba47",
+      "doesNotCloseOriginalFindings": true,
+      "doesNotCertifyActualRetainedCopy": true
+    },
+    "source": {
+      "commit": "b0b3a5e7cbf47f03eda24f53ee7ca3a492436aff",
+      "parent": "82067635061c20a9a3d0301a63aa652bf120d14b",
+      "headVerifiedExact": true,
+      "sourceTreeClean": true,
+      "changedPaths": [
+        {
+          "path": "docs/testing/test-harness.md",
+          "sha256": "00f9cec5071388911b1375126be6001d68b3c443f6fb482b8972fba26cdba09a",
+          "candidateBytesMatch": true
+        },
+        {
+          "path": "scripts/ops/migrate.test.ts",
+          "sha256": "f06a32aa611c5f1af23596739b62c5460e6b0e4a9d69891bf5aeb5797f2e0c98",
+          "candidateBytesMatch": true
+        },
+        {
+          "path": "scripts/ops/migrate.ts",
+          "sha256": "344882de8e53bdea11e61b1f01458bd85a6cc533374558170015013e08300214",
+          "candidateBytesMatch": true
+        },
+        {
+          "path": "scripts/qa/bootstrap.ts",
+          "sha256": "a1ae68baba2446c09b573c981a0c7c75cf17e12d1f2376fe8d498513b8306d48",
+          "candidateBytesMatch": true
+        },
+        {
+          "path": "scripts/qa/history-transition.test.ts",
+          "sha256": "c795f49f996764a342525dd6f7f896d7c860c3fafa223f75a94363f0cf00fa10",
+          "candidateBytesMatch": true
+        },
+        {
+          "path": "scripts/qa/history-transition.ts",
+          "sha256": "fdfe1af26418f26c04ea67a8b4a0e9580022ef5ba9daddc4cf28b416ab666363",
+          "candidateBytesMatch": true
+        }
+      ],
+      "trackedPaths": 6,
+      "sourceOrAssertionsChangedByReviewer": false,
+      "diff": ".temp/read-availability-review/transition-dependency/candidate.diff"
+    },
+    "retainedInput": {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2826/.temp/rating-context-execution/baseline/.temp/rating-context-source/owners/backup.json",
+      "sha256": "d7059aeceef904aa9ccba02dfabb87f8a41f10756ccd4f56567841097d328a8c",
+      "source": "759244e365ad64bcb97fac0ea7d7b9caebe144b2",
+      "project": "rezics-catalogue-corpus-ratings-8eda5a21-ca4d-4fdc-rating-context-selection-79c3488519b38ec7",
+      "runId": "ratings-8eda5a21-ca4d-4fdc",
+      "storageDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056",
+      "storageFiles": 525,
+      "volumeInspected": false,
+      "adoptionExecuted": false,
+      "completeFrozenInventoryVerified": {
+        "files": 525,
+        "everyByteHashMatches": true,
+        "evidence": ".temp/read-availability-review/transition-dependency/retained-inventory-verification.json"
+      },
+      "manifestIsNotDatabaseCompletionProof": true,
+      "realRetainedOwnerVolumesInspectedOrAdoptedByReviewer": false
+    },
+    "materialContractsInspected": [
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "13,53-95",
+        "conclusion": "Only frozen source 759244e365ad64bcb97fac0ea7d7b9caebe144b2 is supported. Git archival supplies immutable SQL and storage bytes. Backup bytes must match the independently retained SHA, and the complete 525-path inventory must match the frozen source. Digest input alone does not authorize receipts."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "97-144",
+        "conclusion": "Input/output paths resolve into this checkout .temp. Target must be a distinct persistent rezics-qa project, not production, with matching Docker project/service, PostgreSQL engine, named volume and loopback owner endpoints. Schema dumps retain definitions, ownership, grants, functions, triggers, policies and indexes; only the two migration metadata relations and random dump guards are excluded."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "147-191,227-240,271-288",
+        "conclusion": "Before first adoption, populated owner schema must equal its frozen template, with no invalid/incomplete index. A fresh replay of all pinned SQL must then equal that schema and every normalized template seed row. The populated copy must retain all stable seed keys and the complete nonvolatile values for fixed seed tables. Runtime counters, gates, policies and recovery state may advance. A forged matching object count or mutually altered target/template seed value cannot substitute for pinned SQL effects."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "202-226",
+        "conclusion": "Nonempty history without a verified transition receipt is refused. Replay requires the exact source/backup, frozen migration list, all historical entries and no entry unknown to the current owner inventory. Already committed transition evidence is trusted to avoid replaying application mutations; retry is not a new certification of arbitrary post-adoption schema/data drift."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "247-323",
+        "conclusion": "All owner clients must be stopped. Existing Access and relay release locks are held, each with a 5-second acquisition limit. Both owners are verified before metadata writes; SHARE table locks and per-owner transactions protect verification/receipt writes. Application SQL is replayed only into temporary empty reference databases. Verification rolls back target transactions; adoption inserts migration and transition metadata only. A write failure before commits rolls both owners back. Cross-database commits are explicitly non-atomic: a durable first-owner receipt allows the interrupted second owner to be completed without replaying seeds. References are removed in finally."
+      },
+      {
+        "path": "scripts/ops/migrate.ts",
+        "lines": "42-119,122-134,199-218",
+        "conclusion": "The same session advisory lock covers provider DDL, standalone concurrent-index builds, per-file transactions and receipts. Polling pg_try_advisory_lock ends each wait statement instead of retaining the transaction that could deadlock a concurrent-index build. Explicit selections reject unknown/duplicate basenames and do not mark unselected migrations. Production owner startup still executes ordinary tracked migrations and never imports the QA transition automatically."
+      },
+      {
+        "path": "scripts/qa/bootstrap.ts",
+        "lines": "19-26,74-91",
+        "conclusion": "Future QA Access/relay bootstrap uses the owner runner and durable receipts before freezing templates. Access and relay paths remain owner-specific; Account/Content lifecycle is unchanged. Existing fault/recovery subset callers still select only their named migrations."
+      },
+      {
+        "path": "scripts/lib/concurrent-index.ts",
+        "lines": "1-75",
+        "conclusion": "Existing online-build parser, standalone execution and invalid-index recovery are retained; the new helper does not replace their contract."
+      },
+      {
+        "path": "docs/testing/test-harness.md",
+        "lines": "72-112",
+        "conclusion": "Documents explicit verification then adoption on an admitted stopped disposable copy, independent pins, metadata-only writes, retry behavior and normal later owner upgrades. Tooling success is expressly separate from certification of a real retained copy."
+      }
+    ],
+    "producerReceiptReuse": {
+      "job": "bdbd6f7e-9d41-40ad-b699-fac2a6ee2ec7",
+      "qaRun": "20261019t072939-b7610f",
+      "command": "bun scripts/goal/goalctl.ts test scripts/ops/migrate.test.ts scripts/qa/history-transition.test.ts --timeout 600000",
+      "exitCode": 0,
+      "execution": "Real isolated PostgreSQL 18.6 containers and frozen empty-bootstrap replay, with a populated principal/counter/gate preservation case; no product persona or retained-corpus adoption run.",
+      "sourceQualification": {
+        "producerSource": {
+          "head": "82067635061c20a9a3d0301a63aa652bf120d14b",
+          "fingerprint": "7401accf2def8fb839fe11001efb413e1ce874dda60c5673fd1f8274df58c32c",
+          "clean": false
+        },
+        "sourceStable": true,
+        "reconstructedPrecommitFingerprint": "7401accf2def8fb839fe11001efb413e1ce874dda60c5673fd1f8274df58c32c",
+        "exactCandidateBytesProved": true,
+        "method": "sha256(parent HEAD newline + tracked binary diff + each sorted untracked pathname NUL and committed bytes), matching scripts/qa/core.ts:245-303"
+      },
+      "counts": {
+        "executed": 8,
+        "pass": 8,
+        "fail": 0,
+        "error": 0,
+        "skip": 0,
+        "assertions": 70,
+        "elapsedMs": 316400
+      },
+      "cases": [
+        {
+          "file": "scripts/ops/migrate.test.ts",
+          "line": 14,
+          "name": "QA receipts share the owner lock, exact selection, transactions and subsequent upgrades",
+          "assertions": 18,
+          "result": "pass"
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 136,
+          "name": "retained lineage requires both independently recorded bytes and every pinned migration byte",
+          "assertions": 8,
+          "result": "pass"
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 153,
+          "name": "partial or unknown historical receipts are refused without adopting the other owner",
+          "assertions": 3,
+          "result": "pass"
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 161,
+          "name": "an existing schema with a missing migration effect cannot gain receipts",
+          "assertions": 3,
+          "result": "pass"
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 167,
+          "name": "a populated owner missing a seeded data-only effect cannot gain receipts",
+          "assertions": 3,
+          "result": "pass"
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 173,
+          "name": "a template with matching object counts is checked against the actual pinned SQL effects",
+          "assertions": 3,
+          "result": "pass"
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 184,
+          "name": "a failed receipt write rolls back both verified owners without changing application state",
+          "assertions": 6,
+          "result": "pass"
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 197,
+          "name": "verification is read-only and adoption preserves all owner schema, data, identities and rights",
+          "assertions": 26,
+          "result": "pass"
+        }
+      ],
+      "affectedCheck": {
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "guards": {
+          "selectedFiles": 18,
+          "availableFiles": 44,
+          "executed": 133,
+          "pass": 133,
+          "fail": 0
+        },
+        "types": "pass (89.3s)",
+        "lint": "pass (3.0s)",
+        "ast": "pass (0.3s)",
+        "briefTests": "none; focused owner QA recorded separately",
+        "log": ".temp/read-availability-review/transition-dependency/producer/.temp/goal/check/run-21KW36/output.log"
+      },
+      "docsCheck": {
+        "command": "task docs:check",
+        "exitCode": 0,
+        "executed": 13,
+        "pass": 13,
+        "fail": 0,
+        "coverage": "249 Markdown files",
+        "log": ".temp/read-availability-review/transition-dependency/producer/.temp/goal/jobs/38564cd7-a5cf-43b1-b7c4-2f6218085421.2.log",
+        "qualification": "Earlier documentation check covers the final unchanged documentation blob; the later producer source/check fingerprint is independently matched to b0b3."
+      },
+      "unchangedTestsRepeatedByReviewer": false,
+      "additionalRuntimeCounterexample": "None warranted after inspecting the exact passing tests and source paths; no unchanged QA replay was performed.",
+      "producerResourcesStopped": "Reported by G-2842 final handoff; reviewer did not start or adopt any stack.",
+      "originalRetainedManifestUnchanged": "SHA-256 independently read as d7059aeceef904aa9ccba02dfabb87f8a41f10756ccd4f56567841097d328a8c; no retained volume mutation performed."
+    },
+    "assertionReachAndLimits": {
+      "provedByProducer": [
+        "Missing/drifted/extra inventory bytes and incorrect source are refused.",
+        "Unknown/partial historical receipts refuse adoption of the other owner.",
+        "Missing schema index and missing seeded data-only effect are refused.",
+        "Matching object counts with altered frozen data effects are refused against actual pinned SQL replay.",
+        "Failed relay receipt insertion rolls back both verified owners and preserves application dump hashes.",
+        "Verification and adoption preserve full application schema/data dumps, principal identity, enforcement epoch, gates and counters.",
+        "A constructed between-owner-commit durable state resumes correctly; repeated retries preserve a post-adoption application change.",
+        "A genuine later ALTER/data upgrade applies once through the ordinary owner runner; enforcement trigger behavior remains active.",
+        "Future QA receipts use the same migration lock/selection/transactions, serialize with ordinary upgrades, retain online-build recovery and refuse production auto-adoption."
+      ],
+      "notClaimed": [
+        "No actual process-kill-at-COMMIT fault was executed; interrupted replay was constructed from a genuinely verified/adopted per-owner receipt.",
+        "No G-2826 retained-copy verify/adopt/upgrade or rating assertion was executed by G-2846.",
+        "No application migration 2605 receipt or native graph-version repair capability is established by this tooling review.",
+        "No public-persona, mixed-load or native SQL/engine drain acceptance is established.",
+        "First-adoption data-effect checks deliberately preserve legitimate runtime changes and do not require every mutable business value to equal an empty bootstrap.",
+        "The original backup manifest is validated; physical backup consistency and restored-volume provenance remain the supported restore/consumer owner obligation."
+      ]
+    },
+    "nextForG2826": {
+      "owner": "G-2826",
+      "prerequisite": "After normal manager landing/integration of reviewed b0b3, restore the unchanged independently pinned backup into a stopped, owned persistent isolated QA copy with its original engines. Run documented verify, then adopt with fresh receipt output, then ordinary owner upgrades. Keep the original frozen rating assertions and source pins. Refusal remains setup failure.",
+      "commandTemplate": "task goal -- slot -- bun scripts/qa/history-transition.ts verify --stack .temp/stack/rezics-qa-<restored-run> --backup .temp/<retained-input>/backup.json --backup-sha256 d7059aeceef904aa9ccba02dfabb87f8a41f10756ccd4f56567841097d328a8c --source 759244e365ad64bcb97fac0ea7d7b9caebe144b2 --receipt .temp/<evidence>/qa-history-verified.json",
+      "recording": "Wrap the concrete command with bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- from the executing owner worktree.",
+      "g2846AdoptionAuthorized": false
+    },
+    "originalCandidatePreservation": {
+      "historicalDiscoveryCreditAssertionFailureRetained": true,
+      "allUnexecutedNotificationPersonasRetained": true,
+      "originalCandidateReReviewed": false,
+      "originalRuntimeChecksReplayed": false,
+      "originalDecisionUnchanged": true,
+      "managerFollowup": "Manager states G-2763 confirmed the inbox regression also fails old code and repair is active. This is recorded as manager follow-up, not a new G-2846 public reproduction or a review of repaired source. Wait for the final immutable notification source before further review."
+    },
+    "evidence": {
+      "directory": ".temp/read-availability-review/transition-dependency",
+      "pins": ".temp/read-availability-review/transition-dependency/pins.json",
+      "sourceDiff": ".temp/read-availability-review/transition-dependency/candidate.diff",
+      "producerHandoff": ".temp/read-availability-review/transition-dependency/producer-handoff.md",
+      "rawProducerQa": ".temp/read-availability-review/transition-dependency/producer/.artifacts/qa/20261019t072939-b7610f"
+    },
+    "ownedReportChecks": {
+      "job": "74c914d0-64cc-4166-aad2-4da1804a00af",
+      "docsCheck": {
+        "command": "task docs:check",
+        "exitCode": 0,
+        "executed": 13,
+        "pass": 13,
+        "fail": 0,
+        "error": 0,
+        "skip": 0,
+        "coverage": "249 Markdown files; links, fragments and navigation",
+        "log": ".temp/read-availability-review/transition-dependency/74c914d0-64cc-4166-aad2-4da1804a00af.1.log"
+      },
+      "workerCheck": {
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "selection": "owned report only, 1/44 guards selected",
+        "types": "pass; no TypeScript workspace changed",
+        "tests": "pass; no test files named in brief",
+        "lint": "pass; no source file changed",
+        "ast": "pass (0.3s)",
+        "guards": "pass (2.4s)",
+        "log": ".temp/read-availability-review/transition-dependency/74c914d0-64cc-4166-aad2-4da1804a00af.2.log"
+      },
+      "receiptFinalization": "Only receipt metadata and preservation of original JSON formatting were finalized after checks; no review conclusions, product bytes or test assertions changed."
+    }
+  }
+}

@@ -69,6 +69,47 @@ Fault, recovery, load and browser tests use their registered isolation paths;
 do not reset another file's project. For background data, restore a stopped,
 compatible backup into a separate project rather than reseeding online.
 
+### Retained untracked QA history
+
+New QA Access and relay bootstraps use the same migration receipts and lock as
+owner upgrades. A retained backup made by the untracked bootstrap at
+`759244e365ad64bcb97fac0ea7d7b9caebe144b2` needs an explicit transition before
+`task dev:prepare` can apply later SQL. Ordinary startup never adopts history.
+
+Restore the original backup into a distinct disposable persistent QA project
+under normal Goal admission. Keep its original engines, stop all owner clients
+and retain the independent source pin and backup SHA-256. Within the same
+600-second preparation budget, verify the copy:
+
+```sh
+task goal -- slot -- bun scripts/qa/history-transition.ts verify \
+  --stack .temp/stack/rezics-qa-<restored-run> \
+  --backup .temp/<retained-input>/backup.json \
+  --backup-sha256 <independently-recorded-backup-sha256> \
+  --source 759244e365ad64bcb97fac0ea7d7b9caebe144b2 \
+  --receipt .temp/<evidence>/qa-history-verified.json
+```
+
+The command checks the retained manifest's complete byte inventory against the
+pinned Git source, checks the owned PostgreSQL container and compares both
+owner schemas and frozen bootstrap templates against a fresh pinned SQL replay.
+The [schema dump](https://www.postgresql.org/docs/18/app-pgdump.html) includes
+owners, grants, functions, triggers, constraints and indexes; separate template
+row and populated-copy seed checks verify data effects. Missing templates,
+unknown or partial history, changed bytes, schema drift and missing data effects
+refuse adoption. A manifest's SQL filenames alone cannot prove completion.
+
+After successful verification, use `adopt` in place of `verify` with a fresh
+receipt output. Both owners are verified before either gains receipts. Only
+migration metadata is written in the restored owners; temporary empty reference
+databases are removed. The original backup and all application rows remain
+unchanged. Retrying recognizes committed per-owner evidence, including an
+interrupted cross-database commit. Apply later SQL through the usual owner
+runner, then continue the original proof. Retain the credential-free JSON
+receipts with that proof; they contain pins, project identities, migration names
+and schema/effect digests. A successful tooling test does not certify a retained
+copy that has not run this verification.
+
 ## Writing tests
 
 Name tests `<ID>: <behavior>` using an owner case ID. Exercise the real owner
