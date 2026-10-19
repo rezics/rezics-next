@@ -8,7 +8,6 @@ import * as entity from '../entity-page/fixtures.ts';
 import type { StatementPage } from '../entity-page/types.ts';
 import { copyOf as entityCopy } from '../entity-page/messages.ts';
 import { attributed } from '../rights-mark/fixtures.ts';
-import { messages as relationshipMessages } from '../relationships/messages.ts';
 import * as levels from '../work-levels/fixtures.ts';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { PartsPreviewView } from '../work-levels/previews.tsx';
@@ -117,6 +116,19 @@ async function readableGuide({ canvasElement, args }: { canvasElement: HTMLEleme
   await expect(subject).toHaveAttribute('data-resource', fixture.work.id);
   await expect(subject).toHaveAttribute('data-semantic-type', 'https://schema.org/DigitalDocument');
   await expect(within(subject as HTMLElement).getByRole('heading', { level: 1 })).toBeVisible();
+  if ((args.locale ?? 'en') === 'en') {
+    const top = within(subject as HTMLElement);
+    const primary = top.getByRole('group', { name: 'Primary actions' });
+    const reactions = top.getByRole('group', { name: 'Reactions' });
+    await expect(within(primary).getByRole('link', { name: 'View guide' })).toBeVisible();
+    await expect(within(reactions).getByRole('button', { name: 'Ratings' })).toBeVisible();
+    const more = top.getByRole('button', { name: `More actions for ${top.getByRole('heading', { level: 1 }).textContent}` });
+    await expect(more).toBeVisible();
+    await expect(primary.compareDocumentPosition(reactions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const r = reactions.getBoundingClientRect(), m = more.getBoundingClientRect();
+    await expect(m.x).toBeGreaterThanOrEqual(r.right);
+    await expect(Math.abs(m.y - r.y)).toBeLessThan(16);
+  }
 }
 
 export const LongEnglish1440: Story = { globals: { viewport: { value: 'desktop1440' } }, play: readableGuide };
@@ -170,7 +182,7 @@ async function dismissibleNavigation(canvasElement: HTMLElement, at: WorkAt) {
   finally { document.removeEventListener('click', stop); }
   await expect(trigger).toHaveAttribute('aria-expanded', 'false');
   await expect(trigger).toHaveFocus();
-  const more = canvas.getByRole('button', { name: `${relationshipMessages.en.options} · ${fixture.work.title.value}` });
+  const more = canvas.getByRole('button', { name: `More actions for ${fixture.work.title.value}` });
   await expect(more).toBeVisible();
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 }
@@ -320,7 +332,7 @@ export const WorkObjectMenu: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvasElement.querySelectorAll('[data-report-action]')).toHaveLength(0);
-    const more = canvas.getByRole('button', { name: `${relationshipMessages.en.options} · ${fixture.work.title.value}` });
+    const more = canvas.getByRole('button', { name: `More actions for ${fixture.work.title.value}` });
     await userEvent.click(more);
     for (const [kind, component, revision] of [['work', null, null],
       ['text', 'synopsis', fixture.work.metadataRevision], ['cover', 'cover', fixture.work.revision]] as const) {

@@ -2,6 +2,7 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { BookOpenIcon, CircleAlertIcon } from 'lucide-react';
+import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderActions, ReaderActionsProvider, ShelfButton } from '../catalogue/reader-actions.tsx';
@@ -90,6 +91,7 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
   avatarQuery?: string;
   locale: UiLocale; messages: WorkPageMessages; children: ReactNode;
 }) {
+  const t = materializeData(messages, { locale });
   const nav = <>
     <WorkTabs workRef={workRef} label={messages.sections} labels={{ overview: messages.overview,
       contents: messages.contents, versions: messages.versions, discussion: messages.discussion,
@@ -108,15 +110,16 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
   const compactHeader = showcase ? <HiddenOnOverview workRef={workRef}>{header}</HiddenOnOverview> : header;
   const primary = readAction === undefined && showsBookControls(experience) ? <ReadButton workRef={workRef} start={{ kind: 'contents' }}
     messages={messages} /> : readAction;
+  const shelf = <ShelfButton work={work.id} title={work.title.value} locale={locale} size="sm" variant="outline"
+    words={shelfWords(experience, messages)} className="min-h-11" />;
   const reactions = <div data-work-reactions className="flex min-w-0 items-start justify-end gap-2">
-    <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
-      <ShelfButton work={work.id} title={work.title.value} locale={locale} size="sm" variant="outline"
-        words={shelfWords(experience, messages)} className="min-h-11" />
+    <div role="group" aria-label={t.reactions} className="flex min-w-0 items-center justify-end gap-1">
       <WorkRating work={work.id} locale={locale} label={messages.ratings} />
     </div>
     <div className="shrink-0 [&_button]:min-h-11 [&_button]:min-w-11 [&_a]:min-h-11">
       <RelationshipControl target={work.id} kind="work" name={work.title.value} locale={locale} compact
       signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref ?? '/auth/start'} api={relationships}
+      moreAccessibleLabel={t.moreActions({ title: work.title.value })}
       reports={workReportTargets(work, workRef)} />
     </div>
   </div>;
@@ -133,16 +136,18 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
       <PageContainer className="grid gap-7 max-lg:pb-24 [text-autospace:normal]">
         <div data-work-identity {...subjectIdentity}
           className="grid min-w-0 gap-4 border-border/60 border-b pb-6">
-          {reactions}
+          <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+            <div id={ACTION_ID} role="group" aria-label={t.primaryActions} className="flex min-w-0 flex-wrap items-center gap-2">
+              {primary}{shelf}
+            </div>
+            {reactions}
+          </div>
           <div className="grid min-w-0 content-start gap-3">
             {artHeader}
             {compactHeader}
             {shortcuts}
           </div>
-          <div id={ACTION_ID} className="grid w-fit max-w-full content-start gap-2">
-            {primary}
-            {status}
-          </div>
+          {status}
         </div>
         {nav}
         <div className="grid min-w-0 content-start gap-8">{children}</div>
@@ -166,7 +171,7 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
       // Under art the title leaves this row on a phone, so the actions sit beside the thumbnail instead of under it.
       'max-lg:group-data-[art]/art:col-span-1 max-lg:group-data-[art]/art:col-start-2 max-lg:group-data-[art]/art:row-start-1',
       'max-lg:group-data-[art]/art:self-center')}>
-        {primary}
+        <div role="group" aria-label={t.primaryActions} className="grid gap-2">{primary}{shelf}</div>
         {status}
       </div>
     </div>
@@ -183,10 +188,10 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
   return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'} actingSubject={actingSubject}
     seed={readerSeed} ratingTarget={ratingTarget} actions={readerActions}>
     <PageContainer {...subjectIdentity} className="grid gap-6 max-lg:pb-24 [text-autospace:normal]">
-      <div data-work-identity>{reactions}</div>
       {artHeader}
       {showcase ? <ArtGrid workRef={workRef} className={`group/art ${bookGrid}`}>{columns}</ArtGrid>
         : <div className={bookGrid}>{columns}</div>}
+      <div data-work-identity className="order-first">{reactions}</div>
       {evidence}
       <StickyAction label={messages.nextAction} />
     </PageContainer>
@@ -267,6 +272,8 @@ export function OverviewLayout({ plan, lead, type, about, facts, classification,
   };
   return <div className="grid min-w-0 gap-6">
     {drawOrder(plan, lead).map(section => <div key={section} id={hubAnchors[section]} data-hub-section={section}
+      data-primary-content={section === 'about' ? '' : undefined}
+      data-community-content={section === 'discussion' ? '' : undefined}
       className="grid min-w-0 scroll-mt-20 content-start gap-5 empty:hidden">{slots[section]}</div>)}
     {record}
   </div>;

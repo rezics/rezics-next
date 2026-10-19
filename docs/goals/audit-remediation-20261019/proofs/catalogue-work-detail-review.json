@@ -11,8 +11,8 @@
     "delegation": false,
     "fallback": false
   },
-  "disposition": "final-a636-independent-review-complete-five-source-remediations-one-reproduced-header-finding",
-  "acceptance": "At exact a636f3b460aa89d80e4a454bef2ececa9dedf128 all five original findings and both e8 residual counterexamples are addressed in source. Original findings/dispositions remain preserved. Exact final C31 desktop/phone pass; original Guide1440/390 fail the named primary-action assertion, recorded as WORK-REVIEW-06 P2. Final normal guards retain page-filter inventory failure; accepted-command timeout retry passes. No canonical catalogue closure or landing approval.",
+  "disposition": "bounded-c17-independent-review-complete-reported-action-group-finding-addressed",
+  "acceptance": "At immutable c17c7dbb037c48faa0d98002ee269c369a605542 versus 1de1bee4d89441de1460d4ce52eaa88258d9f0c8, WORK-REVIEW-06 is addressed in shared source and original Guide assertions at1440/390 pass on production-equivalent7516ad235015f6b916b0e187bc2901de67f8e874. Prior five source findings remain addressed at a636; all historical failures and dispositions are preserved. Inventory provenance retains owner-audit obligations and normal guards pass. No additional actionable bounded finding or full canonical catalogue closure is claimed.",
   "pins": {
     "branch": "sprint/catalogue-work-20261019",
     "base": "dcd0a9c6d60e745b65cd8b155c186c2531e185a0",
@@ -1740,5 +1740,450 @@
       "subsequentEdits": "Receipt outcomes, new actionable finding and validation metadata only; JSON parsed and git diff --check before commit."
     },
     "managerNext": "Use final independent source review: five original findings/remnant counterexamples addressed in source; one reproduced header action finding remains. Fix shared named primary-action contract and final normal guard inventory failure within owner authority; retain unchanged original assertions and source data. C31 final desktop/phone passes do not close other catalogue findings. No extra review-of-review task."
+  },
+  "boundedActionGroupCheckpoint": {
+    "observedAt": "2026-10-19T09:28:25.910582+00:00",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "delegation": false,
+      "fallback": false
+    },
+    "authorization": "2026-10-19T07:59:39.575595Z decision explicitly cuts the same independent review to WORK-REVIEW-06 plus existing predicate-inventory provenance; no further broad candidate review or canonical acceptance inferred.",
+    "previousReportCommit": "17a8580b63492ed4856413579d2ba86ed9e23fa2",
+    "preservedPriorDisposition": {
+      "disposition": "final-a636-independent-review-complete-five-source-remediations-one-reproduced-header-finding",
+      "acceptance": "At exact a636f3b460aa89d80e4a454bef2ececa9dedf128 all five original findings and both e8 residual counterexamples are addressed in source. Original findings/dispositions remain preserved. Exact final C31 desktop/phone pass; original Guide1440/390 fail the named primary-action assertion, recorded as WORK-REVIEW-06 P2. Final normal guards retain page-filter inventory failure; accepted-command timeout retry passes. No canonical catalogue closure or landing approval.",
+      "allPriorCheckpointFieldsAndOriginalFindingsPreserved": true,
+      "previousReportSha256": "e039308379fd3aec6baf0dde3c4ec53678ea7150d2e2ea1af76cf872003cbaa0",
+      "originalFindingsCanonicalSha256": "056dd4bb864b13c1b295324f38f7b001e37c5704cee0fa38f6c895a30a5aff76"
+    },
+    "pins": {
+      "originalBase": "dcd0a9c6d60e745b65cd8b155c186c2531e185a0",
+      "originalCandidate": "4048d121aaea8c3e525acb935e3032ffacdc7d2e",
+      "previousSourceReview": "a636f3b460aa89d80e4a454bef2ececa9dedf128",
+      "boundedBase": "1de1bee4d89441de1460d4ce52eaa88258d9f0c8",
+      "candidate": "c17c7dbb037c48faa0d98002ee269c369a605542",
+      "productExecutionPin": "7516ad235015f6b916b0e187bc2901de67f8e874",
+      "candidateTree": "5de60e35a8de27057880f9ec75501b1173fb1a84",
+      "boundedDiffSha256": "f6886ba7dce4f1843e75d874d462e3c19a970f0bdcf5243ff683676a3866d66c",
+      "boundedPaths": 13,
+      "inventoryProvenanceDiffSha256": "0be225603c3d6c36dfdac96ae30357a504333026ff2827ec1501c847c6ebf0f5",
+      "branch": "sprint/catalogue-work-20261019"
+    },
+    "scope": "Complete source review of the 13-path 1de1..c17 action-group diff plus the single a636..1de1 inventory provenance delta. Inspected actual shared owners and callers below. Read-only review; no implementation, stacks, corpus, landing or changing-main review.",
+    "inspectedChangedFiles": [
+      {
+        "path": "apps/web/features/relationships/control.tsx",
+        "baseBlob": "d6deb6006bedda69a49c2ba835cad43a2b454f70",
+        "candidateBlob": "d72c79a8369675275fd9a5e8137998dafb99678b",
+        "sha256": "50c34520ea41c1f54f25fbdf7132191834c7ac32d62c85a289f2420f37f6b903"
+      },
+      {
+        "path": "apps/web/features/safety/report-action.tsx",
+        "baseBlob": "efd09613cd80513de59b31f4e7275bffd3591e55",
+        "candidateBlob": "a6ac9b1c3d89f16a2b844fb7b2e83d1a7ce2d138",
+        "sha256": "57d2d6e4c809c44f8de8b516c765d26baa862323d96eda6bd0f025fb2c268667"
+      },
+      {
+        "path": "apps/web/features/work-page/hub-frame.stories.tsx",
+        "baseBlob": "e9367a5a7fab23418e051f7e575f4a2a2b4b52c5",
+        "candidateBlob": "ce92ca5c1c7d5bf2ffa878f763b44e5f0b19f48d",
+        "sha256": "d8ab5a2a365c3750bc27f8a1103ee35d0c0b286f2f243c8fd921a47d1d963232"
+      },
+      {
+        "path": "apps/web/features/work-page/messages.ts",
+        "baseBlob": "e96d3762f9b60e7c595bfd79a107c08eb07234e2",
+        "candidateBlob": "c1126e2d50dc7e7212d0a71d2a2aa683204fa16c",
+        "sha256": "7f6246fd4f11b9ad825c357c6da15f0b4116d465237afb687d0695ff0b77c861"
+      },
+      {
+        "path": "apps/web/features/work-page/messages/de.ts",
+        "baseBlob": "7c593703fc549da268e416ef7d5fa6e3958c2b9e",
+        "candidateBlob": "431b838d88886c5fdd36f36a4263f212a1dac88f",
+        "sha256": "4162c9d6c377b7fe88384d809e795ad7d8de7c6719a921e397a59b658b1689c5"
+      },
+      {
+        "path": "apps/web/features/work-page/messages/es.ts",
+        "baseBlob": "55e0ae40ecff22c95315c2d660b001863ccd437e",
+        "candidateBlob": "222a2ddbac4217d64402732b5e5d41bf9244f651",
+        "sha256": "c41454fc72671bdf5aaee66f791614fe7aed5bd1087710360f2c9c6ddbff1841"
+      },
+      {
+        "path": "apps/web/features/work-page/messages/fr.ts",
+        "baseBlob": "0e55350e01c8a35de3b4f8fd43a5031d73ba384c",
+        "candidateBlob": "080c4340b3b252f8ca2de3cefd9217aaf7292ae0",
+        "sha256": "7830c915556634a0ee13476b562a162c674c6c54f42bf3162b497c74ca622dcc"
+      },
+      {
+        "path": "apps/web/features/work-page/messages/ja.ts",
+        "baseBlob": "dfff09d81812e562826b298f9603cc723fae9a9b",
+        "candidateBlob": "ae34616e42260e82449832b5002e6e112b9b41bb",
+        "sha256": "e23262fe4405b59ccd785e3747b6de55182d9af2413fb549e4345c4ab8fc1e4e"
+      },
+      {
+        "path": "apps/web/features/work-page/messages/ko.ts",
+        "baseBlob": "1cf1f42ba7b47cc6fe7b5077411587d4dda4889c",
+        "candidateBlob": "b9cb55d887c4e97d7f0a42f0398421dc0766a593",
+        "sha256": "9c4c8b6be18dd62d85680abca532653335beafc22c94d8a8b0a84841613450ec"
+      },
+      {
+        "path": "apps/web/features/work-page/messages/zh-Hans.ts",
+        "baseBlob": "2727c825d641603c2d7155c36e8c4046d2426db8",
+        "candidateBlob": "52dfa7ebee807baf814e06fadb69fcb5cbe5434c",
+        "sha256": "fde1ebaa51fdb41726554fb0896c73b1fab663eb16ee5f003cd475d53c54a032"
+      },
+      {
+        "path": "apps/web/features/work-page/messages/zh-Hant.ts",
+        "baseBlob": "bed28adb1c51485e997912f9489b6361ffd1399d",
+        "candidateBlob": "ae6a0200c8811a1cd756c52cc509765b11fa6ee6",
+        "sha256": "b7088e340db22a951b18336a8e7f13fdbf9280d07823230020ad183c5ab7a745"
+      },
+      {
+        "path": "apps/web/features/work-page/work-detail-contract.stories.tsx",
+        "baseBlob": "5cd924dea989642be8055e4882dfa02b7da6ecfe",
+        "candidateBlob": "991d047396fe9a49ef978f7f22d2992dface1ccf",
+        "sha256": "79508ba9d8b65eb29ec0bda4707ff633d3a0237738163d33c6de996b2ae53c78"
+      },
+      {
+        "path": "apps/web/features/work-page/work-frame.tsx",
+        "baseBlob": "e1e79c58430227e407dc49f4ad1c91b580f90fab",
+        "candidateBlob": "5bf210320640cac0a73b2655a85c0ae3dfe6c42c",
+        "sha256": "4e311856d7708dec0bf7120e09770d617929f9f364e2ad2ab9140b2e68540218"
+      },
+      {
+        "path": "scripts/static/web-page-filtering.inventory.json",
+        "baseBlob": "dea28579d021844706e20042e2612d4225e2bea6",
+        "candidateBlob": "dea28579d021844706e20042e2612d4225e2bea6",
+        "sha256": "707bb76828fbc01de7b917ee5e8c79c9ba4093ade753cf29501612681f7ab4b8"
+      }
+    ],
+    "inspectedCallChains": [
+      "apps/web/features/work-page/types/actions.tsx",
+      "apps/web/features/work-page/work-nav.tsx",
+      "apps/web/features/work-page/work-report-targets.ts",
+      "apps/web/features/work-page/games-hub-recorded-page.ts",
+      "apps/web/features/shell/page.tsx",
+      "apps/web/features/entity-page/entity-page.tsx",
+      "apps/web/features/realm/membership.tsx",
+      "apps/web/features/relationships/manager.tsx",
+      "apps/web/features/relationships/relationships.stories.tsx",
+      "scripts/static/web-page-filtering.test.ts"
+    ],
+    "findingDisposition": {
+      "id": "WORK-REVIEW-06",
+      "severity": "P2",
+      "historicalDisposition": "Reproduced on a636 at original Guide action assertion44, both1440/390; retained unchanged in finalCandidateResolutionCheckpoint.",
+      "disposition": "addressed-in-source-and-applicable-original-assertions",
+      "source": "Both WorkFrame branches now place actual primary action and shelf in one localized Primary actions group before localized Ratings Reactions in DOM order. NonBook renders that row before title; Book keeps existing visual reaction position via CSS order-first while primary precedes reactions in DOM. Title-specific More actions is materialized from current Work title and passed through signed-out, no-api and signed-in relationship/report menu branches. Existing actual actions, disabled states, status and report selections remain consumed.",
+      "reproducedEvidence": "Original unmodified C22/C26 Guide cells pass at 1440 and 390 on 7516, against genuine backend75409, with no product mocks or data preparation and clean source before/after. c17 changes only the new story expected title, so production code is identical. Original body and helpers were not changed.",
+      "scopeLimit": "Closes this reported named-header-action failure and these applicable original cells. Does not close unrelated canonical catalogue findings or the original full corpus."
+    },
+    "priorFiveDisposition": "WORK-REVIEW-01..05 remain source addressed at a636. This bounded delta changes no Recipe owner reads, read availability, saved preference/progress, facts cursor/evidence, rights attribution or report subject/revision selection. Historical failures and source-only limits remain preserved.",
+    "changedSurfaceAudit": [
+      {
+        "surface": "Both WorkFrame branches and existing callers",
+        "result": "One Primary actions group consumes the existing readAction; actual shelf moves beside it rather than duplicating state. Status is preserved. NonBook task remains the actual Guide/Cook/copy action. Book Continue and Next Volume2 href/status are asserted by the existing PhoneFirstScreen story. ACTION_ID and ACTION_ATTRIBUTE remain compatible with StickyAction, which copies the actual marked control and its disabled state."
+      },
+      {
+        "surface": "RelationshipControl and ReportMenu",
+        "result": "Optional moreAccessibleLabel changes only accessible name. Signed-out/no-api ReportMenu fallback and signed-in Menu trigger all forward it. Unchanged callers omit it and retain options plus resource-name fallback. Entity, Realm membership and following-manager callers inspected; follow, negative relationships, reports, target/revision/selection and auth flows unchanged."
+      },
+      {
+        "surface": "Locale messages",
+        "result": "Primary actions/Reactions and title-inserted overflow label added consistently in eight locales; no hardcoded Guide-only label in shared owner. Catalog parity check passes."
+      },
+      {
+        "surface": "Content/community markers",
+        "result": "OverviewLayout marks its actual existing About slot (native type/body/about/facts) and Discussion slot (discussion/adoption) in existing drawOrder. Does not create content, reorder owner plan or claim availability. Original real Guide usefulText and useful-before-community assertions pass; original empty/sparse other families are not inferred."
+      },
+      {
+        "surface": "Predicate inventory",
+        "result": "Only two existing find predicates are renamed to continuing.entries/contents.entries and the scanner local-helper origin is recorded. Existing owner-audit classification and outstanding bounded-selection/completeness obligation remain. No production behavior or guard implementation/assertions changed. c17 inventory blob equals1de1. Normal nine guards pass; historical a636 failure retained."
+      },
+      {
+        "surface": "Assertions and source data",
+        "result": "c17 corrects only the newly authored story menu expectation to rendered h1 text. Original Guide body occurs unchanged in the selected test, and original helper preservation is documented by its run receipt. Existing Guide70ch/layout assertions and Book href/status/first-screen/menu assertions remain. No fixture/source data modifications in the bounded 13 paths."
+      }
+    ],
+    "newActionableFindings": [],
+    "evidenceClasses": {
+      "sourceInference": "Bounded shared-surface regression assessment above; no additional actionable source defect established. Five earlier source remediations stay at their exact reviewed pins.",
+      "reproducedAssertionResult": "Original Guide2/2 PASS, no flaky/skipped cases, at product-equivalent7516. a636 Guide failures and e8 phone failure remain historical. Exact a636 C31 desktop/phone PASS and c669 actual503 phone PASS remain their original separate provenance.",
+      "setupFailure": "No setup failure in the reused7516 Guide run. Prior occupied-port c669 phone attempt remains setup-incomplete and separate from its later successful run.",
+      "lowerTierEvidence": "Owner types1789, lint/AST/nineguards, i18n and three Guide/Book story states pass; these do not independently close catalogue findings."
+    },
+    "checksActuallyExecuted": [
+      {
+        "command": "git diff1de1..c17; git diff a636..1de1; git show pinned paths/call chains",
+        "result": "Read complete bounded13-path delta and one inventory file; no changing-main review."
+      },
+      {
+        "command": "git diff --check 1de1bee4d89441de1460d4ce52eaa88258d9f0c8 c17c7dbb037c48faa0d98002ee269c369a605542",
+        "exitCode": 0
+      },
+      {
+        "command": "git diff --name-only 7516ad235015f6b916b0e187bc2901de67f8e874 c17c7dbb037c48faa0d98002ee269c369a605542",
+        "result": [
+          "apps/web/features/work-page/work-detail-contract.stories.tsx"
+        ],
+        "interpretation": "Production identical; only newly authored story title expectation changes."
+      },
+      {
+        "command": "Compare original source SHA256 and unchanged selected original body against revisiona0c6558fddc430e3164297970865a69b02fb015d",
+        "result": "File SHA256b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3 matches; original lines36..68 occur unchanged in selected file."
+      },
+      {
+        "command": "Read operator receipts/raw Playwright result/logs and view five actual screenshots",
+        "result": "Original Guide2PASS and three Guide/Book story images inspected; no runtime launched by reviewer."
+      }
+    ],
+    "proofReuse": {
+      "followupTip": "c17c7dbb037c48faa0d98002ee269c369a605542",
+      "followupVerifiedAt": "2026-10-19T07:58:56.596542+00:00",
+      "candidateFileManifestMismatchPaths": [],
+      "originalGuide": {
+        "frontendPin": "7516ad235015f6b916b0e187bc2901de67f8e874",
+        "productEquivalentCandidate": "c17c7dbb037c48faa0d98002ee269c369a605542",
+        "backendPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "runReceipt": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-7516ad235015-1792396694928/run-receipt.json",
+        "finishedAt": "2026-10-19T08:00:02.031Z",
+        "stats": {
+          "startTime": "2026-10-19T07:59:31.020Z",
+          "duration": 29892.017,
+          "expected": 2,
+          "skipped": 0,
+          "unexpected": 0,
+          "flaky": 0
+        },
+        "originalAssertion": {
+          "format": "selected-original-guide-header-v1",
+          "recordedAt": "2026-10-19T07:32:31.674Z",
+          "originalSource": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/apps/web/tests/catalogue-detail-contract.e2e.ts",
+          "originalFileSha256": "b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3",
+          "originalRevision": "a0c6558fddc430e3164297970865a69b02fb015d",
+          "originalBodyStartLine": 36,
+          "originalBodyEndLine": 68,
+          "originalBodySha256": "4c8fb574e420bb6630af5aa3a684f72e558673f308ad76cd2ba0c7dbe9092f25",
+          "localHelpersSha256": "5add290399d72c3eb5f3e62410e16200d224e496264a6aeb659258ef28a8e3de",
+          "selectedBodyCopiedUnchanged": true,
+          "localHelpersCopiedUnchanged": true,
+          "sharedOriginalHelpersReceipt": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/source-receipt.json",
+          "fixtureAdmission": {
+            "family": "work",
+            "density": "rich",
+            "widths": [
+              1440,
+              390
+            ],
+            "subject": "https://rezics.com/id/01a0e90a-d0ce-7480-a1af-e9ffc90f537e",
+            "semanticType": "https://schema.org/DigitalDocument",
+            "nativeBodyLength": 121,
+            "prerequisiteReceipt": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/catalogue-additional-original-case-prerequisites.json",
+            "publicationState": "unpublished; public summary is available; original cell does not assert publication state"
+          },
+          "omitted": "Only unrelated full-corpus beforeAll is omitted; every assertion within these two original cells and needed original helpers remains unchanged.",
+          "scope": "C22/C26 work-rich visitor header cells at two widths only; cannot close full A16/I1-001 or D1-005 long-and-short Guide acceptance.",
+          "productApiMocks": false,
+          "sharedWrites": false,
+          "corpusPreparation": false
+        },
+        "sourceCleanBefore": true,
+        "sourceCleanAfter": true,
+        "ownedFrontendStopped": true,
+        "productApiMocks": false,
+        "sharedDataPreparation": false,
+        "backendLifecycle": false
+      },
+      "ownerChecks": [
+        {
+          "kind": "types",
+          "status": "PASS",
+          "files": 1789,
+          "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-types-final.log",
+          "receipt": {
+            "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-types-final.log",
+            "snapshot": ".temp/catalogue-work-review/action-group-final/work-guide-actions-types-final.log",
+            "sha256": "1e6264e03029b3885c8322b3a7feb3438905584b0f194e15c7081f4d7b4a588c"
+          }
+        },
+        {
+          "kind": "normal lint AST nine guards",
+          "status": "PASS",
+          "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-gates.log",
+          "receipt": {
+            "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-gates.log",
+            "snapshot": ".temp/catalogue-work-review/action-group-final/work-guide-actions-gates.log",
+            "sha256": "f4b3420fa9899d1505a8d2f76090ca7559832164e8e41699bd0bfd2a7b4c2a0a"
+          }
+        },
+        {
+          "kind": "i18n",
+          "status": "PASS",
+          "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-i18n.log",
+          "receipt": {
+            "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-i18n.log",
+            "snapshot": ".temp/catalogue-work-review/action-group-final/work-guide-actions-i18n.log",
+            "sha256": "dde897b7057190b98d68ce0b4b95e62c9ff4dd9cfffdf285c1566a5b19d978ae"
+          }
+        },
+        {
+          "kind": "actual browser",
+          "status": "PASS",
+          "tests": 3,
+          "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-story-verified.log",
+          "receipt": {
+            "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-story-verified.log",
+            "snapshot": ".temp/catalogue-work-review/action-group-final/work-guide-actions-story-verified.log",
+            "sha256": "a178f0205704e52ba290dc55ed9aecf9e769ba67362a4453d1f194c19309bf65"
+          }
+        }
+      ],
+      "viewedImages": [
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-final/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish1440.png",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/apps-web-features-work-page-work-detail-contract.stories.tsx-LongEnglish1440.png",
+          "sha256": "04c5f5a7704a1a620830934170ce2e95ed689049215d8c8c315cee41329bc86a",
+          "viewedBy": "G-2841 actual reviewer via view_image",
+          "observation": "Guide1440/390 show real View guide and shelf before Ratings/overflow, exact title and readable body. Book phone keeps actual Continue to Volume2, edition/progress, thumbnail, menu focus and no horizontal overflow; visual reaction row remains at top as existing Book layout."
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-final/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish390.png",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/apps-web-features-work-page-work-detail-contract.stories.tsx-LongEnglish390.png",
+          "sha256": "bee3a2a15e2ee209d8fe88c0b32debd49e9cc2e69fa88b7a5ca0cf874d7b4084",
+          "viewedBy": "G-2841 actual reviewer via view_image",
+          "observation": "Guide1440/390 show real View guide and shelf before Ratings/overflow, exact title and readable body. Book phone keeps actual Continue to Volume2, edition/progress, thumbnail, menu focus and no horizontal overflow; visual reaction row remains at top as existing Book layout."
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-final/apps-web-features-work-page-hub-frame.stories.tsx/PhoneFirstScreen.png",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/apps-web-features-work-page-hub-frame.stories.tsx-PhoneFirstScreen.png",
+          "sha256": "867cf4d83ccd6d263cde38e1144564ede8b39b83dc83c291273547a703bb577b",
+          "viewedBy": "G-2841 actual reviewer via view_image",
+          "observation": "Guide1440/390 show real View guide and shelf before Ratings/overflow, exact title and readable body. Book phone keeps actual Continue to Volume2, edition/progress, thumbnail, menu focus and no horizontal overflow; visual reaction row remains at top as existing Book layout."
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-7516ad235015-1792396694928/results/guide-header.e2e.ts-C22-C26-visitor-work-rich-header-at-1440/test-finished-1.png",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/original-guide-1440.png",
+          "sha256": "5d1d07a300addb8ba6549494bb8d95e9a6dae99d62c3eb5f6fc887eb6ff99d3e",
+          "viewedBy": "G-2841 actual reviewer via view_image",
+          "observation": "Genuine Mod setup checklist Guide identity; primary View guide/shelf before Ratings and exact subject overflow; useful existing text visible. Phone wraps reactions to next row without horizontal overflow. Desktop retains truthful unavailable Parts alert/Retry."
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-7516ad235015-1792396694928/results/guide-header.e2e.ts-C22-C26-visitor-work-rich-header-at-390/test-finished-1.png",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/original-guide-390.png",
+          "sha256": "a9beb6bb641f79a3c55177e0cc325ad6308177ac326471b486ad73fb70bd8ab7",
+          "viewedBy": "G-2841 actual reviewer via view_image",
+          "observation": "Genuine Mod setup checklist Guide identity; primary View guide/shelf before Ratings and exact subject overflow; useful existing text visible. Phone wraps reactions to next row without horizontal overflow. Desktop retains truthful unavailable Parts alert/Retry."
+        }
+      ],
+      "snapshots": [
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/work-review-followup.json",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/work-review-followup.json",
+          "sha256": "212a0900f19364e4523dc7cc8fde806f8ac17aee4baaca500075ebc1e9442f7a"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/catalogue-browser-execution-receipt.json",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/catalogue-browser-execution-receipt.json",
+          "sha256": "394575497d16c89c351e4da9c1cb81a975f32a4f758cff443d6d0c9bd23aff0e"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-7516ad235015-1792396694928/run-receipt.json",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/original-guide-run-receipt.json",
+          "sha256": "7a2a0744b3e91f75e78d0ebf5360fbda05186208bc0460ce975e8f75872ab763"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-7516ad235015-1792396694928/result.json",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/original-guide-result.json",
+          "sha256": "e0d8dba65ac4cfc2ca14993e63149ecc6f60ecfc8de60aa0a176b4e89f94344f"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-7516ad235015-1792396694928/browser.log",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/original-guide-browser.log",
+          "sha256": "2739d5e851fbe9249f6bf8dbece4196fd17b92fa09897c8ebed1c5800d8a821a"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/guide-header.e2e.ts",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/guide-header.e2e.ts",
+          "sha256": "02577d46720b8dd467494b6d707b6d0920e9a8d63f6311893e84ae94358fa780"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-types-final.log",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/work-guide-actions-types-final.log",
+          "sha256": "1e6264e03029b3885c8322b3a7feb3438905584b0f194e15c7081f4d7b4a588c"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-gates.log",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/work-guide-actions-gates.log",
+          "sha256": "f4b3420fa9899d1505a8d2f76090ca7559832164e8e41699bd0bfd2a7b4c2a0a"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-i18n.log",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/work-guide-actions-i18n.log",
+          "sha256": "dde897b7057190b98d68ce0b4b95e62c9ff4dd9cfffdf285c1566a5b19d978ae"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-story-verified.log",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/work-guide-actions-story-verified.log",
+          "sha256": "a178f0205704e52ba290dc55ed9aecf9e769ba67362a4453d1f194c19309bf65"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-final/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish1440.png",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/apps-web-features-work-page-work-detail-contract.stories.tsx-LongEnglish1440.png",
+          "sha256": "04c5f5a7704a1a620830934170ce2e95ed689049215d8c8c315cee41329bc86a"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-final/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish390.png",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/apps-web-features-work-page-work-detail-contract.stories.tsx-LongEnglish390.png",
+          "sha256": "bee3a2a15e2ee209d8fe88c0b32debd49e9cc2e69fa88b7a5ca0cf874d7b4084"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-final/apps-web-features-work-page-hub-frame.stories.tsx/PhoneFirstScreen.png",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/apps-web-features-work-page-hub-frame.stories.tsx-PhoneFirstScreen.png",
+          "sha256": "867cf4d83ccd6d263cde38e1144564ede8b39b83dc83c291273547a703bb577b"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-7516ad235015-1792396694928/results/guide-header.e2e.ts-C22-C26-visitor-work-rich-header-at-1440/test-finished-1.png",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/original-guide-1440.png",
+          "sha256": "5d1d07a300addb8ba6549494bb8d95e9a6dae99d62c3eb5f6fc887eb6ff99d3e"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-7516ad235015-1792396694928/results/guide-header.e2e.ts-C22-C26-visitor-work-rich-header-at-390/test-finished-1.png",
+          "snapshot": ".temp/catalogue-work-review/action-group-final/original-guide-390.png",
+          "sha256": "a9beb6bb641f79a3c55177e0cc325ad6308177ac326471b486ad73fb70bd8ab7"
+        }
+      ]
+    },
+    "limitations": [
+      "Review disposition applies to immutablec17 versus1de1 plus inventory-only provenance froma636. No merge, changing-main comparison or implementation performed.",
+      "Original Guide execution pin7516 is production-equivalent to c17 by exact git diff; not labelled a direct c17 execution.",
+      "Original Guide selected cells use actual shared data whose body is121 characters and public summary is available. Long Guide stories separately exercise readability. No full long/short/canonical matrix inferred.",
+      "Book regression proof is the recorded actual story and inspected shared code; no original full Book journey rerun authorized or performed.",
+      "Owner-audit entries retain existing unresolved eligibility/completeness responsibility. Inventory/guard pass is not acceptance proof.",
+      "Prior C31/navigation receipts retain their own code pins. They are not relabelled as c17 native API acceptance or broad catalogue closure."
+    ],
+    "reportValidation": {
+      "status": "passed",
+      "jobId": "eb8d3feb-8606-4fe5-9fa6-cfd806cca100",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "13 self-tests;249 Markdown files pass; no external URL or runtime behavior validation",
+          "log": ".temp/goal/jobs/eb8d3feb-8606-4fe5-9fa6-cfd806cca100.1.log"
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "result": "Report-only diff: no TypeScript/source changed and no tests named in brief; AST and1/44selected guard pass",
+          "log": ".temp/goal/jobs/eb8d3feb-8606-4fe5-9fa6-cfd806cca100.2.log"
+        }
+      ],
+      "harnessNotice": "Check reported harness1commit behind main; no failure occurred and no rebase or main mutation performed.",
+      "subsequentEdits": "Only validation metadata and formatting; JSON parse and git diff --check verified before commit."
+    },
+    "managerNext": "Integrate the report using its appended checkpoint; WORK-REVIEW-06 is addressed with original applicable Guide2/2 PASS on identical production code. Prior five findings stay source addressed. Use scoped original applicable assertions for canonical acceptance; no review-of-review task, unrelated whole journeys or conversion prerequisite."
   }
 }

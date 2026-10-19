@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  primaryActions: '주요 작업', reactions: '반응',
+  moreActions: insert('{{title}}의 추가 작업', { title: String }),
   editionsView: '판본',
   connectionsView: '관련 항목',
   sourcesAndEvidence: '출처, 라이선스 및 근거',
