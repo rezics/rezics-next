@@ -1,9 +1,9 @@
 {
   "goal": "audit-remediation-20261019",
   "worker": "G-2848",
-  "reportVersion": 5,
-  "reportedAtUtc": "2026-10-19T12:36:03.067886+00:00",
-  "result": "partial: exact328792cc one-line admission fixture UUID cast source-approved; affected PostgreSQL selection execution remains with root capture; all previous Studio proof and original unreached inventory/count limits preserved",
+  "reportVersion": 6,
+  "reportedAtUtc": "2026-10-19T13:07:05.389526+00:00",
+  "result": "partial overall: original D4-014 composed evidence independently qualified with two-Work genuine API/browser proof and landed Studio source equivalence; historical source/rendered/runtime failures retained; separate AUD-011 and wider original-suite limits remain open",
   "reviewer": {
     "engine": "codex-1",
     "model": "GPT-6.1 Sol",
@@ -7400,5 +7400,1823 @@
       "newCredentialsOrFixturePreparation": false
     },
     "completionBoundary": "Exact cast approved once on source evidence only. Root should capture the reviewed bytes normally and execute the affected original failing selection. This review creates no test-pass or original Studio finding-closure claim; all existing limits and histories remain."
+  },
+  "d4014OriginalEvidenceQualification": {
+    "format": "G-2848-D4-014-original-evidence-qualification-v1",
+    "recordedAtUtc": "2026-10-19T13:07:05.389526+00:00",
+    "kind": "additive independent qualification of retained producer evidence; no second source review or new product execution",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "candidateAuthoredByReviewer": false,
+      "reviewCount": 1,
+      "nestedAgents": 0,
+      "accountOrModelFallback": false,
+      "existingIndependentReviewReuse": "No valid independent review of these exact bytes was found in supplied receipts; source receipt reviewPerformed=false. Existing producer and dependency evidence retained as such."
+    },
+    "status": "D4-014 original composed evidence qualified; Studio source equivalence on landed main independently recorded; canonical class disposition remains with manager",
+    "preservedReports": [
+      "7515ee6729465f55031090ac31245d7f63f52b7d",
+      "a1af782bfc799e57778b226c6fc208e551489a78",
+      "53a6c411e73c8b511be8d29f10a5b47b6655e44e"
+    ],
+    "historicalSections": "All preceding source, check, rendered, runtime, failure, scope and original-criterion records are preserved verbatim as historical evidence. This addendum updates only the current D4-014 evidence disposition; earlier unproved entries describe their earlier pins and reached states.",
+    "previousReportSha256": "0e3065ed10b5fdfc20e889ead840dcc2f9a46ebfa954d4c16adc5980cc8c6d14",
+    "inputs": [
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-proof-summary.json",
+        "sha256": "4500e9fe2107347d796d83577b4d0e6b5ff8ff78be4fe8c720e5f2e983f7ed32"
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/retained-source-selection.json",
+        "sha256": "0e7cd6070450bbd2754f1cabdb7dbd2e6433c96a7b0ac23a4116f2c564544029"
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/retained-runtime-observation.json",
+        "sha256": "6297050239d88e1a0e1826a044a1506e622970ede9a66be3e526290f3aefd657"
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-proof-selection.json",
+        "sha256": "c3fd5f66d3c332fbd645dbd0756b1a636e5c223cb719499b80fcdc12061f1776"
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-proof.test.ts",
+        "sha256": "33ceccd75dc33b950b84b2f0f2c36572fdd1585ed3c35d10d57d3b7f61772190"
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/screenshot-review-current.json",
+        "sha256": "ca3b230435767b1cad9140b15313fa1c7f3e7ff8215da901098a879840a0a74c"
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/readiness-1792411950651/receipt.json",
+        "sha256": "3a847d507d3016a0bc01bddda003ac2aab37cc88bcc9abc6221541dbf197f6bf"
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-D4-014-original-qualification.json",
+        "sha256": "81eb79388257f82944d6a0d962a79316d5dc3eee0d48303ecfc416be1c778449"
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-D4-014-original-qualification/source-and-evidence-manifest.json",
+        "sha256": "95043b5024b00ca33358cfdd6e8b52f2ebabbd0b9a59c16d4b65dca06193f274"
+      }
+    ],
+    "manifestVerification": {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/d4-014-qualification/manifest-verification.json",
+      "sha256": "9b8cd903b1fdf07ae36bffa9e0303f9d7edad23a5f8dfdea5f1ad2550911b6cf",
+      "manifestSha256": "95043b5024b00ca33358cfdd6e8b52f2ebabbd0b9a59c16d4b65dca06193f274",
+      "localProofFiles": 22,
+      "allHashesAndSizesVerified": true,
+      "mismatches": [],
+      "proofFileCount": 22,
+      "copiedProducerFiles": false
+    },
+    "pins": {
+      "reviewedBaseAndHeadUnchanged": {
+        "reviewedCandidate": {
+          "base": "82067635061c20a9a3d0301a63aa652bf120d14b",
+          "head": "af37c8991ffb8997c06f055279301fb9b173f842",
+          "branch": "candidate/site-studio-20261019",
+          "tree": "fc0ba238d4b23917775c2c4d8586fb7ae44796c6",
+          "diffSha256": "acf3249ac7f3b6b915a116b93a5165f8ab84e838990ce83cb412a95e07bf8946",
+          "checkout": ".temp/worktrees/site-studio-candidate",
+          "cleanExactHeadVerifiedBeforeReview": true,
+          "finalVerification": {
+            "head": "af37c8991ffb8997c06f055279301fb9b173f842",
+            "status": ""
+          }
+        },
+        "checkSource": {
+          "head": "af37c8991ffb8997c06f055279301fb9b173f842",
+          "checkout": ".temp/studio-review/source",
+          "isolation": "Owned shared-object clone with separate checkout, index, dependencies and temporary artifacts; detached exact candidate; local main ref points to reviewed base for changed-path selection. No tracked overlays.",
+          "finalVerification": {
+            "head": "af37c8991ffb8997c06f055279301fb9b173f842",
+            "status": ""
+          }
+        },
+        "managerIntegration": {
+          "receipt": ".temp/audit-remediation-20261019/two-hour-sprint/site-auth-studio-candidate.json",
+          "base": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+          "head": "b23f7cace550dc6f77d82d16773a1a297ed0dc40",
+          "tree": "be11acb0e631c74e68a5bfc4c95da0212724e404",
+          "status": "prepared; clean; unreviewed and unproved",
+          "finalVerification": {
+            "head": "b23f7cace550dc6f77d82d16773a1a297ed0dc40",
+            "status": ""
+          },
+          "compileAndRuntimeCompatibilityChecked": false,
+          "productProofPerformedByReviewer": false,
+          "byteBoundary": "Receipt maps the same five Studio imports. StudioHome retains the existing startup/navigation dependency p-1 padding instead of af37 px-1; Work tabs also retain that dependency repair. This report reviews af37, not the new combined integration. Preserve unchanged Studio review/check evidence; qualify the dependency delta and actual runtime separately."
+        },
+        "testProducer": "c46b03f06343b7b308485e8b3d597d9cedebfa4c",
+        "testAndSupportOverlay": [
+          {
+            "path": "tests/qa/integration/outcomes/realm/studio-inventory.test.ts",
+            "revision": "c46b03f06343b7b308485e8b3d597d9cedebfa4c",
+            "sha256": "9dee3f417dd78c34c8e63284ea57472cca051aa0a47880608d34a99f9b1242ae",
+            "blob": "622956753c2e10a7de7e8f09fd7751b28f3148b2"
+          },
+          {
+            "path": "scripts/qa/cases/outcomes/realm/studio-inventory.ts",
+            "revision": "c46b03f06343b7b308485e8b3d597d9cedebfa4c",
+            "sha256": "6bcd6f8cfa1e26b12a456e5b8068cbff2b3aaee179222e70457050d575cd61c8",
+            "blob": "21937fd7f357015d1a030854f96ed88d9e4eb957"
+          },
+          {
+            "path": "tests/qa/support/author-management-fixture.ts",
+            "revision": "c46b03f06343b7b308485e8b3d597d9cedebfa4c",
+            "sha256": "f1c95fb45fd44e5caaeb212b9bfad9d201bc0c5a5cfe2436bbf8565860713dee",
+            "blob": "4f3cac47504b2ed470a5b3ab146c4f7a96eac97e"
+          },
+          {
+            "path": "tests/qa/support/outcome-test.ts",
+            "revision": "c46b03f06343b7b308485e8b3d597d9cedebfa4c",
+            "sha256": "6f1b34c0b23565214708679251e93caad29b4065e3ddaf2ecd22db7bfc4bd7c0",
+            "blob": "390bcb259c1216fac5092b01e83f34848cf33296"
+          },
+          {
+            "path": "tests/qa/support/personas.ts",
+            "revision": "c46b03f06343b7b308485e8b3d597d9cedebfa4c",
+            "sha256": "b2b2be661dd39b9baab070d0b823c3cee0d0109bb93de275058f02c65fd7f574",
+            "blob": "f21cb38c0bab91cb730d7fda4adb21b275548769"
+          }
+        ],
+        "testOverlayInstalled": false,
+        "runner": {
+          "candidateHead": "af37c8991ffb8997c06f055279301fb9b173f842",
+          "actualCandidateChecks": "scripts/goal/goalctl.ts test through Task and recorded Goal admission",
+          "overlayForGenuineAcceptance": null,
+          "limitation": "scripts/qa/test.ts:59-66 resolves explicit test paths inside its own checkout and rejects missing/outside files; scripts/qa/core.ts:160-193 has no independent product/test source pin option, and sourceIdentity at core.ts:247 records one checkout HEAD/fingerprint. A supported separately pinned original test/runner overlay against the qualified product source is still required."
+        },
+        "runtime": {
+          "productHead": null,
+          "webHead": null,
+          "mainHead": null,
+          "accountsHead": null,
+          "nativeImage": null,
+          "nativeImageDigest": null,
+          "modelOrRecipeDigest": null,
+          "schemaMigrationHistory": null,
+          "backup": null,
+          "restore": null,
+          "readiness": null,
+          "publicApiRequests": [],
+          "apiStatusesOrAnswers": [],
+          "reason": "No qualified integrated runtime or retained all-owner data was supplied for this worker; no product stack started, no restore performed and no genuine API assertions reached."
+        },
+        "authEvidence": {
+          "receipt": ".temp/ref/site-auth-fixture.json",
+          "sourceHead": "196a6f4a98413857dbf3e178d05ef65415035f29",
+          "web": "http://127.0.0.1:43125",
+          "main": "http://127.0.0.1:3001",
+          "accounts": "http://127.0.0.1:3004",
+          "issuer": "http://127.0.0.1:3004/api/auth",
+          "resource": "https://main.rezics.test",
+          "scope": "Existing G-2825 development sign-in fixture, plus any later production auth result in that receipt, belongs to 196a6. It establishes neither af37/b23 Studio API behavior nor current session/runtime readiness. Recorded development server stopped. Private storage-state contents were not opened or copied into this report.",
+          "currentCompatibleSessionPreparedByReviewer": false
+        },
+        "sourceContextDifferences": [
+          {
+            "path": "services/main/src/modules/work/read-session.ts",
+            "candidateBlob": "936bf9993703b5070e22d924610c7c1a0713a898",
+            "authoredContextBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+            "equal": false
+          },
+          {
+            "path": "services/main/src/modules/structure/graph.ts",
+            "candidateBlob": "af29502f09ad8f550781aac1273d77fa40281e1d",
+            "authoredContextBlob": "ca6f9bdba18c0331e940b73c7406ac1b9e22e69b",
+            "equal": false
+          }
+        ],
+        "migrationOrImageChangeInStudioChain": {
+          "migrations": [],
+          "nativeImageChange": false,
+          "note": "No new migration does not exempt an isolated restore from the selected runtime existing owner migrations and compatible native image."
+        }
+      },
+      "frontendProduct": "c43a05f54b8f80db57028ab08efc4dd277ad739d",
+      "frontendSsrOverlay": "c108a658a37676c1497fb501924fa5c90ab567a9",
+      "frontendOverlayFiles": [
+        {
+          "path": "apps/web/features/work-maintainers/api.ts",
+          "revision": "c108a658a37676c1497fb501924fa5c90ab567a9",
+          "blob": "f8893695baa34866f8d796b2ec120b57ee51550d",
+          "sha256": "f0ddb5777c55addc9235f40f3b7cc449b961031f2e9e52f0d10709b6d6e1c1ad"
+        },
+        {
+          "path": "apps/web/tests/work-maintainers.test.tsx",
+          "revision": "c108a658a37676c1497fb501924fa5c90ab567a9",
+          "blob": "9fe6fd6a5435c1d9cdd913e0573ba311ed29ee11",
+          "sha256": "20dd6672c03fed72486d71d2d959a08e803b3e7b90df28043efd32868f7cb77a"
+        }
+      ],
+      "backendProduct": "4a616b079a364b8f5ac7fe4d4ff56bc99849e766",
+      "backendAffectedSourceBlobs": [
+        {
+          "path": "services/main/src/modules/studio/access.ts",
+          "blob": "e1a76597038a74975df36d5ec82f6166853bc6a2"
+        },
+        {
+          "path": "services/main/src/modules/studio/chapters.ts",
+          "blob": "bfd0fc170069cd912842352952742344ec3c28bd"
+        },
+        {
+          "path": "services/main/src/modules/studio/works.ts",
+          "blob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8"
+        },
+        {
+          "path": "services/main/src/routes/studio.ts",
+          "blob": "332c6b0ee18c92237863e9ecd8478a03ec501802"
+        },
+        {
+          "path": "services/main/tests/studio-inventory.test.ts",
+          "blob": "d4189db56e06da8d535ad9bc9601fbeadca93b98"
+        },
+        {
+          "path": "services/main/tests/studio-transfer-parity.test.ts",
+          "blob": "cd7af6f33696a3ab10852bfc0a92007913bbd828"
+        }
+      ],
+      "sourceVerificationIsNotWholeRuntimeEquality": "The six Studio API/test blobs match the reviewed product context; the later approved cast changes only the fixture test. Supporting dependencies retain their separate reviewed pins. No whole frontend/backend/source-wave equivalence is inferred.",
+      "testHarness": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-proof.test.ts",
+        "sha256": "33ceccd75dc33b950b84b2f0f2c36572fdd1585ed3c35d10d57d3b7f61772190"
+      },
+      "testHarnessQualification": "Retained final harness hash inspected at API lines210-230 and browser lines245-343. Initial raw log preserves the old Open work locator at line247; the final source correctly uses Open. No original count/search/order/return assertion was removed. This worker edited neither harness nor assertions.",
+      "runner": {
+        "recordedCommandRoot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753",
+        "gitHead": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "pinBasis": "Read-only producer HEAD/status/reflog: this clean HEAD was installed at 2026-10-19T11:40:49Z and remains current after the three jobs; no later HEAD movement appears. This is an inference from retained reflog/current runner bytes, not a new attestation emitted by each job.",
+        "goalctlBlob": "329c2cfe66c9ef7ed12514b380432df97296100a",
+        "goalctlSha256": "2df513f782332d0181ecd2fd9042e99cc44bba5198937e2310990e95f59c9510",
+        "bun": "1.4.3 (c6da4a4d3)",
+        "admission": "Existing recorded Goal jobs run bun scripts/goal/goalctl.ts test from the producer worktree. This worker qualified their exact retained runs and did not start another runner."
+      },
+      "mainOrigin": "http://127.0.0.1:46775",
+      "webOrigin": "http://localhost:43153",
+      "accountsFrontendOrigin": "http://localhost:39943",
+      "accountsServiceOrigin": "http://127.0.0.1:43369",
+      "authConfiguration": "Supported G-2825 development sign-in procedure reused by producer; exact readiness receipt and private fixture reference retained privately. The recorded harness consumes its clientId/resource and ACCOUNT_ORIGIN. No credential, storage state or private token content is copied here.",
+      "nativeImage": {
+        "id": "bc6a966f78e923413ad4386b81bc715cc88e87f9723f85517553d9ac9e5fca65",
+        "name": "/rezics-qa-profile-66d408ad7b1bf349c077-fuseki-1",
+        "imageTag": "rezics/fuseki:6.2.0-cmd0.5.43-e10ecb508229",
+        "imageId": "sha256:fc1ba35593ed25a423a86114b2ef6ca47a277aecc34edadf7fed275e6e86b591",
+        "ports": {
+          "3030/tcp": [
+            {
+              "HostIp": "127.0.0.1",
+              "HostPort": "35491"
+            }
+          ]
+        },
+        "project": "rezics-qa-profile-66d408ad7b1bf349c077"
+      },
+      "postgresImage": {
+        "id": "3454592fd817193358cd3e6e46b088a7c27de7b5fb920a5e9da453aead817308",
+        "name": "/rezics-qa-profile-66d408ad7b1bf349c077-postgres-1",
+        "imageTag": "postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722",
+        "imageId": "sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722",
+        "ports": {
+          "5432/tcp": [
+            {
+              "HostIp": "127.0.0.1",
+              "HostPort": "45231"
+            }
+          ]
+        },
+        "project": "rezics-qa-profile-66d408ad7b1bf349c077"
+      },
+      "schemaObservations": [
+        {
+          "database": "access",
+          "historyTable": "public.rezics_local_migration",
+          "historyAvailable": false,
+          "appliedCount": null,
+          "observedColumnCount": 3408,
+          "answer": {
+            "file": ".temp/studio-proof/retained-schema-access.json",
+            "sha256": "45917c44d5be3a7c70eb97b54eeeab6a0c0a9f0491d17feb7d69476633374f86"
+          },
+          "identifiersAbsentAtBackendSource": null,
+          "limitation": "The named migration journal is absent; the actual read-only column catalogue is retained instead. No zero applied-migration count or migration-byte equivalence is inferred."
+        },
+        {
+          "database": "account",
+          "historyTable": "public.rezics_local_migration",
+          "historyAvailable": true,
+          "appliedCount": 32,
+          "answer": {
+            "file": ".temp/studio-proof/retained-schema-account.json",
+            "sha256": "6b166ef51be027d8eb8589acfeef8dcc3bc38b833109e9d0485d6c517b21607f"
+          },
+          "identifiersAbsentAtBackendSource": [],
+          "limitation": "Applied identifiers and times; these history tables do not attest SQL-byte checksums."
+        },
+        {
+          "database": "content",
+          "historyTable": "content.schema_migration",
+          "historyAvailable": true,
+          "appliedCount": 171,
+          "answer": {
+            "file": ".temp/studio-proof/retained-schema-content.json",
+            "sha256": "bee09060d4f1dae58519cc47cd073e08896344bfcc4246122b4797d15a59ac6e"
+          },
+          "identifiersAbsentAtBackendSource": [],
+          "limitation": "Applied identifiers and times; these history tables do not attest SQL-byte checksums."
+        },
+        {
+          "database": "relay",
+          "historyTable": "public.rezics_local_migration",
+          "historyAvailable": false,
+          "appliedCount": null,
+          "observedColumnCount": 150,
+          "answer": {
+            "file": ".temp/studio-proof/retained-schema-relay.json",
+            "sha256": "e0187110063b71b01dcb1ec71ec02d9c3604a5f1ecb9ca7bd23c5be2261c912b"
+          },
+          "identifiersAbsentAtBackendSource": null,
+          "limitation": "The named migration journal is absent; the actual read-only column catalogue is retained instead. No zero applied-migration count or migration-byte equivalence is inferred."
+        }
+      ],
+      "schemaLimit": "Account32/Content171 applied identifiers match retained backend, without SQL-byte checksums. Access/Relay journal unavailable, appliedCount null rather than zero. No new migration transition or native source-build/image equivalence is claimed.",
+      "backupAndData": {
+        "generation": "recipes-build-mveymfp0-c3acb7",
+        "retainedBook": "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b",
+        "retainedInventorySize": 2,
+        "topology": "five genuine published root chapter placements, no volume/extras/native continuation",
+        "sourceManifestSha256": "be90c0cfe4442e8888c67e8a48004258909ecbf52dca8aa45eefbf6b4a7e6378",
+        "consistentBackupSha256": "7f6d8d7645e870959b050028d53ed1b7997c243065f236915af13db2720b09ca",
+        "ownerCustodyMail": "mail:d8bc3a60-960e-4fa7-9f0b-e8048aa3e9de",
+        "backupRestoredByThisWorker": false
+      },
+      "backupLimit": "Existing owner custody and consistent backup identity reused. No backup restored, new baseline prepared, catalogue generated or independent backup-byte recertification performed in this qualification."
+    },
+    "producerJobs": [
+      {
+        "jobId": "job:7b15e632-d196-417e-9493-2768aa10b791",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/studio-proof/original-inventory-proof.test.ts",
+        "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753",
+        "exitStatus": 1,
+        "resultClass": "assertion",
+        "receipt": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/receipt.json",
+          "sha256": "6df52db26056388660876d46a4c5e7fc6c65ea8000d6d50884028b6d1d87f8a5"
+        },
+        "rawLog": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/goal/jobs/7b15e632-d196-417e-9493-2768aa10b791.log",
+          "sha256": "debed293c45f062ff9d71aaf2e50af1cf873cd0848cda799f1edf01382632792"
+        },
+        "setupReady": true,
+        "rawFailures": [
+          {
+            "assertion": "D4-014 original real inventory browser conditions at 1440px",
+            "error": "expect(received).toBe(expected)\n\nExpected: true\nReceived: false\n"
+          },
+          {
+            "assertion": "D4-014 original real inventory browser conditions at 390px",
+            "error": "expect(received).toBe(expected)\n\nExpected: true\nReceived: false\n"
+          }
+        ],
+        "qualifiedPassingBodies": [
+          "D4-014 real title matching and recent/created/title order with exact-page envelopes"
+        ],
+        "otherBodiesNotQualifiedByThisAddendum": [
+          "AUD-011 owner list/exact/hierarchical five-occurrence count, publication and author facts",
+          "AUD-011 uncontrolled-Agent denial precedes inventory and draft disclosure"
+        ],
+        "cleanup": [
+          {
+            "pid": 2944806,
+            "port": 43153,
+            "signal": "SIGTERM"
+          },
+          {
+            "port": 43153,
+            "listeningAfterCleanup": false
+          },
+          {
+            "pid": 2941986,
+            "port": 39943,
+            "signal": "SIGTERM"
+          },
+          {
+            "port": 39943,
+            "listeningAfterCleanup": false
+          }
+        ],
+        "runTotals": {
+          "pass": 3,
+          "fail": 2,
+          "expectCallsAcrossMixedRun": 162
+        },
+        "reach": "The D4-014 API body reached and passed. Both browser bodies reached the obsolete Open work locator and failed; this is not a passing combined run."
+      },
+      {
+        "jobId": "job:65c0933e-764d-4ff4-8aa8-4800b2bf79bd",
+        "command": "env STUDIO_ORIGINAL_BROWSER_ONLY=1 bun scripts/goal/goalctl.ts test ./.temp/studio-proof/original-inventory-proof.test.ts",
+        "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753",
+        "exitStatus": 1,
+        "resultClass": "assertion",
+        "receipt": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412649696/receipt.json",
+          "sha256": "39b80f250b815348a82a90a59142d2821ca2eb3264bcdd323fd6b20640d6246a"
+        },
+        "rawLog": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/goal/jobs/65c0933e-764d-4ff4-8aa8-4800b2bf79bd.log",
+          "sha256": "2e6b08293432ee34c706ac8df8884fe2591a8890b3b25e5383df145e4dd75b9c"
+        },
+        "setupReady": true,
+        "rawFailures": [
+          {
+            "assertion": "D4-014 original real inventory browser conditions at 1440px",
+            "error": "waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('heading', { name: 'Pride and Prejudice', exact: true, level: 2 }) to be visible\u001b[22m\n"
+          }
+        ],
+        "qualifiedPassingBodies": [
+          "D4-014 original real inventory browser conditions at 390px"
+        ],
+        "otherBodiesNotQualifiedByThisAddendum": [],
+        "cleanup": [
+          {
+            "pid": 3012895,
+            "port": 43153,
+            "signal": "SIGTERM"
+          },
+          {
+            "port": 43153,
+            "listeningAfterCleanup": false
+          },
+          {
+            "pid": 3011675,
+            "port": 39943,
+            "signal": "SIGTERM"
+          },
+          {
+            "port": 39943,
+            "listeningAfterCleanup": false
+          }
+        ],
+        "runTotals": {
+          "pass": 1,
+          "fail": 1,
+          "expectCallsAcrossMixedRun": 22
+        },
+        "reach": "The complete 390px browser body passed. The first 1440px filtered navigation reached Agent not checked and timed out at the Pride h2; failed receipt/log/PNG retained."
+      },
+      {
+        "jobId": "job:deb033b4-a805-4f05-803d-421f959f623b",
+        "command": "env STUDIO_ORIGINAL_BROWSER_ONLY=1 STUDIO_ORIGINAL_BROWSER_WIDTHS=1440 bun scripts/goal/goalctl.ts test ./.temp/studio-proof/original-inventory-proof.test.ts",
+        "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753",
+        "exitStatus": 0,
+        "resultClass": "passed",
+        "receipt": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412958143/receipt.json",
+          "sha256": "b1a1b8e10cdbb676015093b2ba75ea38c1a2d158980e091530d9511a9ee28f91"
+        },
+        "rawLog": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/goal/jobs/deb033b4-a805-4f05-803d-421f959f623b.log",
+          "sha256": "3878433b9e7f34bdbb29193df434947dc5b55e8c86b1fa7b1e4fb31ee66e7da9"
+        },
+        "setupReady": true,
+        "rawFailures": [],
+        "qualifiedPassingBodies": [
+          "D4-014 original real inventory browser conditions at 1440px"
+        ],
+        "otherBodiesNotQualifiedByThisAddendum": [],
+        "cleanup": [
+          {
+            "pid": 3097936,
+            "port": 43153,
+            "signal": "SIGTERM"
+          },
+          {
+            "port": 43153,
+            "listeningAfterCleanup": false
+          },
+          {
+            "pid": 3093389,
+            "port": 39943,
+            "signal": "SIGTERM"
+          },
+          {
+            "port": 39943,
+            "listeningAfterCleanup": false
+          }
+        ],
+        "runTotals": {
+          "pass": 1,
+          "fail": 0,
+          "expectCalls": 15,
+          "durationSeconds": 80.03
+        },
+        "reach": "Only the previously failed 1440px browser body reran and passed on unchanged product source. API evidence was reused, not rerun."
+      }
+    ],
+    "producerJobVerification": {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/d4-014-qualification/producer-job-records.json",
+      "sha256": "be64ebe89864db6cb83846e9243c124dfde39d2adfd41a9cfcbbd211d2caca02"
+    },
+    "apiQualification": {
+      "body": "D4-014 real full-inventory title search and selected orders survive native cursor pages",
+      "assertionReached": true,
+      "bodyPassed": true,
+      "actualRetainedInventorySize": 2,
+      "actualApiAnswers": [
+        {
+          "endpoint": "/v1/me/agents/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a/works",
+          "query": {
+            "view": "curated",
+            "sort": "recent",
+            "limit": "20"
+          },
+          "requestCursorPresent": false,
+          "status": 200,
+          "cacheControl": "no-store",
+          "answer": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/answer-1.json",
+            "sha256": "65065caabbf1359027251d2737c43035e1bf8db278e163a820c9f5869328e1b2"
+          },
+          "ids": [
+            "https://rezics.com/id/01a1532a-2e60-7260-9f3a-d6aa69f61c4b",
+            "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b"
+          ],
+          "titles": [
+            "21. Minestra di passatelli di carne",
+            "Pride and Prejudice"
+          ],
+          "count": {
+            "value": 2,
+            "kind": "exact-page",
+            "total": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "4522fab8-bdad-48b8-b5e3-ef6cc746df9a",
+            "sequence": "69"
+          },
+          "nextCursorPresent": false
+        },
+        {
+          "endpoint": "/v1/me/agents/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a/works",
+          "query": {
+            "view": "curated",
+            "sort": "recent",
+            "limit": "1"
+          },
+          "requestCursorPresent": false,
+          "status": 200,
+          "cacheControl": "no-store",
+          "answer": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/answer-4.json",
+            "sha256": "62f72e91ccad40f14f141fa3bb8c54e703baff741add4c59c3e76f34e57d64cd"
+          },
+          "ids": [
+            "https://rezics.com/id/01a1532a-2e60-7260-9f3a-d6aa69f61c4b"
+          ],
+          "titles": [
+            "21. Minestra di passatelli di carne"
+          ],
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "4522fab8-bdad-48b8-b5e3-ef6cc746df9a",
+            "sequence": "69"
+          },
+          "nextCursorPresent": true
+        },
+        {
+          "endpoint": "/v1/me/agents/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a/works",
+          "query": {
+            "view": "curated",
+            "sort": "recent",
+            "limit": "1"
+          },
+          "requestCursorPresent": true,
+          "status": 200,
+          "cacheControl": "no-store",
+          "answer": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/answer-5.json",
+            "sha256": "79c54a9e9734420817f8a3eb1b8e7ce4773841e8815311a2c5d19b322ca34d02"
+          },
+          "ids": [
+            "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b"
+          ],
+          "titles": [
+            "Pride and Prejudice"
+          ],
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "4522fab8-bdad-48b8-b5e3-ef6cc746df9a",
+            "sequence": "69"
+          },
+          "nextCursorPresent": false
+        },
+        {
+          "endpoint": "/v1/me/agents/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a/works",
+          "query": {
+            "view": "curated",
+            "sort": "created",
+            "limit": "1"
+          },
+          "requestCursorPresent": false,
+          "status": 200,
+          "cacheControl": "no-store",
+          "answer": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/answer-6.json",
+            "sha256": "207b02795816b4576edad2ca2fc8085f2aa39a6c8644db6fe14ceb28f68b959b"
+          },
+          "ids": [
+            "https://rezics.com/id/01a1532a-2e60-7260-9f3a-d6aa69f61c4b"
+          ],
+          "titles": [
+            "21. Minestra di passatelli di carne"
+          ],
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "4522fab8-bdad-48b8-b5e3-ef6cc746df9a",
+            "sequence": "69"
+          },
+          "nextCursorPresent": true
+        },
+        {
+          "endpoint": "/v1/me/agents/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a/works",
+          "query": {
+            "view": "curated",
+            "sort": "created",
+            "limit": "1"
+          },
+          "requestCursorPresent": true,
+          "status": 200,
+          "cacheControl": "no-store",
+          "answer": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/answer-7.json",
+            "sha256": "79c54a9e9734420817f8a3eb1b8e7ce4773841e8815311a2c5d19b322ca34d02"
+          },
+          "ids": [
+            "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b"
+          ],
+          "titles": [
+            "Pride and Prejudice"
+          ],
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "4522fab8-bdad-48b8-b5e3-ef6cc746df9a",
+            "sequence": "69"
+          },
+          "nextCursorPresent": false
+        },
+        {
+          "endpoint": "/v1/me/agents/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a/works",
+          "query": {
+            "view": "curated",
+            "sort": "title",
+            "limit": "1"
+          },
+          "requestCursorPresent": false,
+          "status": 200,
+          "cacheControl": "no-store",
+          "answer": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/answer-8.json",
+            "sha256": "cc395e77b8057b56e48c41f088778a80c7c3e58f92b6ed0920733a40548e77e7"
+          },
+          "ids": [
+            "https://rezics.com/id/01a1532a-2e60-7260-9f3a-d6aa69f61c4b"
+          ],
+          "titles": [
+            "21. Minestra di passatelli di carne"
+          ],
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "4522fab8-bdad-48b8-b5e3-ef6cc746df9a",
+            "sequence": "69"
+          },
+          "nextCursorPresent": true
+        },
+        {
+          "endpoint": "/v1/me/agents/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a/works",
+          "query": {
+            "view": "curated",
+            "sort": "title",
+            "limit": "1"
+          },
+          "requestCursorPresent": true,
+          "status": 200,
+          "cacheControl": "no-store",
+          "answer": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/answer-9.json",
+            "sha256": "79c54a9e9734420817f8a3eb1b8e7ce4773841e8815311a2c5d19b322ca34d02"
+          },
+          "ids": [
+            "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b"
+          ],
+          "titles": [
+            "Pride and Prejudice"
+          ],
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "4522fab8-bdad-48b8-b5e3-ef6cc746df9a",
+            "sequence": "69"
+          },
+          "nextCursorPresent": false
+        },
+        {
+          "endpoint": "/v1/me/agents/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a/works",
+          "query": {
+            "view": "curated",
+            "sort": "title",
+            "limit": "1",
+            "q": "pride",
+            "state": "published",
+            "type": "https://schema.org/Book"
+          },
+          "requestCursorPresent": false,
+          "status": 200,
+          "cacheControl": "no-store",
+          "answer": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/answer-10.json",
+            "sha256": "79c54a9e9734420817f8a3eb1b8e7ce4773841e8815311a2c5d19b322ca34d02"
+          },
+          "ids": [
+            "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b"
+          ],
+          "titles": [
+            "Pride and Prejudice"
+          ],
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "4522fab8-bdad-48b8-b5e3-ef6cc746df9a",
+            "sequence": "69"
+          },
+          "nextCursorPresent": false
+        },
+        {
+          "endpoint": "/v1/me/agents/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a/works",
+          "query": {
+            "view": "curated",
+            "sort": "title",
+            "limit": "1",
+            "q": "  ＰＲＩＤＥ  ",
+            "state": "published",
+            "type": "https://schema.org/Book"
+          },
+          "requestCursorPresent": false,
+          "status": 200,
+          "cacheControl": "no-store",
+          "answer": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/answer-11.json",
+            "sha256": "79c54a9e9734420817f8a3eb1b8e7ce4773841e8815311a2c5d19b322ca34d02"
+          },
+          "ids": [
+            "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b"
+          ],
+          "titles": [
+            "Pride and Prejudice"
+          ],
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "4522fab8-bdad-48b8-b5e3-ef6cc746df9a",
+            "sequence": "69"
+          },
+          "nextCursorPresent": false
+        },
+        {
+          "endpoint": "/v1/me/agents/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a/works",
+          "query": {
+            "view": "curated",
+            "sort": "recent",
+            "limit": "20",
+            "q": "Jane Austen"
+          },
+          "requestCursorPresent": false,
+          "status": 200,
+          "cacheControl": "no-store",
+          "answer": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/answer-12.json",
+            "sha256": "78199e342401fdee91d9bb827a1d315c0f216dbb4e3b000a37342209b7ededbb"
+          },
+          "ids": [],
+          "titles": [],
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "4522fab8-bdad-48b8-b5e3-ef6cc746df9a",
+            "sequence": "69"
+          },
+          "nextCursorPresent": false
+        }
+      ],
+      "rawAnswerVerification": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/d4-014-qualification/qualified-api-answers.json",
+        "sha256": "164b8e957048ddb2fc28a57da3f541874fa83c403c6051e28df10f6b0edfc419"
+      },
+      "orders": [
+        {
+          "sort": "recent",
+          "nativePages": 2,
+          "ids": [
+            "https://rezics.com/id/01a1532a-2e60-7260-9f3a-d6aa69f61c4b",
+            "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b"
+          ]
+        },
+        {
+          "sort": "created",
+          "nativePages": 2,
+          "ids": [
+            "https://rezics.com/id/01a1532a-2e60-7260-9f3a-d6aa69f61c4b",
+            "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b"
+          ]
+        },
+        {
+          "sort": "title",
+          "nativePages": 2,
+          "ids": [
+            "https://rezics.com/id/01a1532a-2e60-7260-9f3a-d6aa69f61c4b",
+            "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b"
+          ]
+        }
+      ],
+      "checks": [
+        "HTTP200 and no-store",
+        "native limit1 two-page recent/created/title cursors",
+        "no repeated cursor or duplicate Work",
+        "count equals current-page items; kind exact-page; total null",
+        "expected normalized title/createdAt/updatedAt order with full IRI comparator",
+        "pride and trimmed fullwidth PRIDE locate only Pride and Prejudice",
+        "metadata-only author query Jane Austen returns no false title match"
+      ],
+      "limits": [
+        "The two Works happen to have the same observed sequence in all three orders. Genuine alternate order/tie arrangements, large inventory and CJK-title records are not invented; controlled tests and rendered inputs cover those dimensions.",
+        "The API body contains an executed Book chapterCount {value:5, complete:true} assertion. This qualification reports title/order wiring and exact-page inventory envelopes; it does not convert the aggregate complete flag or a visible chapter label into independent AUD-011 topology/count proof.",
+        "No measured public latency, all-persona journey, full AMGT pass or unchanged original outcome suite pass is claimed."
+      ]
+    },
+    "browserQualification": {
+      "bodiesPassedAt": {
+        "390": "job:65c0933e-764d-4ff4-8aa8-4800b2bf79bd",
+        "1440": "job:deb033b4-a805-4f05-803d-421f959f623b"
+      },
+      "executedBy": "G-2753 retained producer jobs; harness, raw receipts/logs and actual PNGs independently inspected by G-2848",
+      "newBrowserExecutionByReviewer": false,
+      "executedDomJourneys": [
+        "Direct actual curated inventory; visible titles agree with retained actual API list",
+        "Verify actual row time datetime equals API updatedAt, Open/Details and chapter label visible; no 0 chapters; document scrollWidth <= viewport width",
+        "Enter Pride, select Title, Apply; q=Pride/sort=title/view=curated and only the selected Work title visible",
+        "Follow actual Work title anchor; Work path and h1 Pride and Prejudice reached",
+        "Browser Back restores exact filtered URL, Pride search, Title order and sole selected Work title",
+        "Reload retains exact q/sort/view URL, Pride field and visible selected Work; returned PNG records Title selection"
+      ],
+      "domMeasurements": [
+        {
+          "width": 1440,
+          "domTitles": [
+            "21. Minestra di passatelli di carne",
+            "Pride and Prejudice"
+          ],
+          "geometry": {
+            "width": 1440,
+            "scrollWidth": 1440
+          },
+          "realChapterLabel": "5 chapters"
+        },
+        {
+          "width": 390,
+          "domTitles": [
+            "21. Minestra di passatelli di carne",
+            "Pride and Prejudice"
+          ],
+          "geometry": {
+            "width": 390,
+            "scrollWidth": 390
+          },
+          "realChapterLabel": "5 chapters"
+        },
+        {
+          "width": 390,
+          "filteredUrl": "http://localhost:43153/en/studio/@CQ6ifWv5rPNvMYjfe9tq1s?view=curated&q=Pride&sort=title",
+          "browserReturnConditionsPreserved": true,
+          "reloadConditionsPreserved": true
+        },
+        {
+          "width": 1440,
+          "domTitles": [
+            "21. Minestra di passatelli di carne",
+            "Pride and Prejudice"
+          ],
+          "geometry": {
+            "width": 1440,
+            "scrollWidth": 1440
+          },
+          "realChapterLabel": "5 chapters"
+        },
+        {
+          "width": 1440,
+          "filteredUrl": "http://localhost:43153/en/studio/@CQ6ifWv5rPNvMYjfe9tq1s?view=curated&q=Pride&sort=title",
+          "browserReturnConditionsPreserved": true,
+          "reloadConditionsPreserved": true
+        }
+      ],
+      "historicalNetworkLimits": "The passing isolated desktop run retains three net::ERR_ABORTED navigation requests (session/Work route). No pageerror entry was recorded; a no-network-failures claim is not made.",
+      "screenshotsActuallyViewed": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412649696/inventory-390.png",
+          "sha256": "8daaa254edafa705eecc9498b21cabde768a1f9ca1b447ab2d321d502fd2583e",
+          "actuallyViewedBy": "G-2848",
+          "method": "functions tools.view_image; inspected the returned image",
+          "observation": "Two readable compact rows, title anchors, actual updated time, Open and Details; Pride row visibly says 5 chapters. The settled Imported & curated tab is fully visible."
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412649696/located-390.png",
+          "sha256": "9bbec9068f281591cb389d434c416fb6f71a40971159651f11034b0f395e9153",
+          "actuallyViewedBy": "G-2848",
+          "method": "functions tools.view_image; inspected the returned image",
+          "observation": "Pride and Title controls and the sole Pride title-led row remain readable. The phone tab at the right is clipped in this early capture; no settled destination or focus-ring proof is drawn from it."
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412649696/returned-390.png",
+          "sha256": "9bbec9068f281591cb389d434c416fb6f71a40971159651f11034b0f395e9153",
+          "actuallyViewedBy": "G-2848",
+          "method": "functions tools.view_image; inspected the returned image",
+          "observation": "Personally viewed returned image, identical bytes to located-390. Pride/Title and selected Work remain visible. This does not establish settled tab hydration or focus geometry."
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412958143/inventory-1440.png",
+          "sha256": "46e0468c952866647d826d72a6820620ba51ac8a6c72983f4c685e856aa77202",
+          "actuallyViewedBy": "G-2848",
+          "method": "functions tools.view_image; inspected the returned image",
+          "observation": "Two compact rows with title at left, updated time and Open in repeatable positions; secondary details recede. Curated destination visible."
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412958143/located-1440.png",
+          "sha256": "1bc97aae088b633f5401df886301c8bcd55b45c5cd70b27a078297de6ea2e074",
+          "actuallyViewedBy": "G-2848",
+          "method": "functions tools.view_image; inspected the returned image",
+          "observation": "Only Pride remains with Pride/Title controls, chapter action/count label, updated time and Open visible; no body overflow."
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412958143/returned-1440.png",
+          "sha256": "1bc97aae088b633f5401df886301c8bcd55b45c5cd70b27a078297de6ea2e074",
+          "actuallyViewedBy": "G-2848",
+          "method": "functions tools.view_image; inspected the returned image",
+          "observation": "Personally viewed returned image, identical bytes to located-1440; title, controls, row and curated selection visible after return/reload."
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/failure-390.png",
+          "sha256": "ed05732e286fc0b2a712ea63377f2627e715d51ee922d537920182d5162d70aa",
+          "actuallyViewedBy": "G-2848",
+          "method": "functions tools.view_image; inspected the returned image",
+          "observation": "Historical stale Open work assertion: actual row action reads Open. Disabled controls and clipped phone tab in this early capture do not establish settled navigation geometry."
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/failure-1440.png",
+          "sha256": "a394bac4f0dadf618a8f26ab7f926cb6bacbb7aba20811b098edf6df164ce180",
+          "actuallyViewedBy": "G-2848",
+          "method": "functions tools.view_image; inspected the returned image",
+          "observation": "Historical stale Open work assertion: actual action reads Open; title-led rows and five-chapter label are visible."
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412649696/failure-1440.png",
+          "sha256": "3a7235de18d62576cae78c17ea2d74d49b382addeb69c7815d2ebfd24c3d8cf4",
+          "actuallyViewedBy": "G-2848",
+          "method": "functions tools.view_image; inspected the returned image",
+          "observation": "Historical Agent not checked / Choose who you write as state after slow filtered navigation. This run did not reach desktop return assertions; later isolated same-source run did."
+        }
+      ],
+      "navigationBoundary": "Located/returned 390px images visibly clip the rightmost destination in an early control-hydration capture. They establish selected Work/title/filter visibility, not settled selected-tab/focus geometry. No new settled navigation defect is inferred from these snapshots, and no D4-002 result or existing independently passing Curated/Work-ring proof is replaced. Existing owners G-2747/G-2825 retain the wider class.",
+      "combinedSuitePassClaimed": false,
+      "producerReviewFlagsNotUsedAsOwnViewingProof": true
+    },
+    "originalPerCriterionDisposition": [
+      {
+        "ordinal": 1,
+        "originalVerbatim": "在足够多的库存（建议100项且跨页）下，可以按名字定位并按最近编辑等明确顺序查找；条件在返回后保留，不能只在已加载三项里假筛选。",
+        "status": "proved by composed original evidence",
+        "basis": [
+          "Independent 227-candidate/23-match full authorized-cut normalization/filter-before-pagination/all-three-order test, including targets beyond candidate204 and full Work IRI ties; previously executed job9e260eb3, 119 combined Web/Main assertions.",
+          "Previously viewed 105-Work/20-row LargeInventory, LocatedWork and SearchContinuation stories at 390/1440.",
+          "Newly qualified genuine HTTP200 title-only normalization/all-three-orders across native limit1 cursors and actual Work open/Back/reload preserving q/sort/view at 390/1440."
+        ],
+        "limits": "Genuine retained inventory contains two Works, not 100. The original recommends 100; larger-scale behavior is supplied by the existing controlled tests and rendered inputs, not an invented genuine corpus."
+      },
+      {
+        "ordinal": 2,
+        "originalVerbatim": "1440/390中标题是行的主锚点，核心状态、最近更新时间和继续/章节入口形成可重复扫读位置；次要类型、语言、审核说明逐级展开。",
+        "status": "proved by composed original evidence",
+        "basis": [
+          "Previously independently viewed title-led rows, repeated state/time/action placement and progressive secondary Details across all recorded home states at 390/1440.",
+          "Newly viewed genuine two-Work screenshots and passed DOM checks show actual title links, updatedAt-backed time, Open/Details and chapter label with no horizontal page overflow at both widths."
+        ],
+        "limits": "Actual count labels and updated time/actions are observed; this addendum does not qualify AUD-011 chapter-count truth, topology or private-draft disclosure."
+      },
+      {
+        "ordinal": 3,
+        "originalVerbatim": "多状态、长CJK/Latin标题与无封面样本保持可读，不要求从最前面滚完整个库存找回作品。",
+        "status": "proved by composed original evidence",
+        "basis": [
+          "Previously independently viewed lifecycle/mixed-state, long CJK/Latin, Chinese, coverless and located/continuation states at both widths and selected light/dark themes.",
+          "Independent full-cut controlled search locates 23 results beyond candidate204 without scrolling through the inventory; genuine retained title location and Back/reload establish current API/UI wiring."
+        ],
+        "limits": "Genuine retained data does not itself contain the long CJK/Latin, coverless/multiple-lifecycle variations; those dimensions remain recorded-rendering evidence."
+      }
+    ],
+    "originalRegressionDisposition": [
+      {
+        "id": "D4-014/assertion-1",
+        "assert": "Drafts are recognized by title first, with state, updated time and continue action, including long CJK/English and coverless/mixed-state works.",
+        "status": "proved by composed original evidence",
+        "basis": "Mapped to the three unchanged original criteria above; controlled algorithm, recorded rendering and genuine HTTP/browser evidence remain separately identified."
+      },
+      {
+        "id": "D4-014/assertion-2",
+        "assert": "Title search and useful sort find items beyond the first loaded three cards, with truthful incomplete/pagination state.",
+        "status": "proved by composed original evidence",
+        "basis": "Mapped to the three unchanged original criteria above; controlled algorithm, recorded rendering and genuine HTTP/browser evidence remain separately identified."
+      },
+      {
+        "id": "D4-014/assertion-3",
+        "assert": "390/1440 layout and Back restore the working filter and selected draft rather than repeating oversized cover-first cards.",
+        "status": "proved by composed original evidence",
+        "basis": "Mapped to the three unchanged original criteria above; controlled algorithm, recorded rendering and genuine HTTP/browser evidence remain separately identified."
+      }
+    ],
+    "composedEvidenceReuse": {
+      "independentControlledAlgorithm": "job:9e260eb3-6b67-492b-9350-b1f5a0fd374f step2; Web4/36 + Main7/83, 119 assertions; exact original candidate source pin retained above. 227 candidates, 23 normalized matches beyond204, full-cut filter/order before5-item slices, fullIRI ties.",
+      "recordedRendering": "Existing report renderedEvidence and correctionVerification: 105-Work/20-row LargeInventory, LocatedWork, SearchContinuation, lifecycle, longCJK/Latin and coverless inputs at1440/390, selected themes and corrected Chinese; actual screenshots already viewed. These are recorded inputs, not a genuine100-Work API response.",
+      "genuineProduct": "Newly qualified actual API/native cursor and two-width Work-return bodies above, with retained two-Work inventory.",
+      "unchangedProofNotRepeated": [
+        "full Storybook",
+        "four corrected stories/20DOM/24PNGs",
+        "Curated390 direct/reload/back/forward",
+        "six Work rings",
+        "two recovered Details rings",
+        "source review/types/guards",
+        "full Studio/AMGT suite"
+      ],
+      "originalCanonical145And137AssertionsEdited": false
+    },
+    "sourceLandingQualification": {
+      "managerRecord": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/goal-orchestration/manager-commits/manager-7432b906-81ec-4604-885e-49659a68c753.json",
+        "sha256": "c4c01f0dce6552647582e74a04b8396549926b21df2df9a405fb1f387c6c3244"
+      },
+      "managerId": "manager-7432b906-81ec-4604-885e-49659a68c753",
+      "capturedSource": "ef4a59257ff2ffaaf8a7fc9481de2ed831db3f2c",
+      "landedCommit": "e265b737d4eeec378517b85f7f6b71f9dbaa9e78",
+      "mainInspectedAt": "feb3d091d0dcc6c96f40021b706fdcdeb87daa2b",
+      "landedIsAncestor": true,
+      "sourceEquivalentOnInspectedMain": true,
+      "verification": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/d4-014-qualification/main-source-equivalence.json",
+        "sha256": "f5656a706572becca22da94403f72a3a7d645657d153bb7c7c09105a267a203f"
+      },
+      "exactSourcePathsAndBlobs": [
+        {
+          "path": "apps/web/app/[locale]/studio/[agent]/page.tsx",
+          "expectedBlob": "75ec428a2fa2cdad6c5714810cf48ccd690558f8",
+          "landedBlob": "75ec428a2fa2cdad6c5714810cf48ccd690558f8",
+          "currentMainBlob": "75ec428a2fa2cdad6c5714810cf48ccd690558f8"
+        },
+        {
+          "path": "apps/web/features/address/client.ts",
+          "expectedBlob": "14a890bb2996661a8a19f2f2a562950d363a4c9b",
+          "landedBlob": "14a890bb2996661a8a19f2f2a562950d363a4c9b",
+          "currentMainBlob": "14a890bb2996661a8a19f2f2a562950d363a4c9b"
+        },
+        {
+          "path": "apps/web/features/address/edge.ts",
+          "expectedBlob": "9465ea4d555f13bb5a818ad83c077255b366ee3a",
+          "landedBlob": "9465ea4d555f13bb5a818ad83c077255b366ee3a",
+          "currentMainBlob": "9465ea4d555f13bb5a818ad83c077255b366ee3a"
+        },
+        {
+          "path": "apps/web/features/api/server-fetch.ts",
+          "expectedBlob": "5dc162e45643cf34d789e24c56af204ac1d95b93",
+          "landedBlob": "5dc162e45643cf34d789e24c56af204ac1d95b93",
+          "currentMainBlob": "5dc162e45643cf34d789e24c56af204ac1d95b93"
+        },
+        {
+          "path": "apps/web/features/api/server-read.ts",
+          "expectedBlob": "4486ceb5072fbd9be6d455c95ad83cd6b629d2f4",
+          "landedBlob": "4486ceb5072fbd9be6d455c95ad83cd6b629d2f4",
+          "currentMainBlob": "4486ceb5072fbd9be6d455c95ad83cd6b629d2f4"
+        },
+        {
+          "path": "apps/web/features/shell/current-page-visibility.test.ts",
+          "expectedBlob": "0786d38b74cf348725fecce81743193a7c93e1ce",
+          "landedBlob": "0786d38b74cf348725fecce81743193a7c93e1ce",
+          "currentMainBlob": "0786d38b74cf348725fecce81743193a7c93e1ce"
+        },
+        {
+          "path": "apps/web/features/shell/current-page-visibility.ts",
+          "expectedBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+          "landedBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+          "currentMainBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45"
+        },
+        {
+          "path": "apps/web/features/shell/localized-link.tsx",
+          "expectedBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+          "landedBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+          "currentMainBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba"
+        },
+        {
+          "path": "apps/web/features/shell/navigation-focus.test-utils.ts",
+          "expectedBlob": "73119b78128e31d9e513a30a2e8f27e1d2f3e7ef",
+          "landedBlob": "73119b78128e31d9e513a30a2e8f27e1d2f3e7ef",
+          "currentMainBlob": "73119b78128e31d9e513a30a2e8f27e1d2f3e7ef"
+        },
+        {
+          "path": "apps/web/features/studio/fixtures.ts",
+          "expectedBlob": "b9d07c1df79828ba9c4268a454df23f0f1060017",
+          "landedBlob": "b9d07c1df79828ba9c4268a454df23f0f1060017",
+          "currentMainBlob": "b9d07c1df79828ba9c4268a454df23f0f1060017"
+        },
+        {
+          "path": "apps/web/features/studio/messages.ts",
+          "expectedBlob": "5c8e2b5e7b1d1c1907cc7db59b1e3cef298eda6d",
+          "landedBlob": "5c8e2b5e7b1d1c1907cc7db59b1e3cef298eda6d",
+          "currentMainBlob": "5c8e2b5e7b1d1c1907cc7db59b1e3cef298eda6d"
+        },
+        {
+          "path": "apps/web/features/studio/messages/de.ts",
+          "expectedBlob": "f7cbc00bc6699111280668b1e19191cdd0bc2f3a",
+          "landedBlob": "f7cbc00bc6699111280668b1e19191cdd0bc2f3a",
+          "currentMainBlob": "f7cbc00bc6699111280668b1e19191cdd0bc2f3a"
+        },
+        {
+          "path": "apps/web/features/studio/messages/es.ts",
+          "expectedBlob": "5ebf616667fd5abb78951edeea2d7ed920a22736",
+          "landedBlob": "5ebf616667fd5abb78951edeea2d7ed920a22736",
+          "currentMainBlob": "5ebf616667fd5abb78951edeea2d7ed920a22736"
+        },
+        {
+          "path": "apps/web/features/studio/messages/fr.ts",
+          "expectedBlob": "d74a4ba257a5753db86a2098c96d3e4982baa73f",
+          "landedBlob": "d74a4ba257a5753db86a2098c96d3e4982baa73f",
+          "currentMainBlob": "d74a4ba257a5753db86a2098c96d3e4982baa73f"
+        },
+        {
+          "path": "apps/web/features/studio/messages/ja.ts",
+          "expectedBlob": "cdba6d3cd9a8f8fca5663a66eb5c6f2b8d65fdcb",
+          "landedBlob": "cdba6d3cd9a8f8fca5663a66eb5c6f2b8d65fdcb",
+          "currentMainBlob": "cdba6d3cd9a8f8fca5663a66eb5c6f2b8d65fdcb"
+        },
+        {
+          "path": "apps/web/features/studio/messages/ko.ts",
+          "expectedBlob": "5d84d8907eadc6ad29af9998f39ca55acd774923",
+          "landedBlob": "5d84d8907eadc6ad29af9998f39ca55acd774923",
+          "currentMainBlob": "5d84d8907eadc6ad29af9998f39ca55acd774923"
+        },
+        {
+          "path": "apps/web/features/studio/messages/zh-Hans.ts",
+          "expectedBlob": "572f8b601fdcd22e592f5b102b3bb6aefc150654",
+          "landedBlob": "572f8b601fdcd22e592f5b102b3bb6aefc150654",
+          "currentMainBlob": "572f8b601fdcd22e592f5b102b3bb6aefc150654"
+        },
+        {
+          "path": "apps/web/features/studio/messages/zh-Hant.ts",
+          "expectedBlob": "9236ab79c0d2dc7f4779c6cbb9753d6b2f819b8a",
+          "landedBlob": "9236ab79c0d2dc7f4779c6cbb9753d6b2f819b8a",
+          "currentMainBlob": "9236ab79c0d2dc7f4779c6cbb9753d6b2f819b8a"
+        },
+        {
+          "path": "apps/web/features/studio/read.ts",
+          "expectedBlob": "3a726b274415c4289d8fe46f832a843c150919db",
+          "landedBlob": "3a726b274415c4289d8fe46f832a843c150919db",
+          "currentMainBlob": "3a726b274415c4289d8fe46f832a843c150919db"
+        },
+        {
+          "path": "apps/web/features/studio/studio-home.stories.tsx",
+          "expectedBlob": "e12fa175a1e61bffee6a918413c42e2f4734163b",
+          "landedBlob": "e12fa175a1e61bffee6a918413c42e2f4734163b",
+          "currentMainBlob": "e12fa175a1e61bffee6a918413c42e2f4734163b"
+        },
+        {
+          "path": "apps/web/features/studio/studio-home.tsx",
+          "expectedBlob": "c7d2187111f7a15b5dec4da69aa13cfe8110a342",
+          "landedBlob": "c7d2187111f7a15b5dec4da69aa13cfe8110a342",
+          "currentMainBlob": "c7d2187111f7a15b5dec4da69aa13cfe8110a342"
+        },
+        {
+          "path": "apps/web/features/studio/studio-work.tsx",
+          "expectedBlob": "7fb80382695f309d4e733354415e6c417a6efd17",
+          "landedBlob": "7fb80382695f309d4e733354415e6c417a6efd17",
+          "currentMainBlob": "7fb80382695f309d4e733354415e6c417a6efd17"
+        },
+        {
+          "path": "apps/web/features/studio/types.ts",
+          "expectedBlob": "fad3a36758ea8a5be9c59a35211c6db54bcad542",
+          "landedBlob": "fad3a36758ea8a5be9c59a35211c6db54bcad542",
+          "currentMainBlob": "fad3a36758ea8a5be9c59a35211c6db54bcad542"
+        },
+        {
+          "path": "apps/web/proxy.ts",
+          "expectedBlob": "eb69692fec2543ea823d67928ccb0bee7c802efc",
+          "landedBlob": "eb69692fec2543ea823d67928ccb0bee7c802efc",
+          "currentMainBlob": "eb69692fec2543ea823d67928ccb0bee7c802efc"
+        },
+        {
+          "path": "apps/web/tests/studio-inventory.test.ts",
+          "expectedBlob": "124aaaa6cce231a160036ead484b20fa3923b889",
+          "landedBlob": "124aaaa6cce231a160036ead484b20fa3923b889",
+          "currentMainBlob": "124aaaa6cce231a160036ead484b20fa3923b889"
+        },
+        {
+          "path": "apps/web/worker/index.ts",
+          "expectedBlob": "fc345d1f85383b1fb16866d8cddc82c634f140c5",
+          "landedBlob": "fc345d1f85383b1fb16866d8cddc82c634f140c5",
+          "currentMainBlob": "fc345d1f85383b1fb16866d8cddc82c634f140c5"
+        },
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/studio-inventory-review.json",
+          "expectedBlob": "1bb1bc13c45c53e64b880acc088838bf0b12fa5b",
+          "landedBlob": "1bb1bc13c45c53e64b880acc088838bf0b12fa5b",
+          "currentMainBlob": "1bb1bc13c45c53e64b880acc088838bf0b12fa5b"
+        },
+        {
+          "path": "generated/openapi/main/public.json",
+          "expectedBlob": "cf4366d8cc7fae5bd905f6397fab10ed025a7ac3",
+          "landedBlob": "573fb53333d46ea1f4e76fb111f7139bfd651915",
+          "currentMainBlob": "573fb53333d46ea1f4e76fb111f7139bfd651915"
+        },
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "expectedBlob": "37154e2fc29ab393b5062954c9b0f3442d488946",
+          "landedBlob": "1e278764f7703e60eee71f7a45bed8d13e978184",
+          "currentMainBlob": "b419d777e0bf6b7220e464a9194bf7a12dd1d2ba"
+        },
+        {
+          "path": "scripts/static/web-continuations.test.ts",
+          "expectedBlob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3",
+          "landedBlob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3",
+          "currentMainBlob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3"
+        },
+        {
+          "path": "services/main/src/modules/studio/access.ts",
+          "expectedBlob": "e1a76597038a74975df36d5ec82f6166853bc6a2",
+          "landedBlob": "e1a76597038a74975df36d5ec82f6166853bc6a2",
+          "currentMainBlob": "e1a76597038a74975df36d5ec82f6166853bc6a2"
+        },
+        {
+          "path": "services/main/src/modules/studio/chapters.ts",
+          "expectedBlob": "bfd0fc170069cd912842352952742344ec3c28bd",
+          "landedBlob": "bfd0fc170069cd912842352952742344ec3c28bd",
+          "currentMainBlob": "bfd0fc170069cd912842352952742344ec3c28bd"
+        },
+        {
+          "path": "services/main/src/modules/studio/works.ts",
+          "expectedBlob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8",
+          "landedBlob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8",
+          "currentMainBlob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8"
+        },
+        {
+          "path": "services/main/src/routes/studio.ts",
+          "expectedBlob": "332c6b0ee18c92237863e9ecd8478a03ec501802",
+          "landedBlob": "332c6b0ee18c92237863e9ecd8478a03ec501802",
+          "currentMainBlob": "332c6b0ee18c92237863e9ecd8478a03ec501802"
+        },
+        {
+          "path": "services/main/tests/studio-inventory.test.ts",
+          "expectedBlob": "d4189db56e06da8d535ad9bc9601fbeadca93b98",
+          "landedBlob": "d4189db56e06da8d535ad9bc9601fbeadca93b98",
+          "currentMainBlob": "d4189db56e06da8d535ad9bc9601fbeadca93b98"
+        },
+        {
+          "path": "services/main/tests/studio-transfer-parity.test.ts",
+          "expectedBlob": "10e9b7d8dcd3a97ec9165c226c0d43c4f028ce83",
+          "landedBlob": "10e9b7d8dcd3a97ec9165c226c0d43c4f028ce83",
+          "currentMainBlob": "10e9b7d8dcd3a97ec9165c226c0d43c4f028ce83"
+        }
+      ],
+      "supportingSsrPaths": [
+        {
+          "path": "apps/web/features/work-maintainers/api.ts",
+          "expectedBlob": "f8893695baa34866f8d796b2ec120b57ee51550d",
+          "landedBlob": "f8893695baa34866f8d796b2ec120b57ee51550d",
+          "currentMainBlob": "f8893695baa34866f8d796b2ec120b57ee51550d"
+        },
+        {
+          "path": "apps/web/tests/work-maintainers.test.tsx",
+          "expectedBlob": "9fe6fd6a5435c1d9cdd913e0573ba311ed29ee11",
+          "landedBlob": "9fe6fd6a5435c1d9cdd913e0573ba311ed29ee11",
+          "currentMainBlob": "9fe6fd6a5435c1d9cdd913e0573ba311ed29ee11"
+        }
+      ],
+      "sharedArtifactExceptions": {
+        "generatedOpenapi": {
+          "blobs": [
+            "cf4366d8cc7fae5bd905f6397fab10ed025a7ac3",
+            "573fb53333d46ea1f4e76fb111f7139bfd651915",
+            "573fb53333d46ea1f4e76fb111f7139bfd651915"
+          ],
+          "changedLocationsOutsideStudio": [
+            "/paths//v1/global-rating-aggregates/post/responses/200/content/application/json/schema/properties/count/maximum",
+            "/paths//v1/global-rating-aggregates/post/responses/200/content/application/json/schema/properties/histogram/items/maximum",
+            "/paths//v1/global-rating-aggregates/post/responses/200/content/application/json/schema/properties/population/maximum",
+            "/paths//v1/global-rating-aggregates/post/responses/200/content/application/json/schema/properties/withdrawnCount/maximum",
+            "/paths//v1/rating-syntheses/post/responses/200/content/application/json/schema/properties/components/properties/global/properties/count/maximum",
+            "/paths//v1/rating-syntheses/post/responses/200/content/application/json/schema/properties/components/properties/global/properties/histogram/items/maximum",
+            "/paths//v1/rating-syntheses/post/responses/200/content/application/json/schema/properties/components/properties/global/properties/population/maximum",
+            "/paths//v1/rating-syntheses/post/responses/200/content/application/json/schema/properties/components/properties/global/properties/withdrawnCount/maximum",
+            "/paths//v1/rating-syntheses/post/responses/200/content/application/json/schema/properties/components/properties/realm/properties/count/maximum",
+            "/paths//v1/rating-syntheses/post/responses/200/content/application/json/schema/properties/components/properties/realm/properties/histogram/items/maximum",
+            "/paths//v1/rating-syntheses/post/responses/200/content/application/json/schema/properties/components/properties/realm/properties/population/maximum",
+            "/paths//v1/rating-syntheses/post/responses/200/content/application/json/schema/properties/components/properties/realm/properties/withdrawnCount/maximum"
+          ],
+          "studioRoutesPresentInPublicDocument": false,
+          "qualification": "Studio is private and absent from this public document. All 12 changed JSON locations are removal of maximum:100 from existing global-rating-aggregates/rating-syntheses responses; no Studio public contract or whole-file byte identity is inferred."
+        },
+        "sharedContinuationInventory": {
+          "blobs": [
+            "37154e2fc29ab393b5062954c9b0f3442d488946",
+            "1e278764f7703e60eee71f7a45bed8d13e978184",
+            "b419d777e0bf6b7220e464a9194bf7a12dd1d2ba"
+          ],
+          "studioEntriesEqual": true,
+          "studioEntries": [
+            {
+              "path": "apps/web/app/[locale]/studio/[agent]/page.tsx",
+              "consumer": "StudioHomePage",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "{\"type\":\"VariableDeclarator\",\"id\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"cursor\",\"optional\":false,\"typeAnnotation\":null},\"init\":{\"type\":\"CallExpression\",\"callee\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"validCursor\",\"optional\":false,\"typeAnnotation\":null},\"typeArguments\":null,\"arguments\":[{\"type\":\"MemberExpression\",\"object\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"query\",\"optional\":false,\"typeAnnotation\":null},\"property\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"cursor\",\"optional\":false,\"typeAnnotation\":null},\"optional\":false,\"computed\":false}],\"optional\":false},\"definite\":false}",
+              "context": "2bf87f989dc114b84eb20f7d54ef4cec34cdaee0b1217a8d2167f5cd6e7075b0"
+            },
+            {
+              "path": "apps/web/app/[locale]/studio/[agent]/works/[work]/page.tsx",
+              "consumer": "StudioWorkPage",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "chapters.page.data.items",
+              "context": "0ee180ad761fad87554b7d3f11d5e0d32b97f5d68a0d0128eb43d0791ebe620e"
+            },
+            {
+              "path": "apps/web/app/[locale]/studio/[agent]/works/[work]/page.tsx",
+              "consumer": "StudioWorkPage",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "{\"type\":\"VariableDeclarator\",\"id\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"cursor\",\"optional\":false,\"typeAnnotation\":null},\"init\":{\"type\":\"CallExpression\",\"callee\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"validCursor\",\"optional\":false,\"typeAnnotation\":null},\"typeArguments\":null,\"arguments\":[{\"type\":\"MemberExpression\",\"object\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"query\",\"optional\":false,\"typeAnnotation\":null},\"property\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"cursor\",\"optional\":false,\"typeAnnotation\":null},\"optional\":false,\"computed\":false}],\"optional\":false},\"definite\":false}",
+              "context": "0ee180ad761fad87554b7d3f11d5e0d32b97f5d68a0d0128eb43d0791ebe620e"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "ChapterList",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "current.items",
+              "context": "c93126b340db9c55c1ead5e305630c0f2dfaf1f18e8e27d33fffe2bfe5f43718"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "ChapterList",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "levels[group]?.items",
+              "context": "8d98d57eb0388ed554bc8fc39d705b0a5e9e89d4eaebc1ca9165afb65ffd718f"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "ChapterList",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "more.items",
+              "context": "c93126b340db9c55c1ead5e305630c0f2dfaf1f18e8e27d33fffe2bfe5f43718"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "ChapterList",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "top.items",
+              "context": "2e17d39b3d9df4d50619c9e308c4a1c11a23ff2f285c081fb7bafcae92fb4d3b"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "ChapterList",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "top.items",
+              "context": "a5d7b358d1a706bbe248104e3089aeeeecda293d741f74d424415214621a9914"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "createGroup",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "top.items",
+              "context": "1176283aa9a9bf80e8a2258ee77f8ae3a7abb4aa29606862b8280d61e1942cb8"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "createGroup",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "{\"type\":\"UpdateExpression\",\"operator\":\"--\",\"prefix\":false,\"argument\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"before\",\"optional\":false,\"typeAnnotation\":null}}",
+              "context": "1176283aa9a9bf80e8a2258ee77f8ae3a7abb4aa29606862b8280d61e1942cb8"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "createGroup",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "after:{\"type\":\"TSNonNullExpression\",\"expression\":{\"type\":\"MemberExpression\",\"object\":{\"type\":\"MemberExpression\",\"object\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"top\",\"optional\":false,\"typeAnnotation\":null},\"property\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"items\",\"optional\":false,\"typeAnnotation\":null},\"optional\":false,\"computed\":false},\"property\":{\"type\":\"BinaryExpression\",\"left\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"before\",\"optional\":false,\"typeAnnotation\":null},\"operator\":\"-\",\"right\":{\"type\":\"Literal\",\"value\":1}},\"optional\":false,\"computed\":true}}.occurrence",
+              "context": "1176283aa9a9bf80e8a2258ee77f8ae3a7abb4aa29606862b8280d61e1942cb8"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "everything",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "level.items",
+              "context": "64fe9576c61a097b97954021944ddc2339049bb7abfcdceecb9fbb4403ce34d6"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "everything",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "top.items",
+              "context": "cacea5cd3553c0dc87daeec6ae23fff4a17ecb0d1d09d2efde1dab21da35e9bd"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "groupSection",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "{\"type\":\"TSNonNullExpression\",\"expression\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"level\",\"optional\":false,\"typeAnnotation\":null}}.items",
+              "context": "a4872484fe65a1a253a52296668685da426af7e3e84cdda6d748b0e79ad73882"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "groupSection",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "level?.items",
+              "context": "a4872484fe65a1a253a52296668685da426af7e3e84cdda6d748b0e79ad73882"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "land",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "after:anchor.occurrence",
+              "context": "436c919ecbe43225f17661093ebbb48b3fbe3230b2ab26077ad75abcf5d6e3c0"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "land",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "before:anchor.occurrence",
+              "context": "436c919ecbe43225f17661093ebbb48b3fbe3230b2ab26077ad75abcf5d6e3c0"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "levelOf",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "page.items",
+              "context": "8a44dfbb5818ff93effbe99a6c1ee24da9d4191f6a262076a8237988aac630fa"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "load",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "current[group]?.items",
+              "context": "44d6540cd3e01e6cb9f5b551e0d8e800d5685f347e420e53b43a1727be70ff18"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "load",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "loaded.items",
+              "context": "44d6540cd3e01e6cb9f5b551e0d8e800d5685f347e420e53b43a1727be70ff18"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "moveSelected",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "levels[item.occurrence]?.items",
+              "context": "7cdde828917b977c008d9bdd77cfd2473d3478cd402f4f725f16af854816566a"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "moveSelected",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "top.items",
+              "context": "4f2472cb67b2e900f154530592a9edef975dc541c3865f4c03c43c461ba829c9"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "moveTo",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "top.items",
+              "context": "8e0663ca2b8bc38ca366a4f8169de9c4573288a2381ea2d6f6bc98e05ba223c8"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "outline",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "top.items",
+              "context": "dfa728248f685180ae79e27481b60532727ffb14a6f48289f3d23cffbd320cd6"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "publishSelected",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "level.items",
+              "context": "64fe9576c61a097b97954021944ddc2339049bb7abfcdceecb9fbb4403ce34d6"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "publishSelected",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "top.items",
+              "context": "548b4597c59eb8c6c02a42e14a76ad9227cdabdff42cd3d8dbb7ddf6f257a34d"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "refresh",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "loaded?.items",
+              "context": "2ceb3d74aaa169b68868cd6d86ad29394c9559dd4bb0ed60fca1ee90ff0a2714"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "siblingsOf",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "levels[parent]?.items",
+              "context": "cae574be0868975d53105dcc3dcd4ce4c82be10ebdf83d763a3d3d7ef03a916f"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "siblingsOf",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "top.items",
+              "context": "cae574be0868975d53105dcc3dcd4ce4c82be10ebdf83d763a3d3d7ef03a916f"
+            },
+            {
+              "path": "apps/web/features/studio/content-api.ts",
+              "consumer": "publishLatest",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "listed.data.items",
+              "context": "bf8ca60bc605a03e425300bf12084bd0385d82662fb23922345c6c95b4aadafc"
+            },
+            {
+              "path": "apps/web/features/studio/content-api.ts",
+              "consumer": "settled",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "{\"type\":\"VariableDeclarator\",\"id\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"after\",\"optional\":false,\"typeAnnotation\":null},\"init\":{\"type\":\"ConditionalExpression\",\"test\":{\"type\":\"BinaryExpression\",\"left\":{\"type\":\"UnaryExpression\",\"operator\":\"typeof\",\"argument\":{\"type\":\"ChainExpression\",\"expression\":{\"type\":\"MemberExpression\",\"object\":{\"type\":\"MemberExpression\",\"object\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"data\",\"optional\":false,\"typeAnnotation\":null},\"property\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"retry\",\"optional\":false,\"typeAnnotation\":null},\"optional\":false,\"computed\":false},\"property\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"afterMs\",\"optional\":false,\"typeAnnotation\":null},\"optional\":true,\"computed\":false}},\"prefix\":true},\"operator\":\"===\",\"right\":{\"type\":\"Literal\",\"value\":\"number\"}},\"consequent\":{\"type\":\"MemberExpression\",\"object\":{\"type\":\"MemberExpression\",\"object\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"data\",\"optional\":false,\"typeAnnotation\":null},\"property\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"retry\",\"optional\":false,\"typeAnnotation\":null},\"optional\":false,\"computed\":false},\"property\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"afterMs\",\"optional\":false,\"typeAnnotation\":null},\"optional\":false,\"computed\":false},\"alternate\":{\"type\":\"Literal\",\"value\":1000}},\"definite\":false}",
+              "context": "78c1d5b026d76ca5a5116fe65e763f298827e55104bef8e6f8f66061377a1e65"
+            },
+            {
+              "path": "apps/web/features/studio/outline.ts",
+              "consumer": "chapterFacts",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "page.items",
+              "context": "cf67acabdebeee55427e451845250ed04b4798462da2b2f5573e4111a8bd7e86"
+            },
+            {
+              "path": "apps/web/features/studio/outline.ts",
+              "consumer": "moveOperation",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "after:{\"type\":\"TSNonNullExpression\",\"expression\":{\"type\":\"MemberExpression\",\"object\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"others\",\"optional\":false,\"typeAnnotation\":null},\"property\":{\"type\":\"BinaryExpression\",\"left\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"index\",\"optional\":false,\"typeAnnotation\":null},\"operator\":\"-\",\"right\":{\"type\":\"Literal\",\"value\":1}},\"optional\":false,\"computed\":true}}.occurrence",
+              "context": "23124c9e6d73714a51ace8eb56768825b671b651c821f9645b1023742770eec1"
+            },
+            {
+              "path": "apps/web/features/studio/outline.ts",
+              "consumer": "stepDestination",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "after:neighbour.occurrence",
+              "context": "45c85ed61eaf63d47d27ca455e375c3a15d9395d735f70a1a69e0bcc5e1d39e2"
+            },
+            {
+              "path": "apps/web/features/studio/outline.ts",
+              "consumer": "stepDestination",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "before:neighbour.occurrence",
+              "context": "45c85ed61eaf63d47d27ca455e375c3a15d9395d735f70a1a69e0bcc5e1d39e2"
+            },
+            {
+              "path": "apps/web/features/studio/read.ts",
+              "consumer": "mySubmissions",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "page.data.items",
+              "context": "134a63f33ac131d03a73d8ff19c0a9a57a3f5e4f51166c6dfa8e6e07a243a7f6"
+            },
+            {
+              "path": "apps/web/features/studio/read.ts",
+              "consumer": "readInventory",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "page.data.items",
+              "context": "edd61bbd42a2e10c124d62b0b7cf9052c6e29ac6f57012a8b42a4de5d3484f4a"
+            },
+            {
+              "path": "apps/web/features/studio/read.ts",
+              "consumer": "readRealmChoices",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "loaded.data.items",
+              "context": "de9e894a6ee731314772a6a070b45e19d84e20be1d6b0dec3d5d3af6cf20f4ec"
+            },
+            {
+              "path": "apps/web/features/studio/read.ts",
+              "consumer": "readReviewPage",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "submissions.data.items",
+              "context": "b4cbd69f1611bf3a91642214ce2cdeb0d3daaa26e14cf48d9d305301cae215dd"
+            },
+            {
+              "path": "apps/web/features/studio/read.ts",
+              "consumer": "readStudioChapter",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "listed.data.items",
+              "context": "1177a51ed7a1112e79503700a048923802e67b267268d8f92234e14ffcb2b42c"
+            },
+            {
+              "path": "apps/web/features/studio/read.ts",
+              "consumer": "scan",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "loaded.data.items",
+              "context": "e943ccf819d69fbd75d57191c4dd2bd9ca7a899f5558c15fe0823dedd0053c70"
+            },
+            {
+              "path": "apps/web/features/studio/read.ts",
+              "consumer": "scan",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "{\"type\":\"AssignmentExpression\",\"operator\":\"=\",\"left\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"cursor\",\"optional\":false,\"typeAnnotation\":null},\"right\":{\"type\":\"MemberExpression\",\"object\":{\"type\":\"MemberExpression\",\"object\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"loaded\",\"optional\":false,\"typeAnnotation\":null},\"property\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"data\",\"optional\":false,\"typeAnnotation\":null},\"optional\":false,\"computed\":false},\"property\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"nextCursor\",\"optional\":false,\"typeAnnotation\":null},\"optional\":false,\"computed\":false}}",
+              "context": "e943ccf819d69fbd75d57191c4dd2bd9ca7a899f5558c15fe0823dedd0053c70"
+            },
+            {
+              "path": "apps/web/features/studio/realm-submit.tsx",
+              "consumer": "RealmSubmit",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "page.items",
+              "context": "596524e83ba1d160d6f484ba4d26ed152cd14d9b48fb3fd8a505a566a9aff297"
+            },
+            {
+              "path": "apps/web/features/studio/studio-home.tsx",
+              "consumer": "Review",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "review.submissions.data.items",
+              "context": "c99cf3265371a25158c37dcf3772a4794c67d9ddd6563dcad9f37eb9e7d5e932"
+            },
+            {
+              "path": "apps/web/features/studio/studio-home.tsx",
+              "consumer": "StudioHome",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "content.works.data.page.items",
+              "context": "47581251655d9f9e26f7980f37e13ff5d749127b599436b1f39e2c902bdd9e09"
+            },
+            {
+              "path": "apps/web/features/studio/studio-home.tsx",
+              "consumer": "Works",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "works.data.page.items",
+              "context": "72a6f1508eb51f3d225a676bbe7953fabec79ef61cd58036bab3d3f48043ddfc"
+            },
+            {
+              "path": "apps/web/features/studio/studio-work.tsx",
+              "consumer": "Tags",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "tags.data.items",
+              "context": "0004ea4e8621235f441f32a802c01e962a6e5b51b346067c65682bb440b0ea79"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "ChapterList",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "level.items",
+              "context": "64fe9576c61a097b97954021944ddc2339049bb7abfcdceecb9fbb4403ce34d6"
+            },
+            {
+              "path": "apps/web/features/studio/chapter-list.tsx",
+              "consumer": "ChapterList",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "top.items",
+              "context": "b7090210fb85d33b5e33705df5e7528ca4c0a7eae43cebad85e9c5029932f319"
+            }
+          ],
+          "unrelatedDifferencePaths": [
+            "apps/web/features/api/showcase.ts",
+            "apps/web/features/discover/discover-view.tsx",
+            "apps/web/features/realm/modules.ts",
+            "apps/web/features/zones/modules.tsx"
+          ]
+        }
+      },
+      "qualification": "33 of35 source/shared artifact blobs are exact on landed/current main; both SSR blobs also exact. The public OpenAPI rating changes and shared continuation inventory changes are unrelated to Studio. Studio continuation entries are exact. Entire shared-file hashes are explicitly not claimed equal.",
+      "actual105WorkPostgresCase": {
+        "status": "not independently qualified in this addendum",
+        "owner": "root manager7432",
+        "sourceCastApprovalAlreadyPublished": "53a6c411e73c8b511be8d29f10a5b47b6655e44e",
+        "publishedSelectionReceipt": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-studio-reviewed-fixture-cast-root-selection.json",
+          "sha256": "f252b4a7cd2e1780b30179e09b23b442f9373edc670d36d03e54d360a88c4a00"
+        },
+        "observedLandingUnitFailureEvidence": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/goal-orchestration/merges/audit-remediation-20261019-3252311-1792414321500.json",
+          "sha256": "276d796bd543d24d2dcc9592e37f3f020beb5ed169eef68e25210f59b8127bae"
+        },
+        "limit": "The published selection receipt identifies the exact cast/source; the landed record reports normal gate completion. Neither supplied file records this specific105-Work body reaching/passing. The retained unit failure file shows only two unrelated guard timeouts and passing isolated retries. No105PASS is inferred from cleared:true, landed status, absence of a failure, or generation/check summaries. This separate root result is not made a new D4-014 browser/large-corpus prerequisite."
+      }
+    },
+    "newProductAssertionKnownMissingForOriginalComposedD4014": [],
+    "additionalExecutionJustified": false,
+    "executionDecision": "The existing harness, actual answers and viewed images cover the newly assigned title/order/return/row assertions. No missing affected D4-014 assertion was identified; rerunning passing stories, navigation, source checks or whole API suites would add no necessary evidence.",
+    "separateOpenClassesAndLimits": [
+      "AUD-011 same-Work top-level/volume/extras/native23-occurrence pagination and incomplete/private-draft limits retain their separate original dispositions and G-2753 work.",
+      "Original four-chapter counterexample and23-occurrence corpus are not substituted or claimed rerun.",
+      "All-six-persona/four-additional-body AMGT and wider STUDIO01 journeys are not claimed passed.",
+      "D4-002 Discover instances and navigation class remain outside this qualification."
+    ],
+    "classClosed": false,
+    "canonicalRegistryEdited": false,
+    "recommendedManagerDisposition": "The three original D4-014 acceptance criteria and three regressions are supported by the composed original proof, now independently qualified with actual Studio source equivalence on landed main. Manager may apply the canonical disposition using this evidence; this worker does not edit class state. No genuine100-Work corpus or unrelated AUD-011/AMGT gate is added.",
+    "resources": {
+      "newRecordedProductJobs": [],
+      "newServers": [],
+      "dataPreparationActions": [],
+      "backendLifecycleActions": [],
+      "peerProcessesStopped": false,
+      "producerOwnedWebAndAccountsPortsReleased": true,
+      "ownedResourcesToStop": [],
+      "privateAuthStorageReadOrCopied": false,
+      "privateFixtureContentReadOrCopied": false,
+      "credentialValuesIncludedInReport": false
+    },
+    "docsCheck": {
+      "command": "task docs:check",
+      "status": "passed",
+      "exitStatus": 0,
+      "jobId": "job:bcdfe139-98db-4f04-a66c-df5eb4102d1b",
+      "log": ".temp/goal/jobs/bcdfe139-98db-4f04-a66c-df5eb4102d1b.log",
+      "result": "13 documentation checker tests passed; 259 Markdown files checked. JSON syntax, preserved prior sections, actual job exits and qualification invariants also validated separately. This is report validation, not product acceptance."
+    }
   }
 }
