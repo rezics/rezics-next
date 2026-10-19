@@ -1027,6 +1027,13 @@ export async function importDataset(
       for (const [index, entry] of saved.entries()) if (entry) {
         if (entry.method !== 'POST' || entry.path !== '/v1/sources/intakes')
           throw new DatasetIntakeCustodyError('request', `intake operation changed: ${label}`);
+        // Earlier importer requests made no redistribution claim. A later
+        // provider default cannot upgrade their evidence or change a replay.
+        const legacyRights = { basis: 'unknown' as const,
+          note: `Frozen local development evidence from ${record.sourceUrl}; raw provider data and images retain their original rights. No redistribution permission is asserted.` };
+        if (entry.body !== null && typeof entry.body === 'object'
+          && canonical((entry.body as Record<string, unknown>).rightsEvidence ?? null) === canonical(legacyRights))
+          requests[index] = { ...requests[index]!, rightsEvidence: legacyRights };
         assertDatasetIntakeRequest(entry.body, requests[index]!, false);
       }
       if (saved.every(entry => entry !== undefined)) {
