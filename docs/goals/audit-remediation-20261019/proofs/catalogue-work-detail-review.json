@@ -1,0 +1,1744 @@
+{
+  "format": "catalogue-work-detail-independent-review-v1",
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2841",
+  "observedAt": "2026-10-19T07:14:59.671901+00:00",
+  "reviewer": {
+    "account": "codex-1",
+    "model": "GPT-6.1 Sol",
+    "effort": "xhigh",
+    "independent": true,
+    "delegation": false,
+    "fallback": false
+  },
+  "disposition": "final-a636-independent-review-complete-five-source-remediations-one-reproduced-header-finding",
+  "acceptance": "At exact a636f3b460aa89d80e4a454bef2ececa9dedf128 all five original findings and both e8 residual counterexamples are addressed in source. Original findings/dispositions remain preserved. Exact final C31 desktop/phone pass; original Guide1440/390 fail the named primary-action assertion, recorded as WORK-REVIEW-06 P2. Final normal guards retain page-filter inventory failure; accepted-command timeout retry passes. No canonical catalogue closure or landing approval.",
+  "pins": {
+    "branch": "sprint/catalogue-work-20261019",
+    "base": "dcd0a9c6d60e745b65cd8b155c186c2531e185a0",
+    "candidate": "4048d121aaea8c3e525acb935e3032ffacdc7d2e",
+    "baseTree": "e940f0bc247e769bd73760020c8833750edcad72",
+    "candidateTree": "902a833a8fb733467f96515d6a845d7284adcda7",
+    "reportWorktreeHeadAtStart": "5ad2b48190039f63606ddaca167d89df80cdc2a9",
+    "exactDiffCommand": "git diff --no-ext-diff dcd0a9c6d60e745b65cd8b155c186c2531e185a0 4048d121aaea8c3e525acb935e3032ffacdc7d2e",
+    "exactDiffSha256": "5252fe4b32e019eab92f107098725faad4ce572e81f35657e6e688ca3fb5f076",
+    "changedPathCount": 60,
+    "commitsInExactRange": [
+      "74d4af8e40ca26aeb021e8e2bca29c17a2f0a845 Provide shared subject menu and source primitives for Work detail",
+      "af6286afa2bc994e33019daf50b4c08bdb6c7156 Centralize Work actions, navigation and readable guide layouts",
+      "04111b70a4e420f730963e854e7fb1462fa60424 Consolidate Work evidence and keep primary tasks reachable across views",
+      "80cdbd47f8e9c0248c1f5f768633703afa6f8892 Consume shared subject menus and evidence primitives for Work pages",
+      "2320daf04de4503b0d2616a3e0bdfacf376a3211 Keep missing resources retryable without changing legacy regression assertions",
+      "4048d121aaea8c3e525acb935e3032ffacdc7d2e Repair concrete Work detail rendering and browser proof failures"
+    ],
+    "branchHeadInitiallyObserved": "4048d121aaea8c3e525acb935e3032ffacdc7d2e",
+    "branchHeadAtReportAssembly": "a021ebfb67a11252c73ca37b144060eedebb236c",
+    "branchMovement": "The named branch moved to a021ebfb67a11252c73ca37b144060eedebb236c during report assembly. All diff/source inspection and scratch extraction remain on the instructed immutable 4048d121 candidate; the newer branch head was not reviewed."
+  },
+  "scope": {
+    "method": "Read the exact immutable base-to-candidate diff and candidate Git blobs, then traced rendering, links, report selections and owner projections. Archived candidate files under this worktree .temp supplied supporting reads and the attempted scratch probes. The report branch was never replaced by the candidate.",
+    "changedPathsInspected": [
+      "apps/web/features/entity-page/messages.ts",
+      "apps/web/features/entity-page/messages/de.ts",
+      "apps/web/features/entity-page/messages/es.ts",
+      "apps/web/features/entity-page/messages/fr.ts",
+      "apps/web/features/entity-page/messages/ja.ts",
+      "apps/web/features/entity-page/messages/ko.ts",
+      "apps/web/features/entity-page/messages/zh-Hans.ts",
+      "apps/web/features/entity-page/messages/zh-Hant.ts",
+      "apps/web/features/entity-page/sources.tsx",
+      "apps/web/features/entity-page/statement-groups.ts",
+      "apps/web/features/recipe-editor/ingredient-line.test.ts",
+      "apps/web/features/recipe-editor/ingredient-line.ts",
+      "apps/web/features/relationships/control.tsx",
+      "apps/web/features/safety/report-action.tsx",
+      "apps/web/features/work-levels/connections.tsx",
+      "apps/web/features/work-levels/editions.tsx",
+      "apps/web/features/work-levels/pages.tsx",
+      "apps/web/features/work-levels/parts.tsx",
+      "apps/web/features/work-levels/previews-server.tsx",
+      "apps/web/features/work-levels/previews.tsx",
+      "apps/web/features/work-levels/route.ts",
+      "apps/web/features/work-page/anime-hub-recorded-page.tsx",
+      "apps/web/features/work-page/anime-relations-recorded-page.tsx",
+      "apps/web/features/work-page/books-edition-page.tsx",
+      "apps/web/features/work-page/books-edition-recorded.stories.tsx",
+      "apps/web/features/work-page/credits.tsx",
+      "apps/web/features/work-page/games-hub-recorded-page.ts",
+      "apps/web/features/work-page/games-hub-recorded-page.tsx",
+      "apps/web/features/work-page/hub-frame.stories.tsx",
+      "apps/web/features/work-page/hub-sections.tsx",
+      "apps/web/features/work-page/messages.ts",
+      "apps/web/features/work-page/messages/de.ts",
+      "apps/web/features/work-page/messages/es.ts",
+      "apps/web/features/work-page/messages/fr.ts",
+      "apps/web/features/work-page/messages/ja.ts",
+      "apps/web/features/work-page/messages/ko.ts",
+      "apps/web/features/work-page/messages/zh-Hans.ts",
+      "apps/web/features/work-page/messages/zh-Hant.ts",
+      "apps/web/features/work-page/primary-action.tsx",
+      "apps/web/features/work-page/recipe-reading-recorded-page.tsx",
+      "apps/web/features/work-page/region.tsx",
+      "apps/web/features/work-page/route.ts",
+      "apps/web/features/work-page/shelf-words.stories.tsx",
+      "apps/web/features/work-page/types/actions.tsx",
+      "apps/web/features/work-page/types/guide.tsx",
+      "apps/web/features/work-page/types/hub.tsx",
+      "apps/web/features/work-page/types/recipe.tsx",
+      "apps/web/features/work-page/wiki.tsx",
+      "apps/web/features/work-page/work-detail-contract.stories.tsx",
+      "apps/web/features/work-page/work-detail-contract.test.tsx",
+      "apps/web/features/work-page/work-frame.tsx",
+      "apps/web/features/work-page/work-header.tsx",
+      "apps/web/features/work-page/work-nav.tsx",
+      "apps/web/features/work-page/work-report-targets.ts",
+      "apps/web/features/work-page/work-sources.tsx",
+      "apps/web/features/work-page/work-tabs.tsx",
+      "apps/web/features/work-page/work-views.stories.tsx",
+      "apps/web/features/work-page/work-views.tsx",
+      "apps/web/features/zones/site-work.tsx",
+      "scripts/static/web-continuations.inventory.json"
+    ],
+    "supportingPathsInspectedAtCandidate": [
+      "apps/web/features/entity-page/experience.ts",
+      "apps/web/features/entity-page/route.ts",
+      "apps/web/features/entity-page/read.ts",
+      "apps/web/features/entity-page/types.ts",
+      "apps/web/features/entity-page/views.tsx",
+      "apps/web/features/entity-page/entity-page.tsx",
+      "apps/web/features/entity-page/sections.tsx",
+      "apps/web/features/entity-page/predicate-labels.ts",
+      "apps/web/features/entity-page/fixtures.ts",
+      "apps/web/app/[locale]/e/[ref]/page.tsx",
+      "apps/web/features/work-page/read.ts",
+      "apps/web/features/work-page/shelf-words.ts",
+      "apps/web/features/work-page/hub.ts",
+      "apps/web/features/work-page/types.ts",
+      "apps/web/features/work-page/record.tsx",
+      "apps/web/features/work-page/publication-source.tsx",
+      "apps/web/features/work-page/recipe-reading-recorded-page.ts",
+      "apps/web/features/work-page/books-edition-page.read.ts",
+      "apps/web/features/work-page/games-hub-recorded-page.ts",
+      "apps/web/features/work-page/anime-hub-recorded-page.ts",
+      "apps/web/features/catalogue/cover.tsx",
+      "apps/web/features/catalogue/types.ts",
+      "apps/web/features/catalogue/type-fixtures.ts",
+      "packages/ui/src/components/media-image.tsx",
+      "apps/web/features/safety/report.ts",
+      "apps/web/features/rights-mark/rights-mark.tsx",
+      "apps/web/features/recipe-editor/instructions.ts",
+      "apps/web/features/recipe-editor/instruction-reading.tsx",
+      "apps/web/features/tracking/types.ts",
+      "apps/web/features/zones/site-route.tsx",
+      "services/main/src/modules/entity-page/contract.ts",
+      "services/main/src/modules/statement/subject-read.ts",
+      "services/main/src/modules/wiki/evidence-contract.ts",
+      "services/main/src/modules/recipe/work-page.ts",
+      "services/main/src/modules/recipe/structure-profile.ts",
+      "services/main/src/modules/recipe/instructions.ts",
+      "services/main/src/modules/public-report/contract.ts",
+      "packages/model/src/generated/types.ts",
+      "packages/ui/src/components/menu.tsx",
+      "apps/web/features/entity-page/href.ts",
+      "apps/web/features/api/main.ts",
+      "apps/web/features/api/server-read.ts",
+      "apps/web/features/api/server-fetch.ts"
+    ],
+    "excluded": [
+      "Changing main and the unrelated full wave",
+      "Implementation changes, services, corpus preparation, imports, landing and review-of-review work",
+      "Live browser, public API and original persona acceptance execution"
+    ],
+    "candidateImplementationChanged": false,
+    "candidateTestsChanged": false,
+    "originalIndependentAssertionsChanged": false,
+    "sourceDataChanged": false,
+    "sharedServicesStarted": false,
+    "corpusPrepared": false
+  },
+  "acceptanceReference": {
+    "path": ".temp/ref/catalogue-acceptance-map.json",
+    "sha256": "ba9a18ac281c20491461b6d2529ac7bc90e33b7df7846df7efc8523c192ce273",
+    "originalSourcePathFromBrief": ".temp/audit-remediation-20261019/two-hour-sprint/catalogue-acceptance-map.json",
+    "canonicalFindingCount": 18,
+    "retainedScenarioCount": 31,
+    "denominator": "A14 is the reporting subitem of A16 / I1-001, not a nineteenth finding.",
+    "relevantScenarios": [
+      "C21",
+      "C22",
+      "C24",
+      "C26",
+      "C27",
+      "C28",
+      "C31"
+    ],
+    "originalOutcomeAssertionsRun": false,
+    "originalFindingsClosed": [],
+    "note": "Original assertions and the map remain unchanged. Expected-failure test exit status, source inspection, synthetic stories and unit counts are not acceptance. Rich public Book and Recipe outcomes remain to be established on genuine retained data."
+  },
+  "findings": [
+    {
+      "id": "WORK-REVIEW-01",
+      "severity": "P1",
+      "title": "Cook eligibility is inferred from a separate, potentially incomplete recipe read",
+      "classification": "source-inference",
+      "landingBlockerConfirmed": false,
+      "origin": "Partial remediation of existing A18; the candidate adds the independent frame recipe read and length-based gate.",
+      "acceptanceItems": [
+        "A08",
+        "A11",
+        "A18"
+      ],
+      "scenarios": [
+        "C27",
+        "C31"
+      ],
+      "location": {
+        "path": "apps/web/features/work-page/recipe-reading-recorded-page.tsx",
+        "line": 239,
+        "detail": "Cook is offered when the frame read contains any ingredient or instruction entry."
+      },
+      "evidence": [
+        {
+          "path": "apps/web/features/work-page/recipe-reading-recorded-page.tsx",
+          "line": 201,
+          "detail": "The frame independently reads the projection-provided recipe href."
+        },
+        {
+          "path": "apps/web/features/work-page/recipe-reading-recorded-page.tsx",
+          "line": 164,
+          "detail": "The body reads the same href independently; on failure line 170 renders RegionFailure without RecipeExperience."
+        },
+        {
+          "path": "apps/web/features/work-page/types/actions.tsx",
+          "line": 20,
+          "detail": "On overview, the button only scrolls to recipe-experience and dispatches rezics-cook."
+        },
+        {
+          "path": "apps/web/features/work-page/types/recipe.tsx",
+          "line": 357,
+          "detail": "Only a mounted RecipeExperience installs the cook event listener."
+        },
+        {
+          "path": "apps/web/features/api/server-fetch.ts",
+          "line": 143,
+          "detail": "The transport creates an AbortController signal per attempt and fetches with cache no-store; sharing a cached client is not sharing the recipe result."
+        },
+        {
+          "path": "services/main/src/modules/recipe/work-page.ts",
+          "line": 210,
+          "detail": "The owner returns one bounded pinned page with optional next; ingredients are not an execution capability."
+        },
+        {
+          "path": "services/main/src/modules/recipe/work-page.ts",
+          "line": 323,
+          "detail": "Instructions are resolved only for this page of occurrences."
+        },
+        {
+          "path": "apps/web/features/recipe-editor/instructions.ts",
+          "line": 8,
+          "detail": "An instruction entry may explicitly have status unavailable."
+        },
+        {
+          "path": "apps/web/features/work-page/types/recipe.tsx",
+          "line": 260,
+          "detail": "CookMode renders only the currently loaded ingredients and steps and provides no continuation control."
+        }
+      ],
+      "concreteCounterexamples": [
+        "Both projection reads identify Recipe and disclose the same recipe href. The frame recipe request succeeds with one ingredient. The overview request returns unavailable (503). The header offers Cook, but the body has only RegionFailure, no recipe-experience node and no event listener. Clicking Cook performs no task. Reversing those responses hides Cook while usable body data is present.",
+        "A bounded first page has one ingredient, instructions: [], and next pointing to later instructions. The length gate offers Cook before those pages are loaded; its modal has an empty Method and no Show more. An instructions array containing only unavailable entries also passes the same gate."
+      ],
+      "impact": "The advertised primary Recipe task can do nothing or open an incomplete/unavailable method. The original Cook-availability concern remains open despite the new null/empty guard.",
+      "classSweep": "Applies to global and Zone Work frames on all tabs and their cross-view #cook links; recipe body, shared RecipeExperience and editor preview consumption were inspected. Count-based availability must not be copied to any of those surfaces.",
+      "recommendation": "Derive the action and displayed task from the same exact owner-selected recipe result. Treat missing, denied, unavailable, incomplete continuation and unavailable instruction selections explicitly. Expose or consume an owner-defined task capability if the client cannot determine executability; do not promote array length into business policy.",
+      "validationGap": "No live or browser assertion exercised these response combinations. The scratch probe did not target this finding."
+    },
+    {
+      "id": "WORK-REVIEW-02",
+      "severity": "P2",
+      "title": "Projection failure still changes a known Recipe into plain reading UI",
+      "classification": "source-inference",
+      "landingBlockerConfirmed": false,
+      "origin": "Inherited helper behavior, unresolved in the reviewed candidate; not attributed as a newly introduced regression.",
+      "acceptanceItems": [
+        "A08",
+        "A16 / I1-001"
+      ],
+      "scenarios": [
+        "C31"
+      ],
+      "location": {
+        "path": "apps/web/features/work-page/work-views.tsx",
+        "line": 193,
+        "detail": "A failed entity projection is replaced with null while preserving the known Work types."
+      },
+      "evidence": [
+        {
+          "path": "apps/web/features/entity-page/experience.ts",
+          "line": 27,
+          "detail": "The registry can still identify the presentation as recipe."
+        },
+        {
+          "path": "apps/web/features/entity-page/experience.ts",
+          "line": 32,
+          "detail": "Without a type section, only book and guide presentations retain a semantic kind; Recipe becomes plain."
+        },
+        {
+          "path": "apps/web/features/work-page/work-views.tsx",
+          "line": 236,
+          "detail": "Only experience.kind recipe reaches the specialized Recipe frame."
+        },
+        {
+          "path": "apps/web/features/work-page/shelf-words.ts",
+          "line": 13,
+          "detail": "Only kind recipe receives cook shelf words; Recipe registry primaryAction is read."
+        },
+        {
+          "path": "packages/model/src/generated/types.ts",
+          "line": 1487,
+          "detail": "The served Recipe registry entry has presentation recipe and primaryAction read."
+        }
+      ],
+      "concreteCounterexample": "WorkHeader succeeds with types [https://schema.org/Recipe], but entity-page-v1 returns unavailable. workExperience(null, types) produces kind plain, presentation recipe, primaryAction read, typeSection null. The common frame consequently uses Want to read / Reading / Read instead of the known Recipe identity and cook vocabulary.",
+      "impact": "A recoverable projection failure changes the user-facing type/task meaning instead of keeping identity and explaining unavailable capabilities.",
+      "classSweep": "The shared helper also determines prompt and skill kinds from section presence. Keep known semantic identity distinct from the existence of an authorized section link across global, Zone and recorded callers; never synthesize the missing section URL.",
+      "recommendation": "Preserve the registry-known semantic kind independently from typeSection availability, and render the failed capability with recovery. Keep the owner-provided link absent until disclosed.",
+      "validationGap": "The intended Recipe and Book control assertions in the temporary probe never ran because import setup failed twice."
+    },
+    {
+      "id": "WORK-REVIEW-03",
+      "severity": "P2",
+      "title": "Facts continuation navigates through a Work redirect that discards its cursor",
+      "classification": "source-inference",
+      "landingBlockerConfirmed": false,
+      "origin": "Inherited /e continuation routing is retained by the new WorkFactsView and expanded to the shared page-end footer.",
+      "acceptanceItems": [
+        "A13",
+        "A16 / I1-001"
+      ],
+      "scenarios": [
+        "C21",
+        "C26"
+      ],
+      "location": {
+        "path": "apps/web/features/work-page/hub-sections.tsx",
+        "line": 102,
+        "detail": "Work facts use standaloneHrefFor({}, entityHref(id)), including continuation links."
+      },
+      "evidence": [
+        {
+          "path": "apps/web/features/work-page/work-sources.tsx",
+          "line": 50,
+          "detail": "Pages exposes nextCursor with no current cursor."
+        },
+        {
+          "path": "apps/web/features/entity-page/route.ts",
+          "line": 41,
+          "detail": "The continuation URL becomes /e/<id>?statements=<cursor>#statements."
+        },
+        {
+          "path": "apps/web/app/[locale]/e/[ref]/page.tsx",
+          "line": 37,
+          "detail": "When the resource is a Work, permanentRedirect only preserves its /w address, not the query/cursor."
+        },
+        {
+          "path": "apps/web/features/work-page/hub-sections.tsx",
+          "line": 77,
+          "detail": "Every shared facts read starts at undefined cursor."
+        },
+        {
+          "path": "apps/web/features/work-page/recipe-reading-recorded-page.tsx",
+          "line": 231,
+          "detail": "The Recipe footer uses the same /e-based continuation factory."
+        }
+      ],
+      "concreteCounterexample": "The statements owner returns a first page with nextCursor = opaque-next and an external identity or accepted field on page two. Next points to /e/<work-id>?statements=opaque-next#statements. The real /e route redirects to /w/<work-address> without statements; the shared reader requests page one again. Later facts and their footer evidence are unreachable through this control.",
+      "impact": "The page promises continuation without consuming it, so the consolidated source/evidence section covers only the first page. In a Zone the link also leaves the Zone host/context.",
+      "classSweep": "Both common AboutFacts and Recipe WorkFactsView callers have the same problem, across every Work tab that now receives the footer. Other part/release/connection continuation routes were inspected separately; this finding does not claim they are broken.",
+      "recommendation": "Carry the statements cursor through the actual Work/Zone route and into the owner read, or use a real owner continuation interaction. Preserve the host and relevant selection context; adding a plausible /e link is insufficient.",
+      "validationGap": "No HTTP redirect or browser navigation test executed; this follows the exact link builder, route and read chain."
+    },
+    {
+      "id": "WORK-REVIEW-04",
+      "severity": "P2",
+      "title": "Field evidence omits the structured evidence that Main actually supplies",
+      "classification": "source-inference",
+      "landingBlockerConfirmed": false,
+      "origin": "New WorkFieldEvidence implementation is incomplete; the old generic fact renderer also did not establish this acceptance outcome.",
+      "acceptanceItems": [
+        "A13"
+      ],
+      "scenarios": [
+        "C21",
+        "C24",
+        "C26"
+      ],
+      "location": {
+        "path": "apps/web/features/work-page/work-sources.tsx",
+        "line": 107,
+        "detail": "Rows render a predicate, revision and item.sources, but never consume item.evidence."
+      },
+      "evidence": [
+        {
+          "path": "services/main/src/modules/entity-page/contract.ts",
+          "line": 111,
+          "detail": "A statement may include bounded structured wikiClaimEvidence."
+        },
+        {
+          "path": "services/main/src/modules/wiki/evidence-contract.ts",
+          "line": 5,
+          "detail": "The owner supplies sourceWork, exact representationSha256, locator, quote/quoteWithheld, method, modality, submitter and rightsBasis."
+        },
+        {
+          "path": "services/main/src/modules/statement/subject-read.ts",
+          "line": 637,
+          "detail": "Published statement evidence is re-fenced and projected onto item.evidence before return."
+        },
+        {
+          "path": "apps/web/features/work-page/work-sources.tsx",
+          "line": 111,
+          "detail": "Only source strings become generic Evidence N anchors. URL syntax validation does not recover the supplied source/field coordinates."
+        }
+      ],
+      "concreteCounterexample": "An accepted statement has sources [https://rezics.com/id/<evidence-id>] plus evidence [{id, sourceWork, representationSha256, locator: {pointer: /characters/0/name}, quote: Kirito is the retained character name, quoteWithheld: false, method, modality, submitter, rightsBasis}]. The footer can show Evidence 1 and the statement revision, but loses the exact owner-supplied source Work, representation, field locator, permitted quote and rights basis. The disclosure is absent even though the owner supplied it.",
+      "impact": "A person cannot inspect how the displayed field follows from its selected source. A provider identity or opaque Evidence link is not field-level adoption evidence.",
+      "classSweep": "WorkSources is shared by Book, Recipe, guide, game/media and Zone frames on every view. The source/fact split preserves domain predicates and component-property kinds, but the evidence row must also preserve real owner disclosure semantics on all of them.",
+      "recommendation": "Render the structured owner projection with exact source/representation/locator and permitted rights context, respecting quoteWithheld and unavailable states. Distinguish absent field evidence from provider/source identity. Use real resource navigation for owner IRIs where applicable.",
+      "validationGap": "The temporary renderer assertion and its report-target control never reached a test body; this finding remains source-inferred."
+    },
+    {
+      "id": "WORK-REVIEW-05",
+      "severity": "P2",
+      "title": "New game/media action chooses an edition without consuming saved preference or progress",
+      "classification": "source-inference",
+      "landingBlockerConfirmed": false,
+      "origin": "Introduced inventory-only header action in the candidate.",
+      "acceptanceItems": [
+        "A16 / I1-001"
+      ],
+      "scenarios": [
+        "C21",
+        "C26"
+      ],
+      "location": {
+        "path": "apps/web/features/work-page/work-views.tsx",
+        "line": 204,
+        "detail": "Every nonBook showsEditionStatus Work with a release or continuation gets a fabricated choose action."
+      },
+      "evidence": [
+        {
+          "path": "apps/web/features/entity-page/experience.ts",
+          "line": 40,
+          "detail": "This branch covers game and media presentations."
+        },
+        {
+          "path": "apps/web/features/work-page/hub-sections.tsx",
+          "line": 51,
+          "detail": "The existing primary-action composition reads start, preference, releases and owner progress before mapping the action."
+        },
+        {
+          "path": "apps/web/features/work-page/primary-action.tsx",
+          "line": 44,
+          "detail": "nextAction follows the owner primaryAction/edition preference and only offers local edition choice when no edition is chosen."
+        },
+        {
+          "path": "apps/web/features/work-page/work-views.tsx",
+          "line": 280,
+          "detail": "The status area does read the saved preference/progress, so the new CTA can contradict status beside it."
+        },
+        {
+          "path": "apps/web/features/work-page/anime-hub-recorded-page.tsx",
+          "line": 120,
+          "detail": "The recorded anime frame also constructs the inventory-only choose action."
+        },
+        {
+          "path": "apps/web/features/work-page/games-hub-recorded-page.ts",
+          "line": 122,
+          "detail": "The recorded game path retains the existing owner-aware hub action, so its happy-path proof does not exercise the production inventory-only choice."
+        }
+      ],
+      "concreteCounterexample": "A signed-in person has already chosen a release for a TV series or game and Main returns the saved edition and, for a composition, a primaryAction naming the next unfinished part. If the Work has any releases, ReadSlot always constructs {kind: choose, href: #availability, part: null}; it never reads those owner answers. The identity status can name the existing edition while the headline action asks the same person to choose one again.",
+      "impact": "The primary task is selected by a new frontend inventory rule instead of the capabilities and continuation already supplied by Main.",
+      "classSweep": "Production global/Zone game and media frames plus the recorded anime frame share the issue. Recorded game and Book primary actions already use the owner-aware path and must not regress when the branch is reconciled.",
+      "recommendation": "Consume the existing owner-selected progress/preference action through a common mapping, preserving type-appropriate wording and supported navigation. Releases existing is not authority to ask every person to choose an edition.",
+      "validationGap": "No signed-in stack or browser assertion ran for this state; the contradiction is inferred from the exact branching and existing owner types."
+    }
+  ],
+  "sourceReviewObservations": [
+    {
+      "area": "Identity and reports",
+      "assessment": "The visible Work identity is still the supplied WorkHeader. workReportTargets binds root reporting to work.id, synopsis to metadataRevision (falling back to Work revision) and cover to the exact cover selection. Zone menus carry the Realm IRI. ReportMenuItems passes target/realm/selection unchanged to reportHref. No source-level target substitution was found; menu hydration, keyboard behavior and server acceptance were not reproduced."
+    },
+    {
+      "area": "Book reading",
+      "assessment": "Books retain the owner-aware readStart / edition preference / progress mapping. Empty successful release results now suppress the inline chooser behind an explicit choice; unsuccessful reads remain visible. Contents, hosted-text return/resume and real multi-language synopsis coverage were inspected as call chains, not accepted through execution."
+    },
+    {
+      "area": "Consolidated sources and rights",
+      "assessment": "WorkFrame appends one WorkSources after body content for Book and nonBook layouts. Description/fact and Zone fact obligations are supplied to the footer; equal assessed obligations are grouped with field labels. External identities are restricted to explicit schema:identifier component-property records and are distinguished from domain facts. Findings 03 and 04 limit the actual completeness of this footer."
+    },
+    {
+      "area": "Current media attribution",
+      "assessment": "WorkSources supplies the selected cover and avatar query to CatalogueCoverCredit. The shared cover component follows current media presentation and suppresses unavailable or rating-hidden credits; masks retain credit without loading the original image. Source inspection found no new stale-credit branch. Exact current-media behavior still needs matching browser/API proof."
+    },
+    {
+      "area": "Navigation",
+      "assessment": "Added Editions and Connections tabs have actual global and Zone routes. WorkAt-aware route helpers preserve Zone paths; WorkTaskLink returns a secondary tab to the overview task while preserving relevant scope/language/open query state. No fabricated Cook endpoint is added. The facts continuation is the separate broken navigation path in finding 03."
+    },
+    {
+      "area": "Denied, unavailable and empty states",
+      "assessment": "RegionFailure keeps denied/sign-in/unavailable explicit and retryable. Missing is now a nonurgent status rather than an empty successful read. Moved/invalid continuation can restart where callers supply restartHref. Changed Work-level previews preserve next-only inventories and no longer silently discard missing. Wiki unavailable is distinct from empty. Known-Recipe projection failure and split Recipe requests remain findings 01 and 02."
+    },
+    {
+      "area": "Guide, prompt and skill tasks",
+      "assessment": "Guide headings, page-local contents and <=70ch body measures are source-visible. Copy controls consume published text; blank or unavailable text does not create copy capability. The original guide70ch assertion is retained; the final font probe waits two animation frames. No screenshot or assertion pass is claimed."
+    },
+    {
+      "area": "Shared primitives and existing callers",
+      "assessment": "RelationshipControl reports default to an empty list. Existing follow/negative menu items remain individually disabled while busy or before hydration after enabling the read-only menu trigger. Caller inventory includes profile/home follow buttons, feed realm follow, Realm membership, relationship manager, entity pages and WorkFrame. SubjectSources and statement-source splitting are new opt-in exports. RegionFailure is shared with contents/history/versions, entity sections, release/edition/part/connection pages and wiki. No additional regression was established from source; no shared primitive runtime suite ran."
+    },
+    {
+      "area": "Ingredient reading and assertions",
+      "assessment": "The amount-lexeme fallback retains the leading amount from a full original line, and shownLine uses qualifier text only when it matches the returned ingredient. Tests add a whole-line scaling case without deleting the original cases. Story adjustments preserve the substantive guide70ch/navigation assertions. The continuation inventory diff updates seven context hashes without removing the pre-existing exception entries."
+    }
+  ],
+  "checksActuallyExecuted": {
+    "recordingPrefix": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --",
+    "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2841",
+    "readOnlyGitCheck": {
+      "command": "git diff --check dcd0a9c6d60e745b65cd8b155c186c2531e185a0 4048d121aaea8c3e525acb935e3032ffacdc7d2e",
+      "exit": 0,
+      "meaning": "Whitespace validation of the exact candidate diff only."
+    },
+    "targetedProbe": {
+      "file": ".temp/catalogue-work-review/pinned-contract.test.tsx",
+      "sha256": "05806daf1873fed9686dc78c6b7f2000c382e00c64b1f2b74a9161eb3b1a0fcb",
+      "source": "import { expect, test } from 'bun:test';\nimport { renderToStaticMarkup } from 'react-dom/server';\nimport { AppRouterContext, type AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime.js';\nimport { seedServedTypes } from './apps/web/features/catalogue/type-fixtures.ts';\nimport { workExperience } from './apps/web/features/entity-page/experience.ts';\nimport { shelfVerb } from './apps/web/features/work-page/shelf-words.ts';\nimport { workReportTargets } from './apps/web/features/work-page/work-report-targets.ts';\nimport { WorkSources } from './apps/web/features/work-page/work-sources.tsx';\nimport { work, workRef } from './apps/web/features/work-page/fixtures.ts';\nimport { statements } from './apps/web/features/entity-page/fixtures.ts';\nimport { messages } from './apps/web/features/work-page/messages.ts';\n\nseedServedTypes();\nconst router: AppRouterInstance = { bfcacheId: '', refresh() {}, push() {}, replace() {}, back() {}, forward() {}, prefetch() {} };\n\ntest('known Recipe retains its type and cook shelf verb when projection is unavailable', () => {\n  const experience = workExperience(null, ['https://schema.org/Recipe']);\n  expect({ kind: experience.kind, shelf: shelfVerb(experience), typeSection: experience.typeSection })\n    .toEqual({ kind: 'recipe', shelf: 'cook', typeSection: null });\n});\n\ntest('control: Book fallback retains its book task and reading shelf', () => {\n  const experience = workExperience(null, ['https://schema.org/Book']);\n  expect({ kind: experience.kind, shelf: shelfVerb(experience) }).toEqual({ kind: 'book', shelf: 'read' });\n});\n\ntest('control: synopsis report keeps the rendered metadata revision', () => {\n  const report = workReportTargets(work, workRef).find(target => target.kind === 'text');\n  expect(report?.target).toBe(work.id);\n  expect(report?.selection?.revision).toBe(work.metadataRevision);\n});\n\ntest('page-end evidence exposes the field locator and quote actually supplied by its owner', () => {\n  const page = statements();\n  const item = page.groups[0]!.items[0]!;\n  if (item.kind !== 'statement') throw new Error('Expected statement fixture');\n  item.sources = ['https://rezics.com/id/00000000-0000-4000-8000-000000000042'];\n  item.evidence = [{ id: item.sources[0]!, sourceWork: work.id,\n    representationSha256: 'a'.repeat(64), locator: { pointer: '/characters/0/name' },\n    quote: 'Kirito is the retained character name', quoteWithheld: false,\n    method: { kind: 'source-excerpt' }, modality: 'text', submitter: work.id, rightsBasis: 'public-domain' }];\n  const html = renderToStaticMarkup(<AppRouterContext.Provider value={router}>\n    <WorkSources work={work} locale=\"en\" messages={messages.en}\n      statements={{ ok: true, data: page }} />\n  </AppRouterContext.Provider>);\n  expect(html).toContain('/characters/0/name');\n  expect(html).toContain('Kirito is the retained character name');\n});\n",
+      "candidateSource": "git archive of exact candidate apps/web/features, app, i18n, packages/ui, generated model types, then apps/accounts/features for the one setup correction; candidate source itself unmodified",
+      "intendedAssertions": [
+        "Recipe type/shelf fallback",
+        "Book fallback control",
+        "Synopsis revision control",
+        "Owner-supplied evidence locator/quote in footer"
+      ],
+      "tier": "Temporary helper/SSR probe; not an original public outcome test.",
+      "attempts": [
+        {
+          "job": "1828441a-f372-457c-995b-edfa25214709",
+          "command": "bun scripts/goal/goalctl.ts test ./.temp/catalogue-work-review/pinned-contract.test.tsx",
+          "exit": 1,
+          "classification": "setup-failure",
+          "assertionReached": false,
+          "summary": "0 pass, 1 fail, 1 import error",
+          "error": "Cannot find module '../../../accounts/features/api/oauth-query.ts' from scratch apps/web/features/auth/paths.ts",
+          "log": ".temp/goal/jobs/1828441a-f372-457c-995b-edfa25214709.log",
+          "setupCorrection": "Added only exact-candidate apps/accounts/features to the archived scratch tree. The QA runner also performed its automatic worktree task install; tracked status remained clean."
+        },
+        {
+          "job": "817a23ac-5c7a-4fab-bf01-2624d53f502e",
+          "command": "bun scripts/goal/goalctl.ts test ./.temp/catalogue-work-review/pinned-contract.test.tsx",
+          "exit": 1,
+          "classification": "setup-failure-after-one-correction",
+          "assertionReached": false,
+          "summary": "0 pass, 1 fail, 1 import error",
+          "error": "Cannot find module '../../../../generated/openapi/main/exposure.ts' from scratch apps/web/features/api/platform-access.ts",
+          "log": ".temp/goal/jobs/817a23ac-5c7a-4fab-bf01-2624d53f502e.log"
+        }
+      ],
+      "protocolLimit": {
+        "path": "docs/goals/worker.md",
+        "section": "After a review",
+        "instruction": "the reviewer gets one setup correction",
+        "effect": "Stopped reproduction after the corrected import setup still failed. No test body ran, no product failure was confirmed, and no worker fix round or landing blocker is asserted."
+      },
+      "environmentLimit": "The report worktree supplied installed dependencies; the scratch tree was not a complete executable candidate checkout. Import setup never completed, so no claim is made that all transitive runtime dependencies were pinned or that any assertion ran."
+    },
+    "reproducedProductAssertionFailures": [],
+    "candidateUnitOrStorySuitesRun": [],
+    "requiredReportChecks": {
+      "status": "passed",
+      "job": "bdf8d6de-1665-41ba-9c07-2a2d7ef4d96a",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/bdf8d6de-1665-41ba-9c07-2a2d7ef4d96a.1.log",
+          "result": "13 checker self-tests and 249 Markdown files passed. Local links, fragments and design navigation checked; JSON schema and runtime behavior are not tested by this command."
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/bdf8d6de-1665-41ba-9c07-2a2d7ef4d96a.2.log",
+          "fullCheckOutput": ".temp/goal/check/run-viBpge/output.log",
+          "result": "Types: no TypeScript workspace changed; tests: none named in brief; lint: no source changed; AST passed; 1/44 repository guards selected for the report path and passed."
+        }
+      ],
+      "scope": "Report branch checks, not candidate product validation. Python JSON parsing and exact 60-path inventory matching also passed."
+    }
+  },
+  "proofReuse": {
+    "candidateReceiptDirectoryExpected": ".temp/audit-remediation-20261019/two-hour-sprint/",
+    "localAvailability": "Directory and screenshots/receipts were not present in this worktree; only the staged acceptance map was supplied.",
+    "screenshotsViewed": [],
+    "receiptsReused": [],
+    "restriction": "No earlier 2320daf or unpinned/nonWork screenshot or check receipt is substituted for the final 4048d121 candidate."
+  },
+  "limitations": [
+    "All five findings are source inferences. The two attempted probe runs failed during module import; neither controls nor defect assertions executed.",
+    "No original outcome test, real public Book/Recipe corpus, signed-in browser, denied persona or screenshot ran. Catalogue acceptance findings remain open.",
+    "apps/web/tests/catalogue-detail-contract.e2e.ts from the independent acceptance context is absent at this candidate pin; no assertion was replaced or weakened to obtain a pass.",
+    "The candidate helper/story tests were read, not executed. Browser proof for guide readability, menus, focus, current cover attribution and responsive layout remains unverified here.",
+    "No shared services were started and no new acceptance corpus was prepared, as required by this review-only brief.",
+    "Report documentation and guard checks apply to this report branch, not to the isolated candidate implementation."
+  ],
+  "managerNext": [
+    "Attach this independent review to exact candidate 4048d121aaea8c3e525acb935e3032ffacdc7d2e only.",
+    "Route the five source findings to the Work owners for validation/correction on the prepared immutable candidate, retaining the original assertions and data. Do not treat import setup errors as product failures.",
+    "Use exact-pin existing candidate receipts/screenshots if available to the manager. Establish the original C27/C28/C31 and sources/reporting outcomes with genuine public data before closing catalogue findings.",
+    "Integrate the review report independently; this worker has no implementation, service, corpus or landing follow-up."
+  ],
+  "originalReviewCheckpoint": {
+    "observedAt": "2026-10-19T07:14:59.671901+00:00",
+    "disposition": "review-complete-with-source-inferred-findings",
+    "acceptance": "Five actionable source findings remain. No product assertion executed successfully, no public defect was reproduced, and no executable landing blocker is established. This review neither closes catalogue acceptance nor authorizes landing.",
+    "reportBeforeContinuationSha256": "869727373a9636263cd262fd9e20bbd441ab0c526039b7b8c1ba3d13fbd89959",
+    "originalFindingsCanonicalJsonSha256": "056dd4bb864b13c1b295324f38f7b001e37c5704cee0fa38f6c895a30a5aff76",
+    "preservation": "The original pins, scope, five findings, source assertions, checks, failed probe source and limitations remain unchanged in this report. They describe the 4048d121 checkpoint. This section preserves its previous disposition verbatim; current disposition refers to finalCandidateCheckpoint."
+  },
+  "finalCandidateCheckpoint": {
+    "observedAt": "2026-10-19T07:40:58.449123+00:00",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "delegation": false,
+      "fallback": false
+    },
+    "pins": {
+      "branch": "sprint/catalogue-work-20261019",
+      "base": "dcd0a9c6d60e745b65cd8b155c186c2531e185a0",
+      "originalCandidate": "4048d121aaea8c3e525acb935e3032ffacdc7d2e",
+      "finalCandidate": "e8e0d73cb9e1bd86a5cfff6dbb7ed00de51a2294",
+      "finalCandidateTree": "0928fb61a346ba565074bafc2a191e3c62b552ab",
+      "reportWorktreeHead": "d18d412b3fda897e85fa2d9dcfee5224e6cb98af",
+      "deltaCommand": "git diff --no-ext-diff 4048d121aaea8c3e525acb935e3032ffacdc7d2e e8e0d73cb9e1bd86a5cfff6dbb7ed00de51a2294",
+      "deltaSha256": "bc0f90ac1394beffbe4eb89c16bb9a0cc9ec1a995b52763913a6bcc81cc308f4",
+      "deltaPathCount": 30,
+      "fullBaseToFinalPathCount": 70,
+      "deltaCommits": [
+        "6c10ad04fad1866d4025159f9b525a50ca971c5f fix(web): retain native Work tasks when detail reads are unavailable",
+        "a021ebfb67a11252c73ca37b144060eedebb236c fix(web): derive Recipe markers from the served type registry",
+        "a8e36c0cd72c80fb226528c58c74f239f261f86c Use retained edition choice for Work primary actions",
+        "c218170449a62cdaa43438a9f0681b762b029450 fix(web): align Work detail actions facts and owner evidence",
+        "e8e0d73cb9e1bd86a5cfff6dbb7ed00de51a2294 Preserve absent progress in recorded Work action mapping"
+      ],
+      "laterReceiptTipObserved": "2f1d01d177fd4fab041fcd7b144086818d7b602b",
+      "pinBoundary": "The manager explicitly selected e8e0d73. Read Git blobs at that pin; did not follow later branch/main movement, inspect its implementation delta, land, or edit another worktree."
+    },
+    "scope": {
+      "changedPathsInspected": [
+        "apps/web/features/entity-page/experience.test.ts",
+        "apps/web/features/entity-page/experience.ts",
+        "apps/web/features/recipe-editor/instructions.ts",
+        "apps/web/features/work-page/anime-hub-recorded-page.tsx",
+        "apps/web/features/work-page/anime-hub-recorded.stories.tsx",
+        "apps/web/features/work-page/hub-access.test.ts",
+        "apps/web/features/work-page/hub-sections.tsx",
+        "apps/web/features/work-page/messages.ts",
+        "apps/web/features/work-page/messages/de.ts",
+        "apps/web/features/work-page/messages/es.ts",
+        "apps/web/features/work-page/messages/fr.ts",
+        "apps/web/features/work-page/messages/ja.ts",
+        "apps/web/features/work-page/messages/ko.ts",
+        "apps/web/features/work-page/messages/zh-Hans.ts",
+        "apps/web/features/work-page/messages/zh-Hant.ts",
+        "apps/web/features/work-page/recipe-reading-recorded-page.test.ts",
+        "apps/web/features/work-page/recipe-reading-recorded-page.ts",
+        "apps/web/features/work-page/recipe-reading-recorded-page.tsx",
+        "apps/web/features/work-page/recipe-reading-recorded.stories.tsx",
+        "apps/web/features/work-page/types/actions.tsx",
+        "apps/web/features/work-page/types/recipe.tsx",
+        "apps/web/features/work-page/work-detail-contract.stories.tsx",
+        "apps/web/features/work-page/work-detail-contract.test.tsx",
+        "apps/web/features/work-page/work-frame.tsx",
+        "apps/web/features/work-page/work-nav.tsx",
+        "apps/web/features/work-page/work-primary-owner.test.tsx",
+        "apps/web/features/work-page/work-sources.tsx",
+        "apps/web/features/work-page/work-views.stories.tsx",
+        "apps/web/features/work-page/work-views.tsx",
+        "apps/web/tests/work-page-types.test.ts"
+      ],
+      "fullChangedPaths": [
+        "apps/web/features/entity-page/experience.test.ts",
+        "apps/web/features/entity-page/experience.ts",
+        "apps/web/features/entity-page/messages.ts",
+        "apps/web/features/entity-page/messages/de.ts",
+        "apps/web/features/entity-page/messages/es.ts",
+        "apps/web/features/entity-page/messages/fr.ts",
+        "apps/web/features/entity-page/messages/ja.ts",
+        "apps/web/features/entity-page/messages/ko.ts",
+        "apps/web/features/entity-page/messages/zh-Hans.ts",
+        "apps/web/features/entity-page/messages/zh-Hant.ts",
+        "apps/web/features/entity-page/sources.tsx",
+        "apps/web/features/entity-page/statement-groups.ts",
+        "apps/web/features/recipe-editor/ingredient-line.test.ts",
+        "apps/web/features/recipe-editor/ingredient-line.ts",
+        "apps/web/features/recipe-editor/instructions.ts",
+        "apps/web/features/relationships/control.tsx",
+        "apps/web/features/safety/report-action.tsx",
+        "apps/web/features/work-levels/connections.tsx",
+        "apps/web/features/work-levels/editions.tsx",
+        "apps/web/features/work-levels/pages.tsx",
+        "apps/web/features/work-levels/parts.tsx",
+        "apps/web/features/work-levels/previews-server.tsx",
+        "apps/web/features/work-levels/previews.tsx",
+        "apps/web/features/work-levels/route.ts",
+        "apps/web/features/work-page/anime-hub-recorded-page.tsx",
+        "apps/web/features/work-page/anime-hub-recorded.stories.tsx",
+        "apps/web/features/work-page/anime-relations-recorded-page.tsx",
+        "apps/web/features/work-page/books-edition-page.tsx",
+        "apps/web/features/work-page/books-edition-recorded.stories.tsx",
+        "apps/web/features/work-page/credits.tsx",
+        "apps/web/features/work-page/games-hub-recorded-page.ts",
+        "apps/web/features/work-page/games-hub-recorded-page.tsx",
+        "apps/web/features/work-page/hub-access.test.ts",
+        "apps/web/features/work-page/hub-frame.stories.tsx",
+        "apps/web/features/work-page/hub-sections.tsx",
+        "apps/web/features/work-page/messages.ts",
+        "apps/web/features/work-page/messages/de.ts",
+        "apps/web/features/work-page/messages/es.ts",
+        "apps/web/features/work-page/messages/fr.ts",
+        "apps/web/features/work-page/messages/ja.ts",
+        "apps/web/features/work-page/messages/ko.ts",
+        "apps/web/features/work-page/messages/zh-Hans.ts",
+        "apps/web/features/work-page/messages/zh-Hant.ts",
+        "apps/web/features/work-page/primary-action.tsx",
+        "apps/web/features/work-page/recipe-reading-recorded-page.test.ts",
+        "apps/web/features/work-page/recipe-reading-recorded-page.ts",
+        "apps/web/features/work-page/recipe-reading-recorded-page.tsx",
+        "apps/web/features/work-page/recipe-reading-recorded.stories.tsx",
+        "apps/web/features/work-page/region.tsx",
+        "apps/web/features/work-page/route.ts",
+        "apps/web/features/work-page/shelf-words.stories.tsx",
+        "apps/web/features/work-page/types/actions.tsx",
+        "apps/web/features/work-page/types/guide.tsx",
+        "apps/web/features/work-page/types/hub.tsx",
+        "apps/web/features/work-page/types/recipe.tsx",
+        "apps/web/features/work-page/wiki.tsx",
+        "apps/web/features/work-page/work-detail-contract.stories.tsx",
+        "apps/web/features/work-page/work-detail-contract.test.tsx",
+        "apps/web/features/work-page/work-frame.tsx",
+        "apps/web/features/work-page/work-header.tsx",
+        "apps/web/features/work-page/work-nav.tsx",
+        "apps/web/features/work-page/work-primary-owner.test.tsx",
+        "apps/web/features/work-page/work-report-targets.ts",
+        "apps/web/features/work-page/work-sources.tsx",
+        "apps/web/features/work-page/work-tabs.tsx",
+        "apps/web/features/work-page/work-views.stories.tsx",
+        "apps/web/features/work-page/work-views.tsx",
+        "apps/web/features/zones/site-work.tsx",
+        "apps/web/tests/work-page-types.test.ts",
+        "scripts/static/web-continuations.inventory.json"
+      ],
+      "supportingPathsInspected": [
+        "apps/web/features/work-page/read.ts",
+        "apps/web/features/work-page/primary-action.tsx",
+        "apps/web/features/work-page/books-edition-page.read.ts",
+        "apps/web/features/work-page/games-hub-recorded-page.ts",
+        "apps/web/features/work-page/recipe-reading-recorded-page.ts",
+        "apps/web/features/recipe-editor/instruction-reading.tsx",
+        "apps/web/features/tracking/types.ts",
+        "packages/document/src/index.ts",
+        "services/main/src/modules/session/preference-contract.ts",
+        "services/main/src/routes/progress-summaries.ts"
+      ],
+      "method": "Inspect all 30 changed paths from original to final pin, trace the affected owner/read/render/action chains and existing call sites, retain the prior 60-path independent review, and inspect exact-pin external receipts read-only. No new product test execution or implementation edit in this continuation."
+    },
+    "findingDispositions": [
+      {
+        "id": "WORK-REVIEW-01",
+        "originalSeverity": "P1",
+        "status": "addressed-in-source",
+        "evidence": [
+          "recipe-reading-recorded-page.tsx:65-72 caches initial Recipe, identity and projection by request main client, acting subject and exact href/id; frame and overview use these same functions. read.ts:46 caches reader, preserving client identity in production.",
+          "recipe-reading-recorded-page.tsx:210-213 derives canCook from that owner result and recipeMethodReady; ingredients-only, next-page methods, unavailable selected instructions and absent methods do not suffice.",
+          "recipe-editor/instructions.ts:17-35 uses the same occurrence/native-selection precedence as types/recipe.tsx Steps. Selected unavailable instructions never fall back to a legacy qualifier.",
+          "types/recipe.tsx:340-368 fences cooking on actual loaded method, busy and continuation state, and emits href-scoped readiness. CookThisButton subscribes to readiness; continuation can enable Cook after the complete method is rendered. Direct cook events/hash cannot bypass the body guard."
+        ],
+        "remainingValidation": "Source contract is corrected. No independent live populated/continued/native-instruction Cook journey was executed by this reviewer; fixture and unit counts are not public acceptance."
+      },
+      {
+        "id": "WORK-REVIEW-02",
+        "originalSeverity": "P2",
+        "status": "addressed-in-source",
+        "evidence": [
+          "entity-page/experience.ts retains registry Recipe/Prompt/Skill kind when the projection or its type section is absent, without inventing an href. Books/guides retain their existing fallback; unknown kinds remain plain.",
+          "WorkFrame uses the served type registry to retain exact Recipe semantic markers and full work.id. Recipe frame exposes disabled Cook; null successful recipe body uses recipeUnavailable; projection/owner failure has an explicit failure/retry state.",
+          "TypeExperience renders unavailable Prompt/Skill state when the operation is open but section/projection is unavailable; it retains platform-closed suppression and does not invent publish/read/copy actions."
+        ],
+        "remainingValidation": "Exact-pin original C31 desktop passes; phone reaches its original explanation assertion but observes a server-side 503 and a truthful failure alert. This does not reproduce a successful-null rendering defect. Other real Prompt/Skill unavailable and denied paths remain source-reviewed only."
+      },
+      {
+        "id": "WORK-REVIEW-03",
+        "originalSeverity": "P2",
+        "status": "addressed-in-source",
+        "evidence": [
+          "workFactsSelection retains the actual pathname, existing query selections and opaque statements cursor, replacing only the continuation section and fragment. Repeated or overlong cursor selections are invalid.",
+          "hub-sections.tsx readWorkFacts reads actual request x-rezics-page-url (or supplied pageUrl), passes the admitted cursor to readStatements and returns the same selection to AboutFacts.",
+          "Recipe host supplies the actual pageUrl; its frame passes the cursor into readLinkedStatements and the same href/cursor into WorkFactsView. Facts next/restart stay on the real Work/Zone view instead of /e redirect.",
+          "WorkFactsView now supplies current cursor to Pages and preserves successful-empty StatementsView state, including the original UndatedVisitorPhone expectation. Existing callers without cursor still use their supplied hrefFor."
+        ],
+        "remainingValidation": "No live two-page Work/Zone facts traversal was run by this reviewer. Source and targeted added assertions cover the mechanism; final-pin whole seven-view/Zone acceptance is not inferred."
+      },
+      {
+        "id": "WORK-REVIEW-04",
+        "originalSeverity": "P2",
+        "status": "addressed-in-source",
+        "evidence": [
+          "work-sources.tsx WorkFieldEvidence now renders item.evidence alongside original sources: source Work, exact SHA-256 representation, locator, method, modality, submitter and rights basis under the fact/revision.",
+          "quoteWithheld or null quote produces an unavailable notice and cannot expose the supplied quotation. Generic provider provenance remains separate from field evidence.",
+          "WorkSources remains one page-end section; original source identifier splitting, assessed rights obligations, source records, and exact report selections are retained. Added fixtures do not alter original owner data."
+        ],
+        "remainingValidation": "No new live accepted-fact evidence corpus was prepared. Structured evidence is source-reviewed and added candidate tests exercise serialization/withholding; their count alone does not close evidence acceptance."
+      },
+      {
+        "id": "WORK-REVIEW-05",
+        "originalSeverity": "P2",
+        "status": "partially-addressed-in-source",
+        "addressed": [
+          "ReadSlot routes Book and edition-bearing game/media through shared PrimaryAction rather than synthesizing choose solely from inventory.",
+          "Anime recorded frame reads actual saved preference/progress on mount and after edition-save, uses nextAction, and fences stale identity refresh. e8e0 preserves null for absent progress.",
+          "A concrete saved release or realization with no higher-priority start/series action now suppresses redundant Choose, consistent with status; owner primaryAction remains consumed."
+        ],
+        "residuals": [
+          {
+            "severity": "P2",
+            "classification": "source-inference",
+            "title": "A saved language-only preference still produces a redundant edition choice",
+            "paths": [
+              "apps/web/features/work-page/primary-action.tsx:56",
+              "apps/web/features/work-page/work-views.tsx:201",
+              "services/main/src/modules/session/preference-contract.ts:6",
+              "services/main/src/routes/progress-summaries.ts:79"
+            ],
+            "counterexample": "Main returns preference {work:<this Work>,language:\"ja\",edition:null,version:1}, a non-series or unavailable progress result, no readable start, and a nonempty release inventory. This is an admitted saved preference (PUT explicitly allows absent edition), but nextAction:57 counts only preference.data.edition and returns choose. IdentityStatus displays the saved Japanese choice while the header asks the same person to choose again.",
+            "classSweep": "New shared ReadSlot consumers (game/media), Anime replay and existing Book/Games nextAction callers all share this predicate.",
+            "requestedChange": "Respect the owner-retained language-only preference when mapping the next action; validate both language-only and exact release/realization choices. Do not add a second frontend edition policy.",
+            "reproduced": false
+          },
+          {
+            "severity": "P2",
+            "classification": "source-inference",
+            "title": "The new game/media PrimaryAction path can fabricate Read from an unavailable contents answer",
+            "paths": [
+              "apps/web/features/work-page/work-views.tsx:201",
+              "apps/web/features/work-page/hub-sections.tsx:51",
+              "apps/web/features/work-page/read.ts:360",
+              "apps/web/features/work-page/games-hub-recorded-page.ts:40",
+              "apps/web/features/work-page/primary-action.tsx:56"
+            ],
+            "counterexample": "A media/game Work with releases has no disclosed readable text/part and no series primaryAction; its /contents read returns 503. readSuppliedStart converts this failure to {kind:\"contents\"}, and the newly reused PrimaryAction prioritizes that start over saved preference/releases. The header therefore offers Read to Contents using a failure as availability evidence. The Anime recorded fix instead passes start:null, so its saved-choice story does not test this production path.",
+            "classSweep": "Every newly routed edition-bearing nonBook surface is affected; the inherited Book fallback is also visible through the shared helper, but this review does not redefine the Book contract.",
+            "requestedChange": "Keep unknown/denied read availability explicit when mapping nonBook primary actions and consume disclosed next/read capabilities. Cover the actual production path with unavailable contents plus saved/no saved choice.",
+            "reproduced": false
+          }
+        ],
+        "remainingValidation": "Residuals are actionable source inferences, not reproduced product assertions or executable landing blockers. Targeted owner/API validation is needed; do not count passing saved-iteration replay as proving all production inputs."
+      }
+    ],
+    "sharedPrimitiveRegressionReview": [
+      "Scanned every workExperience and WorkKindActions caller. Recipe fallback preserves kind rather than a guessed link; Anime collection/relations remain nonRecipe kinds. Recipe production frame supplies explicit readiness. Cook defaults in generic stories do not establish owner readiness.",
+      "Instruction readiness matches the existing Steps and InstructionReading precedence, including selected content blocks, native unavailable selections, legacy text and recording details; append/scale/continuation data and original independent assertions remain intact.",
+      "WorkFactsView retains supplied HrefFor for older callers and restores a visible successful-empty state; shared page-end WorkSources/sourceHref/SubjectSources behavior outside evidence rendering is unchanged from original reviewed pin.",
+      "RelationshipControl, report-action, current media attribution, exact WorkReport targets and edition/connections route primitives have no new delta. Their prior source checks remain applicable by exact unchanged Git blobs.",
+      "The original guide70ch assertion and two-animation-frame font probe remain byte-identical across the final delta. Original catalogue-detail-contract test and browser fixture are not changed by the candidate."
+    ],
+    "evidenceClasses": {
+      "sourceInference": "Residual WORK-REVIEW-05 counterexamples above; original five source findings preserved as historical data. Four source remediations do not equal public product acceptance.",
+      "reproducedAssertionFailure": {
+        "case": "C31 / visitor / a null public Recipe body keeps Recipe identity and gives a useful Cook explanation",
+        "device": "phone",
+        "frontendPin": "e8e0d73cb9e1bd86a5cfff6dbb7ed00de51a2294",
+        "backendPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "run": "run-e8e0d73cb9e1-1792395210033",
+        "assertionReached": true,
+        "failingLocation": "null-recipe.e2e.ts:27",
+        "actual": "Expected region Recipe containing Cooking instructions are not available; no such region. Exact identity, semantic type, no Want to read and disabled Cook assertions had passed. UI instead showed a Recipe failure alert and Retry.",
+        "premise": "Owner preflight and later browser API both returned 200/null; server.log records recipe_page_read_failed status503 during the actual page request. Hence page read and later browser read do not share a successful-null response.",
+        "disposition": "Actual outcome assertion failure, not a setup/helper failure. Not sufficient to attribute a null-body rendering defect or introduce a code landing blocker. Resolve the transient/page-read response premise with the existing operator; preserve the failed receipt."
+      },
+      "setupFailure": "The original two reviewer scratch probes still failed at module setup before any test body. No third setup attempt or new reviewer product test was made. These remain unconfirmed and use no worker fix round."
+    },
+    "checksAndProofReuse": {
+      "reviewerExecuted": [
+        {
+          "command": "git diff --check 4048d121aaea8c3e525acb935e3032ffacdc7d2e e8e0d73cb9e1bd86a5cfff6dbb7ed00de51a2294",
+          "result": "pass"
+        },
+        {
+          "command": "Read-only Git blob/call-site inspection and SHA-256/source comparison",
+          "result": "pass",
+          "details": "30 delta paths inspected; original independent C31 file hash matches, exact original test body appears unchanged in selected wrapper; stripped body hash a87833c931e92e37bee36a111bbe031eb4f4e9ffa2bf258bfcb2e05ac60d10a5. No test assertion/data was edited."
+        }
+      ],
+      "exactPinReused": [
+        {
+          "case": "Original C31 null-body visitor desktop",
+          "run": "run-e8e0d73cb9e1-1792395081065",
+          "frontendPin": "e8e0d73cb9e1bd86a5cfff6dbb7ed00de51a2294",
+          "backendPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "result": "pass",
+          "expected": 1,
+          "unexpected": 0,
+          "productApiMocks": false,
+          "assertionBodyUnchanged": true,
+          "executedBy": "existing acceptance operator, not this reviewer",
+          "reviewerViewedScreenshot": true
+        },
+        {
+          "case": "Original C31 null-body visitor phone",
+          "run": "run-e8e0d73cb9e1-1792395210033",
+          "frontendPin": "e8e0d73cb9e1bd86a5cfff6dbb7ed00de51a2294",
+          "backendPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "result": "outcome-assertion-failure-with-page-read-503",
+          "expected": 0,
+          "unexpected": 1,
+          "productApiMocks": false,
+          "assertionBodyUnchanged": true,
+          "executedBy": "existing acceptance operator, not this reviewer",
+          "reviewerViewedScreenshot": true
+        }
+      ],
+      "candidateGateDiagnostics": {
+        "source": "candidate-pre-cleanup-gate.log in frozen receipt directory",
+        "result": "reported-fail-before-2f1d01d-cleanup",
+        "verifiedAtExactPin": [
+          "work-views.tsx imports readReleases but no longer uses it (lint no-unused-vars).",
+          "AST guard rejects literal /w/ and /e/ paths in work-sources.tsx evidence links and /w/test in new continuation tests.",
+          "Static web projection/accepted-command guard diagnostics are reported; accepted-command timeout retry passed but projection syntax failure remains in the supplied gate summary."
+        ],
+        "limit": "No independent candidate gate rerun. Receipt was republished at 2f1d01d; diagnostics themselves match e8e0 source, but later cleanup checks cannot establish a passing e8e0 gate."
+      },
+      "laterReceiptExcluded": {
+        "receipt": "candidate-followup-observed.json",
+        "tip": "2f1d01d177fd4fab041fcd7b144086818d7b602b",
+        "claims": "133 focused units, 17 selected browser states, screenshot reviews and final combined types pass are reported; normal gate failed before cleanup and newer cleanup checks were running.",
+        "reason": "Receipt now covers a different tip and does not independently bind every claimed run to exact e8e0 code. These counts and third-party image reviews are not this reviewer execution or immutable-pin acceptance proof."
+      },
+      "reportValidation": {
+        "status": "pass",
+        "checkedAt": "2026-10-19T07:42:04.599467+00:00",
+        "recordedJob": "bf2c7251-5469-480b-8c56-ef97c54ae349",
+        "launcher": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+        "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2841",
+        "steps": [
+          {
+            "command": "task docs:check",
+            "result": "pass",
+            "exitCode": 0,
+            "log": ".temp/goal/jobs/bf2c7251-5469-480b-8c56-ef97c54ae349.1.log",
+            "sha256": "e89cac22f734b770ae80f29fa55db47cac67fd8faec75e30d57dcc56b5798b5a"
+          },
+          {
+            "command": "task goal -- check",
+            "result": "pass",
+            "exitCode": 0,
+            "log": ".temp/goal/jobs/bf2c7251-5469-480b-8c56-ef97c54ae349.2.log",
+            "sha256": "20bd36c061bcffe8cb0d4bb42bac2867b0331d97f2f88dcb49fbdaf69195158c"
+          }
+        ],
+        "scope": "Report-only validation: docs 13 self-tests and 249 Markdown files; goal types/lint skipped because no source workspace changed, no brief tests, AST pass and 1/44 selected guard pass. This does not run or certify the candidate.",
+        "fullCheckLog": ".temp/goal/check/run-TcRlu5/output.log"
+      },
+      "frozenEvidenceManifest": ".temp/catalogue-work-review/final-e8e0-receipts/manifest.json",
+      "frozenEvidenceFiles": [
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/work-review-followup.json",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/candidate-followup-observed.json",
+          "sha256": "21e2c41b99599acb6c9015fc663e30b19d9865c1519ed656f46273b075ef3299"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/source-receipt.json",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/original-source-receipt.json",
+          "sha256": "d18cc9aa7f218a6aca88387c757411fccafc2c527a394921f6ae1c3ab70cd4e2"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/null-recipe.e2e.ts",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/null-recipe.e2e.ts",
+          "sha256": "d63256aa42c3732f1ea9d27b11a0cfc3142de9488b8fa6fc5d819747e1b04509"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395081065/run-receipt.json",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395081065/run-receipt.json",
+          "sha256": "264615cf9be03672912de64d75839dfc30c57b0d30f89a2ed86934f12e91f4cf"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395081065/result.json",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395081065/result.json",
+          "sha256": "f65825e2449bbaa1a631f784ee2ba59420175e10e439fd711f499a525836b826"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395081065/header.response.json",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395081065/header.response.json",
+          "sha256": "66b818198c10228cf01b6cb2fba60dbfe622006d4e314ec276469d6ada4bb56f"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395081065/recipe.response.json",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395081065/recipe.response.json",
+          "sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395081065/server.log",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395081065/server.log",
+          "sha256": "33fc308ccce230314923cdf1f818833f227b67a437c6973de4c173373ec012c9"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395081065/browser.log",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395081065/browser.log",
+          "sha256": "fb3a57081f289d3bde1465aaf434e6e770f54d901a3f6b401eb3363e9e54c90c"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395081065/results/null-recipe.e2e.ts-C31-vis-d1520-s-a-useful-Cook-explanation/test-finished-1.png",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395081065/results/null-recipe.e2e.ts-C31-vis-d1520-s-a-useful-Cook-explanation/test-finished-1.png",
+          "sha256": "9f7699d17b615947185075e36f556539018e4512dba034896a3cfc1b3f7e824d"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395210033/run-receipt.json",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395210033/run-receipt.json",
+          "sha256": "c5a4508365412a1a24172c4a2d78ae0f229d054e0da4a5df3dce7ae478dc70dd"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395210033/result.json",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395210033/result.json",
+          "sha256": "eeecd81a9fe345ba79ba750664cf4558a4722f83db8a01473c90344af83a976d"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395210033/header.response.json",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395210033/header.response.json",
+          "sha256": "f70be6f9e1d690acc2930ac47f69162a5e772dad63a4af8869ecba850ab82a23"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395210033/recipe.response.json",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395210033/recipe.response.json",
+          "sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395210033/server.log",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395210033/server.log",
+          "sha256": "868f944afd18df1b1f7006122b493b6f9c63b60a1de544b01b3eb8c200929783"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395210033/browser.log",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395210033/browser.log",
+          "sha256": "dcf651113a16b25e10b8626e9a740ecaa1b6636adb0f25784510edfe2596e6a4"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395210033/results/null-recipe.e2e.ts-C31-vis-d1520-s-a-useful-Cook-explanation/test-failed-1.png",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395210033/results/null-recipe.e2e.ts-C31-vis-d1520-s-a-useful-Cook-explanation/test-failed-1.png",
+          "sha256": "9a534fac08af9b3b942c88cf65ba2009e46c08179c837f56c11f523889af0c9c"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-e8e0d73cb9e1-1792395210033/results/null-recipe.e2e.ts-C31-vis-d1520-s-a-useful-Cook-explanation/error-context.md",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/run-e8e0d73cb9e1-1792395210033/results/null-recipe.e2e.ts-C31-vis-d1520-s-a-useful-Cook-explanation/error-context.md",
+          "sha256": "13a9baebd09b207b03a065878259ce9c2f8b5df416f71da89dbec6c219127b1f"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-review-fixes-check-final.log",
+          "copy": ".temp/catalogue-work-review/final-e8e0-receipts/candidate-pre-cleanup-gate.log",
+          "sha256": "e8a35686c9041d8fd4e6f138712a2acf3a30347d27a01a2bfe785855ee775bae"
+        }
+      ]
+    },
+    "limitations": [
+      "Review only: no implementation edits, shared service starts, corpus preparation, data writes, landing or conversion prerequisite.",
+      "No whole-wave or review-of-review expansion. Latest branch movement is outside the selected immutable target.",
+      "Full canonical A08/A18 and C21/C22/C24/C26/C27/C28/C31 persona/view matrix remain unproven by this checkpoint. Source review, narrow C31, fixture pass and unit count do not close catalogue findings.",
+      "Only two exact-pin original C31 screenshots were independently viewed by this reviewer. Other screenshot counts remain operator reports.",
+      "Manual citation/source selection remains independent of conversion/raw/proof generation; no conversion proof is imposed.",
+      "Source-read availability and environment behavior cannot be inferred from a later API request alone; phone 503 is retained separately from the successful desktop null-body run."
+    ],
+    "managerNext": "Use this exact-pin checkpoint with the unchanged original report. Resolve residual WORK-REVIEW-05 through targeted real owner inputs and retain failed phone evidence. Any newer candidate such as 2f1d01d requires its own explicitly selected immutable delta and matching receipts; do not infer this review approves or lands it."
+  },
+  "finalCandidateResolutionCheckpoint": {
+    "observedAt": "2026-10-19T07:54:22.201158+00:00",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "delegation": false,
+      "fallback": false
+    },
+    "priorReportCommit": "69986e703dd0afa4c40b1075a557b697cc56d42e",
+    "preservedPriorDisposition": {
+      "disposition": "final-pinned-review-complete-four-source-remediations-one-partial",
+      "acceptance": "At exact e8e0d73cb9e1bd86a5cfff6dbb7ed00de51a2294, WORK-REVIEW-01 through 04 are addressed in source; WORK-REVIEW-05 is partially addressed with two concrete residual source counterexamples. Reused exact-pin original C31 passes desktop and fails phone at its explanation assertion, with a server-side 503 during the phone page read. No full catalogue closure or landing approval follows. Later 2f1d01d candidate checks are outside this immutable review.",
+      "allPriorFieldsExceptCurrentTopDispositionAndAcceptancePreserved": true
+    },
+    "pins": {
+      "base": "dcd0a9c6d60e745b65cd8b155c186c2531e185a0",
+      "originalCandidate": "4048d121aaea8c3e525acb935e3032ffacdc7d2e",
+      "previouslyReviewedCandidate": "e8e0d73cb9e1bd86a5cfff6dbb7ed00de51a2294",
+      "finalCandidate": "a636f3b460aa89d80e4a454bef2ececa9dedf128",
+      "branch": "sprint/catalogue-work-20261019",
+      "finalTree": "0373ac8dcd8e2d93a72a10f793cbb588d38c595a",
+      "boundedDeltaSha256": "eb3c1caf44ae7ac18950ff4d67fc4953d88b892d891ba55b3f04d0750c76c04b",
+      "boundedDeltaPathCount": 15
+    },
+    "scope": "Actual independent source review of the complete e8..a636 bounded diff and relevant owner/shared call chains; original exact-base/original-candidate review and every original finding/disposition remain historical evidence below. No implementation, service, corpus, landing or unchanged whole-tier rerun.",
+    "inspectedPaths": [
+      "apps/web/features/work-page/anime-hub-recorded-page.tsx",
+      "apps/web/features/work-page/games-hub-recorded-page.test.ts",
+      "apps/web/features/work-page/games-hub-recorded-page.ts",
+      "apps/web/features/work-page/hub-sections.tsx",
+      "apps/web/features/work-page/primary-action.tsx",
+      "apps/web/features/work-page/read.ts",
+      "apps/web/features/work-page/recipe-reading-recorded-page.tsx",
+      "apps/web/features/work-page/recipe-reading-recorded.stories.tsx",
+      "apps/web/features/work-page/types/recipe.tsx",
+      "apps/web/features/work-page/work-detail-contract.stories.tsx",
+      "apps/web/features/work-page/work-detail-contract.test.tsx",
+      "apps/web/features/work-page/work-frame.tsx",
+      "apps/web/features/work-page/work-primary-owner.test.tsx",
+      "apps/web/features/work-page/work-sources.tsx",
+      "apps/web/features/work-page/work-views.tsx"
+    ],
+    "findingDispositions": [
+      {
+        "id": "WORK-REVIEW-01",
+        "originalSeverity": "P1",
+        "disposition": "addressed-in-source",
+        "assessment": "Source addressed; final delta preserves request-scoped Recipe page, exact continuation and Cook readiness. Recipe refusal retains named explanation and exact failure with Retry.",
+        "locations": "apps/web/features/work-page/recipe-reading-recorded-page.tsx; types/recipe.tsx",
+        "acceptanceLimit": "Source remediation is not full canonical catalogue acceptance; historical reproduced failures remain preserved."
+      },
+      {
+        "id": "WORK-REVIEW-02",
+        "originalSeverity": "P2",
+        "disposition": "addressed-in-source",
+        "assessment": "Source addressed; known Recipe/Prompt/Skill projection identities and original semantic markers remain. Recipe absent/refused states use the named instruction region without fabricating instructions.",
+        "locations": "apps/web/features/work-page/types/recipe.tsx; work-frame.tsx",
+        "acceptanceLimit": "Source remediation is not full canonical catalogue acceptance; historical reproduced failures remain preserved."
+      },
+      {
+        "id": "WORK-REVIEW-03",
+        "originalSeverity": "P2",
+        "disposition": "addressed-in-source",
+        "assessment": "Source addressed; shared cursor parser preserves opaque statements cursor, rejects malformed/repeated input, and feeds actual Work/Zone page context. Native entries and nextCursor envelopes remain together.",
+        "locations": "apps/web/features/work-page/work-sources.tsx; games-hub-recorded-page.ts",
+        "acceptanceLimit": "Source remediation is not full canonical catalogue acceptance; historical reproduced failures remain preserved."
+      },
+      {
+        "id": "WORK-REVIEW-04",
+        "originalSeverity": "P2",
+        "disposition": "addressed-in-source",
+        "assessment": "Source addressed; structured source evidence rendering remains. Address helper substitutions preserve actual entity/global-work destinations; no new citation or conversion prerequisite introduced.",
+        "locations": "apps/web/features/work-page/work-sources.tsx",
+        "acceptanceLimit": "Source remediation is not full canonical catalogue acceptance; historical reproduced failures remain preserved."
+      },
+      {
+        "id": "WORK-REVIEW-05",
+        "originalSeverity": "P2",
+        "disposition": "addressed-in-source",
+        "assessment": "Both e8 residual source counterexamples addressed: an admitted language-only preference is a saved choice; refused contents returns typed unavailable with original status/problem, and production action renders failure/Retry without invented Read. Actual continue/text/chapter actions remain; choosing a release remains independently justified when no saved choice exists.",
+        "locations": "apps/web/features/work-page/primary-action.tsx; read.ts; games-hub-recorded-page.ts; hub-sections.tsx; work-frame.tsx",
+        "acceptanceLimit": "Source remediation is not full canonical catalogue acceptance; historical reproduced failures remain preserved."
+      }
+    ],
+    "additionalChangedSurfaceReview": [
+      {
+        "surface": "All known Work identity/header scopes",
+        "assessment": "Native type registry owns exact full Work identity/semantic markers in the non-Book header and Book PageContainer. One owning subject scope per branch. Guide fix applies to every known kind rather than a scenario exception; original assertion bodies remain unchanged."
+      },
+      {
+        "surface": "Recipe absent and failed states",
+        "assessment": "RecipeReadFailure adds named recipe-experience region and truthful explanation around actual RegionFailure. Applied to projection/read failures and absent sections in Recipe overview/region paths. Does not turn 503 into available instructions."
+      },
+      {
+        "surface": "Shared ReadStart and existing callers",
+        "assessment": "Explicit unavailable union is excluded from nextAction read actions and suppressed by WorkFrame ReadButton. PrimaryAction displays real refusal/Retry. Successful contents navigation remains a fallback only after admitted contents, with nextCursor retained; empty first page is empty only without continuation."
+      },
+      {
+        "surface": "Gate cleanup and facts links",
+        "assessment": "Unused import removal is inert; shared parseEntityCursors replaces hand parsing without inventing cursor arithmetic. Canonical entity/globalWork address helpers replace literals. Anime and Work inventories retain entries plus nextCursor, preserving opaque owner envelopes."
+      }
+    ],
+    "newProductFindings": [
+      {
+        "id": "WORK-REVIEW-06",
+        "severity": "P2",
+        "title": "Known Work header still lacks the named primary-action contract",
+        "classification": "reproduced-assertion-failure with source confirmation",
+        "candidate": "a636f3b460aa89d80e4a454bef2ececa9dedf128",
+        "counterexample": {
+          "subject": "https://rezics.com/id/01a0e90a-d0ce-7480-a1af-e9ffc90f537e",
+          "title": "Mod setup checklist",
+          "semanticType": "https://schema.org/DigitalDocument",
+          "widths": [
+            1440,
+            390
+          ],
+          "case": "Original C22/C26 work rich header",
+          "assertion": "Primary actions group within main [data-subject-header] must expose visible View guide button or link",
+          "reached": true,
+          "result": "Both widths fail at unchanged assertion44; original identity helper now passes."
+        },
+        "locations": [
+          "apps/web/features/work-page/work-frame.tsx:144",
+          "apps/web/features/work-page/work-frame.tsx:164",
+          "apps/web/features/work-page/types/actions.tsx:58"
+        ],
+        "sourceEvidence": "Both WorkFrame branches render primary/status in an unnamed div id=ACTION_ID. WorkKindActions supplies a Guide task link, but no named Primary actions group is introduced. Final rendered readiness document has no Primary actions text. Failure establishes missing named action contract; it does not establish that every action is absent visually.",
+        "action": "Restore one localized named primary-action group containing the actual type task inside the exact identity scope in both frame branches. Apply to all known Work kinds and Book callers; preserve consumed availability/refusals and do not invent navigation. Re-execute unchanged original header cases and later action/layout assertions.",
+        "proof": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396072620/browser.log"
+      }
+    ],
+    "evidenceClasses": {
+      "sourceInference": "All five original mechanisms and both e8 residual counterexamples are addressed at final pin based on reviewed source. The newly available final original Guide run establishes the separate named primary-action contract failure WORK-REVIEW-06, with source confirmation in shared frame containers.",
+      "reproducedAssertionFailure": "Historical e8 C31 phone explanation assertion with Recipe503 and c669 Guide identity-helper failures remain preserved. Exact a636 original Guide C22/C26 at1440/390 reaches action assertion44 and fails: within main [data-subject-header], group Primary actions contains no visible button/link View guide. This is an actual assertion failure, not setup. Final normal gate fails page-filter alias inventory; accepted-command timeout passed automatic retry.",
+      "setupFailure": "c669 original C31 phone rerun did not reach assertions because port43130 was occupied. This is setup-incomplete, separate from the e8 phone assertion failure.",
+      "pendingOrLimited": "Exact a636 original C31 desktop and phone both finish exit0 against genuine backend75409, unchanged original body/helpers, no product API mocks or shared data preparation. Exact a636 original Guide both widths fail; reactions/more-action/layout assertions after the missing primary action were not reached. Other canonical findings are not closed by these selected cases."
+    },
+    "checksActuallyExecuted": [
+      {
+        "command": "git diff e8e0d73..a636f3b; git diff --name-only; exact git show/call-chain reads",
+        "result": "Read complete bounded 15-path delta, including changed tests and shared-owner consumers."
+      },
+      {
+        "command": "git diff --check e8e0d73cb9e1bd86a5cfff6dbb7ed00de51a2294 a636f3b460aa89d80e4a454bef2ececa9dedf128",
+        "exitCode": 0,
+        "output": ""
+      },
+      {
+        "command": "Read exact-candidate followup receipt and final residual logs; read selected-original run receipts",
+        "result": "Reused checks below; not rerun by reviewer."
+      }
+    ],
+    "proofReuse": {
+      "followupVerifiedAt": "2026-10-19T07:50:08.495211+00:00",
+      "finalResidualRepair": {
+        "from": "c66950b774beef9727ad5f1a9142cf425b992fb8",
+        "tip": "1de1bee4d89441de1460d4ce52eaa88258d9f0c8",
+        "paths": [
+          "apps/web/features/work-page/games-hub-recorded-page.test.ts",
+          "apps/web/features/work-page/games-hub-recorded-page.ts",
+          "apps/web/features/work-page/hub-sections.tsx",
+          "apps/web/features/work-page/primary-action.tsx",
+          "apps/web/features/work-page/read.ts",
+          "apps/web/features/work-page/work-detail-contract.stories.tsx",
+          "apps/web/features/work-page/work-frame.tsx",
+          "apps/web/features/work-page/work-primary-owner.test.tsx"
+        ],
+        "description": [
+          "Admitted language-only owner preference counts as saved choice.",
+          "True contents refusal remains typed unavailable with exact status/problem; production primary action retains failure/Retry and cannot fabricate Read. Actual successful contents fallback and text/chapter/continue actions preserved.",
+          "Native entries and nextCursor retained together; no continuation exception added.",
+          "Shared native registry identity markers cover known Work kinds, with one owning subject scope. Original Guide contract marker preserved without changing assertion."
+        ],
+        "checksPending": [],
+        "originalAssertionsModified": false,
+        "checksCompleted": [
+          "37 unit tests, 3 files PASS",
+          "affected 1900-file type check PASS",
+          "final native envelope1892-file type check PASS",
+          "2 Guide desktop/phone browser stories PASS; both actual screenshots AI viewed",
+          "lint PASS",
+          "AST PASS",
+          "continuation guard PASS",
+          "Final immutable normal lint1.3s, AST0.4s,9selected guards121testsPASS8.9s"
+        ],
+        "sourcePin": "a636f3b460aa89d80e4a454bef2ececa9dedf128",
+        "gateAdaptation": {
+          "path": "scripts/static/web-page-filtering.inventory.json",
+          "commit": "1de1bee4d89441de1460d4ce52eaa88258d9f0c8",
+          "from": "a636f3b460aa89d80e4a454bef2ececa9dedf128",
+          "result": "Exact two existing selection predicates retain owner-audit obligation under explicit entries/nextCursor aliases; same continue predicate also tracked at synthetic helper origin. No guard code/assertion or predicate body changed.",
+          "preparedDelta": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-review-predicate-adaptation.json"
+        }
+      },
+      "finalChecks": [
+        {
+          "phase": "final-a636-residual",
+          "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-review-residual-unit-final.log",
+          "result": "37 PASS across3files",
+          "sha256": "450415b855c86743375dfdb3c731f07a356b1b8f4e3f7035db600c58a3982858"
+        },
+        {
+          "phase": "final-a636-residual",
+          "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-review-residual-types-final.log",
+          "result": "1900 files PASS",
+          "sha256": "cf7b941af3802c99c6d6cec969cd641ecb28cbc535a66afd4e55a6301fc0ddc7"
+        },
+        {
+          "phase": "final-a636-residual",
+          "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-review-residual-envelope-types.log",
+          "result": "1892 files PASS",
+          "sha256": "62cf756b4e90858c2b0253becf771c265273ad614e3c06799871b26831722453"
+        },
+        {
+          "phase": "final-a636-residual",
+          "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-review-residual-story-final.log",
+          "result": "2 PASS17 skipped; both screenshots AI viewed",
+          "sha256": "abc8def7b651bb24717688ddc81d7fe045597d71adeb5626fd0d5f0a1d5a70b5"
+        },
+        {
+          "phase": "final-a636-residual",
+          "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-review-residual-check-final.log",
+          "result": "lint+AST PASS; continuation PASS; page-filter alias inventory mismatch + accepted command timeout retryPASS retained",
+          "sha256": "7010f3d282494042bf22482d918c62bede7dd522026cf0311224950ef0766538"
+        }
+      ],
+      "originalFinalPinRuns": [
+        {
+          "receipt": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396072620/run-receipt.json",
+          "data": {
+            "format": "selected-original-frontend-run-v1",
+            "startedAt": "2026-10-19T07:47:52.621Z",
+            "frontendPin": "a636f3b460aa89d80e4a454bef2ececa9dedf128",
+            "backendPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+            "origin": "http://127.0.0.1:43131",
+            "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/frontends/a636f3b460aa89d80e4a454bef2ececa9dedf128/source",
+            "out": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396072620",
+            "productApiMocks": false,
+            "sharedDataPreparation": false,
+            "backendLifecycle": false,
+            "executionDevice": "desktop",
+            "grep": null,
+            "scope": "C22/C26 original work rich header cells at 1440/390 only",
+            "originalAssertion": {
+              "format": "selected-original-guide-header-v1",
+              "recordedAt": "2026-10-19T07:32:31.674Z",
+              "originalSource": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/apps/web/tests/catalogue-detail-contract.e2e.ts",
+              "originalFileSha256": "b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3",
+              "originalRevision": "a0c6558fddc430e3164297970865a69b02fb015d",
+              "originalBodyStartLine": 36,
+              "originalBodyEndLine": 68,
+              "originalBodySha256": "4c8fb574e420bb6630af5aa3a684f72e558673f308ad76cd2ba0c7dbe9092f25",
+              "localHelpersSha256": "5add290399d72c3eb5f3e62410e16200d224e496264a6aeb659258ef28a8e3de",
+              "selectedBodyCopiedUnchanged": true,
+              "localHelpersCopiedUnchanged": true,
+              "sharedOriginalHelpersReceipt": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/source-receipt.json",
+              "fixtureAdmission": {
+                "family": "work",
+                "density": "rich",
+                "widths": [
+                  1440,
+                  390
+                ],
+                "subject": "https://rezics.com/id/01a0e90a-d0ce-7480-a1af-e9ffc90f537e",
+                "semanticType": "https://schema.org/DigitalDocument",
+                "nativeBodyLength": 121,
+                "prerequisiteReceipt": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/catalogue-additional-original-case-prerequisites.json",
+                "publicationState": "unpublished; public summary is available; original cell does not assert publication state"
+              },
+              "omitted": "Only unrelated full-corpus beforeAll is omitted; every assertion within these two original cells and needed original helpers remains unchanged.",
+              "scope": "C22/C26 work-rich visitor header cells at two widths only; cannot close full A16/I1-001 or D1-005 long-and-short Guide acceptance.",
+              "productApiMocks": false,
+              "sharedWrites": false,
+              "corpusPreparation": false
+            },
+            "readiness": {
+              "command": [
+                "task",
+                "web:dev",
+                "--",
+                "--port",
+                "43131"
+              ],
+              "pid": 3101455,
+              "startedAt": "2026-10-19T07:48:05.652Z",
+              "listeningAt": "2026-10-19T07:48:26.322Z",
+              "document": {
+                "status": 200,
+                "url": "http://127.0.0.1:43131/en/w/1CfWE1YZJEg6fAw3UA7pqb-mod-setup-checklist",
+                "bytes": 793634,
+                "sha256": "479d0f47eeaef413214024b587d068e5f74e41d47e0457b0b4404098ae1125b3",
+                "ms": 39983
+              }
+            },
+            "prerequisites": [
+              {
+                "path": "/v1/works/01a0e90a-c883-74b9-bac0-f561934c6158",
+                "status": 200,
+                "sha256": "d414249f5f10689dfe0817908ccabb54189215f121f350f18db4244254d2f97b",
+                "bytes": 1757,
+                "file": "header.response.json"
+              },
+              {
+                "path": "/v1/recipes/works/01a0e90a-c883-74b9-bac0-f561934c6158",
+                "status": 200,
+                "sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "bytes": 4,
+                "file": "recipe.response.json"
+              }
+            ],
+            "dependencySource": {
+              "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019",
+              "lockSha256": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30",
+              "mode": "reflink copy; no install or shared mutation"
+            },
+            "sourceHead": "a636f3b460aa89d80e4a454bef2ececa9dedf128",
+            "sourceCleanBefore": true,
+            "browser": {
+              "command": [
+                "task",
+                "-t",
+                "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/SelectedOriginalTaskfile.yml",
+                "guide-browser"
+              ],
+              "exitCode": 201,
+              "finishedAt": "2026-10-19T07:49:39.644Z"
+            },
+            "ownedFrontendStopped": true,
+            "sourceCleanAfter": true,
+            "finishedAt": "2026-10-19T07:49:40.672Z"
+          }
+        },
+        {
+          "receipt": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396209685/run-receipt.json",
+          "data": {
+            "format": "selected-original-frontend-run-v1",
+            "startedAt": "2026-10-19T07:50:09.685Z",
+            "frontendPin": "a636f3b460aa89d80e4a454bef2ececa9dedf128",
+            "backendPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+            "origin": "http://127.0.0.1:43131",
+            "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/frontends/a636f3b460aa89d80e4a454bef2ececa9dedf128/source",
+            "out": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396209685",
+            "productApiMocks": false,
+            "sharedDataPreparation": false,
+            "backendLifecycle": false,
+            "executionDevice": "desktop",
+            "grep": null,
+            "scope": "C31 original null Recipe body only",
+            "originalAssertion": {
+              "format": "selected-original-browser-assertion-v1",
+              "recordedAt": "2026-10-19T07:06:27.481Z",
+              "originalSource": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/apps/web/tests/catalogue-detail-contract.e2e.ts",
+              "originalSourceRevision": "a0c6558fddc430e3164297970865a69b02fb015d",
+              "originalFileSha256": "b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3",
+              "originalBodyTitle": "C31 / visitor / a null public Recipe body keeps Recipe identity and gives a useful Cook explanation",
+              "originalBodyStartLine": 415,
+              "originalBodyEndLine": 426,
+              "originalBodySha256": "a87833c931e92e37bee36a111bbe031eb4f4e9ffa2bf258bfcb2e05ac60d10a5",
+              "helpersModule": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/apps/web/tests/catalogue-browser-fixture.ts",
+              "helpersFileSha256": "6a64ca9e45e3353bd4dd2df53e89d78d859e90a96264f31d785795514c4611e0",
+              "copiedHelpers": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/original-helpers.ts",
+              "helperBlockSha256": [
+                "907c99a2f5ccfa88bf767d15cb0b99a374d26501cdae67abd640983a0449227a",
+                "05de2e5a3fee16d3b1a183da32f79cf69bbaed8388290dc9a81e8a703ec30125",
+                "78af5925b96a5990f4ae93721a5ba57313aab45b014d8fb24b56f26d9580df37"
+              ],
+              "helperFunctionsCopiedUnchanged": true,
+              "helperCopyReason": "A direct cross-worktree import loads a second Playwright installation; needed original helper function source is copied unchanged into the same runner installation.",
+              "selectedBodyCopiedUnchanged": true,
+              "fixtureAdmission": "Only the selected case's original real public Recipe identity is admitted; unrelated beforeAll full-corpus acquisition is omitted. No backup/full corpus/persona matrix is represented.",
+              "sourceReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/catalogue-frontend-shared-read-prerequisites.json",
+              "realSubject": {
+                "id": "https://rezics.com/id/01a0e90a-c883-74b9-bac0-f561934c6158",
+                "href": "/en/w/01a0e90a-c883-74b9-bac0-f561934c6158",
+                "title": "Weekend buttermilk pancakes",
+                "semanticType": "https://schema.org/Recipe"
+              },
+              "expectedGenuineApi": {
+                "header": 200,
+                "recipe": 200,
+                "recipeBody": "null",
+                "recipeBodySha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+              },
+              "backendPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+              "productApiMocks": false,
+              "corpusPreparation": false,
+              "sharedWrites": false,
+              "scope": "C31 null-body case only; does not close all A08/A18 or the original corpus suite"
+            },
+            "readiness": {
+              "command": [
+                "task",
+                "web:dev",
+                "--",
+                "--port",
+                "43131"
+              ],
+              "pid": 3155739,
+              "startedAt": "2026-10-19T07:50:10.574Z",
+              "listeningAt": "2026-10-19T07:50:16.600Z",
+              "document": {
+                "status": 200,
+                "url": "http://127.0.0.1:43131/en/w/1CfWE1PUr78CQnrsThXSiT-weekend-buttermilk-pancakes",
+                "bytes": 538693,
+                "sha256": "6c2819c5d16b7807c9bfdb46631579729961082181509c97323f5841a55b106a",
+                "ms": 24185
+              }
+            },
+            "prerequisites": [
+              {
+                "path": "/v1/works/01a0e90a-c883-74b9-bac0-f561934c6158",
+                "status": 200,
+                "sha256": "a88638c17847924aeff4fc879e7ad88bc046b0524374bd90756a5ffe21bd63cc",
+                "bytes": 1757,
+                "file": "header.response.json"
+              },
+              {
+                "path": "/v1/recipes/works/01a0e90a-c883-74b9-bac0-f561934c6158",
+                "status": 200,
+                "sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "bytes": 4,
+                "file": "recipe.response.json"
+              }
+            ],
+            "sourceHead": "a636f3b460aa89d80e4a454bef2ececa9dedf128",
+            "sourceCleanBefore": true,
+            "browser": {
+              "command": [
+                "task",
+                "-t",
+                "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/SelectedOriginalTaskfile.yml",
+                "browser"
+              ],
+              "exitCode": 0,
+              "finishedAt": "2026-10-19T07:51:05.529Z"
+            },
+            "ownedFrontendStopped": true,
+            "sourceCleanAfter": true,
+            "finishedAt": "2026-10-19T07:51:06.722Z"
+          }
+        },
+        {
+          "receipt": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396284134/run-receipt.json",
+          "data": {
+            "format": "selected-original-frontend-run-v1",
+            "startedAt": "2026-10-19T07:51:24.135Z",
+            "frontendPin": "a636f3b460aa89d80e4a454bef2ececa9dedf128",
+            "backendPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+            "origin": "http://127.0.0.1:43131",
+            "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/frontends/a636f3b460aa89d80e4a454bef2ececa9dedf128/source",
+            "out": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396284134",
+            "productApiMocks": false,
+            "sharedDataPreparation": false,
+            "backendLifecycle": false,
+            "executionDevice": "phone",
+            "grep": null,
+            "scope": "C31 original null Recipe body only",
+            "originalAssertion": {
+              "format": "selected-original-browser-assertion-v1",
+              "recordedAt": "2026-10-19T07:06:27.481Z",
+              "originalSource": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/apps/web/tests/catalogue-detail-contract.e2e.ts",
+              "originalSourceRevision": "a0c6558fddc430e3164297970865a69b02fb015d",
+              "originalFileSha256": "b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3",
+              "originalBodyTitle": "C31 / visitor / a null public Recipe body keeps Recipe identity and gives a useful Cook explanation",
+              "originalBodyStartLine": 415,
+              "originalBodyEndLine": 426,
+              "originalBodySha256": "a87833c931e92e37bee36a111bbe031eb4f4e9ffa2bf258bfcb2e05ac60d10a5",
+              "helpersModule": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/apps/web/tests/catalogue-browser-fixture.ts",
+              "helpersFileSha256": "6a64ca9e45e3353bd4dd2df53e89d78d859e90a96264f31d785795514c4611e0",
+              "copiedHelpers": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/original-helpers.ts",
+              "helperBlockSha256": [
+                "907c99a2f5ccfa88bf767d15cb0b99a374d26501cdae67abd640983a0449227a",
+                "05de2e5a3fee16d3b1a183da32f79cf69bbaed8388290dc9a81e8a703ec30125",
+                "78af5925b96a5990f4ae93721a5ba57313aab45b014d8fb24b56f26d9580df37"
+              ],
+              "helperFunctionsCopiedUnchanged": true,
+              "helperCopyReason": "A direct cross-worktree import loads a second Playwright installation; needed original helper function source is copied unchanged into the same runner installation.",
+              "selectedBodyCopiedUnchanged": true,
+              "fixtureAdmission": "Only the selected case's original real public Recipe identity is admitted; unrelated beforeAll full-corpus acquisition is omitted. No backup/full corpus/persona matrix is represented.",
+              "sourceReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/catalogue-frontend-shared-read-prerequisites.json",
+              "realSubject": {
+                "id": "https://rezics.com/id/01a0e90a-c883-74b9-bac0-f561934c6158",
+                "href": "/en/w/01a0e90a-c883-74b9-bac0-f561934c6158",
+                "title": "Weekend buttermilk pancakes",
+                "semanticType": "https://schema.org/Recipe"
+              },
+              "expectedGenuineApi": {
+                "header": 200,
+                "recipe": 200,
+                "recipeBody": "null",
+                "recipeBodySha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+              },
+              "backendPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+              "productApiMocks": false,
+              "corpusPreparation": false,
+              "sharedWrites": false,
+              "scope": "C31 null-body case only; does not close all A08/A18 or the original corpus suite"
+            },
+            "readiness": {
+              "command": [
+                "task",
+                "web:dev",
+                "--",
+                "--port",
+                "43131"
+              ],
+              "pid": 3184528,
+              "startedAt": "2026-10-19T07:51:24.811Z",
+              "listeningAt": "2026-10-19T07:51:33.351Z",
+              "document": {
+                "status": 200,
+                "url": "http://127.0.0.1:43131/en/w/1CfWE1PUr78CQnrsThXSiT-weekend-buttermilk-pancakes",
+                "bytes": 538614,
+                "sha256": "ca09829f1ffa28b6ae003cdc9509258c1c798f784e3a4f5bd29240e83bde5550",
+                "ms": 28704
+              }
+            },
+            "prerequisites": [
+              {
+                "path": "/v1/works/01a0e90a-c883-74b9-bac0-f561934c6158",
+                "status": 200,
+                "sha256": "a88638c17847924aeff4fc879e7ad88bc046b0524374bd90756a5ffe21bd63cc",
+                "bytes": 1757,
+                "file": "header.response.json"
+              },
+              {
+                "path": "/v1/recipes/works/01a0e90a-c883-74b9-bac0-f561934c6158",
+                "status": 200,
+                "sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+                "bytes": 4,
+                "file": "recipe.response.json"
+              }
+            ],
+            "sourceHead": "a636f3b460aa89d80e4a454bef2ececa9dedf128",
+            "sourceCleanBefore": true,
+            "browser": {
+              "command": [
+                "task",
+                "-t",
+                "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/SelectedOriginalTaskfile.yml",
+                "browser"
+              ],
+              "exitCode": 0,
+              "finishedAt": "2026-10-19T07:52:17.351Z"
+            },
+            "ownedFrontendStopped": true,
+            "sourceCleanAfter": true,
+            "finishedAt": "2026-10-19T07:52:18.381Z"
+          }
+        }
+      ],
+      "snapshots": [
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/work-review-followup.json",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/work-review-followup.json",
+          "sha256": "d232907879e185cc02a56a3f7c8840dc53d692a955e012d2ff81a14a265523cf"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/catalogue-browser-execution-receipt.json",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/catalogue-browser-execution-receipt.json",
+          "sha256": "7b0cb8b334942ead95284f0b7211e0728e6e3f3e655b94bec2868833eb3d6dc8"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-review-residual-unit-final.log",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/work-review-residual-unit-final.log",
+          "sha256": "450415b855c86743375dfdb3c731f07a356b1b8f4e3f7035db600c58a3982858"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-review-residual-types-final.log",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/work-review-residual-types-final.log",
+          "sha256": "cf7b941af3802c99c6d6cec969cd641ecb28cbc535a66afd4e55a6301fc0ddc7"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-review-residual-envelope-types.log",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/work-review-residual-envelope-types.log",
+          "sha256": "62cf756b4e90858c2b0253becf771c265273ad614e3c06799871b26831722453"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-review-residual-story-final.log",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/work-review-residual-story-final.log",
+          "sha256": "abc8def7b651bb24717688ddc81d7fe045597d71adeb5626fd0d5f0a1d5a70b5"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-work-candidate-20261019/.temp/work-review-residual-check-final.log",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/work-review-residual-check-final.log",
+          "sha256": "7010f3d282494042bf22482d918c62bede7dd522026cf0311224950ef0766538"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396072620/run-receipt.json",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/run-receipt.json",
+          "sha256": "c11a448ac6d796f575942d647d23088b1e93085996f286b23f3c43bcb5ae5ab7"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396209685/run-receipt.json",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/run-receipt.json",
+          "sha256": "13a1f8a05a54e49f1f99fc5c21643a40c68384d08823363df5cdf3cfb98a993d"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396284134/run-receipt.json",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/run-receipt.json",
+          "sha256": "ff315577f594eeab436ac06e9ea0dd35718cddc0c6da8232f0b12286fccc65ea"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396072620/run-receipt.json",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/run-a636f3b460aa-1792396072620-receipt.json",
+          "sha256": "c11a448ac6d796f575942d647d23088b1e93085996f286b23f3c43bcb5ae5ab7"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396072620/browser.log",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/run-a636f3b460aa-1792396072620-browser.log",
+          "sha256": "edb9d9e71d7c8a2f4e7357087d3a2594aeb98fe1dd928b7c88b44873110ae1b6"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396072620/result.json",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/run-a636f3b460aa-1792396072620-result.json",
+          "sha256": "4fd67db9d5c28454beca13f63979df3f7ab7ba0c79e296acb5d0c2608f753798"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396209685/run-receipt.json",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/run-a636f3b460aa-1792396209685-receipt.json",
+          "sha256": "13a1f8a05a54e49f1f99fc5c21643a40c68384d08823363df5cdf3cfb98a993d"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396209685/browser.log",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/run-a636f3b460aa-1792396209685-browser.log",
+          "sha256": "db42358971cdbdd84424160e048596a51fd55884e869cd7b4d52e2d15ab06c8f"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396209685/result.json",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/run-a636f3b460aa-1792396209685-result.json",
+          "sha256": "df83231e0dd79294af475e2f2279c3ed28d8d9ae28c48dc3d82be0f575672a2e"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396284134/run-receipt.json",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/run-a636f3b460aa-1792396284134-receipt.json",
+          "sha256": "9866a85841820984beb10f562435bf614086230f4e464842f90b5d71a3fe442d"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396284134/browser.log",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/run-a636f3b460aa-1792396284134-browser.log",
+          "sha256": "ed0037a9ae957557718cf449ee7d37a647c9bcd8bcbaf12d7b60712b3065258d"
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-a636f3b460aa-1792396284134/result.json",
+          "snapshot": ".temp/catalogue-work-review/final-a636-receipts/run-a636f3b460aa-1792396284134-result.json",
+          "sha256": "fe6da6ed475a46f68ac0fdb9feda90e931b661b233f3049098f669a1a573f19c"
+        }
+      ],
+      "historicalProof": "Earlier 133 units/17 browser states, c669 23 units/3 failure browser states, c669 C31 desktop and 2f navigation/global8 remain their own code-pin provenance; not relabelled as final-pin execution."
+    },
+    "limitations": [
+      "No full canonical catalogue closure or landing approval. Exact final C31 desktop/phone pass; original Guide1440/390 fail at primary action contract. Later Guide reactions/more/layout assertions remain unexecuted because the action assertion failed.",
+      "Final normal guards are not wholly green: page-filter alias inventory mismatch remains, accepted-command timeout passed automatic retry. This review does not edit guard inventories.",
+      "Final focused 37 units, affected type checks1900/1892 files and2 Guide stories pass according to exact-pin receipt/logs; these counts do not replace original independent assertions. Reviewer has not independently viewed the final Guide screenshots; operator viewing is reported as operator evidence.",
+      "Source/manual citation remains independent from conversion; no general citation model introduced. Existing source data and original assertions preserved."
+    ],
+    "reportValidation": {
+      "status": "passed",
+      "jobId": "71b75d26-92b6-49b7-b35b-bd1827234a46",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "13 self-tests;249 Markdown files pass; runtime behavior and external URLs not tested",
+          "log": ".temp/goal/jobs/71b75d26-92b6-49b7-b35b-bd1827234a46.1.log"
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "result": "Report-only diff: no TypeScript/source changed, no tests named in brief; AST and1/44selected guard pass",
+          "log": ".temp/goal/jobs/71b75d26-92b6-49b7-b35b-bd1827234a46.2.log"
+        }
+      ],
+      "subsequentEdits": "Receipt outcomes, new actionable finding and validation metadata only; JSON parsed and git diff --check before commit."
+    },
+    "managerNext": "Use final independent source review: five original findings/remnant counterexamples addressed in source; one reproduced header action finding remains. Fix shared named primary-action contract and final normal guard inventory failure within owner authority; retain unchanged original assertions and source data. C31 final desktop/phone passes do not close other catalogue findings. No extra review-of-review task."
+  }
+}
