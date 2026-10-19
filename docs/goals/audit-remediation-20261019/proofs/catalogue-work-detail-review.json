@@ -12948,5 +12948,574 @@
       "disposition": "bounded-D1-003-navigation-correction-source-APPROVE-no-new-actionable-delta-finding",
       "acceptance": "Independent source approval of 2f53317556f68b209bc82987093478e2b2e5ab71 versus its direct parent 222d57ae9bb8886db39f42d7d76e7e3ea58aac7c and the inspected native five-file overlay. Eight genuine selected native navigation cases pass at 390/1440 on the recorded e9bff baseline plus overlay. This approves bounded correction hunks and their provenance, not whole worker blobs, a current-main browser run, all page bodies, broader catalogue classes or a canonical registry status change."
     }
+  },
+  "nameSectionRetryFirstSourceReview": {
+    "observedAt": "2026-10-19T16:59:39.662642+00:00",
+    "reviewer": {
+      "worker": "G-2841",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "fallback": false,
+      "delegated": false
+    },
+    "verdict": "SOURCE APPROVE — exactly six selected A08 name-recovery/Parts hunks; no new actionable delta finding",
+    "acceptance": "First source review of the five new shared-name recovery paths plus the authorized single-line Parts evidence underline. Existing identity/name-state, destination, authority and source contracts remain consumed unchanged. This is not genuine Main recovery or A08/class closure.",
+    "pins": {
+      "namesBase": "9aaf3df4f8b9e75f09a4aa3e828fea85db6b6d20",
+      "namesHead": "f9e73f69bca2514b49b3024efce31772467a5285",
+      "candidate": "d98655dd01ffd6b1657e3a7ca26ff2807a16e5bc",
+      "partsCheckedPin": "2ac99373db15baa7c546a06a17bb25fbd5221005",
+      "partsPublicationParent": "14164f4d3558ece0fd3dbfb91e0677482b478d9c",
+      "frozenMainComparison": "49c33b1c0b3333d084d6dd4e5853ccdb7ef10a79",
+      "priorReportCommit": "32fc87bb2effcc7a1fa79e3eb65b9557b682317a"
+    },
+    "scope": {
+      "selectedPaths": 6,
+      "outsideSelection": "Unrelated inherited Zone2 changes, old 38/43-path identity slices, accepted seven consumers, shared header/menu/footer/A16/A13 source and current-main peer edits are not selected or reviewed again. No whole worker blob is approved for replacement.",
+      "soleTrackedWrite": "docs/goals/audit-remediation-20261019/proofs/catalogue-work-detail-review.json"
+    },
+    "inputs": {
+      "selectionManifest": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-A08-name-section-first-review/manifest.json",
+        "sha256": "e2f4cd9be501cf353a0b2cf16f3cd9bf3316e3704c1b84cfa3c2fde0a619ecc0"
+      },
+      "sourceManifest": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/a08-name-section-retry/source-manifest.json",
+        "sha256": "9800dc44d3f36a2e0801e5850dd89bd7aeecf53f233a450b0ec5555e1b8b5e4a"
+      },
+      "partsCorrectionManifest": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/a08-name-section-retry/parts-correction-manifest.json",
+        "sha256": "b3faced9120d57ff11816ab60b7f6d237a459f3891d6cb6ecd57a877e9f67cb9"
+      },
+      "patches": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/a08-name-section-retry/authored.patch",
+          "sha256": "8334bd4c2fa0a894f5fc939ecad07fb18f4df36a6ae53dab6de82a61d28d6778"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/a08-name-section-retry/parts-correction.patch",
+          "sha256": "3e52ef2d2060353ddd25aab71314dd1a081fe4e28c4ea0e80599f3db345e679a"
+        },
+        {
+          "path": ".temp/goal/a08-name-section-first-review/selected-six.patch",
+          "sha256": "8050b2773a51e4269d15c519c02f9fcd69f1c59f893dd5cb44ad645d622b5b5f"
+        }
+      ],
+      "localVerification": {
+        "path": ".temp/goal/a08-name-section-first-review/verified-evidence.json",
+        "sha256": "bae56c8cfe1ca4a8c3da650ceb7acd253c224e280c73b13428801310d6c12c8a"
+      }
+    },
+    "inspectedPaths": [
+      {
+        "path": "apps/web/features/work-levels/name-recovery.stories.tsx",
+        "beforeBlob": null,
+        "afterBlob": "93192c2be2c2ac3e43897de9b93c171478624bfc",
+        "actualMainBlob": null,
+        "verifiedBaseBlob": null,
+        "verifiedTargetBlob": "93192c2be2c2ac3e43897de9b93c171478624bfc",
+        "verifiedFrozenMainBlob": null,
+        "targetSha256": "2a843195b6c69926b23c488f6db778d7a12f796e97fa63c690e48499e9580581"
+      },
+      {
+        "path": "apps/web/features/work-levels/name-recovery.tsx",
+        "beforeBlob": null,
+        "afterBlob": "8221b52bc6b29e9f098e149fed7d5d22d690614a",
+        "actualMainBlob": null,
+        "verifiedBaseBlob": null,
+        "verifiedTargetBlob": "8221b52bc6b29e9f098e149fed7d5d22d690614a",
+        "verifiedFrozenMainBlob": null,
+        "targetSha256": "2b8b3069833b19292057abe7dc329fa0680e5d4faec847ce70f7a4e537819913"
+      },
+      {
+        "path": "apps/web/features/work-levels/name-retry.test.tsx",
+        "beforeBlob": null,
+        "afterBlob": "cb0dff995d63593ef4938521dbac46c053a1913c",
+        "actualMainBlob": null,
+        "verifiedBaseBlob": null,
+        "verifiedTargetBlob": "cb0dff995d63593ef4938521dbac46c053a1913c",
+        "verifiedFrozenMainBlob": null,
+        "targetSha256": "60362c42a08e55d7567c40c67a1a18c85f54042e7d4a58f6425faefb2e8fd478"
+      },
+      {
+        "path": "apps/web/features/work-levels/names.tsx",
+        "beforeBlob": "7ded5465d2976547628ae4ac7dd9c9ebcb423eb1",
+        "afterBlob": "bc4556d4b9414f3ba22fe6997d9d84924760b200",
+        "actualMainBlob": "7ded5465d2976547628ae4ac7dd9c9ebcb423eb1",
+        "verifiedBaseBlob": "7ded5465d2976547628ae4ac7dd9c9ebcb423eb1",
+        "verifiedTargetBlob": "bc4556d4b9414f3ba22fe6997d9d84924760b200",
+        "verifiedFrozenMainBlob": "7ded5465d2976547628ae4ac7dd9c9ebcb423eb1",
+        "targetSha256": "421119acbd16633ed1cb17ab17a37eb72d4aaac3447ec62121ba3872a45cc80e"
+      },
+      {
+        "path": "apps/web/features/work-levels/release-page.tsx",
+        "beforeBlob": "2ae66f91f6adfb5cded6e168f06ac021fa70bc33",
+        "afterBlob": "9d825ab3afeec0d030a5243270ffb54549725aec",
+        "actualMainBlob": "2ae66f91f6adfb5cded6e168f06ac021fa70bc33",
+        "verifiedBaseBlob": "2ae66f91f6adfb5cded6e168f06ac021fa70bc33",
+        "verifiedTargetBlob": "9d825ab3afeec0d030a5243270ffb54549725aec",
+        "verifiedFrozenMainBlob": "2ae66f91f6adfb5cded6e168f06ac021fa70bc33",
+        "targetSha256": "c94f1ab0015871473debf5cbf62e65478567606a1389216752f9616016e431d6"
+      },
+      {
+        "path": "apps/web/features/work-levels/parts.tsx",
+        "beforeBlob": "bfa135c8f4c7e97b6ec0b67736f261e47125d6a2",
+        "afterBlob": "e54151de153fe4145b60e60ee12cc96fed484bfe",
+        "actualMainBlob": "bfa135c8f4c7e97b6ec0b67736f261e47125d6a2",
+        "verifiedBaseBlob": "bfa135c8f4c7e97b6ec0b67736f261e47125d6a2",
+        "verifiedTargetBlob": "e54151de153fe4145b60e60ee12cc96fed484bfe",
+        "verifiedFrozenMainBlob": "bfa135c8f4c7e97b6ec0b67736f261e47125d6a2",
+        "targetSha256": "344b37617c8d3c8f75be56cdaaf14bb6f2a49aaf75edfd24af879293657882d8"
+      }
+    ],
+    "materialDependencies": {
+      "disposition": "All nineteen listed material caller/interface/producer/test blobs are unchanged between the selected base, candidate and frozen Main. Read only their relevant integration context; prior source approvals are reused, not repeated. Current peer/auth/API/inventory bytes must remain intact.",
+      "blobs": [
+        {
+          "path": "apps/web/features/work-levels/read.ts",
+          "baseBlob": "2f2afd228b3460541f502f9c5d63ad556716cc2f",
+          "targetBlob": "2f2afd228b3460541f502f9c5d63ad556716cc2f",
+          "frozenMainBlob": "2f2afd228b3460541f502f9c5d63ad556716cc2f"
+        },
+        {
+          "path": "apps/web/features/work-levels/types.ts",
+          "baseBlob": "22a62804c79bb7c90bcfeea2f58c3d3f65b9f4f2",
+          "targetBlob": "22a62804c79bb7c90bcfeea2f58c3d3f65b9f4f2",
+          "frozenMainBlob": "22a62804c79bb7c90bcfeea2f58c3d3f65b9f4f2"
+        },
+        {
+          "path": "apps/web/features/work-levels/pages.tsx",
+          "baseBlob": "db0c3e1f4ce63b618ce680eed297e816eb593ce6",
+          "targetBlob": "db0c3e1f4ce63b618ce680eed297e816eb593ce6",
+          "frozenMainBlob": "db0c3e1f4ce63b618ce680eed297e816eb593ce6"
+        },
+        {
+          "path": "apps/web/features/work-levels/connections.tsx",
+          "baseBlob": "d3224a1144ebaf9d77ed01001ddbbc27ea35c848",
+          "targetBlob": "d3224a1144ebaf9d77ed01001ddbbc27ea35c848",
+          "frozenMainBlob": "d3224a1144ebaf9d77ed01001ddbbc27ea35c848"
+        },
+        {
+          "path": "apps/web/features/work-levels/editions.tsx",
+          "baseBlob": "190517f0a7d6305d7700d7adec4b2946a4c7bf28",
+          "targetBlob": "190517f0a7d6305d7700d7adec4b2946a4c7bf28",
+          "frozenMainBlob": "190517f0a7d6305d7700d7adec4b2946a4c7bf28"
+        },
+        {
+          "path": "apps/web/features/work-levels/previews.tsx",
+          "baseBlob": "aeb11e78c774a6d4cf6c4ade3c177888a5cad1fd",
+          "targetBlob": "aeb11e78c774a6d4cf6c4ade3c177888a5cad1fd",
+          "frozenMainBlob": "aeb11e78c774a6d4cf6c4ade3c177888a5cad1fd"
+        },
+        {
+          "path": "apps/web/features/work-levels/release-names-recovery.tsx",
+          "baseBlob": "bf76655ec2a5d1d59bd6529d399068d153f4c531",
+          "targetBlob": "bf76655ec2a5d1d59bd6529d399068d153f4c531",
+          "frozenMainBlob": "bf76655ec2a5d1d59bd6529d399068d153f4c531"
+        },
+        {
+          "path": "apps/web/features/work-levels/route.ts",
+          "baseBlob": "12b4827029b7b49c7bced154a3e159e8e09ad7fe",
+          "targetBlob": "12b4827029b7b49c7bced154a3e159e8e09ad7fe",
+          "frozenMainBlob": "12b4827029b7b49c7bced154a3e159e8e09ad7fe"
+        },
+        {
+          "path": "apps/web/features/work-levels/messages.ts",
+          "baseBlob": "41dfdc012f544ff38bc63ecff63ef41e52f5ccc1",
+          "targetBlob": "41dfdc012f544ff38bc63ecff63ef41e52f5ccc1",
+          "frozenMainBlob": "41dfdc012f544ff38bc63ecff63ef41e52f5ccc1"
+        },
+        {
+          "path": "apps/web/features/work-levels/name-states.test.tsx",
+          "baseBlob": "c688409343ff4507f933de57ec208ce5e922f003",
+          "targetBlob": "c688409343ff4507f933de57ec208ce5e922f003",
+          "frozenMainBlob": "c688409343ff4507f933de57ec208ce5e922f003"
+        },
+        {
+          "path": "apps/web/features/work-levels/names.test.tsx",
+          "baseBlob": "40fb857ed03a69dfe69bc6d9c73a980769e3ec8b",
+          "targetBlob": "40fb857ed03a69dfe69bc6d9c73a980769e3ec8b",
+          "frozenMainBlob": "40fb857ed03a69dfe69bc6d9c73a980769e3ec8b"
+        },
+        {
+          "path": "apps/web/features/work-levels/name-recovery.test.ts",
+          "baseBlob": "afe5d470580e789c3e46dcc88999a7b1f760498d",
+          "targetBlob": "afe5d470580e789c3e46dcc88999a7b1f760498d",
+          "frozenMainBlob": "afe5d470580e789c3e46dcc88999a7b1f760498d"
+        },
+        {
+          "path": "apps/web/features/work-page/anime-relations-recorded-page.ts",
+          "baseBlob": "ebdee2f8f39ae131af58cfebe86285d5d214e3e6",
+          "targetBlob": "ebdee2f8f39ae131af58cfebe86285d5d214e3e6",
+          "frozenMainBlob": "ebdee2f8f39ae131af58cfebe86285d5d214e3e6"
+        },
+        {
+          "path": "apps/web/features/work-page/anime-relations-recorded-page.tsx",
+          "baseBlob": "e6bd4c2c84ba3f4a5622bb69fae2058d1c6f36a0",
+          "targetBlob": "e6bd4c2c84ba3f4a5622bb69fae2058d1c6f36a0",
+          "frozenMainBlob": "e6bd4c2c84ba3f4a5622bb69fae2058d1c6f36a0"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-views.tsx",
+          "baseBlob": "338fc7f4de8f00c3ed5538723fa01380cb75f1c6",
+          "targetBlob": "338fc7f4de8f00c3ed5538723fa01380cb75f1c6",
+          "frozenMainBlob": "338fc7f4de8f00c3ed5538723fa01380cb75f1c6"
+        },
+        {
+          "path": "apps/web/features/work-page/wiki.tsx",
+          "baseBlob": "c2e03cb1f613f328907d71f79f8b2636a1e065d7",
+          "targetBlob": "c2e03cb1f613f328907d71f79f8b2636a1e065d7",
+          "frozenMainBlob": "c2e03cb1f613f328907d71f79f8b2636a1e065d7"
+        },
+        {
+          "path": "apps/web/.storybook/next-navigation.ts",
+          "baseBlob": "f2d56ad4c2d45b12782c1b281a4a87f674bd5e03",
+          "targetBlob": "f2d56ad4c2d45b12782c1b281a4a87f674bd5e03",
+          "frozenMainBlob": "f2d56ad4c2d45b12782c1b281a4a87f674bd5e03"
+        },
+        {
+          "path": "apps/web/features/shell/shell-provider.tsx",
+          "baseBlob": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+          "targetBlob": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+          "frozenMainBlob": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23"
+        },
+        {
+          "path": "apps/web/tests/server-client-boundary.test.ts",
+          "baseBlob": "4dbf2bd8fb46003405baa40d062ef5da3d5e7d27",
+          "targetBlob": "4dbf2bd8fb46003405baa40d062ef5da3d5e7d27",
+          "frozenMainBlob": "4dbf2bd8fb46003405baa40d062ef5da3d5e7d27"
+        }
+      ],
+      "priorReviewsReused": [
+        "boundedIdentityNameConsumerFirstReview",
+        "storyRefreshSeamFirstReview",
+        "boundedNonWorkReleaseFirstSourceCheckpoint",
+        "boundedSourceFooterCheckpoint",
+        "boundedWorkSourceAnchorDedupFirstReview"
+      ]
+    },
+    "originalAcceptance": {
+      "source": "docs/goals/audit-remediation-20261019/site-plan.json / A08; staged catalogue-acceptance-map A08",
+      "clausesPreserved": [
+        "名称查询契约保留成功、确实未命名、不可披露、读取失败、部分完成五种状态；读取失败不得显示 Unnamed。",
+        "依赖失败时保留已成功的对象及可用链接，局部显示可重试状态；重试成功后原位恢复真实名称。",
+        "同一 Work 在发行 coverage、parts、connections、credit 中使用同一状态语义；真实未命名才使用明确的未命名显示。",
+        "已知 Recipe header 下令 projection 单独 503/超时，1440 和 390 仍保留菜谱身份及 Want to cook；配方区给出可重试的 unavailable，不出现书籍版次。",
+        "恢复成功后显示原配方，不改对象身份或保存状态；其他类型遵守同一身份回退契约。",
+        "失败不改已知类型，不把不可用显示为不存在；字段状态说明缺口阶段并可重试。"
+      ],
+      "scopeLimit": "This source slice addresses the local name-recovery part of the original contract. Genuine Main recovery clauses and Recipe/type/read-state outcomes remain separately due; no acceptance assertion or class status is changed."
+    },
+    "sourceObservations": [
+      {
+        "surface": "names.tsx → NameRecovery; all SummaryLink/NameLink consumers",
+        "disposition": "APPROVE",
+        "evidence": "The server-capable SummaryLink still selects the exact supplied summary, renders language/direction through LocalizedText, evaluates hrefFor on the server and renders the existing Work document-navigation anchor before crossing the client boundary. Only status and rendered children reach NameRecovery. Undefined/unavailable-read remains an unavailable nonlink; unavailable remains an undisclosed nonlink; only available empty name uses unnamed. Existing references, canonical address, link ownership and withheld participant labels are not changed."
+      },
+      {
+        "surface": "name-recovery.tsx retry and feedback",
+        "disposition": "APPROVE within the bounded source/UI change",
+        "evidence": "Retry appears for unavailable-read, invokes the existing router.refresh at the current URL without push/replace, retains the control after a retry and keeps its focusable button mounted. aria-disabled plus the pending guard prevents repeated pending activation without disabling/removing the focused element. The live status distinguishes retrying, still unavailable, undisclosed and restored, reusing shell locale and existing copy. This component adds no client fetch, identity inference, authority choice, source read policy, route parameter rewrite or browser account write.",
+        "boundary": "This is same-URL RSC refresh, not a new names-only HTTP retry. The server may re-run existing route reads. The reviewed code/fixtures do not prove that only failed HTTP reads are reissued, nor preserve old successful data if a later owner response refuses it. No surgical-request or stale-success guarantee is inferred."
+      },
+      {
+        "surface": "release-page.tsx SectionNamesRecovery + existing ReleaseNamesRecovery",
+        "disposition": "APPROVE",
+        "evidence": "The provider suppresses per-name controls in ReleaseView so its existing one section control owns the failed names. It wraps the existing rendered children without moving header/primary/menu, native Release/realization revision, coverage, role/evidence or source records. The new SSR unit intentionally injects three failed name summaries and asserts one Retry plus all three unavailable markers and exact revisions/evidence/role labels. Actual page/end selection still uses the unchanged request-scoped readReleaseSelection.",
+        "boundary": "The one-control unit covers ReleaseView, including its inline source fallback. The separately rendered page-end ReleaseSources slot is outside that provider and can retain a local per-name Retry. This is not an assertion that the installed parallel-route page has only one Retry or that the slot was exercised by the new story."
+      },
+      {
+        "surface": "Parts/Connections/Realization credits/preview plus identity/wiki/Collection material callers",
+        "disposition": "APPROVE",
+        "evidence": "The changed leaf preserves caller-supplied names and successful siblings. Stable occurrence/resource keys, Main pagination, grain/current query, language tags, canonical destinations, author/profile distinctions, source continuity, withheld/unnamed states, and existing evidence remain in their original owners. Parts parent/cursors and Completion data are untouched. No new callback crosses RSC; no whole list boundary is replaced or explicit sibling refetch loop is added in the leaf."
+      },
+      {
+        "surface": "actual server name producer and request binding",
+        "disposition": "Existing dependency reused; no producer delta",
+        "evidence": "readNames/namesOf retain resource/position and supplied client; the producer batches at64, pre-populates failed/omitted entries as unavailable-read and replaces only returned same-batch summaries. actingSubject and optional position come from the existing reader. A retry consumes a fresh server snapshot through the same route; the control does not invent or select a name, actor or revision. Existing same-position/resource/actingSubject unit source was inspected as dependency evidence, not rerun or counted as a new pass."
+      },
+      {
+        "surface": "parts.tsx Completion evidence anchor",
+        "disposition": "APPROVE",
+        "evidence": "The only change replaces hover-only underline with persistent underline. href, rel, evidence label/index, Completion value and all surrounding source/Parts facts are byte-preserved. It resolves the retained reached link-in-text-block 1.17:1 failure without changing destination or weakening the audit."
+      },
+      {
+        "surface": "new story fixtures and async evidence limits",
+        "disposition": "Meaningful controlled regression evidence, not native proof",
+        "evidence": "Five recovery interactions exercise repeated failed then successful refresh, Enter/Space activation, retained Retry focus and Reading note, visible known sibling and identical href, unavailable versus unnamed/undisclosed labels, complete recovered name, source version/publisher/evidence and horizontal overflow. The added Japanese phone case checks initial unavailable state. StoryRouteContext increments a local snapshot counter synchronously; it does not execute Main or reproduce real RSC/backend latency, pending completion, authenticated context changes or transport recovery."
+      }
+    ],
+    "actionableFindings": [],
+    "findingClassification": {
+      "sourceInference": "No new actionable defect identified in the six selected source hunks. Source-level conclusions and the actual request-scope limitations above are separate from runtime acceptance.",
+      "newReproducedAssertionFailure": "None. This reviewer ran no new product assertion.",
+      "retainedReproducedFailure": "Original Parts interaction assertions passed but the unchanged a11y afterEach failed on Evidence link-in-text-block at1.17:1 in English dark phone/desktop; correction and later passing selected runs are distinct evidence.",
+      "setupFailure": "Earlier story/setup and unrelated WORK-REVIEW-09/visitor-runtime premise failures remain historical. No setup-only failure is converted into a product assertion or a pass; no new setup run was performed."
+    },
+    "reusedChecks": {
+      "ownerChecks": [
+        {
+          "job": "73056d12-06ae-44bc-9eb4-b9b27971d00e",
+          "source_pin": "2f7d7769c1d882dd79db41bdc805adcb30341786",
+          "step": 1,
+          "command": "task goal:type-files -- --project apps/web/tsconfig.json <five authored paths>",
+          "result": "pass",
+          "files": 1874
+        },
+        {
+          "job": "73056d12-06ae-44bc-9eb4-b9b27971d00e",
+          "source_pin": "2f7d7769c1d882dd79db41bdc805adcb30341786",
+          "step": 2,
+          "command": "bun scripts/goal/goalctl.ts test names.test.tsx name-states.test.tsx name-retry.test.tsx apps/web/tests/server-client-boundary.test.ts name-recovery.stories.tsx (all paths explicit in job log)",
+          "unit": {
+            "result": "pass",
+            "tests": 14,
+            "assertions": 562,
+            "files": 4
+          },
+          "storybook": {
+            "result": "fail",
+            "passed": 4,
+            "failed": 1,
+            "run": "20261019t161925-f668a7",
+            "failure": "PartsRecoverInPlace afterEach axe link-in-text-block in unedited parts.tsx:99; all five interaction bodies reached and passed their assertions"
+          }
+        },
+        {
+          "job": "ca572a0b-1dfb-4cae-84e0-0232c1af2a54",
+          "source_pin": "6b386de750f8166d7073da7f38e2f25a0601925e",
+          "step": 2,
+          "command": "bun scripts/goal/goalctl.ts test apps/web/features/work-levels/name-recovery.stories.tsx -t \"Unavailable Edition Phone Japanese\"",
+          "result": "pass",
+          "stories": 1,
+          "run": "20261019t162350-923d64"
+        },
+        {
+          "job": "ca572a0b-1dfb-4cae-84e0-0232c1af2a54",
+          "source_pin": "6b386de750f8166d7073da7f38e2f25a0601925e",
+          "step": 3,
+          "command": "task goal -- slot -- node_modules/.bin/oxlint <five authored paths>",
+          "result": "pass"
+        },
+        {
+          "job": "09267121-c0f0-4549-a5b1-04b1beff0be0",
+          "source_pin": "88ef54d11ca2072927498f621354a31e78f3df2b",
+          "step": 1,
+          "command": "task ast-grep -- scan <five authored paths>",
+          "result": "pass"
+        },
+        {
+          "job": "09267121-c0f0-4549-a5b1-04b1beff0be0",
+          "source_pin": "88ef54d11ca2072927498f621354a31e78f3df2b",
+          "step": 2,
+          "command": "task goal:type-files -- --project apps/web/tsconfig.json <five authored paths>",
+          "result": "pass",
+          "files": 1874
+        },
+        {
+          "job": "09267121-c0f0-4549-a5b1-04b1beff0be0",
+          "source_pin": "88ef54d11ca2072927498f621354a31e78f3df2b",
+          "step": 3,
+          "command": "task goal -- slot -- node_modules/.bin/oxlint apps/web/features/work-levels/name-recovery.stories.tsx",
+          "result": "pass"
+        },
+        {
+          "job": "638658ee-a0eb-4a46-808f-cdb79395137c",
+          "source_pin": "f9e73f69bca2514b49b3024efce31772467a5285",
+          "step": 1,
+          "command": "task goal:type-files -- --project apps/web/tsconfig.json <five authored paths>",
+          "result": "pass",
+          "files": 1874
+        }
+      ],
+      "sourceBinding": "The three production recovery paths and new SSR unit equal the first 14-test checked bytes. All five recovery paths equal the final f9e73 typechecked bytes and 88ef static-check bytes. The corrected six files and listed audit/config source blobs at checked2ac993 equal publishedd986. Existing four passing recovery cases retain their interaction bodies; later story changes add the separate initial case and use the existing pathname helper. No single six-state final-pin suite is claimed.",
+      "unit": "14 passed,0 failed,562 assertions across names.test.tsx, name-states.test.tsx, name-retry.test.tsx and server-client-boundary.test.ts at2f7d7769; no rerun.",
+      "initialStories": "QA20261019t161925-f668a7:4 cases passed,1 Parts a11y failure. All five interaction bodies reached and passed; the overall run remains FAIL.",
+      "initialUnavailableStory": "QA20261019t162350-923d64 at6b386de:1 selected Japanese phone unavailable case passed,5 skipped; no backend.",
+      "types": "Final affected check atf9e73, job638658ee-a0eb-4a46-808f-cdb79395137c:1874 files PASS. It was not rerun or relabelled as a d986 whole-project pass.",
+      "partsCorrection": {
+        "checkedPin": "2ac99373db15baa7c546a06a17bb25fbd5221005",
+        "job": "1bf10117-76c3-40fd-8030-30005332e411",
+        "phone": "QA20261019t163941-e34ccf:1 Parts case PASS,5 skipped",
+        "desktop": "QA20261019t164029-55fd56:1 Parts case PASS,5 skipped",
+        "audit": "Unchanged interaction and afterEach; reported zero serious/critical violations over existing en light/dark phone390x844 and desktop1280x860 sweep. Two selected runs, not twelve/all-class passes.",
+        "configSha256": "3db112fe03b87f68c4929501f953248ad830c12b415bd31a423aeb24979003ff",
+        "configLimit": "Temporary official addon initialGlobals override only; source/assertions/audit/provider/capture unchanged."
+      },
+      "retainedLogsActuallyReadOrRehashed": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/73056d12-06ae-44bc-9eb4-b9b27971d00e.1.log",
+          "sha256": "9e3fd17b996de06ef2e5032933900c49c4b1899dc32cacb2cbe60f0ff132e6a4"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/73056d12-06ae-44bc-9eb4-b9b27971d00e.2.log",
+          "sha256": "4edd40edcc2516124dd4a95d8032c9735d2e2e4d9d955d119f022070c75dbcc5"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/ca572a0b-1dfb-4cae-84e0-0232c1af2a54.1.log",
+          "sha256": "8f0614287189052df1e4d31a65a22b4af795faaa340d5351faa755b554028477"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/ca572a0b-1dfb-4cae-84e0-0232c1af2a54.2.log",
+          "sha256": "8a81f4dc7220ecc152b45a4c2d258fb197fb4fc747d7b8dacaa2eaccccf590ef"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/ca572a0b-1dfb-4cae-84e0-0232c1af2a54.3.log",
+          "sha256": "c0d047167773bf05091a71435686e785d8b5dd7a34ab4071b357bda541bfbd0c"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/ca572a0b-1dfb-4cae-84e0-0232c1af2a54.4.log",
+          "sha256": "a624212a8dff552cd4683f0b8a0645d93772c1fd388238dd91f502cb36cf7fea"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/09267121-c0f0-4549-a5b1-04b1beff0be0.1.log",
+          "sha256": "75166c782a2fb4ac5e0f62913781b68927705f5b21fc0af2ea5befb9ae957adc"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/09267121-c0f0-4549-a5b1-04b1beff0be0.2.log",
+          "sha256": "26a46a51b310aa4680823381c7eabe082c00998bdac58c7fbb699ac82c07b82d"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/09267121-c0f0-4549-a5b1-04b1beff0be0.3.log",
+          "sha256": "e0552fe8d0477cf29e13143b20d4e72bc76586893d94161808e5e27302c2488c"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/09267121-c0f0-4549-a5b1-04b1beff0be0.4.log",
+          "sha256": "3ca054b0ff869def5d8dc70a70a4f01651a65fed3ffb79890b36a5d25e8e060d"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/638658ee-a0eb-4a46-808f-cdb79395137c.1.log",
+          "sha256": "44b0edc4a400b79b5c70dc2ebc34d5e451e1bc2c47d3a7f77eb85bc05b521688"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/638658ee-a0eb-4a46-808f-cdb79395137c.2.log",
+          "sha256": "5aebdb0e51dc6a353e0fb2bf8984b76ec06345635e608066280628ed3f94e113"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/1bf10117-76c3-40fd-8030-30005332e411.1.log",
+          "sha256": "9bd136c4eca475c5d72785c6b1cfc479eec34920e4786297ece333ccbfa37e58"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/1bf10117-76c3-40fd-8030-30005332e411.2.log",
+          "sha256": "cb5333aa531b21d54e05cab23a1212f6ce7eb31502ad40aae4ae8f6882bac95f"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/1bf10117-76c3-40fd-8030-30005332e411.3.log",
+          "sha256": "3ca054b0ff869def5d8dc70a70a4f01651a65fed3ffb79890b36a5d25e8e060d"
+        }
+      ],
+      "historicalPreservation": "Actual Parts failure, initial story/setup failures, source/check pins, publication races and unrelated runtime premises remain failures at their original receipts. No global timeout, assertion or product source was edited."
+    },
+    "screenshots": {
+      "hashesVerified": 8,
+      "actuallyViewedByThisReviewer": 7,
+      "captures": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.artifacts/qa/20261019t161925-f668a7/story-screenshots/apps-web-features-work-levels-name-recovery.stories.tsx/PartsRecoverInPlace.png",
+          "sha256": "5c9cf7e749a5e799e7264d064218b67f65c23ea428be546bf01e5f87172dd4b2",
+          "actuallyViewedByReviewer": false,
+          "run": "20261019t161925-f668a7",
+          "historicalCasePassed": false
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.artifacts/qa/20261019t161925-f668a7/story-screenshots/apps-web-features-work-levels-name-recovery.stories.tsx/ConnectionsRecoverInPlace.png",
+          "sha256": "25a4b21d732d266e4fdca296f8f52a81b12948618383c9ed87ce47dde24ff31e",
+          "actuallyViewedByReviewer": true,
+          "run": "20261019t161925-f668a7",
+          "historicalCasePassed": true
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.artifacts/qa/20261019t161925-f668a7/story-screenshots/apps-web-features-work-levels-name-recovery.stories.tsx/EditionCreditsRecoverInPlace.png",
+          "sha256": "03c196c7ac9562f3a8bedb18fc0b728653940915f03da4f6443e5e33b85308de",
+          "actuallyViewedByReviewer": true,
+          "run": "20261019t161925-f668a7",
+          "historicalCasePassed": true
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.artifacts/qa/20261019t161925-f668a7/story-screenshots/apps-web-features-work-levels-name-recovery.stories.tsx/PreviewPhoneDarkJapanese.png",
+          "sha256": "9f32b39ec48a73f3ecf5fb60bcf867b8bf46200d274b14e1fc21f4f10e3b163f",
+          "actuallyViewedByReviewer": true,
+          "run": "20261019t161925-f668a7",
+          "historicalCasePassed": true
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.artifacts/qa/20261019t161925-f668a7/story-screenshots/apps-web-features-work-levels-name-recovery.stories.tsx/UndisclosedAfterRetry.png",
+          "sha256": "086652850bba448979443e86552a65bd9edff4c06e307e2f7f97ced8785c57ff",
+          "actuallyViewedByReviewer": true,
+          "run": "20261019t161925-f668a7",
+          "historicalCasePassed": true
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.artifacts/qa/20261019t162350-923d64/story-screenshots/apps-web-features-work-levels-name-recovery.stories.tsx/UnavailableEditionPhoneJapanese.png",
+          "sha256": "7c8fc7f3b73c58654f56efcc83d088dab3fe3ec3c8a8eacce823df5f0235da0a",
+          "actuallyViewedByReviewer": true,
+          "run": "20261019t162350-923d64",
+          "historicalCasePassed": true
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.artifacts/qa/20261019t163941-e34ccf/story-screenshots/apps-web-features-work-levels-name-recovery.stories.tsx/PartsRecoverInPlace.png",
+          "sha256": "4dfa3f2f6e11ccd2623ff2a566b15c3ef3331a82570252f194ded77bddc2ec8c",
+          "actuallyViewedByReviewer": true,
+          "correctedParts": true
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.artifacts/qa/20261019t164029-55fd56/story-screenshots/apps-web-features-work-levels-name-recovery.stories.tsx/PartsRecoverInPlace.png",
+          "sha256": "8c2a0a95e34afe24623106b2965b2abfcf254ce8098feb829ce79572685e6eab",
+          "actuallyViewedByReviewer": true,
+          "correctedParts": true
+        }
+      ],
+      "observations": "Corrected Parts390x844 and1280x860 dark views show persistent Evidence underline, focused Retry after Recovered name, saved note, useful known sibling, undisclosed and genuinely unnamed rows, Arabic labels, no visible horizontal clipping/overlap. Connections/edition recovery and undisclosed screenshots retain source version/publisher/evidence, names and focus. Japanese phone preview and initial unavailable edition retain localized control/status context without overflow. Original failing Parts PNG was rehashed for history but not newly counted as viewed.",
+      "limits": "Captured fixture states, not a genuine installed page, live HTTP recovery, full page-end slot, keyboard/AT journey or all locale/theme/persona combinations."
+    },
+    "checksActuallyExecuted": [
+      "Read exactly six selected immutable deltas and material integration contexts; independently verify six base/target/frozen-Main blobs and nineteen unchanged dependency blobs. git diff --check for selected paths PASS.",
+      "Read original A08 six clauses and regression assertions; preserve every original assertion. Read retained unit/story/type/a11y/lint/static receipts and verify source equality and artifact hashes. No broad rerun or product code mutation.",
+      "Actually inspect seven supplied selected PNGs; hash all eight historical/corrected captures. Controlled local snapshot assertions are distinguished from genuine public API/browser recovery.",
+      "Compare cumulative report with frozen Main only to preserve documentation history; append one key while all36 prior worker values and all existing main-specific fields remain intact.",
+      "Recorded job:996e7a99-59cd-45dc-b04f-aee306b35339: task docs:check and task goal -- check PASS for the report-only change; no product runtime success inferred."
+    ],
+    "historyPreservation": {
+      "priorTopLevelValuesPreserved": 36,
+      "priorReportSha256": "6fae51550aa8f25ae6b75f676a6277f479c783f41b823876d40c4de4f276d0b2",
+      "frozenMainReportTopLevelValues": 33,
+      "mainNestedValuesUnchanged": true,
+      "olderMainSummaryValuesRetained": {
+        "disposition": "bounded-2cc223-credits-cook-review-complete-one-reproduced-typecheck-finding",
+        "acceptance": "Immutable2cc2233811e03867ad11567ece53a5e97bba4b90 versus80265f871e601ce870c5eaeadea7095fc122a726 reviewed across22paths. Credits and Cook source/progression inspected with exact regression receipts; WORK-REVIEW-07 reproduces two existing entry test callers missing newly required resource. Prior findings and all historical failures/dispositions preserved. Genuine C27 remains independently due; C21 and Performer owner gaps are not closed."
+      },
+      "noKeysRemovedOrReplaced": true,
+      "priorA13AndVisitorRuntime": "boundedWorkSourceAnchorDedupFirstReview and i1001VisitorMenuRuntimePremiseCheckpoint remain byte-semantic identical, including the missing-kind3001 premise and its unrun callback."
+    },
+    "limitations": [
+      "SOURCE APPROVE covers exactly the selected six-path correction; it does not approve inherited Zone2/old identity blobs or an entire candidate checkout for replacement. All current-main peer changes and prior review values must be preserved during integration.",
+      "No new product unit/type/story/native/browser/stack/account/corpus run. Source and controlled story success do not close A08, establish actual same-URL RSC pending/retry behavior, prove signed-in actor/position continuity or establish native current-name availability.",
+      "The new leaf uses existing router.refresh and can re-run route reads; selected fixtures only preserve a fixed successful sibling snapshot. No only-failed-HTTP-request or successful-sibling-retention-under-an-additional-independent-failure proof is claimed. Original genuine Main assertions remain the acceptance authority.",
+      "One section control is proved only within ReleaseView; page-end source slot composition and genuine Release recovery are unchanged dependencies with prior acceptance limits.",
+      "All historical setup failures and reached Parts a11y failure remain visible; later selected correction passes do not rewrite them. No backend/name API/citation schema or frontend business policy is introduced."
+    ],
+    "managerNext": "Select only the exact six reviewed source hunks through the normal checked current-main integration, preserving peer bytes. Continue existing genuine Main A08 recovery proof separately; do not infer class closure from this source approval or fixture counts.",
+    "reportValidation": {
+      "status": "PASS",
+      "job": "job:996e7a99-59cd-45dc-b04f-aee306b35339",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/996e7a99-59cd-45dc-b04f-aee306b35339.1.log",
+          "sha256": "c48c13e7d7827927e754b9962893a5d513cf43c351ecff65722a02d9ad41abfc"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/996e7a99-59cd-45dc-b04f-aee306b35339.2.log",
+          "sha256": "f709b4722a9e50534d1e23213ac650f17b1b449b57b3544d514bebe7116a40ba"
+        }
+      ],
+      "result": "Documentation:13 tests/249 Markdown files PASS. Goal:AST and1/44 changed-path report guards PASS. Product TypeScript/lint/tests not selected for report-only diff.",
+      "limits": "No new product unit/types/story/native/whole-guard run. The five-commits-behind harness notice was informational; no rebase or main mutation. Only completion receipt metadata was inserted after successful recorded checks."
+    }
   }
 }

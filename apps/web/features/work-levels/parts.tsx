@@ -96,7 +96,7 @@ function Completion({ completion, t }: { completion: PartsPage['completion']; t:
           <a
             href={href}
             rel="noreferrer"
-            className="break-all text-primary underline-offset-4 hover:underline"
+            className="break-all text-primary underline underline-offset-4"
           >
             {t.evidence}
             {evidence.length > 1 ? ` ${index + 1}` : ''}
