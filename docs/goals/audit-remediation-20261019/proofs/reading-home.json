@@ -1,0 +1,584 @@
+{
+  "version": 1,
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2831",
+  "status": "partial",
+  "recordedAtUTC": "2026-10-19T05:19:10.615488+00:00",
+  "summary": "Rendered reading-first hierarchy and anonymous Home content are verified on the requested wave pin. Recorded Books has phone document overflow; eight supplied Storybook cases fail. Live collection persistence and transfer acceptance are unverified because isolated fixture/corpus prerequisites are unavailable. Neither finding is claimed fully closed on main.",
+  "provenance": {
+    "execution": "Independent Codex-1/GPT-6.1 Sol/xhigh worker; no nested agents or fallback.",
+    "worktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2831",
+    "productAndOriginalTestPin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+    "productBranchAtPin": "wave/audit-20261019",
+    "reportBranch": "goal/g-2831",
+    "reportBranchMainBase": "42f8b873b4608b661e0b4153f2340c5c0e28cc07",
+    "differentBases": "The report branch is based on dispatch main. Product tests ran detached at the wave pin. Administrative report checks do not prove product integration on this main base.",
+    "productChanges": [],
+    "originalTestChanges": [],
+    "sharedStateChanges": [],
+    "sourceReview": {
+      "completed": true,
+      "count": 1,
+      "commits": [
+        "df384dd741ae35efad598cace6410343c64fa91a",
+        "a84cb90bb879fc2529d446f33a37b677df399ac6"
+      ],
+      "reach": "Complete authored patches, including all ten transfer entry-setup files, eight localized disclosure labels, preserved recorded content, original assertions and the continuation inventory fingerprint. Reviewed during actual verification, without product fixes or repeated baseline review.",
+      "inputs": [
+        "source/G-2752-main.md",
+        "source/attempt-6.last.md",
+        "source/reading-home-findings.json",
+        "source/execution-reset.md",
+        "source/df384dd741.patch",
+        "source/a84cb90bb8.patch"
+      ],
+      "pins": "source/test-source-pins.json",
+      "conclusions": [
+        "Library reading and first-use content precede a closed native details disclosure containing the existing goals, stats and transfer tools; loans omit those tools.",
+        "Home continuation and posts precede welcome/setup guidance. Rail content controls desktop column allocation through the existing data marker; empty recommendations do not reserve a column.",
+        "Transfer journeys now open the localized outer tools disclosure, including after reload; keyboard journeys use keyboard activation. Existing outcome assertions were retained.",
+        "New shell-bound stories select a fixed nav without checking rendered visibility, so hidden desktop phone navigation yields a zero bottom boundary. Native closed-details role queries also produce false visible-content assumptions in this Storybook runner."
+      ]
+    },
+    "skillApplications": [
+      "goal-worker",
+      "storybook-ui-review",
+      "local-development (fixture inventory only)",
+      "product-audit (bounded same-principle inspection)"
+    ]
+  },
+  "evidenceClasses": {
+    "readingFirst": "Authored in-memory reading fixture; useful links and layout, not a live persisted collection.",
+    "recordedLibraries": "Original retained API answer replay. Complete answers, request paths, persona identities and bodies are retained unchanged under source/answers, with source hashes in source/answer-manifest.json. No new live API answers claimed.",
+    "contractStories": "Constructed, unrecorded typed Library states through the same client/reader/page; recipe accessibility findings are rendered fixture evidence, not a live recipe collection.",
+    "home": "Authored Home story content and memory APIs. Useful previews and empty/anonymous rendering, not current community inventory.",
+    "live": "Not run; no isolated signed-in fixture or ready command-created corpus was available.",
+    "administrative": "Report-branch documentation/Goal checks recorded separately from pinned product evidence."
+  },
+  "qa": [
+    {
+      "job": "58a87147-70d0-4f8d-800d-5c415f6aca21",
+      "qaId": "20261019t045743-9f0146",
+      "command": "bun scripts/goal/goalctl.ts test apps/web/features/library/reading-first.stories.tsx apps/web/features/library/books-library-recorded.stories.tsx apps/web/features/library/games-library-recorded.stories.tsx apps/web/features/library/visual-novels-library-recorded.stories.tsx apps/web/features/library/library-contract.stories.tsx apps/web/features/home/home-page.stories.tsx apps/web/features/library/library-page.test.tsx apps/web/features/home/home-page.test.tsx",
+      "pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+      "exitStatus": 1,
+      "units": {
+        "passed": 17,
+        "failed": 0,
+        "expectCalls": 69
+      },
+      "stories": {
+        "passed": 107,
+        "failed": 8,
+        "total": 115,
+        "filesPassed": 2,
+        "filesFailed": 4
+      },
+      "fileResults": {
+        "reading-first": "1/4 passed",
+        "books-library-recorded": "8/10 passed",
+        "games-library-recorded": "4/4 passed",
+        "visual-novels-library-recorded": "8/8 passed",
+        "library-contract": "32/34 passed",
+        "home-page": "54/55 passed"
+      },
+      "assertionReach": "All eight failed cases reached assertions, rather than failing to start. Assertions after the first failure in a case were not reached. All original tests and story assertions remained intact.",
+      "artifact": "qa/20261019t045743-9f0146",
+      "log": "jobs/58a87147-70d0-4f8d-800d-5c415f6aca21.log",
+      "routingNotes": "Nonfatal @storybook/react-dom-shim optimizeDeps warning. Unit output reports 17 pass but no separate unit run ID. The job wake classified the combined run harness; retained errors show actual assertions."
+    },
+    {
+      "job": "491c5ea4-71d4-46cf-b912-dac6d7ed8481",
+      "qaId": null,
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/reading-home-G-2831/capture.test.ts",
+      "taskCommand": "task web:e2e -- --config .temp/reading-home-G-2831/playwright.config.ts rendered.spec.ts",
+      "pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+      "exitStatus": 1,
+      "playwright": {
+        "passed": 9,
+        "failed": 1,
+        "skipped": 0
+      },
+      "assertionReach": "All ten private rendered probes entered. Recorded Books 390 reached its document-width assertion: received 559, expected <=390. Prior first-action shell bounds passed.",
+      "artifacts": [
+        "runtime/playwright-results.json",
+        "runtime/playwright.log",
+        "rendered.spec.ts",
+        "playwright.config.ts",
+        "capture.test.ts"
+      ],
+      "admission": "Normal goalctl QA admission followed by Task web:e2e admission and existing browser-test Playwright provider. No Browser MCP was available. Private Bun wrapper has no registered QA UUID."
+    },
+    {
+      "job": "86c27dba-063a-40a0-85e0-d052ff2dcf3a",
+      "qaId": null,
+      "command": "env READING_HOME_PROBE=diagnostic.spec.ts bun scripts/goal/goalctl.ts test ./.temp/reading-home-G-2831/capture.test.ts",
+      "taskCommand": "task web:e2e -- --config .temp/reading-home-G-2831/playwright.config.ts diagnostic.spec.ts",
+      "pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+      "exitStatus": 0,
+      "playwright": {
+        "passed": 2,
+        "failed": 0
+      },
+      "assertionReach": "Confirmed recorded Continue href and keyboard/horizontal access, tools activation, and empty default states at both requested sizes. Diagnostic passing does not erase the earlier overflow failure.",
+      "artifacts": [
+        "runtime/diagnostic-results.json",
+        "runtime/diagnostic.log",
+        "diagnostic.spec.ts",
+        "runtime/recorded-phone-overflow.json",
+        "runtime/recorded-phone-continue-focus.json"
+      ]
+    }
+  ],
+  "observations": {
+    "viewports": [
+      {
+        "width": 1440,
+        "height": 1000
+      },
+      {
+        "width": 390,
+        "height": 844
+      }
+    ],
+    "shell": "Desktop header ends at y=65; phone header at y=105 and visible fixed navigation starts at y=779. Independent measurements exclude display:none navigation from the usable boundary.",
+    "library": [
+      "Synthetic populated phone title is at y=409..453 and Continue at y=501..533, inside the shell; desktop Continue y=361..393.",
+      "Recorded first title is at phone y=409..453; Open y=465..497, and desktop Open y=325..357. Reading remains before closed tools.",
+      "Recorded second-card Continue is initially offscreen horizontally. Focusing it scrolls the reading strip to 263px, brings it to x=181.30..283.30, and leaves window.scrollX=0. Strip clientWidth=390, scrollWidth=653.",
+      "Sequential Tab reaches both synthetic Continue links before tools. Enter opens tools; Tab enters Edit goal; Shift+Tab returns to summary; Space closes and reopens; Tab skips children after closing. Both widths pass.",
+      "Existing memory goal can be changed from 12 to 20; import file input is enabled; download start control is reachable after opening its section. These are story interactions, not transfer completion.",
+      "Empty Library retains Discover works and tools at both sizes. On phone the long first-use guidance places its Discover link below the initial viewport; it remains reachable by scrolling.",
+      "Games replay correctly omits currently-reading cards when retained query limit=6 does not match the component limit=3. No replacement titles were invented. Visual-novel replay retains Orchard Choices member 0 and its Open/progress controls."
+    ],
+    "home": {
+      "anonymousTitles": [
+        "Middlemarch: A Study of Provincial Life",
+        "Version 2.4.0"
+      ],
+      "anonymousPreviews": [
+        "A new annotated translation of George Eliot’s novel, with notes on the reform era and the provincial press.",
+        "Adds Ginger Island crops to the planner, fixes the greenhouse overlap, and supports SMAPI 4.1."
+      ],
+      "reach": "Both titles and both previews fit between phone header and bottom navigation, before welcome guidance, without dismissing guidance. Both requested widths pass.",
+      "absentRecommendations": {
+        "desktopGrid": "736px",
+        "phoneGrid": "390px",
+        "railContentMarker": false,
+        "result": "One content column; no reserved empty recommendation column."
+      },
+      "empty": "No posts yet, Explore Discover, Join REZICS and Sign in remain useful; zero article elements, without fabricated previews.",
+      "continuation": "Source/SSR order tests pass with continuation before posts and guidance. No live signed-in Home continuation acceptance claimed."
+    },
+    "zoom": {
+      "method": "320 CSS-pixel viewport reflow, the width equivalent of a 1280px viewport at 400%; actual screenshots inspected for Library and Home.",
+      "result": "No document overflow in these synthetic states; Library Continue remains focusable within width.",
+      "limitation": "Native browser-chrome zoom and live/recorded Books 400% zoom were not exercised. Reflow proof is not a claim of full zoom coverage."
+    },
+    "screenshotsViewed": [
+      {
+        "path": "qa/20261019t045743-9f0146/story-screenshots/apps-web-features-library-reading-first.stories.tsx/InProgress.png",
+        "width": 1440,
+        "height": 1000,
+        "sha256": "1149a8a18d75515b7c3e5c44ca54d56a542dfeed41d54cd574b981181bc927ff",
+        "viewed": true
+      },
+      {
+        "path": "qa/20261019t045743-9f0146/story-screenshots/apps-web-features-library-reading-first.stories.tsx/InProgressPhone.png",
+        "width": 390,
+        "height": 844,
+        "sha256": "95ac548053383db385364d272b330b64c354a4649fc8e295993529a941b5ce5e",
+        "viewed": true
+      },
+      {
+        "path": "qa/20261019t045743-9f0146/story-screenshots/apps-web-features-home-home-page.stories.tsx/ContentFirstPhone.png",
+        "width": 390,
+        "height": 844,
+        "sha256": "ebc159df8676957816c87e90a8a428ac4ae7ab92bdb3a022dbc116a46bb7f424",
+        "viewed": true
+      },
+      {
+        "path": "qa/20261019t045743-9f0146/story-screenshots/apps-web-features-library-games-library-recorded.stories.tsx/MemberPopulated.png",
+        "width": 1280,
+        "height": 860,
+        "sha256": "7616a9fb989f12d93fe47bcedf663ec34421a52554a0965f62f0cf6c3bea2a96",
+        "viewed": true
+      },
+      {
+        "path": "qa/20261019t045743-9f0146/story-screenshots/apps-web-features-library-games-library-recorded.stories.tsx/MemberPopulatedPhone.png",
+        "width": 390,
+        "height": 844,
+        "sha256": "b315db08245531d6103e2b4c8e897d9f4cc5eaeac9223f6f249200f6caf27538",
+        "viewed": true
+      },
+      {
+        "path": "qa/20261019t045743-9f0146/story-screenshots/apps-web-features-library-visual-novels-library-recorded.stories.tsx/MemberReading.png",
+        "width": 1280,
+        "height": 860,
+        "sha256": "6c4eb8f083ef1fe04d94d310c8596f7380e632458ab3eba4cefea780992b3f70",
+        "viewed": true
+      },
+      {
+        "path": "qa/20261019t045743-9f0146/story-screenshots/apps-web-features-library-visual-novels-library-recorded.stories.tsx/MemberReadingPhone.png",
+        "width": 390,
+        "height": 844,
+        "sha256": "d5c536e342db7a9fe27e1e4980cab26ce4c43b0ca5c03f0931e0db47b052735f",
+        "viewed": true
+      },
+      {
+        "path": "qa/20261019t045743-9f0146/story-screenshots/apps-web-features-library-library-contract.stories.tsx/RepeatedRecipesPhone.png",
+        "width": 390,
+        "height": 844,
+        "sha256": "732d66cd2c835830b00d5a14b6cd045c92c30a6f5ef4670acec169091a93bd48",
+        "viewed": true
+      },
+      {
+        "path": "runtime/recorded-books-390.png",
+        "width": 390,
+        "height": 844,
+        "sha256": "cc82443ab7f9b47555505d70b1e4befa58eb2812d5181c3177d06e210b45532a",
+        "viewed": true
+      },
+      {
+        "path": "runtime/recorded-books-1440.png",
+        "width": 1440,
+        "height": 1000,
+        "sha256": "526ea1fdf7f8f18d2180897022bf19a90c4a79aa17bb4e94473b981e796b0761",
+        "viewed": true
+      },
+      {
+        "path": "runtime/home-1440.png",
+        "width": 1440,
+        "height": 1000,
+        "sha256": "c573ceec4128eea6b61f1cad6b3a8e65978271fc06c416cb2eb82a2b2003d352",
+        "viewed": true
+      },
+      {
+        "path": "runtime/home-390.png",
+        "width": 390,
+        "height": 844,
+        "sha256": "ebc159df8676957816c87e90a8a428ac4ae7ab92bdb3a022dbc116a46bb7f424",
+        "viewed": true
+      },
+      {
+        "path": "runtime/reading-390.png",
+        "width": 390,
+        "height": 844,
+        "sha256": "95ac548053383db385364d272b330b64c354a4649fc8e295993529a941b5ce5e",
+        "viewed": true
+      },
+      {
+        "path": "runtime/empty-library-390.png",
+        "width": 390,
+        "height": 844,
+        "sha256": "690b54deb3b0cc73d7dc45d21524b9aaaecdfb1a70c88b35e9789582a75084b1",
+        "viewed": true
+      },
+      {
+        "path": "runtime/empty-home-390.png",
+        "width": 390,
+        "height": 844,
+        "sha256": "176d9d363cfccd22fda56a74ae4034b4d5f74b7b8a7d457ed2c517f00ee2bfdc",
+        "viewed": true
+      },
+      {
+        "path": "runtime/zoom-reflow-library-320.png",
+        "width": 320,
+        "height": 844,
+        "sha256": "5be4f77aaea93c25fd21b641b66cf4b3ed50e98b65a76edfdd2e40b4aedca023",
+        "viewed": true
+      },
+      {
+        "path": "runtime/zoom-reflow-home-320.png",
+        "width": 320,
+        "height": 844,
+        "sha256": "09fcdf65907c28ecd7aebee45a4fd3208bbe9d6ac61e85b330780eb1e614d852",
+        "viewed": true
+      },
+      {
+        "path": "runtime/empty-default-library-390.png",
+        "width": 390,
+        "height": 844,
+        "sha256": "1abb5fe1bd77ed6a4b0d7fee0c3862eb93a3b14412eedf9eef49769a9037123d",
+        "viewed": true
+      },
+      {
+        "path": "runtime/empty-default-library-1440.png",
+        "width": 1440,
+        "height": 1000,
+        "sha256": "5b68318f83771bc39396e58cd86dfb8efe57eb38ce702bcc5900c849dd3b4d6a",
+        "viewed": true
+      },
+      {
+        "path": "runtime/empty-default-home-1440.png",
+        "width": 1440,
+        "height": 1000,
+        "sha256": "d13b88da5bbe7941cd4b944070b574b917641a2c4e0de8c2d70d691ff32707cf",
+        "viewed": true
+      },
+      {
+        "path": "runtime/recorded-phone-continue-focus.png",
+        "width": 390,
+        "height": 844,
+        "sha256": "f4e82e920ed1d7291961d238dd4866904cc2702778c4ed23011d60d980580e0b",
+        "viewed": true
+      },
+      {
+        "path": "runtime/keyboard-390.png",
+        "width": 390,
+        "height": 844,
+        "sha256": "f25379d5e53aa98bd086da33d4028fd7d5bae1c3d76fe9388c3912fd38a4cdd7",
+        "viewed": true
+      }
+    ],
+    "screenshotScope": "Viewed entries only. The bundle also retains all 115 supplied-story screenshots. Their default desktop sizes vary; requested 1440x1000 shell evidence comes from the private rendered captures. PNG dimensions are recorded per image."
+  },
+  "defects": [
+    {
+      "id": "recorded-books-phone-overflow",
+      "class": "runtime",
+      "status": "confirmed",
+      "assertionReached": true,
+      "evidence": "390x844 recorded Books document.scrollWidth=559 with tools closed and open. First Open action still clears shell; Continue is reachable by strip scrolling/focus.",
+      "attribution": "Overflow candidates include an offscreen sr-only progress label at right=559.125 inside closed details. Exact root cause and introduction commit are unproven; no product fix attempted.",
+      "artifacts": [
+        "runtime/recorded-books-390.json",
+        "runtime/recorded-phone-overflow.json",
+        "runtime/recorded-phone-tools-open.json"
+      ]
+    },
+    {
+      "id": "recipe-touch-targets",
+      "class": "runtime-accessibility",
+      "status": "confirmed",
+      "assertionReached": true,
+      "cases": [
+        "Library/Contract states/Repeated Recipes",
+        "Library/Contract states/Repeated Recipes Phone"
+      ],
+      "evidence": "Serious axe target-size failures in phone light/dark: public/private recipe collection links measure about 145x21 and 150x21; spacing is insufficient.",
+      "attribution": "These link controls are unchanged by the two reviewed commits. Baseline was not executed; introduction is not claimed."
+    },
+    {
+      "id": "home-tab-menu",
+      "class": "runtime-or-story-interaction",
+      "status": "unresolved",
+      "assertionReached": true,
+      "cases": [
+        "Home/Page/Tab Menu"
+      ],
+      "evidence": "Existing keyboard menu test expects menu removal after activation; menu remains in DOM. Retained log contains exact failing stack. Not independently isolated and no assertion removed.",
+      "attribution": "TabMenu test was not edited in reviewed commits; introduction unproven."
+    },
+    {
+      "id": "hidden-desktop-navigation-boundary",
+      "class": "source-test-premise",
+      "status": "confirmed",
+      "assertionReached": true,
+      "cases": [
+        "Library/Reading first/In Progress",
+        "Library/Recorded Books/Owner Reading First"
+      ],
+      "evidence": "Source selects the first position:fixed nav even when display:none. Its top=0 makes visible title bottom=313 fail <=0. Independent visible-nav filtering confirms actual shell clearance."
+    },
+    {
+      "id": "closed-details-role-query",
+      "class": "source-test-premise",
+      "status": "confirmed",
+      "assertionReached": true,
+      "cases": [
+        "Library/Reading first/In Progress Phone",
+        "Library/Recorded Books/Owner Reading First Phone"
+      ],
+      "evidence": "queryByRole returns the Reading in 2026 heading under closed native details, so toBeNull fails. Closed disclosure state and actual hidden statistics were separately measured; source text does not demonstrate visible statistics."
+    },
+    {
+      "id": "storybook-tools-keyboard",
+      "class": "story-interaction",
+      "status": "not-reproduced-in-independent-provider",
+      "assertionReached": true,
+      "cases": [
+        "Library/Reading first/Tools By Keyboard"
+      ],
+      "evidence": "Supplied runner fails immediate goal/stats visibility after Enter. Real sequential Tab/Enter/Space in Task Playwright succeeds at both widths. Native activation settling/runner behavior is a hypothesis, not an established root cause."
+    }
+  ],
+  "livePrerequisites": {
+    "inventory": "runtime/fixture-inventory.json",
+    "availableIsolatedSignedInFixture": false,
+    "sharedDevelopmentFixture": "Main .temp/stack/rezics-dev/web-auth exists but is shared, ineligible for these isolated checks, and was not used or changed. No private credential contents were read.",
+    "existingCommandCreatedCorpus": "G-2791 remains sole producer. Retained attempt-14 handoff reports no preparation, baseline/outcome execution or ready manifest: exact per-part retained intake request/response bindings and real conversion/proposal prerequisites are missing.",
+    "notRun": [
+      {
+        "path": "apps/web/tests/library.e2e.ts",
+        "assertionReached": false,
+        "status": "not-started-prerequisite-unavailable"
+      },
+      {
+        "path": "apps/web/tests/home.e2e.ts",
+        "assertionReached": false,
+        "status": "not-started-prerequisite-unavailable"
+      },
+      {
+        "path": "apps/web/tests/library-import.e2e.ts",
+        "assertionReached": false,
+        "status": "not-started-prerequisite-unavailable"
+      },
+      {
+        "path": "apps/web/tests/g-743-library.e2e.ts",
+        "assertionReached": false,
+        "status": "not-started-prerequisite-unavailable"
+      },
+      {
+        "path": "apps/web/tests/g-855-library-import.e2e.ts",
+        "assertionReached": false,
+        "status": "not-started-prerequisite-unavailable"
+      },
+      {
+        "path": "apps/web/tests/g-855-library-export.e2e.ts",
+        "assertionReached": false,
+        "status": "not-started-prerequisite-unavailable"
+      },
+      {
+        "path": "apps/web/tests/g-855-library-roundtrip.e2e.ts",
+        "assertionReached": false,
+        "status": "not-started-prerequisite-unavailable"
+      },
+      {
+        "path": "apps/web/tests/g-856-library-import.e2e.ts",
+        "assertionReached": false,
+        "status": "not-started-prerequisite-unavailable"
+      },
+      {
+        "path": "apps/web/tests/g-856-library-export.e2e.ts",
+        "assertionReached": false,
+        "status": "not-started-prerequisite-unavailable"
+      },
+      {
+        "path": "apps/web/tests/g-856-formats.e2e.ts",
+        "assertionReached": false,
+        "status": "not-started-prerequisite-unavailable"
+      },
+      {
+        "path": "apps/web/tests/g-856-library-roundtrip.e2e.ts",
+        "assertionReached": false,
+        "status": "not-started-prerequisite-unavailable"
+      },
+      {
+        "path": "apps/web/tests/books-catalogue-export.e2e.ts",
+        "assertionReached": false,
+        "status": "not-started-prerequisite-unavailable"
+      },
+      {
+        "path": "apps/web/tests/books-interrupted-export.e2e.ts",
+        "assertionReached": false,
+        "status": "not-started-prerequisite-unavailable"
+      }
+    ],
+    "exactRequirements": [
+      "A running isolated Web/Main/Accounts stack, pinned appropriately, with REZICS_WEB_AUTH_PRIVATE_PATH for the member/operator fixture; no such isolated fixture was found.",
+      "library.e2e.ts has a library-seed.ts beforeAll that creates a Book and waits for Main graph stabilization. Its outcome assertions cannot be reached without the isolated fixture/Main and eligible existing corpus.",
+      "home.e2e.ts member case needs isolated fixture credentials and platform authority. Anonymous cases also need an isolated running Web; none was available. Shared Web was not used as proof.",
+      "Import/export/roundtrip helpers require isolated credentials, Main and retained eligible collection data; several invoke seeders or write through import APIs. They were not run as a duplicate corpus producer.",
+      "books-interrupted-export calls prepareBook/prepareBookCopies. Authority setup explicitly requires REZICS_WEB_AUTH_PRIVATE_PATH, ACCESS_DATABASE_URL and REZICS_QA_RUN_ID, then real command-created Book/copies. No substitute Book, snapshot, cursor or API answer was invented."
+    ],
+    "webStartupOwner": "G-2747; startup repair was not duplicated and no new startup result is claimed.",
+    "blockedScope": "Live collection/shelving persistence, signed-in continuation, import/export resumability and roundtrip acceptance only. Rendered selection completed independently."
+  },
+  "findingAcceptance": [
+    {
+      "id": "D4-003",
+      "status": "partial",
+      "acceptedEvidence": [
+        "Reading and first action precede secondary tools and clear fixed shell at both requested sizes.",
+        "Tools remain reachable by Tab/Enter/Space, and horizontal card access works.",
+        "Empty/recorded games/visual-novel fixtures remain intact."
+      ],
+      "remaining": [
+        "Recorded Books phone document overflow.",
+        "Supplied story assertion defects remain unchanged.",
+        "Real API-backed continuation, collection persistence and transfer outcomes not reached."
+      ],
+      "mainAcceptance": false
+    },
+    {
+      "id": "D4-011",
+      "status": "rendered-criteria-verified-live-unverified",
+      "acceptedEvidence": [
+        "Two useful anonymous Home titles and previews above phone fixed navigation.",
+        "Empty/anonymous states retain useful destinations.",
+        "No reserved column without recommendations; continuation/feed before guidance."
+      ],
+      "remaining": [
+        "Existing Home TabMenu failure unresolved.",
+        "Live signed-in Home and actual community API selection not reached.",
+        "No independent integration proof on report main base."
+      ],
+      "mainAcceptance": false
+    }
+  ],
+  "administrative": {
+    "initialSetupAttempts": [
+      {
+        "job": "b18b1062-0cfb-4b94-81ce-e21cb3cefc56",
+        "result": "No tests found: Bun hidden-path selector lacked ./; corrected selector, no product assertion reached."
+      },
+      {
+        "job": "c16d2525-6af0-43db-b0d7-00937dfb0203",
+        "result": "Task wide-run guard refused unnamed Playwright selection; corrected to explicit rendered.spec.ts without bypassing admission."
+      }
+    ],
+    "reportChecks": {
+      "status": "passed",
+      "job": "b77903ff-431f-4589-aeac-28f408895ab8",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "pin": "goal/g-2831 dispatch main base 42f8b873b4608b661e0b4153f2340c5c0e28cc07 plus this proof JSON; not product source pin",
+      "docs": "Passed: 13 checker tests, 236 Markdown files; local links/fragments/navigation. JSON content and runtime behavior are not validated by this check.",
+      "goal": {
+        "types": "ok: no TypeScript workspace changed; skipped",
+        "tests": "ok: no test files named in brief; skipped",
+        "lint": "ok: no source file changed; skipped",
+        "ast": "ok",
+        "guards": "ok; 1/44 selected for changed proof path"
+      },
+      "logs": [
+        "jobs/b77903ff-431f-4589-aeac-28f408895ab8.1.log",
+        "jobs/b77903ff-431f-4589-aeac-28f408895ab8.2.log",
+        "administrative/goal-check-output.log"
+      ]
+    },
+    "server": {
+      "ownedProcessGroup": 86925,
+      "command": "task storybook -- --port 6283 --exact-port",
+      "url": "http://127.0.0.1:6283",
+      "stopSignal": "SIGTERM",
+      "stopRequestedUTC": "2026-10-19T05:15:40.990621+00:00",
+      "port6283ListeningAfterStop": false
+    },
+    "trackedChangeScope": [
+      "docs/goals/audit-remediation-20261019/proofs/reading-home.json"
+    ]
+  },
+  "artifacts": {
+    "privateBundle": ".temp/reading-home-G-2831/",
+    "localHandoffCopy": ".temp/audit-remediation-20261019/proofs/reading-home-G-2831/",
+    "managerCopyDestination": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/proofs/reading-home-G-2831/",
+    "mainCopyStatus": "Manager action required. The explicit worktree-only write boundary and worker protocol forbid this worker from copying into main. The requested main path was translated to this worktree for the retained handoff copy.",
+    "manifest": "artifact-manifest.json",
+    "logs": "jobs/",
+    "retainedAnswers": "source/answer-manifest.json"
+  },
+  "handoff": {
+    "proposedWork": [
+      "Resolve confirmed recorded Books overflow and recipe target-size defect through existing owners.",
+      "Correct supplied shell/closed-details test premises through test owners; isolate Home TabMenu and Storybook keyboard failures without dropping assertions.",
+      "Reuse G-2791 genuine ready corpus and an isolated fixture for the listed live selectors after prerequisites exist; preserve G-2747 startup ownership."
+    ],
+    "next": "Manager reviews this partial finding-level evidence, copies the local artifact bundle into main, assigns the concrete unresolved defects, and runs remaining live acceptance only when genuine prerequisites exist. No regression confirmation or automatic landing is claimed.",
+    "instructionBoundary": {
+      "file": "docs/goals/worker.md",
+      "quote": "For an ordinary worker task, never push, never touch the main checkout or `.temp/vault/`, never rebase or merge `main`",
+      "effect": "Report stays on the dispatch main-based worker branch; copying the artifact bundle into main is left to the manager, consistent with the user write restriction."
+    }
+  }
+}
