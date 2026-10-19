@@ -389,10 +389,28 @@ checks, with no ready manifest or product assertion. Actual per-part intake
 request/response bindings remain a blocker; importer summaries supply no receipt.
 Decision db5c2fd6a2 assigned G-2819's codex-1/xhigh review of the three-path
 correction against 13b5d13eec in the complete 15-path producer context.
-It is running; its result event owns disposition. Carry forward G-2812's
-F01–F08 and owner prerequisites explicitly: its advertised report is absent,
-but generation text and final validation survive in its attempt transcripts.
-G-2791 stays partial/exited; no preparation or proof was released.
+That complete review at 92b8a78f1c is accepted, landed at 6d772ffa8e and closed
+verified; its brief is archived in c5e98cca26. The landed report matches the
+accepted copy; all 67 retained evidence files were verified under
+.temp/audit-remediation-20261019/reviews/import-corpus-g2819/.
+I01–I04 remain open: frozen intake identity/multipart receipt joins, complete
+importer envelopes, exact current synopsis-support/head receipts and precise
+owner/blocked-stage refusals. Carry G-2812's F01–F08 and all owner prerequisites
+forward; its absent report was reconstructed from retained generation/final
+validation transcripts. These are source findings, with no executed product
+failure, ready corpus or cleared audit outcome.
+The event's G-2791 acceptance decision is retained in snapshot 9f5a3fe7bc at
+refs/goal-manager/manager-f70e1670-2ccd-439d-b6aa-079b1b850c5e. Its brief commit
+failed on .git/index.lock and is not on main; preserve it for separate commit
+repair before a later worker assignment. The exhausted two-fix-round boundary
+and final import-only scope cut still apply; no further implementation round
+was granted. Program received I03–I04's existing Source/control/private-management
+receipt, head and refusal-contract question as
+mail:e85fa8b8-be80-478a-8379-180f39fbfb2e; its reading remains pending.
+G-2819's first landing also stopped on the index lock; the handled failure event
+verified and removed the stale lock, then restarted the landing successfully.
+Landing mails 2d73a67e and f5502f30 are acknowledged. Do not land or close
+G-2819 again. G-2791 stays partial/exited; no preparation or proof was released.
 Decision 6a0f0d63bf retains G-2776's consumer
 prerequisites in this existing triage without another worker assignment:
 23 Books, 23 root/nested chapter occurrences, original publication/qualification
@@ -553,7 +571,8 @@ refusal was acknowledged and reported to Program; no worker was started.
 Domain-leading research complements, never replaces, these 61 findings.
 Keep account/allowance settings, observations and scheduling notes untracked.
 
-Checkpoint measures: 0/61 proved; tokens/proved row n/a. Current status reports
+Checkpoint measures: 0/61 proved; tokens/proved row n/a. The last detailed status
+reading reports
 69/86 first attempts (80%), seventeen fix rounds, six capacity continuations,
 attempts/landed median one and maximum fourteen (G-2759), 546.5M input and 4.2M
 output tokens. Of 251 job wakes: 126 passed, 64 assertion, one timeout, two
@@ -568,11 +587,16 @@ The last recorded 12-hour window (2026-10-18 08:36:08–20:36:08 UTC) attributes
 The prior reading at 2026-10-18T22:46:16Z covers 20:36:29Z–22:46:16Z:
 223,312,917 input tokens, 93% cached; worker/review/other input shares 91%/6%/3%.
 It does not isolate manager share or report current first-attempt/landed-attempt
-measures. Checkpoint a958a3c1-52ed-4960-97b9-4ca36576e4c4 covers task:G-2772:12,
-mail:dd8fe948, task:G-2769:11, task:G-2817:1, task:G-2791:14 and mail:8ada009f.
-Both supplied mail deliveries are already acknowledged. Six manager attempts
-used 4,866,367 input (4,482,688 cached) and 38,084 output tokens. These event
-totals do not isolate manager share of a matched all-role window. The prior
+measures. Current status supplies no updated first-attempt or landed-attempt
+measures; retain those earlier figures as historical. Checkpoint
+61b5d54f-c288-45af-b407-fec3a58a3913 covers task:G-2819:1,
+mail:2d73a67e-3752-4792-9356-d2e6f7011716 and
+mail:f5502f30-5a45-4744-913c-86a0c6132a6c. Both supplied landing mails are
+already acknowledged. Three manager attempts used 2,802,476 input
+(2,630,784 cached) and 23,249 output tokens. Prior checkpoint
+a958a3c1-52ed-4960-97b9-4ca36576e4c4 recorded six manager attempts using
+4,866,367 input (4,482,688 cached) and 38,084 output tokens. These event totals
+do not isolate manager share of a matched all-role window. The prior
 checkpoint's mail 2628517c completed its actions before a model-capacity exit
 with no usage recorded; the earlier failed G-2806 manager attempt also still
 has no usage recorded. Status declares
@@ -588,12 +612,15 @@ coordinator events. That disposition started no watcher or capacity policy.
 Next executable actions:
 
 1. Read remaining review/result dispositions, including the dispatched
-   G-2816/G-2818 and running G-2819, in their own events.
+   G-2816/G-2818, in their own events.
    G-2753/G-2762/G-2780 builds are accepted/exited; G-2786 stays exited
    pending review and Program's shared
    availability ruling. G-2758 stays open/exited. G-2791's bounded import
-   correction awaits G-2819; G-2769's published design note awaits Program.
-   G-2812/G-2815/G-2817 are closed verified; duplicate neither their
+   correction retains I01–I04/F01–F08 and awaits Program's receipt-contract
+   reading. Recover its failed acceptance-decision snapshot in a separate event
+   before assigning further work; no extra fix round was granted.
+   G-2769's published design note awaits Program.
+   G-2812/G-2815/G-2817/G-2819 are closed verified; duplicate neither their
    reviews/landings nor mail acknowledgements. Preserve G-2750's deferred
    four-consumer handoff and
    completed test reconciliation. G-2782/G-2807/G-2813 are closed verified.
@@ -604,7 +631,8 @@ Next executable actions:
    G-2771's remaining proposal referral; the Source/Release/Realization ownership
    question is delivered. Obtain Program rulings on
    public-domain contracts, delivered joint Source admission, relation/Structure,
-   OA1–OA3, joint G-2769/G-2772 admission, G-2780 custody/F2, G-2786 shared
+   OA1–OA3, joint G-2769/G-2772 admission, G-2791 I03–I04 receipt/refusal contracts,
+   G-2780 custody/F2, G-2786 shared
    availability and instrumentation questions
    before their dependent work.
    Information display, resource search and author lifecycle readings are
@@ -616,8 +644,9 @@ Next executable actions:
 4. G-2783 remains unstarted after queue refusal, under its existing dependency
    and admission gates; retain the about allocation. G-2791 remains the single
    genuine preparation producer. Its completed G-2812 review covers the earlier
-   pin only; require G-2819's review and manager disposition of the bounded
-   import correction and genuine prerequisites before any execution release.
+   pin only. G-2819's later review is accepted; resolve its source findings,
+   failed brief-decision commit and genuine prerequisites before any execution
+   release.
 5. After builds: generate once, pin wave, prepare once within 600 seconds,
    stop/backup and restore isolated copies; run original-baseline/fixed API
    assertions, viewed Storybook/screenshots and real journeys, codex-1 review,
