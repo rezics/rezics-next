@@ -927,5 +927,318 @@
     "mainMutated": false,
     "externalMessagesSent": false,
     "handoff": "normal worker report-only commit; manager decides next proof prerequisites"
+  },
+  "transitionDependencyReview": {
+    "reviewedAt": "2026-10-19T07:48:03.732873+00:00",
+    "authority": "Manager continuation: one actual independent codex-1/GPT-6.1 Sol/xhigh review of G-2842 transition dependency; no migration adoption or shared stack writes by G-2846.",
+    "reviewer": {
+      "worker": "G-2846",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independentOfAuthor": true,
+      "nestedAgents": false,
+      "reviewCount": 1
+    },
+    "decision": {
+      "verdict": "approve",
+      "owner": "G-2842",
+      "canLandThisDependency": true,
+      "blockingFindings": [],
+      "reason": "The six-path change provides an explicit, narrowly pinned QA metadata bridge and shares the existing owner migration receipts, locks and per-file transactions. It verifies actual frozen baseline schema and seed effects before adoption; exact-source producer counterexamples and subsequent-upgrade assertions pass. No actionable defect was found within this scope.",
+      "doesNotApproveNotificationCandidate": "1addc28512baa56bbe940561646c693f8e9aba47",
+      "doesNotCloseOriginalFindings": true,
+      "doesNotCertifyActualRetainedCopy": true
+    },
+    "source": {
+      "commit": "b0b3a5e7cbf47f03eda24f53ee7ca3a492436aff",
+      "parent": "82067635061c20a9a3d0301a63aa652bf120d14b",
+      "headVerifiedExact": true,
+      "sourceTreeClean": true,
+      "changedPaths": [
+        {
+          "path": "docs/testing/test-harness.md",
+          "sha256": "00f9cec5071388911b1375126be6001d68b3c443f6fb482b8972fba26cdba09a",
+          "candidateBytesMatch": true
+        },
+        {
+          "path": "scripts/ops/migrate.test.ts",
+          "sha256": "f06a32aa611c5f1af23596739b62c5460e6b0e4a9d69891bf5aeb5797f2e0c98",
+          "candidateBytesMatch": true
+        },
+        {
+          "path": "scripts/ops/migrate.ts",
+          "sha256": "344882de8e53bdea11e61b1f01458bd85a6cc533374558170015013e08300214",
+          "candidateBytesMatch": true
+        },
+        {
+          "path": "scripts/qa/bootstrap.ts",
+          "sha256": "a1ae68baba2446c09b573c981a0c7c75cf17e12d1f2376fe8d498513b8306d48",
+          "candidateBytesMatch": true
+        },
+        {
+          "path": "scripts/qa/history-transition.test.ts",
+          "sha256": "c795f49f996764a342525dd6f7f896d7c860c3fafa223f75a94363f0cf00fa10",
+          "candidateBytesMatch": true
+        },
+        {
+          "path": "scripts/qa/history-transition.ts",
+          "sha256": "fdfe1af26418f26c04ea67a8b4a0e9580022ef5ba9daddc4cf28b416ab666363",
+          "candidateBytesMatch": true
+        }
+      ],
+      "trackedPaths": 6,
+      "sourceOrAssertionsChangedByReviewer": false,
+      "diff": ".temp/read-availability-review/transition-dependency/candidate.diff"
+    },
+    "retainedInput": {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2826/.temp/rating-context-execution/baseline/.temp/rating-context-source/owners/backup.json",
+      "sha256": "d7059aeceef904aa9ccba02dfabb87f8a41f10756ccd4f56567841097d328a8c",
+      "source": "759244e365ad64bcb97fac0ea7d7b9caebe144b2",
+      "project": "rezics-catalogue-corpus-ratings-8eda5a21-ca4d-4fdc-rating-context-selection-79c3488519b38ec7",
+      "runId": "ratings-8eda5a21-ca4d-4fdc",
+      "storageDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056",
+      "storageFiles": 525,
+      "volumeInspected": false,
+      "adoptionExecuted": false,
+      "completeFrozenInventoryVerified": {
+        "files": 525,
+        "everyByteHashMatches": true,
+        "evidence": ".temp/read-availability-review/transition-dependency/retained-inventory-verification.json"
+      },
+      "manifestIsNotDatabaseCompletionProof": true,
+      "realRetainedOwnerVolumesInspectedOrAdoptedByReviewer": false
+    },
+    "materialContractsInspected": [
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "13,53-95",
+        "conclusion": "Only frozen source 759244e365ad64bcb97fac0ea7d7b9caebe144b2 is supported. Git archival supplies immutable SQL and storage bytes. Backup bytes must match the independently retained SHA, and the complete 525-path inventory must match the frozen source. Digest input alone does not authorize receipts."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "97-144",
+        "conclusion": "Input/output paths resolve into this checkout .temp. Target must be a distinct persistent rezics-qa project, not production, with matching Docker project/service, PostgreSQL engine, named volume and loopback owner endpoints. Schema dumps retain definitions, ownership, grants, functions, triggers, policies and indexes; only the two migration metadata relations and random dump guards are excluded."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "147-191,227-240,271-288",
+        "conclusion": "Before first adoption, populated owner schema must equal its frozen template, with no invalid/incomplete index. A fresh replay of all pinned SQL must then equal that schema and every normalized template seed row. The populated copy must retain all stable seed keys and the complete nonvolatile values for fixed seed tables. Runtime counters, gates, policies and recovery state may advance. A forged matching object count or mutually altered target/template seed value cannot substitute for pinned SQL effects."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "202-226",
+        "conclusion": "Nonempty history without a verified transition receipt is refused. Replay requires the exact source/backup, frozen migration list, all historical entries and no entry unknown to the current owner inventory. Already committed transition evidence is trusted to avoid replaying application mutations; retry is not a new certification of arbitrary post-adoption schema/data drift."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "247-323",
+        "conclusion": "All owner clients must be stopped. Existing Access and relay release locks are held, each with a 5-second acquisition limit. Both owners are verified before metadata writes; SHARE table locks and per-owner transactions protect verification/receipt writes. Application SQL is replayed only into temporary empty reference databases. Verification rolls back target transactions; adoption inserts migration and transition metadata only. A write failure before commits rolls both owners back. Cross-database commits are explicitly non-atomic: a durable first-owner receipt allows the interrupted second owner to be completed without replaying seeds. References are removed in finally."
+      },
+      {
+        "path": "scripts/ops/migrate.ts",
+        "lines": "42-119,122-134,199-218",
+        "conclusion": "The same session advisory lock covers provider DDL, standalone concurrent-index builds, per-file transactions and receipts. Polling pg_try_advisory_lock ends each wait statement instead of retaining the transaction that could deadlock a concurrent-index build. Explicit selections reject unknown/duplicate basenames and do not mark unselected migrations. Production owner startup still executes ordinary tracked migrations and never imports the QA transition automatically."
+      },
+      {
+        "path": "scripts/qa/bootstrap.ts",
+        "lines": "19-26,74-91",
+        "conclusion": "Future QA Access/relay bootstrap uses the owner runner and durable receipts before freezing templates. Access and relay paths remain owner-specific; Account/Content lifecycle is unchanged. Existing fault/recovery subset callers still select only their named migrations."
+      },
+      {
+        "path": "scripts/lib/concurrent-index.ts",
+        "lines": "1-75",
+        "conclusion": "Existing online-build parser, standalone execution and invalid-index recovery are retained; the new helper does not replace their contract."
+      },
+      {
+        "path": "docs/testing/test-harness.md",
+        "lines": "72-112",
+        "conclusion": "Documents explicit verification then adoption on an admitted stopped disposable copy, independent pins, metadata-only writes, retry behavior and normal later owner upgrades. Tooling success is expressly separate from certification of a real retained copy."
+      }
+    ],
+    "producerReceiptReuse": {
+      "job": "bdbd6f7e-9d41-40ad-b699-fac2a6ee2ec7",
+      "qaRun": "20261019t072939-b7610f",
+      "command": "bun scripts/goal/goalctl.ts test scripts/ops/migrate.test.ts scripts/qa/history-transition.test.ts --timeout 600000",
+      "exitCode": 0,
+      "execution": "Real isolated PostgreSQL 18.6 containers and frozen empty-bootstrap replay, with a populated principal/counter/gate preservation case; no product persona or retained-corpus adoption run.",
+      "sourceQualification": {
+        "producerSource": {
+          "head": "82067635061c20a9a3d0301a63aa652bf120d14b",
+          "fingerprint": "7401accf2def8fb839fe11001efb413e1ce874dda60c5673fd1f8274df58c32c",
+          "clean": false
+        },
+        "sourceStable": true,
+        "reconstructedPrecommitFingerprint": "7401accf2def8fb839fe11001efb413e1ce874dda60c5673fd1f8274df58c32c",
+        "exactCandidateBytesProved": true,
+        "method": "sha256(parent HEAD newline + tracked binary diff + each sorted untracked pathname NUL and committed bytes), matching scripts/qa/core.ts:245-303"
+      },
+      "counts": {
+        "executed": 8,
+        "pass": 8,
+        "fail": 0,
+        "error": 0,
+        "skip": 0,
+        "assertions": 70,
+        "elapsedMs": 316400
+      },
+      "cases": [
+        {
+          "file": "scripts/ops/migrate.test.ts",
+          "line": 14,
+          "name": "QA receipts share the owner lock, exact selection, transactions and subsequent upgrades",
+          "assertions": 18,
+          "result": "pass"
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 136,
+          "name": "retained lineage requires both independently recorded bytes and every pinned migration byte",
+          "assertions": 8,
+          "result": "pass"
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 153,
+          "name": "partial or unknown historical receipts are refused without adopting the other owner",
+          "assertions": 3,
+          "result": "pass"
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 161,
+          "name": "an existing schema with a missing migration effect cannot gain receipts",
+          "assertions": 3,
+          "result": "pass"
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 167,
+          "name": "a populated owner missing a seeded data-only effect cannot gain receipts",
+          "assertions": 3,
+          "result": "pass"
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 173,
+          "name": "a template with matching object counts is checked against the actual pinned SQL effects",
+          "assertions": 3,
+          "result": "pass"
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 184,
+          "name": "a failed receipt write rolls back both verified owners without changing application state",
+          "assertions": 6,
+          "result": "pass"
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 197,
+          "name": "verification is read-only and adoption preserves all owner schema, data, identities and rights",
+          "assertions": 26,
+          "result": "pass"
+        }
+      ],
+      "affectedCheck": {
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "guards": {
+          "selectedFiles": 18,
+          "availableFiles": 44,
+          "executed": 133,
+          "pass": 133,
+          "fail": 0
+        },
+        "types": "pass (89.3s)",
+        "lint": "pass (3.0s)",
+        "ast": "pass (0.3s)",
+        "briefTests": "none; focused owner QA recorded separately",
+        "log": ".temp/read-availability-review/transition-dependency/producer/.temp/goal/check/run-21KW36/output.log"
+      },
+      "docsCheck": {
+        "command": "task docs:check",
+        "exitCode": 0,
+        "executed": 13,
+        "pass": 13,
+        "fail": 0,
+        "coverage": "249 Markdown files",
+        "log": ".temp/read-availability-review/transition-dependency/producer/.temp/goal/jobs/38564cd7-a5cf-43b1-b7c4-2f6218085421.2.log",
+        "qualification": "Earlier documentation check covers the final unchanged documentation blob; the later producer source/check fingerprint is independently matched to b0b3."
+      },
+      "unchangedTestsRepeatedByReviewer": false,
+      "additionalRuntimeCounterexample": "None warranted after inspecting the exact passing tests and source paths; no unchanged QA replay was performed.",
+      "producerResourcesStopped": "Reported by G-2842 final handoff; reviewer did not start or adopt any stack.",
+      "originalRetainedManifestUnchanged": "SHA-256 independently read as d7059aeceef904aa9ccba02dfabb87f8a41f10756ccd4f56567841097d328a8c; no retained volume mutation performed."
+    },
+    "assertionReachAndLimits": {
+      "provedByProducer": [
+        "Missing/drifted/extra inventory bytes and incorrect source are refused.",
+        "Unknown/partial historical receipts refuse adoption of the other owner.",
+        "Missing schema index and missing seeded data-only effect are refused.",
+        "Matching object counts with altered frozen data effects are refused against actual pinned SQL replay.",
+        "Failed relay receipt insertion rolls back both verified owners and preserves application dump hashes.",
+        "Verification and adoption preserve full application schema/data dumps, principal identity, enforcement epoch, gates and counters.",
+        "A constructed between-owner-commit durable state resumes correctly; repeated retries preserve a post-adoption application change.",
+        "A genuine later ALTER/data upgrade applies once through the ordinary owner runner; enforcement trigger behavior remains active.",
+        "Future QA receipts use the same migration lock/selection/transactions, serialize with ordinary upgrades, retain online-build recovery and refuse production auto-adoption."
+      ],
+      "notClaimed": [
+        "No actual process-kill-at-COMMIT fault was executed; interrupted replay was constructed from a genuinely verified/adopted per-owner receipt.",
+        "No G-2826 retained-copy verify/adopt/upgrade or rating assertion was executed by G-2846.",
+        "No application migration 2605 receipt or native graph-version repair capability is established by this tooling review.",
+        "No public-persona, mixed-load or native SQL/engine drain acceptance is established.",
+        "First-adoption data-effect checks deliberately preserve legitimate runtime changes and do not require every mutable business value to equal an empty bootstrap.",
+        "The original backup manifest is validated; physical backup consistency and restored-volume provenance remain the supported restore/consumer owner obligation."
+      ]
+    },
+    "nextForG2826": {
+      "owner": "G-2826",
+      "prerequisite": "After normal manager landing/integration of reviewed b0b3, restore the unchanged independently pinned backup into a stopped, owned persistent isolated QA copy with its original engines. Run documented verify, then adopt with fresh receipt output, then ordinary owner upgrades. Keep the original frozen rating assertions and source pins. Refusal remains setup failure.",
+      "commandTemplate": "task goal -- slot -- bun scripts/qa/history-transition.ts verify --stack .temp/stack/rezics-qa-<restored-run> --backup .temp/<retained-input>/backup.json --backup-sha256 d7059aeceef904aa9ccba02dfabb87f8a41f10756ccd4f56567841097d328a8c --source 759244e365ad64bcb97fac0ea7d7b9caebe144b2 --receipt .temp/<evidence>/qa-history-verified.json",
+      "recording": "Wrap the concrete command with bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- from the executing owner worktree.",
+      "g2846AdoptionAuthorized": false
+    },
+    "originalCandidatePreservation": {
+      "historicalDiscoveryCreditAssertionFailureRetained": true,
+      "allUnexecutedNotificationPersonasRetained": true,
+      "originalCandidateReReviewed": false,
+      "originalRuntimeChecksReplayed": false,
+      "originalDecisionUnchanged": true,
+      "managerFollowup": "Manager states G-2763 confirmed the inbox regression also fails old code and repair is active. This is recorded as manager follow-up, not a new G-2846 public reproduction or a review of repaired source. Wait for the final immutable notification source before further review."
+    },
+    "evidence": {
+      "directory": ".temp/read-availability-review/transition-dependency",
+      "pins": ".temp/read-availability-review/transition-dependency/pins.json",
+      "sourceDiff": ".temp/read-availability-review/transition-dependency/candidate.diff",
+      "producerHandoff": ".temp/read-availability-review/transition-dependency/producer-handoff.md",
+      "rawProducerQa": ".temp/read-availability-review/transition-dependency/producer/.artifacts/qa/20261019t072939-b7610f"
+    },
+    "ownedReportChecks": {
+      "job": "74c914d0-64cc-4166-aad2-4da1804a00af",
+      "docsCheck": {
+        "command": "task docs:check",
+        "exitCode": 0,
+        "executed": 13,
+        "pass": 13,
+        "fail": 0,
+        "error": 0,
+        "skip": 0,
+        "coverage": "249 Markdown files; links, fragments and navigation",
+        "log": ".temp/read-availability-review/transition-dependency/74c914d0-64cc-4166-aad2-4da1804a00af.1.log"
+      },
+      "workerCheck": {
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "selection": "owned report only, 1/44 guards selected",
+        "types": "pass; no TypeScript workspace changed",
+        "tests": "pass; no test files named in brief",
+        "lint": "pass; no source file changed",
+        "ast": "pass (0.3s)",
+        "guards": "pass (2.4s)",
+        "log": ".temp/read-availability-review/transition-dependency/74c914d0-64cc-4166-aad2-4da1804a00af.2.log"
+      },
+      "receiptFinalization": "Only receipt metadata and preservation of original JSON formatting were finalized after checks; no review conclusions, product bytes or test assertions changed."
+    }
   }
 }
