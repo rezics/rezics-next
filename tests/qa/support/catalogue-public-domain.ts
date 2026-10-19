@@ -5,7 +5,7 @@ import { isAbsolute, relative, resolve } from 'node:path';
 import { createCorpusBackupDriver } from '../../../scripts/load/corpus-backup-driver.ts';
 import type { AuditFilePin } from '../fixtures/audit-corpus-contract.ts';
 import { publicDomainBaseline, privateRecipeText, assertPublicDomainOriginalWorks, assertPublicDomainNativeCreation, type PublicDomainCorpus,
-  type PublicRecipe, type RecipePage, type SourceQuote } from '../fixtures/catalogue-public-domain.ts';
+  type PublicDomainSelectedCorpus, type PublicDomainSelection, type PublicRecipe, type RecipePage, type SourceQuote } from '../fixtures/catalogue-public-domain.ts';
 import { grantPersonaFixtureAuthority } from './persona-fixture-authority.ts';
 import { assertAuditExecution } from './audit-execution.ts';
 import { restorePersonaRealms, type PersonaSession, type PersonaSessions } from './personas.ts';
@@ -62,7 +62,7 @@ export function assertPublicDomainWorkAdmission(corpus: Pick<PublicDomainCorpus,
   }
 }
 
-export function loadPublicDomainCorpus(): PublicDomainCorpus {
+export function loadPublicDomainCorpus(selection: PublicDomainSelection): PublicDomainCorpus {
   const path = '.temp/goal/public-domain-corpus.json';
   if (!existsSync(path)) throw new Error(`TEST PREMISE: missing ${path}; prepare one isolated command-created corpus `
     + 'with explicit product/test revision pins, retain a consistent owner backup and reviewed source quotes within 600 seconds. '
@@ -77,8 +77,42 @@ export function loadPublicDomainCorpus(): PublicDomainCorpus {
   localFile(corpus.backup);
   if (corpus.importedWorks.length !== 113 || new Set(corpus.importedWorks).size !== 113)
     throw new Error('TEST PREMISE: retain all 113 original imported Work identities');
-  const recipes = [corpus.richRecipe, corpus.noNutritionRecipe, ...corpus.nutritionRecipes];
-  assertPublicDomainWorkAdmission(corpus, [...recipes, corpus.book]);
+  assertPublicDomainSelectedPremises(corpus, selection);
+  // Existing outcome witnesses retain their complete type; absent unselected branches are never synthesized.
+  return corpus;
+}
+
+/** Keep custody/identity/citations global, and require only the existing selected outcome's body premises. */
+export function assertPublicDomainSelectedPremises(corpus: PublicDomainSelectedCorpus, selection: PublicDomainSelection): void {
+  if (!['book', 'recipe', 'nutrition'].includes(selection)) throw new Error('TEST PREMISE: unknown public-domain selection');
+  if (corpus.nutritionRecipes !== undefined && !Array.isArray(corpus.nutritionRecipes))
+    throw new Error('TEST PREMISE: nutritionRecipes must be an array when supplied');
+  const availableRecipes = [corpus.richRecipe, corpus.noNutritionRecipe, ...(corpus.nutritionRecipes ?? [])]
+    .filter((item): item is PublicRecipe => item !== undefined);
+  assertPublicDomainWorkAdmission(corpus, [...availableRecipes, ...(corpus.book ? [corpus.book] : [])]);
+  for (const item of availableRecipes) {
+    if (!item.source.author || !item.source.observation)
+      throw new Error('TEST PREMISE: real recipes need source attribution and nonempty structure');
+    for (const citation of [...item.ingredients, ...item.steps, ...item.measures, ...item.substitutions]) sourceQuote(citation.evidence);
+  }
+  const book = corpus.book;
+  if (book) {
+    for (const evidence of [book.description.evidence, book.author.evidence,
+      ...book.releases.map(item => item.evidence), ...book.chapters.map(item => item.body)]) sourceQuote(evidence);
+  }
+  if (selection === 'book') {
+    if (!book) throw new Error('TEST PREMISE: selected Book fixture is missing');
+    if (book.releases.length < 2 || book.chapters.length < 2
+      || book.chapters.some(chapter => chapter.bodyText.length < 200
+        || !chapter.body.exact.replace(/\s+/gu, ' ').includes(chapter.bodyText.replace(/\s+/gu, ' ').trim())))
+      throw new Error('TEST PREMISE: real Book needs genuine releases and meaningful chapter bodies');
+    return;
+  }
+  if (selection === 'recipe' && !corpus.richRecipe) throw new Error('TEST PREMISE: selected rich Recipe fixture is missing');
+  if (selection === 'nutrition' && (!corpus.noNutritionRecipe || !Array.isArray(corpus.nutritionRecipes)))
+    throw new Error('TEST PREMISE: selected nutrition fixture needs its no-nutrition control and entire nutrition matrix');
+  const recipes = selection === 'recipe' ? [corpus.richRecipe!]
+    : [corpus.noNutritionRecipe!, ...corpus.nutritionRecipes!];
   for (const item of recipes) {
     if (!item.source.author || !item.source.observation
       || !item.ingredients.length || !item.steps.length)
@@ -88,23 +122,25 @@ export function loadPublicDomainCorpus(): PublicDomainCorpus {
       || new Set(item.order).size !== item.order.length
       || [...item.ingredients, ...item.steps].some(entry => !item.order.includes(entry.occurrence)))
       throw new Error('TEST PREMISE: recipes need positive source servings and a complete distinct occurrence receipt');
-    for (const citation of [...item.ingredients, ...item.steps, ...item.measures, ...item.substitutions]) sourceQuote(citation.evidence);
     if (item.nutrition === 'absent' && item.measures.some(measure => measure.value.kind === 'nutrient'))
       throw new Error('TEST PREMISE: do not invent nutrition absent from the source');
     if (item.nutrition === 'stated' && !item.measures.some(measure => measure.value.kind === 'nutrient'))
       throw new Error('TEST PREMISE: a stated-nutrition source must contain reviewed nutrient values');
   }
-  const rich = corpus.richRecipe;
-  const names = rich.ingredients.map(item => item.qualifier.name);
-  if (!names.some((name, index) => name && names.indexOf(name) !== index)
-    || !rich.steps.some(item => item.qualifier.usesIngredient.length)
-    || !rich.ingredients.some(item => item.qualifier.amount && item.qualifier.amount.denominator > 1
-      && item.qualifier.scaling === 'linear')
-    || !rich.measures.some(item => item.value.kind === 'servings')
-    || !rich.measures.some(item => item.value.kind === 'cooking-duration'))
-    throw new Error('TEST PREMISE: rich real recipe needs duplicate uses, fractional amounts, linked steps, servings and duration');
-  if (corpus.noNutritionRecipe.nutrition !== 'absent') throw new Error('TEST PREMISE: missing no-nutrition source control');
-  const nutrients = corpus.nutritionRecipes.flatMap(item => item.measures.filter(measure => measure.value.kind === 'nutrient'));
+  if (selection === 'recipe') {
+    const rich = corpus.richRecipe!;
+    const names = rich.ingredients.map(item => item.qualifier.name);
+    if (!names.some((name, index) => name && names.indexOf(name) !== index)
+      || !rich.steps.some(item => item.qualifier.usesIngredient.length)
+      || !rich.ingredients.some(item => item.qualifier.amount && item.qualifier.amount.denominator > 1
+        && item.qualifier.scaling === 'linear')
+      || !rich.measures.some(item => item.value.kind === 'servings')
+      || !rich.measures.some(item => item.value.kind === 'cooking-duration'))
+      throw new Error('TEST PREMISE: rich real recipe needs duplicate uses, fractional amounts, linked steps, servings and duration');
+    return;
+  }
+  if (corpus.noNutritionRecipe!.nutrition !== 'absent') throw new Error('TEST PREMISE: missing no-nutrition source control');
+  const nutrients = corpus.nutritionRecipes!.flatMap(item => item.measures.filter(measure => measure.value.kind === 'nutrient'));
   if (nutrients.some(item => !item.value.unit || !item.value.nutrient || !item.value.basis
     || !item.value.coverage || !item.value.provenance))
     throw new Error('TEST PREMISE: every source nutrient needs explicit units, basis, coverage and provenance');
@@ -113,22 +149,16 @@ export function loadPublicDomainCorpus(): PublicDomainCorpus {
     if (values.some(value => !nutrients.some(item => item.value[field] === value)))
       throw new Error(`TEST PREMISE: retained nutrition evidence must exercise ${field}: ${values.join(', ')}`);
   }
-  if (!corpus.nutritionRecipes.some(item => item.substitutions.length))
+  if (!corpus.nutritionRecipes!.some(item => item.substitutions.length))
     throw new Error('TEST PREMISE: missing author-declared exact substitute occurrence evidence');
-  const book = corpus.book;
-  if (book.releases.length < 2 || book.chapters.length < 2
-    || book.chapters.some(chapter => chapter.bodyText.length < 200
-      || !chapter.body.exact.replace(/\s+/gu, ' ').includes(chapter.bodyText.replace(/\s+/gu, ' ').trim())))
-    throw new Error('TEST PREMISE: real Book needs genuine releases and meaningful chapter bodies');
-  for (const evidence of [book.description.evidence, book.author.evidence,
-    ...book.releases.map(item => item.evidence), ...book.chapters.map(item => item.body)]) sourceQuote(evidence);
-  return corpus;
 }
 
 /** Restores only. A failed/missing prerequisite never triggers a fresh import. */
-export async function publicDomainFixture(selection: string) {
+export async function publicDomainFixture(selection: PublicDomainSelection) {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use goalctl test with an isolated QA stack');
-  const corpus = loadPublicDomainCorpus();
+  const corpus = loadPublicDomainCorpus(selection);
+  const smokeWork = selection === 'book' ? corpus.book.work
+    : selection === 'recipe' ? corpus.richRecipe.work : corpus.noNutritionRecipe.work;
   const target = `public-domain-${selection}-${randomUUID().slice(0, 8)}`;
   let people: PersonaSessions | undefined;
   let copyEnvironment: Record<string, string> = {};
@@ -144,7 +174,7 @@ export async function publicDomainFixture(selection: string) {
       try {
         [people] = await restorePersonaRealms([corpus.personas]);
         if (!people) throw new Error('Retained public corpus personas are missing');
-        await answer(people.visitor.main('GET', `/v1/works/${short(corpus.book.work)}`));
+        await answer(people.visitor.main('GET', `/v1/works/${short(smokeWork)}`));
         input.signal.throwIfAborted();
         return () => people!.close();
       } catch (error) { await people?.close(); throw error; }

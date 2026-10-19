@@ -78,6 +78,12 @@ export interface PublicDomainCorpus {
   book: RealBook;
 }
 
+export type PublicDomainSelection = 'book' | 'recipe' | 'nutrition';
+/** Unselected branches may be absent; no empty or invented full-corpus placeholders. */
+export type PublicDomainSelectedCorpus = Omit<PublicDomainCorpus,
+  'book' | 'richRecipe' | 'noNutritionRecipe' | 'nutritionRecipes'>
+  & Partial<Pick<PublicDomainCorpus, 'book' | 'richRecipe' | 'noNutritionRecipe' | 'nutritionRecipes'>>;
+
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const text = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
