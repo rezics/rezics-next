@@ -68,11 +68,13 @@ async function call(run: () => Promise<HttpAnswer>): Promise<HttpAnswer> {
 }
 
 /** Browser reads and writes through the BFF, as the signed-in session acting for `actingSubject`. */
-export function browserMaintainers(actingSubject: string, main: ReturnType<typeof browserMainApi> = browserMainApi()): MaintainerSource {
+export function browserMaintainers(actingSubject: string, main?: ReturnType<typeof browserMainApi>): MaintainerSource {
+  let current = main;
+  const client = () => current ??= browserMainApi();
   const idOf = (agent: string) => agent.slice(-36);
   const query = { actingSubject };
   const agentName = async (id: string): Promise<MaintainerName | null> => {
-    const load = () => call(() => main.v1.agents({ id: idOf(id) }).get({ query }));
+    const load = () => call(() => client().v1.agents({ id: idOf(id) }).get({ query }));
     let answer = await load();
     // A profile read answers 409 when the graph moves under it; one more read is the same profile.
     if (answer.error?.status === 409) answer = await load();
@@ -80,7 +82,7 @@ export function browserMaintainers(actingSubject: string, main: ReturnType<typeo
   };
   return {
     async read(workId) {
-      const answer = await call(() => main.v1.works({ id: idOf(workId) }).maintainers.get());
+      const answer = await call(() => client().v1.works({ id: idOf(workId) }).maintainers.get());
       return answer.error ? null : rosterOf(answer.data);
     },
     async names(ids) {
@@ -97,13 +99,13 @@ export function browserMaintainers(actingSubject: string, main: ReturnType<typeo
         const name = await agentName(target.iri);
         return name ? { id: target.iri, name } : null;
       }
-      const answer = await call(() => main.v1.handles({ handle: target.handle }).get({ query }));
+      const answer = await call(() => client().v1.handles({ handle: target.handle }).get({ query }));
       const row = record(answer.data);
       const name = answer.error ? null : nameOf(answer.data);
       return name && typeof row?.id === 'string' ? { id: row.id, name } : null;
     },
     async change(input) {
-      const answer = await call(() => main.v1['work-maintainer-changes'].post({
+      const answer = await call(() => client().v1['work-maintainer-changes'].post({
         profile: 'work-maintainer-change-v1', work: input.work, actingSubject: input.actingSubject,
         target: input.target, action: input.action, expectedGeneration: input.expectedGeneration,
       }, { headers: { 'idempotency-key': input.key } }));
