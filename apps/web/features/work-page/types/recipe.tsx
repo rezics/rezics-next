@@ -97,7 +97,8 @@ export function shownLine(item: ReadableIngredient, units: Units, page: Readable
   const qualifier = page.occurrences.find(node => node.occurrence === item.occurrence)?.qualifier;
   // An exchanged line may carry its quantity separately from its name. Render the retained
   // exact quantity, using Main's scaled amount when present; never merge duplicate occurrences.
-  if (qualifier?.type === 'ingredient-line' && qualifier.originalText?.language) {
+  if (qualifier?.type === 'ingredient-line' && qualifier.originalText?.language
+    && qualifier.originalText.value === item.originalText) {
     const ingredient = qualifier as unknown as IngredientQualifier;
     return readingLine({ ...ingredient, ...(item.amount ? { amount: item.amount } : {}) });
   }

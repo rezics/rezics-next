@@ -9,6 +9,7 @@ import * as fixture from './fixtures.ts';
 import { messages } from './messages.ts';
 import { iriOf, scopeAt, tabOf, workHref, workNavigationQuery, workTabs, workTaskHref, type WorkAt } from './route.ts';
 import { WorkKindActions } from './types/actions.tsx';
+import { shownLine } from './types/recipe.tsx';
 import { GuideExperience, guideSections } from './types/guide.tsx';
 import { RecipeFacts } from './types/recipe.tsx';
 import { WorkAbout, WorkHeader } from './work-header.tsx';
@@ -132,7 +133,6 @@ describe('guide reading', () => {
   });
 });
 
-
 test('overview tasks stay completable from all seven views, including a Zone with explicit global scope', () => {
   for (const at of [fixture.workRef, zone]) {
     for (const tab of workTabs) {
@@ -225,4 +225,13 @@ test('empty continued previews still lead to the complete list while completed e
   const relations = { ok: true as const, data: { ...levels.relations.data, items: [], next: '/opaque-relations-link' } };
   expect(render(<ConnectionsPreviewView {...props} relations={relations} locale="en" />))
     .toContain(`${zone.path}/connections#relations`);
+});
+
+test("recipe reading keeps Main's complete line when an older occurrence names a different source line", () => {
+  const occurrence = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+  const item = { occurrence, originalText: '200 g butter, softened', line: '200 g butter, softened', amount: { numerator: 200, denominator: 1 } };
+  const page = { occurrences: [{ occurrence, parent: occurrence, role: 'ingredient', labels: [], qualifier: {
+    type: 'ingredient-line', originalText: { value: '2 cups flour', language: 'en' },
+  } }], ingredients: [item], measures: [] };
+  expect(shownLine(item, 'written', page)).toBe('200 g butter, softened');
 });

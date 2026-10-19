@@ -146,7 +146,8 @@ export function readingLine(qualifier: IngredientQualifier): string {
   const main = formatQuantity(qualifier.amount);
   const upper = qualifier.amountUpper ? formatQuantity(qualifier.amountUpper) : null;
   const shown = upper ? `${main}\u2013${upper}` : main;
-  const lexical = qualifier.amountLexical?.trim();
+  // Earlier stored qualifiers omit the explicit lexeme while still retaining the whole authored line.
+  const lexical = qualifier.amountLexical?.trim() ?? leadingAmount(original)?.lexical;
   // Direct file imports can use the whole written line as their amount lexeme. It is not a
   // quantity prefix: formatting it as one would erase the ingredient name from the editor.
   if (lexical && lexical === original) return original;

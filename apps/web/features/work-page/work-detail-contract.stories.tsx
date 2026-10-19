@@ -85,8 +85,17 @@ async function readableGuide({ canvasElement, args }: { canvasElement: HTMLEleme
   // The limit scales with the actual font's ch unit, rather than assuming a pixel width.
   const measure = document.createElement('span');
   measure.style.cssText = 'position:absolute;visibility:hidden;width:70ch';
-  measure.style.font = getComputedStyle(paragraph).font;
+  const font = getComputedStyle(paragraph);
+  measure.style.fontFamily = font.fontFamily;
+  measure.style.fontSize = font.fontSize;
+  measure.style.fontWeight = font.fontWeight;
+  measure.style.fontFeatureSettings = font.fontFeatureSettings;
+  measure.style.fontVariationSettings = font.fontVariationSettings;
+  measure.style.fontOpticalSizing = font.fontOpticalSizing;
+  measure.textContent = '0';
   paragraph.append(measure);
+  // Let the browser resolve the inserted probe with the loaded font before measuring.
+  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   const maximum = measure.getBoundingClientRect().width;
   measure.remove();
   await expect(article.getBoundingClientRect().width).toBeLessThanOrEqual(maximum + 1);
@@ -259,7 +268,12 @@ export const SourcesAndEvidence: Story = {
     await expect(within(sources).getByText('Open Library · works · OL123W')).toBeVisible();
     const details = within(sources).getByText(messages.en.fieldEvidence, { selector: 'summary' });
     details.focus();
-    await userEvent.keyboard('{Enter}');
+    // Synthetic key events do not perform summary's native default action. Browser Mode sends a real key.
+    if ('__vitest_worker__' in globalThis) {
+      const { userEvent: keyboard } = await import('vitest/browser');
+      await keyboard.keyboard('{Enter}');
+    } else await userEvent.keyboard('{Enter}');
+    await expect(details.closest('details')).toHaveAttribute('open');
     const evidence = within(sources).getByRole('link', { name: 'Evidence 1' });
     await expect(evidence).toHaveAttribute('href', 'https://openlibrary.org/works/OL123W?revision=7');
     await expect(within(sources).getAllByText(messages.en.fieldEvidenceUnavailable).length).toBeGreaterThan(0);

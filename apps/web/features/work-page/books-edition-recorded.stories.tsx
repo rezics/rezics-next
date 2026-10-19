@@ -146,6 +146,7 @@ async function chooseRecordedEdition(canvasElement: HTMLElement, args: Props) {
   const canvas = within(canvasElement);
   const t = copyOf(args.locale);
   const select = await canvas.findByRole('combobox', { name: t.edition });
+  await waitFor(() => expect(select).toBeEnabled());
   await userEvent.click(select);
   const options = canvas.getAllByRole('option');
   await expect(new Set(options.map(option => option.textContent)).size).toBe(options.length);
