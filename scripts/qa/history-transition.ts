@@ -8,9 +8,26 @@ import { dockerEnvironment, run } from '../fixture/stack.ts';
 import { loadCompatibility, type LoadCompatibility } from '../load/compatibility.ts';
 import { migrateTracked, migrationDirectories, migrationRecords, repositoryRoot, withDatabaseLock } from '../ops/migrate.ts';
 
-// This is a transition for one inspected historical bootstrap, not an inference
+// These are two inspected historical bootstraps, not an inference
 // that an arbitrary untracked database has run the current migration inventory.
 export const retainedQaSource = '759244e365ad64bcb97fac0ea7d7b9caebe144b2';
+export const retainedBookRecipeSource = '4a616b079a364b8f5ac7fe4d4ff56bc99849e766';
+const retainedSources = [retainedQaSource, retainedBookRecipeSource];
+// These retain the component ledger, publication fences and affected-cut
+// lineage respectively. Their DDL/backfills must never run again under a new
+// filename. Byte identity only permits naming the history that the full frozen
+// schema/data-effect replay below has independently verified.
+const bookRecipeRenames = [
+  { source: '2045_standing_rating_components', current: '2606_standing_rating_components',
+    sha256: '65d2a75a859182d5808f7ad8ca3b197006c9d684a7c1bb41c005880e800314f5' },
+  { source: '2077_standing_rating_publication', current: '2607_standing_rating_publication',
+    sha256: '6583a1657afe45a3ee250a0ec4eb11fc244bf88820b05bf7a7e739ad5cce7b41' },
+  { source: '2606_standing_rating_affected_cuts', current: '2608_standing_rating_affected_cuts',
+    sha256: '7d1f1743e6b8c771b275fe8dd1afa601cab07fb62b553699bce52ab76f2b4677' },
+].map(rename => ({ ...rename,
+  source: `${migrationDirectories.access}/${rename.source}.sql`,
+  current: `${migrationDirectories.access}/${rename.current}.sql`,
+}));
 const owners = ['access', 'relay'] as const;
 type Owner = (typeof owners)[number];
 const tracker = 'public.rezics_local_migration';
@@ -36,6 +53,13 @@ export interface QaHistoryReceipt {
     migrations: string[];
     schemaSha256: string;
     effectsSha256: string;
+    /** Required for the second retained source; older receipts stay valid. */
+    lineage?: {
+      backupProject: string;
+      restoredProject: string;
+      sourceMigrations: string[];
+      renames: typeof bookRecipeRenames;
+    };
   }>;
 }
 
@@ -51,7 +75,7 @@ export interface QaHistoryOptions {
 /** The expected digest is an independently retained backup receipt, not a new
  * digest silently computed and accepted from whatever file the caller supplies. */
 export function verifyQaHistoryManifest(bytes: Buffer, expectedSha256: string,
-  expected: LoadCompatibility): Backup {
+  expected: LoadCompatibility, source = retainedQaSource): Backup {
   if (!/^[a-f0-9]{64}$/.test(expectedSha256) || sha256(bytes) !== expectedSha256)
     throw new Error('Missing evidence: retained backup bytes matching the independently recorded SHA-256');
   const backup = JSON.parse(bytes.toString('utf8')) as Backup;
@@ -64,19 +88,44 @@ export function verifyQaHistoryManifest(bytes: Buffer, expectedSha256: string,
   if (!actual || actual.digest !== expected.digest || !actual.files
     || Object.keys(actual.files).length !== paths.length
     || paths.some(path => actual.files[path] !== expected.files[path]))
-    throw new Error(`Missing evidence: complete unchanged storage and SQL byte inventory at ${retainedQaSource}`);
+    throw new Error(`Missing evidence: complete unchanged storage and SQL byte inventory at ${source}`);
   return backup;
 }
 
-function pinnedSourceDirectory(): string {
+/** This checks receipt names, never whether SQL has actually run. Only the
+ * explicit transition combines it with the pinned schema and data replay. */
+export function verifyQaHistoryMigrations(source: string, sourceRoot: string, owner: Owner,
+  currentRoot = repositoryRoot) {
+  if (!retainedSources.includes(source)) throw new Error('Unsupported QA history source');
+  const sourceMigrations = migrationRecords(sourceRoot, owner).map(file => file.name);
+  if (source === retainedQaSource) return { migrations: sourceMigrations, sourceMigrations, renames: [] };
+  const renames = owner === 'access' ? bookRecipeRenames : [];
+  const current = migrationRecords(currentRoot, owner).map(file => file.name);
+  if (renames.some(rename => !sourceMigrations.includes(rename.source) || current.includes(rename.source)))
+    throw new Error(`Missing evidence: exact ${owner} historical filename transitions`);
+  const mapped = sourceMigrations.map(name => {
+    const rename = renames.find(item => item.source === name);
+    const canonical = rename?.current ?? name;
+    const digest = sha256(readFileSync(join(sourceRoot, name)));
+    if ((rename && digest !== rename.sha256) || !current.includes(canonical)
+      || sha256(readFileSync(join(currentRoot, canonical))) !== digest)
+      throw new Error(`Missing evidence: unchanged historical SQL identity ${name} -> ${canonical}`);
+    return canonical;
+  });
+  if (new Set(mapped).size !== mapped.length) throw new Error('Conflicting historical migration identities');
+  return { migrations: current.filter(name => mapped.includes(name)), sourceMigrations,
+    renames: renames.map(rename => ({ ...rename })) };
+}
+
+function pinnedSourceDirectory(source: string): string {
   mkdirSync(join(repositoryRoot, '.temp'), { recursive: true });
   const directory = mkdtempSync(join(repositoryRoot, '.temp/qa-history-source-'));
   try {
-    const archive = spawnSync('git', ['archive', '--format=tar', retainedQaSource,
+    const archive = spawnSync('git', ['archive', '--format=tar', source,
       ...Object.values(migrationDirectories), 'generated/model/manifest.json',
       'infra/dev/compose.yaml', 'infra/jena/fuseki-text.ttl', 'infra/jena/fuseki-text-qa.ttl',
       'services/account/package.json'], { cwd: repositoryRoot, maxBuffer: 32 * 1024 * 1024 });
-    if (archive.status !== 0) throw new Error(`Missing evidence: local Git object ${retainedQaSource}`);
+    if (archive.status !== 0) throw new Error(`Missing evidence: local Git object ${source}`);
     const extracted = spawnSync('tar', ['-x', '-C', directory], { input: archive.stdout });
     if (extracted.status !== 0) throw new Error('Unable to stage pinned QA SQL');
     return directory;
@@ -130,7 +179,7 @@ function targetStack(directory: string, sourceRoot: string, backup: Backup) {
   adminUrl.username = 'postgres';
   adminUrl.password = compose.POSTGRES_PASSWORD!;
   adminUrl.pathname = '/postgres';
-  return { project, container, urls, adminUrl: adminUrl.href, docker };
+  return { project, backupProject: backup.project, container, urls, adminUrl: adminUrl.href, docker };
 }
 
 /** Keep definitions, owners, grants, functions, triggers, policies and index
@@ -196,6 +245,7 @@ interface OwnerState {
   names: string[];
   schema: string;
   effects: SeedEffect[];
+  lineage?: QaHistoryReceipt['owners'][Owner]['lineage'];
   previous?: QaHistoryReceipt['owners'][Owner];
 }
 
@@ -209,19 +259,33 @@ async function ownerState(client: PoolClient, owner: Owner, sourceRoot: string,
       AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname !~ '^pg_'
     ORDER BY n.nspname,c.relname`)).rows;
   if (tables.length) await client.query(`LOCK TABLE ${tables.map(table => table.name).join(', ')} IN SHARE MODE`);
-  const names = migrationRecords(sourceRoot, owner).map(file => file.name);
+  const historyNames = verifyQaHistoryMigrations(options.source, sourceRoot, owner);
+  const names = historyNames.migrations;
+  const lineage = options.source === retainedBookRecipeSource ? {
+    backupProject: target.backupProject, restoredProject: target.project,
+    sourceMigrations: historyNames.sourceMigrations, renames: historyNames.renames,
+  } : undefined;
   const present = (await client.query<{ history: string | null; transition: string | null }>(
     'SELECT to_regclass($1)::text AS history, to_regclass($2)::text AS transition', [tracker, transition])).rows[0]!;
   const history = present.history ? (await client.query<{ name: string }>(`SELECT name FROM ${tracker}`)).rows.map(row => row.name) : [];
   if (present.transition) {
     const recorded = (await client.query<{ source: string; backup_sha256: string; receipt: QaHistoryReceipt['owners'][Owner] }>(
       `SELECT source, backup_sha256, receipt FROM ${transition}`)).rows;
-    if (recorded.length !== 1 || recorded[0]!.source !== retainedQaSource || recorded[0]!.backup_sha256 !== options.backupSha256
+    const previousLineage = recorded[0]?.receipt.lineage;
+    if (recorded.length !== 1 || recorded[0]!.source !== options.source || recorded[0]!.backup_sha256 !== options.backupSha256
       || JSON.stringify(recorded[0]!.receipt.migrations) !== JSON.stringify(names)
+      || (lineage && (!previousLineage || previousLineage.backupProject !== lineage.backupProject
+        || previousLineage.restoredProject !== lineage.restoredProject
+        || JSON.stringify(previousLineage.sourceMigrations) !== JSON.stringify(lineage.sourceMigrations)
+        || previousLineage.renames?.length !== lineage.renames.length
+        || lineage.renames.some((rename, index) => {
+          const previous = previousLineage.renames[index];
+          return previous?.source !== rename.source || previous.current !== rename.current || previous.sha256 !== rename.sha256;
+        })))
       || names.some(name => !history.includes(name))
       || history.some(name => !migrationRecords(repositoryRoot, owner).some(file => file.name === name)))
       throw new Error(`Unknown or partial ${owner} transition history`);
-    return { client, names, schema: '', effects: [], previous: recorded[0]!.receipt };
+    return { client, names, schema: '', effects: [], lineage, previous: recorded[0]!.receipt };
   }
   if (history.length) throw new Error(`Unknown or partial ${owner} migration history; no verified QA transition receipt`);
   const templateUrl = new URL(target.urls[owner]);
@@ -236,7 +300,7 @@ async function ownerState(client: PoolClient, owner: Owner, sourceRoot: string,
     if (invalid.rowCount) throw new Error(`Drifted ${owner} contains an incomplete index build`);
     const effects = await seedEffects(template);
     await verifySeedKeys(client, effects);
-    return { client, names, schema, effects };
+    return { client, names, schema, effects, lineage };
   } finally { await template.end(); }
 }
 
@@ -245,14 +309,14 @@ async function ownerState(client: PoolClient, owner: Owner, sourceRoot: string,
  * receipt write. Session locks survive rollback, as the owner runner requires.
  * https://www.postgresql.org/docs/18/explicit-locking.html#ADVISORY-LOCKS */
 export async function transitionQaHistory(options: QaHistoryOptions): Promise<QaHistoryReceipt> {
-  if (options.source !== retainedQaSource) throw new Error(`Unsupported QA history source; expected ${retainedQaSource}`);
+  if (!retainedSources.includes(options.source)) throw new Error(`Unsupported QA history source; expected ${retainedSources.join(' or ')}`);
   const startedAt = Date.now();
-  const sourceRoot = pinnedSourceDirectory();
+  const sourceRoot = pinnedSourceDirectory(options.source);
   let admin: Client | undefined;
   const references: string[] = [];
   try {
     const backup = verifyQaHistoryManifest(readFileSync(localTemporaryPath(options.backup)),
-      options.backupSha256, loadCompatibility(sourceRoot));
+      options.backupSha256, loadCompatibility(sourceRoot), options.source);
     const target = targetStack(options.stackDirectory, sourceRoot, backup);
     admin = new Client({ connectionString: target.adminUrl, application_name: applicationName });
     await admin.connect();
@@ -288,7 +352,7 @@ export async function transitionQaHistory(options: QaHistoryOptions): Promise<Qa
             if (Date.now() - startedAt > 600_000) throw new Error('QA history verification exceeded the 600-second preparation budget');
           }
           const receipt: QaHistoryReceipt = {
-            source: retainedQaSource, backupSha256: options.backupSha256,
+            source: options.source, backupSha256: options.backupSha256,
             backupProject: backup.project, restoredProject: target.project,
             owners: {} as QaHistoryReceipt['owners'],
           };
@@ -297,6 +361,7 @@ export async function transitionQaHistory(options: QaHistoryOptions): Promise<Qa
             receipt.owners[owner] = state.previous ? { ...state.previous, status: 'replayed' } : {
               status: options.adopt ? 'adopted' : 'verified', migrations: state.names,
               schemaSha256: sha256(state.schema), effectsSha256: sha256(JSON.stringify(state.effects)),
+              ...(state.lineage ? { lineage: state.lineage } : {}),
             };
             if (!options.adopt || state.previous) continue;
             await state.client.query(`CREATE TABLE IF NOT EXISTS ${tracker} (
@@ -306,7 +371,7 @@ export async function transitionQaHistory(options: QaHistoryOptions): Promise<Qa
               source text NOT NULL, backup_sha256 text NOT NULL, receipt jsonb NOT NULL,
               verified_at timestamptz NOT NULL DEFAULT now())`);
             await state.client.query(`INSERT INTO ${transition}(source,backup_sha256,receipt) VALUES ($1,$2,$3::jsonb)`,
-              [retainedQaSource, options.backupSha256, JSON.stringify(receipt.owners[owner])]);
+              [options.source, options.backupSha256, JSON.stringify(receipt.owners[owner])]);
           }
           for (const owner of owners) await clients[owner].query(options.adopt ? 'COMMIT' : 'ROLLBACK');
           return receipt;
