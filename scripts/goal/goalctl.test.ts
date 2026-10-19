@@ -27,6 +27,7 @@ import { reviewPrompt } from './land.ts';
 import { POSTGRES_SOCKET_LIMIT, postgresSocketPath, postgresSocketRefusal } from './postgres-socket.ts';
 import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
 import { fixtureProcessScope } from './fixtures/process-scope.ts';
+import type { TypecheckBudget } from './typecheck-gate.ts';
 import { withTestAccounts, writeTestAccounts } from './fixtures/accounts.ts';
 
 isolateTestSettings();
@@ -6640,18 +6641,26 @@ describe('pre-merge type check', () => {
     expect(main).toContain('type check on main is inconclusive');
   });
 
-  test('every main-side comparison shares one deadline, as every branch run does', async () => {
+  test('every main-side comparison shares one active budget, as every branch run does', async () => {
     let clock = 0;
-    const deadlines: string[] = [];
-    const run = async (workspace: string, side: 'branch' | 'main', deadline: number): Promise<TypecheckRun> => {
-      deadlines.push(`${workspace}:${side}:${deadline}`);
+    const budgets: TypecheckBudget[] = [];
+    const remaining: number[] = [];
+    const run = async (workspace: string, side: 'branch' | 'main', budget: TypecheckBudget): Promise<TypecheckRun> => {
+      budgets.push(budget);
+      clock += 1000; // Queued admission does not spend the side's budget.
+      remaining.push(budget.remainingMs());
+      const finish = budget.start();
       clock += 100;
+      finish();
       return side === 'branch' ? fail(error(`${workspace}.ts`, 1, 'x')) : fail(error(`${workspace}.ts`, 1, 'x'));
     };
     expect(await typecheckGate(['main', 'web', 'model'], run, 500, () => clock)).toBeUndefined();
-    // Branch runs start together at 0; the first main run starts at 300 and the next two inherit its deadline.
-    expect(deadlines).toEqual(['main:branch:500', 'web:branch:500', 'model:branch:500',
-      'main:main:800', 'web:main:800', 'model:main:800']);
+    expect(remaining).toEqual([500, 400, 300, 500, 400, 300]);
+    expect(budgets[1]).toBe(budgets[0]);
+    expect(budgets[2]).toBe(budgets[0]);
+    expect(budgets[3]).not.toBe(budgets[0]);
+    expect(budgets[4]).toBe(budgets[3]);
+    expect(budgets[5]).toBe(budgets[3]);
   });
 
   test('no touched workspace runs nothing', async () => {
