@@ -305,5 +305,229 @@
       "receiptAppend": "Completed check receipts appended after the recorded checks; no observation, assertion or historical field changed."
     },
     "disposition": "Preservation blocked by temporary reader selection, not a demonstrated product/history failure or new API need. No migration-derived differences evaluated. All prior sections and frozen files preserved; no landing, finding closure or proved-row registration. Manager retains the next comparison decision."
+  },
+  "storageAwareNativePreservationComparison": {
+    "status": "finite-required-fixture-facts-and-retained-bytes-match; return for manager disposition",
+    "authority": "UTC 2026-10-19T14:26:15Z event task:G-2826:29: one storage-aware temporary-reader correction and finite comparison. D5-006 remains accepted; no original-boundary rerun, review or landing.",
+    "priorReportSha256": "6b9a9c28a4b8d1bc241f30e53891113a658c0f0c3e6e0e3bb78a04f592a8b911",
+    "preservedFailedRun": {
+      "reportCommit": "09134ba5be1f520c2e366faddf577fdf21024985",
+      "job": "bb80485f-16b6-4e9d-a860-ead87e4eca83",
+      "section": "nativePublicationPreservationComparison",
+      "allArtifactHashesUnchanged": true
+    },
+    "sourcePins": {
+      "worker": "14a9ca725ccac2249bedfd2396de014f9bf087f1",
+      "baselineBackend": "759244e365ad64bcb97fac0ea7d7b9caebe144b2",
+      "fixedWaveBackend": "f84fbee119888f0b880badfd7eeb351543615908",
+      "frontend": "Not started or exercised",
+      "historyTooling": "b0b3a5e7cbf47f03eda24f53ee7ca3a492436aff",
+      "fixtureSourceSha256": "18e0fcc6e5a1ed614ae037b458407eb726e512475453f1667376de78380a6df9",
+      "frozenAssertionsSha256": "bd8192f401cdeac28b1f603c1d1730eaf8fa94ce239b7ebdbaa43fe151795213",
+      "originalBoundaryReportSha256": "a418cf496aba04ada16dd425ee14e4cd6c385954099e607a6c98ebdfec77b1dd"
+    },
+    "backupLineage": {
+      "original": {
+        "path": ".temp/rating-context-execution/baseline/.temp/rating-context-source/owners/backup.json",
+        "sha256": "d7059aeceef904aa9ccba02dfabb87f8a41f10756ccd4f56567841097d328a8c",
+        "project": "rezics-catalogue-corpus-ratings-8eda5a21-ca4d-4fdc-rating-context-selection-79c3488519b38ec7",
+        "runId": "ratings-8eda5a21-ca4d-4fdc",
+        "compatibilityDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056",
+        "storageFiles": 525,
+        "obsoleteMetadataOnlyBackupVolumesRemoved": true
+      },
+      "derivativeManifest": ".temp/rating-context-execution/history-adoption/source/.temp/rating-context-wave-source/owners/backup.json",
+      "derivativeSha256": "368be40518a494069d051e0dd4755fa41f444351884d6cbd92290331f1d04233",
+      "parentSha256": "d7059aeceef904aa9ccba02dfabb87f8a41f10756ccd4f56567841097d328a8c",
+      "bothManifestsUnchanged": true,
+      "waveCompatibilityDigest": "b3a5ee39e6e9d217726dbceb99c858821a1be2897eb029d8c58d662edffb8400",
+      "baselineFuseki": {
+        "rezics/fuseki:6.2.0-cmd0.5.43-dd0efff19707": "sha256:91951474891b4a7b2e4b9bedd44115450c18933e4afa68c7a1cdc60e12c3545b"
+      },
+      "derivativeEngines": {
+        "fuseki": {
+          "image": "rezics/fuseki:6.2.0-cmd0.5.43-a1128cfe65e5",
+          "id": "sha256:c429f562e6166bea40c450800bacaa9594e5cd30eb0afeb1db701812d64a2b60"
+        },
+        "postgres": {
+          "image": "postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722",
+          "id": "sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722"
+        },
+        "rustfs": {
+          "image": "rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff",
+          "id": "sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff"
+        }
+      },
+      "engineLimit": "Both existing Fuseki images verified before restore; baseline uses its original engine, not the wave image. PostgreSQL and RustFS pins are shared. No rebuild or backup rewrite."
+    },
+    "reader": {
+      "owner": "Existing pinned services/main/src/modules/work/history.ts readWorkComponentState",
+      "ownerSourceSha256": "8eb45c300ffbef312fc437daae283699027e44cd797d1c10c7e4328767bff1dd",
+      "temporaryReaderSha256": "ba51436fa8a16092d37f18b2e63c4545a5d6f9d7cbf174d30ddd0be66898588d",
+      "comparisonSha256": "2cf2d983390f576fb3bb5c3a2417ee1f3a3c8edb52af0f20cb76866b5903fd92",
+      "dispatch": "Work/question-presentation/Zone profiles use readWorkComponentState with restored semantic/work/ S3 and verified owner local fallback; local native profiles use readComponentState; structure-composition uses existing readCompositionSnapshot with semantic/structure/ S3.",
+      "verification": "Existing owner digest/profile/manifest/payload checks; withoutVerifiedImmutableObjectCache forces actual object reads. Owner-verified structure manifests are captured through the existing object store. No replacement backend, object relocation or initialize/put.",
+      "budgets": "2 MiB and 10 seconds per component read/capture; owner structure read retains its bounds. Graph reads: 4 MiB, 30 seconds, 12000 rows; at most 512 bound fixture subjects, two expansion rounds. SQL read-only, 5-second connection and 15-second query timeout. Public request and body each bounded at 30 seconds; lifecycle bounded, 540-second phase guard and 600-second driver ceiling."
+    },
+    "previouslyBlockedAnchor": {
+      "revision": "https://rezics.com/id/01a1529b-3e65-71c5-acdd-3d573ddaeede",
+      "component": "https://rezics.com/id/01a15292-8bc3-767d-8077-522f77ab0d9e",
+      "profile": "https://rezics.com/definition/work-metadata-v1",
+      "manifest": "urn:rezics:sha256:084a22e14ac68aeac60e3694545ad0b7ef1cc54ef0cee24f7720773030cb8a16"
+    },
+    "recoveredAnchorEvidence": {
+      "verifiedObjectDigests": [
+        "084a22e14ac68aeac60e3694545ad0b7ef1cc54ef0cee24f7720773030cb8a16",
+        "e330addef1ec2edd8fff304b8f797007eed179558474e55944c2699fd37e610d"
+      ],
+      "bothOwnerReadsAndBytesEqual": true,
+      "ordering": "Exact blocked Work manifest verified after smoke and before remaining baseline facts. Derivative restore/read began only after the baseline input completed and cleaned up."
+    },
+    "execution": {
+      "job": "bd58704e-7927-4427-9923-1622d5b0bd5d",
+      "exitCode": 0,
+      "recording": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task --taskfile .temp/context-preservation-storage/Taskfile.yml read' -- task --taskfile .temp/context-preservation-storage/Taskfile.yml compile",
+      "admission": "read task uses task goal -- slot, supported isolated restore and ordinary integration admission; retained identities sign in normally. Run IDs below identify owned stacks, not a repeated outcome-suite QA run.",
+      "repeatedOutcomeSuites": false,
+      "frontend": "Not started or exercised"
+    },
+    "baseline": {
+      "runId": "pres-b-da3a717d-434e-4e52",
+      "source": "759244e365ad64bcb97fac0ea7d7b9caebe144b2",
+      "backupSha256": "d7059aeceef904aa9ccba02dfabb87f8a41f10756ccd4f56567841097d328a8c",
+      "preparationThroughSmokeMs": 43488,
+      "ceilingMs": 600000,
+      "qualified": true,
+      "restore": {
+        "preparation": {
+          "restoreMs": 17292,
+          "volumeCopyMs": {
+            "postgres_data": 6361,
+            "fuseki_data": 5388,
+            "rustfs_data": 4764
+          },
+          "objectCopyMs": 15,
+          "startupMs": 17690,
+          "readinessMs": 1143,
+          "totalMs": 36125
+        },
+        "admissionWaitMs": 2432
+      },
+      "elapsedIncludingCleanupMs": 57806,
+      "publicReads": 27,
+      "publicResponseBytes": 25295,
+      "maxPublicReadMs": 768,
+      "topLevelOwnerReads": {
+        "verified native component read": 63,
+        "FusekiClient.query": 24,
+        "Access read-only SQL": 17
+      },
+      "maxTopLevelOwnerReadMs": 323,
+      "cleanup": [
+        {
+          "kind": "persona-lifecycle",
+          "ok": true
+        },
+        {
+          "kind": "isolated-restore",
+          "ok": true
+        }
+      ]
+    },
+    "fixedWave": {
+      "runId": "pres-w-6161ccf0-1ca9-4e84",
+      "source": "f84fbee119888f0b880badfd7eeb351543615908",
+      "backupSha256": "368be40518a494069d051e0dd4755fa41f444351884d6cbd92290331f1d04233",
+      "preparationThroughSmokeMs": 56423,
+      "ceilingMs": 600000,
+      "qualified": true,
+      "restore": {
+        "preparation": {
+          "restoreMs": 9782,
+          "volumeCopyMs": {
+            "postgres_data": 5529,
+            "fuseki_data": 1751,
+            "rustfs_data": 1828
+          },
+          "objectCopyMs": 13,
+          "startupMs": 36062,
+          "readinessMs": 1429,
+          "totalMs": 47273
+        },
+        "admissionWaitMs": 19050
+      },
+      "elapsedIncludingCleanupMs": 72775,
+      "publicReads": 27,
+      "publicResponseBytes": 25296,
+      "maxPublicReadMs": 1290,
+      "topLevelOwnerReads": {
+        "verified native component read": 63,
+        "FusekiClient.query": 24,
+        "Access read-only SQL": 17
+      },
+      "maxTopLevelOwnerReadMs": 165,
+      "cleanup": [
+        {
+          "kind": "persona-lifecycle",
+          "ok": true
+        },
+        {
+          "kind": "isolated-restore",
+          "ok": true
+        }
+      ]
+    },
+    "comparison": {
+      "checkGroups": 29,
+      "allPassed": true,
+      "directByteComparisons": 122,
+      "verifiedBytesPerCopy": 55934,
+      "differences": [],
+      "migrationDerivedDifferences": [],
+      "identitiesRevisions": "15 fixture contexts including the private context; 62 native revision/profile/manifest/payload records and 1932 nonempty bound fixture triples across current/revisions/receipts graphs match exactly. Fourteen readable public context details and all native private-context facts compared.",
+      "scalesSteps": "All native context payloads and readable public metadata match, including 1..10 step 1, 1..5 step 1 and 0.25..5 step 0.25; question identity/revision, target grain, population owner and cadence retained.",
+      "observations": "Two nonempty native realm-standing observations match in full: value 10, exact integer lexical value, available state, original observation/context/revision/Realm/Work/MainVersion/slot identities and timestamps.",
+      "follows": "16 original SQL follows and five inventories match. Public owner/member/stranger/moderator/operator counts are 1/10/0/3/0 with no continuation in either input.",
+      "authorityRevocation": "All original columns/rowsets in 17 Access tables match: 11 principals, 21 authority subjects, 38 representations, 190 permission grants, 23 principal grants, four memberships and five history rows. Actual private-member history preserves joined generation 1 then left generation 2/policy revision 2; current membership is left. Empty consent-revocation tables are recorded, not substituted for this nonempty revocation evidence.",
+      "privateAvailability": "Public context detail returns identical 404 rating_context_unavailable for visitor, revoked member and retained private owner; native private identity/revision/payload is independently present through owner reads. This public operation requires public disclosure even for an owner.",
+      "publicationRights": "Two nonempty text-publication-v1 payloads retain author/Work/contribution/selectedDraft/language/predecessor, original-contribution rightsBasis and public disclosure. Two main-default-selection payloads retain exact publication/draft identities and selection basis/mode. Three French question presentations retain context/source identity, CC0 licence, reviewed status and text. Two authored draft bodies and all manifest/payload bytes match directly.",
+      "byteMethod": "Existing readers captured actual manifest/payload bytes. Decode both private receipts and compare every object byte-for-byte, additionally verifying SHA-256 and byte count; compare structure manifest bytes through its existing owner reader. No empty graph, directory inventory or passing outcome suite substitutes for bytes."
+    },
+    "applicability": "Visitor supplies public context/smoke reads; five retained signed-in personas supply follows; original owner supplies two publication inventories. Private retained member is revoked and private owner is additionally checked. These are finite preservation reads, not a new six-persona outcome suite.",
+    "readAccounting": "Per input: 27 public GETs; 24 recorded graph queries, 63 component reads (recovered anchor plus 62 revision states), 17 SQL reads. These are top-level owner reads; storage-owner internal graph/object requests are not counted as 104 physical backend requests. Complete paths/status/body/digests/timing, query text/bindings, SQL and verified bytes are retained in private receipts.",
+    "scopeLimits": "Exact original fixture facts and baseline SQL columns only; no assertion of unrelated graph/store equivalence or equality of migration-added schema/columns. Health sampledAt differs and is retained as smoke, not fixture state. No migration-derived difference required an exception. Original over-600-second history preparation and all prior failures remain failures; these fresh qualified restores do not retrospectively qualify them.",
+    "preserved": "Both backup manifests, frozen assertion bytes, original-boundary report and every previous report field/failed-run artifact unchanged. Owned persona lifecycle and isolated restore cleanup passed for both inputs; no matching running containers remained on inspection.",
+    "artifacts": {
+      ".temp/context-preservation-storage/receipt.json": "0380118270e4f9895eee599e96340d59617bbb6cfd1a543857c7af84e220e108",
+      ".temp/context-preservation-storage/baseline.json": "9f1aad4cf01386163aba2d3375795338aa2c28910e0d55e6357b699006502cad",
+      ".temp/context-preservation-storage/wave.json": "8dbbeaa2690bcbfdc93f23c2796b8babc64416c54a250caeae9aed30b6ba4dfe",
+      ".temp/context-preservation-storage/comparison.json": "103bf27381237241531a7c89816e0b113e55743452de6371e84a0332a1a70dcd",
+      ".temp/context-preservation-storage/safe-observations.json": "df399e3095e695363352c3acedf3d5c9a4a9af1c96bd37e2702bfa05c8cb90f8",
+      ".temp/context-preservation-storage/baseline.log": "efcabe7ed08666ab96465d56a43aa32f55e41d1220d419f617e7fc69784d8e0b",
+      ".temp/context-preservation-storage/wave.log": "40afff8123359680ed683bc47447fb532d26ba3a3b8af20da99aa3e8c5dd3c4a",
+      ".temp/context-preservation-storage/phase.ts": "ba51436fa8a16092d37f18b2e63c4545a5d6f9d7cbf174d30ddd0be66898588d",
+      ".temp/context-preservation-storage/execute.ts": "625a6d35407b3728110b75ee387fdf760e1bcfadc05506ad405f424eb92d62dd",
+      ".temp/context-preservation-storage/compare.ts": "2cf2d983390f576fb3bb5c3a2417ee1f3a3c8edb52af0f20cb76866b5903fd92",
+      ".temp/context-preservation-storage/Taskfile.yml": "61e8b86962d2133ea8e3d16cd878497a4dd961bf4607e265f8d5bdef6494e59f",
+      ".temp/context-preservation-storage/record.py": "d52f2c4567bdd731e539a4a57f5bcde8fe0abc25a0aa9d81dc13ca4bee617a64",
+      ".temp/context-preservation-storage/original-column-schema.json": "a54dac6a182ced34d3ac39dcd9781ea4038ecbf32f08828302f72ae0239ace62",
+      ".temp/context-preservation-storage/prior-report.json": "6b9a9c28a4b8d1bc241f30e53891113a658c0f0c3e6e0e3bb78a04f592a8b911",
+      ".temp/goal/jobs/bd58704e-7927-4427-9923-1622d5b0bd5d.log": "ea4461cc442e2aca0ac3e3dec03b94166edeeb91b8e1f7498bfff5e6af738d30",
+      ".temp/goal/jobs/bd58704e-7927-4427-9923-1622d5b0bd5d.1.log": "e3956661030a52dc58938f1e8e47778d5a5a1634c05e4e01233b55e04aeb7c70",
+      ".temp/goal/jobs/bd58704e-7927-4427-9923-1622d5b0bd5d.2.log": "65b7c1074de06128fa9c576992619bffdd3190f67405fd651afa3b9857662422"
+    },
+    "artifactLimits": "Private ignored artifacts include exact retained native content/bytes and read receipts, mode 0600; no fixture credentials are published. This report identifies their digests and safe observations for review.",
+    "validation": {
+      "temporaryReaderCompile": "passed in recorded runtime job, before read",
+      "job": "55e8a327-bd93-43fb-be9b-bf4e459cc85a",
+      "steps": "record: pass; task docs:check: pass (13 tests); task goal -- check: types/tests/lint/ast/guards pass, 10 of 45 guards selected. No TypeScript workspace changed or test files named in brief; no outcome suites repeated.",
+      "receiptHashes": {
+        ".temp/goal/jobs/55e8a327-bd93-43fb-be9b-bf4e459cc85a.log": "94e04fded0c35487e266ea1804ac73d6daee550736fe88ddfe44ef9f07217444",
+        ".temp/goal/jobs/55e8a327-bd93-43fb-be9b-bf4e459cc85a.1.log": "28ee0d4d67b263b3d6e26941478aec1bcee452debd09871ba9a9aee6b063d81b",
+        ".temp/goal/jobs/55e8a327-bd93-43fb-be9b-bf4e459cc85a.2.log": "8e5451837b9e04b631577e3a33b271ea436ea70de44f4ec926564bb5c9320cd0",
+        ".temp/goal/jobs/55e8a327-bd93-43fb-be9b-bf4e459cc85a.3.log": "2e0d02c015c59406c6e46c9180f12cf736af5ab13921079944ec6f7ac27ece5f"
+      }
+    },
+    "disposition": "Finite preservation comparison passed at its owner/public-read evidence tier. Manager retains acceptance and composed landing disposition; no production change, new API case, finding closure, proved-row registration, frontend acceptance, review or landing performed."
   }
 }
