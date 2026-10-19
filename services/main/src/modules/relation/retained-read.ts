@@ -1,4 +1,3 @@
-import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { PROFILES } from '../semantic/schema.ts';
 import { systemDisclosure } from '../target/disclosed-references.ts';
@@ -7,7 +6,7 @@ import { canonicalCreditValue, creditNativeId, RETAINED_CREDIT_ASSOCIATIONS_PROF
 import { openRetainedCreditIdentityRead, openRetainedCreditAssociationRead, readRetainedCreditAssociationView, resolveRetainedCreditAssociationIdentity,
   RetainedCreditReadUnavailable } from '../work/credit-association-read.ts';
 import { readExactDefinition } from './change.ts';
-import { retainedRelationDependencies } from './retained-change.ts';
+import { retainedRelationDependencies, type RetainedRelationReadDependencies } from './retained-change.ts';
 
 const unavailable = (message: string): never => { throw new RetainedCreditReadUnavailable(message); };
 const equal = (a: unknown, b: unknown) => canonicalCreditValue(a) === canonicalCreditValue(b);
@@ -47,7 +46,7 @@ export async function retainedRelationOwnerMetadata(env: WorkActivationEnvironme
 /** The credit owner resolves its immutable seal and current original support.
  * Current selection additionally requires exact public coverage; an exact
  * authenticated revision read grants no adoption to its sealed values. */
-export async function readRetainedRelationOwner(work: MainWorkDependencies, principal: VerifiedPrincipal,
+export async function readRetainedRelationOwner(work: RetainedRelationReadDependencies, principal: VerifiedPrincipal,
   actingSubject: string, credit: string, associationHead: string, current = false) {
   const deps = retainedRelationDependencies(work, actingSubject);
   const basis = await openRetainedCreditIdentityRead(deps, principal);
@@ -75,5 +74,5 @@ export async function readRetainedRelationOwner(work: MainWorkDependencies, prin
   const metadata = await retainedRelationOwnerMetadata(work.environment, credit, associationHead, exact.receipt);
   if (metadata.operation !== exact.operation || metadata.modelGeneration !== exact.modelGeneration)
     return unavailable('retained credit exact owner command metadata changed');
-  return { ...exact, ...metadata, definition };
+  return { ...exact, ...metadata, definition, currentPosition: { ...basis.sourcePosition } };
 }

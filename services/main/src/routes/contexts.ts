@@ -42,6 +42,7 @@ import { semanticParticipantSchema, semanticValueSchema } from '../modules/seman
 import { InvalidSemanticValue, UnsupportedSemanticValue } from '../modules/semantic/value.ts';
 import { checkedRecordStatementV2, recordStatementV2, recordStatementV2Request, type RecordStatementV2Input } from '../modules/statement/v2-write.ts';
 import { readAdoptedStatementV2, readStatementV2Revision } from '../modules/statement/v2-read.ts';
+import { retainedStatementCoverageReader } from '../modules/statement/retained-coverage.ts';
 import { STATEMENT_V2_PROFILE, StatementV2Rejected } from '../modules/statement/v2-schema.ts';
 import { relationAttributionVerifier } from '../modules/relation/attribution.ts';
 import { frameQuery } from '../modules/projection/frame-read.ts';
@@ -420,7 +421,8 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
                 disclosureViewer(principal, input.actingSubject), 'read');
               return new Set(references.filter((_, index) => decisions[index] === 'visible'));
             }, referenceDisclosure(env, authority, canReadDefinition),
-            relationAttributionVerifier(work.relationAttribution, principal, input.actingSubject));
+            relationAttributionVerifier(work.relationAttribution, principal, input.actingSubject),
+            retainedStatementCoverageReader(work, principal, input.actingSubject));
         },
       });
       const snapshot = await readStatementV2Revision(env, receipt.component!, receipt.revision!);

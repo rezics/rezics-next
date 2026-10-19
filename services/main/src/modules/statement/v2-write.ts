@@ -17,7 +17,7 @@ import { statementQualificationKeyTuple, statementQualificationTriples, validate
   validateStatementInterpretationDefinition } from './qualification.ts';
 import { STATEMENT_FAMILIES } from './receipt-family.ts';
 import { STATEMENT_AUTHORITY } from './schema.ts';
-import { resolveStatementCoverage } from './v2-coverage.ts';
+import { resolveStatementCoverage, type RetainedStatementCoverageReader } from './v2-coverage.ts';
 import type { RelationAttributionVerifier } from '../relation/attribution.ts';
 import { checkedStatementCoverage, checkedStatementMeaningV2, checkedStatementParticipant, statementCoverageRejected,
   statementMeaningKeyV2, statementNativeId, STATEMENT_V2_PROFILE, type StatementCoverage,
@@ -82,6 +82,7 @@ export async function recordStatementV2(env: WorkActivationEnvironment, admissio
   discloseOwned?: ReferenceDisclosure,
   readReferences?: ReferenceDisclosure,
   attribution?: RelationAttributionVerifier,
+  readRetained?: RetainedStatementCoverageReader,
 ): Promise<ContextCommandReceipt> {
   const input = checkedRecordStatementV2(raw), request = recordStatementV2Request(input);
   const existing = await readCommandReceipt(env, admission.id, STATEMENT_FAMILIES.record);
@@ -101,7 +102,7 @@ export async function recordStatementV2(env: WorkActivationEnvironment, admissio
     relationDefinition: input.relationDefinition, value: input.value, applicability: normalized.applicability,
     coverage: checkedStatementCoverage(input.coverage), interpretationDefinitions: interpretation.definition ? [interpretation.definition] : [],
     ...(input.qualification ? { qualification: input.qualification } : {}) };
-  const coverage = await resolveStatementCoverage(env, initial, canRead, canReadDefinition, discloseOwned, readReferences, attribution);
+  const coverage = await resolveStatementCoverage(env, initial, canRead, canReadDefinition, discloseOwned, readReferences, attribution, readRetained);
   const meaning = checkedStatementMeaningV2({ ...initial, applicability:
     await normalizeCoveredStatementApplicability(env, coverage.applicability, initial.applicability, readTargets) });
   const nativeReferences = [subject, input.value].flatMap(value => value.kind === 'resource' ? [value.ref] : []);

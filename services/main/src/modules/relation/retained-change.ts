@@ -45,7 +45,9 @@ const equal = (left: unknown, right: unknown) => canonicalCreditValue(left) === 
 
 /** Relation transport and Statement/evidence composition share the existing
  * credit owner; this adapter only supplies this request's verified reader. */
-export function retainedRelationDependencies(work: MainWorkDependencies, actingSubject: string): RetainedCreditBindingDependencies {
+export type RetainedRelationReadDependencies = Pick<MainWorkDependencies,
+  'environment' | 'access' | 'relationAttribution' | 'retainedCreditRelations'>;
+export function retainedRelationDependencies(work: RetainedRelationReadDependencies, actingSubject: string): RetainedCreditBindingDependencies {
   const owners = work.retainedCreditRelations;
   if (!owners) return unavailable('retained credit relation owners unavailable');
   const attribution = creditAttributionOwner(work.environment, work.relationAttribution);

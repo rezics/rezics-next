@@ -9,6 +9,7 @@ import { normalizeStatementQualification } from '../statement/qualification.ts';
 import { readStatementV2MeaningBasis, readStatementV2Revision, resolveAdoptedOccurrenceV2,
   statementV2Acceptance, verifyStatementV2Current, type StatementOwnerQuery } from '../statement/v2-read.ts';
 import { resolveStatementCoverage } from '../statement/v2-coverage.ts';
+import { retainedStatementCoverageReader } from '../statement/retained-coverage.ts';
 import { checkedStatementCoverage, statementNativeId, STATEMENT_V2_PROFILE, type StatementCoverage } from '../statement/v2-schema.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
@@ -86,7 +87,7 @@ export function selectedNativeValueMatches(value: SemanticValue | StatementValue
 
 /** One owner entry point for Source. Source alone owns coordinate/mapping/rights checks and certificate settlement. */
 async function verifyNativeBasis(
-  work: Pick<MainWorkDependencies, 'environment' | 'access' | 'contextSelections' | 'relationAttribution'>,
+  work: Pick<MainWorkDependencies, 'environment' | 'access' | 'contextSelections' | 'relationAttribution' | 'retainedCreditRelations'>,
   principal: VerifiedPrincipal,
   input: NativeBasisVerificationInput,
 ): Promise<VerifiedSemanticBasis> {
@@ -231,7 +232,8 @@ async function verifyNativeBasis(
     let coverageGuard = '';
     if (v2) {
       const readCoverage = () => resolveStatementCoverage(env, v2.meaning, canRead, canRead, disclose, readable,
-        relationAttributionVerifier(work.relationAttribution, principal, input.actingSubject));
+        relationAttributionVerifier(work.relationAttribution, principal, input.actingSubject),
+        retainedStatementCoverageReader(work, principal, input.actingSubject));
       const coverage = await readCoverage();
       coverageGuard = coverage.guard;
       const readMeaning = () => readStatementV2MeaningBasis(v2, ownerQuery, canReadPrivate);
@@ -326,7 +328,7 @@ async function verifyNativeBasis(
 
 /** Resolve an acknowledged command through the actual Semantic/Statement owner, never through a relabelled ID. */
 export async function verifyAcknowledgedSemanticBasis(
-  work: Pick<MainWorkDependencies, 'environment' | 'access' | 'contextSelections' | 'relationAttribution'>,
+  work: Pick<MainWorkDependencies, 'environment' | 'access' | 'contextSelections' | 'relationAttribution' | 'retainedCreditRelations'>,
   principal: VerifiedPrincipal,
   input: NativeBasisVerificationInput,
 ): Promise<VerifiedSemanticBasis> {
