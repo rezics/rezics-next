@@ -905,7 +905,7 @@ async function runShardWork(
     const batchFile =
       batches.length === 1 ? outfile : outfile.replace(/\.xml$/, `-${index + 1}.xml`);
     const batchArgs = tierBunTestArgs(tier, [
-      ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`,
+      ...batch.map(file => `./${file}`), ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`,
       ...(options.timeoutArgs ?? []),
     ]);
     const runBatch = (environment: NodeJS.ProcessEnv, onLine: (line: string) => void) => commandAsync(
