@@ -1156,6 +1156,20 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "relation-occurrence-v2": {
+    "sha256": "f845f39cff9c253dafe3a267f10340e98e538bf0cf2bf210de0d5e68ffe18745",
+    "file": "shapes/relation-occurrence-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/relation-occurrence-v2/occurrence-shape",
+      "https://rezics.com/definition/relation-occurrence-v2/participation-shape",
+      "https://rezics.com/definition/relation-occurrence-v2/revision-shape"
+    ],
+    "focusRoles": [
+      "occurrence",
+      "participation",
+      "revision"
+    ]
+  },
   "release-v1": {
     "sha256": "e0018a2144113c2c3cc6bfcdc3951f1ce282c919859950c0811aa018c4a1c92c",
     "file": "shapes/release-v1.ttl",

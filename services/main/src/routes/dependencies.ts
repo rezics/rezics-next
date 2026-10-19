@@ -97,6 +97,8 @@ import type { ReaderLibraryRatings } from '../modules/library/ratings.ts';
 import type { ConsumptionSessionStore } from '../modules/session/store.ts';
 
 export interface MainWorkDependencies {
+  /** Source/credit/publication owners attest exact retained participation fields. */
+  relationAttribution?: import('../modules/relation/attribution.ts').RelationAttributionOwner;
   statementSeek?: import('../modules/statement/seek.ts').StatementSeek;
   templateSeek?: import('../modules/query/seek-index.ts').TemplateSeekIndex;
   platformAccess?: import('../modules/access/exposure.ts').AccessExposure;

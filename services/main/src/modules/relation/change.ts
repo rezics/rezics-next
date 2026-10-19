@@ -11,7 +11,7 @@ import { ModelGenerationChanged } from '../semantic/generation-guard.ts';
 import { checkedComponentProfile, checkedStoredState, term, type RelationRole, type RelationStar } from '../semantic/change.ts';
 import type { AssociationBinding, RetainedCreditMapping } from '../semantic/association.ts';
 import { checkedNativeIri, definitionKindIri, MODEL_COMPONENT, PROFILES, type Lifecycle } from '../semantic/schema.ts';
-import { semanticValueRdf } from '../semantic/value.ts';
+import { InvalidSemanticValue, semanticValueRdf } from '../semantic/value.ts';
 import { checkedApplicability, checkedParticipations, checkedRevealedAt, InvalidRelationOccurrence,
   RELATION_LIMITS, RELATION_TERMS, type Participation, type RelationRoleDefinition,
   type RevealedAt } from './schema.ts';
@@ -20,14 +20,21 @@ import { targetRead, targetSummaries } from '../target/resolve.ts';
 import { systemDisclosure, undisclosedReferences, type ReferenceDisclosure } from '../target/disclosed-references.ts';
 import { normalizeStatementSubject, StatementApplicabilityRefused } from '../statement/projection.ts';
 import { readingWorkScope } from '../reading-position/work-scope.ts';
+import { canonicalAttribution, checkedParticipationsV2, InvalidParticipationAttribution, RELATION_V2_PROFILE, UnsupportedRelationModel,
+  type AttributedParticipation, type SourceIdentity } from './v2-schema.ts';
+import type { CreditAttributionSupport } from '../work/credit-association-state.ts';
+import type { RelationAttributionProof, RelationAttributionVerifier } from './attribution.ts';
 
 export const RELATION_CHANGE_FAMILY = 'relation-change';
 
 export interface RelationInput {
+  /** The absent selector is the unchanged V1 command and digest. */
+  profile?: 'relation-change-v2';
   /** Exact relation DefinitionRef: a `semantic-definition-v1` revision. */
   definition: string;
   participations: { role: string; participant: unknown; position?: number;
-    creditedName?: { lexical: string; language: string } }[];
+    creditedName?: { lexical: string; language: string }; sourceIdentity?: SourceIdentity;
+    attributionSupports?: CreditAttributionSupport[] }[];
   applicability?: string[];
   lifecycle?: Lifecycle;
   evidence?: string;
@@ -44,6 +51,8 @@ export interface RelationChangeIntent {
   beforeCommit?: RelationPublication;
   /** The caller's read authority; a star refusal names only links this reader may see. */
   canRead?: (resource: string) => Promise<boolean>;
+  /** Trusted Source/credit/publication verifier; never supplied in the public body. */
+  attribution?: RelationAttributionVerifier;
 }
 
 /** Validate and register publication before the graph write, then settle it: `complete` on a successful
@@ -57,11 +66,14 @@ export interface RelationPublication {
 
 /** Stored occurrence revision state; participation and value node identities are exact. */
 export interface OccurrenceState {
+  profile?: 'relation-change-v2';
   definition: string;
   lifecycle: Lifecycle;
   applicability: string[];
   evidence?: string;
-  participations: (Participation & { iri: string; node?: string })[];
+  participations: (Participation & { iri: string; node?: string; sourceIdentity?: SourceIdentity;
+    attributionSupports?: CreditAttributionSupport[] })[];
+  attributionProofs?: { participation: string; proof: RelationAttributionProof }[];
 }
 
 /** Canonical command state: the stored occurrence plus the revelation it publishes beside the graph write. */
@@ -164,10 +176,12 @@ export async function readExactDefinition(env: WorkActivationEnvironment, revisi
 
 export function canonicalRelation(definition: ExactDefinition, input: RelationInput): CanonicalRelation {
   try {
+    if (input.profile !== undefined && input.profile !== 'relation-change-v2') throw new UnsupportedRelationModel();
+    if (!input.profile && definition.association) throw new UnsupportedRelationModel();
     if (input.evidence !== undefined && !/^https:\/\/[^\s<>"{}|\\^`]{1,2040}$/.test(input.evidence)) {
       throw new InvalidRelationOccurrence('invalid relation evidence');
     }
-    const participations = checkedParticipations(definition.roles, input.participations.map(item => ({
+    const participations = (input.profile === 'relation-change-v2' ? checkedParticipationsV2 : checkedParticipations)(definition.roles, input.participations.map(item => ({
       ...item, role: typeof item.role === 'string' ? roleIri(definition.definition, item.role) : item.role })));
     const externals = participations.filter(item => item.participant.kind === 'external').length;
     if (participations.length + externals > RELATION_LIMITS.participants + 32) {
@@ -175,12 +189,15 @@ export function canonicalRelation(definition: ExactDefinition, input: RelationIn
     }
     if (definition.star) checkedStarParticipants(definition, participations);
     const key = (item: Participation) => JSON.stringify([item.role, item.position ?? -1, item.participant]);
-    return { ...(input.evidence === undefined ? {} : { evidence: input.evidence }),
+    return { ...(input.profile ? { profile: input.profile } : {}), ...(input.evidence === undefined ? {} : { evidence: input.evidence }),
       ...(input.revealedAt === undefined ? {} : { revealedAt: checkedRevealedAt(input.revealedAt) }),
       definition: definition.revision, lifecycle: input.lifecycle ?? 'active',
       applicability: checkedApplicability(input.applicability ?? []),
       participations: participations.sort((a, b) => key(a).localeCompare(key(b))).map(item => ({ ...item, iri: '' })) };
   } catch (error) {
+    if (input.profile === 'relation-change-v2' && (error instanceof InvalidRelationOccurrence || error instanceof InvalidSemanticValue)) {
+      throw new InvalidParticipationAttribution(error.message);
+    }
     if (error instanceof InvalidRelationOccurrence) throw new SemanticChangeRejected('invalid', error.message);
     throw error;
   }
@@ -304,12 +321,14 @@ async function visibleStarConflict(env: WorkActivationEnvironment, conflict: str
 
 export function relationChangeDigest(occurrence: string | undefined, expectedHead: string | null,
   state: CanonicalRelation): string {
-  return hash(JSON.stringify({ family: 'relation-change-v1', occurrence: occurrence ?? null, expectedHead,
+  return hash(JSON.stringify({ family: state.profile ?? 'relation-change-v1', occurrence: occurrence ?? null, expectedHead,
     ...(state.evidence === undefined ? {} : { evidence: state.evidence }),
     ...(state.revealedAt ? { revealedAt: state.revealedAt } : {}), definition: state.definition, lifecycle: state.lifecycle, applicability: state.applicability,
-    participations: state.participations.map(({ role, participant, position, creditedName }) =>
+    participations: state.participations.map(({ role, participant, position, creditedName, sourceIdentity, attributionSupports }) =>
       ({ role, participant, ...(position === undefined ? {} : { position }),
-        ...(creditedName ? { creditedName } : {}) })) }));
+        ...(creditedName ? { creditedName } : {}), ...(state.profile ? {
+          ...(sourceIdentity ? { sourceIdentity } : {}), attributionSupports: attributionSupports ?? [],
+        } : {}) })) }));
 }
 
 function checkedOccurrenceState(state: Record<string, unknown>): OccurrenceState {
@@ -319,11 +338,29 @@ function checkedOccurrenceState(state: Record<string, unknown>): OccurrenceState
     || participations.some(item => typeof item.iri !== 'string' || typeof item.role !== 'string')) {
     throw new RevisionCorrupt('stored occurrence state is invalid');
   }
+  if (state.profile === 'relation-change-v2') {
+    const entries = participations as OccurrenceState['participations'];
+    if (new Set(entries.map(item => item.iri)).size !== entries.length
+      || entries.some(item => !/^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(item.iri))) {
+      throw new RevisionCorrupt('stored V2 participation allocations are invalid');
+    }
+    // Role cardinalities are resolved through the exact DefinitionRef by the reader;
+    // this pass checks the complete sealed metadata without allocating or inferring an identity.
+    const roles = [...new Set(entries.map(item => item.role))].map(role => ({ role, minParticipants: 1,
+      maxParticipants: RELATION_LIMITS.participants, ordered: entries.find(item => item.role === role)!.position !== undefined }));
+    try {
+      const checked = checkedParticipationsV2(roles, entries.map(({ iri: _iri, node: _node, ...entry }) => entry));
+      if (checked.some((entry, index) => canonicalAttribution(entry) !== canonicalAttribution((({ iri: _iri, node: _node, ...value }) => value)(entries[index]!)))) {
+        throw new RevisionCorrupt('stored V2 attribution is not canonical');
+      }
+    } catch (error) { throw new RevisionCorrupt('stored V2 attribution is invalid', { cause: error }); }
+  }
   return state as unknown as OccurrenceState;
 }
 
 function occurrenceTriples(state: OccurrenceState, head: string): string[] {
   return [`<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <${RV}RelationOccurrence>`,
+    ...(state.profile ? [`<${RV}modelRevision> <${RELATION_V2_PROFILE}>`] : []),
     `<${RV}relationDefinition> <${state.definition}>`, `<${RV}occurrenceHead> <${head}>`,
     ...state.applicability.map(item => `<${RV}applicability> <${item}>`)];
 }
@@ -332,16 +369,19 @@ export interface CurrentOccurrence { head: string; manifest: string; state: Occu
 
 export async function readCurrentOccurrence(env: WorkActivationEnvironment, occurrence: string):
 Promise<CurrentOccurrence | null> {
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head ?manifest WHERE {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head ?manifest ?model WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(occurrence)} a rv:RelationOccurrence ; rv:occurrenceHead ?head }
-    GRAPH ${iri(GRAPHS.revisions)} { ?head rv:component ${iri(occurrence)} ; rv:manifest ?manifest } } LIMIT 2`);
+    GRAPH ${iri(GRAPHS.revisions)} { ?head rv:component ${iri(occurrence)} ; rv:manifest ?manifest .
+      OPTIONAL { ?head rv:modelRevision ?model } } } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (!rows.length) return null;
   if (rows.length !== 1) throw new RevisionCorrupt('occurrence head is ambiguous');
   const head = rows[0]!.head!.value;
-  const state = checkedOccurrenceState(await readComponent(env, rows[0]!.manifest!.value, occurrence, PROFILES.relation));
+  const profile = occurrenceProfile(rows[0]!.model?.value);
+  const state = checkedOccurrenceState(await readComponent(env, rows[0]!.manifest!.value, occurrence, profile));
+  if ((profile === RELATION_V2_PROFILE) !== (state.profile === 'relation-change-v2')) throw new RevisionCorrupt('occurrence manifest profile differs');
   const graph = await env.fuseki.query(`SELECT ?p ?o WHERE { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(occurrence)} ?p ?o } } LIMIT 12`);
+    ${iri(occurrence)} ?p ?o } } LIMIT 14`);
   const actual = new Set((graph.results?.bindings ?? []).map(row => `<${row.p!.value}> ${term(row.o!)}`));
   const expected = new Set(occurrenceTriples(state, head));
   if (actual.size !== expected.size || [...expected].some(item => !actual.has(item))) {
@@ -425,6 +465,11 @@ async function writeRelationOccurrence(env: WorkActivationEnvironment,
   const current = intent.occurrence ? await readCurrentOccurrence(env, occurrence) : null;
   if (intent.occurrence && !current) throw new SemanticTargetUnavailable('relation occurrence is unavailable');
   if (current && current.head !== intent.expectedHead) return sealStale(env, intent, receipt, digest, occurrence);
+  if (current?.state.profile && !state.profile) throw new UnsupportedRelationModel();
+  const attributed = state.participations as (AttributedParticipation & { iri: string })[];
+  const hasAttributions = !!state.profile && attributed.some(item => item.attributionSupports.length);
+  if (hasAttributions && !intent.attribution) throw new PendingActivation('exact attribution owner is unavailable');
+  const attribution = hasAttributions ? await intent.attribution!(definition, attributed) : { proofs: [], guard: '' };
   const nodes: string[][] = [];
   const participations = state.participations.map(item => {
     const participation = `${ID}${Bun.randomUUIDv7()}`;
@@ -433,8 +478,15 @@ async function writeRelationOccurrence(env: WorkActivationEnvironment,
     return { ...item, iri: participation, ...(rdf.node ? { node: rdf.node.iri } : {}), object: rdf.object };
   });
   const { revealedAt: _revealedAt, ...retained } = state;
-  const exact: OccurrenceState = { ...retained, participations: participations.map(({ object: _object, ...item }) => item) };
-  const manifest = await sealComponentState(env, occurrence, PROFILES.relation, exact);
+  let proofIndex = 0;
+  const exact: OccurrenceState = { ...retained, participations: participations.map(({ object: _object, ...item }) => item),
+    ...(state.profile ? { attributionProofs: participations.flatMap(item => (item.attributionSupports ?? [])
+      .map(() => ({ participation: item.iri, proof: attribution.proofs[proofIndex++]! }))) } : {}) };
+  if (state.profile && new TextEncoder().encode(canonicalAttribution(exact)).byteLength > 262144) {
+    throw new SemanticChangeRejected('too-large', 'authored relation exceeds its sealed command budget');
+  }
+  const profile = state.profile ? RELATION_V2_PROFILE : PROFILES.relation;
+  const manifest = await sealComponentState(env, occurrence, profile, exact);
   const revision = `${ID}${Bun.randomUUIDv7()}`;
   const operation = `${ID}${Bun.randomUUIDv7()}`;
   const old = current ? occurrenceTriples(current.state, current.head) : [];
@@ -445,7 +497,7 @@ async function writeRelationOccurrence(env: WorkActivationEnvironment,
   const active = state.lifecycle === 'active';
   const conflict = active && definition.star ? starConflict(definition, occurrence, exact) : '';
   const validations = [
-    ...await validationsFor(env, 'relation-occurrence-v1', [{ role: 'occurrence', focus: [occurrence] },
+    ...await validationsFor(env, state.profile ? 'relation-occurrence-v2' : 'relation-occurrence-v1', [{ role: 'occurrence', focus: [occurrence] },
       { role: 'revision', focus: [revision] },
       { role: 'participation', focus: participations.map(item => item.iri) }]),
     ...nodes.length ? await validationsFor(env, 'value-exact-v1',
@@ -462,10 +514,13 @@ async function writeRelationOccurrence(env: WorkActivationEnvironment,
           rv:lifecycle rv:${active ? 'Active' : 'Retired'} ; rv:participantCount ${participations.length} ;
           ${participations.map(item => `rv:participation ${iri(item.iri)} ;`).join(' ')}
           rv:operation ${iri(operation)} ; rv:manifest ${iri(manifest)} ; rv:modelGeneration ${iri(generation)} ;
-          rv:modelRevision ${iri(PROFILES.relation)} ; rv:shapeRevision ${iri(PROFILES.relation)} ;
+          rv:modelRevision ${iri(profile)} ; rv:shapeRevision ${iri(profile)} ;
+          ${state.profile ? `rv:attributionProofs ${lit(canonicalAttribution(exact.attributionProofs))} ;` : ''}
           rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
         ${participations.map(item => `${iri(item.iri)} a rv:RelationParticipation ; rv:occurrence ${iri(occurrence)} ;
           rv:role ${iri(item.role)} ; rv:participant ${item.object}
+          ${state.profile ? `; rv:modelRevision ${iri(RELATION_V2_PROFILE)} ; rv:attributionSupports ${lit(canonicalAttribution(item.attributionSupports ?? []))}
+            ${item.sourceIdentity ? `; rv:sourceIdentity ${lit(canonicalAttribution(item.sourceIdentity))}` : ''}` : ''}
           ${item.position === undefined ? '' : `; <https://schema.org/position> ${item.position}`}
           ${item.creditedName ? `; <${RELATION_TERMS.creditedName}> ${semanticValueRdf({ kind: 'language-string',
             ...item.creditedName }, () => '').object}` : ''} .`).join('\n')}
@@ -482,6 +537,7 @@ async function writeRelationOccurrence(env: WorkActivationEnvironment,
       ${resources.map(ref => `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(ref)} a rv:Projection } }`).join('\n')}
       ${conflict ? `FILTER NOT EXISTS ${conflict}` : ''}
       ${intent.beforeCommit?.guard ? `FILTER EXISTS ${intent.beforeCommit.guard}` : ''}
+      ${attribution.guard}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?revP ?revO } }`,
     receiptFields: `rv:operation ${iri(operation)} ; rv:component ${iri(occurrence)} ; rv:revision ${iri(revision)} ;
       ${state.revealedAt ? `rv:revelationWork ${iri(state.revealedAt.work)} ; rv:revelationOccurrence ${iri(state.revealedAt.occurrence)} ;` : ''}
@@ -590,14 +646,27 @@ export async function readRelationChangeTerminal(env: WorkActivationEnvironment,
 
 /** Exact occurrence revision: its retained participations and pinned DefinitionRef. */
 export async function readExactOccurrence(env: WorkActivationEnvironment, occurrence: string, revision: string) {
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?predecessor ?epoch ?sequence WHERE {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?predecessor ?epoch ?sequence ?model ?generation ?operation WHERE {
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RelationOccurrenceRevision ; rv:component ${iri(occurrence)} ;
       rv:manifest ?manifest ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
-      OPTIONAL { ${iri(revision)} rv:predecessor ?predecessor } } } LIMIT 2`);
+      OPTIONAL { ${iri(revision)} rv:predecessor ?predecessor }
+      OPTIONAL { ${iri(revision)} rv:modelRevision ?model }
+      OPTIONAL { ${iri(revision)} rv:modelGeneration ?generation }
+      OPTIONAL { ${iri(revision)} rv:operation ?operation } } } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (rows.length !== 1) return null;
   const row = rows[0]!;
-  const state = checkedOccurrenceState(await readComponent(env, row.manifest!.value, occurrence, PROFILES.relation));
+  const profile = occurrenceProfile(row.model?.value);
+  const state = checkedOccurrenceState(await readComponent(env, row.manifest!.value, occurrence, profile));
+  if ((profile === RELATION_V2_PROFILE) !== (state.profile === 'relation-change-v2')) throw new RevisionCorrupt('occurrence manifest profile differs');
   return { revision, occurrence, predecessor: row.predecessor?.value ?? null, state,
+    ...(state.profile ? { modelRevision: profile, modelGeneration: row.generation?.value,
+      manifest: row.manifest!.value, operation: row.operation?.value } : {}),
     sourcePosition: { datasetId: 'product' as const, dataEpoch: row.epoch!.value, sequence: row.sequence!.value } };
+}
+
+function occurrenceProfile(profile: string | undefined): string {
+  if (!profile || profile === PROFILES.relation) return PROFILES.relation;
+  if (profile === RELATION_V2_PROFILE) return profile;
+  throw new RevisionCorrupt('occurrence model revision is unavailable');
 }

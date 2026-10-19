@@ -1,4 +1,5 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
+import type { RelationAttributionVerifier } from '../relation/attribution.ts';
 import { requireSelectedPlatformCapability, type AccessExposure, type Exposure } from '../access/exposure.ts';
 import { resolvedSemanticCapabilities } from './selected-capability.ts';
 import { AdmissionDenied, AdmissionExpired, AdmissionLockBusy, type AccessAdmissionRegistry,
@@ -201,6 +202,7 @@ export interface AdmittedRelationChangeInput {
   /** Server-only: validates the position and publishes it after graph acceptance. */
   beforeCommit?: RelationPublication;
   canReadConflict?: (resource: string) => Promise<boolean>;
+  attribution?: RelationAttributionVerifier;
   actingSubject: string;
   idempotencyKey: string;
 }
@@ -238,6 +240,7 @@ export async function admittedRelationChange(env: WorkActivationEnvironment,
       return relationReferences(env, definition, state, { access, principal, actingSubject: input.actingSubject });
     },
     dispatch: (admission, canRead) => changeRelationOccurrence(env, { admission, canRead: input.canReadConflict ?? canRead,
+      ...(input.attribution ? { attribution: input.attribution } : {}),
       ...(input.occurrence ? { occurrence: input.occurrence } : {}), expectedHead: input.expectedHead, input: input.input,
       ...(input.beforeCommit ? { beforeCommit: input.beforeCommit } : {}) }),
     readTerminal: id => readRelationChangeTerminal(env, id),
