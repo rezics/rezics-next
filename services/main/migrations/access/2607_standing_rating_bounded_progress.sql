@@ -391,8 +391,13 @@ BEGIN
 END $$;
 
 
-CREATE OR REPLACE FUNCTION access.rating_standing_publication(c text,m text,OUT generation text,OUT pending bigint)
-LANGUAGE sql STABLE AS $$
+-- These reads seek current keys rather than collecting bitmaps of obsolete
+-- index entries from population-sized seal/reconstruction batches. The planner
+-- settings apply only while this owner function executes, never to its caller.
+CREATE FUNCTION access.rating_standing_publication_state(c text,m text,
+  OUT generation text,OUT pending bigint,OUT slots integer,OUT unvalued integer,
+  OUT histogram jsonb,OUT last_admission_id uuid)
+LANGUAGE sql STABLE SET enable_bitmapscan=off SET enable_seqscan=off AS $$
   SELECT encode(sha256(convert_to(concat_ws('|',c,m,
       COALESCE(k.publication_revision::text,'0'),COALESCE(f.revision::text,'0')),'UTF8')),'hex'),
     CASE WHEN COALESCE(f.pending,0)>0
@@ -404,14 +409,19 @@ LANGUAGE sql STABLE AS $$
           WHERE j.context=c AND j.origin_main_version=d.dependency AND j.after_main_version<m
           ORDER BY j.after_main_version LIMIT 1) awaiting
         LIMIT 1)
-      THEN 1::bigint ELSE 0::bigint END
+      THEN 1::bigint ELSE 0::bigint END,k.slots,k.unvalued,k.histogram,k.last_admission_id
   FROM (VALUES (1)) one_row(n)
   -- A seek stops at the first visible key. Filtering equality afterward also
   -- handles absent cuts without a bitmap over every obsolete index entry.
-  LEFT JOIN LATERAL (SELECT main_version,publication_revision FROM access.rating_standing_component
+  LEFT JOIN LATERAL (SELECT main_version,publication_revision,slots,unvalued,histogram,last_admission_id
+    FROM access.rating_standing_component
     WHERE context=c AND main_version>=m ORDER BY main_version LIMIT 1) k ON k.main_version=m
   LEFT JOIN LATERAL (SELECT main_version,revision,pending FROM access.rating_standing_cut
     WHERE context=c AND main_version>=m ORDER BY main_version LIMIT 1) f ON f.main_version=m;
+$$;
+CREATE OR REPLACE FUNCTION access.rating_standing_publication(c text,m text,OUT generation text,OUT pending bigint)
+LANGUAGE sql STABLE AS $$
+  SELECT generation,pending FROM access.rating_standing_publication_state(c,m);
 $$;
 -- No trigger, read, continuation or completion calls these recursive APIs.
 DROP FUNCTION access.rating_standing_revoked_selections(text);
