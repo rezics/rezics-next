@@ -138,6 +138,10 @@ export function refreshTokens(
   ]);
   const current = refreshes.get(cacheKey);
   if (current) return waitForRefresh(current.result, client.deadlineAt);
+  // A dispatched rotation must finish for reuse safety. A caller that already
+  // left cannot become the owner of a new token-rotation write.
+  if (serverSignal()?.aborted || (client.deadlineAt !== undefined && client.deadlineAt <= Date.now()))
+    return Promise.resolve({ status: 'unavailable' });
   if (refreshes.size >= MAX_TRACKED) {
     // Evicting a pending rotation would let a second call reuse its token.
     const settled = [...refreshes].find(([, tracked]) => tracked.settledAt !== undefined);

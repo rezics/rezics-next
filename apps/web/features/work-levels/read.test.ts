@@ -26,6 +26,11 @@ let answer: (operation: Operation, query: Query) => Answer;
 let collectionCalls = 0;
 let collectionStatus = 200;
 let summaryStatus = 200;
+let identityStatus = 200;
+let privateCollection = false;
+let privateGrant = true;
+let summaryFailureAt = 0;
+let summaryCalls = 0;
 let collectionGroups = false;
 const collectionQueries: URLSearchParams[] = [];
 const collectionSummary = fixture.summary(fixture.iri('900'), 'Public reading list', 'en', 'collection');
@@ -72,6 +77,7 @@ const restoreOriginalTransport = replaceModule(import.meta.resolve('../api/serve
           expect(authorization).toBe(`Bearer ${expired ? expiredToken : 'current-token'}`);
           expect(new Headers(init?.headers).get('x-session-key')).toBe(sessionKey);
           if (expired) return respond({ error: 'expired' }, 401);
+          if (identityStatus !== 200) return respond({ code: 'identity_unavailable' }, identityStatus);
           const agent = {
             eligible: Boolean(actingSubject),
             actingSubject: actingSubject ?? null,
@@ -82,8 +88,11 @@ const restoreOriginalTransport = replaceModule(import.meta.resolve('../api/serve
         if (expired && authorization) return respond({ error: 'expired' }, 401);
         if (url.pathname === '/v1/me/person-preferences') return respond({ contentLanguages: [] });
         if (url.pathname === '/v1/resources/summaries') {
-          if (summaryStatus !== 200) return respond({ code: 'summary_unavailable' }, summaryStatus);
-          const body = JSON.parse(String(init?.body)) as { resources: string[] };
+          summaryCalls++;
+          if (summaryStatus !== 200 || summaryFailureAt === summaryCalls) return respond({ code: 'summary_unavailable' }, 503);
+          const body = JSON.parse(String(init?.body)) as { resources: string[]; actingSubject?: string };
+          if (privateCollection && (!authorization || !privateGrant || body.actingSubject !== fixture.iri('999')))
+            return respond({ summaries: body.resources.map(reference => ({ reference, status: 'unavailable' })) });
           return respond({
             summaries: body.resources.flatMap((reference) => reference === fixture.iri('900')
               ? [collectionSummary] : fixture.names.get(reference) ?? []),
@@ -166,6 +175,11 @@ beforeEach(() => {
   collectionQueries.length = 0;
   collectionStatus = 200;
   summaryStatus = 200;
+  identityStatus = 200;
+  privateCollection = false;
+  privateGrant = true;
+  summaryFailureAt = 0;
+  summaryCalls = 0;
   collectionGroups = false;
   requests.length = 0;
   signedIn = false;
@@ -527,6 +541,55 @@ test('temporary resource admission failure never requests an unsupported generic
   expect(markup).toContain('role="alert"');
   expect(markup).toContain('Retry');
   expect(requests.every(request => request.path === '/v1/resources/summaries')).toBe(true);
+});
+
+test('private Collection identity outage never falls back to anonymous absence, while disclosure refusals remain missing', async () => {
+  const { readEntityEntry } = await import('../entity-page/read.ts');
+  privateCollection = true;
+  signedIn = true;
+  actingSubject = fixture.iri('999');
+  identityStatus = 503;
+  expect(await readEntityEntry(fixture.iri('900'))).toMatchObject({ ok: false, failure: 'identity', status: 503 });
+  expect(requests.some(request => request.path === '/v1/resources/summaries')).toBe(false);
+  identityStatus = 200;
+  expect((await readEntityEntry(fixture.iri('900'))).ok).toBe(true);
+  actingSubject = fixture.iri('998');
+  expect(await readEntityEntry(fixture.iri('900'))).toMatchObject({ ok: false, failure: 'missing' });
+  actingSubject = fixture.iri('999');
+  privateGrant = false;
+  expect(await readEntityEntry(fixture.iri('900'))).toMatchObject({ ok: false, failure: 'missing' });
+  signedIn = false;
+  expect(await readEntityEntry(fixture.iri('900'))).toMatchObject({ ok: false, failure: 'missing' });
+});
+
+test('later Collection entry or member-name failures keep the initial document unavailable and recover on the same URL', async () => {
+  const request = new Request(new URL(`${localizedPath(resourceHref('/e/', fixture.iri('900')), 'en')}?after=members-page-2&parent=${encodeURIComponent(fixture.iri('9'))}&tag=a&tag=b`, 'https://rezics.test'));
+  const props = { params: Promise.resolve({ ref: fixture.iri('900').slice(-36) }),
+    searchParams: Promise.resolve({ after: 'members-page-2', parent: fixture.iri('9'), tag: ['a', 'b'] }) };
+  const document = () => originalTransport.withServerRequest(request, async () => {
+    const tree = await EntityRoute(props);
+    const response = new Response(await renderToReadableStream(tree), { headers: { 'content-type': 'text/html' } });
+    return originalTransport.serverDocumentResponse(request, response);
+  });
+  for (const failAt of [1, 2]) {
+    summaryCalls = 0;
+    summaryFailureAt = failAt;
+    const response = await document();
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.text()).toContain('role="alert"');
+    summaryFailureAt = 0;
+    expect(await (await document()).text()).toContain('A Certain Magical Index');
+  }
+});
+
+test('a moved group continuation restarts within its group and retains unrelated task selections', async () => {
+  const current = `${localizedPath(resourceHref('/e/', fixture.iri('900')), 'en')}?after=stale&parent=${encodeURIComponent(fixture.iri('9'))}&language=sv&tag=a&tag=b`;
+  const markup = await markupOf(createElement(PublicCollectionPage, {
+    summary: collectionSummary as Extract<typeof collectionSummary, { status: 'available' }>,
+    page: { ok: false, failure: 'moved', status: 409 }, currentUrl: current, locale: 'en', messages: messages.en,
+  }));
+  expect(markup).toContain(`href="${current.replace('after=stale&', '').replaceAll('&', '&amp;')}"`);
 });
 
 test('Collection continuation preserves all task selections and reports owner failure without a successful member list', async () => {

@@ -16,6 +16,7 @@ import {
 import { mainApiWithToken } from '../features/api/main.ts';
 import { forwardToMain } from '../features/api/bff.ts';
 import { readAddress, type ResolvedAddress } from '../features/address/client.ts';
+import { resourceHref } from '../features/address/path.ts';
 import { refreshTokens } from '../features/auth/account.ts';
 import { forgetServedTypes, readTypes } from '../features/catalogue/types-read.ts';
 import { servedTypes } from '../features/catalogue/type-fixtures.ts';
@@ -38,7 +39,7 @@ import { NextRequest } from 'next/server';
 import { proxy } from '../proxy.ts';
 import { mainBodyRead } from '../features/api/main-read-operation.ts';
 import { isOfflineError } from '../features/feed/types.ts';
-import { serverRead, serverSignal, withServerRequest } from '../features/api/server-read.ts';
+import { serverDocumentResponse, serverRead, serverSignal, setServerDocumentStatus, withServerRequest } from '../features/api/server-read.ts';
 
 const nativeFetch = globalThis.fetch;
 const mainOrigin = process.env.MAIN_ORIGIN;
@@ -66,6 +67,55 @@ test('request cancellation reaches sequential server reads and stops later work 
   expect(hops).toHaveLength(2);
   expect(hops[0]!.deadline).toBe(hops[1]!.deadline);
   expect(Number(hops[0]!.deadline)).toBeGreaterThan(Date.now() + 10_000);
+});
+
+test('a late whole-page refusal determines document headers before its loading shell is sent', async () => {
+  const request = new Request(new URL(resourceHref('/e/', '0199a0fe-0b21-7000-8000-123456789abc'), 'https://web.test'));
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  let completed = false;
+  const pending = withServerRequest(request, () => serverDocumentResponse(request, new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('<html><body>Loading…')); },
+      async pull(controller) {
+        await held;
+        setServerDocumentStatus(503);
+        controller.enqueue(new TextEncoder().encode('<div role="alert">Retry</div></body></html>'));
+        controller.close();
+      },
+    }), { headers: { 'content-type': 'text/html', 'set-cookie': 'session=renewed; HttpOnly', 'cache-control': 'public' } },
+  ))).then(response => { completed = true; return response; });
+  await Promise.resolve();
+  expect(completed).toBe(false);
+  release();
+  const response = await pending;
+  expect(response.status).toBe(503);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  expect(response.headers.get('set-cookie')).toBe('session=renewed; HttpOnly');
+  expect(await response.text()).toContain('role="alert"');
+});
+
+test('holding resource document headers cancels its renderer on caller abort or the original deadline', async () => {
+  for (const reason of ['abort', 'deadline']) {
+    const controller = new AbortController();
+    const request = new Request(new URL(resourceHref('/e/', '0199a0fe-0b21-7000-8000-123456789abc'), 'https://web.test'),
+      { signal: controller.signal });
+    let cancelled = false;
+    let clock: ReturnType<typeof spyOn> | undefined;
+    try {
+      const initial = Date.now();
+      if (reason === 'deadline') clock = spyOn(Date, 'now').mockReturnValue(initial);
+      const pending = withServerRequest(request, () => {
+        if (reason === 'deadline') clock!.mockReturnValue(initial + 15_001);
+        return serverDocumentResponse(request, new Response(new ReadableStream({
+          cancel() { cancelled = true; },
+        }), { headers: { 'content-type': 'text/html' } }));
+      });
+      if (reason === 'abort') controller.abort();
+      await expect(pending).rejects.toMatchObject({ name: reason === 'abort' ? 'AbortError' : 'TimeoutError' });
+      expect(cancelled).toBe(true);
+    } finally { clock?.mockRestore(); }
+  }
 });
 
 test('BFF cancellation survives Request reconstruction, stops each pre-read and never schedules the requested operation', async () => {
@@ -148,6 +198,58 @@ test('BFF refuses temporary pre-read failures with their phase and owner problem
   expect(calls).toBe(1);
 });
 
+test('BFF preserves prerequisite identity, permission and rate-limit refusals without sending a read or write', async () => {
+  for (const [status, code, phase] of [
+    [401, 'session_expired', 'session-agent'],
+    [403, 'person_forbidden', 'person-preferences'],
+    [429, 'read_rate_limited', 'person-preferences'],
+  ] as const) for (const method of ['GET', 'POST']) {
+    let targets = 0;
+    const request = new Request('https://web.test/api/main/v1/works?intent=preserved', {
+      method, headers: { origin: 'https://web.test', 'idempotency-key': 'same-command-key' },
+      ...(method === 'POST' ? { body: '{"draft":"keep me"}' } : {}),
+    });
+    const response = await forwardToMain(request, ['v1', 'works'], {
+      mainOrigin: 'https://main.test', accessToken: `refusal-${status}-${method}`,
+      fetch: (async (input) => {
+        const path = new URL(String(input)).pathname;
+        if (path.endsWith(phase)) return Response.json({ error: code, code }, { status,
+          headers: { 'retry-after': '11', 'www-authenticate': 'Bearer error="invalid_token"' } });
+        if (path.endsWith('session-agent')) return Response.json({ sessionAgent: { eligible: true, actingSubject: 'reader' } });
+        targets++;
+        throw new Error('A refused prerequisite must stop before target dispatch');
+      }) as typeof fetch,
+    });
+    expect(response.status).toBe(status);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toMatchObject({ code, phase,
+      retry: status === 429 ? 'safe' : 'none', receipt: method === 'POST' ? 'not-sent' : 'not-applicable' });
+    if (status === 429) expect(response.headers.get('retry-after')).toBe('11');
+    if (status === 401) expect(response.headers.get('www-authenticate')).toContain('invalid_token');
+    expect(targets).toBe(0);
+  }
+});
+
+test('a cached language basis does not turn a revoked session refusal into an outage', async () => {
+  let revoked = false, prerequisites = 0;
+  const send = (async (input) => {
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith('session-agent')) {
+      prerequisites++;
+      return Response.json({ sessionAgent: { eligible: true, actingSubject: 'reader' } });
+    }
+    if (path.endsWith('person-preferences')) return Response.json({ contentLanguages: ['ja'] });
+    return revoked ? Response.json({ code: 'session_expired' }, { status: 401 }) : Response.json({ works: [] });
+  }) as typeof fetch;
+  const input = { mainOrigin: 'https://main.test', accessToken: 'cached-revoked-refusal', fetch: send };
+  expect((await forwardToMain(new Request('https://web.test/api/main/v1/works'), ['v1', 'works'], input)).status).toBe(200);
+  revoked = true;
+  const response = await forwardToMain(new Request('https://web.test/api/main/v1/works'), ['v1', 'works'], input);
+  expect(response.status).toBe(401);
+  expect(await response.json()).toMatchObject({ code: 'session_expired' });
+  expect(prerequisites).toBe(1);
+});
+
 test('BFF cancels a stalled inbound Query body before any upstream operation', async () => {
   const controller = new AbortController();
   let cancelled = false, calls = 0;
@@ -212,6 +314,21 @@ test('a cancelled refresh waiter releases promptly without aborting the shared t
   expect(signal?.aborted).toBe(false);
   finish(Response.json({ access_token: 'issued-once' }));
   expect(await second).toMatchObject({ status: 'issued' });
+});
+
+test('an already cancelled initiating reader cannot start a detached token rotation', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let posts = 0;
+  const result = await withServerRequest(new Request(new URL(resourceHref('/e/', '0199a0fe-0b21-7000-8000-123456789abc'),
+    'https://web.test'), { signal: controller.signal }),
+    () => refreshTokens({ accountOrigin: 'https://account.test', clientId: 'web', resource: 'main',
+      deadlineAt: Date.now() + 4_000, fetch: (async () => {
+        posts++;
+        return Response.json({ access_token: 'must-not-rotate' });
+      }) as unknown as typeof fetch }, 'already-aborted-unique-rotation'));
+  expect(result).toEqual({ status: 'unavailable' });
+  expect(posts).toBe(0);
 });
 
 test('a cancelled registry waiter releases its request while the shared owner completes for another reader', async () => {

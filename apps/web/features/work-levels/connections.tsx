@@ -42,10 +42,11 @@ export function PublicCollectionPage({ summary, page, currentUrl, locale, messag
   const t = copyOf(locale), browse = browseMessages[locale];
   const current = new URL(currentUrl, 'https://rezics.com');
   const start = collectionPageHref(currentUrl, { after: null, parent: null });
+  const restart = collectionPageHref(currentUrl, { after: null });
   return <PageContainer className="grid gap-6">
     <Link href="/discover?type=lists" className="w-fit text-sm underline underline-offset-4">{browse.lists}</Link>
     <PageHeader title={<LocalizedText text={summary.name} />} />
-    {!page.ok ? <RegionFailure title={browse.unavailable} failure={page.failure} messages={messages} restartHref={start} />
+    {!page.ok ? <RegionFailure title={browse.unavailable} failure={page.failure} messages={messages} restartHref={restart} />
       : page.data.occurrences.length ? <ol aria-label={browse.lists} className="grid gap-3">
         {page.data.occurrences.map(item => <li key={item.occurrence} className="min-w-0 break-words rounded-xl border p-4">
           {item.target ? <SummaryLink summary={page.data.names.get(item.target)} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown}
