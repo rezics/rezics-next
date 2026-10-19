@@ -3,7 +3,8 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { mkdirSync, rmSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { SparqlResult } from '../src/infrastructure/fuseki.ts';
+import { Parser } from 'n3';
+import type { CommandEnvelope, SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import {
   AccountAssertionDenied,
@@ -11,7 +12,8 @@ import {
   AccountAssertionVerifier,
   type VerifiedAccountAssertion,
 } from '../src/modules/account/verify-assertion.ts';
-import { familyReceiptIri } from '../src/modules/semantic/command.ts';
+import { familyReceiptIri, readComponent, StaleSemanticHead, type SemanticAdmission } from '../src/modules/semantic/command.ts';
+import { PROFILES } from '../src/modules/semantic/schema.ts';
 import { nativeCreditDigest } from '../src/modules/profiles/credits.ts';
 import {
   hash,
@@ -36,11 +38,17 @@ import {
   fenceRetainedCreditAssociationRead,
   readRetainedCreditAssociationCandidates,
   readRetainedCreditAssociationView,
+  resolveRetainedCreditAssociationIdentity,
   RetainedCreditReadMoved,
   RetainedCreditReadUnavailable,
   type RetainedCreditAssociationReadDependencies,
   type RetainedCreditSourceValidation,
 } from '../src/modules/work/credit-association-read.ts';
+import { bindRetainedCreditAssociation, prepareRetainedCreditBinding, RetainedCreditOriginConflict,
+  type RetainedCreditBindingDependencies, type RetainedCreditBindingInput } from '../src/modules/work/credit-association-write.ts';
+import { creditAttributionOwner, retainedCreditAttributionReader } from '../src/modules/work/credit-attribution.ts';
+import type { RelationAttributionOwner } from '../src/modules/relation/attribution.ts';
+import type { RelationPublication } from '../src/modules/relation/change.ts';
 import { NATIVE_CREDIT_ROLES, type NativeCreditRole } from '../src/modules/work/credit-roles.ts';
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
@@ -243,6 +251,9 @@ function fixture(
     afterSource: undefined as (() => void) | undefined,
     afterMapping: undefined as (() => void) | undefined,
     afterRead: undefined as (() => void) | undefined,
+    beforeCommand: undefined as (() => void) | undefined,
+    lostReply: false,
+    writing: false,
     candidates: undefined as Record<string, string>[] | undefined,
   };
   const sealed = new Map<
@@ -252,8 +263,12 @@ function fixture(
       manifest: string;
       predecessor: string | null;
       admission: string;
+      sequence?: string;
     }
   >();
+  const commands: CommandEnvelope[] = [];
+  const terminals = new Map<string, Record<string, string>>();
+  const definitions = new Map<string, { definition: string; manifest: string }>();
   const mappings = new Map<string, RetainedCreditMapping>();
   const store = (
     stored: RetainedCreditAssociationState = state,
@@ -295,6 +310,18 @@ function fixture(
       : authorCreditDigest(value, live.sourceIntent);
   const query = async (sparql: string): Promise<SparqlResult> => {
     live.queries.push(sparql);
+    if (live.writing) {
+      if (sparql.includes('rv:rejectionKind rv:InvalidProfile')) return { boolean: false };
+      if (sparql.includes('SELECT ?definition ?manifest ?kind ?model')) {
+        const entry = [...definitions].find(([revision]) => sparql.includes(`<${revision}> a rv:DefinitionRevision`))?.[1];
+        return entry ? rows({ ...entry, kind: RV + 'RelationDefinition', model: PROFILES.definitionV2 }) : rows();
+      }
+      if (sparql.includes('ASK') && sparql.includes('rv:definitionHead')) return { boolean: live.mapping };
+      if (sparql.includes('SELECT ?outcome ?reason ?kind ?digest')) {
+        const ref = sparql.match(/<urn:rezics:receipt:[0-9a-f]{64}>/)?.[0].slice(1, -1);
+        return ref && terminals.has(ref) ? rows(terminals.get(ref)!) : rows();
+      }
+    }
     if (sparql.includes('SELECT ?epoch ?routing ?sequence'))
       return live.held
         ? rows()
@@ -335,7 +362,7 @@ function fixture(
           work: entry.state.work,
           creditRevision: entry.state.creditRevision,
           epoch: live.epoch,
-          sequence: '80',
+          sequence: entry.sequence ?? '80',
           scope: `work:edit:${entry.state.work}`,
         })),
       );
@@ -409,7 +436,45 @@ function fixture(
   };
   const deps: RetainedCreditAssociationReadDependencies = {
     environment: {
-      fuseki: { query },
+      fuseki: { query, async commandWithReceipt(command: CommandEnvelope) {
+        commands.push(structuredClone(command));
+        live.beforeCommand?.();
+        if (terminals.has(command.receipt)) return { status: 'committed' };
+        const graphBlock = (label: string) => {
+          const start = command.update.indexOf('{', command.update.indexOf(label));
+          let depth = 0, quoted = false, escaped = false;
+          for (let i = start; i < command.update.length; i++) {
+            const c = command.update[i];
+            if (quoted) { if (escaped) escaped = false; else if (c === '\\') escaped = true; else if (c === '"') quoted = false; continue; }
+            if (c === '"') quoted = true;
+            else if (c === '{') depth++;
+            else if (c === '}' && --depth === 0) return command.update.slice(start + 1, i);
+          }
+          throw new Error('unclosed credit command graph block');
+        };
+        const next = String(Number(live.sequence) + 1);
+        const rdf = new Parser({ format: 'TriG' }).parse(`@prefix rv: <${RV}> .\n` + graphBlock('INSERT').replaceAll('?next', next));
+        const prop = (subject: string, predicate: string) => rdf.find(quad => quad.subject.value === subject && quad.predicate.value === RV + predicate)?.object.value;
+        const success = prop(command.receipt, 'outcome') === RV + 'Succeeded';
+        const expected = prop(command.receipt, 'expectedHead') ?? null;
+        if (success && ((live.headAvailable ? live.head : null) !== expected || live.nativeRetired || live.nativeProtected || live.nativeErased || !live.mapping)) return { status: 'committed' };
+        const properties = { outcome: 'outcome', reason: 'reason', digest: 'requestDigest', admissionId: 'admissionId', authorityEpoch: 'authorityEpoch',
+          scope: 'admittedScope', epoch: 'dataEpoch', sequence: 'sequence', component: 'component', revision: 'revision', expected: 'expectedHead', currentHead: 'currentHead' };
+        const terminal = Object.fromEntries(Object.entries(properties).flatMap(([field, predicate]) => {
+          const value = prop(command.receipt, predicate); return value === undefined ? [] : [[field, value]];
+        }));
+        if (!success) { delete terminal.component; delete terminal.revision; }
+        terminals.set(command.receipt, terminal);
+        live.sequence = next;
+        if (success) {
+          const head = terminal.revision!, manifest = prop(head, 'manifest')!;
+          const snapshot = checkedRetainedCreditAssociationState(await readComponent(deps.environment, manifest, state.credit, RETAINED_CREDIT_ASSOCIATIONS_PROFILE));
+          sealed.set(head, { state: snapshot, manifest, predecessor: expected, admission: terminal.admissionId!, sequence: next });
+          live.head = head; live.headAvailable = true;
+        }
+        if (live.lostReply) { live.lostReply = false; throw new Error('committed credit reply lost'); }
+        return { status: 'committed' };
+      } },
       objectDirectory: directory,
       lineage: { dataEpoch: 'credit-epoch', routingEpoch: 'routing-1' },
     } as unknown as WorkActivationEnvironment,
@@ -518,6 +583,41 @@ function fixture(
     }));
     store();
   };
+  const defineMapping = (mapping = state.mapping) => {
+    const definition = { component: 'definition', kind: 'relation', lifecycle: 'active', successor: null,
+      workSubjectRole: 'work', association: { kind: 'credit', workRole: 'work', subjectRoles: [role] },
+      retainedCredit: { origin: mapping.originProfile, storedRole: mapping.originRole, subjectRole: role,
+        ...(mapping.externalNamespace ? { externalNamespace: mapping.externalNamespace } : {}) },
+      roles: [{ key: 'work', minParticipants: 1, maxParticipants: 1, ordered: false },
+        { key: role, minParticipants: 1, maxParticipants: 1, ordered: !agent }] };
+    definitions.set(mapping.revision, { definition: mapping.definition,
+      manifest: `urn:rezics:sha256:${prepareComponent(directory, mapping.definition, definition, PROFILES.definitionV2)}` });
+    mappings.set(mapping.revision, structuredClone(mapping));
+  };
+  const enableBinding = () => {
+    live.writing = true; live.headAvailable = false; sealed.clear();
+    state.mapping.definition = id(30); state.mapping.externalNamespace = null;
+    defineMapping();
+    const input = (expectedAssociationHead: string | null = null): RetainedCreditBindingInput => ({
+      credit: state.credit, creditRevision: state.creditRevision, work: state.work, workRevision: state.workRevision,
+      retainedProfile: state.retainedProfile, role: state.role, origin: structuredClone(state.origin), mapping: structuredClone(state.mapping),
+      subject: { participant: structuredClone(state.participations[1]!.participant),
+        ...(agent ? {} : { position: value.nativeOrdinal }), attributionSupports: [] }, expectedAssociationHead,
+    });
+    const writeDeps: RetainedCreditBindingDependencies = { ...deps, canReadReference: async () => live.readable };
+    const publication = Object.assign(async (credit: string, commandReceipt: string) => {
+      expect(credit).toBe(value.credit); expect(commandReceipt).toMatch(/^urn:rezics:receipt:/);
+    }, { guard: '{ FILTER(true) }', complete: async () => {} }) as RelationPublication;
+    const admission = async (command: RetainedCreditBindingInput, n = 200): Promise<SemanticAdmission> => ({
+      id: uuid(n), action: 'relation.change', scope: `work:edit:${value.work}`,
+      requestDigest: (await prepareRetainedCreditBinding(deps.environment, command)).digest,
+      authorityEpoch: '7', expiresAt: '2099-01-01T00:00:00.000Z',
+    });
+    const bind = async (command = input(), n = 200) => bindRetainedCreditAssociation(writeDeps, {
+      principal: readerPrincipal, actingSubject: value.actingSubject, admission: await admission(command, n), input: command, beforeCommit: publication,
+    });
+    return { input, deps: writeDeps, publication, admission, bind };
+  };
   return {
     state,
     value,
@@ -529,9 +629,195 @@ function fixture(
     addAttribution,
     mappings,
     sealed,
+    commands,
+    terminals,
+    defineMapping,
+    enableBinding,
     clean: () => rmSync(directory, { recursive: true, force: true }),
   };
 }
+
+for (const agent of [true, false]) test(`retained binding seals the actual ${agent ? 'Agent' : 'qualified external'} credit without another occurrence`, async () => {
+  const f = fixture(agent);
+  try {
+    const w = f.enableBinding(), created = await w.bind();
+    expect(created.occurrence).toBe(f.value.credit);
+    expect(created.compatibilityReceipt).toBe(familyReceiptIri(uuid(200), RETAINED_CREDIT_ASSOCIATIONS));
+    expect(created.associationHead).not.toBe(f.value.credit);
+    expect(created.participations).toHaveLength(2);
+    const view = await f.read();
+    expect(view?.state.creditRevision).toBe(f.value.revision);
+    expect(view?.state.workRevision).toBe(f.value.expectedHead);
+    expect(view?.state.participations).toEqual(created.participations);
+    const identity = await resolveRetainedCreditAssociationIdentity(f.deps, {
+      basis: await f.open(), credit: f.value.credit, associationHead: created.associationHead,
+    });
+    expect(identity.occurrence).toBe(f.value.credit);
+    expect(identity.receipt).toBe(created.compatibilityReceipt);
+    expect(identity.manifest).toBe(created.manifest);
+    const command = f.commands[0]!;
+    expect(command.update).toContain(`rv:creditRevision <${f.value.revision}>`);
+    expect(command.update).toContain(`rv:head <${f.value.expectedHead}>`);
+    expect(command.update).toContain('rv:protectionHead');
+    expect(command.update).toContain('rv:ErasedRevision');
+    expect(command.update).not.toContain('a rv:RelationOccurrence');
+    expect(command.update).not.toContain('a rv:NativeAgentCredit');
+    expect(command.update).not.toContain('a rv:AuthorCredit');
+  } finally { f.clean(); }
+});
+
+test('concurrent retained binding and lost response reconcile one receipt, view and allocation set', async () => {
+  const f = fixture();
+  try {
+    const w = f.enableBinding(); f.live.lostReply = true;
+    const results = await Promise.all([w.bind(), w.bind()]);
+    expect(results[0]!.associationHead).toBe(results[1]!.associationHead);
+    expect(results[0]!.compatibilityReceipt).toBe(results[1]!.compatibilityReceipt);
+    expect(results[0]!.participations).toEqual(results[1]!.participations);
+    expect(f.sealed.size).toBe(1);
+    expect(f.terminals.size).toBe(1);
+    expect(new Set(results.flatMap(value => value.participations.map(part => part.id))).size).toBe(2);
+    const replay = await w.bind();
+    expect(replay.replayed).toBe(true);
+    expect(replay.participations).toEqual(results[0]!.participations);
+    expect(f.sealed.size).toBe(1);
+  } finally { f.clean(); }
+});
+
+test('a retained head race cannot abandon publication sealed by the same admission', async () => {
+  const f = fixture();
+  try {
+    const w = f.enableBinding(); let abandoned = 0, held = true;
+    w.publication.abandon = async () => { abandoned++; };
+    const query = f.deps.environment.fuseki.query.bind(f.deps.environment.fuseki);
+    f.deps.environment.fuseki.query = async (sparql) => {
+      // Finish the same admission after the outer request has checked authority
+      // and before it observes the expected head. Its stale-head rejection must
+      // reconcile the winner's actual receipt without undoing publication.
+      if (held && sparql.includes('SELECT ?associationHead')) {
+        held = false;
+        await w.bind();
+      }
+      return query(sparql);
+    };
+    const replay = await w.bind();
+    expect(replay.replayed).toBe(true);
+    expect(abandoned).toBe(0);
+    expect(f.sealed.size).toBe(1);
+    expect(f.terminals.size).toBe(1);
+  } finally { f.clean(); }
+});
+
+test('an Account-issued live principal can bind and cannot replay after revocation', async () => {
+  const account = await accountReader();
+  const f = fixture(true, 'artist', 'vndb', 'staff', account.reader);
+  try {
+    const w = f.enableBinding();
+    const first = await w.bind();
+    expect(first.occurrence).toBe(f.value.credit);
+    const calls = account.state.calls;
+    account.state.active = false;
+    await expect(w.bind()).rejects.toThrow();
+    expect(account.state.calls).toBeGreaterThan(calls);
+    expect(f.sealed.size).toBe(1);
+    expect(f.terminals.size).toBe(1);
+  } finally { f.clean(); account.close(); }
+});
+
+test('a new exact mapping preserves participation IDs, original identity and immutable prior history', async () => {
+  const f = fixture();
+  try {
+    const w = f.enableBinding(), first = await w.bind();
+    const prior = canonicalCreditValue(f.sealed.get(first.associationHead));
+    const command = w.input(first.associationHead);
+    command.mapping = { ...command.mapping, definition: id(34), revision: id(33),
+      workRole: `${id(34)}/role/work`, subjectRole: `${id(34)}/role/artist` };
+    f.defineMapping(command.mapping);
+    const second = await w.bind(command, 201);
+    expect(second.predecessor).toBe(first.associationHead);
+    expect(second.associationHead).not.toBe(first.associationHead);
+    expect(second.participations.map(part => part.id)).toEqual(first.participations.map(part => part.id));
+    expect(canonicalCreditValue(f.sealed.get(first.associationHead))).toBe(prior);
+    const old = await resolveRetainedCreditAssociationIdentity(f.deps, { basis: await f.open(),
+      credit: f.value.credit, associationHead: first.associationHead });
+    expect(old.state.mapping.revision).toBe(id(32));
+    expect(old.currentAssociationHead).toBe(second.associationHead);
+    expect((await f.read())?.state.mapping.revision).toBe(id(33));
+    expect((await w.bind(command, 201)).associationHead).toBe(second.associationHead);
+  } finally { f.clean(); }
+});
+
+test('stale first binding and changed expected head refuse without duplicate views', async () => {
+  const f = fixture();
+  try {
+    const w = f.enableBinding(), first = await w.bind();
+    await expect(w.bind(w.input(), 202)).rejects.toBeInstanceOf(StaleSemanticHead);
+    expect(f.sealed.size).toBe(1);
+    expect(f.live.head).toBe(first.associationHead);
+    expect(f.terminals.get(familyReceiptIri(uuid(202), RETAINED_CREDIT_ASSOCIATIONS))?.outcome).toBe(RV + 'Cancelled');
+  } finally { f.clean(); }
+});
+
+for (const unavailable of ['nativeRetired', 'nativeProtected', 'nativeErased'] as const)
+  test(`retained binding refuses ${unavailable} original identity before sealing`, async () => {
+    const f = fixture();
+    try {
+      const w = f.enableBinding(); f.live[unavailable] = true;
+      await expect(w.bind()).rejects.toThrow();
+      expect(f.commands).toHaveLength(0); expect(f.sealed.size).toBe(0);
+    } finally { f.clean(); }
+  });
+
+test('retained binding refuses ambiguous legacy Source origin and a changed exact participant', async () => {
+  const f = fixture(false);
+  try {
+    const w = f.enableBinding(); f.live.native = false; f.live.sourceIntent = id(60);
+    await expect(w.bind()).rejects.toBeInstanceOf(RetainedCreditOriginConflict);
+    expect(f.sealed.size).toBe(0);
+    f.live.native = true; f.live.sourceIntent = f.value.credit;
+    const command = w.input();
+    command.subject.participant = { kind: 'external', provider: 'bangumi', namespace: 'person', key: 'same-key' };
+    await expect(w.bind(command)).rejects.toThrow('qualifications differ');
+    expect(f.commands).toHaveLength(0);
+  } finally { f.clean(); }
+});
+
+test('native manual citations keep their independent receipt and withdrawal without changing credit identity', async () => {
+  const f = fixture();
+  try {
+    const w = f.enableBinding(); let withdrawn = false;
+    const citation: RelationAttributionOwner = { verify: async ({ principal: reader, requests }) => {
+      expect(reader.subject).toBe(principal.subject);
+      return { guard: `GRAPH <urn:rezics:graph:current> { <${id(90)}> <${RV}citationHead> <${id(91)}> }`,
+        proofs: requests.map(({ participation, support }) => ({ basis: support.basis,
+          participant: participation.participant, state: withdrawn ? 'withdrawn' : 'current',
+          receipt: receipt(90), revision: id(91), validationToken: hash(String(withdrawn)),
+          fields: { creditedName: { lexical: 'Credited alias', language: 'ja' } }, evidence: [id(90)] })) };
+    } };
+    w.deps.attribution = citation;
+    f.deps.owners.attribution = retainedCreditAttributionReader(f.deps.environment,
+      creditAttributionOwner(f.deps.environment, citation), f.value.actingSubject);
+    const command = w.input();
+    command.subject.creditedName = { lexical: 'Credited alias', language: 'ja' };
+    command.subject.attributionSupports = [{ basis: { kind: 'native-credit', credit: f.value.credit, revision: f.value.revision },
+      fields: ['creditedName'], evidence: [id(90)] }];
+    const created = await w.bind(command);
+    const view = await f.read();
+    expect(view?.sourceValidation[0]?.receipt).toBe(receipt(90));
+    expect(view?.sourceValidation[0]?.receipt).not.toBe(workEditReceiptIri(uuid(5)));
+    expect(view?.state.participations[1]?.attributionSupports[0]?.evidence).toEqual([id(90)]);
+    expect(f.commands[0]?.update).toContain(`<${id(90)}> <${RV}citationHead> <${id(91)}>`);
+    const history = canonicalCreditValue(f.sealed.get(created.associationHead));
+    withdrawn = true;
+    const current = await f.read();
+    expect(current?.occurrence).toBe(f.value.credit);
+    expect(current?.attribution[1]?.unsupportedFields).toEqual(['creditedName']);
+    expect(current?.sourceValidation[0]?.state).toBe('withdrawn');
+    await expect(w.bind({ ...command, expectedAssociationHead: created.associationHead }, 201)).rejects.toThrow('withdrawn');
+    expect(canonicalCreditValue(f.sealed.get(created.associationHead))).toBe(history);
+    expect(f.sealed.size).toBe(1);
+  } finally { f.clean(); }
+});
 
 for (const role of NATIVE_CREDIT_ROLES)
   test(`retained ${role} reads preserve the original native credit and allocations`, async () => {

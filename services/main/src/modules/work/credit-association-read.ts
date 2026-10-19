@@ -403,7 +403,10 @@ export async function readRetainedCreditAssociationCandidates(
   return { items: items.slice(0, limit), more: items.length > limit };
 }
 
-async function viewHead(env: WorkActivationEnvironment, credit: string, work: string) {
+/** Server-only current compatibility head. Absence is valid only for a writer
+ * preparing the first binding; public reads still require an installed view. */
+export async function readRetainedCreditAssociationHead(env: WorkActivationEnvironment, credit: string, work: string): Promise<string | null> {
+  if (![credit, work].every(creditNativeId)) unavailable('invalid retained credit head selection');
   const rows =
     (
       await env.fuseki.query(
@@ -416,12 +419,16 @@ async function viewHead(env: WorkActivationEnvironment, credit: string, work: st
         4096,
       )
     ).results?.bindings ?? [];
+  if (!rows.length) return null;
   if (rows.length !== 1 || !creditNativeId(rows[0]?.associationHead?.value))
     unavailable('retained credit view head unavailable or ambiguous');
   return rows[0]!.associationHead!.value;
 }
 
-async function sealedView(env: WorkActivationEnvironment, credit: string, head: string) {
+/** Resolve an immutable owner seal, never an inferred view of a legacy row.
+ * This internal identity read does not grant disclosure or Statement coverage. */
+export async function readSealedRetainedCreditAssociation(env: WorkActivationEnvironment, credit: string, head: string) {
+  if (![credit, head].every(creditNativeId)) unavailable('invalid retained credit seal selection');
   const rows =
     (
       await env.fuseki.query(
@@ -474,7 +481,9 @@ async function sealedView(env: WorkActivationEnvironment, credit: string, head: 
     row.digest.value !== retainedCreditAssociationDigest(state, predecessor)
   )
     unavailable('retained credit view differs from its receipt');
-  return { state, predecessor, receipt: row.receipt.value, admission: row.admission.value };
+  return { state, predecessor, receipt: row.receipt.value, admission: row.admission.value,
+    manifest: row.manifest!.value, sourcePosition: { datasetId: 'product' as const,
+      dataEpoch: row.epoch.value, sequence: row.sequence.value } };
 }
 
 async function originalCredit(
@@ -612,10 +621,20 @@ async function attributions(
           native.value.credit !== state.credit ||
           native.value.revision !== support.basis.revision ||
           native.value.work !== state.work ||
-          support.evidence.length
+          participation.id !== state.subjectParticipation ||
+          !equal(participation.participant, native.value.agent
+            ? { kind: 'resource', ref: native.value.agent }
+            : { kind: 'external', provider: native.value.provider, namespace: native.value.namespace, key: native.value.sourceKey }) ||
+          participation.position !== (native.value.agent ? undefined : native.value.nativeOrdinal)
         )
           unavailable('native attribution basis unavailable');
-        result = {
+        // The native receipt proves identity and its qualified tuple. Citation
+        // fields and rights are a separate owner proof, including withdrawal.
+        if (support.evidence.length) {
+          if (!deps.owners.attribution) unavailable('native citation attribution owner unavailable');
+          result = await deps.owners.attribution({ principal: snapshotPrincipal(principal),
+            ...structuredClone({ view: state, participation, support }), basis: readPosition(basis) });
+        } else result = {
           basis: support.basis,
           state: 'current',
           receipt: native.receipt.receipt,
@@ -662,6 +681,49 @@ async function attributions(
   return { validation, attribution };
 }
 
+/** Validate the original owner and exact participation support before a bind.
+ * Coverage is intentionally a separate Relation/Statement owner operation. */
+export async function verifyRetainedCreditAssociationState(
+  deps: RetainedCreditAssociationReadDependencies,
+  basis: RetainedCreditAssociationReadBasis,
+  supplied: RetainedCreditAssociationState,
+) {
+  const state = checkedRetainedCreditAssociationState(supplied);
+  await fenceRetainedCreditAssociationRead(deps, basis);
+  const check = async () => {
+    const principal = await currentReader(basis);
+    if (!await deps.canReadWork(principal, state.work)) unavailable('retained credit Work unavailable');
+    const source = await originalCredit(deps, basis, state, principal);
+    const supported = await attributions(deps, basis, state, principal);
+    return { sourceValidation: [...source.map(value => checkedSourceValidation(value)), ...supported.validation],
+      attribution: supported.attribution };
+  };
+  const result = await check();
+  if (!equal(result, await check())) throw new RetainedCreditReadMoved('retained credit origin or support changed');
+  await fenceRetainedCreditAssociationRead(deps, basis);
+  return result;
+}
+
+/** Exact compatibility-head to original-credit identity for trusted Relation
+ * composition/evidence reads. Public disclosure and coverage use the full view. */
+export async function resolveRetainedCreditAssociationIdentity(
+  deps: RetainedCreditAssociationReadDependencies,
+  input: { basis: RetainedCreditAssociationReadBasis; credit: string; associationHead: string },
+) {
+  const { credit, associationHead } = input;
+  const seal = await readSealedRetainedCreditAssociation(deps.environment, credit, associationHead);
+  const currentAssociationHead = await readRetainedCreditAssociationHead(deps.environment, credit, seal.state.work);
+  if (!currentAssociationHead) unavailable('retained credit compatibility head unavailable');
+  const currentSeal = currentAssociationHead === associationHead ? seal
+    : await readSealedRetainedCreditAssociation(deps.environment, credit, currentAssociationHead);
+  if (currentSeal.state.work !== seal.state.work) unavailable('retained credit current head target differs');
+  const validation = await verifyRetainedCreditAssociationState(deps, input.basis, seal.state);
+  if (currentAssociationHead !== await readRetainedCreditAssociationHead(deps.environment, credit, seal.state.work))
+    throw new RetainedCreditReadMoved('retained credit compatibility head changed');
+  return { occurrence: credit, associationHead, currentAssociationHead, ...seal, ...validation,
+    headGuarantee: 'verified-before-commit' as const };
+}
+
 /** Query hydrates this sealed owner view into its own AssociationWitness. It
  * must not synthesize a view from legacy rows, select a newer binding for an
  * exact read, or use withdrawal of one support to delete the native credit. */
@@ -690,9 +752,10 @@ export async function readRetainedCreditAssociationView(
     await fenceRetainedCreditAssociationRead(deps, basis);
     return null;
   }
-  const currentAssociationHead = await viewHead(deps.environment, credit, work);
+  const currentAssociationHead = await readRetainedCreditAssociationHead(deps.environment, credit, work);
+  if (!currentAssociationHead) unavailable('retained credit view head unavailable');
   const head = associationHead ?? currentAssociationHead;
-  const sealed = await sealedView(deps.environment, credit, head);
+  const sealed = await readSealedRetainedCreditAssociation(deps.environment, credit, head);
   const { state } = sealed;
   if (state.work !== work) unavailable('retained credit target differs');
   const readOwners = async () => {
@@ -763,7 +826,7 @@ export async function readRetainedCreditAssociationView(
     !current ||
     !(await deps.canReadWork(await currentReader(basis), work)) ||
     !equal(verified, current) ||
-    (await viewHead(deps.environment, credit, work)) !== currentAssociationHead
+    (await readRetainedCreditAssociationHead(deps.environment, credit, work)) !== currentAssociationHead
   ) {
     throw new RetainedCreditReadMoved('retained credit head, support, rights or coverage changed');
   }
