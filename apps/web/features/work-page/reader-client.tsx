@@ -335,65 +335,112 @@ export interface ProgressLabels {
 type Saved = Pick<Progress, 'completed' | 'position' | 'version'>;
 
 /** The paragraph at the top of the reading area, as a stored position. */
-function currentPosition(): string | null {
-  const paragraphs = document.querySelectorAll<HTMLElement>('[data-paragraph]');
+function currentPosition(reader: Element): string | null {
+  if (!reader.isConnected) return null;
+  const paragraphs = reader.querySelectorAll<HTMLElement>('[data-reader-text] [data-paragraph]');
+  let last: string | null = null;
   for (const paragraph of paragraphs) {
-    if (paragraph.getBoundingClientRect().bottom > 96) return paragraphPosition(Number(paragraph.dataset.paragraph));
+    if (!paragraph.getClientRects().length) continue;
+    last = paragraphPosition(Number(paragraph.dataset.paragraph));
+    if (paragraph.getBoundingClientRect().bottom > 96) return last;
   }
-  return null;
+  return last;
 }
+
+// Finish the old chapter's captured position before recording the next opened
+// chapter, even when the route replaces the entire progress component.
+const progressQueues = new Map<string, Promise<void>>();
 
 /**
  * The reader's own progress in this chapter, kept by Main: mark the chapter
- * read or unread, and the paragraph reached is saved as the reader scrolls.
+ * read or unread, and save the actual opened paragraph without completing it.
  * Writes carry the version they saw; a stale one is re-read once and retried.
  */
-export function ReadingProgress({ target, actingSubject, initial, labels }: {
+export function ReadingProgress(props: {
   target: ChapterRead['progress']; actingSubject: string; initial: Progress; labels: ProgressLabels;
 }) {
+  const { target, actingSubject } = props;
+  return <ChapterProgress key={JSON.stringify([actingSubject, target.composition, target.occurrence, target.selectedRevision])}
+    {...props} />;
+}
+
+function ChapterProgress({ target, actingSubject, initial, labels }: Parameters<typeof ReadingProgress>[0]) {
   const [saved, setSaved] = useState<Saved>(initial);
   const [state, setState] = useState<'idle' | 'saving' | 'failed'>('idle');
-  const queue = useRef(Promise.resolve());
   const latest = useRef<Saved>(initial);
+  const panel = useRef<HTMLDivElement>(null);
+  const active = useRef(true);
+  const entered = useRef(false);
+  const { composition, occurrence, selectedRevision } = target;
 
   const write = useCallback((change: { completed?: boolean; position?: string | null }) => {
-    queue.current = queue.current.then(async () => {
-      const api = browserMainApi().v1.compositions({ id: target.composition.slice(-36) })
-        .occurrences({ occurrence: target.occurrence.slice(-36) }).progress;
-      const body = (base: Saved) => ({ actingSubject, selectedRevision: target.selectedRevision,
+    const key = JSON.stringify([actingSubject, composition]);
+    const pending = (progressQueues.get(key) ?? Promise.resolve()).then(async () => {
+      const api = browserMainApi().v1.compositions({ id: composition.slice(-36) })
+        .occurrences({ occurrence: occurrence.slice(-36) }).progress;
+      const body = (base: Saved) => ({ actingSubject, selectedRevision,
         expectedVersion: base.version, completed: change.completed ?? base.completed,
         position: change.position === undefined ? base.position : change.position });
-      if (change.completed !== undefined) setState('saving');
-      let response = await api.put(body(latest.current), { headers: { 'idempotency-key': crypto.randomUUID() } });
+      if (active.current && change.completed !== undefined) setState('saving');
+      const options = () => ({ headers: { 'idempotency-key': crypto.randomUUID() }, fetch: { keepalive: true } });
+      let response = await api.put(body(latest.current), options());
       if (response.error?.status === 409) {
-        const fresh = await api.get({ query: { actingSubject, selectedRevision: target.selectedRevision } });
+        const fresh = await api.get({ query: { actingSubject, selectedRevision }, fetch: { keepalive: true } });
         if (fresh.data) {
           latest.current = fresh.data;
-          response = await api.put(body(fresh.data), { headers: { 'idempotency-key': crypto.randomUUID() } });
+          response = await api.put(body(fresh.data), options());
         }
       }
       if (response.data) {
         latest.current = response.data;
-        setSaved(response.data);
-        setState('idle');
-      } else setState('failed');
-    }).catch(() => setState('failed'));
-  }, [actingSubject, target]);
+        if (active.current) { setSaved(response.data); setState('idle'); }
+      } else if (active.current) setState('failed');
+    }).catch(() => { if (active.current) setState('failed'); });
+    progressQueues.set(key, pending);
+    void pending.then(() => { if (progressQueues.get(key) === pending) progressQueues.delete(key); });
+  }, [actingSubject, composition, occurrence, selectedRevision]);
 
   useEffect(() => {
+    active.current = true;
+    const reader = panel.current?.closest('[data-reader-settings]')?.querySelector('article');
+    if (!reader) return () => { active.current = false; };
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const onScroll = () => {
+    let pending: string | null = null;
+    let queued: string | null = null;
+    const flush = () => {
       clearTimeout(timer);
-      timer = setTimeout(() => {
-        const position = currentPosition();
-        if (position && position !== latest.current.position) write({ position });
-      }, 2000);
+      if (pending && pending !== queued) { write({ position: pending }); queued = pending; }
+      pending = null;
+    };
+    const enter = () => {
+      if (entered.current) return;
+      const position = currentPosition(reader);
+      // Rated or unsupported text has no readable paragraph. Wait for the
+      // admitted body rather than inventing an opening position.
+      if (position) { entered.current = true; queued = position; write({ position }); }
+    };
+    enter();
+    const observer = new MutationObserver(enter);
+    observer.observe(reader, { childList: true, subtree: true });
+    const onScroll = () => {
+      // Capture while this chapter owns the DOM; cleanup must never inspect
+      // the next route's paragraphs through the old chapter's identity.
+      pending = currentPosition(reader);
+      clearTimeout(timer);
+      timer = setTimeout(flush, 2000);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => { clearTimeout(timer); window.removeEventListener('scroll', onScroll); };
+    window.addEventListener('pagehide', flush);
+    return () => {
+      active.current = false;
+      flush();
+      observer.disconnect();
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('pagehide', flush);
+    };
   }, [write]);
 
-  return <div className="grid justify-items-start gap-2">
+  return <div ref={panel} className="grid justify-items-start gap-2">
     <p className="font-medium text-sm">{labels.progress}</p>
     <div className="flex flex-wrap items-center gap-2">
       {saved.completed
