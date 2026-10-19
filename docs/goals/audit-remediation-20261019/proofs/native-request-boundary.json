@@ -2183,5 +2183,305 @@
       "D5003": "open",
       "publicPersonaAndWorkloadObligations": "unchanged; no outcome waived or closed"
     }
+  },
+  "readinessCostConjunctionFirstSourceReview": {
+    "verdict": "APPROVE exact changed source; no new public timing or D5-003 closure claimed",
+    "reviewer": {
+      "worker": "G-2822",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "firstIndependentChangedRepairReview": true,
+      "nestedAgents": false
+    },
+    "source": {
+      "base": "3d40ea310e8f909f6f6b4f7e0358628a1ec109e3",
+      "authoredCommit": "e409f1566d8610a42391fad8a4519f236963303b",
+      "generatedCommitAndCandidate": "aab35e1fa4e7c84d9f2a2c108fba33a1750b5fba",
+      "workerReportParent": "428d1447aa97ccb9c38d677d85c733ca1ae2e788",
+      "mainObserved": "9dae427af77eb72febab09927e58cb00f739162f",
+      "changedPaths": [
+        "docs/development/toolchain.md",
+        "infra/dev/compose.yaml",
+        "infra/jena/command-module/src/test/java/com/rezics/jena/TextReadinessProbeTest.java",
+        "scripts/dev/release-manifest.ts",
+        "services/main/src/modules/work/activate.ts",
+        "services/main/tests/g-585-readiness.test.ts"
+      ],
+      "filePins": {
+        "docs/development/toolchain.md": {
+          "path": "docs/development/toolchain.md",
+          "blob": "f0f4f4b0d34952e94ff95c6580c17ed659bb88bb",
+          "sha256": "a066c610e93bdad1b5d6d09802bd985913c5e2ec983456d674452a04625c82dc"
+        },
+        "infra/dev/compose.yaml": {
+          "path": "infra/dev/compose.yaml",
+          "blob": "12ce8401431244953ba231a6bfb63873405422fe",
+          "sha256": "65d6c42ab550c8e2287b646bc065495cbf69c31817a6372c117f179124feb57e"
+        },
+        "infra/jena/command-module/src/test/java/com/rezics/jena/TextReadinessProbeTest.java": {
+          "path": "infra/jena/command-module/src/test/java/com/rezics/jena/TextReadinessProbeTest.java",
+          "blob": "072b491e25d48944d4f8d396d69091393aa6bcf2",
+          "sha256": "a3be0364c4841c428262765f9323b973b611be02d3451c8cc90f143b5864560d"
+        },
+        "scripts/dev/release-manifest.ts": {
+          "path": "scripts/dev/release-manifest.ts",
+          "blob": "d783f8142ff6a1a7adee5ef2fd0e3efe59268954",
+          "sha256": "cb5595b9e51d0c5c2cda990b9c6c2f48b5e73c2dc1f5b1bfdbe4a4c7ddf18549"
+        },
+        "services/main/src/modules/work/activate.ts": {
+          "path": "services/main/src/modules/work/activate.ts",
+          "blob": "4825d95580995f3ab4222cb0c5b43421284f1a76",
+          "sha256": "c6d6c69f5a3d0f2ab18c6683a85c3800f25115224bf6d7e5765cf1ed7e71a744"
+        },
+        "services/main/tests/g-585-readiness.test.ts": {
+          "path": "services/main/tests/g-585-readiness.test.ts",
+          "blob": "d3b63b87863109223bd20ddbaf4450203d31eca7",
+          "sha256": "e5eca417064772df2f9bed307d132920dfa0034ee009d386704a10b6ce8b428a"
+        }
+      },
+      "mainProductBlobEqualsRepairParent": true,
+      "nativeImplementationTreeUnchanged": true,
+      "previousContentRecoveryApproval": "428d1447 / 39c correction already Main41a589; preserved and not reviewed again"
+    },
+    "review": {
+      "blockingFindings": [],
+      "productOrAssertionEditsByReviewer": false,
+      "change": "One Lucene conjunction replaces five independent searches on the same fixed subject, exact stored literal and graph; each of the five original quoted phrases is required with AND.",
+      "preservedControls": [
+        "fixed probe subject and rv:searchBody predicate",
+        "exact original stored literal and @zh language",
+        "same named graph and returned graph equality",
+        "all five folding phrases and limit2",
+        "profile, graph/routing epoch and generation controls",
+        "native physical and Content qualification",
+        "source/cursor, server instance, write epoch and final delivery fences",
+        "cold readiness rejection, request budgets and captured-reader ownership"
+      ],
+      "mechanismReason": "The old five property functions each required this same subject/literal/graph. Requiring every quoted phrase within one indexed document retains that witness while removing repeated query parsing/reader acquisition. It does not accept a witness supplied by other documents.",
+      "consumersInspected": [
+        "services/main/src/modules/work/search-readiness.ts:322",
+        "services/main/src/modules/content-publication/rebuild.ts:863",
+        "scripts/operations/search-state.ts:381"
+      ],
+      "noNewCacheWarmupOrBypass": true,
+      "nativeRegression": "Real ARQ plus FilteredGraphTextIndex/Lucene, measured query calls only through a delegating proxy. Five old searches versus one conjunction, before/after128 unrelated additions; each missing conjunct, old analyzer, wrong subject, graph, language and literal rejected.",
+      "mainRegression": "Existing owner test now checks exactly one decoded search expression containing the original five phrases in AND order. Existing false-proof rejection, successful generation/profile proof and no-population-query assertions remain.",
+      "limits": "Selected7 and Main55 prove mechanism and owner controls, not HTTP latency, load, cancellation or a whole native tier."
+    },
+    "image": {
+      "tag": "rezics/fuseki:6.2.0-cmd0.5.43-27f6a1bf73f2",
+      "id": "sha256:264bc2bdb9775bef15b601f7ad97c26c574741250b64f19d3c107d52120e3999",
+      "actualCopyInputCount": 477,
+      "fullInputDigest": "27f6a1bf73f229f422f0ac50551bb12bd827fba115cb2f15cb96ab908569c778",
+      "immutableCopySetAndEveryHashVerified": true,
+      "allInputsMatchCleanNativeProofRevision": "4143171ba3880a12ccc1b0a809e74e1497d1cb6e",
+      "nativeProductImplementationChanged": false,
+      "reasonForNewImage": "The new Java regression is itself a Docker COPY input.",
+      "runner": "Task jena:test / host-admission --gib 4 / scripts/qa/native-module-suite.ts / unchanged infra/jena/Dockerfile module-test",
+      "runnerAndSourcePins": ".temp/native-request-boundary/readiness-cost/producer/.temp/d5003-original-proof/readiness-cost-fix/source-manifest.json",
+      "currentMainComposition": "Approval covers the exact bounded delta, not whole-wave ancestry. Preserve current native owner sources and generate pins for the final composed inputs; do not relabel these retained runs as that different integrated revision."
+    },
+    "reusedExecutedChecks": {
+      "newTestsOrRuntimeExecutedByReviewer": false,
+      "baseline": {
+        "source": "0a9092d300e04e21d965ef848fb846733c09d114",
+        "testOverlay": "only existing G-585 owner test now requires one conjunctive search with all five phrases",
+        "job": "745a67ba-3966-495d-9c9f-3dd0895fc24b",
+        "qa": "20261019t165314-36bb75",
+        "tests": 2,
+        "passed": 1,
+        "failed": 1,
+        "skipped": 0,
+        "assertions": 16,
+        "firstFailure": "g-585-readiness.test.ts:45 expected one native search expression, received five",
+        "independentPublicAssertionsEdited": false,
+        "verifiedJUnit": {
+          "tests": 2,
+          "assertions": 16,
+          "failures": 1,
+          "errors": 0,
+          "skipped": 0
+        }
+      },
+      "fixedJob": "b3b73ece-b956-4254-80ea-1eb17e62e2db",
+      "native": {
+        "record": ".temp/native-module-suite/dd500a74-b9e6-4f9c-9f1e-ab5eacdc1e5e.json",
+        "selection": "TextReadinessProbeTest,g585AnalyzerTest",
+        "tests": 7,
+        "passed": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "classes": [
+          {
+            "file": "infra/jena/command-module/src/test/java/com/rezics/jena/TextReadinessProbeTest.java",
+            "passed": 3,
+            "cases": [
+              "allFoldingWitnessesUseOneSearchBeforeAndAfterUnrelatedIndexGrowth",
+              "everyConjunctIsRequiredAndTheOldAnalyzerRemainsUnready",
+              "otherSubjectsGraphsLanguagesAndLiteralValuesCannotSupplyTheWitness"
+            ]
+          },
+          {
+            "file": "infra/jena/command-module/src/test/java/com/rezics/jena/g585AnalyzerTest.java",
+            "passed": 4
+          }
+        ],
+        "meaning": "real ARQ/Lucene analyzer and exact probe evidence; five legacy searches versus one replacement with 128 unrelated additions; no HTTP, mixed-load, cancellation or full-suite proof",
+        "classCountsIndependentlyParsed": {
+          "TextReadinessProbeTest": {
+            "executed": 3,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "g585AnalyzerTest": {
+            "executed": 4,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          }
+        },
+        "executionRevision": "4143171ba3880a12ccc1b0a809e74e1497d1cb6e",
+        "executionTreeClean": true,
+        "fullSuite": false
+      },
+      "main": {
+        "qa": "20261019t165620-bde8e3",
+        "passed": 55,
+        "failed": 0,
+        "skipped": 0,
+        "assertions": 657,
+        "files": [
+          "services/main/tests/g-585-readiness.test.ts",
+          "services/main/tests/search-index-availability.test.ts",
+          "services/main/tests/search-readiness-content.test.ts",
+          "services/main/tests/content-eligibility-state.test.ts",
+          "services/main/tests/content-eligibility-digest-forms.test.ts"
+        ],
+        "meaning": "owner-level witness/cold/movement/deadline/publication tests; no new genuine public API assertion",
+        "verifiedJUnit": {
+          "tests": 55,
+          "assertions": 657,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        "fiveOwnerFilesAndProductBytesEqualReviewedCandidate": true
+      },
+      "generationAndStatic": "types, lint, ast, inference task margins and guards passed; task docs:check passed",
+      "postRebase": {
+        "job": "074fa3f2-c3d8-4a4d-91cf-4fd5ae18610e",
+        "generation": "passed",
+        "affectedTypes": "passed",
+        "allImageInputsMatchSelectedNativeProof": true,
+        "relevantSourceAndNativeInputDelta": ""
+      },
+      "inheritedInferenceCondition": "Main inference base d98655dd has 27000733 instantiations above the recorded +5% ceiling 26950993.65; worker delta passed permitted margins; merge still enforces the recorded baseline",
+      "inferenceBaselineChangedOrWaived": false,
+      "logs": ".temp/native-request-boundary/readiness-cost/producer/.temp/goal/jobs/b3b73ece-b956-4254-80ea-1eb17e62e2db.{1..5}.log"
+    },
+    "originalPublicFailurePreserved": {
+      "job": "861066c8-315b-4595-9ae9-8770d90e5f19",
+      "qa": "20261019t163321-33bc48",
+      "test": "tests/qa/integration/d5003-post-growth-readiness-proof.test.ts:110",
+      "outcomeAssertionReached": true,
+      "counts": {
+        "tests": 1,
+        "assertions": 2,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0
+      },
+      "precedingStatusAssertionPassed": true,
+      "request": {
+        "trace": "f92d2d27ea654382513aa63197536266",
+        "status": 200,
+        "elapsedMs": 1705.9833709999948,
+        "graphCalls": 12,
+        "graphBytes": 94015,
+        "populationAudits": 0
+      },
+      "readinessMs": 831.7553850000113,
+      "controlAndAnalyzerMs": 723.7068760000111,
+      "expectedLessThanMs": 1500,
+      "classification": "Reached original whole-request latency assertion failure despite HTTP200; retained without waiver.",
+      "growthCommandsExecuted": 0,
+      "postGrowthRequestsExecuted": 0,
+      "growthPopulationReaderAndPrivateAssertions": "unreached",
+      "originalLimits": {
+        "requestMs": 1500,
+        "calls": 72,
+        "bytes": 8388608,
+        "testMs": 180000,
+        "cooldownMs": 3000
+      },
+      "capacityFunctionAndIndependentPublicAssertionsChanged": false,
+      "historicalEvent9Delivery": "Unknown: historical cut cleaned; the newer run failed before growth and its one finite observer had no receipt to bind, so made no diagnostic SQL/native read.",
+      "publicTimingAfterRepair": "not measured; no speedup or <=1500ms success claimed"
+    },
+    "preservation": {
+      "allPriorWorkerAndObservedMainReportFieldsUnchanged": true,
+      "priorFieldCount": 16,
+      "oldArtifactsUnmodified": true,
+      "reusedProofs": [
+        "QA20261019t134919-a2c0ce: 75 baseline HTTP200 requests, 675 assertions, 0 audits",
+        "accepted unchanged native48/48 and prior Main53/634; this selected7/55 run adds no persona closure"
+      ],
+      "historicalFailures": [
+        "frozen 12 public campaign failures remain separate and unchanged",
+        "earlier post-growth 503 with physical population 2 but null Content witness remains retained",
+        "historical event9 exact delivery UNKNOWN; cleaned historical cut cannot be reconstructed",
+        "next affected slice must capture exact source-bound delivery/frontier/native witness once, outside timed counters, with corrected SQL text cast"
+      ],
+      "noPublicRuntimeFullTierStackBackupRestoreImportOrSharedLifecycleWork": true
+    },
+    "artifacts": {
+      "receipt": ".temp/native-request-boundary/readiness-cost/retention.json",
+      "verification": ".temp/native-request-boundary/readiness-cost/verification.json",
+      "producerPacketArtifactCount": 27,
+      "deliveryEvidenceArtifactCount": 31,
+      "uniqueProducerArtifactsVerifiedAndCopied": 56,
+      "originalProducerLocationsPreserved": true
+    },
+    "checks": {
+      "status": "passed",
+      "job": "a9604e67-2731-4a20-a2aa-ea8f8a0f4321",
+      "steps": [
+        {
+          "command": "task -t .temp/native-request-boundary/readiness-cost/Taskfile.yml report:prepare",
+          "exit": 0,
+          "log": ".temp/goal/jobs/a9604e67-2731-4a20-a2aa-ea8f8a0f4321.1.log"
+        },
+        {
+          "command": "task -t .temp/native-request-boundary/readiness-cost/Taskfile.yml report:validate",
+          "exit": 0,
+          "log": ".temp/goal/jobs/a9604e67-2731-4a20-a2aa-ea8f8a0f4321.2.log",
+          "verifiedArtifacts": 79,
+          "priorFieldsPreserved": 16
+        },
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/a9604e67-2731-4a20-a2aa-ea8f8a0f4321.3.log"
+        },
+        {
+          "command": "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822 task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/a9604e67-2731-4a20-a2aa-ea8f8a0f4321.4.log",
+          "fullOutput": ".temp/goal/check/run-IYm5pq/output.log"
+        }
+      ]
+    },
+    "landingDisposition": {
+      "changedSource": "APPROVE for root small composition and normal capture; no new review chain.",
+      "inheritedInferenceCeiling": "Explicit existing integration condition; unchanged and not waived.",
+      "D5001": "open",
+      "D5002": "open",
+      "D5003": "open",
+      "nextOwner": "G-2765 / root, same original outcome",
+      "next": "After source composition, resume only missing original cold/cost/post-growth public slice on the supported owned derivative, binding exact delivery/frontier/native witness once outside timed counters. Retain1500ms/72calls/8388608B/180000ms/3s cooldown and unchanged capacity()/assertions. Preserve every earlier failure."
+    }
   }
 }
