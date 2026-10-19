@@ -53,14 +53,15 @@ async function prepare(): Promise<Source> {
     profile: 'metadata-only-v1', authoring: 'own-work', title: 'Separate native rating target',
     language: 'en', semanticTypes: ['https://schema.org/Book'], ...own(people.owner) }), 201);
   await grant(people.owner, GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
-  await grant(people.owner, 'space:create:root', 'space.create');
   const global = await json<Context>(people.owner.main('POST', '/v1/global-rating-contexts', {
     profile: 'global-rating-standing-context-v1', question: 'Overall quality?', scale: { min: 1, max: 10, step: 1 }, ...own(people.owner) }), 201);
   const communities: Source['communities'] = [];
   for (let n = 0; n < 10; n++) {
+    // Each real Account stays within the native three-Spaces-per-month quota.
+    const creator = n < 3 ? people.owner : n < 6 ? people.stranger : n < 9 ? privatePeople.stranger : privatePeople.owner;
     const community = n === 0 ? { space: people.space, realm: people.realm } : await json<{ space: string; realm: string }>(
-      people.owner.main('POST', '/v1/spaces', { profile: 'space-realm-v2', name: `Context community ${n}`,
-        handle: `context-${randomUUID().slice(0, 12)}`, language: 'en', capabilities: ['realm'], ...own(people.owner),
+      creator.main('POST', '/v1/spaces', { profile: 'space-realm-v2', name: `Context community ${n}`,
+        handle: `context-${randomUUID().slice(0, 12)}`, language: 'en', capabilities: ['realm'], ...own(creator),
         initialSettings: { visibility: 'public', reviewRequired: false, reviewMode: 'open', whoMaySubmit: 'members', selfJoin: true, rules: [] } }), 201);
     await grant(people.owner, `rating:context:${community.realm}`, 'rating.context.create');
     const contexts: Context[] = [];
