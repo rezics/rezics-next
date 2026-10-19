@@ -1,7 +1,7 @@
 import type { Capture } from './network.ts';
 import type { DatasetSelectionManifest } from './selection.ts';
 import type { ManualSourceIntake } from '../../services/main/src/modules/source/intake.ts';
-import type { RetainedConversionRequest } from '../../services/main/src/modules/source/field-support-contract.ts';
+import type { RetainedConversionRequest, RetainedSupportRequest } from '../../services/main/src/modules/source/field-support-contract.ts';
 import type { RetainedConversion } from '../../services/main/src/modules/source/retained-record.ts';
 
 export type Provider = 'vndb' | 'bangumi' | 'musicbrainz';
@@ -191,6 +191,26 @@ export interface DatasetRetainedConversionReceipt {
   command: DatasetRecordedCommand;
 }
 
+export interface DatasetFieldAdoption {
+  record: string;
+  field: RetainedSupportRequest['evidence']['field'];
+  status: 'pending' | 'mapped';
+  reason: string;
+  conversion?: DatasetRecordedCommand;
+  native?: DatasetRecordedCommand;
+  nativeRead?: { path: string; body: Record<string, unknown> };
+  nativeReads?: { path: string; body: Record<string, unknown> }[];
+  support?: DatasetRecordedCommand;
+  supportRead?: { path: string; body: Record<string, unknown> };
+}
+
+export interface DatasetFieldAdoptionJournal {
+  profile: 'rezics-dataset-field-adoptions-v1';
+  snapshot: DatasetSnapshotReference;
+  conversions: Record<string, DatasetRetainedConversionReceipt>;
+  fields: DatasetFieldAdoption[];
+}
+
 /** Actual command custody, including intents whose reply has not been observed. */
 export interface DatasetIntakeCommand {
   label: string;
@@ -219,6 +239,17 @@ export interface DatasetRetainedRecord {
   occurrences: DatasetRecordOccurrences;
   payload: DatasetIntakePayload;
   intakes: DatasetIntakeReceipt[];
+}
+
+export interface DatasetIntakeJournal {
+  format: 'rezics-dataset-intake-receipts-v1';
+  snapshot: DatasetSnapshotReference;
+  /** Failed/interrupted intents remain here without an invented result. */
+  commands: DatasetIntakeCommand[];
+  /** Preserve older exact commands even when their frozen coordinate is unverified. */
+  unboundCommands: (Omit<DatasetIntakeCommand, 'coordinate' | 'request'> & { request: unknown })[];
+  /** Only complete, checked, acknowledged record intakes enter this view. */
+  records: Record<string, DatasetRetainedRecord>;
 }
 
 export interface DatasetSourceReference {
