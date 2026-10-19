@@ -57,8 +57,11 @@ const readScopes = new WeakMap<FusekiReadBudget, ReadScope>();
 
 /** Existing owners may supply plain counters or setters which already debit
  * their parent. Preserve both APIs, including their mutable diagnostics. */
-class FusekiReadBudgets extends AsyncLocalStorage<FusekiReadBudget> {
-  override run<R, Args extends unknown[]>(store: FusekiReadBudget, callback: (...args: Args) => R, ...args: Args): R {
+class FusekiReadBudgets extends AsyncLocalStorage<FusekiReadBudget | undefined> {
+  override run<R, Args extends unknown[]>(store: FusekiReadBudget | undefined, callback: (...args: Args) => R, ...args: Args): R {
+    // exit() delegates to run(undefined); detached work must not claim or join
+    // the caller's allocation, even when it inherited an active request.
+    if (store === undefined) return super.run(store, callback, ...args);
     const parent = this.getStore();
     if (parent === store) return super.run(store, callback, ...args);
     const request = readScopes.get(parent!)?.request ?? readScopes.get(store)?.request;
