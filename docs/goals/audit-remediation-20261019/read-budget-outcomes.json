@@ -3011,7 +3011,7 @@
   "populationEnvironmentContinuation": {
     "authority": "Latest maintainer continuation: qualify only the two original frozen D5-006 populations on disposable migrated copies of the retained command-created corpora; G-2826 performs independent original-suite execution after qualification.",
     "scope": "Environment preparation and existing matrix metadata only. No baseline product rerun, catalogue build, production/helper/frozen-test edit, peer mutation, new producer, new fault mechanism or finding closure.",
-    "status": "partial: Zone derivative qualified; rating original copy restored and migrated, then stopped at an inherited empty-queue harness premise. Exact retained-row diagnosis and one narrow temporary witness correction recorded; original assertions remain unexecuted.",
+    "status": "partial: Zone environment qualified; rating owner reconstruction and projection refresh completed, but post-reconstruction source comparison refused before public smoke. Individual changed tables were not retained in that failed receipt; exact derived-signal witness is prepared for actual validation.",
     "originalOutcomeAssertionReached": false,
     "canonicalFindingClosed": false,
     "fixedProductPassCertified": false,
@@ -3517,15 +3517,142 @@
         "publicSmokeReached": false,
         "derivativeCreated": false,
         "standingReconstructionReached": false
+      },
+      {
+        "job": "32a9d1e3-bef0-429d-a5b1-22c2c39a8ac1",
+        "capability": "ratings",
+        "command": "task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- ratings",
+        "precedingSyntaxCheck": "passed in same recorded sequence",
+        "receipt": {
+          "path": ".temp/read-budget-migration/ratings-attempt2/environment-qualification.json",
+          "sha256": "53e15fb1f5cbb4180cc4fb62c581f157e0bc073aa9eb0e2d157def006c7ee056"
+        },
+        "classification": "Environment witness stopped after genuine standing reconstruction and complete projection refresh; no public smoke, derivative or frozen original assertion.",
+        "startedAt": "2026-10-19T12:46:15.335Z",
+        "finishedAt": "2026-10-19T12:50:42.461Z",
+        "ready": false,
+        "originalOutcomeAssertionReached": false,
+        "originalRestore": {
+          "restoreMs": 24159,
+          "volumeCopyMs": {
+            "postgres_data": 9360,
+            "fuseki_data": 12144,
+            "rustfs_data": 1750
+          },
+          "objectCopyMs": 23,
+          "startupMs": 33087,
+          "readinessMs": 1055,
+          "totalMs": 58301,
+          "admissionWaitMs": 2347,
+          "collationRepairs": []
+        },
+        "standingReconstruction": {
+          "before": {
+            "heads": {
+              "heads": 100,
+              "independent_accounts": 100,
+              "known": 0,
+              "five": 0,
+              "withdrawn": 0
+            },
+            "component": {
+              "slots": 100,
+              "unvalued": 100,
+              "histogram": {}
+            },
+            "publication": {
+              "generation": "bb79dcb8daa4d490a7af7e2b89232b8118481af41410a662898d51f0089523bf",
+              "pending": "0"
+            }
+          },
+          "listed": {
+            "targets": [
+              {
+                "context": "https://rezics.com/id/01a150b1-109e-72b2-80c1-68774f09b812",
+                "target": "https://rezics.com/id/01a150b1-050e-73e8-916e-24de26a33bab",
+                "slots": 100,
+                "unvalued": 100
+              }
+            ],
+            "next": null
+          },
+          "reconstructed": {
+            "complete": true,
+            "scanned": 0,
+            "recorded": 0,
+            "cursor": null,
+            "checkpoint": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/rating-reconstruction/1cf4b5cb29c97d28478ee71973c29e3c359e8b80e8f854b60fe182426b4df1fb.json"
+          },
+          "checkpoint": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/rating-reconstruction/1cf4b5cb29c97d28478ee71973c29e3c359e8b80e8f854b60fe182426b4df1fb.json",
+            "sha256": "037a12a82dccd634b463a6c96489b7c899709fde1324c533a27956bf5cdc2aaa"
+          },
+          "scope": "existing bounded owner command; verify old values, no new observations, raw values, or additional voters",
+          "refreshed": {
+            "refreshed": 0,
+            "complete": true,
+            "recoveryGeneration": "2"
+          },
+          "after": {
+            "heads": {
+              "heads": 100,
+              "independent_accounts": 100,
+              "known": 100,
+              "five": 100,
+              "withdrawn": 0
+            },
+            "component": {
+              "slots": 100,
+              "unvalued": 0,
+              "histogram": {
+                "5": 100
+              }
+            },
+            "publication": {
+              "generation": "d10d93a9a20df58439baa092821f91042a7f067bdd5f89661a0135e81373658d",
+              "pending": "0"
+            }
+          },
+          "preservation": {
+            "originalColumnsUnchanged": false,
+            "graphUnchanged": true,
+            "objectsUnchanged": true
+          }
+        },
+        "appliedMigrations": [
+          "services/main/migrations/access/2045_standing_rating_components.sql",
+          "services/main/migrations/access/2077_standing_rating_publication.sql",
+          "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+          "services/main/migrations/access/2606_standing_rating_affected_cuts.sql",
+          "services/main/migrations/access/2607_standing_rating_bounded_progress.sql"
+        ],
+        "appliedContentMigrations": [
+          2603
+        ],
+        "error": "Error: Standing reconstruction changed original fixture source facts",
+        "cleanupErrors": [],
+        "run": "budget-rating-a16fff7c08",
+        "publicSmokeReached": false,
+        "derivativeCreated": false,
+        "diagnosis": {
+          "observed": "100 old independent heads changed from unknown to verified value5, component unvalued100 to0, histogram {5:100}, pending0. Graph and object witness exact. Combined original-column digest differs.",
+          "limitation": "This failed attempt saved only the post-command comparison boolean, not individual changed tables; their actual identity is unconfirmed for this run.",
+          "sourceConfirmedExpectedEffects": [
+            "services/main/migrations/access/1060_discovery_rating_repairs.sql attaches reconstruction repair trigger to rating_aggregate_head;1160_source_fence_change_log.sql deduplicates one discovery-source invalidation per transaction.",
+            "services/main/migrations/access/785_also_enjoyed_generation.sql attaches head-change trigger;1200_also_enjoyed_refresh.sql classifies an UPDATE as privacy=false and deduplicates one signal per transaction."
+          ],
+          "nextWitness": "Capture changed tables and complete original-column digests before refusal; allow only one added discovery row (empty context_key/statement) and one added privacy=false also-enjoyed row, with every retained row, other original column, graph fact and object exact. Actual next execution must validate these effects.",
+          "checkpoint": "Retain prior operator checkpoint and use supported --restart for the new isolated copy; execute two existing bounded pages separately to retain actual100/0 page receipts."
+        }
       }
     ],
     "ratingsDisposition": {
       "ready": false,
       "assertionReached": false,
-      "reason": "Genuine compatible restore/history adoption/owner migration completed. Environment witness assumed an empty derived queue; all24 original rows were exact and migration added two privacy invalidations. Correct only this author premise before the next isolated attempt.",
+      "reason": "Environment witness stopped after genuine standing reconstruction and complete projection refresh; no public smoke, derivative or frozen original assertion.",
       "ownerFunction": "services/main/src/modules/rating/legacy-reconstruction.ts:reconstructLegacyTargetRatings(input.standing=true)",
       "missingCommandPath": null,
-      "operationRequired": "Execute the existing --standing reconstruction and --refresh-standing-projections on the disposable migrated retained copy, using the genuine corpus context and target.",
+      "operationRequired": "No owner operation is missing. Validate exact derived reconstruction invalidations and retained original facts, then perform public smoke/stopped-owner backup/fresh restore.",
       "sourceInspectionOnly": false,
       "nativeExecutionAttempted": true,
       "originalOutcomeAssertionReached": false,
@@ -3539,16 +3666,38 @@
         "missingCommandPath": "services/main/src/rating-reconstruction.ts"
       },
       "lastAttemptReceipt": {
-        "path": ".temp/read-budget-migration/ratings-attempt1/environment-qualification.json",
-        "sha256": "5f409ca46ae657d7caf357cee853e5dda044e9e696d53fdac90cd00a8d8e3e86"
+        "path": ".temp/read-budget-migration/ratings-attempt2/environment-qualification.json",
+        "sha256": "53e15fb1f5cbb4180cc4fb62c581f157e0bc073aa9eb0e2d157def006c7ee056"
+      },
+      "ownerCommandCompleted": true,
+      "publicSmokeReached": false,
+      "verifiedInitialValues": {
+        "heads": {
+          "heads": 100,
+          "independent_accounts": 100,
+          "known": 100,
+          "five": 100,
+          "withdrawn": 0
+        },
+        "component": {
+          "slots": 100,
+          "unvalued": 0,
+          "histogram": {
+            "5": 100
+          }
+        },
+        "publication": {
+          "generation": "d10d93a9a20df58439baa092821f91042a7f067bdd5f89661a0135e81373658d",
+          "pending": "0"
+        }
       }
     },
     "nextWitness": {
       "driver": ".temp/read-budget-migration/qualify.ts",
-      "executionStatus": "Rating attempt1 reached owner migration; correct exact retained queue witness, then use existing standing reconstruction on a new disposable copy.",
+      "executionStatus": "Rating attempt2 owner commands completed; exact post-command derived-signal witness now authored. All prior failures retained; no public regression claimed.",
       "nextPreparationCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- ratings' -- task --taskfile .temp/read-budget-migration/Taskfile.yml syntax",
       "originalSuitesReservedFor": "G-2826 independent owner",
-      "preflight": ".temp/read-budget-migration/ratings-attempt2-preflight.json"
+      "preflight": ".temp/read-budget-migration/ratings-attempt3-preflight.json"
     },
     "qualifiedManifest": {
       "zones": {
